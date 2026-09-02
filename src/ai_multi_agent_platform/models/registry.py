@@ -174,11 +174,11 @@ class ModelRegistry:
         provider_id: str | None = None,
         enabled: bool | None = None,
     ) -> tuple[ModelConfiguration, ...]:
-        models = self._models.values()
+        models = list(self._models.values())
         if provider_id is not None:
-            models = (item for item in models if item.provider_id == provider_id)
+            models = [item for item in models if item.provider_id == provider_id]
         if enabled is not None:
-            models = (item for item in models if item.enabled is enabled)
+            models = [item for item in models if item.enabled is enabled]
         return tuple(sorted(models, key=lambda item: item.config_id))
 
     def provider_health(self, provider_id: str) -> HealthStatus:
