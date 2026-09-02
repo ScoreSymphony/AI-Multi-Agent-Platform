@@ -98,6 +98,8 @@ class InProcessMessageTransport(MessageTransport):
                         "dead_letter",
                         "bounded_backpressure",
                         "topic_group_ordering",
+                        "operation_control_timeout",
+                        "operation_idempotency_binding",
                     ),
                     limits={"max_queue_size": self._max_queue_size},
                 ),
@@ -114,9 +116,30 @@ class InProcessMessageTransport(MessageTransport):
         *,
         control: OperationControl | None = None,
     ) -> PublishReceipt:
-        del control
         if not topic.strip():
             raise ContractError(ErrorCode.INVALID_REQUEST, "topic must not be blank")
+        if control is not None and control.idempotency_key is not None:
+            if envelope.idempotency_key != control.idempotency_key:
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    "operation idempotency_key must match envelope idempotency_key",
+                    provider_id=self._provider_id,
+                )
+        operation = self._publish_once(topic, envelope)
+        if control is None or control.timeout_seconds is None:
+            return await operation
+        try:
+            return await asyncio.wait_for(operation, timeout=control.timeout_seconds)
+        except TimeoutError as exc:
+            raise ContractError(
+                ErrorCode.TIMEOUT,
+                "message publish timed out",
+                retryable=True,
+                provider_id=self._provider_id,
+                details={"topic": topic},
+            ) from exc
+
+    async def _publish_once(self, topic: str, envelope: TransportEnvelope) -> PublishReceipt:
         self._require_available()
         if not self._accepting:
             raise ContractError(ErrorCode.UNAVAILABLE, "transport is closing", retryable=True)

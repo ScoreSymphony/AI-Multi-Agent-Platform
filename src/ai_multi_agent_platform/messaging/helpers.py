@@ -40,11 +40,30 @@ def envelope_for_domain_event(
 
 
 class InMemoryIdempotencyStore:
-    """Deterministic process-local helper for duplicate-safe consumers."""
+    """Deterministic process-local coordination for duplicate-safe consumers.
+
+    Only one coroutine may own a key at a time. Concurrent duplicates wait for
+    the current owner. If it completes, they observe the completed key; if it
+    fails or is cancelled, one waiter may acquire the key and retry processing.
+    """
 
     def __init__(self) -> None:
         self._completed: set[str] = set()
+        self._inflight: dict[str, asyncio.Event] = {}
         self._lock = asyncio.Lock()
+
+    async def acquire(self, key: str) -> bool:
+        """Acquire processing ownership, or return False when already completed."""
+
+        while True:
+            async with self._lock:
+                if key in self._completed:
+                    return False
+                wait_for = self._inflight.get(key)
+                if wait_for is None:
+                    self._inflight[key] = asyncio.Event()
+                    return True
+            await wait_for.wait()
 
     async def contains(self, key: str) -> bool:
         async with self._lock:
@@ -53,14 +72,26 @@ class InMemoryIdempotencyStore:
     async def mark_completed(self, key: str) -> None:
         async with self._lock:
             self._completed.add(key)
+            waiters = self._inflight.pop(key, None)
+            if waiters is not None:
+                waiters.set()
+
+    async def release(self, key: str) -> None:
+        """Release an unsuccessful claim so one waiting duplicate can retry."""
+
+        async with self._lock:
+            waiters = self._inflight.pop(key, None)
+            if waiters is not None:
+                waiters.set()
 
 
 class IdempotentConsumer:
-    """Ack duplicate messages without repeating an already-completed handler.
+    """Ack duplicates without concurrently repeating an in-process handler.
 
     This helper does not claim exactly-once side effects. Durable consumers must
-    coordinate idempotency state with their own durable side effects when that
-    stronger property is required.
+    coordinate durable idempotency state with their own side effects when that
+    stronger property is required. Process loss can still cause redelivery after
+    a side effect because this reference store is intentionally in-memory only.
     """
 
     def __init__(
@@ -78,12 +109,17 @@ class IdempotentConsumer:
         handler: Callable[[TransportEnvelope], Awaitable[None]],
     ) -> bool:
         key = delivery.envelope.idempotency_key or delivery.envelope.message_id
-        if await self._store.contains(key):
+        if not await self._store.acquire(key):
             await self._transport.ack(delivery)
             return False
         try:
             await handler(delivery.envelope)
+        except asyncio.CancelledError:
+            await self._store.release(key)
+            await self._transport.nack(delivery, retry=True, reason="CancelledError")
+            raise
         except Exception as exc:
+            await self._store.release(key)
             await self._transport.nack(delivery, retry=True, reason=type(exc).__name__)
             raise
         await self._store.mark_completed(key)

@@ -1,18 +1,36 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+import asyncio
+from collections.abc import Awaitable, Callable
+
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationControl
 
 from .contracts import MessageTransport
-from .models import MessageKind, RetryPolicy, Subscription, TransportEnvelope
+from .helpers import IdempotentConsumer
+from .models import MessageKind, RetryPolicy, Subscription, TraceContext, TransportEnvelope
 
 type TransportFactory = Callable[[], MessageTransport]
+type AvailabilityToggle = Callable[[MessageTransport, bool], Awaitable[None]]
 
 
 class MessageTransportContractSuite:
-    """Pytest-independent checks reusable by future transport adapters."""
+    """Pytest-independent checks reusable by future transport adapters.
 
-    def __init__(self, factory: TransportFactory) -> None:
+    Full compliance includes adapter-provided fixtures for outage simulation and
+    a deliberately bounded transport instance. Those fixtures keep test-only
+    controls out of the production ``MessageTransport`` interface.
+    """
+
+    def __init__(
+        self,
+        factory: TransportFactory,
+        *,
+        bounded_factory: TransportFactory,
+        availability_toggle: AvailabilityToggle,
+    ) -> None:
         self._factory = factory
+        self._bounded_factory = bounded_factory
+        self._availability_toggle = availability_toggle
 
     async def run(self) -> tuple[str, ...]:
         checks: list[str] = []
@@ -20,12 +38,22 @@ class MessageTransportContractSuite:
         checks.append("descriptor_semantics")
         await self._publish_subscribe_and_metadata()
         checks.append("publish_subscribe_metadata")
+        await self._operation_control_binding()
+        checks.append("operation_control_binding")
         await self._redelivery_and_ordering()
         checks.append("redelivery_ordering")
+        await self._idempotent_consumer()
+        checks.append("idempotent_consumer")
+        await self._retry_backoff()
+        checks.append("retry_backoff")
         await self._consumer_restart()
         checks.append("consumer_restart")
         await self._dead_letter()
         checks.append("dead_letter")
+        await self._transport_unavailable()
+        checks.append("transport_unavailable")
+        await self._bounded_backpressure()
+        checks.append("bounded_backpressure")
         await self._graceful_shutdown()
         checks.append("graceful_shutdown")
         return tuple(checks)
@@ -48,6 +76,13 @@ class MessageTransportContractSuite:
             correlation_id="conformance-correlation",
             causation_id="conformance-cause",
             idempotency_key=f"conformance-{sequence}",
+            trace_context=TraceContext(
+                trace_id="trace-1",
+                span_id="span-1",
+                trace_flags="01",
+                tracestate="vendor=value",
+                baggage={"project": "demo"},
+            ),
             payload={"sequence": sequence},
         )
 
@@ -63,9 +98,30 @@ class MessageTransportContractSuite:
         assert delivery.metadata.consumer_group == "group-a"
         assert delivery.envelope.correlation_id == "conformance-correlation"
         assert delivery.envelope.causation_id == "conformance-cause"
+        assert delivery.envelope.trace_context == envelope.trace_context
         await transport.ack(delivery)
         await stream.aclose()
         await transport.close(graceful=True)
+
+    async def _operation_control_binding(self) -> None:
+        transport = self._factory()
+        envelope = self._envelope(1)
+        await transport.publish(
+            "control",
+            envelope,
+            control=OperationControl(idempotency_key=envelope.idempotency_key),
+        )
+        try:
+            await transport.publish(
+                "control",
+                envelope,
+                control=OperationControl(idempotency_key="different-key"),
+            )
+        except ContractError as exc:
+            assert exc.code is ErrorCode.INVALID_REQUEST
+        else:
+            raise AssertionError("transport accepted mismatched idempotency keys")
+        await transport.close(graceful=False)
 
     async def _redelivery_and_ordering(self) -> None:
         transport = self._factory()
@@ -84,6 +140,53 @@ class MessageTransportContractSuite:
         next_delivery = await anext(stream)
         assert next_delivery.envelope.message_id == second.message_id
         await transport.ack(next_delivery)
+        await stream.aclose()
+        await transport.close(graceful=True)
+
+    async def _idempotent_consumer(self) -> None:
+        transport = self._factory()
+        envelope = self._envelope(1)
+        await transport.publish("idempotent", envelope)
+        await transport.publish("idempotent", envelope)
+        stream = transport.subscribe(Subscription("idempotent", "consumer-a", "group-a"))
+        consumer = IdempotentConsumer(transport)
+        handled: list[str] = []
+
+        async def handler(message: TransportEnvelope) -> None:
+            handled.append(message.message_id)
+
+        first = await anext(stream)
+        assert await consumer.handle(first, handler) is True
+        duplicate = await anext(stream)
+        assert await consumer.handle(duplicate, handler) is False
+        assert handled == [envelope.message_id]
+        await stream.aclose()
+        await transport.close(graceful=True)
+
+    async def _retry_backoff(self) -> None:
+        transport = self._factory()
+        await transport.publish("backoff", self._envelope(1))
+        stream = transport.subscribe(
+            Subscription(
+                "backoff",
+                "consumer-a",
+                "group-a",
+                retry_policy=RetryPolicy(
+                    max_attempts=2,
+                    initial_backoff_seconds=0.05,
+                    backoff_multiplier=2.0,
+                    max_backoff_seconds=0.1,
+                ),
+            )
+        )
+        first = await anext(stream)
+        await transport.nack(first, retry=True, reason="backoff-test")
+        retry_task = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0.01)
+        assert not retry_task.done(), "retry was redelivered before configured backoff elapsed"
+        second = await asyncio.wait_for(retry_task, timeout=1.0)
+        assert second.metadata.attempt == 2
+        await transport.ack(second)
         await stream.aclose()
         await transport.close(graceful=True)
 
@@ -123,6 +226,32 @@ class MessageTransportContractSuite:
         assert dead_letters[0].attempts == 2
         await stream.aclose()
         await transport.close(graceful=True)
+
+    async def _transport_unavailable(self) -> None:
+        transport = self._factory()
+        await self._availability_toggle(transport, False)
+        try:
+            await transport.publish("outage", self._envelope(1))
+        except ContractError as exc:
+            assert exc.code is ErrorCode.UNAVAILABLE
+            assert exc.retryable is True
+        else:
+            raise AssertionError("transport did not expose canonical unavailable behavior")
+        await self._availability_toggle(transport, True)
+        await transport.publish("outage", self._envelope(2))
+        await transport.close(graceful=False)
+
+    async def _bounded_backpressure(self) -> None:
+        transport = self._bounded_factory()
+        await transport.publish("bounded", self._envelope(1))
+        try:
+            await transport.publish("bounded", self._envelope(2))
+        except ContractError as exc:
+            assert exc.code is ErrorCode.RESOURCE_EXHAUSTED
+            assert exc.retryable is True
+        else:
+            raise AssertionError("bounded transport did not reject overload explicitly")
+        await transport.close(graceful=False)
 
     async def _graceful_shutdown(self) -> None:
         transport = self._factory()

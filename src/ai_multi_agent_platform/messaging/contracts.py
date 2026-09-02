@@ -33,7 +33,16 @@ class MessageTransport(ProviderContract):
         envelope: TransportEnvelope,
         *,
         control: OperationControl | None = None,
-    ) -> PublishReceipt: ...
+    ) -> PublishReceipt:
+        """Publish one transport envelope.
+
+        ``OperationControl.timeout_seconds`` bounds the publish operation when
+        supported by the adapter. When ``OperationControl.idempotency_key`` is
+        supplied it must refer to the same key carried by the envelope; it does
+        not create a separate exactly-once identity. ``retry_mode`` expresses
+        caller retry intent and must not cause hidden exactly-once claims.
+        """
+        ...
 
     @abstractmethod
     def subscribe(self, subscription: Subscription) -> MessageSubscription: ...
