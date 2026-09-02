@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -10,7 +10,7 @@ SCHEMA_VERSION = "1.0"
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def new_id(prefix: str) -> str:
