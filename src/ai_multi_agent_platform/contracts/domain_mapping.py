@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping
-from typing import Any
 
 from ai_multi_agent_platform.domain import ExternalRef, OwnerRef, Provenance, validate_id
 from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocation
@@ -13,19 +11,11 @@ from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocatio
 from .types import ToolInvocation as ContractToolInvocation
 
 
-def _json_compatible(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {key: _json_compatible(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_json_compatible(item) for item in value]
-    return value
-
-
 def tool_invocation_arguments_digest(invocation: ContractToolInvocation) -> str:
     """Return the stable SHA-256 digest of the immutable governed arguments."""
 
     encoded = json.dumps(
-        _json_compatible(invocation.arguments),
+        invocation.arguments_json(),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
