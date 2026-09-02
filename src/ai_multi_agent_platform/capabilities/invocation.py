@@ -338,6 +338,8 @@ class CapabilityInvoker:
                 canonical_tool_invocation_id=(
                     canonical_invocation.id if canonical_invocation is not None else None
                 ),
+                node_id=registration.node_id,
+                worker_id=registration.worker_id,
                 approval_decision=approval_decision,
                 error_code=error_code,
                 adapter_metadata=registration.adapter_metadata,
