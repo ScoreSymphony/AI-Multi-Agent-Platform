@@ -431,8 +431,9 @@ def _try_numeric_version_key(version: str) -> tuple[int, int, int] | None:
     parts = version.split(".")
     if not 1 <= len(parts) <= 3 or any(not part.isdigit() for part in parts):
         return None
-    values = tuple(int(part) for part in parts)
-    return (values + (0, 0, 0))[:3]
+    values = [int(part) for part in parts]
+    values.extend([0] * (3 - len(values)))
+    return values[0], values[1], values[2]
 
 
 def _numeric_version_key(version: str) -> tuple[int, int, int]:
