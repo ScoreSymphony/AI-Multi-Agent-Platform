@@ -11,7 +11,7 @@ type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 type FrozenJsonValue = JsonScalar | tuple[FrozenJsonValue, ...] | Mapping[str, FrozenJsonValue]
 
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "2.0"
 
 
 def _freeze_json(value: JsonValue) -> FrozenJsonValue:
