@@ -5,6 +5,7 @@ from __future__ import annotations
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
     AuthorizationProvider,
+    CapabilityProvider,
     EventProvider,
     FileProvider,
     KnowledgeProvider,
@@ -49,6 +50,24 @@ def _descriptor(provider_id: str, provider_type: str, kind: CapabilityKind) -> P
         provider_type=provider_type,
         capabilities=(Capability(name=f"{provider_type}.basic", kind=kind),),
     )
+
+
+class FakeCapabilityProvider(CapabilityProvider):
+    descriptor = _descriptor("fake-capabilities", "capability-registry", CapabilityKind.TOOL)
+
+    def __init__(self, capabilities: tuple[Capability, ...] = ()) -> None:
+        self.capabilities = capabilities or self.descriptor.capabilities
+
+    async def list_capabilities(
+        self,
+        context: OperationContext,
+        *,
+        kind: CapabilityKind | None = None,
+    ) -> tuple[Capability, ...]:
+        del context
+        if kind is None:
+            return self.capabilities
+        return tuple(capability for capability in self.capabilities if capability.kind is kind)
 
 
 class FakeOrchestrator(Orchestrator):
