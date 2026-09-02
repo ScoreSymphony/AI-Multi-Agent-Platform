@@ -8,6 +8,7 @@ behind these contracts rather than becoming part of the canonical domain model.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 
 from .types import (
     AuthorizationDecision,
@@ -25,6 +26,7 @@ from .types import (
     ModelResponse,
     NodeDescriptor,
     OperationContext,
+    OperationControl,
     PlanRequest,
     PlanResponse,
     PlatformEvent,
@@ -134,8 +136,10 @@ class MemoryProvider(ProviderContract):
         key: str,
         value: JsonValue,
         context: OperationContext,
+        *,
+        metadata: dict[str, JsonValue] | None = None,
     ) -> StoredObject:
-        """Store or replace one memory entry."""
+        """Store or replace one memory entry and optional canonical metadata."""
 
     @abstractmethod
     async def get(
@@ -156,8 +160,10 @@ class FileProvider(ProviderContract):
         object_ref: str,
         data: bytes,
         context: OperationContext,
+        *,
+        metadata: dict[str, JsonValue] | None = None,
     ) -> StoredObject:
-        """Persist payload bytes for a canonical object reference."""
+        """Persist bytes and optional canonical metadata for an object reference."""
 
     @abstractmethod
     async def read(self, object_ref: str, context: OperationContext) -> bytes:
@@ -186,7 +192,7 @@ class KnowledgeProvider(ProviderContract):
 
 
 class EventProvider(ProviderContract):
-    """Publishes and reads canonical events."""
+    """Publishes, reads and subscribes to canonical platform events."""
 
     @abstractmethod
     async def publish(self, event: PlatformEvent) -> None:
@@ -198,8 +204,19 @@ class EventProvider(ProviderContract):
         correlation_id: str,
         *,
         after_event_id: str | None = None,
+        control: OperationControl | None = None,
     ) -> tuple[PlatformEvent, ...]:
         """Read events for one logical flow in provider-defined stable order."""
+
+    @abstractmethod
+    def subscribe(
+        self,
+        correlation_id: str,
+        *,
+        after_event_id: str | None = None,
+        control: OperationControl | None = None,
+    ) -> AsyncIterator[PlatformEvent]:
+        """Yield canonical events from a stable cursor until cancelled."""
 
 
 class AuthorizationProvider(ProviderContract):
