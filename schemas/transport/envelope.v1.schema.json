@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/transport/envelope.v1.schema.json",
+  "title": "AI Multi-Agent Platform Transport Envelope v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "message_id",
+    "envelope_version",
+    "message_type",
+    "kind",
+    "payload_schema_version",
+    "timestamp",
+    "source_component",
+    "correlation_id"
+  ],
+  "properties": {
+    "message_id": { "type": "string", "minLength": 1 },
+    "envelope_version": { "const": "1.0" },
+    "message_type": { "type": "string", "minLength": 1 },
+    "kind": {
+      "enum": ["domain_event", "command", "notification", "signal"]
+    },
+    "payload_schema_version": { "type": "string", "minLength": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "source_component": { "type": "string", "minLength": 1 },
+    "correlation_id": { "type": "string", "minLength": 1 },
+    "causation_id": { "type": ["string", "null"] },
+    "project_id": { "type": ["string", "null"] },
+    "task_id": { "type": ["string", "null"] },
+    "run_id": { "type": ["string", "null"] },
+    "idempotency_key": { "type": ["string", "null"] },
+    "trace_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trace_id": { "type": ["string", "null"] },
+        "span_id": { "type": ["string", "null"] },
+        "trace_flags": { "type": ["string", "null"] },
+        "tracestate": { "type": ["string", "null"] },
+        "baggage": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "payload": {
+      "type": ["object", "array", "string", "number", "boolean"]
+    },
+    "payload_ref": { "type": "string", "minLength": 1 },
+    "attributes": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "oneOf": [
+    {
+      "required": ["payload"],
+      "not": { "required": ["payload_ref"] }
+    },
+    {
+      "required": ["payload_ref"],
+      "not": { "required": ["payload"] }
+    }
+  ]
+}
