@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
 
@@ -13,7 +14,7 @@ from ai_multi_agent_platform.contracts.types import (
     JsonValue,
     OperationContext,
 )
-from ai_multi_agent_platform.domain import validate_id
+from ai_multi_agent_platform.domain import utc_now, validate_id
 
 
 def _freeze_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
@@ -201,10 +202,14 @@ class InvocationRecord:
     provider_tool_ref: str
     status: InvocationStatus
     trace: InvocationTrace
+    recorded_at: datetime = field(default_factory=utc_now)
     canonical_tool_invocation_id: str | None = None
+    approval_decision: str | None = None
     error_code: str | None = None
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
     def __post_init__(self) -> None:
         if self.canonical_tool_invocation_id is not None:
             validate_id(self.canonical_tool_invocation_id, "tool_invocation")
+        if self.approval_decision is not None and not self.approval_decision.strip():
+            raise ValueError("approval_decision must not be blank")
