@@ -11,6 +11,7 @@ from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
     ExecutionRequest,
+    ExecutionStatus,
     KnowledgeHit,
     KnowledgeQuery,
     ModelRequest,
@@ -112,8 +113,8 @@ def test_lifecycle_backend_uses_canonical_run_id_and_normalized_errors() -> None
     cancelled = asyncio.run(backend.cancel("run-demo", CTX))
 
     assert handle.run_id == "run-demo"
-    assert running.status == "running"
-    assert cancelled.status == "cancelled"
+    assert running.status is ExecutionStatus.RUNNING
+    assert cancelled.status is ExecutionStatus.CANCELLED
 
     with pytest.raises(ContractError) as error:
         asyncio.run(backend.get("missing", CTX))
@@ -157,6 +158,7 @@ def test_event_and_knowledge_providers_preserve_correlation() -> None:
         event_type="task.ready",
         subject_type="task",
         subject_id="task-demo",
+        occurred_at="2026-09-02T16:00:00+00:00",
         context=CTX,
     )
     asyncio.run(events.publish(event))
@@ -164,6 +166,7 @@ def test_event_and_knowledge_providers_preserve_correlation() -> None:
     hits = asyncio.run(knowledge.query(KnowledgeQuery(query="question", context=CTX)))
 
     assert read_back == (event,)
+    assert read_back[0].schema_version == "1.0"
     assert hits[0].ref == "doc-1"
 
 
