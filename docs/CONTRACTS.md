@@ -10,6 +10,7 @@ The initial contract surface contains:
 
 | Contract | Responsibility |
 | --- | --- |
+| `CapabilityProvider` | Aggregate and filter normalized capabilities from one registry/source |
 | `Orchestrator` | Produce a provider-neutral plan for canonical task intent |
 | `LifecycleBackend` | Start, observe and cancel canonical run attempts |
 | `ModelProvider` | Execute one provider-neutral model request |
@@ -47,7 +48,7 @@ Backend/runtime identifiers may be returned only in explicit external/backend re
 
 ## Capability discovery
 
-Every provider exposes a `ProviderDescriptor` and therefore a normalized capability list.
+Every provider exposes a `ProviderDescriptor` and therefore a normalized capability list. `CapabilityProvider` additionally supplies a registry-style query boundary for aggregating/filtering capability records without inspecting concrete provider classes.
 
 Capabilities contain:
 
