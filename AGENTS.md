@@ -10,6 +10,7 @@ All contributors and coding agents must treat the following documents as authori
 
 - [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md) — product identity, canonical workflow, deployment/cost goals and replaceable architecture layers.
 - [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md) — non-negotiable architecture principles and explicit invariants.
+- [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) — dependency-driven execution order, parallel work lanes and convergence gates.
 - [`docs/adr/README.md`](docs/adr/README.md) — process for recording material architecture decisions.
 
 Implementation work must not silently contradict the normative documents. If a material decision changes canonical domain semantics, lifecycle ownership, public contracts, adapter boundaries, persistence ownership, distributed execution, security boundaries or replacement strategy, create or update an ADR and the affected normative documentation.
@@ -33,15 +34,45 @@ Implementation work must not silently contradict the normative documents. If a m
 15. Treat single-node operation as a valid production topology and multi-node operation as an extension of the same contracts.
 16. Treat security, approvals, traceability, observability and recovery as cross-cutting platform requirements.
 
+## Issue dependency and execution rules
+
+GitHub issue numbers are identifiers, **not** implementation order.
+
+Use these rules when selecting work:
+
+1. Follow explicit `Hard dependencies` in the target issue.
+2. `Follow-up integrations`, `Related issues`, future extension references and optional integrations are not blockers unless the target issue explicitly says otherwise.
+3. Prefer work listed as currently ready in [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md).
+4. Multiple issues in the same parallel lane or readiness batch may be implemented concurrently when they do not edit the same contracts/files incompatibly.
+5. Before starting an issue, re-check that its hard dependencies are merged/closed and that no newer ADR or issue revision changed the contract.
+6. If an issue discovers a missing prerequisite, do not silently create a competing architecture. Update the issue/dependency graph or create a narrowly scoped prerequisite issue.
+7. Downstream issues extend existing canonical contracts; they must not redefine upstream ownership merely to simplify implementation.
+8. When parallel branches touch shared contracts, merge the contract-owning prerequisite first, then rebase/update downstream work before merging.
+
+## Merge priority for parallel work
+
+When several branches are ready, prefer this order:
+
+1. canonical contracts/domain changes;
+2. reference implementations and contract tests;
+3. provider/adapter implementations;
+4. Control Plane/API extensions;
+5. UI/CLI/client integration;
+6. deployment/operations integration.
+
+This minimizes parallel branches building against stale or private assumptions.
+
 ## Third-party integration categories
 
 Use the categories defined in `LICENSE_POLICY.md`: protocol/specification integration, library dependency, external self-hosted service, adapter integration, vendored source, forked source, selective code port, and reference-only influence.
 
 A public or open-source repository is not automatically safe to copy. Prefer the least coupled integration category that satisfies the requirement.
 
-## Initial implementation order
+## Initial foundation status
 
-Follow the numbered GitHub issues. The first architecture sequence is product vision, repository baseline, upstream/license policy, canonical domain model, core interfaces, and then the platform task/run/event kernel.
+The initial architecture foundation (#1–#7) established product vision, repository baseline, upstream/license policy, canonical domain contracts, replaceable interfaces, the canonical task/run/event kernel and the reference execution path.
+
+Further implementation must follow the dependency-driven roadmap rather than simple numeric issue order.
 
 ## Source layout direction
 

@@ -51,6 +51,35 @@ class KnowledgeSearchMode(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class MemoryAccessPolicy:
+    """Provider-neutral access semantics that #15/#33 resolve to authorization decisions.
+
+    Values in ``readers`` and ``writers`` are policy subjects, not backend ACL IDs. This
+    keeps memory scope semantics explicit without coupling the data contract to one IAM
+    implementation.
+    """
+
+    readers: tuple[str, ...]
+    writers: tuple[str, ...]
+    agent_revision_access: str
+    team_access: str
+    task_inheritance: str
+    cross_project_access: str
+
+    def __post_init__(self) -> None:
+        if not self.readers:
+            raise ValueError("memory access policy requires at least one reader subject")
+        if not self.writers:
+            raise ValueError("memory access policy requires at least one writer subject")
+        for subject in (*self.readers, *self.writers):
+            _require_nonblank(subject, "memory access subject")
+        _require_nonblank(self.agent_revision_access, "agent_revision_access")
+        _require_nonblank(self.team_access, "team_access")
+        _require_nonblank(self.task_inheritance, "task_inheritance")
+        _require_nonblank(self.cross_project_access, "cross_project_access")
+
+
+@dataclass(frozen=True, slots=True)
 class DataAccessContext:
     """Authorization/audit context preserved across data-provider calls."""
 
@@ -177,6 +206,12 @@ class MemoryEntry:
             raise ValueError("retention=until requires expires_at")
         if self.scope is MemoryScope.HISTORICAL and not self.provenance:
             raise ValueError("historical memory requires provenance")
+        if self.scope is not MemoryScope.SHORT_TERM and not self.provenance:
+            object.__setattr__(
+                self,
+                "provenance",
+                (SourceRef(kind="memory_writer", ref=self.created_by),),
+            )
         if self.supersedes_memory_id is not None:
             validate_id(self.supersedes_memory_id, "memory")
         if self.superseded_by_memory_id is not None:
@@ -187,6 +222,20 @@ class MemoryEntry:
     @property
     def expired(self) -> bool:
         return self.expires_at is not None and self.expires_at <= datetime.now(UTC)
+
+    @property
+    def access_policy(self) -> MemoryAccessPolicy:
+        """Canonical scope policy; #15/#33 decide whether a concrete actor matches it."""
+
+        return memory_access_policy_for_scope(self.scope, self.owner_ref)
+
+    @property
+    def execution_ref(self) -> str | None:
+        """Persisted execution/session identity for short-term context."""
+
+        if self.scope is MemoryScope.SHORT_TERM:
+            return self.scope_id
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,6 +350,69 @@ class KnowledgeSearchResult:
         validate_id(self.document_id, "knowledge_document")
         _require_nonblank(self.revision, "revision")
         _require_nonblank(self.location, "location")
+
+
+def memory_access_policy_for_scope(scope: MemoryScope, owner_ref: str) -> MemoryAccessPolicy:
+    """Return the canonical default access semantics for a memory scope.
+
+    These policy subjects are intentionally provider-neutral. Authorization issue #15 and
+    agent/team issue #33 resolve the symbolic subjects against concrete identities.
+    """
+
+    _require_nonblank(owner_ref, "owner_ref")
+    if scope is MemoryScope.SHORT_TERM:
+        return MemoryAccessPolicy(
+            readers=(owner_ref, "active_context"),
+            writers=(owner_ref, "active_context"),
+            agent_revision_access="context_bound",
+            team_access="deny_by_default",
+            task_inheritance="none",
+            cross_project_access="deny",
+        )
+    if scope is MemoryScope.TASK:
+        return MemoryAccessPolicy(
+            readers=(owner_ref, "authorized_task_participant"),
+            writers=(owner_ref, "authorized_task_participant"),
+            agent_revision_access="authorized_task_agent_revisions",
+            team_access="policy_controlled",
+            task_inheritance="same_task_only",
+            cross_project_access="deny",
+        )
+    if scope is MemoryScope.AGENT:
+        return MemoryAccessPolicy(
+            readers=(owner_ref, "authorized_agent_revision"),
+            writers=(owner_ref, "authorized_agent_revision"),
+            agent_revision_access="same_agent_policy_controlled",
+            team_access="explicit_policy_only",
+            task_inheritance="explicit_only",
+            cross_project_access="deny_by_default",
+        )
+    if scope is MemoryScope.WORKSPACE:
+        return MemoryAccessPolicy(
+            readers=(owner_ref, "authorized_workspace_member"),
+            writers=(owner_ref, "authorized_workspace_member"),
+            agent_revision_access="workspace_policy_controlled",
+            team_access="workspace_policy_controlled",
+            task_inheritance="explicit_only",
+            cross_project_access="deny",
+        )
+    if scope is MemoryScope.USER:
+        return MemoryAccessPolicy(
+            readers=(owner_ref,),
+            writers=(owner_ref,),
+            agent_revision_access="explicit_user_grant_only",
+            team_access="deny_by_default",
+            task_inheritance="explicit_user_grant_only",
+            cross_project_access="explicit_policy_only",
+        )
+    return MemoryAccessPolicy(
+        readers=(owner_ref, "authorized_history_reader"),
+        writers=(owner_ref, "authorized_history_maintainer"),
+        agent_revision_access="history_policy_controlled",
+        team_access="history_policy_controlled",
+        task_inheritance="none",
+        cross_project_access="explicit_policy_only",
+    )
 
 
 def new_file_id() -> str:
