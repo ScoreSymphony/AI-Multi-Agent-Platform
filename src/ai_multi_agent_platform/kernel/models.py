@@ -17,9 +17,7 @@ class TaskStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-TERMINAL_TASK_STATUSES = frozenset(
-    {TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED}
-)
+TERMINAL_TASK_STATUSES = frozenset({TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED})
 TERMINAL_RUN_STATUSES = frozenset(
     {
         ExecutionStatus.SUCCEEDED,
