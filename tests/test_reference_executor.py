@@ -9,7 +9,7 @@ from ai_multi_agent_platform.execution import (
     ReferenceExecutor,
 )
 
-from .executor_contract_suite import ExecutorContractSuite
+from executor_contract_suite import ExecutorContractSuite
 
 
 class TestReferenceExecutorContract(ExecutorContractSuite):
