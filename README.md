@@ -20,6 +20,12 @@ The platform is designed around canonical tasks, runs, agents, tools, models, wo
 
 The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architectural boundaries live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md).
 
+## Development
+
+A fresh-clone setup and the validation commands are documented in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Contribution and architecture-change rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+Repository-level integration boundaries are reserved under `adapters/`, `workers/` and `frontend/`; concrete contracts are intentionally deferred to the numbered architecture issues.
+
 ## Status
 
 The repository is at its initial architecture/bootstrap stage. Implementation work should follow the numbered GitHub issues in order unless an explicit dependency decision changes that order.
