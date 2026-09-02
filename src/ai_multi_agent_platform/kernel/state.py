@@ -181,12 +181,19 @@ def reduce_run(events: tuple[PlatformEvent, ...], run_id: str) -> RunView:
             continue
 
         if event.event_type == "run.queued":
+            task_id = _required_string(event.payload, "task_id")
+            attempt = _required_int(event.payload, "attempt")
             if run is not None:
-                raise ContractError(ErrorCode.CONFLICT, f"Duplicate run creation: {run_id}")
+                if run.task_id != task_id or run.attempt != attempt:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        f"Conflicting run reservation replay: {run_id}",
+                    )
+                continue
             run = RunView(
                 run_id=run_id,
-                task_id=_required_string(event.payload, "task_id"),
-                attempt=_required_int(event.payload, "attempt"),
+                task_id=task_id,
+                attempt=attempt,
                 status=ExecutionStatus.QUEUED,
             )
             continue
