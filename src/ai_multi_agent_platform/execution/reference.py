@@ -178,15 +178,39 @@ class ReferenceExecutor(Executor):
             )
         if request.action == "fail":
             message = str(request.arguments.get("message", "controlled failure"))
-            code = int(request.arguments.get("code", 1))
+            code = self._integer_argument(request, "code", default=1)
             raise _ControlledFailure(message, code)
         if request.action == "sleep":
-            seconds = float(request.arguments.get("seconds", 0))
+            seconds = self._number_argument(request, "seconds", default=0.0)
             if seconds < 0:
                 raise ValueError("sleep seconds must not be negative")
             await self._sleep_with_cancellation(seconds, request)
             return _ActionResult(output={"slept_seconds": seconds})
         raise AssertionError("capability validation bug")
+
+    @staticmethod
+    def _integer_argument(
+        request: ExecutionRequest,
+        name: str,
+        *,
+        default: int,
+    ) -> int:
+        value = request.arguments.get(name, default)
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise ValueError(f"{name} must be an integer")
+        return value
+
+    @staticmethod
+    def _number_argument(
+        request: ExecutionRequest,
+        name: str,
+        *,
+        default: float,
+    ) -> float:
+        value = request.arguments.get(name, default)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise ValueError(f"{name} must be a number")
+        return float(value)
 
     async def _sleep_with_cancellation(
         self,

@@ -7,13 +7,19 @@ from pathlib import Path
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
-    ExecutionHandle as KernelExecutionHandle,
-    ExecutionRequest as KernelExecutionRequest,
     ExecutionSnapshot,
-    ExecutionStatus as KernelExecutionStatus,
     LifecycleBackend,
     OperationContext,
     ProviderDescriptor,
+)
+from ai_multi_agent_platform.contracts import (
+    ExecutionHandle as KernelExecutionHandle,
+)
+from ai_multi_agent_platform.contracts import (
+    ExecutionRequest as KernelExecutionRequest,
+)
+from ai_multi_agent_platform.contracts import (
+    ExecutionStatus as KernelExecutionStatus,
 )
 
 from .contracts import ExecutionRequest, ExecutionResult, ExecutionStatus, Executor
@@ -85,9 +91,7 @@ class ExecutorLifecycleBackend(LifecycleBackend):
                 "stdout": result.stdout,
                 "stderr": result.stderr,
                 "output": result.output,
-                "artifacts": [
-                    artifact.relative_path for artifact in result.artifacts
-                ],
+                "artifacts": [artifact.relative_path for artifact in result.artifacts],
             },
         )
 

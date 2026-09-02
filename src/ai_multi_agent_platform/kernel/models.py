@@ -8,7 +8,6 @@ from enum import StrEnum
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import Run, RunStatus, Task, TaskStatus
 
-
 TERMINAL_RUN_STATUSES = frozenset(
     {
         RunStatus.SUCCEEDED,
