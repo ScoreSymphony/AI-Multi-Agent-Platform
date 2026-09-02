@@ -12,12 +12,13 @@ from ai_multi_agent_platform.contracts.interfaces import (
     ProviderContract,
 )
 from ai_multi_agent_platform.contracts.types import (
+    AuthorizationDecision,
     AuthorizationRequest,
     JsonValue,
     OperationContext,
     OperationControl,
 )
-from ai_multi_agent_platform.domain import OwnerRef, Project, RunStatus, new_id, validate_id
+from ai_multi_agent_platform.domain import OwnerRef, Project, new_id, validate_id
 from ai_multi_agent_platform.kernel import PlatformKernel, RunState, TaskState
 from ai_multi_agent_platform.kernel.repository import EventRepository
 
@@ -30,6 +31,8 @@ from .models import (
     json_object,
     paginate,
 )
+
+ReferenceCollection = Literal["plans", "steps", "artifacts", "results"]
 
 
 class ScopeStore:
@@ -104,7 +107,8 @@ class ScopeStore:
             return self._workspaces[workspace_id]
         except KeyError as exc:
             raise ContractError(
-                ErrorCode.NOT_FOUND, f"workspace not found: {workspace_id}"
+                ErrorCode.NOT_FOUND,
+                f"workspace not found: {workspace_id}",
             ) from exc
 
     def list_workspaces(self) -> tuple[WorkspaceIdentity, ...]:
@@ -163,8 +167,14 @@ class ControlPlane:
         context: RequestContext,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "project:create", "projects")
         owner_type, owner_id = _resolve_owner(context.actor, payload)
+        await self._authorize(
+            context,
+            "project:create",
+            "projects",
+            owner_type=owner_type,
+            owner_id=owner_id,
+        )
         project = self._scopes.create_project(
             key=_require_key(context),
             name=_required_string(payload, "name"),
@@ -180,17 +190,34 @@ class ControlPlane:
         query: PageQuery,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, "project:list", "projects")
-        return paginate(
-            [_project_resource(project) for project in self._scopes.list_projects()], query
-        )
+        resources: list[dict[str, JsonValue]] = []
+        for project in self._scopes.list_projects():
+            if await self._allowed(
+                context,
+                "project:list",
+                project.id,
+                owner_type=project.owner_ref.type,
+                owner_id=project.owner_ref.id,
+                project_id=project.id,
+            ):
+                resources.append(_project_resource(project))
+        return paginate(resources, query)
 
     async def get_project(
         self,
         context: RequestContext,
         project_id: str,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "project:read", project_id)
-        return _project_resource(self._scopes.get_project(project_id))
+        project = self._scopes.get_project(project_id)
+        await self._authorize(
+            context,
+            "project:read",
+            project_id,
+            owner_type=project.owner_ref.type,
+            owner_id=project.owner_ref.id,
+            project_id=project.id,
+        )
+        return _project_resource(project)
 
     async def create_workspace(
         self,
@@ -198,7 +225,15 @@ class ControlPlane:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         project_id = _required_string(payload, "project_id")
-        await self._authorize(context, "workspace:create", project_id)
+        project = self._scopes.get_project(project_id)
+        await self._authorize(
+            context,
+            "workspace:create",
+            project_id,
+            owner_type=project.owner_ref.type,
+            owner_id=project.owner_ref.id,
+            project_id=project.id,
+        )
         workspace = self._scopes.create_workspace(
             key=_require_key(context),
             project_id=project_id,
@@ -212,29 +247,52 @@ class ControlPlane:
         query: PageQuery,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, "workspace:list", "workspaces")
-        return paginate(
-            [_workspace_resource(workspace) for workspace in self._scopes.list_workspaces()],
-            query,
-        )
+        resources: list[dict[str, JsonValue]] = []
+        for workspace in self._scopes.list_workspaces():
+            if await self._allowed(
+                context,
+                "workspace:list",
+                workspace.id,
+                owner_type=workspace.owner_type,
+                owner_id=workspace.owner_id,
+                project_id=workspace.project_id,
+            ):
+                resources.append(_workspace_resource(workspace))
+        return paginate(resources, query)
 
     async def get_workspace(
         self,
         context: RequestContext,
         workspace_id: str,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "workspace:read", workspace_id)
-        return _workspace_resource(self._scopes.get_workspace(workspace_id))
+        workspace = self._scopes.get_workspace(workspace_id)
+        await self._authorize(
+            context,
+            "workspace:read",
+            workspace_id,
+            owner_type=workspace.owner_type,
+            owner_id=workspace.owner_id,
+            project_id=workspace.project_id,
+        )
+        return _workspace_resource(workspace)
 
     async def create_task(
         self,
         context: RequestContext,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "task:create", "tasks")
         owner_type, owner_id = _resolve_owner(context.actor, payload)
         project_id = _optional_string(payload, "project_id")
         if project_id is not None:
             self._scopes.get_project(project_id)
+        await self._authorize(
+            context,
+            "task:create",
+            "tasks",
+            owner_type=owner_type,
+            owner_id=owner_id,
+            project_id=project_id,
+        )
         task = await self._kernel.create_task(
             idempotency_key=_require_key(context),
             title=_required_string(payload, "title"),
@@ -254,10 +312,11 @@ class ControlPlane:
         query: PageQuery,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, "task:list", "tasks")
-        resources = [
-            _task_resource(await self._kernel.get_task(task_id))
-            for task_id in await self._task_ids()
-        ]
+        resources: list[dict[str, JsonValue]] = []
+        for task_id in await self._task_ids():
+            task = await self._kernel.get_task(task_id)
+            if await self._allowed_for_task(context, "task:list", task_id, task):
+                resources.append(_task_resource(task))
         return paginate(resources, query)
 
     async def get_task(
@@ -265,11 +324,17 @@ class ControlPlane:
         context: RequestContext,
         task_id: str,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "task:read", task_id)
-        return _task_resource(await self._kernel.get_task(task_id))
+        task = await self._kernel.get_task(task_id)
+        await self._authorize_for_task(context, "task:read", task_id, task)
+        return _task_resource(task)
 
-    async def queue_task(self, context: RequestContext, task_id: str) -> dict[str, JsonValue]:
-        await self._authorize(context, "task:queue", task_id)
+    async def queue_task(
+        self,
+        context: RequestContext,
+        task_id: str,
+    ) -> dict[str, JsonValue]:
+        task = await self._kernel.get_task(task_id)
+        await self._authorize_for_task(context, "task:queue", task_id, task)
         state = await self._kernel.ready_task(
             idempotency_key=_require_key(context),
             task_id=task_id,
@@ -278,8 +343,13 @@ class ControlPlane:
         )
         return _task_resource(state)
 
-    async def start_task(self, context: RequestContext, task_id: str) -> dict[str, JsonValue]:
-        await self._authorize(context, "task:start", task_id)
+    async def start_task(
+        self,
+        context: RequestContext,
+        task_id: str,
+    ) -> dict[str, JsonValue]:
+        task = await self._kernel.get_task(task_id)
+        await self._authorize_for_task(context, "task:start", task_id, task)
         state = await self._kernel.start_task(
             idempotency_key=_require_key(context),
             task_id=task_id,
@@ -288,8 +358,13 @@ class ControlPlane:
         )
         return _run_resource(state)
 
-    async def cancel_task(self, context: RequestContext, task_id: str) -> dict[str, JsonValue]:
-        await self._authorize(context, "task:cancel", task_id)
+    async def cancel_task(
+        self,
+        context: RequestContext,
+        task_id: str,
+    ) -> dict[str, JsonValue]:
+        task = await self._kernel.get_task(task_id)
+        await self._authorize_for_task(context, "task:cancel", task_id, task)
         state = await self._kernel.cancel_task(
             idempotency_key=_require_key(context),
             task_id=task_id,
@@ -298,8 +373,13 @@ class ControlPlane:
         )
         return _task_resource(state)
 
-    async def retry_task(self, context: RequestContext, task_id: str) -> dict[str, JsonValue]:
-        await self._authorize(context, "task:retry", task_id)
+    async def retry_task(
+        self,
+        context: RequestContext,
+        task_id: str,
+    ) -> dict[str, JsonValue]:
+        task = await self._kernel.get_task(task_id)
+        await self._authorize_for_task(context, "task:retry", task_id, task)
         state = await self._kernel.retry_task(
             idempotency_key=_require_key(context),
             task_id=task_id,
@@ -320,10 +400,11 @@ class ControlPlane:
         resources: list[dict[str, JsonValue]] = []
         for current_task_id in task_ids:
             task = await self._kernel.get_task(current_task_id)
-            resources.extend(
-                _run_resource(await self._kernel.get_run(current_task_id, run_id))
-                for run_id in task.run_ids
-            )
+            for run_id in task.run_ids:
+                if await self._allowed_for_task(context, "run:list", run_id, task):
+                    resources.append(
+                        _run_resource(await self._kernel.get_run(current_task_id, run_id))
+                    )
         return paginate(resources, query)
 
     async def get_run(
@@ -333,13 +414,17 @@ class ControlPlane:
         *,
         task_id: str | None = None,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "run:read", run_id)
         if task_id is not None:
-            return _run_resource(await self._kernel.get_run(task_id, run_id))
+            task = await self._kernel.get_task(task_id)
+            run = await self._kernel.get_run(task_id, run_id)
+            await self._authorize_for_task(context, "run:read", run_id, task)
+            return _run_resource(run)
         for current_task_id in await self._task_ids():
             task = await self._kernel.get_task(current_task_id)
             if run_id in task.run_ids:
-                return _run_resource(await self._kernel.get_run(current_task_id, run_id))
+                run = await self._kernel.get_run(current_task_id, run_id)
+                await self._authorize_for_task(context, "run:read", run_id, task)
+                return _run_resource(run)
         raise ContractError(ErrorCode.NOT_FOUND, f"run not found: {run_id}")
 
     async def cancel_run(
@@ -348,7 +433,9 @@ class ControlPlane:
         task_id: str,
         run_id: str,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "run:cancel", run_id)
+        task = await self._kernel.get_task(task_id)
+        await self._kernel.get_run(task_id, run_id)
+        await self._authorize_for_task(context, "run:cancel", run_id, task)
         state = await self._kernel.cancel_run(
             idempotency_key=_require_key(context),
             task_id=task_id,
@@ -361,64 +448,42 @@ class ControlPlane:
     async def list_references(
         self,
         context: RequestContext,
-        collection: Literal["plans", "steps", "artifacts", "results"],
+        collection: ReferenceCollection,
         query: PageQuery,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, f"{collection}:list", collection)
         resources: list[dict[str, JsonValue]] = []
         for task_id in await self._task_ids():
             task = await self._kernel.get_task(task_id)
-            if collection == "plans" and task.plan_ref is not None:
-                resources.append(
-                    {
-                        "id": task.plan_ref,
-                        "type": "plan",
-                        "task_id": task_id,
-                        "step_ids": list(task.step_ids),
-                    }
-                )
-            elif collection == "steps":
-                resources.extend(
-                    {
-                        "id": step_id,
-                        "type": "step",
-                        "task_id": task_id,
-                        "plan_id": task.plan_ref,
-                    }
-                    for step_id in task.step_ids
-                )
-            elif collection == "artifacts":
-                resources.extend(
-                    {
-                        "id": artifact_id,
-                        "type": "artifact",
-                        "task_id": task_id,
-                    }
-                    for artifact_id in task.artifact_ids
-                )
-            elif collection == "results":
-                resources.extend(
-                    {
-                        "id": result_id,
-                        "type": "result",
-                        "task_id": task_id,
-                    }
-                    for result_id in task.result_ids
-                )
+            for resource in _references_for_task(task, collection):
+                resource_id = resource["id"]
+                if isinstance(resource_id, str) and await self._allowed_for_task(
+                    context,
+                    f"{collection}:list",
+                    resource_id,
+                    task,
+                ):
+                    resources.append(resource)
         return paginate(_deduplicate(resources), query)
 
     async def get_reference(
         self,
         context: RequestContext,
-        collection: Literal["plans", "steps", "artifacts", "results"],
+        collection: ReferenceCollection,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        page = await self.list_references(context, collection, PageQuery(limit=200))
-        items = page["items"]
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict) and item.get("id") == resource_id:
-                    return item
+        for task_id in await self._task_ids():
+            task = await self._kernel.get_task(task_id)
+            for resource in _references_for_task(task, collection):
+                if resource.get("id") != resource_id:
+                    continue
+                await self._authorize_for_task(
+                    context,
+                    f"{collection[:-1]}:read",
+                    resource_id,
+                    task,
+                )
+                return resource
         raise ContractError(ErrorCode.NOT_FOUND, f"{collection[:-1]} not found: {resource_id}")
 
     async def timeline(
@@ -427,7 +492,8 @@ class ControlPlane:
         task_id: str,
         query: PageQuery,
     ) -> dict[str, JsonValue]:
-        await self._authorize(context, "event:list", task_id)
+        task = await self._kernel.get_task(task_id)
+        await self._authorize_for_task(context, "event:list", task_id, task)
         events = [_event_resource(event) for event in await self._events.read_events(task_id)]
         return paginate(events, query)
 
@@ -438,32 +504,40 @@ class ControlPlane:
         *,
         after_event_id: str | None = None,
     ) -> AsyncIterator[dict[str, JsonValue]]:
-        await self._authorize(context, "event:subscribe", task_id)
+        task = await self._kernel.get_task(task_id)
+        await self._authorize_for_task(context, "event:subscribe", task_id, task)
 
-        async def iterator() -> AsyncIterator[dict[str, JsonValue]]:
-            if self._live_events is not None:
-                async for event in self._live_events.subscribe(
+        live_events = self._live_events
+        if live_events is not None:
+
+            async def live_iterator() -> AsyncIterator[dict[str, JsonValue]]:
+                async for event in live_events.subscribe(
                     task_id,
                     after_event_id=after_event_id,
                     control=OperationControl(),
                 ):
                     yield _event_resource(event)
-                return
-            events = await self._events.read_events(task_id)
-            emit = after_event_id is None
-            found = after_event_id is None
-            for event in events:
-                if emit:
-                    yield _event_resource(event)
-                elif event.id == after_event_id:
-                    emit = True
-                    found = True
-            if not found:
+
+            return live_iterator()
+
+        events = await self._events.read_events(task_id)
+        start_index = 0
+        if after_event_id is not None:
+            for index, event in enumerate(events):
+                if event.id == after_event_id:
+                    start_index = index + 1
+                    break
+            else:
                 raise ContractError(
-                    ErrorCode.NOT_FOUND, f"event cursor not found: {after_event_id}"
+                    ErrorCode.NOT_FOUND,
+                    f"event cursor not found: {after_event_id}",
                 )
 
-        return iterator()
+        async def repository_iterator() -> AsyncIterator[dict[str, JsonValue]]:
+            for event in events[start_index:]:
+                yield _event_resource(event)
+
+        return repository_iterator()
 
     async def _task_ids(self) -> tuple[str, ...]:
         return tuple(
@@ -472,29 +546,110 @@ class ControlPlane:
             if stream_id.startswith("task_")
         )
 
+    async def _authorize_for_task(
+        self,
+        context: RequestContext,
+        action: str,
+        resource_ref: str,
+        task: TaskState,
+    ) -> None:
+        await self._authorize(
+            context,
+            action,
+            resource_ref,
+            owner_type=task.task.owner_ref.type,
+            owner_id=task.task.owner_ref.id,
+            project_id=task.task.project_id,
+        )
+
+    async def _allowed_for_task(
+        self,
+        context: RequestContext,
+        action: str,
+        resource_ref: str,
+        task: TaskState,
+    ) -> bool:
+        return await self._allowed(
+            context,
+            action,
+            resource_ref,
+            owner_type=task.task.owner_ref.type,
+            owner_id=task.task.owner_ref.id,
+            project_id=task.task.project_id,
+        )
+
     async def _authorize(
         self,
         context: RequestContext,
         action: str,
         resource_ref: str,
+        *,
+        owner_type: str | None = None,
+        owner_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
+        decision = await self._authorization_decision(
+            context,
+            action,
+            resource_ref,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            project_id=project_id,
+        )
+        if decision is not None and not decision.allowed:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                decision.reason or "operation is forbidden",
+            )
+
+    async def _allowed(
+        self,
+        context: RequestContext,
+        action: str,
+        resource_ref: str,
+        *,
+        owner_type: str | None = None,
+        owner_id: str | None = None,
+        project_id: str | None = None,
+    ) -> bool:
+        decision = await self._authorization_decision(
+            context,
+            action,
+            resource_ref,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            project_id=project_id,
+        )
+        return decision is None or decision.allowed
+
+    async def _authorization_decision(
+        self,
+        context: RequestContext,
+        action: str,
+        resource_ref: str,
+        *,
+        owner_type: str | None = None,
+        owner_id: str | None = None,
+        project_id: str | None = None,
+    ) -> AuthorizationDecision | None:
         if self._authorization is None:
-            return
-        decision = await self._authorization.authorize(
+            return None
+        effective_owner_type = owner_type if owner_type is not None else context.actor.owner_type
+        effective_owner_id = owner_id if owner_id is not None else context.actor.owner_id
+        return await self._authorization.authorize(
             AuthorizationRequest(
                 principal_ref=context.actor.principal_ref,
                 action=action,
                 resource_ref=resource_ref,
                 context=OperationContext(
                     correlation_id=context.correlation_id,
-                    owner_type=context.actor.owner_type,
-                    owner_id=context.actor.owner_id,
+                    owner_type=effective_owner_type,
+                    owner_id=effective_owner_id,
+                    project_id=project_id,
                     control=OperationControl(idempotency_key=context.idempotency_key),
                 ),
             )
         )
-        if not decision.allowed:
-            raise ContractError(ErrorCode.FORBIDDEN, decision.reason or "operation is forbidden")
 
 
 def _resolve_owner(
@@ -623,6 +778,51 @@ def _run_resource(state: RunState) -> dict[str, JsonValue]:
         "recovery_required": state.recovery_required,
         "recovery_reason": state.recovery_reason,
     }
+
+
+def _references_for_task(
+    task: TaskState,
+    collection: ReferenceCollection,
+) -> list[dict[str, JsonValue]]:
+    task_id = task.task_id
+    if collection == "plans":
+        if task.plan_ref is None:
+            return []
+        return [
+            {
+                "id": task.plan_ref,
+                "type": "plan",
+                "task_id": task_id,
+                "step_ids": list(task.step_ids),
+            }
+        ]
+    if collection == "steps":
+        return [
+            {
+                "id": step_id,
+                "type": "step",
+                "task_id": task_id,
+                "plan_id": task.plan_ref,
+            }
+            for step_id in task.step_ids
+        ]
+    if collection == "artifacts":
+        return [
+            {
+                "id": artifact_id,
+                "type": "artifact",
+                "task_id": task_id,
+            }
+            for artifact_id in task.artifact_ids
+        ]
+    return [
+        {
+            "id": result_id,
+            "type": "result",
+            "task_id": task_id,
+        }
+        for result_id in task.result_ids
+    ]
 
 
 def _event_resource(event: object) -> dict[str, JsonValue]:
