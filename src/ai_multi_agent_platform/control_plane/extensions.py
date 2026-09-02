@@ -1,12 +1,13 @@
-"""Extensible full-scope Control Plane surface required by issue #32.
+"""Registration-based Control Plane extensions for later platform domains.
 
-The base Control Plane owns the resources whose application services already exist in
-this repository. This module adds platform-owned registration seams for later domains
-without proxying private backend APIs or inventing a second domain model.
+Issue #32 owns the stable Task/Run foundation. Canonical domains implemented by
+later issues extend that foundation only when their contracts exist. Generic future
+domains are therefore registered explicitly instead of being predeclared here.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Mapping
 from copy import deepcopy
 from typing import Any, Protocol, runtime_checkable
@@ -23,9 +24,7 @@ from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.models import ModelRegistry
 
-from .http import (
-    ControlPlaneHTTP as BaseControlPlaneHTTP,
-)
+from .http import ControlPlaneHTTP as BaseControlPlaneHTTP
 from .http import (
     HTTPRequest,
     HTTPResponse,
@@ -47,67 +46,39 @@ from .openapi import build_openapi as build_base_openapi
 from .service import ControlPlane as BaseControlPlane
 from .service import ScopeStore
 
-PLATFORM_COLLECTIONS = (
+FOUNDATION_COLLECTIONS = (
     "projects",
     "workspaces",
     "tasks",
     "plans",
     "steps",
     "runs",
-    "agents",
-    "teams",
     "artifacts",
     "results",
-    "files",
-    "memory",
-    "knowledge",
-    "models",
+)
+
+# These collections are implemented by later completed domain work (#10). They are
+# part of the current composed API, but not part of the issue #32 foundation itself.
+IMPLEMENTED_DOMAIN_COLLECTIONS = (
     "model-providers",
-    "providers",
-    "tools",
-    "capabilities",
-    "nodes",
-    "workers",
-    "approvals",
-    "automations",
-    "evaluations",
-    "plugins",
-    "adapters",
+    "models",
 )
 
-BASE_COLLECTIONS = frozenset(
-    {
-        "projects",
-        "workspaces",
-        "tasks",
-        "plans",
-        "steps",
-        "runs",
-        "artifacts",
-        "results",
-        "models",
-        "model-providers",
-    }
-)
-EXTENSION_COLLECTIONS = frozenset(PLATFORM_COLLECTIONS) - BASE_COLLECTIONS
+PLATFORM_COLLECTIONS = FOUNDATION_COLLECTIONS + IMPLEMENTED_DOMAIN_COLLECTIONS
+BASE_COLLECTIONS = frozenset(PLATFORM_COLLECTIONS)
 
-REQUIRED_COMMANDS = (
-    "approval.approve",
-    "approval.deny",
-    "adapter.enable",
-    "adapter.disable",
-    "plugin.enable",
-    "plugin.disable",
-    "worker.drain",
-    "worker.restore",
-    "automation.test",
-    "evaluation.start",
-)
+# Kept as a compatibility export. #32 no longer predeclares commands owned by future
+# domains; later domains register their own commands explicitly.
+REQUIRED_COMMANDS: tuple[str, ...] = ()
+
+_RESERVED_COLLECTIONS = BASE_COLLECTIONS | {"timeline", "commands"}
+_COLLECTION_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
+_COMMAND_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*$")
 
 
 @runtime_checkable
 class ResourceService(Protocol):
-    """Platform-owned read boundary for one canonical resource collection."""
+    """Platform-owned read boundary for one explicitly registered collection."""
 
     async def list_resources(
         self,
@@ -123,7 +94,7 @@ class ResourceService(Protocol):
 
 
 class CommandHandler(Protocol):
-    """Explicit command seam used by approvals, adapters, workers and automations."""
+    """Explicit command seam registered by the canonical domain that owns it."""
 
     def __call__(
         self,
@@ -168,7 +139,7 @@ class InMemoryResourceService:
 
 
 class ControlPlane(BaseControlPlane):
-    """Full #32 northbound service boundary with replaceable extension services."""
+    """Issue #32 foundation plus explicitly registered later-domain extensions."""
 
     def __init__(
         self,
@@ -192,18 +163,27 @@ class ControlPlane(BaseControlPlane):
             health_providers=health_providers,
             model_registry=model_registry,
         )
-        self._resource_services = dict(resource_services or {})
-        self._command_handlers = dict(command_handlers or {})
-        for collection in self._resource_services:
-            self._validate_extension_collection(collection)
+        self._resource_services: dict[str, ResourceService] = {}
+        self._command_handlers: dict[str, CommandHandler] = {}
+        for collection, service in (resource_services or {}).items():
+            self.register_resource_service(collection, service)
+        for command, handler in (command_handlers or {}).items():
+            self.register_command(command, handler)
+
+    @property
+    def registered_collections(self) -> tuple[str, ...]:
+        return tuple(sorted(self._resource_services))
+
+    @property
+    def registered_commands(self) -> tuple[str, ...]:
+        return tuple(sorted(self._command_handlers))
 
     def register_resource_service(self, collection: str, service: ResourceService) -> None:
-        self._validate_extension_collection(collection)
+        _validate_extension_collection(collection)
         self._resource_services[collection] = service
 
     def register_command(self, command: str, handler: CommandHandler) -> None:
-        if command not in REQUIRED_COMMANDS:
-            raise ValueError(f"unsupported canonical command: {command}")
+        _validate_command_name(command)
         self._command_handlers[command] = handler
 
     async def list_extension_resources(
@@ -212,24 +192,8 @@ class ControlPlane(BaseControlPlane):
         collection: str,
         query: PageQuery,
     ) -> dict[str, JsonValue]:
-        self._validate_extension_collection(collection)
+        service = self._registered_resource_service(collection)
         await self._authorize(context, f"{_singular(collection)}:list", collection)
-
-        if collection in {"providers", "adapters", "plugins"}:
-            resources = await self._provider_inventory(collection)
-            return paginate(resources, query)
-        if collection == "capabilities":
-            resources = await self._capability_inventory()
-            return paginate(resources, query)
-
-        service = self._resource_services.get(collection)
-        if service is None:
-            raise ContractError(
-                ErrorCode.UNAVAILABLE,
-                f"canonical {collection} service is not configured",
-                retryable=True,
-                details={"collection": collection},
-            )
         resources = list(await service.list_resources(context, query))
         _validate_resources(collection, resources)
         return paginate(resources, query)
@@ -240,28 +204,8 @@ class ControlPlane(BaseControlPlane):
         collection: str,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        self._validate_extension_collection(collection)
+        service = self._registered_resource_service(collection)
         await self._authorize(context, f"{_singular(collection)}:read", resource_id)
-
-        if collection in {"providers", "adapters", "plugins", "capabilities"}:
-            page = await self.list_extension_resources(context, collection, PageQuery(limit=200))
-            items = page.get("items")
-            if isinstance(items, list):
-                for item in items:
-                    if isinstance(item, dict) and item.get("id") == resource_id:
-                        return item
-            raise ContractError(
-                ErrorCode.NOT_FOUND, f"{collection} resource not found: {resource_id}"
-            )
-
-        service = self._resource_services.get(collection)
-        if service is None:
-            raise ContractError(
-                ErrorCode.UNAVAILABLE,
-                f"canonical {collection} service is not configured",
-                retryable=True,
-                details={"collection": collection},
-            )
         resource = await service.get_resource(context, resource_id)
         _validate_resources(collection, [resource])
         return resource
@@ -273,9 +217,13 @@ class ControlPlane(BaseControlPlane):
         resource_ref: str,
         payload: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
-        if command not in REQUIRED_COMMANDS:
+        _validate_command_name(command)
+        handler = self._command_handlers.get(command)
+        if handler is None:
             raise ContractError(
-                ErrorCode.INVALID_REQUEST, f"unsupported canonical command: {command}"
+                ErrorCode.NOT_FOUND,
+                f"canonical command is not registered: {command}",
+                details={"command": command},
             )
         if context.idempotency_key is None:
             raise ContractError(
@@ -284,65 +232,24 @@ class ControlPlane(BaseControlPlane):
                 details={"header": "Idempotency-Key"},
             )
         await self._authorize(context, command, resource_ref)
-        handler = self._command_handlers.get(command)
-        if handler is None:
-            raise ContractError(
-                ErrorCode.UNAVAILABLE,
-                f"canonical command handler is not configured: {command}",
-                retryable=True,
-                details={"command": command},
-            )
         result = await handler(context, resource_ref, payload or {})
         _reject_private_payload(result)
         return result
 
-    async def _provider_inventory(self, collection: str) -> list[dict[str, JsonValue]]:
-        resources: list[dict[str, JsonValue]] = []
-        for provider in self._health_providers:
-            descriptor = provider.descriptor
-            health = await provider.health()
-            resources.append(
-                {
-                    "id": descriptor.provider_id,
-                    "type": _singular(collection),
-                    "provider_type": descriptor.provider_type,
-                    "contract_version": descriptor.contract_version,
-                    "supported_operations": list(descriptor.supported_operations),
-                    "health": health.value,
-                    "available": descriptor.available,
-                }
+    def _registered_resource_service(self, collection: str) -> ResourceService:
+        _validate_extension_collection(collection)
+        service = self._resource_services.get(collection)
+        if service is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"canonical collection is not registered: {collection}",
+                details={"collection": collection},
             )
-        return resources
-
-    async def _capability_inventory(self) -> list[dict[str, JsonValue]]:
-        resources: list[dict[str, JsonValue]] = []
-        for provider in self._health_providers:
-            for capability in await provider.discover_capabilities():
-                resources.append(
-                    {
-                        "id": f"{provider.descriptor.provider_id}:{capability.name}",
-                        "type": "capability",
-                        "provider_ref": provider.descriptor.provider_id,
-                        "name": capability.name,
-                        "kind": capability.kind.value,
-                        "version": capability.version,
-                        "supported_operations": list(capability.supported_operations),
-                        "modalities": list(capability.modalities),
-                        "features": list(capability.features),
-                        "limits": dict(capability.limits),
-                        "attributes": dict(capability.attributes),
-                    }
-                )
-        return resources
-
-    @staticmethod
-    def _validate_extension_collection(collection: str) -> None:
-        if collection not in EXTENSION_COLLECTIONS:
-            raise ValueError(f"not an extension collection: {collection}")
+        return service
 
 
 class ControlPlaneHTTP(BaseControlPlaneHTTP):
-    """HTTP mapping for the complete issue #32 resource and command surface."""
+    """HTTP mapping for the current API plus explicit extension registrations."""
 
     def __init__(self, control_plane: ControlPlane) -> None:
         super().__init__(control_plane)
@@ -356,13 +263,21 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
             _require_supported_version(version)
 
             if request.method == "GET" and relative == "/openapi.json":
-                return self._response(200, build_openapi(), request_id, correlation_id)
+                specification = build_openapi(
+                    extension_collections=self._extended_control_plane.registered_collections,
+                    extension_commands=self._extended_control_plane.registered_commands,
+                )
+                return self._response(200, specification, request_id, correlation_id)
+
             if request.method == "GET" and relative in {"", "/"}:
                 manifest_resources: list[JsonValue] = [
                     *PLATFORM_COLLECTIONS,
+                    *self._extended_control_plane.registered_collections,
                     "timeline",
                 ]
-                manifest_commands: list[JsonValue] = [command for command in REQUIRED_COMMANDS]
+                manifest_commands: list[JsonValue] = [
+                    command for command in self._extended_control_plane.registered_commands
+                ]
                 return self._response(
                     200,
                     {
@@ -377,7 +292,8 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                 )
 
             segments = [segment for segment in relative.split("/") if segment]
-            if segments and segments[0] in EXTENSION_COLLECTIONS:
+            registered_collections = self._extended_control_plane.registered_collections
+            if segments and segments[0] in registered_collections:
                 context = _request_context(request, request_id, correlation_id)
                 query = _page_query(request.query)
                 if len(segments) == 1 and request.method == "GET":
@@ -387,21 +303,11 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                         query,
                     )
                     return self._response(200, page, request_id, correlation_id)
-                if len(segments) == 2 and request.method == "GET" and ":" not in segments[1]:
+                if len(segments) == 2 and request.method == "GET":
                     item = await self._extended_control_plane.get_extension_resource(
                         context,
                         segments[0],
                         segments[1],
-                    )
-                    return self._response(200, item, request_id, correlation_id)
-                command = _command_for_route(segments)
-                if command is not None and request.method == "POST":
-                    resource_ref = _resource_ref_for_route(segments)
-                    item = await self._extended_control_plane.execute_command(
-                        context,
-                        command,
-                        resource_ref,
-                        request.body,
                     )
                     return self._response(200, item, request_id, correlation_id)
 
@@ -448,14 +354,25 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
         return await super().handle(request)
 
 
-def build_openapi() -> dict[str, Any]:
-    """Extend the base OpenAPI contract with every resource/command required by #32."""
+def build_openapi(
+    *,
+    extension_collections: tuple[str, ...] = (),
+    extension_commands: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Generate current OpenAPI plus only explicitly registered future extensions."""
+
+    normalized_collections = tuple(sorted(set(extension_collections)))
+    normalized_commands = tuple(sorted(set(extension_commands)))
+    for collection in normalized_collections:
+        _validate_extension_collection(collection)
+    for command in normalized_commands:
+        _validate_command_name(command)
 
     specification = deepcopy(build_base_openapi())
     paths = specification["paths"]
     assert isinstance(paths, dict)
 
-    for collection in sorted(EXTENSION_COLLECTIONS):
+    for collection in normalized_collections:
         paths[f"/api/{API_VERSION}/{collection}"] = {
             "get": _list_operation(f"list{_pascal(collection)}", f"Canonical {collection} page")
         }
@@ -466,35 +383,15 @@ def build_openapi() -> dict[str, Any]:
             )
         }
 
-    command_routes = {
-        "approval.approve": "/approvals/{resource_id}:approve",
-        "approval.deny": "/approvals/{resource_id}:deny",
-        "adapter.enable": "/adapters/{resource_id}:enable",
-        "adapter.disable": "/adapters/{resource_id}:disable",
-        "plugin.enable": "/plugins/{resource_id}:enable",
-        "plugin.disable": "/plugins/{resource_id}:disable",
-        "worker.drain": "/workers/{resource_id}:drain",
-        "worker.restore": "/workers/{resource_id}:restore",
-        "automation.test": "/automations/{resource_id}:test",
-        "evaluation.start": "/evaluations/{resource_id}:start",
-    }
-    for command, route in command_routes.items():
-        paths[f"/api/{API_VERSION}{route}"] = {
-            "post": _command_operation(command.replace(".", "_") + "Command")
+    if normalized_commands:
+        paths[f"/api/{API_VERSION}/commands/{{command}}"] = {
+            "post": _command_operation("executeCanonicalExtensionCommand", normalized_commands)
         }
-    paths[f"/api/{API_VERSION}/commands/{{command}}"] = {
-        "post": _command_operation("executeCanonicalCommand", command_parameter=True)
-    }
 
-    info = specification.get("info")
-    if isinstance(info, dict):
-        info["description"] = (
-            "Stable platform-owned northbound API for canonical resources and explicit "
-            "commands. Concrete orchestrator, executor, model, tool and worker-private APIs "
-            "are never client contracts."
-        )
-    specification["x-platform-collections"] = list(PLATFORM_COLLECTIONS)
-    specification["x-platform-commands"] = list(REQUIRED_COMMANDS)
+    specification["x-control-plane-foundation-collections"] = list(FOUNDATION_COLLECTIONS)
+    specification["x-implemented-domain-collections"] = list(IMPLEMENTED_DOMAIN_COLLECTIONS)
+    specification["x-registered-extension-collections"] = list(normalized_collections)
+    specification["x-registered-extension-commands"] = list(normalized_commands)
     return specification
 
 
@@ -536,37 +433,27 @@ def _read_operation(operation_id: str, description: str) -> dict[str, Any]:
     }
 
 
-def _command_operation(operation_id: str, *, command_parameter: bool = False) -> dict[str, Any]:
-    parameters: list[dict[str, Any]] = [
-        {
-            "name": "Idempotency-Key",
-            "in": "header",
-            "required": True,
-            "schema": {"type": "string", "minLength": 1},
-        }
-    ]
-    if command_parameter:
-        parameters.append(
+def _command_operation(operation_id: str, commands: tuple[str, ...]) -> dict[str, Any]:
+    return {
+        "operationId": operation_id,
+        "parameters": [
+            {
+                "name": "Idempotency-Key",
+                "in": "header",
+                "required": True,
+                "schema": {"type": "string", "minLength": 1},
+            },
             {
                 "name": "command",
                 "in": "path",
                 "required": True,
-                "schema": {"type": "string", "enum": list(REQUIRED_COMMANDS)},
-            }
-        )
-    else:
-        parameters.append(
-            {
-                "name": "resource_id",
-                "in": "path",
-                "required": True,
-                "schema": {"type": "string"},
-            }
-        )
-    return {
-        "operationId": operation_id,
-        "parameters": parameters,
-        "responses": {"200": {"description": "Canonical command result"}, **_error_responses()},
+                "schema": {"type": "string", "enum": list(commands)},
+            },
+        ],
+        "responses": {
+            "200": {"description": "Canonical extension command result"},
+            **_error_responses(),
+        },
     }
 
 
@@ -577,35 +464,19 @@ def _error_responses() -> dict[str, Any]:
     }
 
 
-def _command_for_route(segments: list[str]) -> str | None:
-    if len(segments) != 2 or ":" not in segments[1]:
-        return None
-    collection = segments[0]
-    _, action = segments[1].rsplit(":", 1)
-    mapping = {
-        ("approvals", "approve"): "approval.approve",
-        ("approvals", "deny"): "approval.deny",
-        ("adapters", "enable"): "adapter.enable",
-        ("adapters", "disable"): "adapter.disable",
-        ("plugins", "enable"): "plugin.enable",
-        ("plugins", "disable"): "plugin.disable",
-        ("workers", "drain"): "worker.drain",
-        ("workers", "restore"): "worker.restore",
-        ("automations", "test"): "automation.test",
-        ("evaluations", "start"): "evaluation.start",
-    }
-    return mapping.get((collection, action))
-
-
-def _resource_ref_for_route(segments: list[str]) -> str:
-    resource_ref, _ = segments[1].rsplit(":", 1)
-    if not resource_ref.strip():
-        raise APIException(
-            status=400,
-            code="invalid_request",
-            message="resource reference must not be blank",
+def _validate_extension_collection(collection: str) -> None:
+    if collection in _RESERVED_COLLECTIONS:
+        raise ValueError(f"extension collection conflicts with an existing route: {collection}")
+    if _COLLECTION_PATTERN.fullmatch(collection) is None:
+        raise ValueError(
+            "extension collection must use lowercase URL-safe names "
+            "([a-z][a-z0-9-]*)"
         )
-    return resource_ref
+
+
+def _validate_command_name(command: str) -> None:
+    if _COMMAND_PATTERN.fullmatch(command) is None:
+        raise ValueError("command must use lowercase canonical segments separated by dots")
 
 
 def _validate_resources(collection: str, resources: list[dict[str, JsonValue]]) -> None:
