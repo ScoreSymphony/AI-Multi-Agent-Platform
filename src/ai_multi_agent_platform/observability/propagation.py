@@ -57,11 +57,7 @@ class TraceCarrier:
             "run-id": self.run_id,
             "step-id": self.step_id,
         }
-        return {
-            f"{_PREFIX}{key}": value
-            for key, value in values.items()
-            if value is not None
-        }
+        return {f"{_PREFIX}{key}": value for key, value in values.items() if value is not None}
 
     @classmethod
     def from_mapping(cls, values: Mapping[str, str]) -> TraceCarrier:
