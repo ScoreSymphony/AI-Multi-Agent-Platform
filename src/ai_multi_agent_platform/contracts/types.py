@@ -107,7 +107,9 @@ class ProviderDescriptor:
     supported_operations: tuple[str, ...] = ()
     capabilities: tuple[Capability, ...] = ()
     health: HealthStatus = HealthStatus.UNKNOWN
+    available: bool = True
     limits: dict[str, JsonValue] = field(default_factory=dict)
+    resources: dict[str, JsonValue] = field(default_factory=dict)
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
 
@@ -227,6 +229,7 @@ class PlatformEvent:
     context: OperationContext
     payload: dict[str, JsonValue] = field(default_factory=dict)
     schema_version: str = CONTRACT_VERSION
+    adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
