@@ -16,7 +16,7 @@ from ai_multi_agent_platform.contracts.types import (
 
 
 def _freeze_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
-    """Take a shallow immutable snapshot of schema/metadata mappings."""
+    """Take an immutable snapshot of one top-level JSON mapping."""
 
     return MappingProxyType(dict(value))
 
@@ -144,7 +144,6 @@ class CapabilityInvocation:
     version: str | None = None
     granted_permissions: frozenset[str] = frozenset()
     available_worker_capabilities: frozenset[str] = frozenset()
-    approval_grants: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
@@ -168,6 +167,7 @@ class CapabilityInvocationResult:
     provider_id: str
     status: InvocationStatus
     output: JsonValue = None
+    canonical_tool_invocation_id: str | None = None
     result_ref: str | None = None
     artifact_refs: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
@@ -195,5 +195,6 @@ class InvocationRecord:
     provider_tool_ref: str
     status: InvocationStatus
     trace: InvocationTrace
+    canonical_tool_invocation_id: str | None = None
     error_code: str | None = None
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
