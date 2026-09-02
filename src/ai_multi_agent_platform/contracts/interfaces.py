@@ -24,6 +24,7 @@ from .types import (
     KnowledgeQuery,
     ModelRequest,
     ModelResponse,
+    ModelSelection,
     NodeDescriptor,
     OperationContext,
     OperationControl,
@@ -71,11 +72,16 @@ class CapabilityProvider(ProviderContract):
 
 
 class Orchestrator(ProviderContract):
-    """Turns canonical task intent into a provider-neutral plan description."""
+    """Turns canonical task intent into a provider-neutral plan proposal."""
 
     @abstractmethod
     async def plan(self, request: PlanRequest) -> PlanResponse:
-        """Produce a plan without owning canonical task persistence."""
+        """Propose planning content without allocating canonical Plan/Step IDs.
+
+        The platform core owns canonical Plan and Step identity. An orchestrator
+        may suggest decomposition and coordination content, but it must not make
+        its own workflow/job/session identifiers canonical platform identities.
+        """
 
 
 class LifecycleBackend(ProviderContract):
@@ -91,7 +97,7 @@ class LifecycleBackend(ProviderContract):
 
     @abstractmethod
     async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        """Read the current execution snapshot for a canonical run."""
+        """Read the current execution snapshot for a canonical Run ID."""
 
     @abstractmethod
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
@@ -114,16 +120,16 @@ class ModelRouter(ProviderContract):
     """Chooses a model provider/reference from neutral request requirements."""
 
     @abstractmethod
-    async def select_provider(self, request: ModelRequest) -> str:
-        """Return a platform provider identifier, not an SDK object."""
+    async def select_provider(self, request: ModelRequest) -> ModelSelection:
+        """Return a typed platform selection, never a provider SDK object."""
 
 
 class ToolProvider(ProviderContract):
-    """Invokes tools through native, MCP, HTTP or other adapters."""
+    """Invokes canonical Tools through native, MCP, HTTP or other adapters."""
 
     @abstractmethod
     async def invoke(self, invocation: ToolInvocation) -> ToolResult:
-        """Execute one tool invocation."""
+        """Execute one tool invocation using the canonical Tool reference."""
 
 
 class MemoryProvider(ProviderContract):
@@ -192,11 +198,11 @@ class KnowledgeProvider(ProviderContract):
 
 
 class EventProvider(ProviderContract):
-    """Publishes, reads and subscribes to canonical platform events."""
+    """Persists and subscribes to the canonical domain Event type."""
 
     @abstractmethod
     async def publish(self, event: PlatformEvent) -> None:
-        """Persist/publish one canonical event."""
+        """Persist/publish one canonical domain Event unchanged."""
 
     @abstractmethod
     async def read(
@@ -216,7 +222,7 @@ class EventProvider(ProviderContract):
         after_event_id: str | None = None,
         control: OperationControl | None = None,
     ) -> AsyncIterator[PlatformEvent]:
-        """Yield canonical events from a stable cursor until cancelled."""
+        """Yield canonical Events from a stable cursor until cancelled."""
 
 
 class AuthorizationProvider(ProviderContract):
@@ -228,7 +234,7 @@ class AuthorizationProvider(ProviderContract):
 
 
 class NodeProvider(ProviderContract):
-    """Registers and discovers compute nodes participating in the platform."""
+    """Registers and discovers canonical compute nodes participating in the platform."""
 
     @abstractmethod
     async def register_node(
@@ -264,4 +270,4 @@ class WorkerProvider(ProviderContract):
         worker_id: str,
         request: ExecutionRequest,
     ) -> ExecutionHandle:
-        """Dispatch one canonical run attempt to a worker."""
+        """Dispatch one canonical Run attempt to a canonical Worker."""
