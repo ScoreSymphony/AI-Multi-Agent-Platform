@@ -47,7 +47,6 @@ from .models import (
     new_file_id,
     new_knowledge_document_id,
     new_knowledge_index_id,
-    new_knowledge_source_id,
     new_memory_id,
 )
 
@@ -242,7 +241,9 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
                     "UPDATE data_files SET state = ? WHERE file_id = ?",
                     (FileState.TOMBSTONED.value, canonical_id),
                 )
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to finalize file metadata") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to finalize file metadata"
+            ) from exc
         return replace(pending, state=FileState.READY)
 
     async def write(
@@ -287,12 +288,14 @@ class LocalFileProvider(_SqliteMixin, FileProvider):
             with self._connect() as connection:
                 if context.project_id is None:
                     rows = connection.execute(
-                        "SELECT * FROM data_files WHERE project_id IS NULL AND state != ? ORDER BY created_at",
+                        "SELECT * FROM data_files WHERE project_id IS NULL "
+                        "AND state != ? ORDER BY created_at",
                         (FileState.TOMBSTONED.value,),
                     ).fetchall()
                 else:
                     rows = connection.execute(
-                        "SELECT * FROM data_files WHERE project_id = ? AND state != ? ORDER BY created_at",
+                        "SELECT * FROM data_files WHERE project_id = ? "
+                        "AND state != ? ORDER BY created_at",
                         (context.project_id, FileState.TOMBSTONED.value),
                     ).fetchall()
         except sqlite3.Error as exc:
@@ -529,7 +532,11 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
             entry = self._memory_from_row(row)
             if query.owner_ref is not None and entry.owner_ref != query.owner_ref:
                 continue
-            if not query.include_expired and entry.expires_at is not None and entry.expires_at <= now:
+            if (
+                not query.include_expired
+                and entry.expires_at is not None
+                and entry.expires_at <= now
+            ):
                 continue
             if not query.include_superseded and entry.superseded_by_memory_id is not None:
                 continue
@@ -592,7 +599,9 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
                 f"memory entry already exists: {linked.memory_id}",
             ) from exc
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to supersede memory entry") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to supersede memory entry"
+            ) from exc
         return linked
 
     async def delete_entry(self, memory_id: str, context: DataAccessContext) -> None:
@@ -649,7 +658,9 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
         try:
             scope = MemoryScope(namespace)
         except ValueError as exc:
-            raise ContractError(ErrorCode.INVALID_REQUEST, f"unknown memory scope: {namespace}") from exc
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, f"unknown memory scope: {namespace}"
+            ) from exc
         now = datetime.now(UTC)
         retention = RetentionPolicy.DURABLE
         expires_at: datetime | None = None
@@ -685,8 +696,12 @@ class LocalMemoryProvider(_SqliteMixin, MemoryProvider):
         try:
             scope = MemoryScope(namespace)
         except ValueError as exc:
-            raise ContractError(ErrorCode.INVALID_REQUEST, f"unknown memory scope: {namespace}") from exc
-        entries = await self.query_entries(MemoryQuery(scope=scope, scope_id=key, limit=1), _compat_context(context))
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, f"unknown memory scope: {namespace}"
+            ) from exc
+        entries = await self.query_entries(
+            MemoryQuery(scope=scope, scope_id=key, limit=1), _compat_context(context)
+        )
         if not entries:
             raise _not_found("memory scope/key", f"{namespace}/{key}")
         return entries[0].value
@@ -888,7 +903,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                 f"knowledge source already exists: {source.source_id}",
             ) from exc
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to register knowledge source") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to register knowledge source"
+            ) from exc
         return source
 
     async def ingest_source(
@@ -971,7 +988,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                         ),
                     )
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to ingest knowledge source") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to ingest knowledge source"
+            ) from exc
         return document
 
     async def get_index_status(
@@ -1101,7 +1120,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                     (revision, KnowledgeStatus.INDEXING.value, now.isoformat(), source_id),
                 )
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to start knowledge reindex") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to start knowledge reindex"
+            ) from exc
         _ = source
         return await self.ingest_source(source_id, content, location, context)
 
@@ -1110,7 +1131,8 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
         try:
             with self._connect() as connection:
                 connection.execute(
-                    "UPDATE data_knowledge_sources SET status = ?, updated_at = ? WHERE source_id = ?",
+                    "UPDATE data_knowledge_sources SET status = ?, updated_at = ? "
+                    "WHERE source_id = ?",
                     (KnowledgeStatus.REMOVED.value, datetime.now(UTC).isoformat(), source_id),
                 )
                 connection.execute(
@@ -1118,7 +1140,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                     (source_id,),
                 )
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to remove knowledge source") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to remove knowledge source"
+            ) from exc
 
     async def index(
         self,
@@ -1162,7 +1186,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
     async def query(self, request: KnowledgeQuery) -> tuple[KnowledgeHit, ...]:
         raw_source_ids = request.filters.get("source_ids")
         source_ids: tuple[str, ...] = ()
-        if isinstance(raw_source_ids, list) and all(isinstance(item, str) for item in raw_source_ids):
+        if isinstance(raw_source_ids, list) and all(
+            isinstance(item, str) for item in raw_source_ids
+        ):
             source_ids = tuple(cast(list[str], raw_source_ids))
         results = await self.search(
             KnowledgeSearchRequest(
@@ -1199,7 +1225,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                     (source.source_id, source.revision),
                 ).fetchone()
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to read knowledge document") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to read knowledge document"
+            ) from exc
         if row is None:
             raise _not_found("knowledge document", source_ref)
         return KnowledgeHit(
@@ -1245,7 +1273,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                         (context.project_id,),
                     ).fetchall()
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to list knowledge sources") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to list knowledge sources"
+            ) from exc
         return tuple(self._source_from_row(row) for row in rows)
 
     @staticmethod

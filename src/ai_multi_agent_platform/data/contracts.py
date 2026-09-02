@@ -7,7 +7,11 @@ from collections.abc import AsyncIterator
 
 from ai_multi_agent_platform.contracts.interfaces import (
     FileProvider as CoreFileProvider,
+)
+from ai_multi_agent_platform.contracts.interfaces import (
     KnowledgeProvider as CoreKnowledgeProvider,
+)
+from ai_multi_agent_platform.contracts.interfaces import (
     MemoryProvider as CoreMemoryProvider,
 )
 from ai_multi_agent_platform.contracts.types import JsonValue

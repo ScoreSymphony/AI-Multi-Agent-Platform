@@ -56,8 +56,7 @@ def test_file_create_read_stream_link_and_delete(tmp_path: Path) -> None:
 
     async def collect() -> bytes:
         chunks = [
-            chunk
-            async for chunk in provider.stream_file(record.file_id, context, chunk_size=3)
+            chunk async for chunk in provider.stream_file(record.file_id, context, chunk_size=3)
         ]
         return b"".join(chunks)
 
