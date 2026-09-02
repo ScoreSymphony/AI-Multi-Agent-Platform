@@ -1,0 +1,21 @@
+[data]
+profile = "local-reference"
+
+[data.metadata]
+backend = "sqlite"
+path = ".local/platform-data.sqlite"
+
+[data.files]
+provider = "local"
+root = ".local/files"
+verify_checksum_on_read = true
+
+[data.memory]
+provider = "local"
+short_term_max_hours = 24
+semantic_search = false
+
+[data.knowledge]
+provider = "local"
+search_mode = "keyword"
+vector_database_required = false
