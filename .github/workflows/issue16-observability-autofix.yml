@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Apply focused typing fix
+      - name: Correct focused typing patch
         shell: bash
         run: |
           python - <<'PY'
@@ -30,31 +30,28 @@ jobs:
           start = text.index("        except Exception as exc:\n", class_start)
           marker = "            raise\n\n        outcome = _EXECUTION_OUTCOMES[result.status]"
           end = text.index(marker, start) + len("            raise\n")
-          block = text[start:end].replace("failure", "exception_failure")
-          text = text[:start] + block + text[end:]
-          text = text.replace(
-              "        outcome = _EXECUTION_OUTCOMES[result.status]\n        failure = None\n",
-              "        outcome = _EXECUTION_OUTCOMES[result.status]\n"
-              "        failure: FailureClassification | None = None\n",
-              1,
+          block = text[start:end]
+          block = block.replace("_exception_failure_from_exception", "_failure_from_exception")
+          block = block.replace("exception_failure=exception_failure", "failure=exception_failure")
+          block = block.replace(
+              '"platform.executor.exception_failures"',
+              '"platform.executor.failures"',
           )
+          text = text[:start] + block + text[end:]
           path.write_text(text, encoding="utf-8")
           PY
       - name: Install Ruff
         run: python -m pip install "ruff>=0.12,<1"
-      - name: Format and lint focused files
+      - name: Format and lint focused file
         shell: bash
         run: |
-          ruff format \
-            src/ai_multi_agent_platform/observability/instrumentation.py
-          ruff check \
-            src/ai_multi_agent_platform/observability \
-            tests/test_observability.py
-      - name: Commit fix
+          ruff format src/ai_multi_agent_platform/observability/instrumentation.py
+          ruff check src/ai_multi_agent_platform/observability/instrumentation.py
+      - name: Commit correction
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/ai_multi_agent_platform/observability/instrumentation.py
-          git commit -m "fix(observability): satisfy strict typing" || exit 0
+          git commit -m "fix(observability): narrow exception typing variable" || exit 0
           git push origin HEAD:issue-16-observability-foundation
