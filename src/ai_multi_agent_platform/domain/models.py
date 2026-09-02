@@ -561,6 +561,7 @@ class ToolInvocation:
     correlation_id: str | None = None
     causation_id: str | None = None
     trace_id: str | None = None
+    arguments_digest: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     schema_version: str = SCHEMA_VERSION
     provenance: Provenance | None = None
@@ -571,6 +572,20 @@ class ToolInvocation:
         validate_id(self.tool_id, "tool")
         _validate_optional_id(self.project_id, "project")
         _freeze_tuple_field(self, "external_refs")
+        if self.arguments_digest is not None:
+            prefix = "sha256:"
+            digest = self.arguments_digest
+            if len(digest) != len(prefix) + 64 or not digest.startswith(prefix):
+                raise ValueError("tool invocation arguments_digest must be sha256:<64 hex>")
+            hex_digest = digest[len(prefix) :]
+            try:
+                int(hex_digest, 16)
+            except ValueError as exc:
+                raise ValueError(
+                    "tool invocation arguments_digest must be sha256:<64 hex>"
+                ) from exc
+            if hex_digest.lower() != hex_digest:
+                raise ValueError("tool invocation arguments_digest must use lowercase hex")
 
 
 @dataclass(frozen=True, kw_only=True)
