@@ -40,7 +40,7 @@ class ToolCallTransport:
                 "choices": [
                     {
                         "message": {
-                            "content": null,
+                            "content": None,
                             "tool_calls": [
                                 {
                                     "id": "call-1",
