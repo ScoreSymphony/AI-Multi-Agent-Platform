@@ -43,13 +43,13 @@ The foundation owned by #32 is intentionally small and contains only the resourc
 
 The repository can contain APIs added after #32. They are not retroactively part of the #32 foundation.
 
-At the current repository state, #10 has added the canonical Model Registry/Provider API, including:
+Work under #10 has already added the canonical Model Registry/Provider API, including:
 
 - `/api/v1/models`;
 - `/api/v1/model-providers`;
 - their read and supported enable/disable/health commands.
 
-These routes are legitimate because the Model domain now exists. The distinction is therefore:
+These routes are legitimate because the Model domain and its Control Plane integration now exist, regardless of whether every remaining #10 deliverable is already closed. The distinction is therefore:
 
 ```text
 #32 foundation contract
@@ -134,7 +134,7 @@ The owning later-domain issue may also implement dedicated canonical routes once
 `GET /api/v1` reports the current composed surface:
 
 - #32 foundation resources;
-- APIs implemented by completed later domains;
+- APIs implemented by later-domain work;
 - explicitly registered extension resources and commands;
 - the OpenAPI URL;
 - the live-update mechanism.
@@ -168,9 +168,34 @@ Collection responses use:
 
 Stable platform IDs or stable platform references are required for resources returned through the Control Plane.
 
+## Run error inspection
+
+Every Run representation returned by the Control Plane contains an `error` field. This field describes the canonical execution failure state and is separate from HTTP/API request failures.
+
+For a failed run:
+
+```json
+{
+  "error": {
+    "code": "run_failed",
+    "category": "execution",
+    "message": "executor rejected request",
+    "retryable": false
+  }
+}
+```
+
+For a timed-out run the canonical code is `run_timed_out`, the category is `timeout`, and `retryable` is `true`. Runs in queued, starting, running, succeeded or cancelled state expose `"error": null`.
+
+The Control Plane derives this stable error view from canonical Run status. When canonical output already contains a human-readable `error`, `message` or `reason`, that text can populate the Run error message without exposing backend exception classes or provider-private error types. The original canonical `output` remains a separate field.
+
+This contract is available consistently through direct Run reads, task-scoped Run reads, Run lists, task start/retry results and Run cancellation results. Sparse-field Run lists may explicitly request `error` just like any other canonical Run field.
+
+Generated OpenAPI includes `RunError`, `Run` and `RunPage` schemas and binds them to the relevant Run endpoints.
+
 ## Error model
 
-Every API failure uses one canonical envelope:
+HTTP/API request failures use a separate canonical envelope:
 
 ```json
 {
@@ -183,7 +208,7 @@ Every API failure uses one canonical envelope:
 }
 ```
 
-`ContractError` is mapped to HTTP status without exposing backend exception classes. Request and correlation IDs are returned in headers and in error bodies.
+`ContractError` is mapped to HTTP status without exposing backend exception classes. Request and correlation IDs are returned in headers and in error bodies. Current canonical error codes have intentional HTTP mappings, including model-unavailable/no-route errors, invalid configuration, oversized input and invalid provider responses, rather than silently falling through to an accidental HTTP 500.
 
 ## Authentication and authorization context
 
