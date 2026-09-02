@@ -329,7 +329,7 @@ class FakeToolProvider(ToolProvider):
         _raise_configured_failure(self.descriptor.provider_id, self.failure)
         output: JsonValue = self.fixed_output
         if self.echo_arguments:
-            output = invocation.arguments
+            output = dict(invocation.arguments)
         return ToolResult(invocation_id=invocation.invocation_id, output=output)
 
 
