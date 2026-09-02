@@ -118,8 +118,7 @@ class SqliteEventProvider(EventProvider):
 
         if after_event_id is not None:
             cursor_query = (
-                "SELECT sequence FROM platform_events "
-                "WHERE event_id = ? AND correlation_id = ?"
+                "SELECT sequence FROM platform_events WHERE event_id = ? AND correlation_id = ?"
             )
             with self._connect() as connection:
                 row = connection.execute(
