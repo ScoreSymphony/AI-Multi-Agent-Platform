@@ -255,7 +255,10 @@ def _augment_openapi(specification: dict[str, Any]) -> dict[str, Any]:
         "failed": "run_failed",
         "timed_out": "run_timed_out",
         "other_statuses": None,
-        "source": "canonical run status plus safe human-readable output message/reason when present",
+        "source": (
+            "canonical run status plus safe human-readable output "
+            "message/reason when present"
+        ),
     }
     return specification
 
