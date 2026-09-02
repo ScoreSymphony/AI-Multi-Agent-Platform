@@ -31,6 +31,48 @@ replace_once(
 extensions = "src/ai_multi_agent_platform/control_plane/extensions.py"
 replace_once(
     extensions,
+    "from ai_multi_agent_platform.kernel.repository import EventRepository\n",
+    "from ai_multi_agent_platform.kernel.repository import EventRepository\nfrom ai_multi_agent_platform.models import ModelRegistry\n",
+)
+replace_once(
+    extensions,
+    '    "models",\n    "providers",\n',
+    '    "models",\n    "model-providers",\n    "providers",\n',
+)
+replace_once(
+    extensions,
+    '''BASE_COLLECTIONS = frozenset(
+    {"projects", "workspaces", "tasks", "plans", "steps", "runs", "artifacts", "results"}
+)
+''',
+    '''BASE_COLLECTIONS = frozenset(
+    {
+        "projects",
+        "workspaces",
+        "tasks",
+        "plans",
+        "steps",
+        "runs",
+        "artifacts",
+        "results",
+        "models",
+        "model-providers",
+    }
+)
+''',
+)
+replace_once(
+    extensions,
+    "        health_providers: tuple[ProviderContract, ...] = (),\n        resource_services: Mapping[str, ResourceService] | None = None,\n",
+    "        health_providers: tuple[ProviderContract, ...] = (),\n        model_registry: ModelRegistry | None = None,\n        resource_services: Mapping[str, ResourceService] | None = None,\n",
+)
+replace_once(
+    extensions,
+    "            health_providers=health_providers,\n        )\n",
+    "            health_providers=health_providers,\n            model_registry=model_registry,\n        )\n",
+)
+replace_once(
+    extensions,
     '    api_exception_from_contract,\n    paginate,\n',
     '    api_exception_from_contract,\n    json_value,\n    paginate,\n',
 )
