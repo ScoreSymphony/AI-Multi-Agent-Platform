@@ -4,16 +4,21 @@ import asyncio
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane import (
+    CommandHandler,
     ControlPlane,
     ControlPlaneHTTP,
     HTTPRequest,
+    RequestContext,
     build_openapi,
 )
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 
 
-def _stack(*, command_handlers: dict[str, object] | None = None) -> tuple[ControlPlane, ControlPlaneHTTP]:
+def _stack(
+    *,
+    command_handlers: dict[str, CommandHandler] | None = None,
+) -> tuple[ControlPlane, ControlPlaneHTTP]:
     repository = InMemoryKernelRepository()
     kernel = PlatformKernel(
         orchestrator=FakeOrchestrator(),
@@ -23,7 +28,7 @@ def _stack(*, command_handlers: dict[str, object] | None = None) -> tuple[Contro
     control_plane = ControlPlane(
         kernel=kernel,
         events=repository,
-        command_handlers=command_handlers,  # type: ignore[arg-type]
+        command_handlers=command_handlers,
     )
     return control_plane, ControlPlaneHTTP(control_plane)
 
@@ -81,7 +86,7 @@ def test_extension_openapi_matches_filter_and_command_request_contract() -> None
 def test_extension_commands_require_json_content_type() -> None:
     async def scenario() -> None:
         async def refresh_widget(
-            context: object,
+            context: RequestContext,
             resource_ref: str,
             payload: dict[str, JsonValue],
         ) -> dict[str, JsonValue]:
@@ -108,7 +113,7 @@ def test_extension_commands_require_json_content_type() -> None:
 def test_extension_private_payload_rejection_is_recursive() -> None:
     async def scenario() -> None:
         async def leaking_command(
-            context: object,
+            context: RequestContext,
             resource_ref: str,
             payload: dict[str, JsonValue],
         ) -> dict[str, JsonValue]:
