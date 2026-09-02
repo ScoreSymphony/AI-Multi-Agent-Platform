@@ -1,12 +1,37 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
 SCHEMA_VERSION = "1.0"
+
+CANONICAL_SUBJECT_PREFIXES: Mapping[str, str] = MappingProxyType(
+    {
+        "goal": "goal",
+        "project": "project",
+        "task": "task",
+        "plan": "plan",
+        "step": "step",
+        "run": "run",
+        "agent": "agent",
+        "agent_team": "team",
+        "artifact": "artifact",
+        "result": "result",
+        "event": "event",
+        "approval": "approval",
+        "node": "node",
+        "worker": "worker",
+        "worker_job": "worker_job",
+        "tool": "tool",
+        "capability": "cap",
+        "model_assignment": "model_assignment",
+    }
+)
 
 
 def utc_now() -> datetime:
@@ -29,6 +54,41 @@ def validate_id(value: str, prefix: str) -> str:
     if str(parsed) != payload.lower():
         raise ValueError(f"invalid canonical {prefix} id")
     return value
+
+
+def validate_subject_id(subject_type: str, subject_id: str) -> str:
+    prefix = CANONICAL_SUBJECT_PREFIXES.get(subject_type)
+    if prefix is None:
+        raise ValueError(f"unsupported canonical subject type: {subject_type}")
+    return validate_id(subject_id, prefix)
+
+
+def _validate_optional_id(value: str | None, prefix: str) -> None:
+    if value is not None:
+        validate_id(value, prefix)
+
+
+def _validate_ids(values: tuple[str, ...], prefix: str) -> None:
+    for value in values:
+        validate_id(value, prefix)
+
+
+def _deep_freeze(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _deep_freeze(item) for key, item in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(_deep_freeze(item) for item in value)
+    if isinstance(value, set | frozenset):
+        return frozenset(_deep_freeze(item) for item in value)
+    return value
+
+
+def _freeze_mapping_field(instance: object, name: str) -> None:
+    object.__setattr__(instance, name, _deep_freeze(dict(getattr(instance, name))))
+
+
+def _freeze_tuple_field(instance: object, name: str) -> None:
+    object.__setattr__(instance, name, tuple(getattr(instance, name)))
 
 
 class TaskStatus(StrEnum):
@@ -99,10 +159,13 @@ class ExternalRef:
 class Provenance:
     source: str
     actor_ref: str | None = None
-    details: dict[str, Any] = field(default_factory=dict)
+    details: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _freeze_mapping_field(self, "details")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Goal:
     title: str
     owner_ref: OwnerRef
@@ -117,9 +180,11 @@ class Goal:
 
     def __post_init__(self) -> None:
         validate_id(self.id, "goal")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Project:
     name: str
     owner_ref: OwnerRef
@@ -132,9 +197,10 @@ class Project:
 
     def __post_init__(self) -> None:
         validate_id(self.id, "project")
+        _freeze_tuple_field(self, "external_refs")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Task:
     title: str
     owner_ref: OwnerRef
@@ -150,17 +216,23 @@ class Task:
     schema_version: str = SCHEMA_VERSION
     provenance: Provenance | None = None
     external_refs: tuple[ExternalRef, ...] = ()
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         validate_id(self.id, "task")
-        if self.goal_id is not None:
-            validate_id(self.goal_id, "goal")
-        if self.project_id is not None:
-            validate_id(self.project_id, "project")
+        _validate_optional_id(self.goal_id, "goal")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "metadata")
+
+    def transition_to(self, target: TaskStatus) -> Task:
+        from .lifecycle import TASK_TRANSITIONS, require_transition
+
+        require_transition(self.status, target, TASK_TRANSITIONS)
+        return replace(self, status=target, updated_at=utc_now())
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Plan:
     task_id: str
     owner_ref: OwnerRef
@@ -176,11 +248,13 @@ class Plan:
     def __post_init__(self) -> None:
         validate_id(self.id, "plan")
         validate_id(self.task_id, "task")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
         if self.revision < 1:
             raise ValueError("plan revision must be >= 1")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Step:
     plan_id: str
     title: str
@@ -197,15 +271,22 @@ class Step:
     external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
+        _freeze_tuple_field(self, "depends_on")
+        _freeze_tuple_field(self, "external_refs")
         validate_id(self.id, "step")
         validate_id(self.plan_id, "plan")
-        if self.parent_step_id is not None:
-            validate_id(self.parent_step_id, "step")
-        for dependency in self.depends_on:
-            validate_id(dependency, "step")
+        _validate_optional_id(self.parent_step_id, "step")
+        _validate_ids(self.depends_on, "step")
+        _validate_optional_id(self.project_id, "project")
+
+    def transition_to(self, target: StepStatus) -> Step:
+        from .lifecycle import STEP_TRANSITIONS, require_transition
+
+        require_transition(self.status, target, STEP_TRANSITIONS)
+        return replace(self, status=target, updated_at=utc_now())
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Run:
     subject_type: Literal["task", "step"]
     subject_id: str
@@ -225,18 +306,37 @@ class Run:
     schema_version: str = SCHEMA_VERSION
     provenance: Provenance | None = None
     external_refs: tuple[ExternalRef, ...] = ()
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         validate_id(self.id, "run")
-        validate_id(self.subject_id, self.subject_type)
+        validate_subject_id(self.subject_type, self.subject_id)
+        _validate_optional_id(self.project_id, "project")
+        _validate_optional_id(self.worker_id, "worker")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "metadata")
         if self.attempt < 1:
             raise ValueError("run attempt must be >= 1")
-        if self.worker_id is not None:
-            validate_id(self.worker_id, "worker")
+
+    def transition_to(self, target: RunStatus) -> Run:
+        from .lifecycle import RUN_TRANSITIONS, require_transition
+
+        require_transition(self.status, target, RUN_TRANSITIONS)
+        now = utc_now()
+        changes: dict[str, Any] = {"status": target, "updated_at": now}
+        if target is RunStatus.RUNNING and self.started_at is None:
+            changes["started_at"] = now
+        if target in {
+            RunStatus.SUCCEEDED,
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+            RunStatus.TIMED_OUT,
+        }:
+            changes["finished_at"] = now
+        return replace(self, **changes)
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Agent:
     name: str
     owner_ref: OwnerRef
@@ -245,6 +345,7 @@ class Agent:
     capability_ids: tuple[str, ...] = ()
     project_id: str | None = None
     model_assignment_id: str | None = None
+    policy_requirements: Mapping[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
     schema_version: str = SCHEMA_VERSION
@@ -252,16 +353,22 @@ class Agent:
     external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
+        _freeze_tuple_field(self, "capability_ids")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "policy_requirements")
         validate_id(self.id, "agent")
+        _validate_ids(self.capability_ids, "cap")
+        _validate_optional_id(self.project_id, "project")
+        _validate_optional_id(self.model_assignment_id, "model_assignment")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class AgentTeam:
     name: str
     owner_ref: OwnerRef
     agent_ids: tuple[str, ...]
     id: str = field(default_factory=lambda: new_id("team"))
-    coordination_metadata: dict[str, Any] = field(default_factory=dict)
+    coordination_metadata: Mapping[str, Any] = field(default_factory=dict)
     project_id: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
@@ -270,12 +377,15 @@ class AgentTeam:
     external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
+        _freeze_tuple_field(self, "agent_ids")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "coordination_metadata")
         validate_id(self.id, "team")
-        for agent_id in self.agent_ids:
-            validate_id(agent_id, "agent")
+        _validate_ids(self.agent_ids, "agent")
+        _validate_optional_id(self.project_id, "project")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Artifact:
     name: str
     owner_ref: OwnerRef
@@ -291,15 +401,18 @@ class Artifact:
 
     def __post_init__(self) -> None:
         validate_id(self.id, "artifact")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Result:
     subject_type: Literal["task", "run"]
     subject_id: str
     owner_ref: OwnerRef
     id: str = field(default_factory=lambda: new_id("result"))
     outcome: str = ""
+    status_data: Mapping[str, Any] = field(default_factory=dict)
     artifact_ids: tuple[str, ...] = ()
     project_id: str | None = None
     created_at: datetime = field(default_factory=utc_now)
@@ -308,10 +421,13 @@ class Result:
     external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
+        _freeze_tuple_field(self, "artifact_ids")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "status_data")
         validate_id(self.id, "result")
-        validate_id(self.subject_id, self.subject_type)
-        for artifact_id in self.artifact_ids:
-            validate_id(artifact_id, "artifact")
+        validate_subject_id(self.subject_type, self.subject_id)
+        _validate_ids(self.artifact_ids, "artifact")
+        _validate_optional_id(self.project_id, "project")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -321,19 +437,25 @@ class Event:
     subject_id: str
     correlation_id: str
     id: str = field(default_factory=lambda: new_id("event"))
+    owner_ref: OwnerRef | None = None
+    project_id: str | None = None
     causation_id: str | None = None
     trace_id: str | None = None
     occurred_at: datetime = field(default_factory=utc_now)
-    payload: dict[str, Any] = field(default_factory=dict)
+    payload: Mapping[str, Any] = field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION
     provenance: Provenance | None = None
     external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
         validate_id(self.id, "event")
+        validate_subject_id(self.subject_type, self.subject_id)
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "payload")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Approval:
     subject_type: str
     subject_id: str
@@ -351,21 +473,39 @@ class Approval:
 
     def __post_init__(self) -> None:
         validate_id(self.id, "approval")
+        validate_subject_id(self.subject_type, self.subject_id)
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
+
+    def transition_to(self, target: ApprovalStatus) -> Approval:
+        from .lifecycle import APPROVAL_TRANSITIONS, require_transition
+
+        require_transition(self.status, target, APPROVAL_TRANSITIONS)
+        return replace(self, status=target, updated_at=utc_now())
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Capability:
     name: str
     id: str = field(default_factory=lambda: new_id("cap"))
     description: str = ""
-    attributes: dict[str, Any] = field(default_factory=dict)
+    attributes: Mapping[str, Any] = field(default_factory=dict)
+    owner_ref: OwnerRef | None = None
+    project_id: str | None = None
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
     schema_version: str = SCHEMA_VERSION
+    provenance: Provenance | None = None
+    external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
         validate_id(self.id, "cap")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "attributes")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Tool:
     name: str
     owner_ref: OwnerRef
@@ -379,15 +519,19 @@ class Tool:
     external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
+        _freeze_tuple_field(self, "capability_ids")
+        _freeze_tuple_field(self, "external_refs")
         validate_id(self.id, "tool")
+        _validate_ids(self.capability_ids, "cap")
+        _validate_optional_id(self.project_id, "project")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class ModelAssignment:
-    subject_type: Literal["agent", "task", "step", "policy"]
+    subject_type: Literal["agent", "task", "step"]
     subject_id: str
     owner_ref: OwnerRef
-    requirements: dict[str, Any]
+    requirements: Mapping[str, Any]
     id: str = field(default_factory=lambda: new_id("model_assignment"))
     provider_ref: str | None = None
     revision: int = 1
@@ -399,18 +543,22 @@ class ModelAssignment:
 
     def __post_init__(self) -> None:
         validate_id(self.id, "model_assignment")
+        validate_subject_id(self.subject_type, self.subject_id)
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "requirements")
         if self.revision < 1:
             raise ValueError("model assignment revision must be >= 1")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Node:
     name: str
     owner_ref: OwnerRef
     id: str = field(default_factory=lambda: new_id("node"))
     capability_ids: tuple[str, ...] = ()
     project_id: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
     schema_version: str = SCHEMA_VERSION
@@ -418,10 +566,15 @@ class Node:
     external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
+        _freeze_tuple_field(self, "capability_ids")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "metadata")
         validate_id(self.id, "node")
+        _validate_ids(self.capability_ids, "cap")
+        _validate_optional_id(self.project_id, "project")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class Worker:
     node_id: str
     name: str
@@ -437,19 +590,29 @@ class Worker:
     external_refs: tuple[ExternalRef, ...] = ()
 
     def __post_init__(self) -> None:
+        _freeze_tuple_field(self, "capability_ids")
+        _freeze_tuple_field(self, "external_refs")
         validate_id(self.id, "worker")
         validate_id(self.node_id, "node")
+        _validate_ids(self.capability_ids, "cap")
+        _validate_optional_id(self.project_id, "project")
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class WorkerJob:
     run_id: str
     worker_id: str
     owner_ref: OwnerRef
     id: str = field(default_factory=lambda: new_id("worker_job"))
     status: WorkerJobStatus = WorkerJobStatus.QUEUED
+    project_id: str | None = None
+    correlation_id: str | None = None
+    causation_id: str | None = None
+    trace_id: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
     schema_version: str = SCHEMA_VERSION
     provenance: Provenance | None = None
     external_refs: tuple[ExternalRef, ...] = ()
@@ -458,3 +621,22 @@ class WorkerJob:
         validate_id(self.id, "worker_job")
         validate_id(self.run_id, "run")
         validate_id(self.worker_id, "worker")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
+
+    def transition_to(self, target: WorkerJobStatus) -> WorkerJob:
+        from .lifecycle import WORKER_JOB_TRANSITIONS, require_transition
+
+        require_transition(self.status, target, WORKER_JOB_TRANSITIONS)
+        now = utc_now()
+        changes: dict[str, Any] = {"status": target, "updated_at": now}
+        if target is WorkerJobStatus.RUNNING and self.started_at is None:
+            changes["started_at"] = now
+        if target in {
+            WorkerJobStatus.SUCCEEDED,
+            WorkerJobStatus.FAILED,
+            WorkerJobStatus.CANCELLED,
+            WorkerJobStatus.TIMED_OUT,
+        }:
+            changes["finished_at"] = now
+        return replace(self, **changes)
