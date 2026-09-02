@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from ai_multi_agent_platform.contracts import (
     ContractError,
@@ -49,6 +49,12 @@ class PlatformKernel:
         owner_id: str,
         project_id: str | None = None,
     ) -> TaskView:
+        if not title.strip() or not objective.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "Task title and objective must not be blank",
+            )
+
         history = await self._events.read(task_id)
         marker = self._command_marker(history, command_id)
         if marker is not None:
@@ -101,8 +107,10 @@ class PlatformKernel:
             )
         if title is None and objective is None:
             raise ContractError(ErrorCode.INVALID_REQUEST, "Task update contains no changes")
-        if title == "" or objective == "":
-            raise ContractError(ErrorCode.INVALID_REQUEST, "Task fields cannot be empty")
+        if (title is not None and not title.strip()) or (
+            objective is not None and not objective.strip()
+        ):
+            raise ContractError(ErrorCode.INVALID_REQUEST, "Task fields cannot be blank")
 
         payload: dict[str, JsonValue] = {"command_id": command_id}
         if title is not None:
@@ -164,6 +172,25 @@ class PlatformKernel:
         plan = await self._orchestrator.plan(
             PlanRequest(task_id=task_id, context=context, objective=task.objective)
         )
+
+        # Planning may yield long enough for an identical retry to reserve the command.
+        history = await self._events.read(task_id)
+        marker = self._command_marker(history, command_id)
+        if marker is not None:
+            if marker.event_type != "run.queued":
+                self._raise_command_conflict(command_id, marker)
+            run_id = marker.subject_id
+            await self._recover_run(task_id=task_id, run_id=run_id, command_id=command_id)
+            return await self.get_run(task_id, run_id)
+
+        task = reduce_task(history, task_id)
+        if task.status is not TaskStatus.READY:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"Task {task_id} cannot start from {task.status.value}",
+            )
+        context = self._context(task, command_id)
+
         await self._publish(
             event_type="plan.created",
             subject_type="task",
@@ -176,7 +203,9 @@ class PlatformKernel:
             },
         )
 
-        run_id = f"run_{uuid4()}"
+        # A deterministic Run ID makes the canonical execution identity stable even
+        # when two processes race between their final read and the reservation write.
+        run_id = self._run_id_for_command(task_id, command_id)
         await self._publish(
             event_type="run.queued",
             subject_type="run",
@@ -188,28 +217,20 @@ class PlatformKernel:
                 "attempt": len(task.run_ids) + 1,
             },
         )
-        await self._publish(
-            event_type="task.running",
-            subject_type="task",
-            subject_id=task_id,
-            context=context,
-        )
 
-        request = ExecutionRequest(
-            run_id=run_id,
-            subject_type="task",
-            subject_id=task_id,
-            context=context,
-            input={"plan_ref": plan.plan_ref},
-        )
-        handle = await self._lifecycle.start(request)
-        await self._publish(
-            event_type="run.running",
-            subject_type="run",
-            subject_id=run_id,
-            context=context,
-            payload={"backend_ref": handle.backend_ref},
-        )
+        # The event store owns the command reservation. A duplicate publish of the
+        # same deterministic command event must not create a second canonical Run.
+        history = await self._events.read(task_id)
+        marker = self._command_marker(history, command_id)
+        if marker is None:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                f"Start command reservation was not persisted: {command_id}",
+            )
+        if marker.event_type != "run.queued" or marker.subject_id != run_id:
+            self._raise_command_conflict(command_id, marker)
+
+        await self._recover_run(task_id=task_id, run_id=run_id, command_id=command_id)
         return await self.get_run(task_id, run_id)
 
     async def refresh_run(
@@ -224,13 +245,18 @@ class PlatformKernel:
         if marker is not None:
             if marker.subject_id != run_id or not marker.event_type.startswith("run."):
                 self._raise_command_conflict(command_id, marker)
-            return reduce_run(history, run_id)
+            task = reduce_task(history, task_id)
+            run = reduce_run(history, run_id)
+            self._require_run_task(run, task_id)
+            await self._reconcile_task_for_run(task=task, run=run, command_id=command_id)
+            return await self.get_run(task_id, run_id)
 
         task = reduce_task(history, task_id)
         run = reduce_run(history, run_id)
         self._require_run_task(run, task_id)
         if run.status in TERMINAL_RUN_STATUSES:
-            return run
+            await self._reconcile_task_for_run(task=task, run=run, command_id=command_id)
+            return await self.get_run(task_id, run_id)
 
         snapshot = await self._lifecycle.get(run_id, self._context(task, command_id))
         await self._apply_snapshot(
@@ -254,13 +280,18 @@ class PlatformKernel:
         if marker is not None:
             if marker.event_type != "run.cancelled" or marker.subject_id != run_id:
                 self._raise_command_conflict(command_id, marker)
-            return reduce_run(history, run_id)
+            task = reduce_task(history, task_id)
+            run = reduce_run(history, run_id)
+            self._require_run_task(run, task_id)
+            await self._reconcile_task_for_run(task=task, run=run, command_id=command_id)
+            return await self.get_run(task_id, run_id)
 
         task = reduce_task(history, task_id)
         run = reduce_run(history, run_id)
         self._require_run_task(run, task_id)
         if run.status in TERMINAL_RUN_STATUSES:
-            return run
+            await self._reconcile_task_for_run(task=task, run=run, command_id=command_id)
+            return await self.get_run(task_id, run_id)
 
         snapshot = await self._lifecycle.cancel(run_id, self._context(task, command_id))
         if snapshot.status is not ExecutionStatus.CANCELLED:
@@ -326,11 +357,13 @@ class PlatformKernel:
         return await self.get_task(task_id)
 
     async def recover_task(self, task_id: str) -> TaskView:
-        """Recover queued attempts after constructing a new kernel process."""
+        """Recover incomplete attempts and reconcile split lifecycle event boundaries."""
 
         history = await self._events.read(task_id)
         task = reduce_task(history, task_id)
         for run_id in task.run_ids:
+            history = await self._events.read(task_id)
+            task = reduce_task(history, task_id)
             run = reduce_run(history, run_id)
             if run.status is ExecutionStatus.QUEUED:
                 await self._recover_run(
@@ -338,8 +371,14 @@ class PlatformKernel:
                     run_id=run_id,
                     command_id=f"recovery:{run_id}",
                 )
-                history = await self._events.read(task_id)
-        return reduce_task(history, task_id)
+            elif run.status in TERMINAL_RUN_STATUSES:
+                await self._reconcile_task_for_run(
+                    task=task,
+                    run=run,
+                    command_id=f"recovery:{run_id}",
+                )
+
+        return await self.get_task(task_id)
 
     async def get_task(self, task_id: str) -> TaskView:
         return reduce_task(await self._events.read(task_id), task_id)
@@ -357,6 +396,10 @@ class PlatformKernel:
         task = reduce_task(history, task_id)
         run = reduce_run(history, run_id)
         self._require_run_task(run, task_id)
+
+        if run.status in TERMINAL_RUN_STATUSES:
+            await self._reconcile_task_for_run(task=task, run=run, command_id=command_id)
+            return
         if run.status is not ExecutionStatus.QUEUED:
             return
 
@@ -385,12 +428,11 @@ class PlatformKernel:
                     input={"plan_ref": task.plan_ref},
                 )
             )
-            await self._publish(
-                event_type="run.running",
-                subject_type="run",
-                subject_id=run_id,
-                context=context,
-                payload={"backend_ref": handle.backend_ref},
+            await self._observe_started_run(
+                task=task,
+                run=run,
+                command_id=command_id,
+                backend_ref=handle.backend_ref,
             )
             return
 
@@ -402,6 +444,33 @@ class PlatformKernel:
             mark_command=False,
         )
 
+    async def _observe_started_run(
+        self,
+        *,
+        task: TaskView,
+        run: RunView,
+        command_id: str,
+        backend_ref: str | None,
+    ) -> None:
+        """Observe actual backend state instead of assuming start implies running."""
+
+        context = self._context(task, command_id)
+        try:
+            snapshot = await self._lifecycle.get(run.run_id, context)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                return
+            raise
+
+        await self._apply_snapshot(
+            task=task,
+            run=run,
+            snapshot=snapshot,
+            command_id=command_id,
+            mark_command=False,
+            backend_ref=backend_ref,
+        )
+
     async def _apply_snapshot(
         self,
         *,
@@ -410,20 +479,30 @@ class PlatformKernel:
         snapshot: ExecutionSnapshot,
         command_id: str,
         mark_command: bool,
+        backend_ref: str | None = None,
     ) -> None:
         if snapshot.run_id != run.run_id:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
                 f"Backend returned snapshot for wrong run: {snapshot.run_id}",
             )
+
         if snapshot.status is run.status:
+            await self._reconcile_task_for_run(task=task, run=run, command_id=command_id)
             return
+        if snapshot.status is ExecutionStatus.QUEUED:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                f"Backend regressed run {run.run_id} to queued from {run.status.value}",
+            )
 
         context = self._context(task, command_id)
         event_type = f"run.{snapshot.status.value}"
         payload: dict[str, JsonValue] = {"output": snapshot.output}
         if mark_command:
             payload["command_id"] = command_id
+        if snapshot.status is ExecutionStatus.RUNNING and backend_ref is not None:
+            payload["backend_ref"] = backend_ref
 
         await self._publish(
             event_type=event_type,
@@ -433,14 +512,64 @@ class PlatformKernel:
             payload=payload,
         )
 
-        task_event = self._task_event_for_run_status(snapshot.status)
-        if task_event is not None and task.status not in TERMINAL_TASK_STATUSES:
+        updated_run = RunView(
+            run_id=run.run_id,
+            task_id=run.task_id,
+            attempt=run.attempt,
+            status=snapshot.status,
+            backend_ref=backend_ref if backend_ref is not None else run.backend_ref,
+            output=snapshot.output,
+        )
+        await self._reconcile_task_for_run(
+            task=task,
+            run=updated_run,
+            command_id=command_id,
+        )
+
+    async def _reconcile_task_for_run(
+        self,
+        *,
+        task: TaskView,
+        run: RunView,
+        command_id: str,
+    ) -> None:
+        task_event = self._task_event_for_run_status(run.status)
+        expected_status = self._task_status_for_run_status(run.status)
+        if task_event is None or expected_status is None:
+            return
+        if task.status is expected_status:
+            return
+        if task.status in TERMINAL_TASK_STATUSES:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"Task {task.task_id} is {task.status.value} while run {run.run_id} is "
+                f"{run.status.value}",
+            )
+
+        context = self._context(task, command_id)
+        if task.status is TaskStatus.READY:
             await self._publish(
-                event_type=task_event,
+                event_type="task.running",
                 subject_type="task",
                 subject_id=task.task_id,
                 context=context,
             )
+            task = await self.get_task(task.task_id)
+            context = self._context(task, command_id)
+
+        if task.status is not TaskStatus.RUNNING:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"Task {task.task_id} cannot reconcile run {run.run_id} from "
+                f"{task.status.value}",
+            )
+
+        await self._publish(
+            event_type=task_event,
+            subject_type="task",
+            subject_id=task.task_id,
+            context=context,
+        )
 
     @staticmethod
     def _task_event_for_run_status(status: ExecutionStatus) -> str | None:
@@ -450,6 +579,16 @@ class PlatformKernel:
             return "task.failed"
         if status is ExecutionStatus.CANCELLED:
             return "task.cancelled"
+        return None
+
+    @staticmethod
+    def _task_status_for_run_status(status: ExecutionStatus) -> TaskStatus | None:
+        if status is ExecutionStatus.SUCCEEDED:
+            return TaskStatus.SUCCEEDED
+        if status in {ExecutionStatus.FAILED, ExecutionStatus.TIMED_OUT}:
+            return TaskStatus.FAILED
+        if status is ExecutionStatus.CANCELLED:
+            return TaskStatus.CANCELLED
         return None
 
     @staticmethod
@@ -470,6 +609,23 @@ class PlatformKernel:
             project_id=task.project_id,
         )
 
+    @staticmethod
+    def _run_id_for_command(task_id: str, command_id: str) -> str:
+        value = uuid5(NAMESPACE_URL, f"ai-multi-agent-platform:run:{task_id}:{command_id}")
+        return f"run_{value}"
+
+    @staticmethod
+    def _event_id_for_command(
+        correlation_id: str,
+        command_id: str,
+        event_type: str,
+    ) -> str:
+        value = uuid5(
+            NAMESPACE_URL,
+            f"ai-multi-agent-platform:event:{correlation_id}:{command_id}:{event_type}",
+        )
+        return f"event_{value}"
+
     async def _publish(
         self,
         *,
@@ -479,14 +635,24 @@ class PlatformKernel:
         context: OperationContext,
         payload: dict[str, JsonValue] | None = None,
     ) -> PlatformEvent:
+        event_payload = payload or {}
+        command_id = event_payload.get("command_id")
+        event_id = f"event_{uuid4()}"
+        if isinstance(command_id, str):
+            event_id = self._event_id_for_command(
+                context.correlation_id,
+                command_id,
+                event_type,
+            )
+
         event = PlatformEvent(
-            event_id=f"event_{uuid4()}",
+            event_id=event_id,
             event_type=event_type,
             subject_type=subject_type,
             subject_id=subject_id,
             occurred_at=datetime.now(UTC).isoformat(),
             context=context,
-            payload=payload or {},
+            payload=event_payload,
         )
         await self._events.publish(event)
         return event
