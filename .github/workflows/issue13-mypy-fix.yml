@@ -1,0 +1,63 @@
+name: Issue 13 Mypy Fix
+
+on:
+  push:
+    branches: [feat/issue-13-data-boundaries]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-13-data-boundaries
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install checks
+        run: python -m pip install -e '.[dev]'
+      - name: Apply focused typing fix
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/ai_multi_agent_platform/data/reference.py')
+          text = path.read_text()
+          old = '''        source_ids = request.source_ids
+        if source_ids:
+            sources = tuple(
+                await self._get_source(source_id, request.context) for source_id in source_ids
+            )
+        else:
+            sources = await self._list_sources(request.context)
+'''
+          new = '''        source_ids = request.source_ids
+        sources: tuple[KnowledgeSource, ...]
+        if source_ids:
+            resolved_sources: list[KnowledgeSource] = []
+            for source_id in source_ids:
+                resolved_sources.append(await self._get_source(source_id, request.context))
+            sources = tuple(resolved_sources)
+        else:
+            sources = await self._list_sources(request.context)
+'''
+          if old not in text:
+              raise SystemExit('target snippet not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          ruff format .
+          ruff check .
+          mypy
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ai_multi_agent_platform/data/reference.py
+          git commit -m 'fix: make knowledge source resolution mypy-safe'
+          git push origin HEAD:feat/issue-13-data-boundaries
