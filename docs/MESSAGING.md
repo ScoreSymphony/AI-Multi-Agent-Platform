@@ -81,7 +81,11 @@ attempt number, redelivery flag and delivery time. Broker-specific delivery
 handles remain adapter-private.
 
 The JSON representation is specified by
-`schemas/transport/envelope.v1.schema.json`.
+`schemas/transport/envelope.v1.schema.json`. `TransportEnvelope.to_dict()` emits
+the canonical JSON-compatible wire mapping and `TransportEnvelope.from_dict()`
+reconstructs it. The repository validates a full serialize -> JSON Schema ->
+deserialize -> serialize round trip. Unsupported envelope versions fail rather
+than being accepted silently.
 
 ### Canonical domain-event messages
 
@@ -108,9 +112,13 @@ once. The recommended key is:
 2. otherwise `message_id`.
 
 `IdempotentConsumer` and `InMemoryIdempotencyStore` provide a deterministic
-single-process helper for tests and simple local consumers. They are not a
-durable exactly-once mechanism. Consumers with durable side effects must
-coordinate durable idempotency state with those side effects where required.
+single-process helper for tests and simple local consumers. The store coordinates
+one in-process owner per key, so concurrently delivered duplicates wait rather
+than executing the handler at the same time. If the owner fails or is cancelled,
+the claim is released so a waiting duplicate can retry. This is still not a
+durable exactly-once mechanism: process loss may erase the in-memory evidence,
+and consumers with durable side effects must coordinate durable idempotency state
+with those side effects where required.
 
 ### Acknowledgement timing
 
@@ -122,6 +130,24 @@ recorded before `ack`.
 A retryable failure uses `nack(..., retry=True)`. A non-retryable rejection may
 use `nack(..., retry=False)`. An unacknowledged in-flight delivery is eligible
 for redelivery when the consumer disappears/restarts.
+
+### Publish operation control
+
+`MessageTransport.publish(...)` accepts the platform-wide `OperationControl`.
+For messaging, its semantics are deliberately narrow:
+
+- `timeout_seconds` bounds the publish operation and maps expiry to canonical
+  `ErrorCode.TIMEOUT`;
+- when `idempotency_key` is supplied it must match the envelope's own
+  `idempotency_key`, preventing two competing idempotency identities at one
+  boundary;
+- `retry_mode` expresses caller retry intent and does not authorize a transport
+  to manufacture an exactly-once guarantee or silently create a second message
+  identity.
+
+The reference transport implements timeout enforcement and idempotency-key
+binding. Future adapters must preserve these canonical semantics even if their
+backend SDK exposes different timeout or retry primitives.
 
 ### Retry and poison messages
 
@@ -137,6 +163,9 @@ message is redelivered. Once the maximum attempt count is reached, or retry is
 explicitly disabled, the reference transport moves the delivery into a
 transport-owned dead-letter record and advances that consumer group's cursor.
 Dead letters are diagnostic/delivery state, not canonical domain history.
+
+The reusable contract suite verifies that a configured non-zero retry backoff is
+actually observed before redelivery instead of merely checking attempt counters.
 
 ## Ordering
 
@@ -183,6 +212,9 @@ test hook. While unavailable, operations fail with retryable
 `ErrorCode.UNAVAILABLE`. A production adapter maps backend/network outages into
 the same canonical failure category and lets the platform decide when to retry
 or reconnect.
+
+The reusable conformance suite receives an adapter-specific availability-toggle
+fixture rather than adding outage simulation to the production transport API.
 
 ## Shutdown
 
@@ -238,7 +270,8 @@ Adapters must:
 9. keep broker topics, offsets, message IDs and internal handles out of canonical
    domain identities;
 10. preserve correlation, causation and trace context exactly;
-11. support clean cancellation/shutdown/reconnection behavior.
+11. support clean cancellation/shutdown/reconnection behavior;
+12. preserve the canonical `OperationControl` timeout/idempotency-key binding.
 
 The broad existing `CapabilityKind.EVENT` is used for discovery metadata by the
 reference implementation, while `provider_type="message_transport"` and
@@ -259,6 +292,7 @@ dependency and provides:
 - retry/backoff;
 - dead-letter handling;
 - outage simulation;
+- publish timeout and operation/envelope idempotency-key binding;
 - graceful/forced shutdown;
 - normalized provider metadata.
 
@@ -268,18 +302,29 @@ recoverable canonical history.
 ## Reusable contract tests
 
 `MessageTransportContractSuite` is pytest-independent and can be run against a
-configured future adapter. It checks:
+configured future adapter. Full compliance checks:
 
 - normalized transport descriptor/capabilities;
-- publish/subscribe and metadata preservation;
+- publish/subscribe and full correlation/causation/trace metadata preservation;
+- operation/envelope idempotency-key binding;
 - duplicate redelivery and scoped ordering;
+- idempotent-consumer behavior;
+- configured retry backoff;
 - consumer restart behavior;
 - retry exhaustion/dead-letter behavior;
+- canonical transport-unavailable behavior;
+- bounded backpressure behavior;
 - graceful shutdown.
 
-The repository test suite adds reference-specific checks for explicit
-backpressure, outage errors, idempotent consumption, versioned/immutable envelope
-behavior and canonical domain-event references.
+Future adapters provide three test fixtures: their normal transport factory, a
+deliberately bounded transport factory and an availability toggle. This keeps
+backend-specific failure injection out of the production `MessageTransport`
+interface while still making outage and overload behavior part of reusable
+contract compliance.
+
+The repository adds reference-specific regression tests for publish timeout,
+concurrent duplicate-handler serialization, JSON Schema wire round trips,
+version rejection and canonical domain-event references.
 
 ## Non-goals
 
