@@ -33,6 +33,8 @@ Layers at the same scope retain caller order. Task/run overrides are denied by d
 
 Issue #43 already established `ai_multi_agent_platform.security.SecretReference`. Issue #34 reuses that type rather than defining a competing secret identity. It contains provider/backend identity, secret ID, owner/scope, optional version and non-secret metadata. Plaintext material is intentionally absent.
 
+`SecretReference` defensively sanitizes its metadata through the central structured-redaction rules at construction time, recursively freezes the sanitized metadata, and returns a fresh redacted copy from `to_dict()`. This means known sensitive metadata keys such as tokens, credentials, passwords, API keys and private keys are not retained in plaintext by the canonical reference object and cannot be reintroduced by mutating the original input mapping or the stored metadata after construction.
+
 `SecretMetadata` adds logical purpose, lifecycle timestamps, active/revoked state, expiry/rotation data and optional allowed-consumer/purpose hooks. Its safe serialization recursively redacts sensitive reference metadata.
 
 ## SecretProvider boundary
