@@ -34,7 +34,9 @@ def build_executor(tmp_path: Path) -> tuple[Executor, str]:
 
 def test_success_and_identity_preservation(tmp_path: Path) -> None:
     executor, workspace = build_executor(tmp_path)
-    result = asyncio.run(executor.execute(request(workspace, "echo", text="hello")))
+    result = asyncio.run(
+        executor.execute(request(workspace, "echo", text="hello"))
+    )
     assert result.status is ExecutionStatus.SUCCEEDED
     assert result.stdout == "hello"
     assert result.task_id == "task-1"
@@ -45,7 +47,11 @@ def test_success_and_identity_preservation(tmp_path: Path) -> None:
 
 def test_controlled_failure_is_canonical(tmp_path: Path) -> None:
     executor, workspace = build_executor(tmp_path)
-    result = asyncio.run(executor.execute(request(workspace, "fail", message="boom", code=7)))
+    result = asyncio.run(
+        executor.execute(
+            request(workspace, "fail", message="boom", code=7)
+        )
+    )
     assert result.status is ExecutionStatus.FAILED
     assert result.result_code == 7
     assert result.error is not None
@@ -109,14 +115,29 @@ def test_workspace_traversal_is_blocked(tmp_path: Path) -> None:
 def test_artifact_collection_and_write_boundary(tmp_path: Path) -> None:
     executor, workspace = build_executor(tmp_path)
     result = asyncio.run(
-        executor.execute(request(workspace, "write_artifact", path="out/result.txt", content="ok"))
+        executor.execute(
+            request(
+                workspace,
+                "write_artifact",
+                path="out/result.txt",
+                content="ok",
+            )
+        )
     )
     assert result.status is ExecutionStatus.SUCCEEDED
     assert result.artifacts[0].relative_path == "out/result.txt"
-    assert (tmp_path / "workspaces" / workspace / "out" / "result.txt").read_text() == "ok"
+    artifact_path = tmp_path / "workspaces" / workspace / "out" / "result.txt"
+    assert artifact_path.read_text() == "ok"
 
     escaped = asyncio.run(
-        executor.execute(request(workspace, "write_artifact", path="../../escape.txt", content="no"))
+        executor.execute(
+            request(
+                workspace,
+                "write_artifact",
+                path="../../escape.txt",
+                content="no",
+            )
+        )
     )
     assert escaped.error is not None
     assert escaped.error.category is ExecutionErrorCategory.INVALID_REQUEST
@@ -125,7 +146,10 @@ def test_artifact_collection_and_write_boundary(tmp_path: Path) -> None:
 
 def test_registry_selection_is_configuration_driven(tmp_path: Path) -> None:
     executor = ReferenceExecutor(tmp_path)
-    registry, default = ExecutorRegistry.from_config({"local": executor}, default="local")
+    registry, default = ExecutorRegistry.from_config(
+        {"local": executor},
+        default="local",
+    )
     assert default is executor
     assert registry.select("local") is executor
 
