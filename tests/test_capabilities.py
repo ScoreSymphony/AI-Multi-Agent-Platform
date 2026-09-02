@@ -19,47 +19,65 @@ from ai_multi_agent_platform.capabilities import (
     PolicyDecision,
 )
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
+from ai_multi_agent_platform.contracts.domain_mapping import map_tool_invocation_to_domain
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
     Capability,
     CapabilityKind,
     HealthStatus,
+    JsonValue,
     OperationContext,
     OperationControl,
     ProviderDescriptor,
     ToolInvocation,
     ToolResult,
 )
+from ai_multi_agent_platform.domain import OwnerRef, ToolInvocation as DomainToolInvocation, new_id
 
 
 def _request(
     capability_id: str = "tool.echo",
     *,
-    arguments: dict[str, object] | None = None,
+    arguments: dict[str, JsonValue] | None = None,
     version: str | None = None,
     permissions: frozenset[str] = frozenset(),
-    approvals: frozenset[str] = frozenset(),
     timeout: float | None = None,
 ) -> CapabilityInvocation:
+    project_id = new_id("project")
     context = OperationContext(
         correlation_id="corr-1",
+        owner_type="user",
+        owner_id="user-1",
+        project_id=project_id,
         control=OperationControl(timeout_seconds=timeout),
     )
     return CapabilityInvocation(
         invocation_id="invoke-1",
         capability_id=capability_id,
         version=version,
-        arguments=arguments or {"message": "hello"},
+        arguments={"message": "hello"} if arguments is None else arguments,
         context=context,
         trace=InvocationTrace(
             correlation_id="corr-1",
-            task_id="task-1",
-            run_id="run-1",
-            agent_id="agent-1",
-            project_id="project-1",
+            task_id=new_id("task"),
+            run_id=new_id("run"),
+            agent_id=new_id("agent"),
+            project_id=project_id,
         ),
         granted_permissions=permissions,
-        approval_grants=approvals,
+    )
+
+
+async def _governance_binding(
+    request: CapabilityInvocation,
+    registration: CapabilityRegistration,
+    provider_invocation: ToolInvocation,
+) -> DomainToolInvocation:
+    return map_tool_invocation_to_domain(
+        provider_invocation,
+        canonical_tool_id=new_id("tool"),
+        owner_ref=OwnerRef(type="user", id="user-1"),
+        canonical_project_id=request.trace.project_id,
     )
 
 
@@ -128,7 +146,7 @@ class StaticProvider(CapabilityToolProvider):
 
 class FakeMCPClient:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, dict[str, object]]] = []
+        self.calls: list[tuple[str, dict[str, JsonValue]]] = []
 
     async def list_tools(self) -> tuple[MCPTool, ...]:
         return (
@@ -145,7 +163,7 @@ class FakeMCPClient:
             ),
         )
 
-    async def call_tool(self, name: str, arguments: dict[str, object]) -> object:
+    async def call_tool(self, name: str, arguments: dict[str, JsonValue]) -> JsonValue:
         self.calls.append((name, arguments))
         return {"source": name, "query": arguments["query"]}
 
@@ -163,9 +181,9 @@ def test_native_tool_success_and_trace_preservation() -> None:
         assert result.output == {"message": "hello"}
         assert result.provider_id == "native.reference"
         assert [record.status.value for record in observer.records] == ["running", "succeeded"]
-        assert observer.records[-1].trace.task_id == "task-1"
-        assert observer.records[-1].trace.run_id == "run-1"
-        assert observer.records[-1].trace.agent_id == "agent-1"
+        assert observer.records[-1].trace.task_id.startswith("task_")
+        assert observer.records[-1].trace.run_id.startswith("run_")
+        assert observer.records[-1].trace.agent_id.startswith("agent_")
 
     asyncio.run(scenario())
 
@@ -173,8 +191,7 @@ def test_native_tool_success_and_trace_preservation() -> None:
 def test_invalid_input_is_rejected_before_provider_execution() -> None:
     async def scenario() -> None:
         registry = CapabilityRegistry()
-        provider = NativeEchoProvider()
-        await registry.register_provider(provider)
+        await registry.register_provider(NativeEchoProvider())
         with pytest.raises(ContractError) as caught:
             await CapabilityInvoker(registry).invoke(_request(arguments={"message": 42}))
         assert caught.value.code is ErrorCode.INVALID_REQUEST
@@ -288,7 +305,7 @@ def test_permission_denied_before_provider_execution() -> None:
     asyncio.run(scenario())
 
 
-def test_approval_required_hook_is_enforced() -> None:
+def test_approval_required_without_governance_binding_is_contract_violation() -> None:
     async def policy(
         request: CapabilityInvocation, capability: CapabilitySpec
     ) -> PolicyDecision:
@@ -299,8 +316,73 @@ def test_approval_required_hook_is_enforced() -> None:
         await registry.register_provider(NativeEchoProvider())
         with pytest.raises(ContractError) as caught:
             await CapabilityInvoker(registry, policy_hook=policy).invoke(_request())
+        assert caught.value.code is ErrorCode.CONTRACT_VIOLATION
+
+    asyncio.run(scenario())
+
+
+def test_approval_required_is_bound_to_canonical_tool_invocation() -> None:
+    async def policy(
+        request: CapabilityInvocation, capability: CapabilitySpec
+    ) -> PolicyDecision:
+        return PolicyDecision.REQUIRE_APPROVAL
+
+    async def approve(
+        request: CapabilityInvocation,
+        capability: CapabilitySpec,
+        canonical_invocation: DomainToolInvocation,
+    ) -> bool:
+        assert canonical_invocation.id.startswith("tool_invocation_")
+        return True
+
+    async def scenario() -> None:
+        registry = CapabilityRegistry()
+        await registry.register_provider(NativeEchoProvider())
+        observer = RecordingObserver()
+        result = await CapabilityInvoker(
+            registry,
+            policy_hook=policy,
+            governance_binding_hook=_governance_binding,
+            approval_hook=approve,
+            observer=observer,
+        ).invoke(_request())
+
+        assert result.output == {"message": "hello"}
+        assert result.canonical_tool_invocation_id is not None
+        assert result.canonical_tool_invocation_id.startswith("tool_invocation_")
+        assert observer.records[-1].canonical_tool_invocation_id == result.canonical_tool_invocation_id
+
+    asyncio.run(scenario())
+
+
+def test_approval_required_but_rejected_fails_before_execution() -> None:
+    async def policy(
+        request: CapabilityInvocation, capability: CapabilitySpec
+    ) -> PolicyDecision:
+        return PolicyDecision.REQUIRE_APPROVAL
+
+    async def reject(
+        request: CapabilityInvocation,
+        capability: CapabilitySpec,
+        canonical_invocation: DomainToolInvocation,
+    ) -> bool:
+        return False
+
+    async def scenario() -> None:
+        registry = CapabilityRegistry()
+        await registry.register_provider(NativeEchoProvider())
+        with pytest.raises(ContractError) as caught:
+            await CapabilityInvoker(
+                registry,
+                policy_hook=policy,
+                governance_binding_hook=_governance_binding,
+                approval_hook=reject,
+            ).invoke(_request())
         assert caught.value.code is ErrorCode.FORBIDDEN
         assert caught.value.details["approval_required"] is True
+        canonical_id = caught.value.details["canonical_tool_invocation_id"]
+        assert isinstance(canonical_id, str)
+        assert canonical_id.startswith("tool_invocation_")
 
     asyncio.run(scenario())
 
