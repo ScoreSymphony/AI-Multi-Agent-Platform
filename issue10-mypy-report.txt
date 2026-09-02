@@ -1,2 +1,1 @@
-src/ai_multi_agent_platform/models/persistence.py:198: error: Argument 1 to "tuple" has incompatible type "list[str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]]"; expected "Iterable[str]"  [arg-type]
-Found 1 error in 1 file (checked 33 source files)
+Success: no issues found in 33 source files
