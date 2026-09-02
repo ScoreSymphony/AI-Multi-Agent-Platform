@@ -560,8 +560,7 @@ class PlatformKernel:
         if task.status is not TaskStatus.RUNNING:
             raise ContractError(
                 ErrorCode.CONFLICT,
-                f"Task {task.task_id} cannot reconcile run {run.run_id} from "
-                f"{task.status.value}",
+                f"Task {task.task_id} cannot reconcile run {run.run_id} from {task.status.value}",
             )
 
         await self._publish(
