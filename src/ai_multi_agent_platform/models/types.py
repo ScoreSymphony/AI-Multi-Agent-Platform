@@ -146,10 +146,13 @@ class RoutingRequirements:
             return value
 
         raw_modalities = values.get("modalities", [])
-        if not isinstance(raw_modalities, list) or any(
-            not isinstance(item, str) for item in raw_modalities
-        ):
+        if not isinstance(raw_modalities, list):
             raise ValueError("modalities must be a list of strings")
+        modalities: list[str] = []
+        for item in raw_modalities:
+            if not isinstance(item, str):
+                raise ValueError("modalities must be a list of strings")
+            modalities.append(item)
 
         return cls(
             explicit_model_id=optional_string("model_config_id"),
@@ -157,7 +160,7 @@ class RoutingRequirements:
             tool_calling=boolean("tool_calling"),
             structured_output=boolean("structured_output"),
             streaming=boolean("streaming"),
-            modalities=tuple(raw_modalities),
+            modalities=tuple(modalities),
             local_only=boolean("local_only"),
             self_hosted_only=boolean("self_hosted_only"),
         )
