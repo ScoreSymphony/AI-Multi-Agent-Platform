@@ -16,7 +16,9 @@ Rules:
 - Agent carries provider-neutral model/capability references plus a structured policy-requirements hook without selecting a final authorization engine;
 - Model Assignment supports canonical Agent, Task, Step, Capability and Policy Scope targets;
 - Policy Scope is only a canonical model-assignment target/scope identity, not the final authorization-policy model;
+- Tool Invocation provides a canonical per-call identity so Approval can govern one sensitive invocation rather than an entire reusable Tool definition;
 - Result carries an outcome plus immutable structured status data and Artifact references;
+- Event schema `1.0` remains backward-compatible; strict canonical subject-type/ID validation is published as Event schema `2.0`;
 - this package must not import Hermes, Forge, Temporal or other replaceable integration frameworks.
 
 Cross-boundary serialization is defined separately under `schemas/domain/` so Python dataclasses are not the external wire contract.
