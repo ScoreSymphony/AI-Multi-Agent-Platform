@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import ExecutionStatus, JsonValue, PlatformEvent
@@ -206,7 +205,7 @@ def reduce_run(events: tuple[PlatformEvent, ...], run_id: str) -> RunView:
         output = run.output
         output_value = event.payload.get("output")
         if isinstance(output_value, dict):
-            output = cast(dict[str, JsonValue], output_value)
+            output = output_value
 
         run = replace(
             run,
