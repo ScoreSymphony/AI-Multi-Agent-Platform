@@ -12,7 +12,7 @@ import json
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from time import perf_counter
+from time import perf_counter, time
 from types import MappingProxyType
 from typing import Protocol
 from urllib import error, request
@@ -178,7 +178,12 @@ class OpenAICompatibleModelProvider(ModelProvider):
                     kind=CapabilityKind.MODEL,
                     supported_operations=("generate",),
                     modalities=("text",),
-                    features=("local-first", "self-hosted", "structured-output"),
+                    features=(
+                        "local-first",
+                        "self-hosted",
+                        "tool-calling",
+                        "structured-output",
+                    ),
                 ),
             ),
             health=self._health,
@@ -240,16 +245,23 @@ class OpenAICompatibleModelProvider(ModelProvider):
 
         payload: dict[str, JsonValue] = {
             "model": native_model,
-            "messages": [{"role": "user", "content": message} for message in request_data.messages],
+            "messages": self._messages(request_data),
             "stream": False,
         }
         self._copy_generation_parameters(request_data, payload)
-        if request_data.requirements.get("structured_output") is True:
-            payload["response_format"] = {"type": "json_object"}
+        self._copy_tools(request_data, payload)
+        self._copy_response_expectation(request_data, payload)
 
+        started_wall_ms = time() * 1000.0
         started = perf_counter()
-        response = await self._request("POST", "/chat/completions", payload=payload)
+        response = await self._request(
+            "POST",
+            "/chat/completions",
+            payload=payload,
+            timeout_seconds=request_data.context.control.timeout_seconds,
+        )
         elapsed_ms = (perf_counter() - started) * 1000.0
+        ended_wall_ms = time() * 1000.0
         self._raise_for_status(response)
 
         body = response.payload
@@ -279,14 +291,27 @@ class OpenAICompatibleModelProvider(ModelProvider):
                 if isinstance(key, str) and self._is_json_value(value)
             }
 
-        finish_reason = first.get("finish_reason")
         metadata_values: dict[str, JsonValue] = {
             "provider_native_model": native_model,
             "correlation_id": request_data.context.correlation_id,
             "latency_ms": elapsed_ms,
+            "started_unix_ms": started_wall_ms,
+            "ended_unix_ms": ended_wall_ms,
+            "status": "success",
         }
+        self._copy_context_metadata(request_data, metadata_values)
+
+        finish_reason = first.get("finish_reason")
         if isinstance(finish_reason, str):
-            metadata_values["finish_reason"] = finish_reason
+            metadata_values["finish_reason"] = self._normalize_finish_reason(finish_reason)
+
+        tool_calls = message.get("tool_calls")
+        if isinstance(tool_calls, list) and self._is_json_value(tool_calls):
+            metadata_values["tool_calls"] = tool_calls
+
+        structured_output = self._structured_output(request_data, content)
+        if structured_output is not None:
+            metadata_values["structured_output"] = structured_output
 
         return ModelResponse(
             request_id=request_data.request_id,
@@ -319,15 +344,167 @@ class OpenAICompatibleModelProvider(ModelProvider):
             provider_id=self.config.provider_id,
         )
 
+    def _messages(self, request_data: ModelRequest) -> list[JsonValue]:
+        canonical = request_data.requirements.get("canonical_messages")
+        if canonical is None:
+            return [{"role": "user", "content": message} for message in request_data.messages]
+        if not isinstance(canonical, list):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "canonical_messages must be a list",
+                provider_id=self.config.provider_id,
+            )
+
+        messages: list[JsonValue] = []
+        for raw_message in canonical:
+            if not isinstance(raw_message, dict):
+                raise self._invalid_request("canonical message must be an object")
+            role = raw_message.get("role")
+            content = raw_message.get("content")
+            if not isinstance(role, str) or not isinstance(content, list):
+                raise self._invalid_request("canonical message requires role and content")
+            text_parts: list[str] = []
+            for block in content:
+                if not isinstance(block, dict):
+                    raise self._invalid_request("canonical content block must be an object")
+                kind = block.get("kind")
+                if kind == "text":
+                    text = block.get("text")
+                    if not isinstance(text, str):
+                        raise self._invalid_request("text content block requires text")
+                    text_parts.append(text)
+                elif kind == "json":
+                    value = block.get("value")
+                    if not self._is_json_value(value):
+                        raise self._invalid_request("JSON content block contains invalid data")
+                    text_parts.append(json.dumps(value, separators=(",", ":")))
+                else:
+                    raise ContractError(
+                        ErrorCode.UNSUPPORTED_CAPABILITY,
+                        f"content block kind is not supported by this provider: {kind}",
+                        provider_id=self.config.provider_id,
+                    )
+
+            translated: dict[str, JsonValue] = {
+                "role": role,
+                "content": "\n".join(text_parts),
+            }
+            name = raw_message.get("name")
+            if isinstance(name, str):
+                translated["name"] = name
+            tool_call_id = raw_message.get("tool_call_id")
+            if isinstance(tool_call_id, str):
+                translated["tool_call_id"] = tool_call_id
+            messages.append(translated)
+        return messages
+
     def _copy_generation_parameters(
         self,
         request_data: ModelRequest,
         payload: dict[str, JsonValue],
     ) -> None:
-        for key in ("temperature", "top_p", "max_tokens", "seed"):
+        for key in ("temperature", "top_p", "max_tokens", "seed", "stop"):
             value = request_data.requirements.get(key)
             if value is not None:
                 payload[key] = value
+
+    def _copy_tools(
+        self,
+        request_data: ModelRequest,
+        payload: dict[str, JsonValue],
+    ) -> None:
+        raw_tools = request_data.requirements.get("canonical_tools")
+        if raw_tools is None:
+            return
+        if not isinstance(raw_tools, list):
+            raise self._invalid_request("canonical_tools must be a list")
+
+        tools: list[JsonValue] = []
+        for raw_tool in raw_tools:
+            if not isinstance(raw_tool, dict):
+                raise self._invalid_request("canonical tool definition must be an object")
+            name = raw_tool.get("name")
+            description = raw_tool.get("description", "")
+            input_schema = raw_tool.get("input_schema")
+            if not isinstance(name, str) or not isinstance(description, str):
+                raise self._invalid_request("canonical tool requires string name/description")
+            if not isinstance(input_schema, dict) or not self._is_json_value(input_schema):
+                raise self._invalid_request("canonical tool input_schema must be a JSON object")
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "description": description,
+                        "parameters": input_schema,
+                    },
+                }
+            )
+        if tools:
+            payload["tools"] = tools
+
+    def _copy_response_expectation(
+        self,
+        request_data: ModelRequest,
+        payload: dict[str, JsonValue],
+    ) -> None:
+        raw_expectation = request_data.requirements.get("response_expectation")
+        if raw_expectation is None:
+            if request_data.requirements.get("structured_output") is True:
+                payload["response_format"] = {"type": "json_object"}
+            return
+        if not isinstance(raw_expectation, dict):
+            raise self._invalid_request("response_expectation must be an object")
+
+        kind = raw_expectation.get("kind")
+        if kind == "text":
+            return
+        if kind == "json_object":
+            payload["response_format"] = {"type": "json_object"}
+            return
+        if kind != "json_schema":
+            raise self._invalid_request("unknown response expectation kind")
+
+        schema_name = raw_expectation.get("schema_name")
+        schema = raw_expectation.get("json_schema")
+        strict = raw_expectation.get("strict", False)
+        if not isinstance(schema_name, str) or not isinstance(schema, dict):
+            raise self._invalid_request("json_schema response requires name and schema")
+        if not isinstance(strict, bool) or not self._is_json_value(schema):
+            raise self._invalid_request("invalid json_schema response configuration")
+        payload["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": schema_name,
+                "strict": strict,
+                "schema": schema,
+            },
+        }
+
+    def _structured_output(self, request_data: ModelRequest, content: str) -> JsonValue:
+        expectation = request_data.requirements.get("response_expectation")
+        structured = request_data.requirements.get("structured_output") is True
+        if isinstance(expectation, dict):
+            structured = expectation.get("kind") in {"json_object", "json_schema"}
+        if not structured or not content:
+            return None
+        try:
+            parsed: object = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise self._invalid_response("provider returned invalid structured JSON output") from exc
+        if not self._is_json_value(parsed):
+            raise self._invalid_response("provider structured output is not JSON compatible")
+        return parsed  # type: ignore[return-value]
+
+    def _copy_context_metadata(
+        self,
+        request_data: ModelRequest,
+        metadata: dict[str, JsonValue],
+    ) -> None:
+        for key in ("task_id", "run_id", "agent_id"):
+            value = request_data.requirements.get(key)
+            if isinstance(value, str):
+                metadata[key] = value
 
     async def _request(
         self,
@@ -335,18 +512,19 @@ class OpenAICompatibleModelProvider(ModelProvider):
         path: str,
         *,
         payload: Mapping[str, JsonValue] | None,
+        timeout_seconds: float | None = None,
     ) -> HttpJsonResponse:
-        timeout_seconds = self.config.timeout_seconds
+        effective_timeout = timeout_seconds or self.config.timeout_seconds
         headers = self._headers()
         url = f"{self.config.base_url.rstrip('/')}{path}"
         try:
-            async with asyncio.timeout(timeout_seconds):
+            async with asyncio.timeout(effective_timeout):
                 return await self.transport.request_json(
                     method,
                     url,
                     headers=headers,
                     payload=payload,
-                    timeout_seconds=timeout_seconds,
+                    timeout_seconds=effective_timeout,
                 )
         except asyncio.CancelledError as exc:
             raise ContractError(
@@ -429,12 +607,25 @@ class OpenAICompatibleModelProvider(ModelProvider):
             details={"http_status": status},
         )
 
+    def _invalid_request(self, message: str) -> ContractError:
+        return ContractError(
+            ErrorCode.INVALID_REQUEST,
+            message,
+            provider_id=self.config.provider_id,
+        )
+
     def _invalid_response(self, message: str) -> ContractError:
         return ContractError(
             ErrorCode.INVALID_PROVIDER_RESPONSE,
             message,
             provider_id=self.config.provider_id,
         )
+
+    @staticmethod
+    def _normalize_finish_reason(value: str) -> str:
+        if value == "tool_calls":
+            return "tool_call"
+        return value
 
     @classmethod
     def _is_json_value(cls, value: object) -> bool:
