@@ -22,6 +22,8 @@ from ai_multi_agent_platform.domain import (
     Node,
     OwnerRef,
     Plan,
+    Provenance,
+    Result,
     Run,
     RunStatus,
     Step,
@@ -202,24 +204,69 @@ def test_direct_status_assignment_cannot_bypass_transition_rules() -> None:
     assert succeeded.finished_at is not None
 
 
-def test_event_payload_is_defensively_deep_frozen() -> None:
+def test_event_payload_and_provenance_are_defensively_deep_frozen() -> None:
     task_id = new_id("task")
     source_payload = {"outcome": {"labels": ["initial"]}}
+    source_details = {"inputs": {"files": ["input.txt"]}}
+    provenance = Provenance(source="agent", details=source_details)
     event = Event(
         event_type="task.updated",
         subject_type="task",
         subject_id=task_id,
         correlation_id="corr-event",
         payload=source_payload,
+        provenance=provenance,
     )
 
     source_payload["outcome"]["labels"].append("mutated")
+    source_details["inputs"]["files"].append("other.txt")
 
     assert event.payload["outcome"]["labels"] == ("initial",)
+    assert event.provenance is not None
+    assert event.provenance.details["inputs"]["files"] == ("input.txt",)
     with pytest.raises(TypeError):
         event.payload["new"] = "value"  # type: ignore[index]
     with pytest.raises(TypeError):
         event.payload["outcome"]["other"] = "value"
+
+
+def test_non_event_domain_metadata_is_also_deeply_immutable() -> None:
+    source_metadata = {"nested": {"items": ["initial"]}}
+    task = Task(title="Immutable metadata", owner_ref=OWNER, metadata=source_metadata)
+
+    source_metadata["nested"]["items"].append("mutated")
+
+    assert task.metadata["nested"]["items"] == ("initial",)
+    with pytest.raises(TypeError):
+        task.metadata["new"] = "value"  # type: ignore[index]
+
+
+def test_agent_exposes_provider_neutral_policy_requirements_hook() -> None:
+    source_policy = {"approval": {"required": True}}
+    agent = Agent(name="Policy-aware agent", owner_ref=OWNER, policy_requirements=source_policy)
+
+    source_policy["approval"]["required"] = False
+
+    assert agent.policy_requirements["approval"]["required"] is True
+    with pytest.raises(TypeError):
+        agent.policy_requirements["approval"]["required"] = False
+
+
+def test_result_supports_structured_status_data() -> None:
+    task_id = new_id("task")
+    source_status = {"completion": {"state": "succeeded", "warnings": []}}
+    result = Result(
+        subject_type="task",
+        subject_id=task_id,
+        owner_ref=OWNER,
+        outcome="completed",
+        status_data=source_status,
+    )
+
+    source_status["completion"]["warnings"].append("late mutation")
+
+    assert result.status_data["completion"]["state"] == "succeeded"
+    assert result.status_data["completion"]["warnings"] == ()
 
 
 def test_model_assignment_requires_canonical_subject_identity() -> None:
