@@ -5,6 +5,8 @@ def replace_once(path: str, old: str, new: str) -> None:
     target = Path(path)
     text = target.read_text()
     if old not in text:
+        if new in text:
+            return
         raise SystemExit(f"anchor not found in {path}: {old[:80]!r}")
     target.write_text(text.replace(old, new, 1))
 
