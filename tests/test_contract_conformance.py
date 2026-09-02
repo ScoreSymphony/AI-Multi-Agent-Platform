@@ -14,6 +14,7 @@ from ai_multi_agent_platform.contracts import (
     ToolInvocation,
     WorkerDescriptor,
 )
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.testing.conformance import (
     assert_authorization_provider_contract,
     assert_capability_provider_contract,
@@ -71,10 +72,15 @@ def test_generic_provider_conformance_runs_for_every_reference_provider() -> Non
 
 
 def test_specialized_conformance_checks_cover_every_interface_family() -> None:
+    task_id = new_id("task")
+    run_id = new_id("run")
+    tool_id = new_id("tool")
+    node_id = new_id("node")
+    worker_id = new_id("worker")
     execution = ExecutionRequest(
-        run_id="run-contract",
+        run_id=run_id,
         subject_type="task",
-        subject_id="task-contract",
+        subject_id=task_id,
         context=CTX,
     )
     model_request = ModelRequest(
@@ -83,26 +89,26 @@ def test_specialized_conformance_checks_cover_every_interface_family() -> None:
         context=CTX,
     )
     plan_request = PlanRequest(
-        task_id="task-contract",
+        task_id=task_id,
         context=CTX,
         objective="contract objective",
     )
     tool_invocation = ToolInvocation(
         invocation_id="tool-contract",
-        tool_ref="tool.echo",
+        tool_ref=tool_id,
         arguments={"value": "contract"},
         context=CTX,
     )
     authorization_request = AuthorizationRequest(
         principal_ref="user:contract",
         action="execute",
-        resource_ref="task:contract",
+        resource_ref=task_id,
         context=CTX,
     )
     capability = Capability(name="python", kind=CapabilityKind.EXECUTION)
-    node = NodeDescriptor(node_id="node-contract", capabilities=(capability,))
+    node = NodeDescriptor(node_id=node_id, capabilities=(capability,))
     worker = WorkerDescriptor(
-        worker_id="worker-contract",
+        worker_id=worker_id,
         node_id=node.node_id,
         capabilities=(capability,),
     )
