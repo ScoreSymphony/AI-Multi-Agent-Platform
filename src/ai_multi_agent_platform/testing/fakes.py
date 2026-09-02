@@ -26,6 +26,7 @@ from ai_multi_agent_platform.contracts.types import (
     ExecutionHandle,
     ExecutionRequest,
     ExecutionSnapshot,
+    ExecutionStatus,
     JsonValue,
     KnowledgeHit,
     KnowledgeQuery,
@@ -88,7 +89,7 @@ class FakeLifecycleBackend(LifecycleBackend):
         self._runs: dict[str, ExecutionSnapshot] = {}
 
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
-        snapshot = ExecutionSnapshot(run_id=request.run_id, status="running")
+        snapshot = ExecutionSnapshot(run_id=request.run_id, status=ExecutionStatus.RUNNING)
         self._runs[request.run_id] = snapshot
         return ExecutionHandle(run_id=request.run_id, backend_ref=f"fake:{request.run_id}")
 
@@ -101,7 +102,7 @@ class FakeLifecycleBackend(LifecycleBackend):
 
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
         current = await self.get(run_id, context)
-        cancelled = ExecutionSnapshot(run_id=current.run_id, status="cancelled")
+        cancelled = ExecutionSnapshot(run_id=current.run_id, status=ExecutionStatus.CANCELLED)
         self._runs[run_id] = cancelled
         return cancelled
 
