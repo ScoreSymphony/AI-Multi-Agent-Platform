@@ -3,6 +3,7 @@
 from .invocation import (
     ApprovalHook,
     CapabilityInvoker,
+    GovernanceBindingHook,
     InvocationObserver,
     NullInvocationObserver,
     PolicyHook,
@@ -34,6 +35,7 @@ __all__ = [
     "CapabilitySpec",
     "CapabilityToolProvider",
     "ECHO_CAPABILITY_ID",
+    "GovernanceBindingHook",
     "InvocationObserver",
     "InvocationRecord",
     "InvocationStatus",
