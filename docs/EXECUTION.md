@@ -46,14 +46,18 @@ The contract already carries `policy_context`, `environment`, timeout and cancel
 
 `ExecutorRegistry` maps configuration-owned names to `Executor` instances. Callers select an executor by configured name rather than importing a concrete implementation. Forge can therefore later be registered as another executor implementation.
 
-## Kernel integration
+## Kernel integration and artifact attachment
 
 `ExecutorLifecycleBackend` adapts the new executor abstraction to the lifecycle seam currently consumed by `PlatformKernel`. The integration test `tests/test_executor_kernel_integration.py` demonstrates:
 
 `Task -> Run -> LifecycleBackend -> Executor -> canonical ExecutionResult -> Run/Task terminal state`
 
+The same integration test executes `write_artifact`, verifies the executor evidence, materializes a canonical `artifact_*` identity through the kernel and attaches that identity to both the canonical run and task. This proves executor-produced evidence can cross the execution boundary without making executor-specific artifact types part of the kernel contract.
+
 No Forge type or Forge runtime is involved.
 
-## Contract-test coverage
+## Reusable contract-test coverage
 
-`tests/test_reference_executor.py` covers success, controlled non-zero failure, timeout, cancellation, unsupported capability, missing workspace, traversal isolation, artifact evidence, canonical identity preservation, health/capability metadata and configuration-driven selection. These scenarios are intentionally backend-neutral so the same expectations can be applied to a future Forge executor adapter.
+`tests/executor_contract_suite.py` defines `ExecutorContractSuite`, a reusable backend-neutral pytest contract suite. A concrete executor test class supplies only an executor instance and isolated workspace. `tests/test_reference_executor.py` applies the suite to `ReferenceExecutor`; a future Forge executor can subclass the same suite rather than copying the assertions.
+
+The reusable suite covers success and canonical identity preservation, controlled non-zero failure and error mapping, timeout, cancellation, unsupported capability, missing workspace, traversal isolation and artifact/write-boundary evidence. Reference-specific tests additionally cover health/capability metadata and configuration-driven selection.
