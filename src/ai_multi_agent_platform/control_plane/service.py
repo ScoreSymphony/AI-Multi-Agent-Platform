@@ -17,7 +17,7 @@ from ai_multi_agent_platform.contracts.types import (
     OperationContext,
     OperationControl,
 )
-from ai_multi_agent_platform.domain import OwnerRef, Project, RunStatus, new_id, validate_id
+from ai_multi_agent_platform.domain import OwnerRef, Project, new_id, validate_id
 from ai_multi_agent_platform.kernel import PlatformKernel, RunState, TaskState
 from ai_multi_agent_platform.kernel.repository import EventRepository
 
