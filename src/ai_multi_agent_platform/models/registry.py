@@ -192,17 +192,11 @@ class ModelRegistry:
             return HealthStatus.UNAVAILABLE
 
         provider_health = self.provider_health(config.provider_id)
-        if (
-            provider_health is HealthStatus.UNAVAILABLE
-            or config.health is HealthStatus.UNAVAILABLE
-        ):
+        if provider_health is HealthStatus.UNAVAILABLE or config.health is HealthStatus.UNAVAILABLE:
             return HealthStatus.UNAVAILABLE
         if provider_health is HealthStatus.UNKNOWN or config.health is HealthStatus.UNKNOWN:
             return HealthStatus.UNKNOWN
-        if (
-            provider_health is HealthStatus.DEGRADED
-            or config.health is HealthStatus.DEGRADED
-        ):
+        if provider_health is HealthStatus.DEGRADED or config.health is HealthStatus.DEGRADED:
             return HealthStatus.DEGRADED
         return HealthStatus.HEALTHY
 

@@ -203,9 +203,7 @@ class OpenAICompatibleModelProvider(ModelProvider):
             return self._health
 
         self._health = (
-            HealthStatus.HEALTHY
-            if 200 <= response.status_code < 300
-            else HealthStatus.UNAVAILABLE
+            HealthStatus.HEALTHY if 200 <= response.status_code < 300 else HealthStatus.UNAVAILABLE
         )
         return self._health
 
@@ -242,9 +240,7 @@ class OpenAICompatibleModelProvider(ModelProvider):
 
         payload: dict[str, JsonValue] = {
             "model": native_model,
-            "messages": [
-                {"role": "user", "content": message} for message in request_data.messages
-            ],
+            "messages": [{"role": "user", "content": message} for message in request_data.messages],
             "stream": False,
         }
         self._copy_generation_parameters(request_data, payload)
@@ -448,7 +444,6 @@ class OpenAICompatibleModelProvider(ModelProvider):
             return all(cls._is_json_value(item) for item in value)
         if isinstance(value, dict):
             return all(
-                isinstance(key, str) and cls._is_json_value(item)
-                for key, item in value.items()
+                isinstance(key, str) and cls._is_json_value(item) for key, item in value.items()
             )
         return False

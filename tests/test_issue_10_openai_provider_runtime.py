@@ -88,8 +88,7 @@ def make_provider(
         OpenAICompatibleProviderConfig(
             provider_id="local-model-endpoint",
             base_url="http://127.0.0.1:8000/v1",
-            models=models
-            or {"model-local-coder": "Qwen/Qwen3-Coder-30B-A3B-Instruct"},
+            models=models or {"model-local-coder": "Qwen/Qwen3-Coder-30B-A3B-Instruct"},
         ),
         transport=transport,
     )

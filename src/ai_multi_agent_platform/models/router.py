@@ -134,7 +134,10 @@ class DeterministicModelRouter(ModelRouter):
         if not provider.descriptor.available:
             return False
 
-        if self.registry.effective_health(config) not in {HealthStatus.HEALTHY, HealthStatus.DEGRADED}:
+        if self.registry.effective_health(config) not in {
+            HealthStatus.HEALTHY,
+            HealthStatus.DEGRADED,
+        }:
             return False
 
         if requirements.local_only and config.location is not ModelLocation.LOCAL:

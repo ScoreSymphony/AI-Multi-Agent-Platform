@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts import AdapterMetadata, ContractError, ErrorCode, HealthStatus
+from ai_multi_agent_platform.contracts import (
+    AdapterMetadata,
+    ContractError,
+    ErrorCode,
+    HealthStatus,
+)
 from ai_multi_agent_platform.models import (
     DeterministicModelRouter,
     JsonModelRegistryStore,

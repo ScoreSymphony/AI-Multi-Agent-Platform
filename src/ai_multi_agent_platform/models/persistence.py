@@ -156,10 +156,7 @@ def _is_json_value(value: object) -> bool:
     if isinstance(value, list):
         return all(_is_json_value(item) for item in value)
     if isinstance(value, dict):
-        return all(
-            isinstance(key, str) and _is_json_value(item)
-            for key, item in value.items()
-        )
+        return all(isinstance(key, str) and _is_json_value(item) for key, item in value.items())
     return False
 
 

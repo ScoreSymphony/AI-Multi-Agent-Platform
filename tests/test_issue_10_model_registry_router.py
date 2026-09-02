@@ -235,9 +235,7 @@ def test_router_filters_capabilities_location_health_and_uses_stable_priority() 
     )
     router = DeterministicModelRouter(registry)
 
-    unrestricted = router.route(
-        RoutingRequirements(tool_calling=True, structured_output=True)
-    )
+    unrestricted = router.route(RoutingRequirements(tool_calling=True, structured_output=True))
     local = router.route(
         RoutingRequirements(local_only=True, tool_calling=True, structured_output=True)
     )
