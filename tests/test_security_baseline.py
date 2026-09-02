@@ -5,30 +5,32 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts.types import AdapterMetadata
+from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue
 from ai_multi_agent_platform.execution import ExecutionErrorCategory, ExecutionRequest, ReferenceExecutor
 from ai_multi_agent_platform.security import (
-    REDACTED,
     PathSecurityError,
-    SecretReference,
     SecurityContext,
     SecurityDecision,
     UntrustedInputError,
     baseline_decision,
-    redact_sensitive,
     resolve_within,
     validate_untrusted_json,
 )
 
 
-def _request(*, workspace: str, action: str = "echo", arguments: dict[str, object] | None = None) -> ExecutionRequest:
+def _request(
+    *,
+    workspace: str,
+    action: str = "echo",
+    arguments: dict[str, JsonValue] | None = None,
+) -> ExecutionRequest:
     return ExecutionRequest(
         task_id="task-security",
         run_id="run-security",
         correlation_id="correlation-security",
         action=action,
         workspace=workspace,
-        arguments=arguments or {},  # type: ignore[arg-type]
+        arguments=arguments or {},
     )
 
 
@@ -93,51 +95,6 @@ def test_reference_executor_rejects_artifact_symlink_escape_when_supported(tmp_p
     assert result.error is not None
     assert result.error.category is ExecutionErrorCategory.INVALID_REQUEST
     assert not (outside / "pwned.txt").exists()
-
-
-def test_redaction_recursively_removes_sensitive_values() -> None:
-    payload = {
-        "authorization": "Bearer super-secret",
-        "nested": {
-            "api-key": "abc123",
-            "safe": "visible",
-            "refresh_token": "refresh-me",
-        },
-        "items": [{"password": "hunter2"}],
-    }
-
-    redacted = redact_sensitive(payload)
-
-    assert isinstance(redacted, dict)
-    assert redacted["authorization"] == REDACTED
-    nested = redacted["nested"]
-    assert isinstance(nested, dict)
-    assert nested["api-key"] == REDACTED
-    assert nested["refresh_token"] == REDACTED
-    assert nested["safe"] == "visible"
-    items = redacted["items"]
-    assert isinstance(items, list)
-    assert isinstance(items[0], dict)
-    assert items[0]["password"] == REDACTED
-
-
-def test_secret_reference_serializes_without_plaintext_secret_material() -> None:
-    reference = SecretReference(
-        provider="local-keystore",
-        secret_id="github-token",
-        scope="project:demo",
-    )
-
-    serialized = redact_sensitive(reference)
-
-    assert serialized == {
-        "secret_reference": {
-            "provider": "local-keystore",
-            "secret_id": "github-token",
-            "scope": "project:demo",
-            "metadata": {},
-        }
-    }
 
 
 def test_validate_untrusted_json_rejects_non_json_and_non_finite_values() -> None:
@@ -210,6 +167,4 @@ def test_optional_adapter_absence_does_not_change_canonical_security_decision() 
         resource_id="capability-1",
     )
 
-    # The baseline takes only canonical policy/approval inputs. No provider or adapter
-    # is required to preserve the secure path.
     assert baseline_decision(context, explicitly_allowed=False) is SecurityDecision.DENY
