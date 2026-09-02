@@ -58,7 +58,13 @@ class ReferenceExecutor(Executor):
         try:
             workspace = self._workspace(request.workspace)
         except ValueError as exc:
-            return self._failure(request, started_at, started, ExecutionErrorCategory.WORKSPACE_ERROR, str(exc))
+            return self._failure(
+                request,
+                started_at,
+                started,
+                ExecutionErrorCategory.WORKSPACE_ERROR,
+                str(exc),
+            )
 
         if request.action not in self._CAPABILITIES:
             return self._failure(
@@ -76,7 +82,10 @@ class ReferenceExecutor(Executor):
             action_result = (
                 await operation
                 if request.timeout_seconds is None
-                else await asyncio.wait_for(operation, timeout=request.timeout_seconds)
+                else await asyncio.wait_for(
+                    operation,
+                    timeout=request.timeout_seconds,
+                )
             )
         except TimeoutError:
             return self._failure(
@@ -100,11 +109,19 @@ class ReferenceExecutor(Executor):
             )
         except ValueError as exc:
             return self._failure(
-                request, started_at, started, ExecutionErrorCategory.INVALID_REQUEST, str(exc)
+                request,
+                started_at,
+                started,
+                ExecutionErrorCategory.INVALID_REQUEST,
+                str(exc),
             )
         except Exception as exc:
             return self._failure(
-                request, started_at, started, ExecutionErrorCategory.INTERNAL, str(exc)
+                request,
+                started_at,
+                started,
+                ExecutionErrorCategory.INTERNAL,
+                str(exc),
             )
 
         if request.cancellation is not None and request.cancellation.cancelled:
@@ -133,7 +150,11 @@ class ReferenceExecutor(Executor):
             raise ValueError("workspace is missing or unavailable")
         return candidate
 
-    async def _run_action(self, request: ExecutionRequest, workspace: Path) -> _ActionResult:
+    async def _run_action(
+        self,
+        request: ExecutionRequest,
+        workspace: Path,
+    ) -> _ActionResult:
         if request.action == "echo":
             text = str(request.arguments.get("text", ""))
             return _ActionResult(output={"text": text}, stdout=text)
@@ -151,7 +172,9 @@ class ReferenceExecutor(Executor):
                 size_bytes=len(content.encode("utf-8")),
             )
             return _ActionResult(
-                output={"artifact": relative}, stdout=relative, artifacts=(artifact,)
+                output={"artifact": relative},
+                stdout=relative,
+                artifacts=(artifact,),
             )
         if request.action == "fail":
             message = str(request.arguments.get("message", "controlled failure"))
@@ -165,14 +188,19 @@ class ReferenceExecutor(Executor):
             return _ActionResult(output={"slept_seconds": seconds})
         raise AssertionError("capability validation bug")
 
-    async def _sleep_with_cancellation(self, seconds: float, request: ExecutionRequest) -> None:
+    async def _sleep_with_cancellation(
+        self,
+        seconds: float,
+        request: ExecutionRequest,
+    ) -> None:
         sleep_task = asyncio.create_task(asyncio.sleep(seconds))
         if request.cancellation is None:
             await sleep_task
             return
         cancel_task = asyncio.create_task(request.cancellation.wait())
         done, pending = await asyncio.wait(
-            {sleep_task, cancel_task}, return_when=asyncio.FIRST_COMPLETED
+            {sleep_task, cancel_task},
+            return_when=asyncio.FIRST_COMPLETED,
         )
         for task in pending:
             task.cancel()
@@ -204,7 +232,12 @@ class ReferenceExecutor(Executor):
             duration_seconds=monotonic() - started,
         )
 
-    def _cancelled(self, request: ExecutionRequest, started_at: str, started: float) -> ExecutionResult:
+    def _cancelled(
+        self,
+        request: ExecutionRequest,
+        started_at: str,
+        started: float,
+    ) -> ExecutionResult:
         return self._failure(
             request,
             started_at,
