@@ -145,7 +145,7 @@ class TransportEnvelope:
                 raise ValueError(f"{name} must not be blank")
         if self.envelope_version != ENVELOPE_VERSION:
             raise ValueError(
-                f"unsupported envelope_version {self.envelope_version!r}; expected {ENVELOPE_VERSION!r}"
+                f"unsupported envelope_version {self.envelope_version!r}; want {ENVELOPE_VERSION!r}"
             )
         if (self.payload is None) == (self.payload_ref is None):
             raise ValueError("exactly one of payload or payload_ref must be set")
