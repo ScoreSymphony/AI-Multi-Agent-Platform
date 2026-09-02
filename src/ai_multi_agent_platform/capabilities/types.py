@@ -311,5 +311,6 @@ class InvocationRecord:
 def _numeric_version_key(version: str) -> tuple[int, int, int]:
     """Normalize a validated one-to-three-part dotted numeric version."""
 
-    parts = tuple(int(part) for part in version.split("."))
-    return (parts + (0, 0, 0))[:3]
+    values = [int(part) for part in version.split(".")]
+    values.extend([0] * (3 - len(values)))
+    return values[0], values[1], values[2]
