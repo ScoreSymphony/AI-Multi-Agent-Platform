@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from ai_multi_agent_platform.capabilities import InvocationRecord, InvocationStatus, InvocationTrace
 from ai_multi_agent_platform.contracts import (
-    CapabilityKind,
     HealthStatus,
     ModelRequest,
     ModelResponse,
@@ -16,12 +15,7 @@ from ai_multi_agent_platform.contracts import (
     WorkerDescriptor,
 )
 from ai_multi_agent_platform.contracts.types import ExecutionRequest
-from ai_multi_agent_platform.control_plane import (
-    ActorContext,
-    ControlPlane,
-    PageQuery,
-    RequestContext,
-)
+from ai_multi_agent_platform.control_plane import ActorContext, ControlPlane, PageQuery, RequestContext
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.messaging import (
@@ -135,14 +129,18 @@ def test_agent_model_tool_and_worker_attach_to_one_canonical_trace() -> None:
     worker_id = new_id("worker")
     exporter = InMemoryExporter()
     telemetry = Telemetry(exporter)
-    task_context = TelemetryContext(task_id=task_id, correlation_id=task_id)
-    task_span = telemetry.start_span("task.lifecycle", context=task_context)
+    task_span = telemetry.start_span(
+        "task.lifecycle",
+        context=TelemetryContext(task_id=task_id, correlation_id=task_id),
+    )
     telemetry.set_anchor("task", task_id, task_span)
-    run_context = TelemetryContext(task_id=task_id, run_id=run_id, correlation_id=task_id)
-    run_span = telemetry.start_span("run.lifecycle", context=run_context, parent=task_span)
+    run_span = telemetry.start_span(
+        "run.lifecycle",
+        context=TelemetryContext(task_id=task_id, run_id=run_id, correlation_id=task_id),
+        parent=task_span,
+    )
     telemetry.set_anchor("run", run_id, run_span)
     hierarchy = TraceHierarchy(telemetry)
-
     model = ObservedModelProvider(FakeModelProvider(), telemetry, hierarchy=hierarchy)
     tool = ObservedToolProvider(FakeToolProvider(), telemetry, hierarchy=hierarchy)
     worker = ObservedWorkerProvider(
@@ -184,16 +182,11 @@ def test_agent_model_tool_and_worker_attach_to_one_canonical_trace() -> None:
         await observe_agent_run(
             hierarchy,
             agent_id=agent_id,
-            context=TelemetryContext(
-                task_id=task_id,
-                run_id=run_id,
-                correlation_id=task_id,
-            ),
+            context=TelemetryContext(task_id=task_id, run_id=run_id, correlation_id=task_id),
             operation=agent_operation,
         )
 
     asyncio.run(scenario())
-
     agent_span = next(span for span in exporter.spans if span.name == "agent.run")
     model_span = next(span for span in exporter.spans if span.name == "model.generate")
     tool_span = next(span for span in exporter.spans if span.name == "tool.invoke")
@@ -215,8 +208,7 @@ def test_model_usage_metrics_emit_only_reported_numeric_measurements() -> None:
     task_id = new_id("task")
     exporter = InMemoryExporter()
     telemetry = Telemetry(exporter)
-    hierarchy = TraceHierarchy(telemetry)
-    model = ObservedModelProvider(_UsageModelProvider(), telemetry, hierarchy=hierarchy)
+    model = ObservedModelProvider(_UsageModelProvider(), telemetry)
 
     async def scenario() -> None:
         await model.generate(
@@ -239,12 +231,11 @@ def test_model_usage_metrics_emit_only_reported_numeric_measurements() -> None:
 
 def test_capability_policy_and_approval_outcomes_are_observable() -> None:
     task_id = new_id("task")
-    run_id = new_id("run")
     agent_id = new_id("agent")
     trace = InvocationTrace(
         correlation_id=task_id,
         task_id=task_id,
-        run_id=run_id,
+        run_id=new_id("run"),
         agent_id=agent_id,
     )
     exporter = InMemoryExporter()
@@ -427,14 +418,10 @@ def test_control_plane_timeline_is_enriched_without_private_backend_queries() ->
             owner_id="observability",
         )
         exporter = InMemoryExporter()
-        telemetry = Telemetry(exporter)
-        telemetry.timeline(
+        Telemetry(exporter).timeline(
             event_name="executor.completed",
             component=FailureComponent.EXECUTION,
-            context=TelemetryContext(
-                task_id=task.task_id,
-                correlation_id=task.task_id,
-            ),
+            context=TelemetryContext(task_id=task.task_id, correlation_id=task.task_id),
         )
         control.bind_observability_timeline(exporter)
         page = await control.timeline(_request_context(), task.task_id, PageQuery())
@@ -455,8 +442,7 @@ def test_accounting_bridge_forwards_measurements_without_owning_accounting_state
     delegate = InMemoryExporter()
     sink = _RecordingMeasurementSink(records=[])
     bridge = AccountingBridgeExporter(delegate, sink)
-    telemetry = Telemetry(bridge)
-    telemetry.metric(
+    Telemetry(bridge).metric(
         "platform.executor.duration_seconds",
         1.25,
         context=TelemetryContext(task_id=new_id("task"), correlation_id="usage-correlation"),
