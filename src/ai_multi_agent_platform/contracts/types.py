@@ -328,11 +328,20 @@ class ToolInvocation:
 class ToolResult:
     invocation_id: str
     output: JsonValue
+    result_ref: str | None = None
+    artifact_refs: tuple[str, ...] = ()
+    evidence_refs: tuple[str, ...] = ()
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
             raise ValueError("tool result invocation_id must not be blank")
+        if self.result_ref is not None and not self.result_ref.strip():
+            raise ValueError("tool result_ref must not be blank")
+        if any(not ref.strip() for ref in self.artifact_refs):
+            raise ValueError("tool artifact_refs must not contain blank references")
+        if any(not ref.strip() for ref in self.evidence_refs):
+            raise ValueError("tool evidence_refs must not contain blank references")
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,7 +388,7 @@ class AuthorizationRequest:
         if not self.action.strip():
             raise ValueError("authorization action must not be blank")
         if not self.resource_ref.strip():
-            raise ValueError("resource_ref must not be blank")
+            raise ValueError("authorization resource_ref must not be blank")
 
 
 @dataclass(frozen=True, slots=True)
