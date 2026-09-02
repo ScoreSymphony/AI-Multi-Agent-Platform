@@ -11,8 +11,13 @@ class ErrorCode(StrEnum):
     """Stable error categories that callers may handle without backend knowledge."""
 
     INVALID_REQUEST = "invalid_request"
+    INVALID_CONFIGURATION = "invalid_configuration"
     UNSUPPORTED_CAPABILITY = "unsupported_capability"
     NOT_FOUND = "not_found"
+    MODEL_UNAVAILABLE = "model_unavailable"
+    NO_COMPATIBLE_ROUTE = "no_compatible_route"
+    INPUT_TOO_LARGE = "input_too_large"
+    INVALID_PROVIDER_RESPONSE = "invalid_provider_response"
     CONFLICT = "conflict"
     UNAVAILABLE = "unavailable"
     TIMEOUT = "timeout"
