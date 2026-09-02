@@ -1,6 +1,5 @@
 """Public provider-neutral contract surface."""
 
-from .domain_mapping import map_tool_invocation_to_domain
 from .errors import ContractError, ErrorCode
 from .interfaces import (
     AuthorizationProvider,
@@ -34,11 +33,13 @@ from .types import (
     KnowledgeQuery,
     ModelRequest,
     ModelResponse,
+    ModelSelection,
     NodeDescriptor,
     OperationContext,
     OperationControl,
     PlanRequest,
     PlanResponse,
+    PlanStepProposal,
     PlatformEvent,
     ProviderDescriptor,
     RetryMode,
@@ -75,6 +76,7 @@ __all__ = [
     "ModelRequest",
     "ModelResponse",
     "ModelRouter",
+    "ModelSelection",
     "NodeDescriptor",
     "NodeProvider",
     "OperationContext",
@@ -82,6 +84,7 @@ __all__ = [
     "Orchestrator",
     "PlanRequest",
     "PlanResponse",
+    "PlanStepProposal",
     "PlatformEvent",
     "ProviderContract",
     "ProviderDescriptor",
@@ -92,5 +95,4 @@ __all__ = [
     "ToolResult",
     "WorkerDescriptor",
     "WorkerProvider",
-    "map_tool_invocation_to_domain",
 ]

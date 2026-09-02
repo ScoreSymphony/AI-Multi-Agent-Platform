@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from typing import Literal, cast
@@ -9,10 +10,10 @@ from typing import Literal, cast
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import (
-    RUN_TRANSITIONS,
-    TASK_TRANSITIONS,
     OwnerRef,
     Provenance,
+    RUN_TRANSITIONS,
+    TASK_TRANSITIONS,
     Run,
     RunStatus,
     Task,
@@ -45,10 +46,7 @@ _RUN_EVENT_STATUS: dict[str, RunStatus] = {
 
 
 def _timestamp(event: PlatformEvent) -> datetime:
-    try:
-        return datetime.fromisoformat(event.occurred_at)
-    except ValueError as exc:
-        raise ContractError(ErrorCode.CONTRACT_VIOLATION, "invalid event timestamp") from exc
+    return event.occurred_at
 
 
 def _string(event: PlatformEvent, key: str) -> str:
@@ -84,10 +82,7 @@ def _integer(event: PlatformEvent, key: str) -> int:
 
 
 def _event_provenance(event: PlatformEvent) -> Provenance:
-    return Provenance(
-        source=_optional_string(event, "source") or "platform-kernel",
-        actor_ref=_optional_string(event, "actor_ref"),
-    )
+    return event.provenance or Provenance(source="platform-kernel")
 
 
 def _transition_task(task: Task, target: TaskStatus, event: PlatformEvent) -> Task:
@@ -101,7 +96,7 @@ def _transition_task(task: Task, target: TaskStatus, event: PlatformEvent) -> Ta
         task,
         status=target,
         updated_at=_timestamp(event),
-        causation_id=event.context.causation_id,
+        causation_id=event.causation_id,
         provenance=_event_provenance(event),
     )
 
@@ -114,26 +109,22 @@ def _transition_run(run: Run, target: RunStatus, event: PlatformEvent) -> Run:
     except ValueError as exc:
         raise ContractError(ErrorCode.CONFLICT, str(exc)) from exc
     occurred = _timestamp(event)
-    started_at = run.started_at
-    if target is RunStatus.RUNNING and started_at is None:
-        started_at = occurred
-    finished_at = run.finished_at
+    changes: dict[str, object] = {
+        "status": target,
+        "updated_at": occurred,
+        "causation_id": event.causation_id,
+        "provenance": _event_provenance(event),
+    }
+    if target is RunStatus.RUNNING and run.started_at is None:
+        changes["started_at"] = occurred
     if target in {
         RunStatus.SUCCEEDED,
         RunStatus.FAILED,
         RunStatus.CANCELLED,
         RunStatus.TIMED_OUT,
     }:
-        finished_at = occurred
-    return replace(
-        run,
-        status=target,
-        updated_at=occurred,
-        causation_id=event.context.causation_id,
-        provenance=_event_provenance(event),
-        started_at=started_at,
-        finished_at=finished_at,
-    )
+        changes["finished_at"] = occurred
+    return replace(run, **changes)
 
 
 def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
@@ -146,10 +137,10 @@ def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
     blocked = False
 
     for event in events:
-        if event.context.correlation_id != task_id:
+        if event.correlation_id != task_id:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
-                f"event {event.event_id} is in the wrong task stream",
+                f"event {event.id} is in the wrong task stream",
             )
 
         if event.event_type == "task.created" and event.subject_id == task_id:
@@ -163,9 +154,9 @@ def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
                 title=_string(event, "title"),
                 description=_string(event, "objective"),
                 owner_ref=owner,
-                project_id=event.context.project_id,
-                correlation_id=event.context.correlation_id,
-                causation_id=event.context.causation_id,
+                project_id=event.project_id,
+                correlation_id=event.correlation_id,
+                causation_id=event.causation_id,
                 created_at=occurred,
                 updated_at=occurred,
                 provenance=_event_provenance(event),
@@ -183,7 +174,7 @@ def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
             metadata_patch = event.payload.get("metadata")
             if metadata_patch is None:
                 metadata = dict(task.metadata)
-            elif isinstance(metadata_patch, dict):
+            elif isinstance(metadata_patch, Mapping):
                 metadata = {**dict(task.metadata), **metadata_patch}
             else:
                 raise ContractError(
@@ -196,7 +187,7 @@ def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
                 description=objective,
                 metadata=metadata,
                 updated_at=_timestamp(event),
-                causation_id=event.context.causation_id,
+                causation_id=event.causation_id,
                 provenance=_event_provenance(event),
             )
             continue
@@ -276,10 +267,10 @@ def reduce_run(events: tuple[PlatformEvent, ...], run_id: str) -> RunState:
                 subject_type=subject_type,
                 subject_id=_string(event, "subject_id"),
                 owner_ref=owner,
-                correlation_id=event.context.correlation_id,
+                correlation_id=event.correlation_id,
                 attempt=_integer(event, "attempt"),
-                project_id=event.context.project_id,
-                causation_id=event.context.causation_id,
+                project_id=event.project_id,
+                causation_id=event.causation_id,
                 created_at=occurred,
                 updated_at=occurred,
                 provenance=_event_provenance(event),
@@ -307,7 +298,7 @@ def reduce_run(events: tuple[PlatformEvent, ...], run_id: str) -> RunState:
             if event.event_type == "run.running":
                 backend_ref = _optional_string(event, "backend_ref") or backend_ref
             maybe_output = event.payload.get("output")
-            if isinstance(maybe_output, dict):
+            if isinstance(maybe_output, Mapping):
                 output = cast(dict[str, JsonValue], dict(maybe_output))
             if target in {
                 RunStatus.SUCCEEDED,

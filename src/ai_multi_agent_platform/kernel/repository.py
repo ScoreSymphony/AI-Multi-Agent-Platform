@@ -138,21 +138,19 @@ class InMemoryKernelRepository(EventRepository):
                     f"expected {expected_revision}, actual {len(stream)}",
                 )
 
-            existing_event_ids = {
-                event.event_id for item in self._streams.values() for event in item
-            }
+            existing_event_ids = {event.id for item in self._streams.values() for event in item}
             for event in events:
-                if event.context.correlation_id != stream_id:
+                if event.correlation_id != stream_id:
                     raise ContractError(
                         ErrorCode.CONTRACT_VIOLATION,
                         "event correlation_id must equal canonical stream id",
                     )
-                if event.event_id in existing_event_ids:
+                if event.id in existing_event_ids:
                     raise ContractError(
                         ErrorCode.CONFLICT,
-                        f"duplicate event id: {event.event_id}",
+                        f"duplicate event id: {event.id}",
                     )
-                existing_event_ids.add(event.event_id)
+                existing_event_ids.add(event.id)
 
             stream.extend(events)
             if command is not None:

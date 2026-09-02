@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from ai_multi_agent_platform.contracts import ErrorCode, OperationContext, ToolInvocation
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.testing import (
     FakeFailure,
     FakeToolProvider,
@@ -19,9 +20,9 @@ def test_unsupported_tool_capability_fails_canonically() -> None:
     )
     invocation = ToolInvocation(
         invocation_id="invoke-unsupported",
-        tool_ref="tool.unsupported",
+        tool_ref=new_id("tool"),
         arguments={},
-        context=OperationContext(correlation_id="task-unsupported"),
+        context=OperationContext(correlation_id="tool-unsupported"),
     )
 
     async def operation() -> object:

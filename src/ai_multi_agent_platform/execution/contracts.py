@@ -7,14 +7,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-type JsonValue = str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.domain import RunStatus
 
-
-class ExecutionStatus(StrEnum):
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-    TIMED_OUT = "timed_out"
+ExecutionStatus = RunStatus
 
 
 class ExecutionErrorCategory(StrEnum):
