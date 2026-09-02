@@ -121,3 +121,164 @@ def test_cancelling_task_with_active_step_run_cancels_both() -> None:
     assert task.status is TaskStatus.CANCELLED
     assert asyncio.run(k.get_run(task_id, run.run_id)).status is RunStatus.CANCELLED
     assert len(lifecycle.cancel_calls) == 1
+
+
+def test_cancel_task_cancels_all_parallel_step_runs() -> None:
+    lifecycle = FakeLifecycleBackend()
+    k = make_kernel(lifecycle)
+    task_id = ready(k, "parallel")
+    step_a = new_id("step")
+    step_b = new_id("step")
+    run_a = asyncio.run(
+        k.create_run(
+            idempotency_key="parallel:a:create",
+            task_id=task_id,
+            subject_type="step",
+            subject_id=step_a,
+        )
+    )
+    run_b = asyncio.run(
+        k.create_run(
+            idempotency_key="parallel:b:create",
+            task_id=task_id,
+            subject_type="step",
+            subject_id=step_b,
+        )
+    )
+    asyncio.run(
+        k.start_run(idempotency_key="parallel:a:start", task_id=task_id, run_id=run_a.run_id)
+    )
+    asyncio.run(
+        k.start_run(idempotency_key="parallel:b:start", task_id=task_id, run_id=run_b.run_id)
+    )
+
+    task = asyncio.run(k.cancel_task(idempotency_key="parallel:cancel", task_id=task_id))
+
+    assert task.status is TaskStatus.CANCELLED
+    assert asyncio.run(k.get_run(task_id, run_a.run_id)).status is RunStatus.CANCELLED
+    assert asyncio.run(k.get_run(task_id, run_b.run_id)).status is RunStatus.CANCELLED
+    assert {call[0] for call in lifecycle.cancel_calls} == {run_a.run_id, run_b.run_id}
+
+
+def test_cancel_task_handles_queued_and_running_step_runs() -> None:
+    lifecycle = FakeLifecycleBackend()
+    k = make_kernel(lifecycle)
+    task_id = ready(k, "mixed-state")
+    queued = asyncio.run(
+        k.create_run(
+            idempotency_key="mixed-state:queued:create",
+            task_id=task_id,
+            subject_type="step",
+            subject_id=new_id("step"),
+        )
+    )
+    running = asyncio.run(
+        k.create_run(
+            idempotency_key="mixed-state:running:create",
+            task_id=task_id,
+            subject_type="step",
+            subject_id=new_id("step"),
+        )
+    )
+    asyncio.run(
+        k.start_run(
+            idempotency_key="mixed-state:running:start",
+            task_id=task_id,
+            run_id=running.run_id,
+        )
+    )
+
+    task = asyncio.run(k.cancel_task(idempotency_key="mixed-state:cancel", task_id=task_id))
+
+    assert task.status is TaskStatus.CANCELLED
+    assert asyncio.run(k.get_run(task_id, queued.run_id)).status is RunStatus.CANCELLED
+    assert asyncio.run(k.get_run(task_id, running.run_id)).status is RunStatus.CANCELLED
+    assert [call[0] for call in lifecycle.cancel_calls] == [running.run_id]
+
+
+def test_cancel_task_is_idempotent_after_parallel_cancellation() -> None:
+    lifecycle = FakeLifecycleBackend()
+    k = make_kernel(lifecycle)
+    task_id = ready(k, "repeat")
+    runs = []
+    for index in range(2):
+        run = asyncio.run(
+            k.create_run(
+                idempotency_key=f"repeat:{index}:create",
+                task_id=task_id,
+                subject_type="step",
+                subject_id=new_id("step"),
+            )
+        )
+        asyncio.run(
+            k.start_run(
+                idempotency_key=f"repeat:{index}:start",
+                task_id=task_id,
+                run_id=run.run_id,
+            )
+        )
+        runs.append(run)
+
+    first = asyncio.run(k.cancel_task(idempotency_key="repeat:cancel", task_id=task_id))
+    call_count = len(lifecycle.cancel_calls)
+    second = asyncio.run(k.cancel_task(idempotency_key="repeat:cancel", task_id=task_id))
+    third = asyncio.run(k.cancel_task(idempotency_key="repeat:cancel-again", task_id=task_id))
+
+    assert first.status is TaskStatus.CANCELLED
+    assert second.status is TaskStatus.CANCELLED
+    assert third.status is TaskStatus.CANCELLED
+    assert len(lifecycle.cancel_calls) == call_count == 2
+    assert all(
+        asyncio.run(k.get_run(task_id, run.run_id)).status is RunStatus.CANCELLED for run in runs
+    )
+
+
+def test_task_and_step_execution_modes_cannot_be_mixed() -> None:
+    k = make_kernel()
+    task_id = ready(k, "mode")
+    task_run = asyncio.run(k.create_run(idempotency_key="mode:task", task_id=task_id))
+
+    with pytest.raises(ContractError):
+        asyncio.run(
+            k.create_run(
+                idempotency_key="mode:step",
+                task_id=task_id,
+                subject_type="step",
+                subject_id=new_id("step"),
+            )
+        )
+
+    assert task_run.run.subject_type == "task"
+
+
+def test_recovery_after_parallel_cancellation_keeps_runs_terminal() -> None:
+    lifecycle = FakeLifecycleBackend()
+    k = make_kernel(lifecycle)
+    task_id = ready(k, "recovery-cancel")
+    runs = []
+    for index in range(2):
+        run = asyncio.run(
+            k.create_run(
+                idempotency_key=f"recovery-cancel:{index}:create",
+                task_id=task_id,
+                subject_type="step",
+                subject_id=new_id("step"),
+            )
+        )
+        asyncio.run(
+            k.start_run(
+                idempotency_key=f"recovery-cancel:{index}:start",
+                task_id=task_id,
+                run_id=run.run_id,
+            )
+        )
+        runs.append(run)
+
+    asyncio.run(k.cancel_task(idempotency_key="recovery-cancel:cancel", task_id=task_id))
+    calls_before_recovery = len(lifecycle.start_calls)
+    report = asyncio.run(k.recover_task(task_id))
+
+    assert asyncio.run(k.get_task(task_id)).status is TaskStatus.CANCELLED
+    assert len(report.entries) == 2
+    assert all(entry.after is RunStatus.CANCELLED for entry in report.entries)
+    assert len(lifecycle.start_calls) == calls_before_recovery

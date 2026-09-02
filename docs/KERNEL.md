@@ -31,7 +31,7 @@ A failed Task may be retried. Retry transitions the Task back to ready and creat
 
 Direct `complete_task()` and `fail_task()` operations are rejected while any canonical run is still non-terminal. Task terminal state therefore cannot diverge from an active run, and task retry is likewise rejected while unfinished work remains.
 
-Attempts are scoped to the canonical run subject `(subject_type, subject_id)`, not to the task-wide number of runs. Task runs may be created/started only while the task is `ready`. Step runs may be created/started while the task is `ready` or `running`; their success, failure, timeout or cancellation terminalizes the step run only and does not implicitly terminalize the parent task. Cancelling the parent task still cancels an active step run first and then terminalizes the task. A second non-terminal run for the same subject is rejected.
+Attempts are scoped to the canonical run subject `(subject_type, subject_id)`, not to the task-wide number of runs. Task runs may be created/started only while the task is `ready`. Step runs may be created/started while the task is `ready` or `running`; their success, failure, timeout or cancellation terminalizes the step run only and does not implicitly terminalize the parent task. Cancelling the parent task cancels every non-terminal run first (queued runs canonically, starting/running runs through the lifecycle backend) and only then terminalizes the task. Parallel step runs are supported for distinct step subjects, but task-level and step-level execution modes cannot be active at the same time. A second non-terminal run for the same subject is rejected.
 
 ## Event history and read models
 
