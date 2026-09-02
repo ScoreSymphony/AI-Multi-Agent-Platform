@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .types import SecurityDecision, SecurityContext
+from .types import SecurityContext, SecurityDecision
 
 
 def baseline_decision(
