@@ -483,6 +483,13 @@ class PlatformKernel:
             return await self.get_task(task_id)
         if task.status in {TaskStatus.SUCCEEDED, TaskStatus.CANCELLED}:
             raise ContractError(ErrorCode.CONFLICT, f"task {task_id} is terminal")
+        active = await self._latest_active_run(task)
+        if active is not None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"task {task_id} cannot be replanned while run "
+                f"{active.run_id} is {active.status.value}",
+            )
 
         context = self._context(task, idempotency_key)
         proposal = await self._orchestrator.plan(
@@ -564,6 +571,7 @@ class PlatformKernel:
             return await self.get_run(task_id, duplicate.result_id)
         canonical_subject_id = subject_id or task_id
         validate_subject_id(subject_type, canonical_subject_id)
+        self._validate_run_subject(task, subject_type, canonical_subject_id)
         allowed_task_statuses = (
             {TaskStatus.READY} if subject_type == "task" else {TaskStatus.READY, TaskStatus.RUNNING}
         )
@@ -1524,6 +1532,31 @@ class PlatformKernel:
             source=source,
             event_specs=(("run.recovery_cleared", "run", run_id, {}, ()),),
         )
+
+    @staticmethod
+    def _validate_run_subject(
+        task: TaskState,
+        subject_type: RunSubjectType,
+        subject_id: str,
+    ) -> None:
+        if subject_type == "task":
+            if subject_id != task.task_id:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    f"task run subject {subject_id} does not match owning task {task.task_id}",
+                )
+            return
+        if task.plan_ref is None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"task {task.task_id} has no canonical plan for step run {subject_id}",
+            )
+        if subject_id not in task.step_ids:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"step {subject_id} does not belong to current plan {task.plan_ref} "
+                f"for task {task.task_id}",
+            )
 
     async def _active_runs(self, task: TaskState) -> tuple[RunState, ...]:
         active: list[RunState] = []

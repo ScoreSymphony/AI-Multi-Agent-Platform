@@ -272,7 +272,9 @@ def test_retry_waiting_metadata_and_step_run_use_canonical_models() -> None:
 
     other = kernel()
     other_task = ready(other, "other")
-    step_id = new_id("step")
+    planned = asyncio.run(other.plan_task(idempotency_key="other:plan", task_id=other_task))
+    assert planned.step_ids
+    step_id = planned.step_ids[0]
     step_run = asyncio.run(
         other.create_run(
             idempotency_key="step-run",

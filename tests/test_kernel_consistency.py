@@ -4,16 +4,34 @@ import asyncio
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ContractError, ExecutionStatus
-from ai_multi_agent_platform.domain import RunStatus, TaskStatus, new_id
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ExecutionStatus,
+    PlanRequest,
+    PlanResponse,
+    PlanStepProposal,
+)
+from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.testing import FakeOrchestrator
 from ai_multi_agent_platform.testing.fakes import FakeLifecycleBackend
 
 
+class ParallelFakeOrchestrator(FakeOrchestrator):
+    async def plan(self, request: PlanRequest) -> PlanResponse:
+        self.calls.append(request)
+        return PlanResponse(
+            summary=f"Plan for {request.objective}",
+            steps=(
+                PlanStepProposal(key="step-a", title="Step A", objective=request.objective),
+                PlanStepProposal(key="step-b", title="Step B", objective=request.objective),
+            ),
+        )
+
+
 def make_kernel(lifecycle: FakeLifecycleBackend | None = None) -> PlatformKernel:
     return PlatformKernel(
-        orchestrator=FakeOrchestrator(),
+        orchestrator=ParallelFakeOrchestrator(),
         lifecycle=lifecycle or FakeLifecycleBackend(),
     )
 
@@ -29,7 +47,15 @@ def ready(k: PlatformKernel, key: str = "create") -> str:
         )
     )
     asyncio.run(k.ready_task(idempotency_key=f"{key}:ready", task_id=task.task_id))
+    planned = asyncio.run(k.plan_task(idempotency_key=f"{key}:plan", task_id=task.task_id))
+    assert len(planned.step_ids) == 2
     return task.task_id
+
+
+def planned_step_ids(k: PlatformKernel, task_id: str) -> tuple[str, str]:
+    task = asyncio.run(k.get_task(task_id))
+    assert len(task.step_ids) == 2
+    return task.step_ids[0], task.step_ids[1]
 
 
 def test_direct_task_terminalization_rejects_active_run() -> None:
@@ -51,8 +77,7 @@ def test_step_runs_have_subject_scoped_attempts_and_do_not_terminalize_task() ->
     lifecycle = FakeLifecycleBackend()
     k = make_kernel(lifecycle)
     task_id = ready(k)
-    step_a = new_id("step")
-    step_b = new_id("step")
+    step_a, step_b = planned_step_ids(k, task_id)
 
     run_a1 = asyncio.run(
         k.create_run(
@@ -106,7 +131,7 @@ def test_cancelling_task_with_active_step_run_cancels_both() -> None:
     lifecycle = FakeLifecycleBackend()
     k = make_kernel(lifecycle)
     task_id = ready(k)
-    step_id = new_id("step")
+    step_id = planned_step_ids(k, task_id)[0]
     run = asyncio.run(
         k.create_run(
             idempotency_key="step",
@@ -127,8 +152,7 @@ def test_cancel_task_cancels_all_parallel_step_runs() -> None:
     lifecycle = FakeLifecycleBackend()
     k = make_kernel(lifecycle)
     task_id = ready(k, "parallel")
-    step_a = new_id("step")
-    step_b = new_id("step")
+    step_a, step_b = planned_step_ids(k, task_id)
     run_a = asyncio.run(
         k.create_run(
             idempotency_key="parallel:a:create",
@@ -164,12 +188,13 @@ def test_cancel_task_handles_queued_and_running_step_runs() -> None:
     lifecycle = FakeLifecycleBackend()
     k = make_kernel(lifecycle)
     task_id = ready(k, "mixed-state")
+    queued_step, running_step = planned_step_ids(k, task_id)
     queued = asyncio.run(
         k.create_run(
             idempotency_key="mixed-state:queued:create",
             task_id=task_id,
             subject_type="step",
-            subject_id=new_id("step"),
+            subject_id=queued_step,
         )
     )
     running = asyncio.run(
@@ -177,7 +202,7 @@ def test_cancel_task_handles_queued_and_running_step_runs() -> None:
             idempotency_key="mixed-state:running:create",
             task_id=task_id,
             subject_type="step",
-            subject_id=new_id("step"),
+            subject_id=running_step,
         )
     )
     asyncio.run(
@@ -201,13 +226,14 @@ def test_cancel_task_is_idempotent_after_parallel_cancellation() -> None:
     k = make_kernel(lifecycle)
     task_id = ready(k, "repeat")
     runs = []
+    step_ids = planned_step_ids(k, task_id)
     for index in range(2):
         run = asyncio.run(
             k.create_run(
                 idempotency_key=f"repeat:{index}:create",
                 task_id=task_id,
                 subject_type="step",
-                subject_id=new_id("step"),
+                subject_id=step_ids[index],
             )
         )
         asyncio.run(
@@ -244,7 +270,7 @@ def test_task_and_step_execution_modes_cannot_be_mixed() -> None:
                 idempotency_key="mode:step",
                 task_id=task_id,
                 subject_type="step",
-                subject_id=new_id("step"),
+                subject_id=planned_step_ids(k, task_id)[0],
             )
         )
 
@@ -256,13 +282,14 @@ def test_recovery_after_parallel_cancellation_keeps_runs_terminal() -> None:
     k = make_kernel(lifecycle)
     task_id = ready(k, "recovery-cancel")
     runs = []
+    step_ids = planned_step_ids(k, task_id)
     for index in range(2):
         run = asyncio.run(
             k.create_run(
                 idempotency_key=f"recovery-cancel:{index}:create",
                 task_id=task_id,
                 subject_type="step",
-                subject_id=new_id("step"),
+                subject_id=step_ids[index],
             )
         )
         asyncio.run(
