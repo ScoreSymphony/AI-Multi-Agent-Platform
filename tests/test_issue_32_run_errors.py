@@ -166,9 +166,9 @@ def test_generated_openapi_documents_run_error_contract() -> None:
     specification = build_openapi()
     paths = specification["paths"]
     assert (
-        paths["/api/v1/runs/{run_id}"]["get"]["responses"]["200"]["content"][
-            "application/json"
-        ]["schema"]["$ref"]
+        paths["/api/v1/runs/{run_id}"]["get"]["responses"]["200"]["content"]["application/json"][
+            "schema"
+        ]["$ref"]
         == "#/components/schemas/Run"
     )
 
