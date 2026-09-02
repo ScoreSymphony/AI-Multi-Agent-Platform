@@ -1,4 +1,4 @@
-"""Canonical capability registry, invocation pipeline and tool adapters."""
+"""Canonical capability registry and invocation pipeline."""
 
 from .invocation import (
     ApprovalHook,
@@ -8,7 +8,6 @@ from .invocation import (
     NullInvocationObserver,
     PolicyHook,
 )
-from .mcp import MCPClient, MCPServerConfig, MCPTool, MCPToolProvider
 from .native import ECHO_CAPABILITY_ID, NativeEchoProvider
 from .provider import CapabilityToolProvider
 from .registry import CapabilityRegistry
@@ -40,10 +39,6 @@ __all__ = [
     "InvocationRecord",
     "InvocationStatus",
     "InvocationTrace",
-    "MCPClient",
-    "MCPServerConfig",
-    "MCPTool",
-    "MCPToolProvider",
     "NativeEchoProvider",
     "NullInvocationObserver",
     "PolicyDecision",
