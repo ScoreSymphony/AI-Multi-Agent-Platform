@@ -47,11 +47,27 @@ def redact_sensitive(
     """Return a JSON-safe copy with sensitive mappings recursively redacted.
 
     ``SecretReference`` objects serialize as references only; plaintext secret
-    material is intentionally not part of their type.
+    material is intentionally not part of their type. Reference metadata is
+    recursively redacted as defense in depth.
     """
 
     normalized_extra = frozenset(_normalize_key(key) for key in extra_sensitive_keys)
     return _redact(value, normalized_extra)
+
+
+def redact_text(text: str, sensitive_values: tuple[str, ...] = ()) -> str:
+    """Redact known sensitive substrings from free-text operational surfaces."""
+
+    redacted = text
+    for value in sorted((item for item in sensitive_values if item), key=len, reverse=True):
+        redacted = redacted.replace(value, REDACTED)
+    return redacted
+
+
+def redact_exception(error: BaseException, sensitive_values: tuple[str, ...] = ()) -> str:
+    """Return an exception message with known sensitive substrings removed."""
+
+    return redact_text(str(error), sensitive_values)
 
 
 def _redact(
@@ -59,7 +75,7 @@ def _redact(
     extra_sensitive_keys: frozenset[str],
 ) -> JsonValue:
     if isinstance(value, SecretReference):
-        return {"secret_reference": value.to_dict()}
+        return {"secret_reference": _redact(value.to_dict(), extra_sensitive_keys)}
     if isinstance(value, dict):
         redacted: dict[str, JsonValue] = {}
         for key, item in value.items():

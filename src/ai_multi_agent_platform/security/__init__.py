@@ -2,7 +2,7 @@
 
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
-from .redaction import REDACTED, redact_sensitive
+from .redaction import REDACTED, redact_exception, redact_sensitive, redact_text
 from .types import (
     ExternalSideEffect,
     SecretReference,
@@ -22,7 +22,9 @@ __all__ = [
     "SecurityDecision",
     "UntrustedInputError",
     "baseline_decision",
+    "redact_exception",
     "redact_sensitive",
+    "redact_text",
     "resolve_within",
     "validate_untrusted_json",
 ]
