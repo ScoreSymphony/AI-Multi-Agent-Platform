@@ -9,8 +9,10 @@ from typing import Protocol
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError, ValidationError
 
+from ai_multi_agent_platform.contracts.domain_mapping import validate_tool_invocation_binding
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, ToolInvocation
+from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocation
 
 from .registry import CapabilityRegistry
 from .types import (
@@ -24,7 +26,13 @@ from .types import (
 )
 
 type PolicyHook = Callable[[CapabilityInvocation, CapabilitySpec], Awaitable[PolicyDecision]]
-type ApprovalHook = Callable[[CapabilityInvocation, CapabilitySpec], Awaitable[bool]]
+type GovernanceBindingHook = Callable[
+    [CapabilityInvocation, CapabilityRegistration, ToolInvocation],
+    Awaitable[DomainToolInvocation],
+]
+type ApprovalHook = Callable[
+    [CapabilityInvocation, CapabilitySpec, DomainToolInvocation], Awaitable[bool]
+]
 
 
 class InvocationObserver(Protocol):
@@ -37,18 +45,20 @@ class NullInvocationObserver:
 
 
 class CapabilityInvoker:
-    """Resolve, validate, authorize, invoke and normalize one capability request."""
+    """Resolve, validate, authorize, govern, invoke and normalize one request."""
 
     def __init__(
         self,
         registry: CapabilityRegistry,
         *,
         policy_hook: PolicyHook | None = None,
+        governance_binding_hook: GovernanceBindingHook | None = None,
         approval_hook: ApprovalHook | None = None,
         observer: InvocationObserver | None = None,
     ) -> None:
         self._registry = registry
         self._policy_hook = policy_hook
+        self._governance_binding_hook = governance_binding_hook
         self._approval_hook = approval_hook
         self._observer = observer or NullInvocationObserver()
 
@@ -67,24 +77,6 @@ class CapabilityInvoker:
             capability_id=capability.capability_id,
         )
 
-        if self._policy_hook is not None:
-            decision = await self._policy_hook(request, capability)
-            if decision is PolicyDecision.DENY:
-                await self._record(
-                    request, registration, InvocationStatus.DENIED, ErrorCode.FORBIDDEN.value
-                )
-                raise ContractError(
-                    ErrorCode.FORBIDDEN,
-                    f"capability {capability.capability_id!r} denied by policy hook",
-                    provider_id=registration.provider_id,
-                )
-            if decision is PolicyDecision.REQUIRE_APPROVAL:
-                await self._require_approval(request, capability, registration)
-
-        missing_approvals = set(capability.required_approvals) - set(request.approval_grants)
-        if missing_approvals:
-            await self._require_approval(request, capability, registration)
-
         provider_invocation = ToolInvocation(
             invocation_id=request.invocation_id,
             tool_ref=registration.provider_tool_ref,
@@ -92,17 +84,102 @@ class CapabilityInvoker:
             context=request.context,
         )
 
-        await self._record(request, registration, InvocationStatus.RUNNING)
+        policy_decision = PolicyDecision.ALLOW
+        if self._policy_hook is not None:
+            policy_decision = await self._policy_hook(request, capability)
+        if policy_decision is PolicyDecision.DENY:
+            await self._record(
+                request, registration, InvocationStatus.DENIED, ErrorCode.FORBIDDEN.value
+            )
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                f"capability {capability.capability_id!r} denied by policy hook",
+                provider_id=registration.provider_id,
+            )
+
+        canonical_invocation: DomainToolInvocation | None = None
+        approval_required = (
+            policy_decision is PolicyDecision.REQUIRE_APPROVAL
+            or bool(capability.required_approvals)
+        )
+        if approval_required:
+            if self._governance_binding_hook is None:
+                await self._record(
+                    request,
+                    registration,
+                    InvocationStatus.FAILED,
+                    ErrorCode.CONTRACT_VIOLATION.value,
+                )
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    (
+                        f"capability {capability.capability_id!r} requires approval but no "
+                        "canonical governance binding hook is configured"
+                    ),
+                    provider_id=registration.provider_id,
+                )
+
+            canonical_invocation = await self._governance_binding_hook(
+                request,
+                registration,
+                provider_invocation,
+            )
+            try:
+                validate_tool_invocation_binding(provider_invocation, canonical_invocation)
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "governance binding does not match the resolved provider invocation",
+                    provider_id=registration.provider_id,
+                ) from exc
+
+            approved = False
+            if self._approval_hook is not None:
+                approved = await self._approval_hook(
+                    request,
+                    capability,
+                    canonical_invocation,
+                )
+            if not approved:
+                await self._record(
+                    request,
+                    registration,
+                    InvocationStatus.APPROVAL_REQUIRED,
+                    ErrorCode.FORBIDDEN.value,
+                    canonical_invocation=canonical_invocation,
+                )
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    f"capability {capability.capability_id!r} requires approval",
+                    provider_id=registration.provider_id,
+                    details={
+                        "approval_required": True,
+                        "canonical_tool_invocation_id": canonical_invocation.id,
+                    },
+                )
+
+        await self._record(
+            request,
+            registration,
+            InvocationStatus.RUNNING,
+            canonical_invocation=canonical_invocation,
+        )
         timeout = capability.timeout_seconds or request.context.control.timeout_seconds
 
         try:
+            if canonical_invocation is not None:
+                validate_tool_invocation_binding(provider_invocation, canonical_invocation)
             if timeout is None:
                 tool_result = await provider.invoke(provider_invocation)
             else:
                 tool_result = await asyncio.wait_for(provider.invoke(provider_invocation), timeout)
         except TimeoutError as exc:
             await self._record(
-                request, registration, InvocationStatus.TIMED_OUT, ErrorCode.TIMEOUT.value
+                request,
+                registration,
+                InvocationStatus.TIMED_OUT,
+                ErrorCode.TIMEOUT.value,
+                canonical_invocation=canonical_invocation,
             )
             raise ContractError(
                 ErrorCode.TIMEOUT,
@@ -112,7 +189,11 @@ class CapabilityInvoker:
             ) from exc
         except asyncio.CancelledError as exc:
             await self._record(
-                request, registration, InvocationStatus.CANCELLED, ErrorCode.CANCELLED.value
+                request,
+                registration,
+                InvocationStatus.CANCELLED,
+                ErrorCode.CANCELLED.value,
+                canonical_invocation=canonical_invocation,
             )
             raise ContractError(
                 ErrorCode.CANCELLED,
@@ -120,12 +201,35 @@ class CapabilityInvoker:
                 provider_id=registration.provider_id,
                 retryable=True,
             ) from exc
+        except ValueError as exc:
+            await self._record(
+                request,
+                registration,
+                InvocationStatus.FAILED,
+                ErrorCode.CONTRACT_VIOLATION.value,
+                canonical_invocation=canonical_invocation,
+            )
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "tool invocation governance binding changed before provider execution",
+                provider_id=registration.provider_id,
+            ) from exc
         except ContractError as exc:
-            await self._record(request, registration, InvocationStatus.FAILED, exc.code.value)
+            await self._record(
+                request,
+                registration,
+                InvocationStatus.FAILED,
+                exc.code.value,
+                canonical_invocation=canonical_invocation,
+            )
             raise
         except Exception as exc:
             await self._record(
-                request, registration, InvocationStatus.FAILED, ErrorCode.BACKEND_ERROR.value
+                request,
+                registration,
+                InvocationStatus.FAILED,
+                ErrorCode.BACKEND_ERROR.value,
+                canonical_invocation=canonical_invocation,
             )
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
@@ -139,6 +243,7 @@ class CapabilityInvoker:
                 registration,
                 InvocationStatus.FAILED,
                 ErrorCode.CONTRACT_VIOLATION.value,
+                canonical_invocation=canonical_invocation,
             )
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
@@ -161,32 +266,18 @@ class CapabilityInvoker:
             provider_id=registration.provider_id,
             status=InvocationStatus.SUCCEEDED,
             output=tool_result.output,
+            canonical_tool_invocation_id=(
+                canonical_invocation.id if canonical_invocation is not None else None
+            ),
             adapter_metadata=tool_result.adapter_metadata,
         )
-        await self._record(request, registration, InvocationStatus.SUCCEEDED)
+        await self._record(
+            request,
+            registration,
+            InvocationStatus.SUCCEEDED,
+            canonical_invocation=canonical_invocation,
+        )
         return result
-
-    async def _require_approval(
-        self,
-        request: CapabilityInvocation,
-        capability: CapabilitySpec,
-        registration: CapabilityRegistration,
-    ) -> None:
-        approved = False
-        if self._approval_hook is not None:
-            approved = await self._approval_hook(request, capability)
-        if not approved:
-            await self._record(
-                request,
-                registration,
-                InvocationStatus.APPROVAL_REQUIRED,
-                ErrorCode.FORBIDDEN.value,
-            )
-            raise ContractError(
-                ErrorCode.FORBIDDEN,
-                f"capability {capability.capability_id!r} requires approval",
-                details={"approval_required": True},
-            )
 
     async def _record(
         self,
@@ -194,6 +285,8 @@ class CapabilityInvoker:
         registration: CapabilityRegistration,
         status: InvocationStatus,
         error_code: str | None = None,
+        *,
+        canonical_invocation: DomainToolInvocation | None = None,
     ) -> None:
         await self._observer.record(
             InvocationRecord(
@@ -204,6 +297,9 @@ class CapabilityInvoker:
                 provider_tool_ref=registration.provider_tool_ref,
                 status=status,
                 trace=request.trace,
+                canonical_tool_invocation_id=(
+                    canonical_invocation.id if canonical_invocation is not None else None
+                ),
                 error_code=error_code,
                 adapter_metadata=registration.adapter_metadata,
             )
