@@ -284,10 +284,23 @@ class ModelToolCallRequest:
 @dataclass(frozen=True, slots=True)
 class ModelTiming:
     latency_ms: float | None = None
+    started_unix_ms: float | None = None
+    ended_unix_ms: float | None = None
 
     def __post_init__(self) -> None:
-        if self.latency_ms is not None and self.latency_ms < 0:
-            raise ValueError("latency_ms must not be negative")
+        for value, name in (
+            (self.latency_ms, "latency_ms"),
+            (self.started_unix_ms, "started_unix_ms"),
+            (self.ended_unix_ms, "ended_unix_ms"),
+        ):
+            if value is not None and value < 0:
+                raise ValueError(f"{name} must not be negative")
+        if (
+            self.started_unix_ms is not None
+            and self.ended_unix_ms is not None
+            and self.ended_unix_ms < self.started_unix_ms
+        ):
+            raise ValueError("ended_unix_ms must not precede started_unix_ms")
 
 
 @dataclass(frozen=True, slots=True)
@@ -301,28 +314,59 @@ class CanonicalModelResponse:
     usage: dict[str, JsonValue] = field(default_factory=dict)
     timing: ModelTiming = field(default_factory=ModelTiming)
 
+    def __post_init__(self) -> None:
+        if not self.request_id.strip():
+            raise ValueError("response request_id must not be blank")
+        if not self.model_config_id.strip():
+            raise ValueError("response model_config_id must not be blank")
+
     @classmethod
     def from_contract_response(cls, response: ModelResponse) -> CanonicalModelResponse:
         finish_reason = ModelFinishReason.UNKNOWN
+        structured_output: JsonValue = None
+        tool_calls: tuple[ModelToolCallRequest, ...] = ()
         latency_ms: float | None = None
+        started_unix_ms: float | None = None
+        ended_unix_ms: float | None = None
+
         for metadata in response.adapter_metadata:
-            raw_finish = metadata.values.get("finish_reason")
+            values = metadata.values
+            raw_finish = values.get("finish_reason")
             if isinstance(raw_finish, str):
                 try:
                     finish_reason = ModelFinishReason(raw_finish)
                 except ValueError:
                     finish_reason = ModelFinishReason.UNKNOWN
-            raw_latency = metadata.values.get("latency_ms")
-            if isinstance(raw_latency, int | float) and not isinstance(raw_latency, bool):
-                latency_ms = float(raw_latency)
+            latency_ms = _optional_number(values.get("latency_ms"), latency_ms)
+            started_unix_ms = _optional_number(
+                values.get("started_unix_ms"),
+                started_unix_ms,
+            )
+            ended_unix_ms = _optional_number(values.get("ended_unix_ms"), ended_unix_ms)
+
+            if metadata.namespace == "model-protocol":
+                if "structured_output" in values:
+                    structured_output = values["structured_output"]
+                if "tool_calls" in values:
+                    tool_calls = _tool_calls(values["tool_calls"])
+
+        content: tuple[ModelContentBlock, ...] = ()
+        if response.text:
+            content = (ModelContentBlock(ModelContentKind.TEXT, text=response.text),)
 
         return cls(
             request_id=response.request_id,
             model_config_id=response.model_ref,
-            content=(ModelContentBlock(ModelContentKind.TEXT, text=response.text),),
+            content=content,
+            tool_calls=tool_calls,
+            structured_output=structured_output,
             finish_reason=finish_reason,
             usage=dict(response.usage),
-            timing=ModelTiming(latency_ms=latency_ms),
+            timing=ModelTiming(
+                latency_ms=latency_ms,
+                started_unix_ms=started_unix_ms,
+                ended_unix_ms=ended_unix_ms,
+            ),
         )
 
 
@@ -331,3 +375,33 @@ def _message_text(message: ModelMessage) -> str:
     if text_parts:
         return "\n".join(text_parts)
     return f"[{message.role.value} content]"
+
+
+def _optional_number(value: JsonValue | None, current: float | None) -> float | None:
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return float(value)
+    return current
+
+
+def _tool_calls(value: JsonValue) -> tuple[ModelToolCallRequest, ...]:
+    if not isinstance(value, list):
+        return ()
+    parsed: list[ModelToolCallRequest] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        call_id = item.get("call_id")
+        tool_name = item.get("tool_name")
+        arguments = item.get("arguments")
+        if not isinstance(call_id, str) or not isinstance(tool_name, str):
+            continue
+        if not isinstance(arguments, dict):
+            continue
+        parsed.append(
+            ModelToolCallRequest(
+                call_id=call_id,
+                tool_name=tool_name,
+                arguments=arguments,
+            )
+        )
+    return tuple(parsed)
