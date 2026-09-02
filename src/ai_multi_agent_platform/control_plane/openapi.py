@@ -253,7 +253,7 @@ def _error_responses() -> dict[str, Any]:
 
 
 def _schemas() -> dict[str, Any]:
-    owner = {
+    owner: dict[str, Any] = {
         "type": "object",
         "required": ["type", "id"],
         "properties": {

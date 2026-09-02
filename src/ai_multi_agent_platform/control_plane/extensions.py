@@ -343,12 +343,17 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
             if request.method == "GET" and relative == "/openapi.json":
                 return self._response(200, build_openapi(), request_id, correlation_id)
             if request.method == "GET" and relative in {"", "/"}:
+                manifest_resources: list[JsonValue] = [
+                    *PLATFORM_COLLECTIONS,
+                    "timeline",
+                ]
+                manifest_commands: list[JsonValue] = [command for command in REQUIRED_COMMANDS]
                 return self._response(
                     200,
                     {
                         "api_version": API_VERSION,
-                        "resources": list(PLATFORM_COLLECTIONS) + ["timeline"],
-                        "commands": list(REQUIRED_COMMANDS),
+                        "resources": manifest_resources,
+                        "commands": manifest_commands,
                         "openapi": f"/api/{API_VERSION}/openapi.json",
                         "live_updates": "sse",
                     },
@@ -393,8 +398,8 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                         message="method not allowed",
                     )
                 context = _request_context(request, request_id, correlation_id)
-                resource_ref = request.body.get("resource_ref")
-                if not isinstance(resource_ref, str) or not resource_ref.strip():
+                generic_resource_ref = request.body.get("resource_ref")
+                if not isinstance(generic_resource_ref, str) or not generic_resource_ref.strip():
                     raise APIException(
                         status=400,
                         code="invalid_request",
@@ -406,7 +411,7 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                 item = await self._extended_control_plane.execute_command(
                     context,
                     segments[1],
-                    resource_ref,
+                    generic_resource_ref,
                     payload,
                 )
                 return self._response(200, item, request_id, correlation_id)
