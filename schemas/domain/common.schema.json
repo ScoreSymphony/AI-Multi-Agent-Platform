@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/domain/common.schema.json",
+  "title": "Canonical domain common types",
+  "type": "object",
+  "$defs": {
+    "canonicalId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*_[0-9a-fA-F-]{36}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ownerRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["user", "organization", "team", "service"]
+        },
+        "id": {"type": "string", "minLength": 1}
+      }
+    },
+    "externalRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "kind", "value"],
+      "properties": {
+        "system": {"type": "string", "minLength": 1},
+        "kind": {"type": "string", "minLength": 1},
+        "value": {"type": "string", "minLength": 1}
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}
