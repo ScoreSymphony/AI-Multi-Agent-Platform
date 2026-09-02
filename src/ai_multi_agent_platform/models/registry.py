@@ -72,13 +72,13 @@ class ModelRegistry:
         return tuple(self._providers[key] for key in sorted(self._providers))
 
     def register_model(self, config: ModelConfiguration) -> ModelConfiguration:
-        if config.provider_id not in self._providers:
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                f"model provider must be registered first: {config.provider_id}",
-                provider_id=config.provider_id,
-                details={"model_config_id": config.config_id},
-            )
+        """Register canonical inventory even when its runtime provider is offline.
+
+        Allowing an inactive provider reference is intentional: persisted model
+        inventory and canonical Agent definitions must survive endpoint or node
+        removal. The router marks such entries unavailable until the provider is
+        attached again.
+        """
 
         current = self._models.get(config.config_id)
         if current is not None:
@@ -96,15 +96,7 @@ class ModelRegistry:
                 f"model configuration ID conflicts with alias: {config.config_id}",
             )
 
-        for alias in config.aliases:
-            existing_id = self._aliases.get(alias)
-            if alias in self._models or existing_id is not None:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    f"model alias already registered: {alias}",
-                    provider_id=config.provider_id,
-                )
-
+        self._assert_aliases_available(config.aliases, config.config_id)
         self._models[config.config_id] = config
         for alias in config.aliases:
             self._aliases[alias] = config.config_id
@@ -117,12 +109,6 @@ class ModelRegistry:
                 ErrorCode.NOT_FOUND,
                 f"model configuration not found: {config.config_id}",
             )
-        if config.provider_id not in self._providers:
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                f"model provider is not registered: {config.provider_id}",
-                provider_id=config.provider_id,
-            )
         if config.revision <= current.revision:
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -134,28 +120,19 @@ class ModelRegistry:
                 },
             )
 
-        for alias in current.aliases:
+        old_aliases = current.aliases
+        for alias in old_aliases:
             self._aliases.pop(alias, None)
         try:
-            for alias in config.aliases:
-                existing_id = self._aliases.get(alias)
-                if alias in self._models and alias != config.config_id:
-                    raise ContractError(
-                        ErrorCode.CONFLICT,
-                        f"model alias already registered: {alias}",
-                    )
-                if existing_id is not None and existing_id != config.config_id:
-                    raise ContractError(
-                        ErrorCode.CONFLICT,
-                        f"model alias already registered: {alias}",
-                    )
-            self._models[config.config_id] = config
-            for alias in config.aliases:
-                self._aliases[alias] = config.config_id
+            self._assert_aliases_available(config.aliases, config.config_id)
         except Exception:
-            for alias in current.aliases:
+            for alias in old_aliases:
                 self._aliases[alias] = current.config_id
             raise
+
+        self._models[config.config_id] = config
+        for alias in config.aliases:
+            self._aliases[alias] = config.config_id
         return config
 
     def unregister_model(self, model_id_or_alias: str) -> ModelConfiguration:
@@ -168,6 +145,16 @@ class ModelRegistry:
     def set_enabled(self, model_id_or_alias: str, enabled: bool) -> ModelConfiguration:
         current = self.get_model(model_id_or_alias)
         updated = replace(current, enabled=enabled, revision=current.revision + 1)
+        self._models[current.config_id] = updated
+        return updated
+
+    def set_model_health(
+        self,
+        model_id_or_alias: str,
+        health: HealthStatus,
+    ) -> ModelConfiguration:
+        current = self.get_model(model_id_or_alias)
+        updated = replace(current, health=health, revision=current.revision + 1)
         self._models[current.config_id] = updated
         return updated
 
@@ -187,11 +174,11 @@ class ModelRegistry:
         provider_id: str | None = None,
         enabled: bool | None = None,
     ) -> tuple[ModelConfiguration, ...]:
-        models = list(self._models.values())
+        models = self._models.values()
         if provider_id is not None:
-            models = [item for item in models if item.provider_id == provider_id]
+            models = (item for item in models if item.provider_id == provider_id)
         if enabled is not None:
-            models = [item for item in models if item.enabled is enabled]
+            models = (item for item in models if item.enabled is enabled)
         return tuple(sorted(models, key=lambda item: item.config_id))
 
     def provider_health(self, provider_id: str) -> HealthStatus:
@@ -203,16 +190,26 @@ class ModelRegistry:
         provider = self._providers.get(config.provider_id)
         if provider is None or not provider.descriptor.available:
             return HealthStatus.UNAVAILABLE
+
         provider_health = self.provider_health(config.provider_id)
-        if provider_health is HealthStatus.UNAVAILABLE or config.health is HealthStatus.UNAVAILABLE:
+        if (
+            provider_health is HealthStatus.UNAVAILABLE
+            or config.health is HealthStatus.UNAVAILABLE
+        ):
             return HealthStatus.UNAVAILABLE
         if provider_health is HealthStatus.UNKNOWN or config.health is HealthStatus.UNKNOWN:
             return HealthStatus.UNKNOWN
-        if provider_health is HealthStatus.DEGRADED or config.health is HealthStatus.DEGRADED:
+        if (
+            provider_health is HealthStatus.DEGRADED
+            or config.health is HealthStatus.DEGRADED
+        ):
             return HealthStatus.DEGRADED
         return HealthStatus.HEALTHY
 
-    async def refresh_health(self, provider_id: str | None = None) -> dict[str, HealthStatus]:
+    async def refresh_health(
+        self,
+        provider_id: str | None = None,
+    ) -> dict[str, HealthStatus]:
         if provider_id is not None:
             provider = self.get_provider(provider_id)
             self._provider_health[provider_id] = await provider.health()
@@ -221,3 +218,21 @@ class ModelRegistry:
         for current_id, provider in self._providers.items():
             self._provider_health[current_id] = await provider.health()
         return dict(self._provider_health)
+
+    def _assert_aliases_available(
+        self,
+        aliases: tuple[str, ...],
+        config_id: str,
+    ) -> None:
+        for alias in aliases:
+            existing_id = self._aliases.get(alias)
+            if alias in self._models and alias != config_id:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    f"model alias already registered as canonical ID: {alias}",
+                )
+            if existing_id is not None and existing_id != config_id:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    f"model alias already registered: {alias}",
+                )
