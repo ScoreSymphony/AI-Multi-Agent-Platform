@@ -64,16 +64,24 @@ Issue #5 introduced the baseline `ModelRequest.requirements` mapping before the 
 
 This preserves the existing provider contract while #10 incrementally introduces richer canonical request/response structures.
 
-## Remaining #10 work
+## Control Plane inventory
 
-This baseline does not close issue #10. Follow-up implementation still includes:
+The versioned Control Plane exposes the canonical model inventory without turning provider-native APIs into northbound contracts:
 
-- persistent/reference registry storage;
-- richer canonical message/content/tool/structured-output request and response types;
-- local/self-hosted OpenAI-compatible reference provider;
-- timeout/cancellation and provider error mapping for that adapter;
-- provider model discovery where supported;
-- configuration examples and secret-reference integration;
-- Control Plane model/provider inventory endpoints once the relevant API foundation is available;
-- reusable provider/registry/router contract tests beyond the initial issue-specific tests;
-- final end-to-end test covering router -> registry -> local provider invocation.
+- `GET /api/v1/model-providers`
+- `GET /api/v1/model-providers/{provider_id}`
+- `POST /api/v1/model-providers/{provider_id}:enable`
+- `POST /api/v1/model-providers/{provider_id}:disable`
+- `POST /api/v1/model-providers/{provider_id}:refresh-health`
+- `GET /api/v1/models`
+- `GET /api/v1/models/{model_id_or_alias}`
+- `POST /api/v1/models/{model_id_or_alias}:enable`
+- `POST /api/v1/models/{model_id_or_alias}:disable`
+
+Inventory mutations require the Control Plane idempotency key. Provider construction and provider-native configuration remain adapter/bootstrap responsibilities rather than generic HTTP object creation.
+
+## Issue #10 completion state
+
+The #10 baseline now includes the distinct provider, registry and router contracts; stable canonical model configuration IDs; persistent reference storage; deterministic capability/location/health routing; rich canonical request/response types; local OpenAI-compatible execution; timeout/cancellation/error normalization; configuration examples; model/provider Control Plane inventory; and end-to-end/contract coverage.
+
+The baseline remains local-first and does not require any recurring paid AI/API service. Optional gateways and additional commercial or local providers remain replaceable follow-up adapters.

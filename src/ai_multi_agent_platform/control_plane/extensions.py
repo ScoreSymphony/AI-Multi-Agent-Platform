@@ -21,6 +21,7 @@ from ai_multi_agent_platform.contracts.interfaces import (
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.repository import EventRepository
+from ai_multi_agent_platform.models import ModelRegistry
 
 from .http import (
     ControlPlaneHTTP as BaseControlPlaneHTTP,
@@ -61,6 +62,7 @@ PLATFORM_COLLECTIONS = (
     "memory",
     "knowledge",
     "models",
+    "model-providers",
     "providers",
     "tools",
     "capabilities",
@@ -74,7 +76,18 @@ PLATFORM_COLLECTIONS = (
 )
 
 BASE_COLLECTIONS = frozenset(
-    {"projects", "workspaces", "tasks", "plans", "steps", "runs", "artifacts", "results"}
+    {
+        "projects",
+        "workspaces",
+        "tasks",
+        "plans",
+        "steps",
+        "runs",
+        "artifacts",
+        "results",
+        "models",
+        "model-providers",
+    }
 )
 EXTENSION_COLLECTIONS = frozenset(PLATFORM_COLLECTIONS) - BASE_COLLECTIONS
 
@@ -166,6 +179,7 @@ class ControlPlane(BaseControlPlane):
         authorization: AuthorizationProvider | None = None,
         live_events: EventProvider | None = None,
         health_providers: tuple[ProviderContract, ...] = (),
+        model_registry: ModelRegistry | None = None,
         resource_services: Mapping[str, ResourceService] | None = None,
         command_handlers: Mapping[str, CommandHandler] | None = None,
     ) -> None:
@@ -176,6 +190,7 @@ class ControlPlane(BaseControlPlane):
             authorization=authorization,
             live_events=live_events,
             health_providers=health_providers,
+            model_registry=model_registry,
         )
         self._resource_services = dict(resource_services or {})
         self._command_handlers = dict(command_handlers or {})

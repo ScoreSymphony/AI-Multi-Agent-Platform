@@ -101,6 +101,48 @@ def build_openapi() -> dict[str, Any]:
         },
     }
 
+    paths.update(
+        {
+            f"/api/{API_VERSION}/model-providers": {
+                "get": _list_operation("listModelProviders", "Model provider page")
+            },
+            f"/api/{API_VERSION}/model-providers/{{provider_id}}": {
+                "get": _read_operation("getModelProvider", "provider_id", "Model provider")
+            },
+            f"/api/{API_VERSION}/models": {
+                "get": _list_operation("listModels", "Model configuration page")
+            },
+            f"/api/{API_VERSION}/models/{{model_id}}": {
+                "get": _read_operation("getModel", "model_id", "Model configuration")
+            },
+        }
+    )
+
+    for command in ("enable", "disable", "refresh-health"):
+        paths[f"/api/{API_VERSION}/model-providers/{{provider_id}}:{command}"] = {
+            "post": {
+                **_operation(
+                    f"{command.replace('-', ' ').title().replace(' ', '')}ModelProvider",
+                    "Updated model provider",
+                ),
+                "parameters": [
+                    _path_parameter("provider_id"),
+                    {"$ref": "#/components/parameters/IdempotencyKey"},
+                ],
+            }
+        }
+
+    for command in ("enable", "disable"):
+        paths[f"/api/{API_VERSION}/models/{{model_id}}:{command}"] = {
+            "post": {
+                **_operation(f"{command}Model", "Updated model configuration"),
+                "parameters": [
+                    _path_parameter("model_id"),
+                    {"$ref": "#/components/parameters/IdempotencyKey"},
+                ],
+            }
+        }
+
     for command in ("queue", "start", "cancel", "retry"):
         paths[f"/api/{API_VERSION}/tasks/{{task_id}}:{command}"] = {
             "post": {

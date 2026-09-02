@@ -77,6 +77,8 @@ class ControlPlaneHTTP:
                             "artifacts",
                             "results",
                             "timeline",
+                            "model-providers",
+                            "models",
                         ],
                         "openapi": f"/api/{API_VERSION}/openapi.json",
                         "live_updates": "sse",
@@ -110,6 +112,14 @@ class ControlPlaneHTTP:
                 )
             if segments[0] == "runs":
                 return await self._runs(
+                    request, context, query, segments, request_id, correlation_id
+                )
+            if segments[0] == "model-providers":
+                return await self._model_providers(
+                    request, context, query, segments, request_id, correlation_id
+                )
+            if segments[0] == "models":
+                return await self._models(
                     request, context, query, segments, request_id, correlation_id
                 )
             if segments[0] in {"plans", "steps", "artifacts", "results"}:
@@ -254,6 +264,72 @@ class ControlPlaneHTTP:
             return self._response(200, page, request_id, correlation_id)
         if len(segments) == 2 and request.method == "GET":
             item = await self._control_plane.get_run(context, segments[1])
+            return self._response(200, item, request_id, correlation_id)
+        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+
+    async def _model_providers(
+        self,
+        request: HTTPRequest,
+        context: RequestContext,
+        query: PageQuery,
+        segments: list[str],
+        request_id: str,
+        correlation_id: str,
+    ) -> HTTPResponse:
+        if len(segments) == 1 and request.method == "GET":
+            page = await self._control_plane.list_model_providers(context, query)
+            return self._response(200, page, request_id, correlation_id)
+        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
+            provider_id, command = segments[1].rsplit(":", 1)
+            if command == "enable":
+                item = await self._control_plane.set_model_provider_enabled(
+                    context, provider_id, enabled=True
+                )
+            elif command == "disable":
+                item = await self._control_plane.set_model_provider_enabled(
+                    context, provider_id, enabled=False
+                )
+            elif command == "refresh-health":
+                item = await self._control_plane.refresh_model_provider_health(context, provider_id)
+            else:
+                raise APIException(
+                    status=404,
+                    code="not_found",
+                    message="unknown model-provider command",
+                )
+            return self._response(200, item, request_id, correlation_id)
+        if len(segments) == 2 and request.method == "GET":
+            item = await self._control_plane.get_model_provider(context, segments[1])
+            return self._response(200, item, request_id, correlation_id)
+        raise APIException(status=405, code="method_not_allowed", message="method not allowed")
+
+    async def _models(
+        self,
+        request: HTTPRequest,
+        context: RequestContext,
+        query: PageQuery,
+        segments: list[str],
+        request_id: str,
+        correlation_id: str,
+    ) -> HTTPResponse:
+        if len(segments) == 1 and request.method == "GET":
+            page = await self._control_plane.list_models(context, query)
+            return self._response(200, page, request_id, correlation_id)
+        if len(segments) == 2 and ":" in segments[1] and request.method == "POST":
+            model_id, command = segments[1].rsplit(":", 1)
+            if command == "enable":
+                item = await self._control_plane.set_model_enabled(context, model_id, enabled=True)
+            elif command == "disable":
+                item = await self._control_plane.set_model_enabled(context, model_id, enabled=False)
+            else:
+                raise APIException(
+                    status=404,
+                    code="not_found",
+                    message="unknown model command",
+                )
+            return self._response(200, item, request_id, correlation_id)
+        if len(segments) == 2 and request.method == "GET":
+            item = await self._control_plane.get_model(context, segments[1])
             return self._response(200, item, request_id, correlation_id)
         raise APIException(status=405, code="method_not_allowed", message="method not allowed")
 
