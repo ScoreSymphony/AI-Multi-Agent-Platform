@@ -24,12 +24,12 @@ def _freeze_json(value: JsonValue) -> FrozenJsonValue:
     return value
 
 
-def _thaw_json(value: FrozenJsonValue) -> JsonValue:
+def _thaw_json(value: JsonValue | FrozenJsonValue) -> JsonValue:
     """Copy an immutable JSON value back to a standard JSON-serializable value."""
 
     if isinstance(value, Mapping):
         return {key: _thaw_json(item) for key, item in value.items()}
-    if isinstance(value, tuple):
+    if isinstance(value, list | tuple):
         return [_thaw_json(item) for item in value]
     return value
 
