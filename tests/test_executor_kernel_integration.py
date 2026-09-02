@@ -22,7 +22,7 @@ def test_kernel_executes_end_to_end_through_reference_executor(
     lifecycle = ExecutorLifecycleBackend(
         ReferenceExecutor(workspace_root),
         workspace=task_id,
-        action="echo",
+        action="write_artifact",
     )
     kernel = PlatformKernel(
         orchestrator=FakeOrchestrator(),
@@ -52,8 +52,21 @@ def test_kernel_executes_end_to_end_through_reference_executor(
             run_id=run.run_id,
         )
         assert run.status.value == "succeeded"
-        task = await kernel.get_task(task_id)
-        assert task.status is TaskStatus.SUCCEEDED
         assert run.output["result_code"] == 0
+        assert run.output["artifacts"] == ["artifact.txt"]
+        assert (workspace / "artifact.txt").exists()
+
+        artifact_id = new_id("artifact")
+        await kernel.attach_artifact(
+            idempotency_key="cmd-attach-artifact",
+            task_id=task_id,
+            run_id=run.run_id,
+            artifact_id=artifact_id,
+        )
+        run = await kernel.get_run(task_id, run.run_id)
+        task = await kernel.get_task(task_id)
+        assert artifact_id in run.artifact_ids
+        assert artifact_id in task.artifact_ids
+        assert task.status is TaskStatus.SUCCEEDED
 
     asyncio.run(scenario())
