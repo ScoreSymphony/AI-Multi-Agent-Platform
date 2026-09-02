@@ -1,136 +1,101 @@
-# Task / Run / Event Kernel
+# Platform-owned Task / Run / Event Kernel
 
-The platform kernel is the smallest component that owns canonical Task and Run lifecycle decisions. It is intentionally independent from Hermes, Forge, Temporal and concrete persistence products.
+The kernel is the authoritative owner of externally visible Task and Run lifecycle state. Hermes, Forge, Temporal, executors, model providers and other adapters may participate in planning or execution, but none of their private databases or status models become the platform source of truth.
 
-## Responsibilities
+## Ownership boundary
 
-The kernel owns:
-
-- task creation, updates and queries;
-- deterministic Task lifecycle transitions;
-- canonical Run identity and attempt numbering;
-- run start, observation/completion and cancellation;
-- canonical lifecycle event emission;
-- correlation and causation metadata;
-- command idempotency and concurrent retry handling;
-- artifact and result references;
-- reconstruction of externally visible state from event history;
-- restart recovery and reconciliation of incompletely observed lifecycle transitions.
-
-The kernel does **not** own model reasoning, backend process execution or a specific production database.
-
-## Dependency boundaries
-
-The kernel depends only on platform contracts:
+The implementation lives under `ai_multi_agent_platform.kernel` and depends only on the canonical domain model plus replaceable platform contracts.
 
 ```text
 PlatformKernel
-  ├─ Orchestrator
-  ├─ LifecycleBackend
-  └─ EventProvider
+  ├─ canonical domain: Task, Run, TaskStatus, RunStatus
+  ├─ EventRepository          <- authoritative persisted history
+  ├─ TaskRepository           <- replaceable read boundary
+  ├─ RunRepository            <- replaceable read boundary
+  ├─ Orchestrator             <- replaceable planning participant
+  ├─ LifecycleBackend         <- replaceable execution participant
+  └─ EventProvider (optional) <- post-commit mirror, never source of truth
 ```
 
-A deployment may replace any implementation of those contracts without changing canonical Task or Run identifiers.
+`InMemoryKernelRepository` is the deterministic baseline. `SqliteKernelRepository` is a durable stdlib reference implementation used to prove process restart and recovery semantics. Neither selects the final production database.
 
-## Event history as reconstructable truth
+## Canonical lifecycle
 
-`TaskView` and `RunView` are derived by deterministic reducers. They are not authoritative mutable records.
+The kernel reuses the canonical state machines from `ai_multi_agent_platform.domain`; it does not introduce parallel Task or Run status definitions.
 
-The reducers consume canonical events in stable order and reconstruct visible state. This provides a recovery path independent from a specific database schema and lets future read models be rebuilt from history.
+Tasks support draft, ready, running, waiting/blocked, succeeded, failed and cancelled flows. Runs support queued, starting, running, succeeded, failed, cancelled and timed-out flows. Illegal transitions fail with a canonical `ContractError(CONFLICT)`.
 
-Initial Task events include:
+A failed Task may be retried. Retry transitions the Task back to ready and creates a **new** canonical Run with an incremented attempt number. Previous attempts remain immutable history.
 
-- `task.created`
-- `task.updated`
-- `task.ready`
-- `task.running`
-- `task.succeeded`
-- `task.failed`
-- `task.cancelled`
-- `plan.created`
-- `artifact.attached`
-- `result.recorded`
+## Event history and read models
 
-Initial Run events include:
+Every mutation appends one or more canonical `PlatformEvent` records. Task and Run views are reconstructed deterministically from the ordered event stream; mutable adapter state is not read as canonical platform state.
 
-- `run.queued`
-- `run.running`
-- `run.succeeded`
-- `run.failed`
-- `run.cancelled`
-- `run.timed_out`
+Lifecycle events include, among others:
 
-## Correlation and causation
+- `task.created`, `task.updated`, `task.ready`, `task.running`, `task.waiting`, `task.resumed`, `task.succeeded`, `task.failed`, `task.cancelled`;
+- `plan.created`;
+- `run.created`, `run.starting`, `run.dispatch_attempted`, `run.running`, `run.succeeded`, `run.failed`, `run.cancelled`, `run.timed_out`;
+- `run.recovery_required` / `run.recovery_cleared`;
+- `artifact.attached` and `result.attached`.
 
-All events for a Task use the canonical Task ID as their initial `correlation_id`.
+Each generated event carries an event ID, event type, canonical subject, timestamp, task correlation ID, command/recovery causation ID, owner metadata, actor/source metadata, canonical payload version and deterministic stream revision. Adapter-private diagnostics remain in namespaced `AdapterMetadata`.
 
-User/API commands supply a stable `command_id`. Events caused by that command carry it as `causation_id`; the event that reserves or completes the command also stores it in its payload for idempotent command lookup.
+Artifact and Result payloads are referenced by canonical `artifact_*` / `result_*` IDs. The kernel deliberately does not choose the file or result-storage backend.
 
-This is deliberately separate from future distributed tracing identifiers.
+## Idempotency and consistency
 
-## Idempotent commands and concurrent retries
+Every retriable mutation requires an idempotency key. The repository stores an atomic `CommandRecord` together with the first event(s) of that command. Replaying the same key for the same operation returns the existing result; reusing that key for a different operation is a conflict.
 
-A command ID represents one logical mutation. Retrying a command with the same ID must resolve to the already-created canonical state rather than allocate another Task or Run.
+The repository commit boundary also requires an `expected_revision`. A stale writer is rejected before new events are appended. This gives the baseline an optimistic-concurrency mechanism without coupling the kernel to a specific production database.
 
-Command-bearing events receive deterministic event IDs. The `EventProvider.publish()` contract requires repeated publication of the same `event_id` to be idempotent: only one canonical event may exist for that identifier.
+Run dispatch is ordered deliberately:
 
-Run starts additionally derive the canonical Run ID deterministically from the Task ID plus command ID. This means two processes that race after both observing the same pre-command history still converge on the same Run identity.
+1. persist the canonical `run.starting` transition and reserve the start command;
+2. persist `run.dispatch_attempted`;
+3. call the replaceable lifecycle backend using the already-persisted canonical Run ID;
+4. persist the normalized backend observation (`run.running` or a later terminal state).
 
-The critical start flow is:
+That ordering makes duplicate starts detectable and makes the crash window recoverable.
 
-1. validate and reconstruct the current Task;
-2. obtain the replaceable orchestration plan;
-3. re-check whether another retry already reserved the command;
-4. derive the canonical Run ID from Task ID plus command ID;
-5. atomically reserve the command by publishing deterministic `run.queued`;
-6. reconstruct the reservation from persisted history;
-7. move the Task to `running` when required;
-8. reconcile with the lifecycle backend using that exact Run ID;
-9. persist only backend state that has actually been observed.
+## Cancellation and duplicate callbacks
 
-The baseline SQLite provider enforces event-ID uniqueness in the database, so simultaneous command retries cannot create two canonical `run.queued` reservations.
+Cancellation before dispatch is entirely canonical and does not call the backend. Cancellation of a starting/running Run asks the backend to cancel the same canonical Run ID and maps the normalized result back into platform state.
 
-## Backend start semantics
+Cancellation is safe to repeat. Duplicate terminal callbacks for the same outcome are accepted without adding a second terminal transition. A contradictory terminal callback is rejected rather than rewriting history.
 
-`LifecycleBackend.start()` returns an `ExecutionHandle`, not a guarantee that execution is already running. A backend may accept a Run while still reporting `queued`.
+## Recovery and reconciliation
 
-The kernel therefore does **not** emit `run.running` merely because `start()` returned successfully. It observes the backend through `LifecycleBackend.get()` and records `run.running` only when a normalized `RUNNING` snapshot is actually seen. An immediately terminal snapshot can transition directly from queued to the corresponding terminal Run event.
+`recover_task()` classifies every non-terminal attempt after restart:
 
-## Restart and split-event recovery
+| Canonical Run state | Recovery behavior |
+| --- | --- |
+| `queued` | Keep pending; it was never dispatched. |
+| `starting`, backend knows Run | Reconcile the backend snapshot into canonical state without dispatching again. |
+| `starting`, backend does not know Run | Re-dispatch the **same canonical Run ID**; the extra dispatch attempt is persisted. |
+| `running`, backend knows Run | Reconcile the normalized snapshot. |
+| `running`, backend does not know Run | Mark `recovery_required`; do **not** blindly create or start another Run. |
+| terminal | Leave unchanged. |
 
-For a Run whose last canonical state is `queued`, recovery first asks the `LifecycleBackend` for that same canonical Run ID.
+This distinguishes a crash before backend acceptance from a crash after acceptance. It also leaves an explicit reconciliation marker for orphaned external jobs that future backend-specific reconcilers can resolve.
 
-- If the backend already knows the Run, the kernel records its observed normalized state and does **not** allocate another Run.
-- If the backend reports `not_found`, the kernel may call `start()` again using the same canonical Run ID. The lifecycle contract requires repeated starts for that Run identity to be idempotent.
-- If a just-started backend still reports `queued`, the canonical Run remains queued until later observation confirms progress.
+`recover_all()` applies the same logic to all task streams in the configured repository.
 
-This handles the ambiguous crash window where a backend accepted work but the platform died before persisting the next Run state.
+## Fake/reference end-to-end flow
 
-Recovery also repairs split event boundaries. If a terminal Run event was persisted but the process died before the matching terminal Task event, a retry or recovery pass reconciles the Task from the already-terminal canonical Run instead of returning early and leaving the Task stuck in `running`.
+With only the reference providers the kernel can:
 
-A backend may already be terminal when recovery first observes it. Therefore the canonical reducer permits `queued -> terminal` transitions when an intermediate running observation was never persisted.
+1. create and ready a canonical Task;
+2. obtain a plan from `FakeOrchestrator`;
+3. create a canonical Run;
+4. dispatch it through `FakeLifecycleBackend`;
+5. observe success, failure, timeout or cancellation;
+6. attach canonical Artifact/Result IDs;
+7. transition Run and Task consistently;
+8. replay the event history to the same visible state.
 
-## Persistence
+No Hermes, Forge, Temporal, external model API or production database is required for this path.
 
-The production event-store technology is deliberately not selected by issue #6. `EventProvider` remains the replaceable boundary.
+## Deliberate non-goals
 
-A small standard-library SQLite implementation exists under `ai_multi_agent_platform.testing.sqlite_events` to verify durable restart, cursor and concurrent reservation behavior. It is a reference/testing provider, not a production database decision.
-
-## Artifacts and results
-
-Issue #6 stores only canonical references (`artifact_ref`, `result_ref`) in lifecycle history. Payload storage and richer metadata belong behind later File/Artifact and knowledge/storage work.
-
-## Non-goals
-
-This kernel does not implement:
-
-- Hermes integration;
-- Forge integration;
-- Temporal workflows;
-- production database selection;
-- distributed worker scheduling;
-- authorization policy;
-- model routing;
-- MCP transport.
-
-Those components must integrate around the kernel rather than replace its canonical lifecycle ownership.
+Issue #6 does not select a production scheduler, event bus or database and does not integrate Hermes, Forge or Temporal. Those components must remain replaceable participants around this kernel and map their private state into the platform-owned canonical lifecycle.

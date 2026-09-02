@@ -1,53 +1,96 @@
-"""Externally visible kernel state reconstructed from canonical events."""
+"""Canonical event-sourced read models for the platform-owned kernel."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from ai_multi_agent_platform.contracts.types import ExecutionStatus, JsonValue
+from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.domain import Run, RunStatus, Task, TaskStatus
 
 
-class TaskStatus(StrEnum):
-    DRAFT = "draft"
-    READY = "ready"
-    RUNNING = "running"
-    SUCCEEDED = "succeeded"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-TERMINAL_TASK_STATUSES = frozenset({TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED})
 TERMINAL_RUN_STATUSES = frozenset(
     {
-        ExecutionStatus.SUCCEEDED,
-        ExecutionStatus.FAILED,
-        ExecutionStatus.CANCELLED,
-        ExecutionStatus.TIMED_OUT,
+        RunStatus.SUCCEEDED,
+        RunStatus.FAILED,
+        RunStatus.CANCELLED,
+        RunStatus.TIMED_OUT,
     }
 )
 
 
+class RecoveryDisposition(StrEnum):
+    """How recovery classified or reconciled one canonical run."""
+
+    QUEUED_PENDING = "queued_pending"
+    REDISPATCHED = "redispatched"
+    RECONCILED = "reconciled"
+    TERMINAL_UNCHANGED = "terminal_unchanged"
+    ORPHANED_RECONCILIATION_REQUIRED = "orphaned_reconciliation_required"
+
+
 @dataclass(frozen=True, slots=True)
-class TaskView:
-    task_id: str
-    title: str
-    objective: str
-    status: TaskStatus
-    owner_type: str | None = None
-    owner_id: str | None = None
-    project_id: str | None = None
+class TaskState:
+    """Externally visible task state reconstructed only from canonical events."""
+
+    task: Task
+    revision: int
     plan_ref: str | None = None
     run_ids: tuple[str, ...] = ()
-    artifact_refs: tuple[str, ...] = ()
-    result_refs: tuple[str, ...] = ()
+    artifact_ids: tuple[str, ...] = ()
+    result_ids: tuple[str, ...] = ()
+    wait_reason: str | None = None
+    blocked: bool = False
+
+    @property
+    def task_id(self) -> str:
+        return self.task.id
+
+    @property
+    def status(self) -> TaskStatus:
+        return self.task.status
 
 
 @dataclass(frozen=True, slots=True)
-class RunView:
-    run_id: str
-    task_id: str
-    attempt: int
-    status: ExecutionStatus
+class RunState:
+    """Externally visible run state reconstructed only from canonical events."""
+
+    run: Run
+    revision: int
     backend_ref: str | None = None
     output: dict[str, JsonValue] = field(default_factory=dict)
+    artifact_ids: tuple[str, ...] = ()
+    result_ids: tuple[str, ...] = ()
+    dispatch_attempts: int = 0
+    recovery_required: bool = False
+    recovery_reason: str | None = None
+
+    @property
+    def run_id(self) -> str:
+        return self.run.id
+
+    @property
+    def task_id(self) -> str:
+        return self.run.correlation_id
+
+    @property
+    def attempt(self) -> int:
+        return self.run.attempt
+
+    @property
+    def status(self) -> RunStatus:
+        return self.run.status
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryEntry:
+    run_id: str
+    before: RunStatus
+    after: RunStatus
+    disposition: RecoveryDisposition
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryReport:
+    task_id: str
+    entries: tuple[RecoveryEntry, ...]
