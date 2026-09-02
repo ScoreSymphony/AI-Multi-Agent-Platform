@@ -3,6 +3,7 @@
 from .errors import ContractError, ErrorCode
 from .interfaces import (
     AuthorizationProvider,
+    CapabilityProvider,
     EventProvider,
     FileProvider,
     KnowledgeProvider,
@@ -48,6 +49,7 @@ __all__ = [
     "AuthorizationRequest",
     "Capability",
     "CapabilityKind",
+    "CapabilityProvider",
     "ContractError",
     "ErrorCode",
     "EventProvider",
