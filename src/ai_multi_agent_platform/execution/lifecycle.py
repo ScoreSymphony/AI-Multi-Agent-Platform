@@ -22,7 +22,13 @@ from .contracts import ExecutionRequest, ExecutionResult, ExecutionStatus, Execu
 class ExecutorLifecycleBackend(LifecycleBackend):
     """Lifecycle adapter proving the kernel can execute through a generic Executor."""
 
-    def __init__(self, executor: Executor, *, workspace: str, action: str = "echo") -> None:
+    def __init__(
+        self,
+        executor: Executor,
+        *,
+        workspace: str,
+        action: str = "echo",
+    ) -> None:
         self._executor = executor
         self._workspace = workspace
         self._action = action
@@ -36,7 +42,10 @@ class ExecutorLifecycleBackend(LifecycleBackend):
             supported_operations=("start", "get", "cancel"),
         )
 
-    async def start(self, request: KernelExecutionRequest) -> KernelExecutionHandle:
+    async def start(
+        self,
+        request: KernelExecutionRequest,
+    ) -> KernelExecutionHandle:
         existing = self._results.get(request.run_id)
         if existing is None:
             result = await self._executor.execute(
@@ -56,11 +65,18 @@ class ExecutorLifecycleBackend(LifecycleBackend):
             backend_ref=f"{self._executor.descriptor.executor_id}:{request.run_id}",
         )
 
-    async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+    async def get(
+        self,
+        run_id: str,
+        context: OperationContext,
+    ) -> ExecutionSnapshot:
         del context
         result = self._results.get(run_id)
         if result is None:
-            raise ContractError(ErrorCode.NOT_FOUND, f"execution not found: {run_id}")
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"execution not found: {run_id}",
+            )
         return ExecutionSnapshot(
             run_id=run_id,
             status=self._map_status(result.status),
@@ -69,18 +85,37 @@ class ExecutorLifecycleBackend(LifecycleBackend):
                 "stdout": result.stdout,
                 "stderr": result.stderr,
                 "output": result.output,
-                "artifacts": [artifact.relative_path for artifact in result.artifacts],
+                "artifacts": [
+                    artifact.relative_path for artifact in result.artifacts
+                ],
             },
         )
 
-    async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+    async def cancel(
+        self,
+        run_id: str,
+        context: OperationContext,
+    ) -> ExecutionSnapshot:
         del context
         result = self._results.get(run_id)
         if result is None:
-            raise ContractError(ErrorCode.NOT_FOUND, f"execution not found: {run_id}")
-        if result.status not in {ExecutionStatus.SUCCEEDED, ExecutionStatus.FAILED, ExecutionStatus.TIMED_OUT}:
-            raise ContractError(ErrorCode.CONFLICT, f"execution cannot be cancelled: {run_id}")
-        return await self.get(run_id, OperationContext(correlation_id=run_id))
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"execution not found: {run_id}",
+            )
+        if result.status not in {
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.TIMED_OUT,
+        }:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"execution cannot be cancelled: {run_id}",
+            )
+        return await self.get(
+            run_id,
+            OperationContext(correlation_id=run_id),
+        )
 
     @staticmethod
     def ensure_workspace(root: str | Path, workspace: str) -> Path:
