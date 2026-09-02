@@ -8,7 +8,7 @@ from ai_multi_agent_platform.execution import (
     ReferenceExecutor,
 )
 from ai_multi_agent_platform.kernel import PlatformKernel, TaskStatus
-from ai_multi_agent_platform.testing import FakeEventProvider, FakeOrchestrator
+from ai_multi_agent_platform.testing import FakeOrchestrator
 
 
 def test_kernel_executes_end_to_end_through_reference_executor(
@@ -25,22 +25,29 @@ def test_kernel_executes_end_to_end_through_reference_executor(
     kernel = PlatformKernel(
         orchestrator=FakeOrchestrator(),
         lifecycle=lifecycle,
-        events=FakeEventProvider(),
     )
 
     async def scenario() -> None:
         await kernel.create_task(
-            command_id="cmd-create",
+            idempotency_key="cmd-create",
             task_id="task-demo",
             title="Demo",
             objective="Prove platform-owned execution",
             owner_type="user",
             owner_id="tester",
         )
-        await kernel.ready_task(command_id="cmd-ready", task_id="task-demo")
-        run = await kernel.start_task(
-            command_id="cmd-start",
+        await kernel.ready_task(
+            idempotency_key="cmd-ready",
             task_id="task-demo",
+        )
+        run = await kernel.start_task(
+            idempotency_key="cmd-start",
+            task_id="task-demo",
+        )
+        run = await kernel.refresh_run(
+            idempotency_key="cmd-refresh",
+            task_id="task-demo",
+            run_id=run.run_id,
         )
         assert run.status.value == "succeeded"
         task = await kernel.get_task("task-demo")
