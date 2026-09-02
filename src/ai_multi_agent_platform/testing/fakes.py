@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -38,6 +39,7 @@ from ai_multi_agent_platform.contracts.types import (
     ModelResponse,
     NodeDescriptor,
     OperationContext,
+    OperationControl,
     PlanRequest,
     PlanResponse,
     PlatformEvent,
@@ -78,7 +80,9 @@ def _descriptor(
         supported_operations=operations,
         capabilities=(capability,),
         health=HealthStatus.HEALTHY,
+        available=True,
         limits={"max_concurrency": 1},
+        resources={"reference_units": 1},
         adapter_metadata=(
             AdapterMetadata(namespace="fake", values={"implementation": "in-memory"}),
         ),
@@ -351,12 +355,17 @@ class FakeMemoryProvider(MemoryProvider):
         key: str,
         value: JsonValue,
         context: OperationContext,
+        *,
+        metadata: dict[str, JsonValue] | None = None,
     ) -> StoredObject:
         del context
         self.calls.append("put")
         _raise_configured_failure(self.descriptor.provider_id, self.failure)
         self._values[(namespace, key)] = value
-        return StoredObject(object_ref=f"memory:{namespace}:{key}")
+        return StoredObject(
+            object_ref=f"memory:{namespace}:{key}",
+            metadata=metadata or {},
+        )
 
     async def get(self, namespace: str, key: str, context: OperationContext) -> JsonValue:
         del context
@@ -388,12 +397,16 @@ class FakeFileProvider(FileProvider):
         object_ref: str,
         data: bytes,
         context: OperationContext,
+        *,
+        metadata: dict[str, JsonValue] | None = None,
     ) -> StoredObject:
         del context
         self.calls.append("write")
         _raise_configured_failure(self.descriptor.provider_id, self.failure)
         self._objects[object_ref] = data
-        return StoredObject(object_ref=object_ref, metadata={"size": len(data)})
+        stored_metadata = dict(metadata or {})
+        stored_metadata["size"] = len(data)
+        return StoredObject(object_ref=object_ref, metadata=stored_metadata)
 
     async def read(self, object_ref: str, context: OperationContext) -> bytes:
         del context
@@ -465,13 +478,15 @@ class FakeEventProvider(EventProvider):
         CapabilityKind.EVENT,
         "publish",
         "read",
+        "subscribe",
     )
 
     def __init__(self, *, failure: FakeFailure | None = None) -> None:
         self._events: list[PlatformEvent] = []
         self.failure = failure
         self.publish_calls: list[PlatformEvent] = []
-        self.read_calls: list[tuple[str, str | None]] = []
+        self.read_calls: list[tuple[str, str | None, OperationControl | None]] = []
+        self.subscribe_calls: list[tuple[str, str | None, OperationControl | None]] = []
 
     async def publish(self, event: PlatformEvent) -> None:
         self.publish_calls.append(event)
@@ -483,8 +498,9 @@ class FakeEventProvider(EventProvider):
         correlation_id: str,
         *,
         after_event_id: str | None = None,
+        control: OperationControl | None = None,
     ) -> tuple[PlatformEvent, ...]:
-        self.read_calls.append((correlation_id, after_event_id))
+        self.read_calls.append((correlation_id, after_event_id, control))
         _raise_configured_failure(self.descriptor.provider_id, self.failure)
         events = [event for event in self._events if event.context.correlation_id == correlation_id]
         if after_event_id is None:
@@ -493,6 +509,25 @@ class FakeEventProvider(EventProvider):
             if event.event_id == after_event_id:
                 return tuple(events[index + 1 :])
         raise ContractError(ErrorCode.NOT_FOUND, f"Event cursor not found: {after_event_id}")
+
+    def subscribe(
+        self,
+        correlation_id: str,
+        *,
+        after_event_id: str | None = None,
+        control: OperationControl | None = None,
+    ) -> AsyncIterator[PlatformEvent]:
+        self.subscribe_calls.append((correlation_id, after_event_id, control))
+
+        async def iterator() -> AsyncIterator[PlatformEvent]:
+            for event in await self.read(
+                correlation_id,
+                after_event_id=after_event_id,
+                control=control,
+            ):
+                yield event
+
+        return iterator()
 
 
 class FakeAuthorizationProvider(AuthorizationProvider):
