@@ -37,6 +37,7 @@ from .models import (
     WorkerJobStatus,
     new_id,
     validate_id,
+    validate_subject_id,
 )
 
 __all__ = [
@@ -76,4 +77,5 @@ __all__ = [
     "new_id",
     "require_transition",
     "validate_id",
+    "validate_subject_id",
 ]
