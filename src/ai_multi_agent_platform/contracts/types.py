@@ -27,6 +27,17 @@ class CapabilityKind(StrEnum):
     WORKER = "worker"
 
 
+class ExecutionStatus(StrEnum):
+    """Normalized execution states matching the canonical Run lifecycle."""
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    TIMED_OUT = "timed_out"
+
+
 @dataclass(frozen=True, slots=True)
 class Capability:
     """A discoverable capability advertised by a provider."""
@@ -90,7 +101,7 @@ class ExecutionHandle:
 @dataclass(frozen=True, slots=True)
 class ExecutionSnapshot:
     run_id: str
-    status: str
+    status: ExecutionStatus
     output: dict[str, JsonValue] = field(default_factory=dict)
 
 
@@ -150,8 +161,10 @@ class PlatformEvent:
     event_type: str
     subject_type: str
     subject_id: str
+    occurred_at: str
     context: OperationContext
     payload: dict[str, JsonValue] = field(default_factory=dict)
+    schema_version: str = CONTRACT_VERSION
 
 
 @dataclass(frozen=True, slots=True)
