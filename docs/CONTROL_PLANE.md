@@ -106,8 +106,8 @@ A registered collection receives the common Control Plane read conventions:
 - pagination/filter/sort/search/field selection;
 - request/correlation context;
 - authorization hooks;
-- backend-private payload rejection;
-- generated OpenAPI entries.
+- recursive backend-private payload rejection;
+- generated OpenAPI entries, including the common `filter[field]` convention.
 
 The collection name comes from the owning canonical domain. An unregistered future collection is neither advertised nor treated as a #32 resource.
 
@@ -125,7 +125,16 @@ Registered generic extension commands are exposed through:
 POST /api/v1/commands/{command}
 ```
 
-The request identifies the canonical `resource_ref`. Mutating extension commands require `Idempotency-Key` and receive the same `RequestContext` used elsewhere by the Control Plane.
+The request must use `Content-Type: application/json`, requires an `Idempotency-Key`, and contains the canonical target as `resource_ref`. Additional JSON members form the domain-owned command payload:
+
+```json
+{
+  "resource_ref": "widget_...",
+  "reason": "maintenance"
+}
+```
+
+The request identifies the canonical `resource_ref`. Mutating extension commands receive the same `RequestContext` used elsewhere by the Control Plane. Generated OpenAPI documents the JSON request body and required `resource_ref` field.
 
 The owning later-domain issue may also implement dedicated canonical routes once its own contract exists, as #10 does for Models. #32 itself does not guess those routes.
 
@@ -139,7 +148,7 @@ The owning later-domain issue may also implement dedicated canonical routes once
 - the OpenAPI URL;
 - the live-update mechanism.
 
-`GET /api/v1/openapi.json` generates OpenAPI 3.1 for the same current API. Future domains that have not been implemented or registered are absent.
+`GET /api/v1/openapi.json` generates OpenAPI 3.1 for the same current API. Future domains that have not been implemented or registered are absent. The specification documents the error statuses that the Control Plane can intentionally emit, including authentication, payload-size, media-type and semantic-validation failures.
 
 ## Query conventions
 
@@ -200,6 +209,7 @@ HTTP/API request failures use a separate canonical envelope:
 ```json
 {
   "code": "conflict",
+  "category": "conflict",
   "message": "human-readable explanation",
   "request_id": "request_...",
   "correlation_id": "corr_...",
@@ -207,6 +217,8 @@ HTTP/API request failures use a separate canonical envelope:
   "details": {}
 }
 ```
+
+Every API error has both a stable specific `code` and a stable broader `category`. Categories group errors without erasing the actionable code; examples include `validation`, `configuration`, `resource`, `availability`, `provider`, `conflict`, `timeout`, `capacity`, `authentication`, `authorization`, `contract` and `backend`.
 
 `ContractError` is mapped to HTTP status without exposing backend exception classes. Request and correlation IDs are returned in headers and in error bodies. Current canonical error codes have intentional HTTP mappings, including model-unavailable/no-route errors, invalid configuration, oversized input and invalid provider responses, rather than silently falling through to an accidental HTTP 500.
 
@@ -241,6 +253,6 @@ Health/readiness use canonical provider contracts and remain extensible for late
 - No browser/CLI canonical flow calls Hermes, Forge, LiteLLM, MCP or Workers directly.
 - Task/Run lifecycle authority remains in the canonical kernel.
 - Direct database mutations do not bypass application services.
-- Backend-private IDs/types remain implementation metadata.
+- Backend-private IDs/types remain implementation metadata and are rejected even when nested inside registered extension payloads.
 - Future resource schemas are defined by their owning domain issues, not speculatively by #32.
 - Missing future optional domains do not affect foundation startup.

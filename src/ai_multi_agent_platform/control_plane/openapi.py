@@ -289,7 +289,21 @@ def _query_parameters() -> list[dict[str, Any]]:
 def _error_responses() -> dict[str, Any]:
     return {
         status: {"$ref": "#/components/responses/Error"}
-        for status in ("400", "403", "404", "409", "415", "429", "500", "502", "503", "504")
+        for status in (
+            "400",
+            "401",
+            "403",
+            "404",
+            "409",
+            "413",
+            "415",
+            "422",
+            "429",
+            "500",
+            "502",
+            "503",
+            "504",
+        )
     }
 
 
@@ -309,9 +323,17 @@ def _schemas() -> dict[str, Any]:
     return {
         "APIError": {
             "type": "object",
-            "required": ["code", "message", "request_id", "correlation_id", "retryable"],
+            "required": [
+                "code",
+                "category",
+                "message",
+                "request_id",
+                "correlation_id",
+                "retryable",
+            ],
             "properties": {
                 "code": {"type": "string"},
+                "category": {"type": "string"},
                 "message": {"type": "string"},
                 "request_id": {"type": "string"},
                 "correlation_id": {"type": "string"},

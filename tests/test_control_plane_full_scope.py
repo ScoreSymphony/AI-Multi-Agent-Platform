@@ -51,6 +51,7 @@ def _stack(
 
 def _headers(*, key: str | None = None) -> dict[str, str]:
     headers = {
+        "Content-Type": "application/json",
         "X-Request-Id": "request-extension",
         "X-Correlation-Id": "correlation-extension",
         "X-Principal-Ref": "user:test",
