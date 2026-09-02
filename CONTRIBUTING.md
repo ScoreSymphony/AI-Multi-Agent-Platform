@@ -32,20 +32,35 @@ Concrete systems such as orchestrators, execution backends, model gateways, tool
 
 ## Third-party components
 
-Before adding or materially changing a third-party component:
+Before adding or materially changing an architecture-significant third-party component:
 
-- classify it according to `LICENSE_POLICY.md`;
-- verify its canonical upstream, exact version/tag/commit and current license;
-- update `docs/UPSTREAMS.md` when the component becomes approved or integrated;
-- preserve required notices for copied or modified source;
-- document why vendoring is necessary when a looser dependency/service boundary would work;
-- keep optional paid services replaceable and outside the baseline requirement.
+- classify all applicable integration modes using `LICENSE_POLICY.md`;
+- complete `docs/UPSTREAM_ADOPTION_CHECKLIST.md` for a new upstream;
+- verify the canonical upstream, exact version/tag/commit/deployed revision and current license;
+- review required notices and material transitive/bundled license concerns;
+- update `docs/UPSTREAMS.md` when the component becomes approved/integrated or its recorded state changes;
+- keep provenance metadata compatible with `upstream/PROVENANCE_TEMPLATE.yaml`;
+- preserve required notices and traceable origin information for copied, modified, vendored, forked or selectively ported source;
+- document why copying/vendoring/forking/porting is necessary when a looser dependency/service/adapter boundary would work;
+- document platform adapter/boundary, compatibility constraints, update method and exit/replacement strategy;
+- keep optional paid services replaceable and outside the baseline requirement;
+- add an ADR when an upstream change materially changes canonical architecture.
 
 If provenance or license compatibility is unclear, do not copy the source into the repository until the uncertainty is resolved.
 
+Architecture-significant upstream changes must follow `docs/UPSTREAM_UPDATE_WORKFLOW.md`; they may not be silently replaced because a newer release exists.
+
+Standard build/development packages are tracked separately from architecture-significant integrations in `docs/UPSTREAMS.md`, but they remain subject to their package licenses and normal dependency review.
+
+## Coding agents
+
+Coding agents are contributors for policy purposes. When an agent adds, removes, upgrades, vendors, forks, ports, or materially changes a third-party integration, it must update the same provenance, registry, notices, tests, and architecture documentation required of a human contributor.
+
+Agents must not infer that an upstream is safe to copy merely because it is public or open source, and must not silently swap architecture-significant upstreams without explicit review.
+
 ## Scope discipline
 
-Do not mix unrelated issue work into the same pull request. Do not introduce a new third-party dependency before its role, license, provenance and replaceability have been reviewed.
+Do not mix unrelated issue work into the same pull request. Do not introduce a new third-party dependency before its role, license, provenance and replaceability have been reviewed at the level appropriate to its architecture impact.
 
 ## Secrets and configuration
 
