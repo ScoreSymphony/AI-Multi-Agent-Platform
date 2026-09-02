@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from enum import StrEnum
+from enum import Enum, StrEnum
 from types import MappingProxyType
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -28,10 +28,14 @@ CANONICAL_SUBJECT_PREFIXES: Mapping[str, str] = MappingProxyType(
         "worker": "worker",
         "worker_job": "worker_job",
         "tool": "tool",
+        "tool_invocation": "tool_invocation",
         "capability": "cap",
+        "policy_scope": "policy_scope",
         "model_assignment": "model_assignment",
     }
 )
+
+IMMUTABLE_LEAF_TYPES = (str, bytes, int, float, bool, type(None), datetime, UUID, Enum)
 
 
 def utc_now() -> datetime:
@@ -80,7 +84,9 @@ def _deep_freeze(value: Any) -> Any:
         return tuple(_deep_freeze(item) for item in value)
     if isinstance(value, set | frozenset):
         return frozenset(_deep_freeze(item) for item in value)
-    return value
+    if isinstance(value, IMMUTABLE_LEAF_TYPES):
+        return value
+    raise TypeError(f"unsupported mutable or noncanonical metadata value: {type(value).__name__}")
 
 
 def _freeze_mapping_field(instance: object, name: str) -> None:
@@ -506,6 +512,26 @@ class Capability:
 
 
 @dataclass(frozen=True, kw_only=True)
+class PolicyScope:
+    name: str
+    owner_ref: OwnerRef
+    id: str = field(default_factory=lambda: new_id("policy_scope"))
+    criteria: Mapping[str, Any] = field(default_factory=dict)
+    project_id: str | None = None
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
+    schema_version: str = SCHEMA_VERSION
+    provenance: Provenance | None = None
+    external_refs: tuple[ExternalRef, ...] = ()
+
+    def __post_init__(self) -> None:
+        validate_id(self.id, "policy_scope")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
+        _freeze_mapping_field(self, "criteria")
+
+
+@dataclass(frozen=True, kw_only=True)
 class Tool:
     name: str
     owner_ref: OwnerRef
@@ -527,8 +553,29 @@ class Tool:
 
 
 @dataclass(frozen=True, kw_only=True)
+class ToolInvocation:
+    tool_id: str
+    owner_ref: OwnerRef
+    id: str = field(default_factory=lambda: new_id("tool_invocation"))
+    project_id: str | None = None
+    correlation_id: str | None = None
+    causation_id: str | None = None
+    trace_id: str | None = None
+    created_at: datetime = field(default_factory=utc_now)
+    schema_version: str = SCHEMA_VERSION
+    provenance: Provenance | None = None
+    external_refs: tuple[ExternalRef, ...] = ()
+
+    def __post_init__(self) -> None:
+        validate_id(self.id, "tool_invocation")
+        validate_id(self.tool_id, "tool")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
+
+
+@dataclass(frozen=True, kw_only=True)
 class ModelAssignment:
-    subject_type: Literal["agent", "task", "step"]
+    subject_type: Literal["agent", "task", "step", "capability", "policy"]
     subject_id: str
     owner_ref: OwnerRef
     requirements: Mapping[str, Any]
@@ -543,7 +590,10 @@ class ModelAssignment:
 
     def __post_init__(self) -> None:
         validate_id(self.id, "model_assignment")
-        validate_subject_id(self.subject_type, self.subject_id)
+        if self.subject_type == "policy":
+            validate_id(self.subject_id, "policy_scope")
+        else:
+            validate_subject_id(self.subject_type, self.subject_id)
         _validate_optional_id(self.project_id, "project")
         _freeze_tuple_field(self, "external_refs")
         _freeze_mapping_field(self, "requirements")
