@@ -66,7 +66,10 @@ class RecordingTransport:
                 "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
                 "choices": [
                     {
-                        "message": {"role": "assistant", "content": "local answer"},
+                        "message": {
+                            "role": "assistant",
+                            "content": '{"answer":"local answer"}',
+                        },
                         "finish_reason": "stop",
                     }
                 ],
@@ -158,7 +161,7 @@ def test_runtime_routes_canonical_model_then_provider_resolves_native_name() -> 
         )
     )
 
-    assert response.text == "local answer"
+    assert response.text == '{"answer":"local answer"}'
     assert response.model_ref == "model-local-coder"
     assert response.usage["total_tokens"] == 7
     assert response.adapter_metadata[-1].namespace == "platform-model-runtime"
