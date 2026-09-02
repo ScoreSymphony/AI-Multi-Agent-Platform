@@ -24,6 +24,16 @@ def _freeze_json(value: JsonValue) -> FrozenJsonValue:
     return value
 
 
+def _thaw_json(value: FrozenJsonValue) -> JsonValue:
+    """Copy an immutable JSON value back to a standard JSON-serializable value."""
+
+    if isinstance(value, Mapping):
+        return {key: _thaw_json(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw_json(item) for item in value]
+    return value
+
+
 class CapabilityKind(StrEnum):
     """Broad, implementation-neutral capability categories."""
 
@@ -206,6 +216,11 @@ class ToolInvocation:
             {key: _freeze_json(value) for key, value in dict(self.arguments).items()}
         )
         object.__setattr__(self, "arguments", frozen)
+
+    def arguments_json(self) -> dict[str, JsonValue]:
+        """Return a detached, standard JSON-serializable copy for provider transport."""
+
+        return {key: _thaw_json(value) for key, value in self.arguments.items()}
 
 
 @dataclass(frozen=True, slots=True)
