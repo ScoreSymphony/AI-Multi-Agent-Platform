@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TypeVar
 
 from .models import ApprovalStatus, RunStatus, StepStatus, TaskStatus, WorkerJobStatus
-
-StatusT = TypeVar("StatusT", bound=StrEnum)
 
 TASK_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
     TaskStatus.DRAFT: frozenset({TaskStatus.READY, TaskStatus.CANCELLED}),
@@ -84,13 +81,13 @@ WORKER_JOB_TRANSITIONS: dict[WorkerJobStatus, frozenset[WorkerJobStatus]] = {
 }
 
 
-def can_transition(
+def can_transition[StatusT: StrEnum](
     current: StatusT, target: StatusT, transitions: dict[StatusT, frozenset[StatusT]]
 ) -> bool:
     return target in transitions[current]
 
 
-def require_transition(
+def require_transition[StatusT: StrEnum](
     current: StatusT, target: StatusT, transitions: dict[StatusT, frozenset[StatusT]]
 ) -> None:
     if not can_transition(current, target, transitions):
