@@ -15,7 +15,12 @@ from ai_multi_agent_platform.contracts import (
     WorkerDescriptor,
 )
 from ai_multi_agent_platform.contracts.types import ExecutionRequest
-from ai_multi_agent_platform.control_plane import ActorContext, ControlPlane, PageQuery, RequestContext
+from ai_multi_agent_platform.control_plane import (
+    ActorContext,
+    ControlPlane,
+    PageQuery,
+    RequestContext,
+)
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.messaging import (
