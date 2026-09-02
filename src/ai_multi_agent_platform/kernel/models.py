@@ -35,6 +35,7 @@ class TaskState:
     task: Task
     revision: int
     plan_ref: str | None = None
+    step_ids: tuple[str, ...] = ()
     run_ids: tuple[str, ...] = ()
     artifact_ids: tuple[str, ...] = ()
     result_ids: tuple[str, ...] = ()

@@ -19,6 +19,7 @@ from ai_multi_agent_platform.domain import (
     Task,
     TaskStatus,
     require_transition,
+    validate_id,
 )
 
 from .models import RunState, TaskState
@@ -134,6 +135,7 @@ def _transition_run(run: Run, target: RunStatus, event: PlatformEvent) -> Run:
 def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
     task: Task | None = None
     plan_ref: str | None = None
+    step_ids: tuple[str, ...] = ()
     run_ids: list[str] = []
     artifact_ids: list[str] = []
     result_ids: list[str] = []
@@ -209,6 +211,28 @@ def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
 
         if event.event_type == "plan.created" and event.subject_id == task_id:
             plan_ref = _string(event, "plan_ref")
+            raw_step_refs = event.payload.get("step_refs", ())
+            if not isinstance(raw_step_refs, (list, tuple)):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "plan.created step_refs must be a sequence",
+                )
+            validated_step_ids: list[str] = []
+            for step_id in raw_step_refs:
+                if not isinstance(step_id, str):
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "plan.created step_refs must contain canonical Step IDs",
+                    )
+                try:
+                    validate_id(step_id, "step")
+                except ValueError as exc:
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "plan.created contains an invalid canonical Step ID",
+                    ) from exc
+                validated_step_ids.append(step_id)
+            step_ids = tuple(validated_step_ids)
             continue
 
         if event.event_type == "run.created" and _string(event, "task_id") == task_id:
@@ -234,6 +258,7 @@ def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
         task=task,
         revision=len(events),
         plan_ref=plan_ref,
+        step_ids=step_ids,
         run_ids=tuple(run_ids),
         artifact_ids=tuple(artifact_ids),
         result_ids=tuple(result_ids),
