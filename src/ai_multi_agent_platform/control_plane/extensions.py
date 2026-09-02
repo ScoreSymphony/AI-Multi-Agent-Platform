@@ -468,10 +468,7 @@ def _validate_extension_collection(collection: str) -> None:
     if collection in _RESERVED_COLLECTIONS:
         raise ValueError(f"extension collection conflicts with an existing route: {collection}")
     if _COLLECTION_PATTERN.fullmatch(collection) is None:
-        raise ValueError(
-            "extension collection must use lowercase URL-safe names "
-            "([a-z][a-z0-9-]*)"
-        )
+        raise ValueError("extension collection must use lowercase URL-safe names ([a-z][a-z0-9-]*)")
 
 
 def _validate_command_name(command: str) -> None:
