@@ -12,9 +12,7 @@ from .models import RunView, TaskStatus, TaskView
 _TASK_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
     TaskStatus.DRAFT: frozenset({TaskStatus.READY, TaskStatus.CANCELLED}),
     TaskStatus.READY: frozenset({TaskStatus.RUNNING, TaskStatus.CANCELLED}),
-    TaskStatus.RUNNING: frozenset(
-        {TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED}
-    ),
+    TaskStatus.RUNNING: frozenset({TaskStatus.SUCCEEDED, TaskStatus.FAILED, TaskStatus.CANCELLED}),
     TaskStatus.SUCCEEDED: frozenset(),
     TaskStatus.FAILED: frozenset({TaskStatus.READY}),
     TaskStatus.CANCELLED: frozenset(),
