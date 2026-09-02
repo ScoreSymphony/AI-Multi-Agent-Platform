@@ -20,7 +20,7 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .models import RunView, TERMINAL_RUN_STATUSES, TERMINAL_TASK_STATUSES, TaskStatus, TaskView
+from .models import TERMINAL_RUN_STATUSES, TERMINAL_TASK_STATUSES, RunView, TaskStatus, TaskView
 from .state import reduce_run, reduce_task
 
 
