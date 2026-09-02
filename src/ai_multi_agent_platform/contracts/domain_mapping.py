@@ -28,6 +28,19 @@ def tool_arguments_digest(arguments: dict[str, JsonValue]) -> str:
     return f"sha256:{hashlib.sha256(serialized.encode('utf-8')).hexdigest()}"
 
 
+def _validate_security_context(
+    invocation: ContractToolInvocation,
+    *,
+    owner_ref: OwnerRef,
+    canonical_project_id: str | None,
+) -> None:
+    context = invocation.context
+    if context.owner_type != owner_ref.type or context.owner_id != owner_ref.id:
+        raise ValueError("tool invocation ownership context does not match canonical owner")
+    if context.project_id != canonical_project_id:
+        raise ValueError("tool invocation project context does not match canonical project")
+
+
 def map_tool_invocation_to_domain(
     invocation: ContractToolInvocation,
     *,
@@ -40,10 +53,9 @@ def map_tool_invocation_to_domain(
 
     Contract-level ``invocation_id`` and ``tool_ref`` values may be backend/provider
     handles, so they are retained only as external references. The caller supplies the
-    already-resolved canonical Tool (and optional Project) identity. A deterministic
-    digest of the exact argument payload is retained alongside those references so an
-    Approval/Event for the canonical invocation cannot silently authorize later-mutated
-    arguments.
+    already-resolved canonical Tool (and optional Project) identity. The exact immutable
+    argument snapshot is represented by a deterministic digest on the canonical Tool
+    Invocation so an Approval/Event cannot authorize a different later payload.
     """
 
     validate_id(canonical_tool_id, "tool")
@@ -51,6 +63,11 @@ def map_tool_invocation_to_domain(
         validate_id(canonical_project_id, "project")
     if not provider_namespace.strip():
         raise ValueError("provider_namespace must not be blank")
+    _validate_security_context(
+        invocation,
+        owner_ref=owner_ref,
+        canonical_project_id=canonical_project_id,
+    )
 
     return DomainToolInvocation(
         tool_id=canonical_tool_id,
@@ -58,6 +75,7 @@ def map_tool_invocation_to_domain(
         project_id=canonical_project_id,
         correlation_id=invocation.context.correlation_id,
         causation_id=invocation.context.causation_id,
+        arguments_digest=tool_arguments_digest(invocation.arguments),
         external_refs=(
             ExternalRef(
                 system=provider_namespace,
@@ -69,11 +87,6 @@ def map_tool_invocation_to_domain(
                 kind="tool_ref",
                 value=invocation.tool_ref,
             ),
-            ExternalRef(
-                system="platform",
-                kind="arguments_sha256",
-                value=tool_arguments_digest(invocation.arguments),
-            ),
         ),
     )
 
@@ -81,15 +94,29 @@ def map_tool_invocation_to_domain(
 def validate_tool_invocation_binding(
     invocation: ContractToolInvocation,
     canonical_invocation: DomainToolInvocation,
+    *,
+    provider_namespace: str,
 ) -> None:
-    """Reject execution when a contract invocation no longer matches its approved identity."""
+    """Reject execution when a provider call differs from its governed identity."""
 
-    refs = {(ref.kind, ref.value) for ref in canonical_invocation.external_refs}
-    if ("invocation_id", invocation.invocation_id) not in refs:
-        raise ValueError("tool invocation id does not match canonical governed invocation")
-    if ("tool_ref", invocation.tool_ref) not in refs:
-        raise ValueError("tool reference does not match canonical governed invocation")
+    if not provider_namespace.strip():
+        raise ValueError("provider_namespace must not be blank")
+    _validate_security_context(
+        invocation,
+        owner_ref=canonical_invocation.owner_ref,
+        canonical_project_id=canonical_invocation.project_id,
+    )
+    if invocation.context.correlation_id != canonical_invocation.correlation_id:
+        raise ValueError("tool invocation correlation context changed after governance binding")
+    if invocation.context.causation_id != canonical_invocation.causation_id:
+        raise ValueError("tool invocation causation context changed after governance binding")
+
+    refs = {(ref.system, ref.kind, ref.value) for ref in canonical_invocation.external_refs}
+    if (provider_namespace, "invocation_id", invocation.invocation_id) not in refs:
+        raise ValueError("tool invocation id/provider does not match canonical governed invocation")
+    if (provider_namespace, "tool_ref", invocation.tool_ref) not in refs:
+        raise ValueError("tool reference/provider does not match canonical governed invocation")
 
     expected_digest = tool_arguments_digest(invocation.arguments)
-    if ("arguments_sha256", expected_digest) not in refs:
+    if canonical_invocation.arguments_digest != expected_digest:
         raise ValueError("tool invocation arguments changed after governance binding")
