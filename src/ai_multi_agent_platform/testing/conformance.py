@@ -290,14 +290,13 @@ async def assert_event_provider_contract(
     if tuple(event.event_id for event in after) != (second.event_id,):
         raise AssertionError("event read cursor must preserve stable event ordering")
 
-    streamed = tuple(
-        event.event_id
-        async for event in provider.subscribe(
-            context.correlation_id,
-            after_event_id=first.event_id,
-        )
-    )
-    if streamed != (second.event_id,):
+    streamed_ids: list[str] = []
+    async for event in provider.subscribe(
+        context.correlation_id,
+        after_event_id=first.event_id,
+    ):
+        streamed_ids.append(event.event_id)
+    if tuple(streamed_ids) != (second.event_id,):
         raise AssertionError("event subscription must honor the canonical cursor")
     for event in after:
         assert_namespaced_adapter_metadata(event.adapter_metadata)
