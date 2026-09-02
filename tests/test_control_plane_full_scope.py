@@ -152,9 +152,7 @@ def test_registered_extension_resource_updates_manifest_openapi_and_routes() -> 
             "timeline",
         ]
 
-        openapi_response = await http.handle(
-            HTTPRequest(method="GET", path="/api/v1/openapi.json")
-        )
+        openapi_response = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
         assert openapi_response.status == 200
         assert isinstance(openapi_response.body, dict)
         paths = openapi_response.body["paths"]
@@ -229,9 +227,7 @@ def test_registered_command_receives_actor_correlation_and_idempotency_context()
         assert isinstance(manifest.body, dict)
         assert manifest.body["commands"] == ["widget.refresh"]
 
-        openapi_response = await http.handle(
-            HTTPRequest(method="GET", path="/api/v1/openapi.json")
-        )
+        openapi_response = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
         assert isinstance(openapi_response.body, dict)
         paths = openapi_response.body["paths"]
         assert isinstance(paths, dict)
