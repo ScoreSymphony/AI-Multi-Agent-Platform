@@ -29,6 +29,17 @@ def _freeze_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
     return MappingProxyType(dict(value))
 
 
+def _validate_compatibility_version(value: str, field_name: str) -> None:
+    """Validate the numeric version subset used for canonical compatibility matching."""
+
+    parts = value.split(".")
+    if not 1 <= len(parts) <= 3 or any(not part.isdigit() for part in parts):
+        raise ValueError(
+            f"{field_name} must be a one-to-three-part dotted numeric version; "
+            "use exact version matching for other version identifiers"
+        )
+
+
 class SafetyClassification(StrEnum):
     """Platform-level safety sensitivity for a capability."""
 
@@ -44,6 +55,13 @@ class SideEffectClassification(StrEnum):
     LOCAL_WRITE = "local_write"
     EXTERNAL = "external"
     DESTRUCTIVE = "destructive"
+
+
+class CredentialRequirement(StrEnum):
+    """Backend-neutral classification for capabilities that require credentials."""
+
+    NONE = "none"
+    REQUIRED = "required"
 
 
 class PolicyDecision(StrEnum):
@@ -66,6 +84,47 @@ class InvocationStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class CapabilityCompatibilityRequest:
+    """Canonical request for deterministic version/feature compatibility resolution.
+
+    Compatibility ranges intentionally use a small, provider-independent numeric version
+    subset. Arbitrary provider version labels remain supported through exact ``version``
+    matching, but the platform never guesses ordering/compatibility for those labels.
+    """
+
+    minimum_version: str | None = None
+    maximum_version: str | None = None
+    include_minimum: bool = True
+    include_maximum: bool = False
+    required_features: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if (
+            self.minimum_version is None
+            and self.maximum_version is None
+            and not self.required_features
+        ):
+            raise ValueError("compatibility request must contain a version bound or feature")
+        if self.minimum_version is not None:
+            if not self.minimum_version.strip():
+                raise ValueError("minimum_version must not be blank")
+            _validate_compatibility_version(self.minimum_version, "minimum_version")
+        if self.maximum_version is not None:
+            if not self.maximum_version.strip():
+                raise ValueError("maximum_version must not be blank")
+            _validate_compatibility_version(self.maximum_version, "maximum_version")
+        if self.minimum_version is not None and self.maximum_version is not None:
+            minimum = _numeric_version_key(self.minimum_version)
+            maximum = _numeric_version_key(self.maximum_version)
+            if minimum > maximum:
+                raise ValueError("minimum_version must not be greater than maximum_version")
+        if any(not feature.strip() for feature in self.required_features):
+            raise ValueError("required_features must not contain blank values")
+        if len(set(self.required_features)) != len(self.required_features):
+            raise ValueError("required_features must not contain duplicates")
+
+
+@dataclass(frozen=True, slots=True)
 class CapabilitySpec:
     """Backend-neutral definition of one invokable platform capability."""
 
@@ -84,6 +143,8 @@ class CapabilitySpec:
     timeout_seconds: float | None = None
     health: HealthStatus = HealthStatus.UNKNOWN
     available: bool = True
+    features: tuple[str, ...] = ()
+    credential_requirement: CredentialRequirement = CredentialRequirement.NONE
 
     def __post_init__(self) -> None:
         if not self.capability_id.strip():
@@ -94,6 +155,10 @@ class CapabilitySpec:
             raise ValueError("capability version must not be blank")
         if self.timeout_seconds is not None and self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be greater than zero")
+        if any(not feature.strip() for feature in self.features):
+            raise ValueError("features must not contain blank values")
+        if len(set(self.features)) != len(self.features):
+            raise ValueError("features must not contain duplicates")
         object.__setattr__(self, "input_schema", _freeze_mapping(self.input_schema))
         if self.output_schema is not None:
             object.__setattr__(self, "output_schema", _freeze_mapping(self.output_schema))
@@ -144,6 +209,15 @@ class InvocationTrace:
 
 
 @dataclass(frozen=True, slots=True)
+class CapabilityDiscoveryRequest:
+    """Canonical caller/scope context used for policy-aware capability discovery."""
+
+    context: OperationContext
+    granted_permissions: frozenset[str] = frozenset()
+    available_worker_capabilities: frozenset[str] = frozenset()
+
+
+@dataclass(frozen=True, slots=True)
 class CapabilityInvocation:
     """Canonical capability request before provider-specific tool resolution."""
 
@@ -153,6 +227,7 @@ class CapabilityInvocation:
     context: OperationContext
     trace: InvocationTrace
     version: str | None = None
+    compatibility: CapabilityCompatibilityRequest | None = None
     granted_permissions: frozenset[str] = frozenset()
     available_worker_capabilities: frozenset[str] = frozenset()
 
@@ -163,6 +238,8 @@ class CapabilityInvocation:
             raise ValueError("capability_id must not be blank")
         if self.version is not None and not self.version.strip():
             raise ValueError("version must not be blank")
+        if self.version is not None and self.compatibility is not None:
+            raise ValueError("version and compatibility are mutually exclusive")
         if self.trace.correlation_id != self.context.correlation_id:
             raise ValueError("trace/context correlation_id must match")
         if self.trace.causation_id != self.context.causation_id:
@@ -229,3 +306,10 @@ class InvocationRecord:
             validate_id(self.worker_id, "worker")
         if self.approval_decision is not None and not self.approval_decision.strip():
             raise ValueError("approval_decision must not be blank")
+
+
+def _numeric_version_key(version: str) -> tuple[int, int, int]:
+    """Normalize a validated one-to-three-part dotted numeric version."""
+
+    parts = tuple(int(part) for part in version.split("."))
+    return (parts + (0, 0, 0))[:3]
