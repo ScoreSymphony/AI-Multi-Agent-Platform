@@ -100,8 +100,7 @@ class FakeLifecycleBackend(LifecycleBackend):
             raise ContractError(ErrorCode.NOT_FOUND, f"Run not found: {run_id}") from exc
 
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        del context
-        current = await self.get(run_id, OperationContext(correlation_id="fake-cancel"))
+        current = await self.get(run_id, context)
         cancelled = ExecutionSnapshot(run_id=current.run_id, status="cancelled")
         self._runs[run_id] = cancelled
         return cancelled
@@ -158,7 +157,8 @@ class FakeMemoryProvider(MemoryProvider):
         try:
             return self._values[(namespace, key)]
         except KeyError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, f"Memory key not found: {namespace}/{key}") from exc
+            message = f"Memory key not found: {namespace}/{key}"
+            raise ContractError(ErrorCode.NOT_FOUND, message) from exc
 
 
 class FakeFileProvider(FileProvider):
