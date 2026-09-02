@@ -84,6 +84,8 @@ def _deep_freeze(value: Any) -> Any:
         return tuple(_deep_freeze(item) for item in value)
     if isinstance(value, set | frozenset):
         return frozenset(_deep_freeze(item) for item in value)
+    if isinstance(value, Enum):
+        return _deep_freeze(value.value)
     if isinstance(value, IMMUTABLE_LEAF_TYPES):
         return value
     raise TypeError(f"unsupported mutable or noncanonical metadata value: {type(value).__name__}")
