@@ -13,6 +13,7 @@ from .types import (
     AuthorizationDecision,
     AuthorizationRequest,
     Capability,
+    CapabilityKind,
     ExecutionHandle,
     ExecutionRequest,
     ExecutionSnapshot,
@@ -46,6 +47,19 @@ class ProviderContract(ABC):
         """Return provider capabilities without exposing private backend state."""
 
         return self.descriptor.capabilities
+
+
+class CapabilityProvider(ProviderContract):
+    """Lists normalized capabilities across one registry/source."""
+
+    @abstractmethod
+    async def list_capabilities(
+        self,
+        context: OperationContext,
+        *,
+        kind: CapabilityKind | None = None,
+    ) -> tuple[Capability, ...]:
+        """Return capabilities, optionally filtered by broad kind."""
 
 
 class Orchestrator(ProviderContract):
