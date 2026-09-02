@@ -26,6 +26,10 @@ A fresh-clone setup and the validation commands are documented in [`docs/DEVELOP
 
 Repository-level integration boundaries are reserved under `adapters/`, `workers/` and `frontend/`; concrete contracts are intentionally deferred to the numbered architecture issues.
 
+## Licensing and upstream components
+
+Project-owned source is distributed under the MIT License in [`LICENSE`](LICENSE). Rules for third-party source, dependencies, services and adapters live in [`LICENSE_POLICY.md`](LICENSE_POLICY.md). The canonical provenance inventory is [`docs/UPSTREAMS.md`](docs/UPSTREAMS.md), and updates follow [`docs/UPSTREAM_UPDATE_WORKFLOW.md`](docs/UPSTREAM_UPDATE_WORKFLOW.md).
+
 ## Status
 
 The repository is at its initial architecture/bootstrap stage. Implementation work should follow the numbered GitHub issues in order unless an explicit dependency decision changes that order.
