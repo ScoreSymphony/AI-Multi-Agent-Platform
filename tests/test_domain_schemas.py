@@ -7,7 +7,7 @@ from jsonschema import Draft202012Validator, ValidationError
 from referencing import Registry, Resource
 
 SCHEMA_DIR = Path(__file__).parents[1] / "schemas" / "domain"
-SCHEMA_NAMES = ("common", "task", "run", "event")
+SCHEMA_NAMES = ("common", "task", "run", "event", "event.v2")
 
 
 def _load_schemas() -> dict[str, dict[str, Any]]:
@@ -65,10 +65,10 @@ def _run(**overrides: Any) -> dict[str, Any]:
     return run
 
 
-def _event(**overrides: Any) -> dict[str, Any]:
+def _event(*, version: str = "1.0", **overrides: Any) -> dict[str, Any]:
     event: dict[str, Any] = {
         "id": "event_123e4567-e89b-12d3-a456-426614174002",
-        "schema_version": "1.0",
+        "schema_version": version,
         "event_type": "task.ready",
         "occurred_at": "2026-09-02T16:00:00Z",
         "subject_type": "task",
@@ -111,18 +111,40 @@ def test_canonical_step_run_example_validates() -> None:
     )
 
 
-def test_canonical_event_example_validates() -> None:
-    _validator("event").validate(_event())
-
-
-def test_policy_scope_event_example_validates() -> None:
+def test_event_v1_remains_backward_compatible_with_nonempty_subjects() -> None:
     _validator("event").validate(
         _event(
+            subject_type="legacy_adapter_subject",
+            subject_id="legacy-subject-42",
+        )
+    )
+
+
+def test_event_v2_validates_canonical_subject_relationships() -> None:
+    _validator("event.v2").validate(_event(version="2.0"))
+    _validator("event.v2").validate(
+        _event(
+            version="2.0",
             event_type="policy_scope.updated",
             subject_type="policy_scope",
             subject_id="policy_scope_123e4567-e89b-12d3-a456-426614174011",
         )
     )
+    _validator("event.v2").validate(
+        _event(
+            version="2.0",
+            event_type="tool_invocation.requested",
+            subject_type="tool_invocation",
+            subject_id="tool_invocation_123e4567-e89b-12d3-a456-426614174012",
+        )
+    )
+
+
+def test_event_versions_are_explicit_and_non_interchangeable() -> None:
+    with pytest.raises(ValidationError):
+        _validator("event").validate(_event(version="2.0"))
+    with pytest.raises(ValidationError):
+        _validator("event.v2").validate(_event(version="1.0"))
 
 
 def test_task_rejects_backend_specific_status() -> None:
@@ -145,21 +167,26 @@ def test_run_rejects_step_id_when_subject_type_is_task() -> None:
         _validator("run").validate(_run(subject_id="step_123e4567-e89b-12d3-a456-426614174003"))
 
 
-def test_event_rejects_backend_specific_subject_id() -> None:
+def test_event_v2_rejects_backend_specific_subject_id() -> None:
     with pytest.raises(ValidationError):
-        _validator("event").validate(_event(subject_id="backend-task-42"))
+        _validator("event.v2").validate(
+            _event(version="2.0", subject_id="backend-task-42")
+        )
 
 
-def test_event_rejects_subject_type_id_mismatch() -> None:
+def test_event_v2_rejects_subject_type_id_mismatch() -> None:
     with pytest.raises(ValidationError):
-        _validator("event").validate(
+        _validator("event.v2").validate(
             _event(
+                version="2.0",
                 subject_type="run",
                 subject_id="task_123e4567-e89b-12d3-a456-426614174000",
             )
         )
 
 
-def test_event_rejects_backend_specific_subject_type() -> None:
+def test_event_v2_rejects_backend_specific_subject_type() -> None:
     with pytest.raises(ValidationError):
-        _validator("event").validate(_event(subject_type="forge_job"))
+        _validator("event.v2").validate(
+            _event(version="2.0", subject_type="forge_job")
+        )
