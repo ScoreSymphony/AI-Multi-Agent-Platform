@@ -1035,10 +1035,12 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                 f"local knowledge provider does not support {request.mode.value} search",
             )
         source_ids = request.source_ids
+        sources: tuple[KnowledgeSource, ...]
         if source_ids:
-            sources = tuple(
-                await self._get_source(source_id, request.context) for source_id in source_ids
-            )
+            resolved_sources: list[KnowledgeSource] = []
+            for source_id in source_ids:
+                resolved_sources.append(await self._get_source(source_id, request.context))
+            sources = tuple(resolved_sources)
         else:
             sources = await self._list_sources(request.context)
         active = tuple(source for source in sources if source.status is not KnowledgeStatus.REMOVED)
