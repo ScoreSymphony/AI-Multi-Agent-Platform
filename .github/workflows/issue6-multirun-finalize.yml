@@ -20,6 +20,10 @@ jobs:
           python-version: "3.12"
       - name: Apply multi-run lifecycle fixes
         run: python .github/issue6_multirun_fix.py
+      - name: Remove temporary files from final tree
+        run: |
+          rm .github/workflows/issue6-multirun-finalize.yml
+          rm .github/issue6_multirun_fix.py
       - name: Validate repository
         shell: bash
         run: |
@@ -31,11 +35,9 @@ jobs:
           mypy
           pytest
           python -m build
-      - name: Remove temporary files and commit validated fixes
+      - name: Commit validated fixes
         shell: bash
         run: |
-          rm .github/workflows/issue6-multirun-finalize.yml
-          rm .github/issue6_multirun_fix.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/ai_multi_agent_platform/kernel/kernel.py tests/test_kernel_consistency.py docs/KERNEL.md .github/workflows/issue6-multirun-finalize.yml .github/issue6_multirun_fix.py
