@@ -17,6 +17,7 @@ from .types import (
     ExecutionHandle,
     ExecutionRequest,
     ExecutionSnapshot,
+    HealthStatus,
     JsonValue,
     KnowledgeHit,
     KnowledgeQuery,
@@ -48,6 +49,11 @@ class ProviderContract(ABC):
 
         return self.descriptor.capabilities
 
+    async def health(self) -> HealthStatus:
+        """Return normalized provider health without exposing backend probes."""
+
+        return self.descriptor.health
+
 
 class CapabilityProvider(ProviderContract):
     """Lists normalized capabilities across one registry/source."""
@@ -75,7 +81,11 @@ class LifecycleBackend(ProviderContract):
 
     @abstractmethod
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
-        """Start one canonical execution attempt."""
+        """Start one canonical execution attempt.
+
+        Repeating a request with the same canonical Run ID and idempotency key
+        must not intentionally create a second execution attempt.
+        """
 
     @abstractmethod
     async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
@@ -83,7 +93,11 @@ class LifecycleBackend(ProviderContract):
 
     @abstractmethod
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        """Request cancellation of a canonical run."""
+        """Request cancellation of a canonical run.
+
+        Cancellation is idempotent. Repeated cancellation returns the current
+        terminal snapshot or another normalized snapshot for the same Run ID.
+        """
 
 
 class ModelProvider(ProviderContract):
@@ -151,11 +165,24 @@ class FileProvider(ProviderContract):
 
 
 class KnowledgeProvider(ProviderContract):
-    """Queries a replaceable knowledge/index backend."""
+    """Indexes, searches and retrieves through a replaceable knowledge backend."""
+
+    @abstractmethod
+    async def index(
+        self,
+        source_ref: str,
+        content: str,
+        context: OperationContext,
+    ) -> StoredObject:
+        """Index canonical knowledge content under a stable source reference."""
 
     @abstractmethod
     async def query(self, request: KnowledgeQuery) -> tuple[KnowledgeHit, ...]:
         """Return normalized knowledge hits."""
+
+    @abstractmethod
+    async def get(self, source_ref: str, context: OperationContext) -> KnowledgeHit:
+        """Retrieve one indexed knowledge source by canonical reference."""
 
 
 class EventProvider(ProviderContract):
@@ -184,7 +211,15 @@ class AuthorizationProvider(ProviderContract):
 
 
 class NodeProvider(ProviderContract):
-    """Discovers compute nodes participating in the platform."""
+    """Registers and discovers compute nodes participating in the platform."""
+
+    @abstractmethod
+    async def register_node(
+        self,
+        node: NodeDescriptor,
+        context: OperationContext,
+    ) -> NodeDescriptor:
+        """Register or refresh one canonical node descriptor."""
 
     @abstractmethod
     async def list_nodes(self, context: OperationContext) -> tuple[NodeDescriptor, ...]:
@@ -192,7 +227,15 @@ class NodeProvider(ProviderContract):
 
 
 class WorkerProvider(ProviderContract):
-    """Discovers workers and dispatches canonical execution requests."""
+    """Registers/discovers workers and dispatches canonical execution requests."""
+
+    @abstractmethod
+    async def register_worker(
+        self,
+        worker: WorkerDescriptor,
+        context: OperationContext,
+    ) -> WorkerDescriptor:
+        """Register or refresh one canonical worker descriptor."""
 
     @abstractmethod
     async def list_workers(self, context: OperationContext) -> tuple[WorkerDescriptor, ...]:
