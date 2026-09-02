@@ -33,6 +33,7 @@ from ai_multi_agent_platform.domain import (
     Task,
     TaskStatus,
     Tool,
+    ToolInvocation,
     Worker,
     WorkerJob,
     WorkerJobStatus,
@@ -336,6 +337,32 @@ def test_model_assignment_supports_capability_and_policy_scopes() -> None:
             subject_id="backend-policy-default",
             owner_ref=OWNER,
             requirements={},
+        )
+
+
+def test_approval_can_target_one_canonical_tool_invocation() -> None:
+    tool = Tool(name="filesystem-write", owner_ref=OWNER)
+    invocation = ToolInvocation(
+        tool_id=tool.id,
+        owner_ref=OWNER,
+        correlation_id="corr-tool-call",
+    )
+    approval = Approval(
+        subject_type="tool_invocation",
+        subject_id=invocation.id,
+        owner_ref=OWNER,
+        reason="Approve this exact sensitive invocation",
+    )
+
+    validate_id(invocation.id, "tool_invocation")
+    assert approval.subject_id == invocation.id
+    assert approval.subject_id != tool.id
+
+    with pytest.raises(ValueError):
+        Approval(
+            subject_type="tool_invocation",
+            subject_id="provider-call-42",
+            owner_ref=OWNER,
         )
 
 
