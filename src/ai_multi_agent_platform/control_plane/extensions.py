@@ -8,7 +8,7 @@ domains are therefore registered explicitly instead of being predeclared here.
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Mapping
+from collections.abc import Awaitable, Mapping, Sequence
 from copy import deepcopy
 from typing import Any, Protocol, runtime_checkable
 from uuid import uuid4
@@ -31,6 +31,7 @@ from .http import (
     _header,
     _page_query,
     _request_context,
+    _require_json,
     _require_supported_version,
     _split_version,
 )
@@ -318,6 +319,7 @@ class ControlPlaneHTTP(BaseControlPlaneHTTP):
                         code="method_not_allowed",
                         message="method not allowed",
                     )
+                _require_json(request)
                 context = _request_context(request, request_id, correlation_id)
                 generic_resource_ref = request.body.get("resource_ref")
                 if not isinstance(generic_resource_ref, str) or not generic_resource_ref.strip():
@@ -384,6 +386,18 @@ def build_openapi(
         }
 
     if normalized_commands:
+        components = specification.get("components")
+        assert isinstance(components, dict)
+        schemas = components.get("schemas")
+        assert isinstance(schemas, dict)
+        schemas["CanonicalExtensionCommandRequest"] = {
+            "type": "object",
+            "required": ["resource_ref"],
+            "properties": {
+                "resource_ref": {"type": "string", "minLength": 1},
+            },
+            "additionalProperties": True,
+        }
         paths[f"/api/{API_VERSION}/commands/{{command}}"] = {
             "post": _command_operation("executeCanonicalExtensionCommand", normalized_commands)
         }
@@ -413,6 +427,14 @@ def _list_operation(operation_id: str, description: str) -> dict[str, Any]:
             },
             {"name": "q", "in": "query", "schema": {"type": "string"}},
             {"name": "fields", "in": "query", "schema": {"type": "string"}},
+            {
+                "name": "filter[field]",
+                "in": "query",
+                "description": (
+                    "Exact canonical-field filter; replace field with a resource field name."
+                ),
+                "schema": {"type": "string"},
+            },
         ],
         "responses": {"200": {"description": description}, **_error_responses()},
     }
@@ -450,6 +472,14 @@ def _command_operation(operation_id: str, commands: tuple[str, ...]) -> dict[str
                 "schema": {"type": "string", "enum": list(commands)},
             },
         ],
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": {"$ref": "#/components/schemas/CanonicalExtensionCommandRequest"}
+                }
+            },
+        },
         "responses": {
             "200": {"description": "Canonical extension command result"},
             **_error_responses(),
@@ -460,7 +490,7 @@ def _command_operation(operation_id: str, commands: tuple[str, ...]) -> dict[str
 def _error_responses() -> dict[str, Any]:
     return {
         status: {"$ref": "#/components/responses/Error"}
-        for status in ("400", "401", "403", "404", "409", "429", "500", "502", "503", "504")
+        for status in ("400", "401", "403", "404", "409", "415", "429", "500", "502", "503", "504")
     }
 
 
@@ -495,11 +525,27 @@ def _reject_private_payload(resource: Mapping[str, JsonValue]) -> None:
         "raw_exception",
         "private_api",
     }
-    leaked = forbidden.intersection(resource)
+    leaked: list[str] = []
+
+    def inspect(value: object, path: tuple[str, ...] = ()) -> None:
+        if isinstance(value, Mapping):
+            for raw_name, nested in value.items():
+                name = str(raw_name)
+                current_path = (*path, name)
+                if name in forbidden:
+                    leaked.append(".".join(current_path))
+                inspect(nested, current_path)
+            return
+        if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+            for index, nested in enumerate(value):
+                inspect(nested, (*path, str(index)))
+
+    inspect(resource)
     if leaked:
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
             f"backend-private fields leaked through Control Plane: {sorted(leaked)!r}",
+            details={"fields": sorted(leaked)},
         )
 
 
