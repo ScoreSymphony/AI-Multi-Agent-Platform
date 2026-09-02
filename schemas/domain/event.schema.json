@@ -13,24 +13,9 @@
     "subject_type": {
       "type": "string",
       "enum": [
-        "goal",
-        "project",
-        "task",
-        "plan",
-        "step",
-        "run",
-        "agent",
-        "agent_team",
-        "artifact",
-        "result",
-        "event",
-        "approval",
-        "node",
-        "worker",
-        "worker_job",
-        "tool",
-        "capability",
-        "model_assignment"
+        "goal", "project", "task", "plan", "step", "run", "agent", "agent_team",
+        "artifact", "result", "event", "approval", "node", "worker", "worker_job",
+        "tool", "capability", "policy_scope", "model_assignment"
       ]
     },
     "subject_id": {"type": "string"},
@@ -61,6 +46,7 @@
     {"if": {"properties": {"subject_type": {"const": "worker_job"}}, "required": ["subject_type"]}, "then": {"properties": {"subject_id": {"$ref": "common.schema.json#/$defs/workerJobId"}}}},
     {"if": {"properties": {"subject_type": {"const": "tool"}}, "required": ["subject_type"]}, "then": {"properties": {"subject_id": {"$ref": "common.schema.json#/$defs/toolId"}}}},
     {"if": {"properties": {"subject_type": {"const": "capability"}}, "required": ["subject_type"]}, "then": {"properties": {"subject_id": {"$ref": "common.schema.json#/$defs/capabilityId"}}}},
+    {"if": {"properties": {"subject_type": {"const": "policy_scope"}}, "required": ["subject_type"]}, "then": {"properties": {"subject_id": {"$ref": "common.schema.json#/$defs/policyScopeId"}}}},
     {"if": {"properties": {"subject_type": {"const": "model_assignment"}}, "required": ["subject_type"]}, "then": {"properties": {"subject_id": {"$ref": "common.schema.json#/$defs/modelAssignmentId"}}}}
   ]
 }
