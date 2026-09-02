@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from types import MappingProxyType
 
@@ -14,7 +14,13 @@ from ai_multi_agent_platform.contracts.types import (
     JsonValue,
     OperationContext,
 )
-from ai_multi_agent_platform.domain import utc_now, validate_id
+from ai_multi_agent_platform.domain import validate_id
+
+
+def _utc_now() -> datetime:
+    """Return an aware UTC timestamp without expanding the public domain API."""
+
+    return datetime.now(UTC)
 
 
 def _freeze_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
@@ -206,7 +212,7 @@ class InvocationRecord:
     provider_tool_ref: str
     status: InvocationStatus
     trace: InvocationTrace
-    recorded_at: datetime = field(default_factory=utc_now)
+    recorded_at: datetime = field(default_factory=_utc_now)
     canonical_tool_invocation_id: str | None = None
     node_id: str | None = None
     worker_id: str | None = None
