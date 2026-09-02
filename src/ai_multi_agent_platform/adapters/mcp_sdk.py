@@ -50,9 +50,7 @@ class MCPPythonSDKClient(MCPClient):
                     description=tool.description or "",
                     input_schema=_json_object(tool.input_schema),
                     output_schema=(
-                        _json_object(tool.output_schema)
-                        if tool.output_schema is not None
-                        else None
+                        _json_object(tool.output_schema) if tool.output_schema is not None else None
                     ),
                 )
                 for tool in listed.tools
