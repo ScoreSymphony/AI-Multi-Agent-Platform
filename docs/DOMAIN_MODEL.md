@@ -17,6 +17,7 @@ Executable reference definitions live in `src/ai_multi_agent_platform/domain/`. 
 9. Canonical identity is immutable after construction.
 10. Canonical relationships validate canonical IDs instead of accepting backend-private strings.
 11. Nested mappings/collections that belong to canonical value state are defensively deep-frozen.
+12. Breaking external-contract restrictions require a new schema major version rather than silently narrowing an existing contract.
 
 ## Identifier model
 
@@ -38,6 +39,7 @@ Canonical identifiers are opaque type-prefixed UUID strings:
 - `worker_<uuid>`
 - `worker_job_<uuid>`
 - `tool_<uuid>`
+- `tool_invocation_<uuid>`
 - `cap_<uuid>`
 - `policy_scope_<uuid>`
 - `model_assignment_<uuid>`
@@ -154,7 +156,14 @@ Semantic completion outcome for a Task or Run. Result references canonical Artif
 
 Append-only canonical fact about lifecycle or another significant platform action. Events carry a canonical subject, correlation/causation data, optional tracing and ownership/project hooks, payload, provenance and external references.
 
-Event payload/provenance are deeply immutable, including nested arbitrary `Mapping` implementations. Event JSON Schema enforces the same subject-type/subject-ID relationships as Python.
+Event payload/provenance are deeply immutable, including nested arbitrary `Mapping` implementations. The Python Event model requires canonical subject identities.
+
+The external Event contract is explicitly versioned:
+
+- `event.schema.json` / `schema_version="1.0"` preserves the previously published compatibility contract: `subject_type` and `subject_id` remain nonempty strings;
+- `event.v2.schema.json` / `schema_version="2.0"` is the strict canonical contract: supported subject types are enumerated and each subject ID must match the corresponding canonical ID type.
+
+New canonical producers should target Event v2. Existing v1 payloads remain valid and can be migrated at API/persistence boundaries without pretending a breaking restriction was additive.
 
 ### Approval
 
@@ -164,11 +173,17 @@ Human or policy decision associated with a canonical governed subject.
 pending -> approved | rejected | expired | cancelled
 ```
 
-A Task or Step can remain in `waiting` while an Approval is pending. Approval status changes use the immutable transition API.
+A Task or Step can remain in `waiting` while an Approval is pending. Approval status changes use the immutable transition API. Approval may also target a canonical `ToolInvocation` when the decision governs one concrete sensitive call rather than the reusable Tool definition.
 
 ### Tool
 
 Canonical invokable tool description independent of native, MCP, HTTP or plugin transport. Tool capabilities use canonical Capability IDs.
+
+### Tool Invocation
+
+Canonical identity for one concrete invocation of a Tool. `ToolInvocation` uses `tool_invocation_<uuid>`, references the canonical `tool_<uuid>` definition and carries neutral project/correlation/causation/trace/provenance hooks.
+
+Its purpose in this domain layer is identity and governance: an Approval can point to exactly one invocation. Concrete arguments/results and protocol-specific invocation DTOs remain adapter/contract concerns and may map to this canonical identity.
 
 ### Capability
 
@@ -229,6 +244,7 @@ Project
   └─ shared Artifacts / configuration
 
 Run -> Worker Job -> Worker -> Node
+Tool -> Tool Invocation -> Approval (when a specific call is governed)
 Agent/Task/Step/Capability/Policy Scope -> Model Assignment
 Worker/Node/Tool/Agent -> Capability
 Agent -> neutral policy requirements
@@ -248,22 +264,23 @@ Every entity/scope relationship uses canonical IDs. Backend IDs live only in `ex
 - Events remain append-only immutable facts;
 - Plan revisions preserve history;
 - backend identifiers remain non-canonical;
-- Worker Jobs reference canonical Runs and Workers.
+- Worker Jobs reference canonical Runs and Workers;
+- approvals for sensitive tool calls can reference one canonical Tool Invocation rather than over-broadly governing the Tool definition.
 
 Executable transition tables live in `src/ai_multi_agent_platform/domain/lifecycle.py`.
 
 ## Serialization and schema versioning
 
-Externally visible canonical payloads carry `schema_version`; initial contracts use `1.0`.
+Externally visible canonical payloads carry `schema_version`.
 
 - backward-compatible additive changes retain the major version;
-- removing/changing required fields or semantics requires a new major version;
+- removing/changing required fields, narrowing previously valid enum/value space or changing field semantics requires a new major version;
 - adapter/provider versions never replace canonical schema versions;
 - readers reject unsupported major versions explicitly;
 - migration logic belongs at persistence/API boundaries and preserves canonical identity/provenance;
 - Python dataclasses are not the external wire contract.
 
-Task, Run and Event are the initial cross-boundary JSON Schemas. The shared common schema defines canonical ID formats, including Policy Scope, for reuse by later contracts.
+Task and Run currently use schema `1.0`. Event preserves its published v1 contract in `event.schema.json` and publishes strict canonical subject validation in `event.v2.schema.json` with `schema_version="2.0"`. The shared common schema defines canonical ID formats, including Policy Scope and Tool Invocation, for reuse by later contracts.
 
 ## Adapter boundary
 
@@ -280,6 +297,8 @@ external_refs:
 
 Changing adapters changes mappings, not canonical identity.
 
+A protocol-level tool call with its own request/invocation handle maps to a canonical `tool_invocation_<uuid>` when the platform needs stable governance, approval or audit identity. Provider/private call handles remain external references.
+
 ## Required validation scenarios
 
 Tests model all Issue #4 scenarios:
@@ -291,8 +310,8 @@ Tests model all Issue #4 scenarios:
 5. one Run dispatched to a remote Worker/Node through Worker Job;
 6. one canonical Task mapped to external orchestrator/executor IDs without identity change.
 
-Additional regression coverage includes malformed IDs, backend IDs in canonical relationships, immutable IDs, lifecycle-bypass prevention, deep immutability for arbitrary Mapping implementations, capability/policy-scoped Model Assignments, structured Result status data and the no-vendor-import architecture guard.
+Additional regression coverage includes malformed IDs, backend IDs in canonical relationships, immutable IDs, lifecycle-bypass prevention, deep immutability for arbitrary Mapping implementations, capability/policy-scoped Model Assignments, per-invocation Approval targeting, structured Result status data, Event v1 compatibility plus strict Event v2 validation, and the no-vendor-import architecture guard.
 
 ## Deferred decisions
 
-Persistence, concrete Hermes/Forge mappings, final scheduler implementation, final authorization/policy evaluation semantics, UI and provider-specific runtime integration remain later work. `PolicyScope` is only a canonical targeting primitive for model assignment and does not pre-empt those later decisions.
+Persistence, concrete Hermes/Forge mappings, final scheduler implementation, final authorization/policy evaluation semantics, UI and provider-specific runtime integration remain later work. `PolicyScope` is only a canonical targeting primitive for model assignment, and `ToolInvocation` is only the canonical governed-call identity; neither pre-empts those later implementation choices.
