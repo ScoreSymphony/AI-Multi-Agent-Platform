@@ -489,6 +489,8 @@ class FakeEventProvider(EventProvider):
     async def publish(self, event: PlatformEvent) -> None:
         self.publish_calls.append(event)
         _raise_configured_failure(self.descriptor.provider_id, self.failure)
+        if any(existing.event_id == event.event_id for existing in self._events):
+            return
         self._events.append(event)
 
     async def read(
