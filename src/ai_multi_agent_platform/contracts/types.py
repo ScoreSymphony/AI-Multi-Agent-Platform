@@ -4,11 +4,67 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Self
 
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
 
 CONTRACT_VERSION = "1.0"
+
+
+class _FrozenJsonDict(dict[str, JsonValue]):
+    """JSON-compatible dictionary that rejects in-place mutation."""
+
+    def __init__(self, values: dict[str, JsonValue]) -> None:
+        dict.__init__(self)
+        for key, value in values.items():
+            dict.__setitem__(self, key, _freeze_json_value(value))
+
+    @staticmethod
+    def _immutable() -> None:
+        raise TypeError("tool invocation arguments are immutable")
+
+    def __setitem__(self, key: str, value: JsonValue) -> None:
+        del key, value
+        self._immutable()
+
+    def __delitem__(self, key: str) -> None:
+        del key
+        self._immutable()
+
+    def clear(self) -> None:
+        self._immutable()
+
+    def pop(self, *args: object, **kwargs: object) -> JsonValue:  # type: ignore[override]
+        del args, kwargs
+        self._immutable()
+        raise AssertionError("unreachable")
+
+    def popitem(self) -> tuple[str, JsonValue]:
+        self._immutable()
+        raise AssertionError("unreachable")
+
+    def setdefault(self, *args: object, **kwargs: object) -> JsonValue:  # type: ignore[override]
+        del args, kwargs
+        self._immutable()
+        raise AssertionError("unreachable")
+
+    def update(self, *args: object, **kwargs: object) -> None:  # type: ignore[override]
+        del args, kwargs
+        self._immutable()
+
+    def __ior__(self, other: object) -> Self:
+        del other
+        self._immutable()
+        raise AssertionError("unreachable")
+
+
+def _freeze_json_value(value: JsonValue) -> JsonValue:
+    if isinstance(value, dict):
+        return _FrozenJsonDict(value)
+    if isinstance(value, list):
+        return tuple(_freeze_json_value(item) for item in value)  # type: ignore[return-value]
+    return value
 
 
 class CapabilityKind(StrEnum):
@@ -187,6 +243,9 @@ class ToolInvocation:
     tool_ref: str
     arguments: dict[str, JsonValue]
     context: OperationContext
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "arguments", _FrozenJsonDict(self.arguments))
 
 
 @dataclass(frozen=True, slots=True)
