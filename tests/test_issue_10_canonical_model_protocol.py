@@ -194,7 +194,12 @@ def test_rich_request_runs_end_to_end_through_router_registry_and_local_provider
 
     assert response.model_config_id == "model-local"
     assert response.finish_reason.value == "stop"
+    assert response.structured_output == {"answer": 42}
     assert response.usage["total_tokens"] == 9
+    assert response.timing.latency_ms is not None
+    assert response.timing.started_unix_ms is not None
+    assert response.timing.ended_unix_ms is not None
+
     generation_call = transport.calls[-1]
     assert generation_call[4] == 4.0
     payload = generation_call[3]
