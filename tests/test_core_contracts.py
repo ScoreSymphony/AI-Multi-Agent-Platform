@@ -380,9 +380,7 @@ def test_fake_only_canonical_task_flow_uses_replaceable_contracts() -> None:
     lifecycle = FakeLifecycleBackend()
 
     plan = asyncio.run(
-        orchestrator.plan(
-            PlanRequest(task_id=task.id, context=context, objective=task.description)
-        )
+        orchestrator.plan(PlanRequest(task_id=task.id, context=context, objective=task.description))
     )
     model_response = asyncio.run(
         model.generate(
