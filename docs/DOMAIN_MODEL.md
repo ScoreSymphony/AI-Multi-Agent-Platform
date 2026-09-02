@@ -16,6 +16,7 @@ The executable reference definitions live in `src/ai_multi_agent_platform/domain
 8. Core domain code must import no Hermes-, Forge- or Temporal-specific types.
 9. Canonical entity identity is immutable after construction.
 10. Canonical relationship fields validate canonical IDs rather than accepting arbitrary backend/provider strings.
+11. Nested canonical metadata/configuration collections are defensively deep-frozen so immutable value state cannot be modified indirectly.
 
 ## Identifier model
 
@@ -69,7 +70,7 @@ Persistent canonical entities support, where applicable:
 - `project_id`;
 - `provenance`;
 - `external_refs`;
-- implementation-neutral metadata.
+- implementation-neutral metadata/configuration.
 
 Execution/event records additionally support:
 
@@ -79,7 +80,7 @@ Execution/event records additionally support:
 
 `owner_ref` is neutral and currently supports `user`, `organization`, `team`, and `service`. Authorization semantics remain a later concern; the ownership hook is reserved now so multi-user support does not require an identifier redesign.
 
-`provenance` records a neutral source, optional actor reference and structured details. Provider-specific response objects do not belong in provenance. Provenance details attached to append-only facts are defensively frozen.
+`provenance` records a neutral source, optional actor reference and structured details. Provider-specific response objects do not belong in provenance. Structured provenance, metadata, requirements and coordination maps are defensively copied into immutable nested representations at construction time.
 
 ## Canonical entities
 
@@ -118,7 +119,7 @@ waiting -> failed | cancelled
 
 `waiting` is the canonical paused state for approval, external dependency or another resumable condition. The reason for waiting belongs in associated state/event/approval data rather than a backend-specific Task status.
 
-Task values are immutable. A legal lifecycle change uses `task.transition_to(target)`; the current object is not rewritten and the returned next state preserves the Task ID while updating lifecycle timestamps.
+Task values are deeply immutable. A legal lifecycle change uses `task.transition_to(target)`; the current object is not rewritten and the returned next state preserves the Task ID while updating lifecycle timestamps.
 
 ### Plan
 
@@ -163,15 +164,15 @@ queued -> starting -> running -> succeeded
 
 A Run's `subject_id` must be a canonical `task_...` ID when `subject_type=task` and a canonical `step_...` ID when `subject_type=step`. Backend workflow/job IDs belong in `external_refs`.
 
-A Run may reference a canonical Worker ID when scheduled remotely, but the Worker is not part of the Run identity. `run.transition_to(target)` enforces the transition table and records `started_at`/`finished_at` when execution begins or terminates.
+A Run may reference a canonical Worker ID when scheduled remotely, but the Worker is not part of the Run identity. `run.transition_to(target)` enforces the transition table and records `started_at`/`finished_at` when execution begins or terminates. Run metadata is deep-frozen with the rest of the value state.
 
 ### Agent
 
-Platform-owned reasoning/acting participant definition. It contains role/configuration references, required canonical Capability IDs and an optional canonical Model Assignment ID without depending on an agent framework or model provider.
+Platform-owned reasoning/acting participant definition. It contains role/configuration context, canonical Capability IDs, an optional canonical Model Assignment ID and structured provider-neutral `policy_requirements`. The policy requirements provide the policy-assignment hook required by the domain model without selecting a final authorization engine or inventing a non-canonical Policy ID.
 
 ### Agent Team
 
-Named grouping of canonical Agents plus coordination metadata. Team membership uses canonical Agent IDs and does not imply a fixed orchestration implementation.
+Named grouping of canonical Agents plus immutable coordination metadata. Team membership uses canonical Agent IDs and does not imply a fixed orchestration implementation.
 
 ### Artifact
 
@@ -179,13 +180,13 @@ Durable or version-addressable input/output/evidence object produced, consumed o
 
 ### Result
 
-Semantic completion outcome for a Task or Run. A Result may reference zero or more canonical Artifact IDs and is distinct from raw executor output.
+Semantic completion outcome for a Task or Run. A Result may reference zero or more canonical Artifact IDs and contains immutable structured `status_data` for completion/status details in addition to the high-level `outcome`. Result is distinct from raw executor output.
 
 ### Event
 
 Append-only canonical fact about a lifecycle transition or significant platform action. Events carry a canonical subject reference, correlation, causation, optional trace data, optional ownership/project hooks, payload, provenance and external references.
 
-Event values are immutable. Caller-owned payload/provenance mappings and nested collections are defensively copied into immutable representations so retaining a source dictionary cannot later rewrite an existing Event. Event JSON Schema validation enforces the same subject-type/subject-ID relationship as the Python model.
+Event values are deeply immutable. Caller-owned payload/provenance mappings and nested collections are defensively copied into immutable representations so retaining a source dictionary cannot later rewrite an existing Event. Event JSON Schema validation enforces the same subject-type/subject-ID relationship as the Python model.
 
 ### Approval
 
@@ -205,17 +206,17 @@ Canonical description of an invokable platform tool independent of native, MCP, 
 
 ### Capability
 
-Implementation-neutral functional/property descriptor used to match requirements against Agents, Tools, Models, Nodes or Workers. Capability may be globally owned or carry optional owner/project hooks; its identity remains platform-owned.
+Implementation-neutral functional/property descriptor used to match requirements against Agents, Tools, Models, Nodes or Workers. Capability may be globally owned or carry optional owner/project hooks; its identity remains platform-owned and its structured attributes are immutable.
 
 ### Model Assignment
 
-Versioned association between a canonical Agent, Task or Step and model requirements/provider selection. Provider-specific model handles are not canonical identity. Model Assignments can be replaced without changing Task, Step or Agent identity.
+Versioned association between a canonical Agent, Task or Step and immutable model requirements/provider selection. Provider-specific model handles are not canonical identity. Model Assignments can be replaced without changing Task, Step or Agent identity.
 
-Policy-scoped model assignment is deliberately deferred until a canonical policy/scope contract exists. The domain does not accept an untyped `policy` subject string because that would reintroduce a non-canonical relationship.
+Policy-scoped model assignment is deliberately deferred until a canonical policy/scope contract exists. The domain does not accept an untyped `policy` subject string because that would reintroduce a non-canonical relationship. Agent-level neutral policy requirements remain available independently.
 
 ### Node
 
-Canonical compute device/runtime host participating in the platform. Hardware/vendor/deployment class belongs in metadata and capabilities, not identity. Capability relationships use canonical Capability IDs.
+Canonical compute device/runtime host participating in the platform. Hardware/vendor/deployment class belongs in immutable metadata and capabilities, not identity. Capability relationships use canonical Capability IDs.
 
 ### Worker
 
@@ -263,14 +264,16 @@ Run ──> Worker Job ──> Worker ──> Node
 Canonical governed entity ── may require ──> Approval
 Agent/Task/Step ── may use ──> Model Assignment
 Worker/Node/Tool/Agent ── advertises/requires ──> Capability
+Agent ── carries ──> neutral policy requirements
 ```
 
-Every relationship shown above uses a canonical type-prefixed ID. Backend IDs live only in `external_refs`.
+Every entity relationship shown above uses a canonical type-prefixed ID. Backend IDs live only in `external_refs`; policy requirements are structured platform intent rather than an external identity.
 
 ## Lifecycle invariants
 
 - canonical IDs never change after creation;
 - direct `id` or lifecycle `status` reassignment is impossible on canonical value objects;
+- nested mappings/collections that form canonical value state are defensively deep-frozen;
 - lifecycle transitions use `transition_to(...)` and validate the explicit transition tables;
 - a retry creates a new Run ID;
 - terminal Runs have no outgoing lifecycle transitions;
@@ -326,7 +329,7 @@ The domain tests model all issue #4 scenarios:
 5. one Run dispatched to a remote Worker/Node through a Worker Job;
 6. one canonical Task carrying external orchestrator-run and executor-job references without changing canonical identity.
 
-Additional invariant tests reject malformed canonical UUID payloads, backend IDs used as canonical relationships, direct identity/status reassignment, illegal lifecycle jumps, mutable rewrites of Event facts and vendor/framework imports in the core domain layer.
+Additional invariant tests reject malformed canonical UUID payloads, backend IDs used as canonical relationships, direct identity/status reassignment, illegal lifecycle jumps, mutable rewrites of nested domain metadata/Event facts, and vendor/framework imports in the core domain layer. Tests also cover the neutral Agent policy hook and structured Result status data.
 
 ## Deferred decisions
 
