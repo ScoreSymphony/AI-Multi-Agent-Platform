@@ -4,12 +4,12 @@ from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 
 from .kernel import PlatformKernel
 from .models import (
+    TERMINAL_RUN_STATUSES,
     RecoveryDisposition,
     RecoveryEntry,
     RecoveryReport,
     RunState,
     TaskState,
-    TERMINAL_RUN_STATUSES,
 )
 from .repository import (
     CommandRecord,
