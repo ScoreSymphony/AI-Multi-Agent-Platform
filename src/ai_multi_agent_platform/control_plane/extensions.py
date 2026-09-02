@@ -32,7 +32,14 @@ from .http import (
     _require_supported_version,
     _split_version,
 )
-from .models import API_VERSION, APIException, PageQuery, RequestContext, api_exception_from_contract, paginate
+from .models import (
+    API_VERSION,
+    APIException,
+    PageQuery,
+    RequestContext,
+    api_exception_from_contract,
+    paginate,
+)
 from .openapi import build_openapi as build_base_openapi
 from .service import ControlPlane as BaseControlPlane
 from .service import ScopeStore
@@ -226,7 +233,9 @@ class ControlPlane(BaseControlPlane):
                 for item in items:
                     if isinstance(item, dict) and item.get("id") == resource_id:
                         return item
-            raise ContractError(ErrorCode.NOT_FOUND, f"{collection} resource not found: {resource_id}")
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"{collection} resource not found: {resource_id}"
+            )
 
         service = self._resource_services.get(collection)
         if service is None:
@@ -248,7 +257,9 @@ class ControlPlane(BaseControlPlane):
         payload: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
         if command not in REQUIRED_COMMANDS:
-            raise ContractError(ErrorCode.INVALID_REQUEST, f"unsupported canonical command: {command}")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, f"unsupported canonical command: {command}"
+            )
         if context.idempotency_key is None:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
@@ -476,7 +487,11 @@ def _list_operation(operation_id: str, description: str) -> dict[str, Any]:
             },
             {"name": "cursor", "in": "query", "schema": {"type": "string"}},
             {"name": "sort", "in": "query", "schema": {"type": "string", "default": "id"}},
-            {"name": "direction", "in": "query", "schema": {"type": "string", "enum": ["asc", "desc"]}},
+            {
+                "name": "direction",
+                "in": "query",
+                "schema": {"type": "string", "enum": ["asc", "desc"]},
+            },
             {"name": "q", "in": "query", "schema": {"type": "string"}},
             {"name": "fields", "in": "query", "schema": {"type": "string"}},
         ],

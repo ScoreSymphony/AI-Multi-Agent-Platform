@@ -92,7 +92,9 @@ class ControlPlaneHTTP:
                 raise APIException(status=404, code="not_found", message="route not found")
 
             if segments[0] == "projects":
-                return await self._projects(request, context, query, segments, request_id, correlation_id)
+                return await self._projects(
+                    request, context, query, segments, request_id, correlation_id
+                )
             if segments[0] == "workspaces":
                 return await self._workspaces(
                     request,
@@ -103,9 +105,13 @@ class ControlPlaneHTTP:
                     correlation_id,
                 )
             if segments[0] == "tasks":
-                return await self._tasks(request, context, query, segments, request_id, correlation_id)
+                return await self._tasks(
+                    request, context, query, segments, request_id, correlation_id
+                )
             if segments[0] == "runs":
-                return await self._runs(request, context, query, segments, request_id, correlation_id)
+                return await self._runs(
+                    request, context, query, segments, request_id, correlation_id
+                )
             if segments[0] in {"plans", "steps", "artifacts", "results"}:
                 return await self._references(
                     request,
@@ -391,11 +397,7 @@ class ControlPlaneASGI:
             version, relative = _split_version(path)
             _require_supported_version(version)
             segments = [segment for segment in relative.split("/") if segment]
-            if (
-                len(segments) != 4
-                or segments[0] != "tasks"
-                or segments[2:] != ["events", "stream"]
-            ):
+            if len(segments) != 4 or segments[0] != "tasks" or segments[2:] != ["events", "stream"]:
                 raise APIException(status=404, code="not_found", message="route not found")
             context = _request_context(
                 HTTPRequest(method="GET", path=path, headers=headers, query=query),

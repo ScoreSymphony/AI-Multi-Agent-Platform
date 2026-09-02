@@ -286,9 +286,7 @@ def test_run_list_read_and_status_filter() -> None:
         run_id = started.body["id"]
         assert isinstance(run_id, str)
 
-        nested = await http.handle(
-            HTTPRequest(method="GET", path=f"/api/v1/tasks/{task_id}/runs")
-        )
+        nested = await http.handle(HTTPRequest(method="GET", path=f"/api/v1/tasks/{task_id}/runs"))
         assert_page(nested.body, total=1)
         filtered = await http.handle(
             HTTPRequest(
@@ -567,10 +565,27 @@ def test_openapi_is_current_scope_only_and_documents_evolution() -> None:
     spec = build_openapi()
     assert spec["openapi"] == "3.1.0"
     paths = spec["paths"]
-    for resource in ("projects", "workspaces", "tasks", "runs", "plans", "steps", "artifacts", "results"):
+    for resource in (
+        "projects",
+        "workspaces",
+        "tasks",
+        "runs",
+        "plans",
+        "steps",
+        "artifacts",
+        "results",
+    ):
         assert f"/api/v1/{resource}" in paths
     assert "/api/v1/tasks/{task_id}/timeline" in paths
     assert "/api/v1/tasks/{task_id}/events/stream" in paths
-    for future_resource in ("agents", "models", "tools", "nodes", "automations", "evaluations", "plugins"):
+    for future_resource in (
+        "agents",
+        "models",
+        "tools",
+        "nodes",
+        "automations",
+        "evaluations",
+        "plugins",
+    ):
         assert f"/api/v1/{future_resource}" not in paths
     assert spec["x-evolution-policy"]["breaking_changes"] == "require a new major path namespace"
