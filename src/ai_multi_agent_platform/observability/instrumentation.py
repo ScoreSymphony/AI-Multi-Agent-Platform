@@ -343,13 +343,11 @@ class ObservedExecutor(Executor):
         try:
             result = await self._executor.execute(request)
         except Exception as exc:
-            exception_failure = self._exception_failure_from_exception(
-                exc, FailureComponent.EXECUTION
-            )
+            exception_failure = self._failure_from_exception(exc, FailureComponent.EXECUTION)
             finished = self._telemetry.finish_span(
                 span,
                 outcome=TelemetryOutcome.FAILED,
-                exception_failure=exception_failure,
+                failure=exception_failure,
             )
             self._telemetry.metric(
                 "platform.executor.duration_seconds",
@@ -358,14 +356,14 @@ class ObservedExecutor(Executor):
                 unit="seconds",
                 attributes={"outcome": TelemetryOutcome.FAILED.value},
             )
-            self._telemetry.metric("platform.executor.exception_failures", 1.0, context=context)
+            self._telemetry.metric("platform.executor.failures", 1.0, context=context)
             self._telemetry.log(
                 severity=TelemetrySeverity.ERROR,
                 component=FailureComponent.EXECUTION,
                 event_name="executor.failed",
                 context=context,
                 outcome=TelemetryOutcome.FAILED,
-                exception_failure=exception_failure,
+                failure=exception_failure,
                 duration_seconds=finished.duration_seconds,
             )
             self._telemetry.timeline(
@@ -373,7 +371,7 @@ class ObservedExecutor(Executor):
                 component=FailureComponent.EXECUTION,
                 context=context,
                 outcome=TelemetryOutcome.FAILED,
-                exception_failure=exception_failure,
+                failure=exception_failure,
                 duration_seconds=finished.duration_seconds,
             )
             raise
