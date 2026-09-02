@@ -76,16 +76,16 @@ The official Model Context Protocol Python SDK is used only for the concrete opt
 
 Agents request canonical capability IDs. The platform resolves those IDs to native or MCP implementations, validates inputs/outputs, applies policy/approval hooks, preserves canonical trace/governance identities, captures evidence references and can persist lifecycle audit events. Changing or removing the MCP transport does not require changes to agent/task contracts.
 
-On that basis, the functional Definition of Done is met subject only to the final repository quality gate below.
+The functional Definition of Done and the final repository quality gate are both satisfied.
 
 ## Final quality gate
 
-- [ ] `ruff format --check .`
-- [ ] `ruff check .`
-- [ ] `mypy`
-- [ ] full `pytest`
-- [ ] `python -m build`
-- [ ] merge-ready against current `main`
-- [ ] post-merge CI on `main`
+- [x] `ruff format --check .`
+- [x] `ruff check .`
+- [x] `mypy`
+- [x] full `pytest`
+- [x] `python -m build`
+- [x] merge-ready against current `main`
+- [x] post-merge CI on `main`
 
-#12 must not be closed again until every item in this final quality gate is checked.
+Verified after the squash merge of PR #94: post-merge CI run `33686231713` passed on `main` with 204 tests passing.
