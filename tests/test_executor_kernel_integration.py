@@ -53,7 +53,7 @@ def test_kernel_executes_end_to_end_through_reference_executor(
         )
         assert run.status.value == "succeeded"
         assert run.output["result_code"] == 0
-        assert run.output["artifacts"] == ["artifact.txt"]
+        assert run.output["artifacts"] == ("artifact.txt",)
         assert (workspace / "artifact.txt").exists()
 
         artifact_id = new_id("artifact")

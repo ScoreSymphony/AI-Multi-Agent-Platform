@@ -33,7 +33,7 @@ The following invariants are enforced in code and tests:
 - `PlanRequest.task_id` must be a canonical `task_<uuid>` ID.
 - `ExecutionRequest.run_id` must be a canonical `run_<uuid>` ID and its subject must be a canonical Task or Step ID matching `subject_type`.
 - execution handles/snapshots preserve the same canonical Run ID.
-- `ToolInvocation.tool_ref` is a canonical Tool ID. Native/MCP/HTTP/provider tool identifiers are adapter-private mappings, not canonical IDs.
+- `ToolInvocation.tool_ref` and `invocation_id` are opaque provider/transport handles, not canonical domain IDs. Per-invocation governance resolves the canonical Tool ID at `map_tool_invocation_to_domain(...)`; provider handles are retained only as external references on the resulting canonical Tool Invocation.
 - Provider Contract `2.0` deep-freezes `ToolInvocation.arguments`; adapters use `arguments_json()` for a detached transport copy, preserving exact approval/audit binding.
 - node and worker descriptors require canonical `node_<uuid>` / `worker_<uuid>` identities.
 - optional `project_id` values in operation context use canonical Project IDs.
@@ -238,7 +238,7 @@ The suite validates, where applicable:
 
 - provider identity, contract version and health/capabilities;
 - namespaced adapter metadata;
-- canonical Task/Run/Tool/Node/Worker identities at boundaries;
+- canonical Task/Run/Node/Worker identities at boundaries and explicit provider-handle-to-canonical Tool Invocation mapping;
 - canonical RunStatus use;
 - orchestrator non-ownership of Plan/Step identity;
 - typed model-router results;

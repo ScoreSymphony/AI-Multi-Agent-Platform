@@ -311,7 +311,8 @@ class ToolInvocation:
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
             raise ValueError("tool invocation_id must not be blank")
-        validate_id(self.tool_ref, "tool")
+        if not self.tool_ref.strip():
+            raise ValueError("tool_ref must not be blank")
         frozen = MappingProxyType(
             {key: _freeze_json(value) for key, value in dict(self.arguments).items()}
         )

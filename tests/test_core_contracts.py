@@ -174,10 +174,18 @@ def test_canonical_identifier_validation_is_enforced_at_provider_boundaries() ->
     with pytest.raises(ValueError):
         ToolInvocation(
             invocation_id="invoke-invalid",
-            tool_ref="tool.invalid",
+            tool_ref="   ",
             arguments={},
             context=CTX,
         )
+
+    provider_tool = ToolInvocation(
+        invocation_id="provider-invoke",
+        tool_ref="provider-tool-write",
+        arguments={},
+        context=CTX,
+    )
+    assert provider_tool.tool_ref == "provider-tool-write"
 
     with pytest.raises(ValueError):
         NodeDescriptor(node_id="node-invalid")

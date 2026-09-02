@@ -151,12 +151,12 @@ async def assert_tool_provider_contract(
     provider: ToolProvider,
     invocation: ToolInvocation,
 ) -> None:
-    """Verify canonical invocation identity preservation for tool providers."""
+    """Verify provider invocation-handle preservation for tool providers."""
 
     await assert_provider_contract(provider)
     result = await provider.invoke(invocation)
     if result.invocation_id != invocation.invocation_id:
-        raise AssertionError("tool provider must preserve canonical invocation_id")
+        raise AssertionError("tool provider must preserve the provider invocation handle")
     assert_namespaced_adapter_metadata(result.adapter_metadata)
 
 
