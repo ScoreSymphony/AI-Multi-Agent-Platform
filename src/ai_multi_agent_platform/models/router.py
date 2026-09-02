@@ -76,9 +76,13 @@ class DeterministicModelRouter(ModelRouter):
                     details={"explicit_model_id": requirements.explicit_model_id},
                 ) from exc
             if not self._eligible(explicit, requirements):
+                message = (
+                    "explicit model assignment does not satisfy routing policy: "
+                    f"{explicit.config_id}"
+                )
                 raise ContractError(
                     ErrorCode.NO_COMPATIBLE_ROUTE,
-                    f"explicit model assignment does not satisfy routing policy: {explicit.config_id}",
+                    message,
                     provider_id=explicit.provider_id,
                     details={"explicit_model_id": explicit.config_id},
                 )
