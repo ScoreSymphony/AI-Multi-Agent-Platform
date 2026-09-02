@@ -196,7 +196,12 @@ class EventProvider(ProviderContract):
 
     @abstractmethod
     async def publish(self, event: PlatformEvent) -> None:
-        """Persist/publish one canonical event."""
+        """Persist/publish one canonical event.
+
+        Publishing the same ``event_id`` more than once is idempotent: providers
+        must not append a second canonical event for that identifier. This lets
+        command-derived event IDs act as an atomic reservation boundary.
+        """
 
     @abstractmethod
     async def read(
