@@ -115,6 +115,16 @@ def test_canonical_event_example_validates() -> None:
     _validator("event").validate(_event())
 
 
+def test_policy_scope_event_example_validates() -> None:
+    _validator("event").validate(
+        _event(
+            event_type="policy_scope.updated",
+            subject_type="policy_scope",
+            subject_id="policy_scope_123e4567-e89b-12d3-a456-426614174011",
+        )
+    )
+
+
 def test_task_rejects_backend_specific_status() -> None:
     with pytest.raises(ValidationError):
         _validator("task").validate(_task(status="forge_executing"))
