@@ -11,6 +11,18 @@
 7. Open a pull request that references the relevant numbered issue.
 8. Prefer squash merges for focused work packages unless preserving commit history is materially useful.
 
+## Reconciling stale or superseded branches
+
+When a branch has diverged because equivalent or newer work landed through another pull request, do not resolve conflicts by restoring stale file versions.
+
+1. Compare the branch against the current `main` and identify which changes are still unique.
+2. Preserve current canonical `main` behavior for work that has already landed or been superseded.
+3. Reapply only still-required changes on top of the current base.
+4. Document when a pull request becomes history-only or a reconciliation change rather than pretending old implementation changes are still new.
+5. Never use conflict resolution to reintroduce superseded architecture, security fixes, tests or provider-specific assumptions.
+
+A reconciliation commit may preserve branch ancestry, but the resulting tree must be reviewed against current architecture and CI rather than accepted merely because Git reports the conflict as resolved.
+
 ## Local validation
 
 ```bash
