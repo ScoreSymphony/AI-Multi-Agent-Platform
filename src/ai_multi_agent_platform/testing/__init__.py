@@ -2,6 +2,7 @@
 
 from .fakes import (
     FakeAuthorizationProvider,
+    FakeCapabilityProvider,
     FakeEventProvider,
     FakeFileProvider,
     FakeKnowledgeProvider,
@@ -17,6 +18,7 @@ from .fakes import (
 
 __all__ = [
     "FakeAuthorizationProvider",
+    "FakeCapabilityProvider",
     "FakeEventProvider",
     "FakeFileProvider",
     "FakeKnowledgeProvider",
