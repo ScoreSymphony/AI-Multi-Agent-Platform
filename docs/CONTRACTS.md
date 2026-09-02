@@ -27,7 +27,20 @@ model runtimes may later implement one or more of these interfaces through adapt
 
 ## Contract versioning
 
-The initial provider contract version is `1.0`.
+The initial provider contract version was `1.0`. The current provider contract version is
+`2.0`.
+
+Provider Contract `2.0` introduces immutable `ToolInvocation.arguments` semantics so a tool
+call that is mapped to a canonical approval/audit identity cannot be silently changed through
+an alias to the original argument object. Adapters must use `ToolInvocation.arguments_json()`
+when they need a detached standard JSON-serializable `dict`/`list` representation for HTTP,
+MCP or another transport. That export is intentionally mutable because it is a copy; changing
+it does not change the governed invocation snapshot.
+
+This is a major-version change rather than a silent `1.0` change because a `1.0` adapter could
+legitimately mutate or normalize the supplied argument dictionary in place. Contract `2.0`
+removes that guarantee. A provider descriptor therefore must not advertise `1.0` while relying
+on the immutable argument semantics.
 
 Every `ProviderDescriptor` declares the contract version it implements. Provider-contract
 versioning is independent from:

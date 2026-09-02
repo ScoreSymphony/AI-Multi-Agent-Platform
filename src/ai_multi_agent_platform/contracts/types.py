@@ -2,13 +2,36 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
+type FrozenJsonValue = JsonScalar | tuple[FrozenJsonValue, ...] | Mapping[str, FrozenJsonValue]
 
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "2.0"
+
+
+def _freeze_json(value: JsonValue) -> FrozenJsonValue:
+    """Copy a JSON-compatible value into an immutable representation."""
+
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze_json(item) for item in value)
+    return value
+
+
+def _thaw_json(value: JsonValue | FrozenJsonValue) -> JsonValue:
+    """Copy an immutable JSON value back to a standard JSON-serializable value."""
+
+    if isinstance(value, Mapping):
+        return {key: _thaw_json(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_thaw_json(item) for item in value]
+    return value
 
 
 class CapabilityKind(StrEnum):
@@ -185,8 +208,19 @@ class ModelResponse:
 class ToolInvocation:
     invocation_id: str
     tool_ref: str
-    arguments: dict[str, JsonValue]
+    arguments: Mapping[str, JsonValue]
     context: OperationContext
+
+    def __post_init__(self) -> None:
+        frozen = MappingProxyType(
+            {key: _freeze_json(value) for key, value in dict(self.arguments).items()}
+        )
+        object.__setattr__(self, "arguments", frozen)
+
+    def arguments_json(self) -> dict[str, JsonValue]:
+        """Return a detached, standard JSON-serializable copy for provider transport."""
+
+        return {key: _thaw_json(value) for key, value in self.arguments.items()}
 
 
 @dataclass(frozen=True, slots=True)
