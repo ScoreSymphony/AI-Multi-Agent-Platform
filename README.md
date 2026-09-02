@@ -7,18 +7,21 @@ The platform is designed around canonical tasks, runs, agents, tools, models, wo
 ## Core principles
 
 - General purpose; not tied to ScoreSymphony or another application domain.
+- Supports both single-agent and multi-agent workloads.
 - Task-centric rather than chat-centric.
 - Model/provider agnostic.
 - Hardware/deployment agnostic.
-- Single-node and distributed multi-node operation use the same conceptual model.
-- Replaceable orchestration, execution, model, tool, memory, file, knowledge and authorization layers.
+- Single-node and distributed multi-node operation use the same conceptual model and are both first-class architecture targets.
+- Replaceable orchestration, execution, model, tool, memory, file, knowledge, persistence, event/messaging, authorization/policy, scheduling, observability and automation layers.
 - API-first and plugin-friendly.
 - Self-hostable and local-first.
 - Baseline operation must not require recurring paid AI/API services.
 
 ## Architecture
 
-The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architectural boundaries live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md).
+The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architectural boundaries and explicit invariants live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md).
+
+Material implementation choices and architecture refinements are recorded through [`docs/adr/`](docs/adr/README.md). Implementations must not silently contradict the normative product or architecture documents.
 
 ## Development
 
