@@ -9,6 +9,7 @@ from .invocation import (
     PolicyHook,
 )
 from .native import ECHO_CAPABILITY_ID, NativeEchoProvider
+from .observer import EventRepositoryInvocationObserver
 from .provider import CapabilityToolProvider
 from .registry import CapabilityRegistry
 from .types import (
@@ -34,6 +35,7 @@ __all__ = [
     "CapabilitySpec",
     "CapabilityToolProvider",
     "ECHO_CAPABILITY_ID",
+    "EventRepositoryInvocationObserver",
     "GovernanceBindingHook",
     "InvocationObserver",
     "InvocationRecord",
