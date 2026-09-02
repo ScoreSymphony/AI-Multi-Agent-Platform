@@ -22,12 +22,14 @@ from ai_multi_agent_platform.contracts import (
 from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue
 from ai_multi_agent_platform.domain import (
     Event as DomainEvent,
+)
+from ai_multi_agent_platform.domain import (
     OwnerRef,
     Plan,
     Provenance,
     Run,
-    Step,
     RunStatus,
+    Step,
     Task,
     TaskStatus,
     new_id,
@@ -36,12 +38,12 @@ from ai_multi_agent_platform.domain import (
 )
 
 from .models import (
+    TERMINAL_RUN_STATUSES,
     RecoveryDisposition,
     RecoveryEntry,
     RecoveryReport,
     RunState,
     TaskState,
-    TERMINAL_RUN_STATUSES,
 )
 from .repository import (
     CommandRecord,
@@ -1293,7 +1295,7 @@ class PlatformKernel:
         task: TaskState,
         run: RunState,
         snapshot: ExecutionSnapshot,
-    ) -> tuple["EventSpec", ...]:
+    ) -> tuple[EventSpec, ...]:
         if run.status is RunStatus.RUNNING:
             return ()
         if run.status is not RunStatus.STARTING:
@@ -1368,7 +1370,7 @@ class PlatformKernel:
         output: dict[str, JsonValue],
         adapter_metadata: tuple[AdapterMetadata, ...],
         allow_queued_cancel: bool,
-    ) -> tuple["EventSpec", ...]:
+    ) -> tuple[EventSpec, ...]:
         specs: list[EventSpec] = []
         if run.status is RunStatus.QUEUED:
             if target is not RunStatus.CANCELLED or not allow_queued_cancel:
@@ -1511,7 +1513,7 @@ class PlatformKernel:
         task: TaskState,
         key: str,
         operation: str,
-        event_specs: tuple["EventSpec", ...],
+        event_specs: tuple[EventSpec, ...],
         result_id: str,
         actor_ref: str | None,
         source: str,
@@ -1553,7 +1555,7 @@ class PlatformKernel:
         causation_id: str,
         actor_ref: str | None,
         source: str,
-        event_specs: tuple["EventSpec", ...],
+        event_specs: tuple[EventSpec, ...],
     ) -> None:
         events = self._build_events(
             task=task,
@@ -1576,7 +1578,7 @@ class PlatformKernel:
         causation_id: str,
         actor_ref: str | None,
         source: str,
-        event_specs: tuple["EventSpec", ...],
+        event_specs: tuple[EventSpec, ...],
     ) -> tuple[PlatformEvent, ...]:
         return tuple(
             self._event(
