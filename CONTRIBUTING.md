@@ -26,6 +26,19 @@ Changes to canonical domain entities, lifecycle semantics, public contracts, ada
 
 Concrete systems such as orchestrators, execution backends, model gateways, tool protocols, memory systems and storage products must integrate through platform-owned contracts rather than redefine them.
 
+## Third-party components
+
+Before adding or materially changing a third-party component:
+
+- classify it according to `LICENSE_POLICY.md`;
+- verify its canonical upstream, exact version/tag/commit and current license;
+- update `docs/UPSTREAMS.md` when the component becomes approved or integrated;
+- preserve required notices for copied or modified source;
+- document why vendoring is necessary when a looser dependency/service boundary would work;
+- keep optional paid services replaceable and outside the baseline requirement.
+
+If provenance or license compatibility is unclear, do not copy the source into the repository until the uncertainty is resolved.
+
 ## Scope discipline
 
 Do not mix unrelated issue work into the same pull request. Do not introduce a new third-party dependency before its role, license, provenance and replaceability have been reviewed.
