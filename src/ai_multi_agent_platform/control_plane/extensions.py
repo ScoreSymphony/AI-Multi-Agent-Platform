@@ -490,7 +490,21 @@ def _command_operation(operation_id: str, commands: tuple[str, ...]) -> dict[str
 def _error_responses() -> dict[str, Any]:
     return {
         status: {"$ref": "#/components/responses/Error"}
-        for status in ("400", "401", "403", "404", "409", "415", "429", "500", "502", "503", "504")
+        for status in (
+            "400",
+            "401",
+            "403",
+            "404",
+            "409",
+            "413",
+            "415",
+            "422",
+            "429",
+            "500",
+            "502",
+            "503",
+            "504",
+        )
     }
 
 
