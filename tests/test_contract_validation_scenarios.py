@@ -89,9 +89,7 @@ def test_canonical_task_flow_runs_using_only_reference_providers() -> None:
     lifecycle = FakeLifecycleBackend()
 
     plan = asyncio.run(
-        orchestrator.plan(
-            PlanRequest(task_id=task_id, context=CTX, objective="validate contracts")
-        )
+        orchestrator.plan(PlanRequest(task_id=task_id, context=CTX, objective="validate contracts"))
     )
     model_response = asyncio.run(
         model.generate(
