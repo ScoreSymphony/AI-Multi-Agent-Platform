@@ -32,7 +32,8 @@ from ai_multi_agent_platform.contracts.types import (
     ToolInvocation,
     ToolResult,
 )
-from ai_multi_agent_platform.domain import OwnerRef, ToolInvocation as DomainToolInvocation, new_id
+from ai_multi_agent_platform.domain import OwnerRef, new_id
+from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocation
 
 
 def _request(
