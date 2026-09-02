@@ -17,7 +17,7 @@ from ai_multi_agent_platform.contracts.types import (
     OperationContext,
     OperationControl,
 )
-from ai_multi_agent_platform.domain import OwnerRef, Project, RunStatus, new_id, validate_id
+from ai_multi_agent_platform.domain import OwnerRef, Project, new_id, validate_id
 from ai_multi_agent_platform.kernel import PlatformKernel, RunState, TaskState
 from ai_multi_agent_platform.kernel.repository import EventRepository
 
@@ -320,10 +320,8 @@ class ControlPlane:
         resources: list[dict[str, JsonValue]] = []
         for current_task_id in task_ids:
             task = await self._kernel.get_task(current_task_id)
-            resources.extend(
-                _run_resource(await self._kernel.get_run(current_task_id, run_id))
-                for run_id in task.run_ids
-            )
+            for run_id in task.run_ids:
+                resources.append(_run_resource(await self._kernel.get_run(current_task_id, run_id)))
         return paginate(resources, query)
 
     async def get_run(

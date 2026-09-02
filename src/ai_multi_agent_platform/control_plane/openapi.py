@@ -160,7 +160,9 @@ def build_openapi() -> dict[str, Any]:
         "x-evolution-policy": {
             "additive_changes": "allowed within v1",
             "breaking_changes": "require a new major path namespace",
-            "later_domains": "register new Control Plane paths only when their canonical domain exists",
+            "later_domains": (
+                "register new Control Plane paths only when their canonical domain exists"
+            ),
             "private_backends": "never become northbound client contracts",
         },
     }
@@ -235,7 +237,9 @@ def _query_parameters() -> list[dict[str, Any]]:
         {
             "name": "filter[field]",
             "in": "query",
-            "description": "Exact canonical-field filter; replace field with a resource field name.",
+            "description": (
+                "Exact canonical-field filter; replace field with a resource field name."
+            ),
             "schema": {"type": "string"},
         },
     ]
@@ -249,7 +253,7 @@ def _error_responses() -> dict[str, Any]:
 
 
 def _schemas() -> dict[str, Any]:
-    owner = {
+    owner: dict[str, Any] = {
         "type": "object",
         "required": ["type", "id"],
         "properties": {

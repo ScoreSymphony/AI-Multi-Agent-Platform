@@ -137,7 +137,10 @@ class APIError:
         if self.details:
             payload["details"] = self.details
         if self.diagnostics:
-            payload["diagnostics"] = self.diagnostics
+            diagnostics: dict[str, JsonValue] = {
+                namespace: dict(values) for namespace, values in self.diagnostics.items()
+            }
+            payload["diagnostics"] = diagnostics
         return payload
 
 
@@ -223,8 +226,9 @@ def paginate(
     next_offset = offset + len(window)
     next_cursor = _encode_cursor(next_offset) if next_offset < len(filtered) else None
     selected = [_select_fields(item, query.fields) for item in window]
+    selected_json: list[JsonValue] = [dict(item) for item in selected]
     return {
-        "items": selected,
+        "items": selected_json,
         "next_cursor": next_cursor,
         "total": len(filtered),
         "limit": query.limit,
