@@ -32,27 +32,47 @@ Each approved or integrated component must record:
 
 The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 
-## Current architecture-significant integrated upstreams
+## Current architecture-significant upstreams
 
-**None.**
+### jsonschema
 
-The platform is still at the architecture/bootstrap stage. Candidate systems such as orchestrators, execution backends, model gateways, tool protocols, memory systems, and storage products must be added here only after the adoption review and when their implementation work is approved or merged.
+- **Purpose:** Draft 2020-12 JSON Schema validation for canonical capability input/output contracts.
+- **Status:** approved; becomes integrated when the #12 implementation is merged.
+- **Integration category/categories:** library dependency.
+- **Canonical upstream repository:** `https://github.com/python-jsonschema/jsonschema`.
+- **Pinned version/tag/commit or deployed revision:** `4.26.0`.
+- **Verified license:** MIT.
+- **License verification date:** 2026-09-02.
+- **Last review date:** 2026-09-02.
+- **Platform adapter/boundary:** internal validation implementation in `ai_multi_agent_platform.capabilities.invocation`; no upstream types are canonical API types.
+- **Local source path:** none; normal package dependency only.
+- **Source origin/path:** no upstream source copied into this repository.
+- **Modified locally:** no.
+- **Required notices / attribution:** package retains its upstream license metadata; no vendored source/NOTICE material is redistributed by this repository.
+- **Known compatibility constraints:** Python >=3.12 platform baseline; direct package supports Python >=3.10. Full transitive resolution is not repository-locked yet.
+- **Security/deployment/resource constraints:** in-process schema validation only; no network service, credentials, GPU, ports or external infrastructure.
+- **Required for baseline:** yes once #12 is merged, because canonical tool invocation validates declared schemas before execution.
+- **Recurring paid service required:** no.
+- **Update/review method:** explicit dependency update PR; review upstream release/security notes; run full CI plus capability validation/contract tests.
+- **Exit/replacement strategy:** replace the internal validator with another Draft 2020-12-compatible implementation while preserving platform-owned `CapabilitySpec` and invocation contracts.
+- **ADR:** none required for the library choice; canonical architecture remains implementation-neutral.
+- **Adoption review:** `docs/upstream/JSONSCHEMA_ADOPTION.md`.
 
 ## Current direct build/development dependencies
 
-These packages are third-party software already declared by `pyproject.toml`, but they are **not currently architecture-significant platform integrations**. They are recorded here to make the inventory scope explicit and to resolve the distinction between repository tooling and platform upstream integrations.
+These packages are third-party software already declared by `pyproject.toml`. Packages promoted to required production use must also appear in the architecture-significant registry above when required by `LICENSE_POLICY.md`.
 
 | Package | Role | Manifest constraint | Canonical upstream | License reviewed 2026-09-02 | Architecture-significant now? |
 | --- | --- | --- | --- | --- | --- |
 | setuptools | build backend requirement | `>=75` | `https://github.com/pypa/setuptools` | MIT | no |
 | wheel | build requirement | unbounded in build-system manifest | `https://github.com/pypa/wheel` | MIT | no |
 | build | development build tool | `>=1.2,<2` | `https://github.com/pypa/build` | MIT | no |
-| jsonschema | schema-validation development dependency | `>=4.25,<5` | `https://github.com/python-jsonschema/jsonschema` | MIT | no; promotion to required runtime use requires architecture-upstream review |
+| jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT | yes; promoted for #12 and recorded above |
 | pytest | test runner | `>=8.3,<9` | `https://github.com/pytest-dev/pytest` | MIT | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT | no |
 | mypy | static type checking | `>=1.17,<2` | `https://github.com/python/mypy` | MIT | no |
 
-The manifest currently uses version constraints rather than a repository lockfile, so exact resolved tool versions are environment-dependent. If one of these packages becomes a required production/architecture dependency, its exact production pin/revision, provenance, compatibility constraints, update method, and exit strategy must be promoted into the architecture-significant registry before that change is considered complete.
+The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. The required #12 runtime dependency is pinned directly; its transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
 
 ## Architecture-upstream entry template
 
