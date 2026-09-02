@@ -34,6 +34,7 @@ The following invariants are enforced in code and tests:
 - `ExecutionRequest.run_id` must be a canonical `run_<uuid>` ID and its subject must be a canonical Task or Step ID matching `subject_type`.
 - execution handles/snapshots preserve the same canonical Run ID.
 - `ToolInvocation.tool_ref` is a canonical Tool ID. Native/MCP/HTTP/provider tool identifiers are adapter-private mappings, not canonical IDs.
+- Provider Contract `2.0` deep-freezes `ToolInvocation.arguments`; adapters use `arguments_json()` for a detached transport copy, preserving exact approval/audit binding.
 - node and worker descriptors require canonical `node_<uuid>` / `worker_<uuid>` identities.
 - optional `project_id` values in operation context use canonical Project IDs.
 
@@ -53,20 +54,11 @@ Provider `Capability`, `NodeDescriptor` and `WorkerDescriptor` types are normali
 
 ## Contract versioning
 
-The initial provider contract version was `1.0`. The current provider contract version is
-`2.0`.
+The initial provider contract version was `1.0`. The current provider contract version is `2.0`.
 
-Provider Contract `2.0` introduces immutable `ToolInvocation.arguments` semantics so a tool
-call that is mapped to a canonical approval/audit identity cannot be silently changed through
-an alias to the original argument object. Adapters must use `ToolInvocation.arguments_json()`
-when they need a detached standard JSON-serializable `dict`/`list` representation for HTTP,
-MCP or another transport. That export is intentionally mutable because it is a copy; changing
-it does not change the governed invocation snapshot.
+Provider Contract `2.0` introduces immutable `ToolInvocation.arguments` semantics. A governed tool call cannot be changed through an alias to the caller's original argument object after approval/audit identity has been established. Adapters that need ordinary JSON transport data must use `ToolInvocation.arguments_json()`, which returns a detached mutable copy without changing the governed snapshot.
 
-This is a major-version change rather than a silent `1.0` change because a `1.0` adapter could
-legitimately mutate or normalize the supplied argument dictionary in place. Contract `2.0`
-removes that guarantee. A provider descriptor therefore must not advertise `1.0` while relying
-on the immutable argument semantics.
+This is a major-version change because a `1.0` adapter could legitimately mutate or normalize the supplied argument dictionary in place. A provider relying on immutable invocation semantics must therefore advertise contract `2.0`.
 
 Every `ProviderDescriptor` declares the contract version it implements. Provider-contract versioning is independent from:
 

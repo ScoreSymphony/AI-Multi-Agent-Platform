@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import AsyncIterator
+from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from ai_multi_agent_platform.contracts import (
     Capability,
@@ -17,11 +18,11 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.contracts.types import (
     JsonValue,
-    OperationContext,
     OperationControl,
     PlatformEvent,
     ProviderDescriptor,
 )
+from ai_multi_agent_platform.domain import OwnerRef
 
 
 class SqliteEventProvider(EventProvider):
@@ -84,16 +85,16 @@ class SqliteEventProvider(EventProvider):
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    event.event_id,
+                    event.id,
                     event.event_type,
                     event.subject_type,
                     event.subject_id,
-                    event.occurred_at,
-                    event.context.correlation_id,
-                    event.context.causation_id,
-                    event.context.owner_type,
-                    event.context.owner_id,
-                    event.context.project_id,
+                    event.occurred_at.isoformat(),
+                    event.correlation_id,
+                    event.causation_id,
+                    event.owner_ref.type if event.owner_ref else None,
+                    event.owner_ref.id if event.owner_ref else None,
+                    event.project_id,
                     event.schema_version,
                     json.dumps(event.payload, sort_keys=True, separators=(",", ":")),
                 ),
@@ -164,19 +165,21 @@ class SqliteEventProvider(EventProvider):
         if not isinstance(payload_object, dict):
             raise ValueError("Stored event payload must be a JSON object")
         payload = cast(dict[str, JsonValue], payload_object)
+        owner_type = cls._nullable_text(row["owner_type"])
+        owner_id = cls._nullable_text(row["owner_id"])
+        owner_ref = None
+        if owner_type is not None and owner_id is not None:
+            owner_ref = OwnerRef(type=cast(Any, owner_type), id=owner_id)
         return PlatformEvent(
-            event_id=str(row["event_id"]),
+            id=str(row["event_id"]),
             event_type=str(row["event_type"]),
-            subject_type=str(row["subject_type"]),
+            subject_type=cast(Any, str(row["subject_type"])),
             subject_id=str(row["subject_id"]),
-            occurred_at=str(row["occurred_at"]),
-            context=OperationContext(
-                correlation_id=str(row["correlation_id"]),
-                causation_id=cls._nullable_text(row["causation_id"]),
-                owner_type=cls._nullable_text(row["owner_type"]),
-                owner_id=cls._nullable_text(row["owner_id"]),
-                project_id=cls._nullable_text(row["project_id"]),
-            ),
+            occurred_at=datetime.fromisoformat(str(row["occurred_at"])),
+            correlation_id=str(row["correlation_id"]),
+            causation_id=cls._nullable_text(row["causation_id"]),
+            owner_ref=owner_ref,
+            project_id=cls._nullable_text(row["project_id"]),
             payload=payload,
             schema_version=str(row["schema_version"]),
         )

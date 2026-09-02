@@ -6,6 +6,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
+from typing import Literal
+
+from ai_multi_agent_platform.domain import Event, RunStatus, validate_id, validate_subject_id
+
+ExecutionStatus = RunStatus
+PlatformEvent = Event
 
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
@@ -303,13 +309,16 @@ class ToolInvocation:
     context: OperationContext
 
     def __post_init__(self) -> None:
+        if not self.invocation_id.strip():
+            raise ValueError("tool invocation_id must not be blank")
+        validate_id(self.tool_ref, "tool")
         frozen = MappingProxyType(
             {key: _freeze_json(value) for key, value in dict(self.arguments).items()}
         )
         object.__setattr__(self, "arguments", frozen)
 
     def arguments_json(self) -> dict[str, JsonValue]:
-        """Return a detached, standard JSON-serializable copy for provider transport."""
+        """Return a detached standard JSON representation for provider transport."""
 
         return {key: _thaw_json(value) for key, value in self.arguments.items()}
 
