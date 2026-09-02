@@ -1,2 +1,8 @@
-src/ai_multi_agent_platform/observability/instrumentation.py:380: error: Incompatible types in assignment (expression has type "None", variable has type "FailureClassification")  [assignment]
-Found 1 error in 1 file (checked 74 source files)
+src/ai_multi_agent_platform/observability/instrumentation.py:346: error: "ObservedExecutor" has no attribute "_exception_failure_from_exception"; maybe "_failure_from_exception"?  [attr-defined]
+src/ai_multi_agent_platform/observability/instrumentation.py:349: error: Unexpected keyword argument "exception_failure" for "finish_span" of "Telemetry"  [call-arg]
+src/ai_multi_agent_platform/observability/instrumentation.py:349: note: "finish_span" defined in "ai_multi_agent_platform.observability.exporters"
+src/ai_multi_agent_platform/observability/instrumentation.py:362: error: Unexpected keyword argument "exception_failure" for "log" of "Telemetry"  [call-arg]
+src/ai_multi_agent_platform/observability/instrumentation.py:362: note: "log" defined in "ai_multi_agent_platform.observability.exporters"
+src/ai_multi_agent_platform/observability/instrumentation.py:371: error: Unexpected keyword argument "exception_failure" for "timeline" of "Telemetry"  [call-arg]
+src/ai_multi_agent_platform/observability/instrumentation.py:371: note: "timeline" defined in "ai_multi_agent_platform.observability.exporters"
+Found 4 errors in 1 file (checked 74 source files)
