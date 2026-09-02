@@ -23,6 +23,7 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
+    FakeCapabilityProvider,
     FakeEventProvider,
     FakeFileProvider,
     FakeKnowledgeProvider,
@@ -41,6 +42,7 @@ CTX = OperationContext(correlation_id="corr-test", owner_type="user", owner_id="
 
 def test_every_reference_provider_exposes_neutral_capabilities() -> None:
     providers = (
+        FakeCapabilityProvider(),
         FakeOrchestrator(),
         FakeLifecycleBackend(),
         FakeModelProvider(),
@@ -60,6 +62,22 @@ def test_every_reference_provider_exposes_neutral_capabilities() -> None:
         assert provider.descriptor.contract_version == "1.0"
         assert capabilities == provider.descriptor.capabilities
         assert capabilities
+
+
+def test_capability_registry_filters_without_provider_specific_types() -> None:
+    capabilities = (
+        Capability(name="python", kind=CapabilityKind.EXECUTION),
+        Capability(name="chat", kind=CapabilityKind.MODEL),
+    )
+    registry = FakeCapabilityProvider(capabilities)
+
+    all_capabilities = asyncio.run(registry.list_capabilities(CTX))
+    model_capabilities = asyncio.run(
+        registry.list_capabilities(CTX, kind=CapabilityKind.MODEL)
+    )
+
+    assert all_capabilities == capabilities
+    assert model_capabilities == (capabilities[1],)
 
 
 def test_orchestrator_model_router_and_model_are_replaceable() -> None:
