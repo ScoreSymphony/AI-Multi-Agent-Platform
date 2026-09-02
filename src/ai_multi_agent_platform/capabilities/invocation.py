@@ -66,6 +66,7 @@ class CapabilityInvoker:
         registration, provider = self._registry.resolve(
             request.capability_id,
             version=request.version,
+            compatibility=request.compatibility,
             granted_permissions=request.granted_permissions,
             available_worker_capabilities=request.available_worker_capabilities,
         )
