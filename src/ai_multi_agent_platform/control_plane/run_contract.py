@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, cast
 
@@ -145,13 +146,13 @@ def _canonical_run_error(resource: dict[str, JsonValue]) -> dict[str, JsonValue]
 
 
 def _failure_message(output: JsonValue | None) -> str | None:
-    if not isinstance(output, dict):
+    if not isinstance(output, Mapping):
         return None
     for name in ("error", "message", "reason"):
         value = output.get(name)
         if isinstance(value, str) and value.strip():
             return value.strip()
-        if isinstance(value, dict):
+        if isinstance(value, Mapping):
             for nested_name in ("message", "reason"):
                 nested = value.get(nested_name)
                 if isinstance(nested, str) and nested.strip():
