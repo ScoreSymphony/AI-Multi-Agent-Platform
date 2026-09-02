@@ -241,7 +241,10 @@ def test_backend_replacement_preserves_canonical_memory_identity(tmp_path: Path)
     )
     assert bundle.memory is replacement
     assert migrated.memory_id == canonical.memory_id
-    assert asyncio.run(bundle.memory.get_entry(canonical.memory_id, context)).memory_id == canonical.memory_id
+    assert (
+        asyncio.run(bundle.memory.get_entry(canonical.memory_id, context)).memory_id
+        == canonical.memory_id
+    )
 
 
 def test_local_provider_maps_backend_failure_to_canonical_error(
