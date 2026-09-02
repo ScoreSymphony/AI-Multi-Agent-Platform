@@ -4,19 +4,14 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import Mapping
+from datetime import datetime
+from enum import Enum
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
-from ai_multi_agent_platform.contracts import (
-    AdapterMetadata,
-    ContractError,
-    ErrorCode,
-    OperationContext,
-    OperationControl,
-    PlatformEvent,
-    RetryMode,
-)
-from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
+from ai_multi_agent_platform.domain import Event, ExternalRef, OwnerRef, Provenance
 
 from .repository import CommandRecord, CommitResult, EventRepository
 
@@ -150,7 +145,7 @@ class SqliteKernelRepository(EventRepository):
                 )
 
             for offset, event in enumerate(events, start=1):
-                if event.context.correlation_id != stream_id:
+                if event.correlation_id != stream_id:
                     connection.rollback()
                     raise ContractError(
                         ErrorCode.CONTRACT_VIOLATION,
@@ -162,7 +157,7 @@ class SqliteKernelRepository(EventRepository):
                     (
                         stream_id,
                         expected_revision + offset,
-                        event.event_id,
+                        event.id,
                         self._encode_event(event),
                     ),
                 )
@@ -208,30 +203,35 @@ class SqliteKernelRepository(EventRepository):
 
     @staticmethod
     def _encode_event(event: PlatformEvent) -> str:
-        control = event.context.control
         payload: dict[str, object] = {
-            "event_id": event.event_id,
+            "id": event.id,
             "event_type": event.event_type,
             "subject_type": event.subject_type,
             "subject_id": event.subject_id,
-            "occurred_at": event.occurred_at,
+            "correlation_id": event.correlation_id,
+            "causation_id": event.causation_id,
+            "trace_id": event.trace_id,
+            "occurred_at": event.occurred_at.isoformat(),
             "schema_version": event.schema_version,
-            "context": {
-                "correlation_id": event.context.correlation_id,
-                "causation_id": event.context.causation_id,
-                "owner_type": event.context.owner_type,
-                "owner_id": event.context.owner_id,
-                "project_id": event.context.project_id,
-                "control": {
-                    "timeout_seconds": control.timeout_seconds,
-                    "idempotency_key": control.idempotency_key,
-                    "retry_mode": control.retry_mode.value,
-                },
-            },
-            "payload": event.payload,
-            "adapter_metadata": [
-                {"namespace": item.namespace, "values": item.values}
-                for item in event.adapter_metadata
+            "project_id": event.project_id,
+            "owner_ref": (
+                None
+                if event.owner_ref is None
+                else {"type": event.owner_ref.type, "id": event.owner_ref.id}
+            ),
+            "payload": _jsonable(event.payload),
+            "provenance": (
+                None
+                if event.provenance is None
+                else {
+                    "source": event.provenance.source,
+                    "actor_ref": event.provenance.actor_ref,
+                    "details": _jsonable(event.provenance.details),
+                }
+            ),
+            "external_refs": [
+                {"system": ref.system, "kind": ref.kind, "value": ref.value}
+                for ref in event.external_refs
             ],
         }
         return json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -241,57 +241,80 @@ class SqliteKernelRepository(EventRepository):
         obj = json.loads(raw)
         if not isinstance(obj, dict):
             raise ValueError("stored event must be a JSON object")
-        context_obj = obj.get("context")
         payload_obj = obj.get("payload")
-        metadata_obj = obj.get("adapter_metadata", [])
-        if not isinstance(context_obj, dict) or not isinstance(payload_obj, dict):
-            raise ValueError("stored event has invalid context or payload")
-        control_obj = context_obj.get("control", {})
-        if not isinstance(control_obj, dict) or not isinstance(metadata_obj, list):
-            raise ValueError("stored event has invalid control or adapter metadata")
+        if not isinstance(payload_obj, dict):
+            raise ValueError("stored event payload must be a JSON object")
 
-        adapter_metadata: list[AdapterMetadata] = []
-        for item in metadata_obj:
-            if not isinstance(item, dict) or not isinstance(item.get("values"), dict):
-                raise ValueError("stored adapter metadata is invalid")
-            adapter_metadata.append(
-                AdapterMetadata(
-                    namespace=str(item["namespace"]),
-                    values=cast(dict[str, JsonValue], item["values"]),
-                )
+        owner_obj = obj.get("owner_ref")
+        owner_ref: OwnerRef | None = None
+        if owner_obj is not None:
+            if not isinstance(owner_obj, dict):
+                raise ValueError("stored event owner_ref must be an object or null")
+            owner_ref = OwnerRef(
+                type=cast(Any, str(owner_obj["type"])),
+                id=str(owner_obj["id"]),
             )
 
-        return PlatformEvent(
-            event_id=str(obj["event_id"]),
+        provenance_obj = obj.get("provenance")
+        provenance: Provenance | None = None
+        if provenance_obj is not None:
+            if not isinstance(provenance_obj, dict):
+                raise ValueError("stored event provenance must be an object or null")
+            details = provenance_obj.get("details", {})
+            if not isinstance(details, dict):
+                raise ValueError("stored provenance details must be an object")
+            provenance = Provenance(
+                source=str(provenance_obj["source"]),
+                actor_ref=_nullable_string(provenance_obj.get("actor_ref")),
+                details=details,
+            )
+
+        refs_obj = obj.get("external_refs", [])
+        if not isinstance(refs_obj, list):
+            raise ValueError("stored event external_refs must be an array")
+        external_refs = tuple(
+            ExternalRef(
+                system=str(item["system"]),
+                kind=str(item["kind"]),
+                value=str(item["value"]),
+            )
+            for item in refs_obj
+            if isinstance(item, dict)
+        )
+        if len(external_refs) != len(refs_obj):
+            raise ValueError("stored event external_refs contains an invalid entry")
+
+        return Event(
+            id=str(obj["id"]),
             event_type=str(obj["event_type"]),
             subject_type=str(obj["subject_type"]),
             subject_id=str(obj["subject_id"]),
-            occurred_at=str(obj["occurred_at"]),
+            correlation_id=str(obj["correlation_id"]),
+            causation_id=_nullable_string(obj.get("causation_id")),
+            trace_id=_nullable_string(obj.get("trace_id")),
+            occurred_at=datetime.fromisoformat(str(obj["occurred_at"])),
             schema_version=str(obj["schema_version"]),
-            context=OperationContext(
-                correlation_id=str(context_obj["correlation_id"]),
-                causation_id=_nullable_string(context_obj.get("causation_id")),
-                owner_type=_nullable_string(context_obj.get("owner_type")),
-                owner_id=_nullable_string(context_obj.get("owner_id")),
-                project_id=_nullable_string(context_obj.get("project_id")),
-                control=OperationControl(
-                    timeout_seconds=_nullable_float(control_obj.get("timeout_seconds")),
-                    idempotency_key=_nullable_string(control_obj.get("idempotency_key")),
-                    retry_mode=RetryMode(str(control_obj.get("retry_mode", RetryMode.NEVER.value))),
-                ),
-            ),
-            payload=cast(dict[str, JsonValue], payload_obj),
-            adapter_metadata=tuple(adapter_metadata),
+            project_id=_nullable_string(obj.get("project_id")),
+            owner_ref=owner_ref,
+            payload=payload_obj,
+            provenance=provenance,
+            external_refs=external_refs,
         )
+
+
+def _jsonable(value: object) -> object:
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, tuple | list):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, frozenset | set):
+        return [_jsonable(item) for item in sorted(value, key=repr)]
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return value.value
+    return value
 
 
 def _nullable_string(value: object) -> str | None:
     return None if value is None else str(value)
-
-
-def _nullable_float(value: object) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValueError("stored timeout_seconds must be numeric or null")
-    return float(value)

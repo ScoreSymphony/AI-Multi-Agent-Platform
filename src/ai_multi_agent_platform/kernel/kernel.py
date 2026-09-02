@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Literal
 
 from ai_multi_agent_platform.contracts import (
@@ -26,9 +25,11 @@ from ai_multi_agent_platform.domain import (
 )
 from ai_multi_agent_platform.domain import (
     OwnerRef,
+    Plan,
     Provenance,
     Run,
     RunStatus,
+    Step,
     Task,
     TaskStatus,
     new_id,
@@ -484,9 +485,45 @@ class PlatformKernel:
             raise ContractError(ErrorCode.CONFLICT, f"task {task_id} is terminal")
 
         context = self._context(task, idempotency_key)
-        plan = await self._orchestrator.plan(
+        proposal = await self._orchestrator.plan(
             PlanRequest(task_id=task_id, context=context, objective=task.task.description)
         )
+
+        provenance = Provenance(
+            source=source,
+            actor_ref=actor_ref or f"{task.task.owner_ref.type}:{task.task.owner_ref.id}",
+        )
+        canonical_plan = Plan(
+            task_id=task_id,
+            owner_ref=task.task.owner_ref,
+            active=True,
+            project_id=task.task.project_id,
+            provenance=provenance,
+        )
+        step_ids = {step.key: new_id("step") for step in proposal.steps}
+        canonical_steps = tuple(
+            Step(
+                id=step_ids[step.key],
+                plan_id=canonical_plan.id,
+                title=step.title,
+                owner_ref=task.task.owner_ref,
+                depends_on=tuple(step_ids[key] for key in step.depends_on),
+                project_id=task.task.project_id,
+                provenance=provenance,
+            )
+            for step in proposal.steps
+        )
+        step_payloads: list[JsonValue] = [
+            {
+                "id": canonical_step.id,
+                "proposal_key": proposed.key,
+                "title": proposed.title,
+                "objective": proposed.objective,
+                "depends_on": list(canonical_step.depends_on),
+                "metadata": proposed.metadata,
+            }
+            for proposed, canonical_step in zip(proposal.steps, canonical_steps, strict=True)
+        ]
         await self._commit_task_command(
             task=task,
             key=idempotency_key,
@@ -497,11 +534,12 @@ class PlatformKernel:
                     "task",
                     task_id,
                     {
-                        "plan_ref": plan.plan_ref,
-                        "summary": plan.summary,
-                        "step_refs": list(plan.step_refs),
+                        "plan_ref": canonical_plan.id,
+                        "summary": proposal.summary,
+                        "step_refs": [step.id for step in canonical_steps],
+                        "steps": step_payloads,
                     },
-                    plan.adapter_metadata,
+                    proposal.adapter_metadata,
                 ),
             ),
             result_id=task_id,
@@ -1690,8 +1728,18 @@ class PlatformKernel:
                 "stream_revision": revision,
             }
         )
-        occurred_at = datetime.now(UTC)
-        canonical = DomainEvent(
+        if adapter_metadata:
+            namespaces = [item.namespace for item in adapter_metadata]
+            if len(namespaces) != len(set(namespaces)):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "adapter metadata namespaces must be unique",
+                )
+            enriched["adapter_metadata"] = {
+                item.namespace: dict(item.values) for item in adapter_metadata
+            }
+
+        return DomainEvent(
             event_type=event_type,
             subject_type=subject_type,
             subject_id=subject_id,
@@ -1699,29 +1747,8 @@ class PlatformKernel:
             owner_ref=OwnerRef(type=owner_type, id=owner_id),
             project_id=project_id,
             causation_id=causation_id,
-            occurred_at=occurred_at,
             payload=enriched,
             provenance=Provenance(source=source, actor_ref=actor_ref),
-        )
-        return PlatformEvent(
-            event_id=canonical.id,
-            event_type=canonical.event_type,
-            subject_type=canonical.subject_type,
-            subject_id=canonical.subject_id,
-            occurred_at=canonical.occurred_at.isoformat(),
-            context=OperationContext(
-                correlation_id=stream_id,
-                causation_id=causation_id,
-                owner_type=owner_type,
-                owner_id=owner_id,
-                project_id=project_id,
-                control=OperationControl(
-                    idempotency_key=causation_id,
-                    retry_mode=RetryMode.IDEMPOTENT,
-                ),
-            ),
-            payload=enriched,
-            adapter_metadata=adapter_metadata,
         )
 
     @staticmethod
@@ -1740,7 +1767,7 @@ class PlatformKernel:
             operation=operation,
             stream_id=stream_id,
             result_id=result_id,
-            event_id=event.event_id,
+            event_id=event.id,
         )
 
     @staticmethod

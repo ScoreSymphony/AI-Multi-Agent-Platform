@@ -18,15 +18,26 @@ from ai_multi_agent_platform.contracts import (
     ModelProvider,
     ModelRequest,
     ModelResponse,
+    ModelSelection,
     NodeDescriptor,
     OperationContext,
     OperationControl,
     PlanRequest,
+    PlanStepProposal,
     PlatformEvent,
     ProviderDescriptor,
     RetryMode,
     ToolInvocation,
     WorkerDescriptor,
+)
+from ai_multi_agent_platform.domain import (
+    Event,
+    OwnerRef,
+    Run,
+    RunStatus,
+    Task,
+    Tool,
+    new_id,
 )
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
@@ -54,6 +65,7 @@ from ai_multi_agent_platform.testing import (
     assert_worker_provider_contract,
 )
 
+OWNER = OwnerRef(type="user", id="user-test")
 CTX = OperationContext(correlation_id="corr-test", owner_type="user", owner_id="user-test")
 
 
@@ -133,6 +145,72 @@ class TranslatingModelProvider(ModelProvider):
         )
 
 
+def test_contracts_reuse_canonical_run_status_and_event_type() -> None:
+    assert ExecutionStatus is RunStatus
+    assert PlatformEvent is Event
+    assert ExecutionStatus.STARTING is RunStatus.STARTING
+
+
+def test_canonical_identifier_validation_is_enforced_at_provider_boundaries() -> None:
+    with pytest.raises(ValueError):
+        PlanRequest(task_id="task-invalid", context=CTX, objective="invalid")
+
+    with pytest.raises(ValueError):
+        ExecutionRequest(
+            run_id="run-invalid",
+            subject_type="task",
+            subject_id=new_id("task"),
+            context=CTX,
+        )
+
+    with pytest.raises(ValueError):
+        ExecutionRequest(
+            run_id=new_id("run"),
+            subject_type="task",
+            subject_id="task-invalid",
+            context=CTX,
+        )
+
+    with pytest.raises(ValueError):
+        ToolInvocation(
+            invocation_id="invoke-invalid",
+            tool_ref="   ",
+            arguments={},
+            context=CTX,
+        )
+
+    provider_tool = ToolInvocation(
+        invocation_id="provider-invoke",
+        tool_ref="provider-tool-write",
+        arguments={},
+        context=CTX,
+    )
+    assert provider_tool.tool_ref == "provider-tool-write"
+
+    with pytest.raises(ValueError):
+        NodeDescriptor(node_id="node-invalid")
+
+    with pytest.raises(ValueError):
+        WorkerDescriptor(worker_id="worker-invalid", node_id=new_id("node"))
+
+
+def test_orchestrator_returns_proposal_content_not_canonical_plan_identity() -> None:
+    task = Task(title="Plan task", description="Plan it", owner_ref=OWNER)
+    response = asyncio.run(
+        FakeOrchestrator().plan(
+            PlanRequest(task_id=task.id, context=CTX, objective="Plan canonical work")
+        )
+    )
+
+    assert response.summary
+    assert response.steps[0].key == "step-1"
+    assert not hasattr(response, "plan_ref")
+    assert not hasattr(response, "step_refs")
+
+    with pytest.raises(ValueError):
+        PlanStepProposal(key="same", title="Self dependency", depends_on=("same",))
+
+
 def test_every_reference_provider_passes_common_conformance() -> None:
     providers = (
         FakeCapabilityProvider(),
@@ -157,21 +235,26 @@ def test_every_reference_provider_passes_common_conformance() -> None:
 
 
 def test_reusable_interface_conformance_checks_run_against_reference_providers() -> None:
+    task_id = new_id("task")
+    run_id = new_id("run")
+    tool_id = new_id("tool")
+    node_id = new_id("node")
+    worker_id = new_id("worker")
     model_request = ModelRequest(request_id="req-1", messages=("hello",), context=CTX)
     tool_invocation = ToolInvocation(
         invocation_id="invoke-1",
-        tool_ref="tool.echo",
+        tool_ref=tool_id,
         arguments={"value": "hello"},
         context=CTX,
     )
     execution_request = ExecutionRequest(
-        run_id="run-contract",
+        run_id=run_id,
         subject_type="task",
-        subject_id="task-contract",
+        subject_id=task_id,
         context=CTX,
     )
-    node = NodeDescriptor(node_id="node-contract")
-    worker = WorkerDescriptor(worker_id="worker-contract", node_id=node.node_id)
+    node = NodeDescriptor(node_id=node_id)
+    worker = WorkerDescriptor(worker_id=worker_id, node_id=node.node_id)
 
     asyncio.run(assert_model_provider_contract(FakeModelProvider(), model_request))
     asyncio.run(assert_tool_provider_contract(FakeToolProvider(), tool_invocation))
@@ -182,11 +265,13 @@ def test_reusable_interface_conformance_checks_run_against_reference_providers()
 
 
 def test_second_model_implementation_passes_same_contract_without_domain_changes() -> None:
+    task = Task(title="Stable task", owner_ref=OWNER)
     request = ModelRequest(
         request_id="req-replace",
         messages=("same", "canonical", "request"),
-        context=CTX,
+        context=OperationContext(correlation_id=task.id),
     )
+    original_task_id = task.id
 
     asyncio.run(assert_model_provider_contract(FakeModelProvider(), request))
     asyncio.run(assert_model_provider_contract(AlternateModelProvider(), request))
@@ -194,6 +279,16 @@ def test_second_model_implementation_passes_same_contract_without_domain_changes
     alternate_response = asyncio.run(AlternateModelProvider().generate(request))
     assert alternate_response.request_id == request.request_id
     assert alternate_response.text == "SAME | CANONICAL | REQUEST"
+    assert task.id == original_task_id
+
+
+def test_model_router_returns_typed_selection() -> None:
+    request = ModelRequest(request_id="req-route", messages=("route",), context=CTX)
+    selection = asyncio.run(FakeModelRouter(model_ref="fake-model/small").select_provider(request))
+
+    assert isinstance(selection, ModelSelection)
+    assert selection.provider_id == "fake-model"
+    assert selection.model_ref == "fake-model/small"
 
 
 def test_backend_private_exception_is_translated_to_canonical_error() -> None:
@@ -248,14 +343,16 @@ def test_configurable_fake_failure_covers_timeout_and_call_recording() -> None:
     assert model.calls == [request]
 
 
-def test_lifecycle_start_and_cancel_are_idempotent_for_same_run() -> None:
+def test_lifecycle_start_and_cancel_are_idempotent_for_same_canonical_run() -> None:
+    task_id = new_id("task")
+    run_id = new_id("run")
     backend = FakeLifecycleBackend()
     request = ExecutionRequest(
-        run_id="run-idempotent",
+        run_id=run_id,
         subject_type="task",
-        subject_id="task-idempotent",
+        subject_id=task_id,
         context=OperationContext(
-            correlation_id="task-idempotent",
+            correlation_id=task_id,
             control=OperationControl(
                 idempotency_key="start-run-idempotent",
                 retry_mode=RetryMode.IDEMPOTENT,
@@ -276,17 +373,22 @@ def test_lifecycle_start_and_cancel_are_idempotent_for_same_run() -> None:
 
 
 def test_fake_only_canonical_task_flow_uses_replaceable_contracts() -> None:
-    task_id = "task-fake-flow"
-    context = OperationContext(correlation_id=task_id)
+    task = Task(title="Fake flow", description="execute fake flow", owner_ref=OWNER)
+    run = Run(
+        subject_type="task",
+        subject_id=task.id,
+        owner_ref=OWNER,
+        correlation_id=task.id,
+    )
+    tool_entity = Tool(name="Reference tool", owner_ref=OWNER)
+    context = OperationContext(correlation_id=task.id, owner_type="user", owner_id="user-test")
     orchestrator = FakeOrchestrator()
     model = FakeModelProvider(response_text="model-result")
     tool = FakeToolProvider(fixed_output={"tool": "ok"}, echo_arguments=False)
     lifecycle = FakeLifecycleBackend()
 
     plan = asyncio.run(
-        orchestrator.plan(
-            PlanRequest(task_id=task_id, context=context, objective="execute fake flow")
-        )
+        orchestrator.plan(PlanRequest(task_id=task.id, context=context, objective=task.description))
     )
     model_response = asyncio.run(
         model.generate(
@@ -297,7 +399,7 @@ def test_fake_only_canonical_task_flow_uses_replaceable_contracts() -> None:
         tool.invoke(
             ToolInvocation(
                 invocation_id="tool-flow",
-                tool_ref="tool.reference",
+                tool_ref=tool_entity.id,
                 arguments={"model_ref": model_response.model_ref},
                 context=context,
             )
@@ -306,12 +408,13 @@ def test_fake_only_canonical_task_flow_uses_replaceable_contracts() -> None:
     handle = asyncio.run(
         lifecycle.start(
             ExecutionRequest(
-                run_id="run-fake-flow",
-                subject_type="task",
-                subject_id=task_id,
+                run_id=run.id,
+                subject_type=run.subject_type,
+                subject_id=run.subject_id,
                 context=context,
                 input={
-                    "plan_ref": plan.plan_ref,
+                    "plan_summary": plan.summary,
+                    "proposal_steps": [step.key for step in plan.steps],
                     "model_text": model_response.text,
                     "tool_output": tool_result.output,
                 },
@@ -319,10 +422,10 @@ def test_fake_only_canonical_task_flow_uses_replaceable_contracts() -> None:
         )
     )
 
-    assert handle.run_id == "run-fake-flow"
-    assert orchestrator.calls[0].task_id == task_id
-    assert model.calls[0].context.correlation_id == task_id
-    assert tool.calls[0].context.correlation_id == task_id
+    assert handle.run_id == run.id
+    assert orchestrator.calls[0].task_id == task.id
+    assert model.calls[0].context.correlation_id == task.id
+    assert tool.calls[0].context.correlation_id == task.id
 
 
 def test_capability_metadata_and_adapter_metadata_are_explicit() -> None:
@@ -344,15 +447,19 @@ def test_capability_metadata_and_adapter_metadata_are_explicit() -> None:
         )
 
 
-def test_knowledge_node_and_worker_registration_are_canonical() -> None:
+def test_knowledge_node_and_worker_registration_use_canonical_compute_ids() -> None:
     knowledge = FakeKnowledgeProvider()
     stored = asyncio.run(knowledge.index("doc-1", "searchable answer", CTX))
     retrieved = asyncio.run(knowledge.get("doc-1", CTX))
     hits = asyncio.run(knowledge.query(KnowledgeQuery(query="answer", context=CTX)))
 
     capability = Capability(name="python", kind=CapabilityKind.EXECUTION)
-    node = NodeDescriptor(node_id="node-1", capabilities=(capability,))
-    worker = WorkerDescriptor(worker_id="worker-1", node_id="node-1", capabilities=(capability,))
+    node = NodeDescriptor(node_id=new_id("node"), capabilities=(capability,))
+    worker = WorkerDescriptor(
+        worker_id=new_id("worker"),
+        node_id=node.node_id,
+        capabilities=(capability,),
+    )
     nodes = FakeNodeProvider()
     workers = FakeWorkerProvider()
 
@@ -366,34 +473,33 @@ def test_knowledge_node_and_worker_registration_are_canonical() -> None:
     assert asyncio.run(workers.list_workers(CTX)) == (worker,)
 
 
-def test_other_provider_families_preserve_canonical_values_and_correlation() -> None:
+def test_other_provider_families_preserve_portable_values_and_canonical_event() -> None:
     capability = Capability(name="chat", kind=CapabilityKind.MODEL)
     registry = FakeCapabilityProvider((capability,))
     memory = FakeMemoryProvider()
     files = FakeFileProvider()
     events = FakeEventProvider()
     authorization = FakeAuthorizationProvider(allowed=True)
+    task_id = new_id("task")
+    event = Event(
+        event_type="task.ready",
+        subject_type="task",
+        subject_id=task_id,
+        correlation_id="corr-test",
+    )
 
     listed = asyncio.run(registry.list_capabilities(CTX, kind=CapabilityKind.MODEL))
     stored_memory = asyncio.run(memory.put("agent", "name", "Ada", CTX))
     memory_value = asyncio.run(memory.get("agent", "name", CTX))
     stored_file = asyncio.run(files.write("artifact-demo", b"payload", CTX))
     file_value = asyncio.run(files.read("artifact-demo", CTX))
-    event = PlatformEvent(
-        event_id="event-1",
-        event_type="task.ready",
-        subject_type="task",
-        subject_id="task-demo",
-        occurred_at="2026-09-02T16:00:00+00:00",
-        context=CTX,
-    )
     asyncio.run(events.publish(event))
     decision = asyncio.run(
         authorization.authorize(
             AuthorizationRequest(
                 principal_ref="user:test",
                 action="execute",
-                resource_ref="task:test",
+                resource_ref=task_id,
                 context=CTX,
             )
         )
@@ -405,6 +511,7 @@ def test_other_provider_families_preserve_canonical_values_and_correlation() -> 
     assert stored_file.metadata["size"] == 7
     assert file_value == b"payload"
     assert asyncio.run(events.read("corr-test")) == (event,)
+    assert isinstance(event, PlatformEvent)
     assert decision.allowed is True
 
 

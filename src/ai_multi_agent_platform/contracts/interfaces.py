@@ -24,6 +24,7 @@ from .types import (
     KnowledgeQuery,
     ModelRequest,
     ModelResponse,
+    ModelSelection,
     NodeDescriptor,
     OperationContext,
     OperationControl,
@@ -48,34 +49,29 @@ class ProviderContract(ABC):
 
     async def discover_capabilities(self) -> tuple[Capability, ...]:
         """Return provider capabilities without exposing private backend state."""
-
         return self.descriptor.capabilities
 
     async def health(self) -> HealthStatus:
         """Return normalized provider health without exposing backend probes."""
-
         return self.descriptor.health
 
 
 class CapabilityProvider(ProviderContract):
-    """Lists normalized capabilities across one registry/source."""
-
     @abstractmethod
     async def list_capabilities(
         self,
         context: OperationContext,
         *,
         kind: CapabilityKind | None = None,
-    ) -> tuple[Capability, ...]:
-        """Return capabilities, optionally filtered by broad kind."""
+    ) -> tuple[Capability, ...]: ...
 
 
 class Orchestrator(ProviderContract):
-    """Turns canonical task intent into a provider-neutral plan description."""
+    """Turns canonical task intent into provider-neutral planning proposals."""
 
     @abstractmethod
     async def plan(self, request: PlanRequest) -> PlanResponse:
-        """Produce a plan without owning canonical task persistence."""
+        """Propose planning content without allocating canonical Plan/Step IDs."""
 
 
 class LifecycleBackend(ProviderContract):
@@ -83,52 +79,33 @@ class LifecycleBackend(ProviderContract):
 
     @abstractmethod
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
-        """Start one canonical execution attempt.
-
-        Repeating a request with the same canonical Run ID and idempotency key
-        must not intentionally create a second execution attempt.
-        """
+        """Start one canonical execution attempt idempotently for the same Run ID."""
 
     @abstractmethod
     async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        """Read the current execution snapshot for a canonical run."""
+        """Read the current execution snapshot for a canonical Run ID."""
 
     @abstractmethod
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        """Request cancellation of a canonical run.
-
-        Cancellation is idempotent. Repeated cancellation returns the current
-        terminal snapshot or another normalized snapshot for the same Run ID.
-        """
+        """Request idempotent cancellation for a canonical Run ID."""
 
 
 class ModelProvider(ProviderContract):
-    """Executes a model request against one model/runtime provider."""
-
     @abstractmethod
-    async def generate(self, request: ModelRequest) -> ModelResponse:
-        """Generate a provider-neutral model response."""
+    async def generate(self, request: ModelRequest) -> ModelResponse: ...
 
 
 class ModelRouter(ProviderContract):
-    """Chooses a model provider/reference from neutral request requirements."""
-
     @abstractmethod
-    async def select_provider(self, request: ModelRequest) -> str:
-        """Return a platform provider identifier, not an SDK object."""
+    async def select_provider(self, request: ModelRequest) -> ModelSelection: ...
 
 
 class ToolProvider(ProviderContract):
-    """Invokes tools through native, MCP, HTTP or other adapters."""
-
     @abstractmethod
-    async def invoke(self, invocation: ToolInvocation) -> ToolResult:
-        """Execute one tool invocation."""
+    async def invoke(self, invocation: ToolInvocation) -> ToolResult: ...
 
 
 class MemoryProvider(ProviderContract):
-    """Stores and retrieves memory entries without fixing a memory product."""
-
     @abstractmethod
     async def put(
         self,
@@ -138,22 +115,13 @@ class MemoryProvider(ProviderContract):
         context: OperationContext,
         *,
         metadata: dict[str, JsonValue] | None = None,
-    ) -> StoredObject:
-        """Store or replace one memory entry and optional canonical metadata."""
+    ) -> StoredObject: ...
 
     @abstractmethod
-    async def get(
-        self,
-        namespace: str,
-        key: str,
-        context: OperationContext,
-    ) -> JsonValue:
-        """Return one memory entry."""
+    async def get(self, namespace: str, key: str, context: OperationContext) -> JsonValue: ...
 
 
 class FileProvider(ProviderContract):
-    """Stores artifact/file payload bytes independently from metadata ownership."""
-
     @abstractmethod
     async def write(
         self,
@@ -162,45 +130,37 @@ class FileProvider(ProviderContract):
         context: OperationContext,
         *,
         metadata: dict[str, JsonValue] | None = None,
-    ) -> StoredObject:
-        """Persist bytes and optional canonical metadata for an object reference."""
+    ) -> StoredObject: ...
 
     @abstractmethod
-    async def read(self, object_ref: str, context: OperationContext) -> bytes:
-        """Read payload bytes by canonical/storage-neutral reference."""
+    async def read(self, object_ref: str, context: OperationContext) -> bytes: ...
 
 
 class KnowledgeProvider(ProviderContract):
-    """Indexes, searches and retrieves through a replaceable knowledge backend."""
-
     @abstractmethod
     async def index(
         self,
         source_ref: str,
         content: str,
         context: OperationContext,
-    ) -> StoredObject:
-        """Index canonical knowledge content under a stable source reference."""
+    ) -> StoredObject: ...
 
     @abstractmethod
-    async def query(self, request: KnowledgeQuery) -> tuple[KnowledgeHit, ...]:
-        """Return normalized knowledge hits."""
+    async def query(self, request: KnowledgeQuery) -> tuple[KnowledgeHit, ...]: ...
 
     @abstractmethod
-    async def get(self, source_ref: str, context: OperationContext) -> KnowledgeHit:
-        """Retrieve one indexed knowledge source by canonical reference."""
+    async def get(self, source_ref: str, context: OperationContext) -> KnowledgeHit: ...
 
 
 class EventProvider(ProviderContract):
-    """Publishes, reads and subscribes to canonical platform events."""
+    """Persists and subscribes to the canonical domain Event type."""
 
     @abstractmethod
     async def publish(self, event: PlatformEvent) -> None:
-        """Persist/publish one canonical event.
+        """Persist/publish one canonical domain Event unchanged.
 
-        Publishing the same ``event_id`` more than once is idempotent: providers
-        must not append a second canonical event for that identifier. This lets
-        command-derived event IDs act as an atomic reservation boundary.
+        Publishing the same canonical ``event.id`` more than once is idempotent:
+        providers must not append a second canonical event for that identifier.
         """
 
     @abstractmethod
@@ -210,8 +170,7 @@ class EventProvider(ProviderContract):
         *,
         after_event_id: str | None = None,
         control: OperationControl | None = None,
-    ) -> tuple[PlatformEvent, ...]:
-        """Read events for one logical flow in provider-defined stable order."""
+    ) -> tuple[PlatformEvent, ...]: ...
 
     @abstractmethod
     def subscribe(
@@ -220,53 +179,40 @@ class EventProvider(ProviderContract):
         *,
         after_event_id: str | None = None,
         control: OperationControl | None = None,
-    ) -> AsyncIterator[PlatformEvent]:
-        """Yield canonical events from a stable cursor until cancelled."""
+    ) -> AsyncIterator[PlatformEvent]: ...
 
 
 class AuthorizationProvider(ProviderContract):
-    """Evaluates authorization without embedding a specific policy engine."""
-
     @abstractmethod
-    async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision:
-        """Return a normalized authorization decision."""
+    async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision: ...
 
 
 class NodeProvider(ProviderContract):
-    """Registers and discovers compute nodes participating in the platform."""
-
     @abstractmethod
     async def register_node(
         self,
         node: NodeDescriptor,
         context: OperationContext,
-    ) -> NodeDescriptor:
-        """Register or refresh one canonical node descriptor."""
+    ) -> NodeDescriptor: ...
 
     @abstractmethod
-    async def list_nodes(self, context: OperationContext) -> tuple[NodeDescriptor, ...]:
-        """Return normalized node descriptors."""
+    async def list_nodes(self, context: OperationContext) -> tuple[NodeDescriptor, ...]: ...
 
 
 class WorkerProvider(ProviderContract):
-    """Registers/discovers workers and dispatches canonical execution requests."""
-
     @abstractmethod
     async def register_worker(
         self,
         worker: WorkerDescriptor,
         context: OperationContext,
-    ) -> WorkerDescriptor:
-        """Register or refresh one canonical worker descriptor."""
+    ) -> WorkerDescriptor: ...
 
     @abstractmethod
-    async def list_workers(self, context: OperationContext) -> tuple[WorkerDescriptor, ...]:
-        """Return normalized worker descriptors."""
+    async def list_workers(self, context: OperationContext) -> tuple[WorkerDescriptor, ...]: ...
 
     @abstractmethod
     async def dispatch(
         self,
         worker_id: str,
         request: ExecutionRequest,
-    ) -> ExecutionHandle:
-        """Dispatch one canonical run attempt to a worker."""
+    ) -> ExecutionHandle: ...

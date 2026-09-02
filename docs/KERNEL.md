@@ -8,7 +8,7 @@ The implementation lives under `ai_multi_agent_platform.kernel` and depends only
 
 ```text
 PlatformKernel
-  ├─ canonical domain: Task, Run, TaskStatus, RunStatus
+  ├─ canonical domain: Task, Plan, Step, Run, Event, TaskStatus, RunStatus
   ├─ EventRepository          <- authoritative persisted history
   ├─ TaskRepository           <- replaceable read boundary
   ├─ RunRepository            <- replaceable read boundary
@@ -35,7 +35,7 @@ Attempts are scoped to the canonical run subject `(subject_type, subject_id)`, n
 
 ## Event history and read models
 
-Every mutation appends one or more canonical `PlatformEvent` records. Task and Run views are reconstructed deterministically from the ordered event stream; mutable adapter state is not read as canonical platform state.
+Every mutation appends one or more canonical domain `Event` records. `PlatformEvent` in the provider-contract surface is only an alias of this same domain type; there is no parallel event model. Task and Run views are reconstructed deterministically from the ordered event stream, and mutable adapter state is not read as canonical platform state.
 
 Lifecycle events include, among others:
 
@@ -45,7 +45,9 @@ Lifecycle events include, among others:
 - `run.recovery_required` / `run.recovery_cleared`;
 - `artifact.attached` and `result.attached`.
 
-Each generated event carries an event ID, event type, canonical subject, timestamp, task correlation ID, command/recovery causation ID, owner metadata, actor/source metadata, canonical payload version and deterministic stream revision. Adapter-private diagnostics remain in namespaced `AdapterMetadata`.
+Each generated event carries its canonical `event_*` ID, event type, canonical subject, timestamp, task correlation ID, command/recovery causation ID, owner/project context, provenance and canonical payload. Adapter-private diagnostics from a participant are retained only under an explicit namespace in event payload data; they do not alter the canonical Event schema.
+
+`EventProvider.publish()` is idempotent by canonical `Event.id`: publishing an already accepted event ID must not create a second canonical event.
 
 Artifact and Result payloads are referenced by canonical `artifact_*` / `result_*` IDs. The kernel deliberately does not choose the file or result-storage backend.
 
@@ -92,13 +94,13 @@ This distinguishes a crash before backend acceptance from a crash after acceptan
 With only the reference providers the kernel can:
 
 1. create and ready a canonical Task;
-2. obtain a plan from `FakeOrchestrator`;
+2. obtain a provider-neutral proposal from `FakeOrchestrator` and allocate canonical Plan/Step IDs in the kernel;
 3. create a canonical Run;
 4. dispatch it through `FakeLifecycleBackend`;
 5. observe success, failure, timeout or cancellation;
 6. attach canonical Artifact/Result IDs;
 7. transition Run and Task consistently;
-8. replay the event history to the same visible state.
+8. replay the canonical Event history to the same visible state.
 
 No Hermes, Forge, Temporal, external model API or production database is required for this path.
 

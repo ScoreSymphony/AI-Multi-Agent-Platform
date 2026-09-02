@@ -40,6 +40,8 @@ from ai_multi_agent_platform.contracts import (
     WorkerDescriptor,
     WorkerProvider,
 )
+from ai_multi_agent_platform.domain import Event as DomainEvent
+from ai_multi_agent_platform.domain import new_id
 
 
 def assert_namespaced_adapter_metadata(metadata: tuple[AdapterMetadata, ...]) -> None:
@@ -103,14 +105,17 @@ async def assert_orchestrator_contract(
     provider: Orchestrator,
     request: PlanRequest,
 ) -> None:
-    """Verify orchestration preserves canonical task identity and normalized results."""
+    """Verify orchestration consumes canonical Task identity without owning Plan identity."""
 
     await assert_provider_contract(provider)
     response = await provider.plan(request)
-    if not response.plan_ref:
-        raise AssertionError("orchestrator must return a stable plan_ref")
     if not response.summary:
         raise AssertionError("orchestrator must return a non-empty plan summary")
+    if hasattr(response, "plan_ref") or hasattr(response, "step_refs"):
+        raise AssertionError("orchestrator response must not allocate canonical Plan/Step IDs")
+    keys = [step.key for step in response.steps]
+    if len(keys) != len(set(keys)):
+        raise AssertionError("orchestrator proposal step keys must be unique")
     assert_namespaced_adapter_metadata(response.adapter_metadata)
 
 
@@ -133,24 +138,25 @@ async def assert_model_router_contract(
     provider: ModelRouter,
     request: ModelRequest,
 ) -> None:
-    """Verify model routing returns a stable platform provider identifier."""
+    """Verify model routing returns a typed provider-neutral selection."""
 
     await assert_provider_contract(provider)
-    provider_id = await provider.select_provider(request)
-    if not isinstance(provider_id, str) or not provider_id:
-        raise AssertionError("model router must return a non-empty provider_id string")
+    selection = await provider.select_provider(request)
+    if not selection.provider_id:
+        raise AssertionError("model router must return a non-empty provider_id")
+    assert_namespaced_adapter_metadata(selection.adapter_metadata)
 
 
 async def assert_tool_provider_contract(
     provider: ToolProvider,
     invocation: ToolInvocation,
 ) -> None:
-    """Verify canonical invocation identity preservation for tool providers."""
+    """Verify provider invocation-handle preservation for tool providers."""
 
     await assert_provider_contract(provider)
     result = await provider.invoke(invocation)
     if result.invocation_id != invocation.invocation_id:
-        raise AssertionError("tool provider must preserve canonical invocation_id")
+        raise AssertionError("tool provider must preserve the provider invocation handle")
     assert_namespaced_adapter_metadata(result.adapter_metadata)
 
 
@@ -158,7 +164,7 @@ async def assert_memory_provider_contract(
     provider: MemoryProvider,
     context: OperationContext,
 ) -> None:
-    """Verify memory put/get behavior preserves canonical references and metadata."""
+    """Verify memory put/get behavior preserves portable references and metadata."""
 
     await assert_provider_contract(provider)
     stored = await provider.put(
@@ -169,7 +175,7 @@ async def assert_memory_provider_contract(
         metadata={"scope": "contract"},
     )
     if stored.object_ref != "memory:contract:key":
-        raise AssertionError("memory provider must return a stable canonical reference")
+        raise AssertionError("memory provider must return a stable portable reference")
     if stored.metadata.get("scope") != "contract":
         raise AssertionError("memory provider must preserve canonical metadata")
     value = await provider.get("contract", "key", context)
@@ -182,7 +188,7 @@ async def assert_file_provider_contract(
     provider: FileProvider,
     context: OperationContext,
 ) -> None:
-    """Verify file write/read behavior preserves canonical references and metadata."""
+    """Verify file write/read behavior preserves portable references and metadata."""
 
     await assert_provider_contract(provider)
     stored = await provider.write(
@@ -192,7 +198,7 @@ async def assert_file_provider_contract(
         metadata={"media_type": "application/octet-stream"},
     )
     if stored.object_ref != "artifact:contract-check":
-        raise AssertionError("file provider must preserve canonical object_ref")
+        raise AssertionError("file provider must preserve object_ref")
     if stored.metadata.get("media_type") != "application/octet-stream":
         raise AssertionError("file provider must preserve canonical metadata")
     if await provider.read(stored.object_ref, context) != b"contract-bytes":
@@ -223,6 +229,8 @@ async def assert_lifecycle_backend_contract(
     snapshot = await provider.get(request.run_id, request.context)
     if snapshot.run_id != request.run_id:
         raise AssertionError("lifecycle snapshot must preserve canonical run_id")
+    if not isinstance(snapshot.status, ExecutionStatus):
+        raise AssertionError("lifecycle status must use the canonical RunStatus enum")
     assert_namespaced_adapter_metadata(snapshot.adapter_metadata)
 
     first_cancel = await provider.cancel(request.run_id, request.context)
@@ -243,19 +251,19 @@ async def assert_knowledge_provider_contract(
     provider: KnowledgeProvider,
     context: OperationContext,
 ) -> None:
-    """Verify index/search/retrieve behavior uses canonical source references."""
+    """Verify index/search/retrieve behavior uses portable source references."""
 
     await assert_provider_contract(provider)
     source_ref = "knowledge:contract-check"
     stored = await provider.index(source_ref, "contract searchable content", context)
     if stored.object_ref != source_ref:
-        raise AssertionError("knowledge index must preserve canonical source reference")
+        raise AssertionError("knowledge index must preserve source reference")
     retrieved = await provider.get(source_ref, context)
     if retrieved.ref != source_ref:
-        raise AssertionError("knowledge get must preserve canonical source reference")
+        raise AssertionError("knowledge get must preserve source reference")
     hits = await provider.query(KnowledgeQuery(query="searchable", context=context))
     if source_ref not in {hit.ref for hit in hits}:
-        raise AssertionError("knowledge query must return the indexed canonical source")
+        raise AssertionError("knowledge query must return the indexed source")
     assert_namespaced_adapter_metadata(stored.adapter_metadata)
     assert_namespaced_adapter_metadata(retrieved.adapter_metadata)
 
@@ -264,42 +272,49 @@ async def assert_event_provider_contract(
     provider: EventProvider,
     context: OperationContext,
 ) -> None:
-    """Verify publish/read/subscribe preserve canonical event identity and cursors."""
+    """Verify canonical domain Event identity, ordering and subscription cursors."""
 
     await assert_provider_contract(provider)
+    task_id = new_id("task")
     first = PlatformEvent(
-        event_id="event-contract-1",
         event_type="contract.first",
         subject_type="task",
-        subject_id="task-contract",
-        occurred_at="2026-09-02T00:00:00+00:00",
-        context=context,
+        subject_id=task_id,
+        correlation_id=context.correlation_id,
+        causation_id=context.causation_id,
+        project_id=context.project_id,
     )
     second = PlatformEvent(
-        event_id="event-contract-2",
         event_type="contract.second",
         subject_type="task",
-        subject_id="task-contract",
-        occurred_at="2026-09-02T00:00:01+00:00",
-        context=context,
+        subject_id=task_id,
+        correlation_id=context.correlation_id,
+        causation_id=first.id,
+        project_id=context.project_id,
     )
+    if not isinstance(first, DomainEvent) or not isinstance(second, DomainEvent):
+        raise AssertionError("EventProvider must use the canonical domain Event type")
+
+    await provider.publish(first)
     await provider.publish(first)
     await provider.publish(second)
 
-    after = await provider.read(context.correlation_id, after_event_id=first.event_id)
-    if tuple(event.event_id for event in after) != (second.event_id,):
+    all_events = await provider.read(context.correlation_id)
+    if tuple(event.id for event in all_events) != (first.id, second.id):
+        raise AssertionError("duplicate Event publication must be idempotent by canonical event.id")
+
+    after = await provider.read(context.correlation_id, after_event_id=first.id)
+    if tuple(event.id for event in after) != (second.id,):
         raise AssertionError("event read cursor must preserve stable event ordering")
 
     streamed_ids: list[str] = []
     async for event in provider.subscribe(
         context.correlation_id,
-        after_event_id=first.event_id,
+        after_event_id=first.id,
     ):
-        streamed_ids.append(event.event_id)
-    if tuple(streamed_ids) != (second.event_id,):
+        streamed_ids.append(event.id)
+    if tuple(streamed_ids) != (second.id,):
         raise AssertionError("event subscription must honor the canonical cursor")
-    for event in after:
-        assert_namespaced_adapter_metadata(event.adapter_metadata)
 
 
 async def assert_authorization_provider_contract(

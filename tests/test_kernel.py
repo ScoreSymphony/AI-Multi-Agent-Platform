@@ -366,12 +366,13 @@ def test_event_metadata_ordering_replay_and_optimistic_revision(tmp_path: Path) 
     before_run = asyncio.run(k.get_run(task_id, run_id))
     history = asyncio.run(k.history(task_id))
     for revision, event in enumerate(history, 1):
-        assert event.context.correlation_id == task_id and event.context.causation_id
+        assert event.correlation_id == task_id and event.causation_id
+        assert event.owner_ref is not None
         assert event.payload["actor_ref"] and event.payload["source"]
         assert event.payload["canonical_payload_version"] == "1.0"
         assert event.payload["stream_revision"] == revision
     succeeded = next(event for event in history if event.event_type == "run.succeeded")
-    assert succeeded.adapter_metadata == metadata
+    assert succeeded.payload["adapter_metadata"] == {"fake.executor": {"delivery": "1"}}
     restarted = kernel(lifecycle, SqliteKernelRepository(db))
     assert asyncio.run(restarted.get_task(task_id)) == before_task
     assert asyncio.run(restarted.get_run(task_id, run_id)) == before_run
