@@ -135,7 +135,6 @@ def build_openapi() -> dict[str, Any]:
                 "predeclared here."
             ),
         },
-        "servers": [{"url": f"/api/{API_VERSION}"}],
         "paths": paths,
         "components": {
             "parameters": {
