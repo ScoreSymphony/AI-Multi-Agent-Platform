@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from collections.abc import Awaitable, Mapping, Sequence
 from copy import deepcopy
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -559,7 +559,7 @@ def _reject_private_payload(resource: Mapping[str, JsonValue]) -> None:
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
             f"backend-private fields leaked through Control Plane: {sorted(leaked)!r}",
-            details={"fields": sorted(leaked)},
+            details={"fields": cast(JsonValue, sorted(leaked))},
         )
 
 
