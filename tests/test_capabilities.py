@@ -306,9 +306,7 @@ def test_permission_denied_before_provider_execution() -> None:
 
 
 def test_approval_required_without_governance_binding_is_contract_violation() -> None:
-    async def policy(
-        request: CapabilityInvocation, capability: CapabilitySpec
-    ) -> PolicyDecision:
+    async def policy(request: CapabilityInvocation, capability: CapabilitySpec) -> PolicyDecision:
         return PolicyDecision.REQUIRE_APPROVAL
 
     async def scenario() -> None:
@@ -322,9 +320,7 @@ def test_approval_required_without_governance_binding_is_contract_violation() ->
 
 
 def test_approval_required_is_bound_to_canonical_tool_invocation() -> None:
-    async def policy(
-        request: CapabilityInvocation, capability: CapabilitySpec
-    ) -> PolicyDecision:
+    async def policy(request: CapabilityInvocation, capability: CapabilitySpec) -> PolicyDecision:
         return PolicyDecision.REQUIRE_APPROVAL
 
     async def approve(
@@ -350,15 +346,15 @@ def test_approval_required_is_bound_to_canonical_tool_invocation() -> None:
         assert result.output == {"message": "hello"}
         assert result.canonical_tool_invocation_id is not None
         assert result.canonical_tool_invocation_id.startswith("tool_invocation_")
-        assert observer.records[-1].canonical_tool_invocation_id == result.canonical_tool_invocation_id
+        assert (
+            observer.records[-1].canonical_tool_invocation_id == result.canonical_tool_invocation_id
+        )
 
     asyncio.run(scenario())
 
 
 def test_approval_required_but_rejected_fails_before_execution() -> None:
-    async def policy(
-        request: CapabilityInvocation, capability: CapabilitySpec
-    ) -> PolicyDecision:
+    async def policy(request: CapabilityInvocation, capability: CapabilitySpec) -> PolicyDecision:
         return PolicyDecision.REQUIRE_APPROVAL
 
     async def reject(

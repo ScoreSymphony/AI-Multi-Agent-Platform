@@ -17,9 +17,7 @@ class CapabilityRegistry:
 
     def __init__(self) -> None:
         self._providers: dict[str, CapabilityToolProvider] = {}
-        self._registrations: dict[
-            tuple[str, str], list[CapabilityRegistration]
-        ] = defaultdict(list)
+        self._registrations: dict[tuple[str, str], list[CapabilityRegistration]] = defaultdict(list)
 
     async def register_provider(self, provider: CapabilityToolProvider) -> None:
         provider_id = provider.descriptor.provider_id
@@ -129,8 +127,7 @@ class CapabilityRegistry:
                 break
 
         return tuple(
-            seen[key]
-            for key in sorted(seen, key=lambda item: (item[0], _version_key(item[1])))
+            seen[key] for key in sorted(seen, key=lambda item: (item[0], _version_key(item[1])))
         )
 
     def resolve(

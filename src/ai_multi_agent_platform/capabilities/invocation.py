@@ -98,9 +98,8 @@ class CapabilityInvoker:
             )
 
         canonical_invocation: DomainToolInvocation | None = None
-        approval_required = (
-            policy_decision is PolicyDecision.REQUIRE_APPROVAL
-            or bool(capability.required_approvals)
+        approval_required = policy_decision is PolicyDecision.REQUIRE_APPROVAL or bool(
+            capability.required_approvals
         )
         if approval_required:
             if self._governance_binding_hook is None:
@@ -319,8 +318,6 @@ class CapabilityInvoker:
             Draft202012Validator(schema_dict).validate(value)
         except (SchemaError, ValidationError) as exc:
             raise ContractError(
-                ErrorCode.INVALID_REQUEST
-                if stage == "input"
-                else ErrorCode.CONTRACT_VIOLATION,
+                ErrorCode.INVALID_REQUEST if stage == "input" else ErrorCode.CONTRACT_VIOLATION,
                 f"{stage} schema validation failed for capability {capability_id!r}: {exc.message}",
             ) from exc
