@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from ai_multi_agent_platform.adapters.mcp import MCPServerConfig, MCPTool, MCPToolProvider
 from ai_multi_agent_platform.capabilities import (
     CapabilityInvocation,
     CapabilityInvoker,
@@ -12,9 +13,6 @@ from ai_multi_agent_platform.capabilities import (
     CapabilitySpec,
     InvocationRecord,
     InvocationTrace,
-    MCPServerConfig,
-    MCPTool,
-    MCPToolProvider,
     NativeEchoProvider,
     PolicyDecision,
 )
