@@ -68,8 +68,7 @@ class SqliteKernelRepository(EventRepository):
     async def read_events(self, stream_id: str) -> tuple[PlatformEvent, ...]:
         with self._connect() as connection:
             rows = connection.execute(
-                "SELECT event_json FROM kernel_events "
-                "WHERE stream_id = ? ORDER BY sequence ASC",
+                "SELECT event_json FROM kernel_events WHERE stream_id = ? ORDER BY sequence ASC",
                 (stream_id,),
             ).fetchall()
         return tuple(self._decode_event(str(row["event_json"])) for row in rows)

@@ -84,9 +84,7 @@ def test_happy_path_persists_events_and_canonical_result_references() -> None:
     k = kernel(lifecycle, sink=sink)
     task_id, run_id = started(k, lifecycle)
     lifecycle.complete(run_id, status=ExecutionStatus.SUCCEEDED, output={"answer": 42})
-    run = asyncio.run(
-        k.refresh_run(idempotency_key="refresh", task_id=task_id, run_id=run_id)
-    )
+    run = asyncio.run(k.refresh_run(idempotency_key="refresh", task_id=task_id, run_id=run_id))
     artifact_id, result_id = new_id("artifact"), new_id("result")
     asyncio.run(
         k.attach_artifact(
@@ -138,9 +136,7 @@ def test_cancellation_before_dispatch_and_while_running_are_idempotent() -> None
     lifecycle = FakeLifecycleBackend()
     queued_kernel = kernel(lifecycle)
     queued_task = ready(queued_kernel)
-    queued = asyncio.run(
-        queued_kernel.create_run(idempotency_key="run", task_id=queued_task)
-    )
+    queued = asyncio.run(queued_kernel.create_run(idempotency_key="run", task_id=queued_task))
     cancelled = asyncio.run(
         queued_kernel.cancel_run(
             idempotency_key="cancel",
@@ -345,8 +341,7 @@ def test_recovery_distinguishes_queued_pre_accept_and_orphaned_running(tmp_path:
     orphan_report = asyncio.run(orphan_kernel.recover_task(orphan_task))
     orphan = asyncio.run(orphan_kernel.get_run(orphan_task, orphan_run))
     assert (
-        orphan_report.entries[0].disposition
-        is RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED
+        orphan_report.entries[0].disposition is RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED
     )
     assert orphan.recovery_required and len(orphan_lifecycle.start_calls) == 1
 
