@@ -195,12 +195,16 @@ class ObservabilityEventProvider(EventProvider):
                 )
                 return queue_wait
 
-        if event.event_type in {
-            "run.succeeded",
-            "run.failed",
-            "run.cancelled",
-            "run.timed_out",
-        } and context.run_id is not None:
+        if (
+            event.event_type
+            in {
+                "run.succeeded",
+                "run.failed",
+                "run.cancelled",
+                "run.timed_out",
+            }
+            and context.run_id is not None
+        ):
             anchor = self._telemetry.pop_anchor("run", context.run_id)
             if anchor is not None:
                 span = self._telemetry.finish_span(anchor, outcome=outcome, failure=failure)
@@ -538,7 +542,9 @@ class ObservedToolProvider(ToolProvider):
         try:
             result = await self._provider.invoke(invocation)
         except Exception as exc:
-            failure = ObservedExecutor._failure_from_exception(exc, FailureComponent.CAPABILITY_TOOL)
+            failure = ObservedExecutor._failure_from_exception(
+                exc, FailureComponent.CAPABILITY_TOOL
+            )
             record = self._telemetry.finish_span(
                 span,
                 outcome=TelemetryOutcome.FAILED,
