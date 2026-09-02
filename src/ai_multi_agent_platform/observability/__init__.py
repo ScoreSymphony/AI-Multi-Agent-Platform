@@ -13,11 +13,17 @@ from .health import (
     ServiceHealth,
     aggregate_health,
 )
-from .instrumentation import (
-    ObservabilityEventProvider,
-    ObservedExecutor,
-    ObservedModelProvider,
-    ObservedToolProvider,
+from .hierarchy import TraceHierarchy, observe_agent_run
+from .instrumentation import ObservabilityEventProvider, ObservedExecutor
+from .integrations import (
+    AccountingBridgeExporter,
+    AggregatedHealthProvider,
+    MeasurementSink,
+    ProviderHealthDependency,
+    TimelineReader,
+    extract_trace_carrier,
+    inject_trace_carrier,
+    timeline_entry_resource,
 )
 from .models import (
     CaptureKind,
@@ -32,22 +38,42 @@ from .models import (
     TelemetrySeverity,
     TimelineEntry,
 )
+from .progressive import (
+    CompositeInvocationObserver,
+    ObservabilityInvocationObserver,
+    ObservedModelProvider,
+    ObservedModelRouter,
+    ObservedNodeProvider,
+    ObservedOrchestrator,
+    ObservedToolProvider,
+    ObservedWorkerProvider,
+)
 from .propagation import TraceCarrier
 
 __all__ = [
+    "AccountingBridgeExporter",
+    "AggregatedHealthProvider",
     "CaptureKind",
     "CapturePolicy",
+    "CompositeInvocationObserver",
     "DependencyHealth",
     "FailureClassification",
     "FailureComponent",
     "InMemoryExporter",
+    "MeasurementSink",
     "MetricRecord",
     "NoOpExporter",
     "ObservabilityEventProvider",
     "ObservabilityExporter",
+    "ObservabilityInvocationObserver",
     "ObservedExecutor",
     "ObservedModelProvider",
+    "ObservedModelRouter",
+    "ObservedNodeProvider",
+    "ObservedOrchestrator",
     "ObservedToolProvider",
+    "ObservedWorkerProvider",
+    "ProviderHealthDependency",
     "ReadinessState",
     "ServiceHealth",
     "SpanHandle",
@@ -58,6 +84,12 @@ __all__ = [
     "TelemetryOutcome",
     "TelemetrySeverity",
     "TimelineEntry",
+    "TimelineReader",
     "TraceCarrier",
+    "TraceHierarchy",
     "aggregate_health",
+    "extract_trace_carrier",
+    "inject_trace_carrier",
+    "observe_agent_run",
+    "timeline_entry_resource",
 ]
