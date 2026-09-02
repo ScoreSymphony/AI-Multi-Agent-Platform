@@ -28,6 +28,9 @@ class SecretAuditEvent:
     occurred_at: datetime
 
 
+type SecretAuditSink = Callable[[SecretAuditEvent], None]
+
+
 @dataclass(frozen=True, slots=True)
 class SecretAccessContext:
     """Canonical least-privilege context supplied for one secret resolution."""
@@ -103,7 +106,11 @@ class SecretMaterial:
 
 
 class SecretProvider(ProviderContract):
-    """Replaceable boundary for secret storage, resolution and lifecycle operations."""
+    """Replaceable boundary for secret storage, resolution, lifecycle and audit emission."""
+
+    @abstractmethod
+    def set_audit_hook(self, audit_hook: SecretAuditSink | None) -> None:
+        """Install or clear the value-free audit sink used for secret operations."""
 
     @abstractmethod
     async def create(
@@ -139,8 +146,9 @@ class LocalSecretProvider(SecretProvider):
     """In-process, dependency-free reference backend for tests and minimal deployment.
 
     Secret material remains only in memory. Nothing in this backend writes plaintext material to
-    disk or exposes it through canonical serialization. Durable deployments can replace the
-    provider without changing canonical references or callers.
+    disk or exposes it through canonical serialization. The backend is intentionally ephemeral:
+    process restart loses all secret material and callers must reprovision it. Deployments that
+    require persistence can replace the provider without changing canonical references or callers.
     """
 
     def __init__(
@@ -148,7 +156,7 @@ class LocalSecretProvider(SecretProvider):
         provider_id: str = "local-secrets",
         *,
         available: bool = True,
-        audit_hook: Callable[[SecretAuditEvent], None] | None = None,
+        audit_hook: SecretAuditSink | None = None,
     ) -> None:
         if not provider_id.strip():
             raise ValueError("secret provider_id must not be blank")
@@ -166,7 +174,15 @@ class LocalSecretProvider(SecretProvider):
             supported_operations=("create", "resolve", "rotate", "revoke", "delete", "metadata"),
             health=HealthStatus.HEALTHY if self._available else HealthStatus.UNAVAILABLE,
             available=self._available,
+            resources={
+                "storage": "memory_only",
+                "durable": False,
+                "restart_requires_reprovision": True,
+            },
         )
+
+    def set_audit_hook(self, audit_hook: SecretAuditSink | None) -> None:
+        self._audit_hook = audit_hook
 
     def set_available(self, available: bool) -> None:
         self._available = available
