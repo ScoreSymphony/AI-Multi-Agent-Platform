@@ -3,7 +3,7 @@ from enum import Enum
 
 import pytest
 
-from ai_multi_agent_platform.contracts import OperationContext
+from ai_multi_agent_platform.contracts import CONTRACT_VERSION, OperationContext, ProviderDescriptor
 from ai_multi_agent_platform.contracts import ToolInvocation as ContractToolInvocation
 from ai_multi_agent_platform.contracts.domain_mapping import (
     map_tool_invocation_to_domain,
@@ -16,6 +16,13 @@ OWNER = OwnerRef(type="user", id="user-1")
 
 class MutableValueEnum(Enum):
     VALUE = ["initial"]
+
+
+def test_provider_contract_v2_carries_immutable_tool_invocation_semantics() -> None:
+    descriptor = ProviderDescriptor(provider_id="test-provider", provider_type="tool")
+
+    assert CONTRACT_VERSION == "2.0"
+    assert descriptor.contract_version == "2.0"
 
 
 def test_domain_freezer_copies_mutable_enum_value() -> None:
