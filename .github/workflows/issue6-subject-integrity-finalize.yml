@@ -23,11 +23,12 @@ jobs:
 
       - name: Apply subject-integrity fix
         run: |
+          python .github/issue6_subject_integrity_prepatch.py
           python .github/issue6_subject_integrity_fix.py
-          python .github/issue6_subject_integrity_fix2.py
 
       - name: Remove temporary validator files
         run: |
+          rm -f .github/issue6_subject_integrity_prepatch.py
           rm -f .github/issue6_subject_integrity_fix.py
           rm -f .github/issue6_subject_integrity_fix2.py
           rm -f .github/workflows/issue6-subject-integrity-finalize.yml
