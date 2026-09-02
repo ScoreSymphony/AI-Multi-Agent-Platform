@@ -22,6 +22,7 @@ class ModelRegistry:
     def __init__(self) -> None:
         self._providers: dict[str, ModelProvider] = {}
         self._provider_health: dict[str, HealthStatus] = {}
+        self._provider_enabled: dict[str, bool] = {}
         self._models: dict[str, ModelConfiguration] = {}
         self._aliases: dict[str, str] = {}
 
@@ -38,6 +39,7 @@ class ModelRegistry:
             )
         self._providers[provider_id] = provider
         self._provider_health[provider_id] = provider.descriptor.health
+        self._provider_enabled[provider_id] = True
 
     def replace_provider(self, provider: ModelProvider) -> None:
         """Replace one provider instance while preserving its canonical models."""
@@ -45,6 +47,7 @@ class ModelRegistry:
         provider_id = provider.descriptor.provider_id
         self._providers[provider_id] = provider
         self._provider_health[provider_id] = provider.descriptor.health
+        self._provider_enabled.setdefault(provider_id, True)
 
     def unregister_provider(self, provider_id: str) -> ModelProvider:
         try:
@@ -56,6 +59,7 @@ class ModelRegistry:
                 provider_id=provider_id,
             ) from exc
         self._provider_health.pop(provider_id, None)
+        self._provider_enabled.pop(provider_id, None)
         return provider
 
     def get_provider(self, provider_id: str) -> ModelProvider:
@@ -70,6 +74,13 @@ class ModelRegistry:
 
     def list_providers(self) -> tuple[ModelProvider, ...]:
         return tuple(self._providers[key] for key in sorted(self._providers))
+
+    def set_provider_enabled(self, provider_id: str, enabled: bool) -> None:
+        self.get_provider(provider_id)
+        self._provider_enabled[provider_id] = enabled
+
+    def provider_enabled(self, provider_id: str) -> bool:
+        return provider_id in self._providers and self._provider_enabled.get(provider_id, False)
 
     def register_model(self, config: ModelConfiguration) -> ModelConfiguration:
         """Register canonical inventory even when its runtime provider is offline.
@@ -181,14 +192,64 @@ class ModelRegistry:
             models = [item for item in models if item.enabled is enabled]
         return tuple(sorted(models, key=lambda item: item.config_id))
 
+    def query_models(
+        self,
+        *,
+        provider_id: str | None = None,
+        enabled: bool | None = True,
+        min_context_window: int | None = None,
+        tool_calling: bool | None = None,
+        structured_output: bool | None = None,
+        streaming: bool | None = None,
+        modalities: tuple[str, ...] = (),
+        reasoning: tuple[str, ...] = (),
+    ) -> tuple[ModelConfiguration, ...]:
+        """Filter inventory by backend-neutral model capabilities only."""
+
+        models = list(self.list_models(provider_id=provider_id, enabled=enabled))
+        if min_context_window is not None:
+            models = [
+                item
+                for item in models
+                if item.capabilities.context_window is not None
+                and item.capabilities.context_window >= min_context_window
+            ]
+        if tool_calling is not None:
+            models = [item for item in models if item.capabilities.tool_calling is tool_calling]
+        if structured_output is not None:
+            models = [
+                item for item in models if item.capabilities.structured_output is structured_output
+            ]
+        if streaming is not None:
+            models = [item for item in models if item.capabilities.streaming is streaming]
+        if modalities:
+            required_modalities = set(modalities)
+            models = [
+                item
+                for item in models
+                if required_modalities.issubset(item.capabilities.modalities)
+            ]
+        if reasoning:
+            required_reasoning = set(reasoning)
+            models = [
+                item
+                for item in models
+                if required_reasoning.issubset(item.capabilities.reasoning)
+            ]
+        return tuple(models)
+
     def provider_health(self, provider_id: str) -> HealthStatus:
-        if provider_id not in self._providers:
+        if not self.provider_enabled(provider_id):
             return HealthStatus.UNAVAILABLE
         return self._provider_health.get(provider_id, HealthStatus.UNKNOWN)
 
     def effective_health(self, config: ModelConfiguration) -> HealthStatus:
         provider = self._providers.get(config.provider_id)
-        if provider is None or not provider.descriptor.available:
+        if (
+            provider is None
+            or not self.provider_enabled(config.provider_id)
+            or not provider.descriptor.available
+        ):
             return HealthStatus.UNAVAILABLE
 
         provider_health = self.provider_health(config.provider_id)
@@ -206,12 +267,19 @@ class ModelRegistry:
     ) -> dict[str, HealthStatus]:
         if provider_id is not None:
             provider = self.get_provider(provider_id)
+            if not self.provider_enabled(provider_id):
+                return {provider_id: HealthStatus.UNAVAILABLE}
             self._provider_health[provider_id] = await provider.health()
             return {provider_id: self._provider_health[provider_id]}
 
+        result: dict[str, HealthStatus] = {}
         for current_id, provider in self._providers.items():
+            if not self.provider_enabled(current_id):
+                result[current_id] = HealthStatus.UNAVAILABLE
+                continue
             self._provider_health[current_id] = await provider.health()
-        return dict(self._provider_health)
+            result[current_id] = self._provider_health[current_id]
+        return result
 
     def _assert_aliases_available(
         self,
