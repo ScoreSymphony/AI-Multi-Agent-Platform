@@ -1,0 +1,38 @@
+name: Issue 6 formatter
+
+on:
+  push:
+    branches:
+      - feat/issue-6-canonical-kernel
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-6-canonical-kernel
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Ruff
+        run: python -m pip install "ruff==0.16.5"
+      - name: Format issue 6 files
+        run: |
+          ruff format src/ai_multi_agent_platform/kernel/kernel.py
+          ruff format src/ai_multi_agent_platform/kernel/sqlite_repository.py
+          ruff format tests/test_kernel.py
+      - name: Commit formatting when needed
+        run: |
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/ai_multi_agent_platform/kernel/kernel.py \
+                    src/ai_multi_agent_platform/kernel/sqlite_repository.py \
+                    tests/test_kernel.py
+            git commit -m "style: format issue 6 kernel"
+            git push origin HEAD:feat/issue-6-canonical-kernel
+          fi

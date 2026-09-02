@@ -19,9 +19,11 @@ The platform is designed around canonical tasks, runs, agents, tools, models, wo
 
 ## Architecture
 
-The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architectural boundaries and explicit invariants live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md). The canonical domain model is defined in [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md), replaceable provider boundaries are defined in [`docs/CONTRACTS.md`](docs/CONTRACTS.md), and canonical Task/Run lifecycle ownership is described in [`docs/KERNEL.md`](docs/KERNEL.md).
+The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architectural boundaries and explicit invariants live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md). The canonical domain model is defined in [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md), replaceable provider boundaries are defined in [`docs/CONTRACTS.md`](docs/CONTRACTS.md), and canonical Task/Run lifecycle ownership and recovery are defined in [`docs/KERNEL.md`](docs/KERNEL.md).
 
 Material implementation choices and architecture refinements are recorded through [`docs/adr/`](docs/adr/README.md). Implementations must not silently contradict the normative product or architecture documents.
+
+The platform-owned kernel under `src/ai_multi_agent_platform/kernel/` is the authoritative source for externally visible Task/Run lifecycle state. Orchestrators and executors integrate through contracts and must not become implicit lifecycle owners.
 
 ## Development
 
@@ -39,4 +41,4 @@ The policy is exercised against multiple integration models in [`docs/UPSTREAM_P
 
 ## Status
 
-The repository is at its initial architecture/bootstrap stage. Implementation work should follow the numbered GitHub issues in order unless an explicit dependency decision changes that order.
+The canonical domain model, replaceable core contracts and platform-owned Task/Run/Event kernel are now established. Implementation work should continue through the numbered GitHub issues while preserving these ownership boundaries.
