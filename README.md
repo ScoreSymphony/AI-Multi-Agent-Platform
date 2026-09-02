@@ -18,13 +18,13 @@ The platform is designed around canonical tasks, runs, agents, tools, models, wo
 
 ## Architecture
 
-The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architectural boundaries live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md).
+The authoritative product direction lives in [`docs/PRODUCT_VISION.md`](docs/PRODUCT_VISION.md). Non-negotiable architectural boundaries live in [`docs/ARCHITECTURE_PRINCIPLES.md`](docs/ARCHITECTURE_PRINCIPLES.md). The canonical domain model is defined in [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md), and replaceable provider boundaries are defined in [`docs/CONTRACTS.md`](docs/CONTRACTS.md).
 
 ## Development
 
 A fresh-clone setup and the validation commands are documented in [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). Contribution and architecture-change rules live in [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-Repository-level integration boundaries are reserved under `adapters/`, `workers/` and `frontend/`; concrete contracts are intentionally deferred to the numbered architecture issues.
+Repository-level integration boundaries are reserved under `adapters/`, `workers/` and `frontend/`. Concrete integrations must implement platform-owned contracts rather than redefine canonical domain types.
 
 ## Licensing and upstream components
 
