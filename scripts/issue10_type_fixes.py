@@ -9,25 +9,6 @@ def replace_once(path: str, old: str, new: str) -> None:
     target.write_text(text.replace(old, new, 1))
 
 
-models = "src/ai_multi_agent_platform/control_plane/models.py"
-replace_once(
-    models,
-    '        if self.diagnostics:\n            payload["diagnostics"] = self.diagnostics\n',
-    '        if self.diagnostics:\n            payload["diagnostics"] = json_value(self.diagnostics)\n',
-)
-replace_once(
-    models,
-    '    selected = [_select_fields(item, query.fields) for item in window]\n',
-    '    selected: list[JsonValue] = [_select_fields(item, query.fields) for item in window]\n',
-)
-
-openapi = "src/ai_multi_agent_platform/control_plane/openapi.py"
-replace_once(
-    openapi,
-    'def _schemas() -> dict[str, Any]:\n    owner = {\n',
-    'def _schemas() -> dict[str, Any]:\n    owner: dict[str, Any] = {\n',
-)
-
 service = "src/ai_multi_agent_platform/control_plane/service.py"
 replace_once(
     service,
