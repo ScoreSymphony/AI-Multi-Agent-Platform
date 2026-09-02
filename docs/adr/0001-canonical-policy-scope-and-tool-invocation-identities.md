@@ -42,7 +42,9 @@ Provider-neutral contract DTOs may continue to carry implementation/provider han
 
 The explicit boundary function `contracts.domain_mapping.map_tool_invocation_to_domain(...)` maps a contract `ToolInvocation` to the canonical domain Tool Invocation. It requires the already-resolved canonical Tool ID and stores the contract invocation/tool handles as `ExternalRef` values. This creates a deterministic governance/audit link without coupling the domain model to a ToolProvider implementation.
 
-A governed invocation must also be bound to the exact arguments that were approved. Provider Contract `2.0` therefore defensively deep-freezes `ToolInvocation.arguments` when the contract value is created. The mapping boundary computes a deterministic SHA-256 digest of that immutable JSON-compatible argument value and records the digest in canonical Tool Invocation provenance as `arguments_sha256`. The same contract object subsequently passed to a ToolProvider cannot be mutated in-place to execute different arguments under an already-approved canonical invocation identity.
+A governed invocation must also be bound to the exact arguments that were approved. Provider Contract `2.0` therefore defensively deep-freezes `ToolInvocation.arguments` when the contract value is created. The mapping boundary computes a deterministic SHA-256 digest of that immutable JSON-compatible argument value and records the digest in canonical Tool Invocation provenance as `arguments_sha256`.
+
+Freezing one DTO is not sufficient by itself because a caller could reconstruct a new DTO with the same provider handles but different arguments. Governed execution paths therefore use `contracts.validate_tool_invocation_binding(...)` immediately before executing the provider call. The validator checks the mapped provider invocation ID, provider tool reference, correlation/causation context, any explicitly supplied owner/project context, and the current argument digest against the canonical Tool Invocation. A reconstructed or altered call no longer inherits an earlier approval merely by reusing its handles.
 
 Adapters that need a conventional JSON transport object use `ToolInvocation.arguments_json()`. It returns a detached recursive `dict`/`list` copy suitable for standard JSON encoding; mutations to that exported copy do not alter the governed snapshot or its digest.
 
@@ -60,14 +62,16 @@ Event schema `1.0` retains its previously published compatibility rules. Strict 
 - one sensitive tool invocation can be approved/audited independently from the reusable Tool definition;
 - provider invocation IDs remain replaceable external references;
 - approved tool-call identity is cryptographically bound to an immutable argument snapshot;
+- reconstructed or altered provider calls can be rejected before governed execution;
 - adapters retain a supported standard JSON export path through `arguments_json()`;
 - ToolProvider implementations do not become lifecycle or identity authorities;
 - Event v1 consumers are not broken by a silent contract narrowing;
-- future adapters have one explicit mapping point between provider DTOs and canonical governance identity.
+- future adapters have explicit mapping and validation points between provider DTOs and canonical governance identity.
 
 ### Costs / constraints
 
 - callers that need per-invocation governance must create/map a canonical Tool Invocation before creating the Approval/Event subject;
+- governed execution paths must call `validate_tool_invocation_binding(...)` immediately before invoking the provider;
 - callers must resolve the canonical Tool ID at the boundary;
 - Provider Contract `2.0` Tool Invocation arguments are read-only after construction and callers must create a new invocation for changed arguments;
 - adapters that serialize invocation arguments must use the detached `arguments_json()` export rather than serializing the internal frozen representation directly;
@@ -88,6 +92,10 @@ Rejected for invocation-specific approvals because it over-broadly identifies a 
 ### Keep invocation arguments mutable and approve only the invocation ID
 
 Rejected because a caller could mutate the arguments after approval and execute a different action under the same approved identity. Identity-only approval is insufficient for action-level governance.
+
+### Freeze the original DTO but do not validate reconstructed calls
+
+Rejected because a caller can create a new contract DTO with the same provider handles and altered arguments. The canonical governance identity must remain verifiable at the execution boundary.
 
 ### Change ToolInvocation semantics while continuing to advertise Provider Contract 1.0
 
@@ -116,6 +124,7 @@ Rejected because changing previously accepted subject values is a breaking contr
 - `src/ai_multi_agent_platform/contracts/domain_mapping.py`
   - explicit contract-to-domain Tool Invocation mapping
   - deterministic `arguments_sha256` binding
+  - `validate_tool_invocation_binding(...)` pre-execution verification
 - `docs/CONTRACTS.md`
   - Provider Contract `2.0` migration semantics
 - `schemas/domain/common.schema.json`
@@ -125,4 +134,4 @@ Rejected because changing previously accepted subject values is a breaking contr
   - backward-compatible Event v1
 - `schemas/domain/event.v2.schema.json`
   - strict canonical Event v2 subjects
-- Issue #4, PR #54 and its final follow-up PR
+- Issue #4 and the final follow-up PR replacing stale PR #60
