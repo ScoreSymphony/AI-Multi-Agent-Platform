@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 
 import pytest
@@ -10,10 +11,14 @@ from ai_multi_agent_platform.domain import (
     RUN_TRANSITIONS,
     TASK_TRANSITIONS,
     WORKER_JOB_TRANSITIONS,
+    Agent,
     Approval,
     ApprovalStatus,
     Artifact,
+    Event,
     ExternalRef,
+    Goal,
+    ModelAssignment,
     Node,
     OwnerRef,
     Plan,
@@ -22,10 +27,12 @@ from ai_multi_agent_platform.domain import (
     Step,
     Task,
     TaskStatus,
+    Tool,
     Worker,
     WorkerJob,
     WorkerJobStatus,
     can_transition,
+    new_id,
     validate_id,
 )
 
@@ -93,8 +100,9 @@ def test_scenario_four_task_waiting_for_approval() -> None:
     )
 
     assert can_transition(TaskStatus.RUNNING, TaskStatus.WAITING, TASK_TRANSITIONS)
-    task.status = TaskStatus.WAITING
-    assert task.status is TaskStatus.WAITING
+    waiting_task = task.transition_to(TaskStatus.WAITING)
+    assert task.status is TaskStatus.RUNNING
+    assert waiting_task.status is TaskStatus.WAITING
     assert approval.status is ApprovalStatus.PENDING
     assert can_transition(
         ApprovalStatus.PENDING,
@@ -114,10 +122,16 @@ def test_scenario_five_remote_worker_execution() -> None:
         correlation_id="corr-remote",
         worker_id=worker.id,
     )
-    job = WorkerJob(run_id=run.id, worker_id=worker.id, owner_ref=OWNER)
+    job = WorkerJob(
+        run_id=run.id,
+        worker_id=worker.id,
+        owner_ref=OWNER,
+        correlation_id=run.correlation_id,
+    )
 
     assert run.worker_id == worker.id
     assert job.run_id == run.id
+    assert job.correlation_id == run.correlation_id
     assert can_transition(
         WorkerJobStatus.QUEUED,
         WorkerJobStatus.ASSIGNED,
@@ -155,6 +169,101 @@ def test_run_rejects_backend_identifier_as_canonical_subject() -> None:
 def test_canonical_id_rejects_malformed_uuid_payload() -> None:
     with pytest.raises(ValueError):
         validate_id("task_------------------------------------", "task")
+
+
+def test_canonical_identity_cannot_be_reassigned_after_creation() -> None:
+    task = Task(title="Stable identity", owner_ref=OWNER)
+
+    with pytest.raises(FrozenInstanceError):
+        task.id = "backend-task-42"  # type: ignore[misc]
+
+
+def test_direct_status_assignment_cannot_bypass_transition_rules() -> None:
+    run = Run(
+        subject_type="task",
+        subject_id=new_id("task"),
+        owner_ref=OWNER,
+        correlation_id="corr-status",
+    )
+
+    with pytest.raises(FrozenInstanceError):
+        run.status = RunStatus.SUCCEEDED  # type: ignore[misc]
+
+    with pytest.raises(ValueError):
+        run.transition_to(RunStatus.SUCCEEDED)
+
+    starting = run.transition_to(RunStatus.STARTING)
+    running = starting.transition_to(RunStatus.RUNNING)
+    succeeded = running.transition_to(RunStatus.SUCCEEDED)
+
+    assert run.status is RunStatus.QUEUED
+    assert succeeded.status is RunStatus.SUCCEEDED
+    assert running.started_at is not None
+    assert succeeded.finished_at is not None
+
+
+def test_event_payload_is_defensively_deep_frozen() -> None:
+    task_id = new_id("task")
+    source_payload = {"outcome": {"labels": ["initial"]}}
+    event = Event(
+        event_type="task.updated",
+        subject_type="task",
+        subject_id=task_id,
+        correlation_id="corr-event",
+        payload=source_payload,
+    )
+
+    source_payload["outcome"]["labels"].append("mutated")
+
+    assert event.payload["outcome"]["labels"] == ("initial",)
+    with pytest.raises(TypeError):
+        event.payload["new"] = "value"  # type: ignore[index]
+    with pytest.raises(TypeError):
+        event.payload["outcome"]["other"] = "value"
+
+
+def test_model_assignment_requires_canonical_subject_identity() -> None:
+    with pytest.raises(ValueError):
+        ModelAssignment(
+            subject_type="task",
+            subject_id="backend-job-42",
+            owner_ref=OWNER,
+            requirements={},
+        )
+
+    assignment = ModelAssignment(
+        subject_type="task",
+        subject_id=new_id("task"),
+        owner_ref=OWNER,
+        requirements={"context": "large"},
+    )
+    validate_id(assignment.subject_id, "task")
+
+
+def test_relationship_fields_reject_noncanonical_ids() -> None:
+    with pytest.raises(ValueError):
+        Goal(title="Bad project", owner_ref=OWNER, project_id="db-row-1")
+
+    with pytest.raises(ValueError):
+        Agent(name="Bad capabilities", owner_ref=OWNER, capability_ids=("mcp-cap-1",))
+
+    with pytest.raises(ValueError):
+        Tool(name="Bad tool", owner_ref=OWNER, capability_ids=("provider-cap-1",))
+
+    with pytest.raises(ValueError):
+        Approval(
+            subject_type="task",
+            subject_id="executor-job-99",
+            owner_ref=OWNER,
+        )
+
+    with pytest.raises(ValueError):
+        Event(
+            event_type="task.updated",
+            subject_type="task",
+            subject_id="workflow-123",
+            correlation_id="corr-invalid-event",
+        )
 
 
 def test_lifecycle_terminal_run_has_no_outgoing_transition() -> None:
