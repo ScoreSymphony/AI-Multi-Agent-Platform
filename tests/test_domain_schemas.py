@@ -169,9 +169,7 @@ def test_run_rejects_step_id_when_subject_type_is_task() -> None:
 
 def test_event_v2_rejects_backend_specific_subject_id() -> None:
     with pytest.raises(ValidationError):
-        _validator("event.v2").validate(
-            _event(version="2.0", subject_id="backend-task-42")
-        )
+        _validator("event.v2").validate(_event(version="2.0", subject_id="backend-task-42"))
 
 
 def test_event_v2_rejects_subject_type_id_mismatch() -> None:
@@ -187,6 +185,4 @@ def test_event_v2_rejects_subject_type_id_mismatch() -> None:
 
 def test_event_v2_rejects_backend_specific_subject_type() -> None:
     with pytest.raises(ValidationError):
-        _validator("event.v2").validate(
-            _event(version="2.0", subject_type="forge_job")
-        )
+        _validator("event.v2").validate(_event(version="2.0", subject_type="forge_job"))
