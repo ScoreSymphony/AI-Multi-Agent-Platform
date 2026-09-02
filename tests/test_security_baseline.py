@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.contracts.types import AdapterMetadata
-from ai_multi_agent_platform.execution import ExecutionErrorCategory, ExecutionRequest, ReferenceExecutor
+from ai_multi_agent_platform.execution import (
+    ExecutionErrorCategory,
+    ExecutionRequest,
+    ReferenceExecutor,
+)
 from ai_multi_agent_platform.security import (
     REDACTED,
     PathSecurityError,
@@ -21,7 +25,9 @@ from ai_multi_agent_platform.security import (
 )
 
 
-def _request(*, workspace: str, action: str = "echo", arguments: dict[str, object] | None = None) -> ExecutionRequest:
+def _request(
+    *, workspace: str, action: str = "echo", arguments: dict[str, object] | None = None
+) -> ExecutionRequest:
     return ExecutionRequest(
         task_id="task-security",
         run_id="run-security",
