@@ -18,6 +18,7 @@ from ai_multi_agent_platform.contracts import (
     ProviderDescriptor,
     ToolInvocation,
 )
+from ai_multi_agent_platform.domain import OwnerRef, Run, Task
 from ai_multi_agent_platform.testing.conformance import (
     assert_canonical_error,
     assert_model_provider_contract,
@@ -81,15 +82,38 @@ class TranslatingModelAdapter(ModelProvider):
             ) from error
 
 
+def _canonical_task_and_run() -> tuple[Task, Run]:
+    owner = OwnerRef(type="user", id="validation-user")
+    task = Task(
+        title="Validate provider contracts",
+        description="validate contracts",
+        owner_ref=owner,
+        correlation_id=CTX.correlation_id,
+    )
+    run = Run(
+        subject_type="task",
+        subject_id=task.id,
+        owner_ref=owner,
+        correlation_id=CTX.correlation_id,
+    )
+    return task, run
+
+
 def test_canonical_task_flow_runs_using_only_reference_providers() -> None:
-    task_id = "task-validation"
+    task, run = _canonical_task_and_run()
     orchestrator = FakeOrchestrator()
     model = FakeModelProvider(response_text="model-output")
     tool = FakeToolProvider(fixed_output={"tool": "output"}, echo_arguments=False)
     lifecycle = FakeLifecycleBackend()
 
     plan = asyncio.run(
-        orchestrator.plan(PlanRequest(task_id=task_id, context=CTX, objective="validate contracts"))
+        orchestrator.plan(
+            PlanRequest(
+                task_id=task.id,
+                context=CTX,
+                objective=task.description,
+            )
+        )
     )
     model_response = asyncio.run(
         model.generate(
@@ -113,28 +137,42 @@ def test_canonical_task_flow_runs_using_only_reference_providers() -> None:
     execution = asyncio.run(
         lifecycle.start(
             ExecutionRequest(
-                run_id="run-validation",
+                run_id=run.id,
                 subject_type="task",
-                subject_id=task_id,
+                subject_id=task.id,
                 context=CTX,
                 input={"plan_ref": plan.plan_ref, "tool_output": tool_result.output},
             )
         )
     )
 
-    assert plan.plan_ref == f"plan:{task_id}"
+    assert plan.plan_ref == f"plan:{task.id}"
     assert model_response.request_id == "model-validation"
     assert tool_result.invocation_id == "tool-validation"
-    assert execution.run_id == "run-validation"
-    assert orchestrator.calls[0].task_id == task_id
-    assert lifecycle.start_calls[0].subject_id == task_id
+    assert execution.run_id == run.id
+    assert orchestrator.calls[0].task_id == task.id
+    assert lifecycle.start_calls[0].subject_id == task.id
+    assert lifecycle.start_calls[0].run_id == run.id
 
 
-def test_model_provider_can_be_replaced_without_changing_canonical_request() -> None:
+def test_model_provider_can_be_replaced_without_changing_canonical_domain_object() -> None:
+    task, _ = _canonical_task_and_run()
+    original_task_state = (
+        task.id,
+        task.status,
+        task.owner_ref,
+        task.description,
+        task.external_refs,
+    )
     request = ModelRequest(
         request_id="same-request",
         messages=("same canonical input",),
-        context=CTX,
+        context=OperationContext(
+            correlation_id=task.correlation_id or task.id,
+            owner_type=task.owner_ref.type,
+            owner_id=task.owner_ref.id,
+        ),
+        requirements={"task_id": task.id},
     )
     first = FakeModelProvider(response_text="first-provider")
     second = SecondTestModelAdapter()
@@ -146,6 +184,13 @@ def test_model_provider_can_be_replaced_without_changing_canonical_request() -> 
     assert second_response.request_id == request.request_id
     assert first_response.text == "first-provider"
     assert second_response.text == "second-provider"
+    assert (
+        task.id,
+        task.status,
+        task.owner_ref,
+        task.description,
+        task.external_refs,
+    ) == original_task_state
     asyncio.run(assert_model_provider_contract(SecondTestModelAdapter(), request))
 
 
