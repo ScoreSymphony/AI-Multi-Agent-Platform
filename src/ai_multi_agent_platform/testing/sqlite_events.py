@@ -5,8 +5,15 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
+from typing import cast
 
-from ai_multi_agent_platform.contracts import Capability, CapabilityKind, EventProvider
+from ai_multi_agent_platform.contracts import (
+    Capability,
+    CapabilityKind,
+    ContractError,
+    ErrorCode,
+    EventProvider,
+)
 from ai_multi_agent_platform.contracts.types import (
     JsonValue,
     OperationContext,
@@ -103,15 +110,18 @@ class SqliteEventProvider(EventProvider):
         parameters: list[str | int] = [correlation_id]
 
         if after_event_id is not None:
+            cursor_query = (
+                "SELECT sequence FROM platform_events "
+                "WHERE event_id = ? AND correlation_id = ?"
+            )
             with self._connect() as connection:
                 row = connection.execute(
-                    "SELECT sequence FROM platform_events WHERE event_id = ? AND correlation_id = ?",
+                    cursor_query,
                     (after_event_id, correlation_id),
                 ).fetchone()
             if row is None:
-                from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-
-                raise ContractError(ErrorCode.NOT_FOUND, f"Event cursor not found: {after_event_id}")
+                message = f"Event cursor not found: {after_event_id}"
+                raise ContractError(ErrorCode.NOT_FOUND, message)
             query += " AND sequence > ?"
             parameters.append(int(row["sequence"]))
 
@@ -122,11 +132,15 @@ class SqliteEventProvider(EventProvider):
         return tuple(self._to_event(row) for row in rows)
 
     @staticmethod
-    def _to_event(row: sqlite3.Row) -> PlatformEvent:
-        payload = json.loads(str(row["payload_json"]))
-        if not isinstance(payload, dict):
+    def _nullable_text(value: object) -> str | None:
+        return None if value is None else str(value)
+
+    @classmethod
+    def _to_event(cls, row: sqlite3.Row) -> PlatformEvent:
+        payload_object = json.loads(str(row["payload_json"]))
+        if not isinstance(payload_object, dict):
             raise ValueError("Stored event payload must be a JSON object")
-        typed_payload: dict[str, JsonValue] = payload
+        payload = cast(dict[str, JsonValue], payload_object)
         return PlatformEvent(
             event_id=str(row["event_id"]),
             event_type=str(row["event_type"]),
@@ -135,11 +149,11 @@ class SqliteEventProvider(EventProvider):
             occurred_at=str(row["occurred_at"]),
             context=OperationContext(
                 correlation_id=str(row["correlation_id"]),
-                causation_id=row["causation_id"],
-                owner_type=row["owner_type"],
-                owner_id=row["owner_id"],
-                project_id=row["project_id"],
+                causation_id=cls._nullable_text(row["causation_id"]),
+                owner_type=cls._nullable_text(row["owner_type"]),
+                owner_id=cls._nullable_text(row["owner_id"]),
+                project_id=cls._nullable_text(row["project_id"]),
             ),
-            payload=typed_payload,
+            payload=payload,
             schema_version=str(row["schema_version"]),
         )
