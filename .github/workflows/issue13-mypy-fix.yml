@@ -28,24 +28,26 @@ jobs:
 
           path = Path('src/ai_multi_agent_platform/data/reference.py')
           text = path.read_text()
-          old = '''        source_ids = request.source_ids
-        if source_ids:
-            sources = tuple(
-                await self._get_source(source_id, request.context) for source_id in source_ids
-            )
-        else:
-            sources = await self._list_sources(request.context)
-'''
-          new = '''        source_ids = request.source_ids
-        sources: tuple[KnowledgeSource, ...]
-        if source_ids:
-            resolved_sources: list[KnowledgeSource] = []
-            for source_id in source_ids:
-                resolved_sources.append(await self._get_source(source_id, request.context))
-            sources = tuple(resolved_sources)
-        else:
-            sources = await self._list_sources(request.context)
-'''
+          old = (
+              "        source_ids = request.source_ids\n"
+              "        if source_ids:\n"
+              "            sources = tuple(\n"
+              "                await self._get_source(source_id, request.context) for source_id in source_ids\n"
+              "            )\n"
+              "        else:\n"
+              "            sources = await self._list_sources(request.context)\n"
+          )
+          new = (
+              "        source_ids = request.source_ids\n"
+              "        sources: tuple[KnowledgeSource, ...]\n"
+              "        if source_ids:\n"
+              "            resolved_sources: list[KnowledgeSource] = []\n"
+              "            for source_id in source_ids:\n"
+              "                resolved_sources.append(await self._get_source(source_id, request.context))\n"
+              "            sources = tuple(resolved_sources)\n"
+              "        else:\n"
+              "            sources = await self._list_sources(request.context)\n"
+          )
           if old not in text:
               raise SystemExit('target snippet not found')
           path.write_text(text.replace(old, new, 1))
