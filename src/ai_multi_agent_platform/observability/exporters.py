@@ -100,10 +100,7 @@ class InMemoryExporter(ObservabilityExporter):
                     for entry in entries
                     if (task_id is None or entry.context.task_id == task_id)
                     and (run_id is None or entry.context.run_id == run_id)
-                    and (
-                        correlation_id is None
-                        or entry.context.correlation_id == correlation_id
-                    )
+                    and (correlation_id is None or entry.context.correlation_id == correlation_id)
                 ),
                 key=lambda entry: entry.timestamp,
             )
