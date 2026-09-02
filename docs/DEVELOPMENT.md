@@ -7,29 +7,62 @@
 
 ## Fresh clone
 
+Clone the repository and create an isolated virtual environment:
+
 ```bash
 git clone https://github.com/ScoreSymphony/AI-Multi-Agent-Platform.git
 cd AI-Multi-Agent-Platform
 python -m venv .venv
 ```
 
-Activate the virtual environment for your operating system, then install the development dependencies:
+Activate the virtual environment.
+
+Linux/macOS:
+
+```bash
+source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Windows Command Prompt:
+
+```bat
+.venv\Scripts\activate.bat
+```
+
+Then install the development dependencies:
 
 ```bash
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-## Validate the repository
+## Formatting
+
+Format the repository before committing:
 
 ```bash
+ruff format .
+```
+
+## Validate the repository
+
+Run the complete CI-equivalent local validation path:
+
+```bash
+ruff format --check .
 ruff check .
 mypy
 pytest
 python -m build
 ```
 
-These commands mirror the baseline CI checks.
+GitHub Actions starts from a fresh checkout on a clean runner, creates and activates `.venv` with the same Linux/macOS bootstrap commands above, installs the same development dependencies, and then runs the validation commands in the same order. This keeps the documented fresh-clone path and CI behavior directly aligned.
 
 ## Repository boundaries
 

@@ -28,13 +28,8 @@ def _validator(name: str) -> Draft202012Validator:
     return Draft202012Validator(schemas[name], registry=_registry(schemas))
 
 
-def test_domain_schemas_are_valid_draft_2020_12() -> None:
-    for schema in _load_schemas().values():
-        Draft202012Validator.check_schema(schema)
-
-
-def test_canonical_task_example_validates() -> None:
-    task = {
+def _task(**overrides: Any) -> dict[str, Any]:
+    task: dict[str, Any] = {
         "id": "task_123e4567-e89b-12d3-a456-426614174000",
         "schema_version": "1.0",
         "title": "Reference task",
@@ -47,11 +42,12 @@ def test_canonical_task_example_validates() -> None:
         "metadata": {},
         "external_refs": [],
     }
-    _validator("task").validate(task)
+    task.update(overrides)
+    return task
 
 
-def test_canonical_run_example_validates() -> None:
-    run = {
+def _run(**overrides: Any) -> dict[str, Any]:
+    run: dict[str, Any] = {
         "id": "run_123e4567-e89b-12d3-a456-426614174001",
         "schema_version": "1.0",
         "subject_type": "task",
@@ -65,34 +61,95 @@ def test_canonical_run_example_validates() -> None:
         "external_refs": [],
         "metadata": {},
     }
-    _validator("run").validate(run)
+    run.update(overrides)
+    return run
 
 
-def test_canonical_event_example_validates() -> None:
-    event = {
+def _event(**overrides: Any) -> dict[str, Any]:
+    event: dict[str, Any] = {
         "id": "event_123e4567-e89b-12d3-a456-426614174002",
         "schema_version": "1.0",
         "event_type": "task.ready",
         "occurred_at": "2026-09-02T16:00:00Z",
         "subject_type": "task",
         "subject_id": "task_123e4567-e89b-12d3-a456-426614174000",
+        "owner_ref": {"type": "service", "id": "platform"},
+        "project_id": "project_123e4567-e89b-12d3-a456-426614174010",
         "correlation_id": "corr-1",
         "causation_id": None,
+        "trace_id": "trace-1",
         "payload": {},
         "external_refs": [],
     }
-    _validator("event").validate(event)
+    event.update(overrides)
+    return event
+
+
+def test_domain_schemas_are_valid_draft_2020_12() -> None:
+    for schema in _load_schemas().values():
+        Draft202012Validator.check_schema(schema)
+
+
+def test_canonical_task_example_validates() -> None:
+    _validator("task").validate(_task())
+
+
+def test_waiting_task_example_validates() -> None:
+    _validator("task").validate(_task(status="waiting"))
+
+
+def test_canonical_run_example_validates() -> None:
+    _validator("run").validate(_run(trace_id="trace-1"))
+
+
+def test_canonical_step_run_example_validates() -> None:
+    _validator("run").validate(
+        _run(
+            subject_type="step",
+            subject_id="step_123e4567-e89b-12d3-a456-426614174003",
+        )
+    )
+
+
+def test_canonical_event_example_validates() -> None:
+    _validator("event").validate(_event())
 
 
 def test_task_rejects_backend_specific_status() -> None:
-    task = {
-        "id": "task_123e4567-e89b-12d3-a456-426614174000",
-        "schema_version": "1.0",
-        "title": "Invalid backend-shaped task",
-        "status": "forge_executing",
-        "owner_ref": {"type": "user", "id": "user-1"},
-        "created_at": "2026-09-02T16:00:00Z",
-        "updated_at": "2026-09-02T16:00:00Z",
-    }
     with pytest.raises(ValidationError):
-        _validator("task").validate(task)
+        _validator("task").validate(_task(status="forge_executing"))
+
+
+def test_task_rejects_malformed_uuid_payload() -> None:
+    with pytest.raises(ValidationError):
+        _validator("task").validate(_task(id="task_------------------------------------"))
+
+
+def test_run_rejects_backend_specific_subject_id() -> None:
+    with pytest.raises(ValidationError):
+        _validator("run").validate(_run(subject_id="forge-job-123"))
+
+
+def test_run_rejects_step_id_when_subject_type_is_task() -> None:
+    with pytest.raises(ValidationError):
+        _validator("run").validate(_run(subject_id="step_123e4567-e89b-12d3-a456-426614174003"))
+
+
+def test_event_rejects_backend_specific_subject_id() -> None:
+    with pytest.raises(ValidationError):
+        _validator("event").validate(_event(subject_id="backend-task-42"))
+
+
+def test_event_rejects_subject_type_id_mismatch() -> None:
+    with pytest.raises(ValidationError):
+        _validator("event").validate(
+            _event(
+                subject_type="run",
+                subject_id="task_123e4567-e89b-12d3-a456-426614174000",
+            )
+        )
+
+
+def test_event_rejects_backend_specific_subject_type() -> None:
+    with pytest.raises(ValidationError):
+        _validator("event").validate(_event(subject_type="forge_job"))

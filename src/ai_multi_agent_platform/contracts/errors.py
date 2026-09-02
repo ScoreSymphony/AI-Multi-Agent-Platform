@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from .types import JsonValue
+from .types import AdapterMetadata, JsonValue
 
 
 class ErrorCode(StrEnum):
@@ -16,8 +16,14 @@ class ErrorCode(StrEnum):
     CONFLICT = "conflict"
     UNAVAILABLE = "unavailable"
     TIMEOUT = "timeout"
+    CANCELLED = "cancelled"
+    RATE_LIMITED = "rate_limited"
+    RESOURCE_EXHAUSTED = "resource_exhausted"
     UNAUTHORIZED = "unauthorized"
     FORBIDDEN = "forbidden"
+    TRANSIENT_FAILURE = "transient_failure"
+    PERMANENT_FAILURE = "permanent_failure"
+    CONTRACT_VIOLATION = "contract_violation"
     BACKEND_ERROR = "backend_error"
 
 
@@ -36,6 +42,7 @@ class ContractError(Exception):
         retryable: bool = False,
         provider_id: str | None = None,
         details: dict[str, JsonValue] | None = None,
+        adapter_metadata: tuple[AdapterMetadata, ...] = (),
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -43,3 +50,4 @@ class ContractError(Exception):
         self.retryable = retryable
         self.provider_id = provider_id
         self.details = details or {}
+        self.adapter_metadata = adapter_metadata

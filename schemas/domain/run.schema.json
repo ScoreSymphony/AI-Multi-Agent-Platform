@@ -6,21 +6,34 @@
   "additionalProperties": false,
   "required": ["id", "schema_version", "subject_type", "subject_id", "attempt", "status", "created_at", "updated_at", "owner_ref", "correlation_id"],
   "properties": {
-    "id": {"type": "string", "pattern": "^run_[0-9a-fA-F-]{36}$"},
+    "id": {"$ref": "common.schema.json#/$defs/runId"},
     "schema_version": {"type": "string", "const": "1.0"},
     "subject_type": {"type": "string", "enum": ["task", "step"]},
-    "subject_id": {"type": "string", "minLength": 1},
+    "subject_id": {"type": "string"},
     "attempt": {"type": "integer", "minimum": 1},
-    "status": {"type": "string", "enum": ["queued", "running", "succeeded", "failed", "cancelled", "timed_out"]},
+    "status": {"type": "string", "enum": ["queued", "starting", "running", "succeeded", "failed", "cancelled", "timed_out"]},
     "owner_ref": {"$ref": "common.schema.json#/$defs/ownerRef"},
-    "project_id": {"type": ["string", "null"], "pattern": "^project_[0-9a-fA-F-]{36}$"},
+    "project_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/projectId"}, {"type": "null"}]},
+    "worker_id": {"anyOf": [{"$ref": "common.schema.json#/$defs/workerId"}, {"type": "null"}]},
     "created_at": {"$ref": "common.schema.json#/$defs/timestamp"},
     "updated_at": {"$ref": "common.schema.json#/$defs/timestamp"},
     "started_at": {"anyOf": [{"$ref": "common.schema.json#/$defs/timestamp"}, {"type": "null"}]},
     "finished_at": {"anyOf": [{"$ref": "common.schema.json#/$defs/timestamp"}, {"type": "null"}]},
     "correlation_id": {"type": "string", "minLength": 1},
     "causation_id": {"type": ["string", "null"]},
+    "trace_id": {"type": ["string", "null"]},
+    "provenance": {"anyOf": [{"$ref": "common.schema.json#/$defs/provenance"}, {"type": "null"}]},
     "external_refs": {"type": "array", "items": {"$ref": "common.schema.json#/$defs/externalRef"}},
     "metadata": {"$ref": "common.schema.json#/$defs/metadata"}
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"subject_type": {"const": "task"}}, "required": ["subject_type"]},
+      "then": {"properties": {"subject_id": {"$ref": "common.schema.json#/$defs/taskId"}}}
+    },
+    {
+      "if": {"properties": {"subject_type": {"const": "step"}}, "required": ["subject_type"]},
+      "then": {"properties": {"subject_id": {"$ref": "common.schema.json#/$defs/stepId"}}}
+    }
+  ]
 }
