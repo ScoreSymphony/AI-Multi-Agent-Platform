@@ -2,10 +2,12 @@ import pytest
 
 from ai_multi_agent_platform.contracts import (
     OperationContext,
-    ToolInvocation as ContractToolInvocation,
     map_tool_invocation_to_domain,
     tool_invocation_arguments_digest,
     validate_tool_invocation_binding,
+)
+from ai_multi_agent_platform.contracts import (
+    ToolInvocation as ContractToolInvocation,
 )
 from ai_multi_agent_platform.domain import OwnerRef, Tool
 from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocation
