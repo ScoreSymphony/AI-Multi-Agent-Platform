@@ -25,6 +25,7 @@ Complete this section when third-party software is added or changed.
 
 ## Validation
 
+- [ ] `ruff format --check .`
 - [ ] `ruff check .`
 - [ ] `mypy`
 - [ ] `pytest`
