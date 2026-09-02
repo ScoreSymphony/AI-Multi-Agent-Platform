@@ -1,0 +1,12 @@
+E501 Line too long (103 > 100)
+  --> src/ai_multi_agent_platform/models/router.py:81:101
+   |
+79 |                 raise ContractError(
+80 |                     ErrorCode.NO_COMPATIBLE_ROUTE,
+81 |                     f"explicit model assignment does not satisfy routing policy: {explicit.config_id}",
+   |                                                                                                     ^^^
+82 |                     provider_id=explicit.provider_id,
+83 |                     details={"explicit_model_id": explicit.config_id},
+   |
+
+Found 1 error.
