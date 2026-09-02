@@ -70,12 +70,16 @@ class CapabilityInvoker:
             available_worker_capabilities=request.available_worker_capabilities,
         )
         capability = registration.capability
-        self._validate_schema(
-            capability.input_schema,
-            dict(request.arguments),
-            stage="input",
-            capability_id=capability.capability_id,
-        )
+        try:
+            self._validate_schema(
+                capability.input_schema,
+                dict(request.arguments),
+                stage="input",
+                capability_id=capability.capability_id,
+            )
+        except ContractError as exc:
+            await self._record(request, registration, InvocationStatus.FAILED, exc.code.value)
+            raise
 
         provider_invocation = ToolInvocation(
             invocation_id=request.invocation_id,
@@ -98,6 +102,7 @@ class CapabilityInvoker:
             )
 
         canonical_invocation: DomainToolInvocation | None = None
+        approval_decision: str | None = None
         approval_required = policy_decision is PolicyDecision.REQUIRE_APPROVAL or bool(
             capability.required_approvals
         )
@@ -108,6 +113,7 @@ class CapabilityInvoker:
                     registration,
                     InvocationStatus.FAILED,
                     ErrorCode.CONTRACT_VIOLATION.value,
+                    approval_decision="required",
                 )
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
@@ -126,6 +132,14 @@ class CapabilityInvoker:
             try:
                 validate_tool_invocation_binding(provider_invocation, canonical_invocation)
             except ValueError as exc:
+                await self._record(
+                    request,
+                    registration,
+                    InvocationStatus.FAILED,
+                    ErrorCode.CONTRACT_VIOLATION.value,
+                    canonical_invocation=canonical_invocation,
+                    approval_decision="required",
+                )
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
                     "governance binding does not match the resolved provider invocation",
@@ -146,6 +160,7 @@ class CapabilityInvoker:
                     InvocationStatus.APPROVAL_REQUIRED,
                     ErrorCode.FORBIDDEN.value,
                     canonical_invocation=canonical_invocation,
+                    approval_decision="required",
                 )
                 raise ContractError(
                     ErrorCode.FORBIDDEN,
@@ -156,12 +171,14 @@ class CapabilityInvoker:
                         "canonical_tool_invocation_id": canonical_invocation.id,
                     },
                 )
+            approval_decision = "approved"
 
         await self._record(
             request,
             registration,
             InvocationStatus.RUNNING,
             canonical_invocation=canonical_invocation,
+            approval_decision=approval_decision,
         )
         timeout = capability.timeout_seconds or request.context.control.timeout_seconds
 
@@ -179,6 +196,7 @@ class CapabilityInvoker:
                 InvocationStatus.TIMED_OUT,
                 ErrorCode.TIMEOUT.value,
                 canonical_invocation=canonical_invocation,
+                approval_decision=approval_decision,
             )
             raise ContractError(
                 ErrorCode.TIMEOUT,
@@ -193,6 +211,7 @@ class CapabilityInvoker:
                 InvocationStatus.CANCELLED,
                 ErrorCode.CANCELLED.value,
                 canonical_invocation=canonical_invocation,
+                approval_decision=approval_decision,
             )
             raise ContractError(
                 ErrorCode.CANCELLED,
@@ -207,6 +226,7 @@ class CapabilityInvoker:
                 InvocationStatus.FAILED,
                 ErrorCode.CONTRACT_VIOLATION.value,
                 canonical_invocation=canonical_invocation,
+                approval_decision=approval_decision,
             )
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
@@ -220,6 +240,7 @@ class CapabilityInvoker:
                 InvocationStatus.FAILED,
                 exc.code.value,
                 canonical_invocation=canonical_invocation,
+                approval_decision=approval_decision,
             )
             raise
         except Exception as exc:
@@ -229,6 +250,7 @@ class CapabilityInvoker:
                 InvocationStatus.FAILED,
                 ErrorCode.BACKEND_ERROR.value,
                 canonical_invocation=canonical_invocation,
+                approval_decision=approval_decision,
             )
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
@@ -243,6 +265,7 @@ class CapabilityInvoker:
                 InvocationStatus.FAILED,
                 ErrorCode.CONTRACT_VIOLATION.value,
                 canonical_invocation=canonical_invocation,
+                approval_decision=approval_decision,
             )
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
@@ -251,12 +274,23 @@ class CapabilityInvoker:
             )
 
         if capability.output_schema is not None:
-            self._validate_schema(
-                capability.output_schema,
-                tool_result.output,
-                stage="output",
-                capability_id=capability.capability_id,
-            )
+            try:
+                self._validate_schema(
+                    capability.output_schema,
+                    tool_result.output,
+                    stage="output",
+                    capability_id=capability.capability_id,
+                )
+            except ContractError as exc:
+                await self._record(
+                    request,
+                    registration,
+                    InvocationStatus.FAILED,
+                    exc.code.value,
+                    canonical_invocation=canonical_invocation,
+                    approval_decision=approval_decision,
+                )
+                raise
 
         result = CapabilityInvocationResult(
             invocation_id=request.invocation_id,
@@ -268,6 +302,9 @@ class CapabilityInvoker:
             canonical_tool_invocation_id=(
                 canonical_invocation.id if canonical_invocation is not None else None
             ),
+            result_ref=tool_result.result_ref,
+            artifact_refs=tool_result.artifact_refs,
+            evidence_refs=tool_result.evidence_refs,
             adapter_metadata=tool_result.adapter_metadata,
         )
         await self._record(
@@ -275,6 +312,7 @@ class CapabilityInvoker:
             registration,
             InvocationStatus.SUCCEEDED,
             canonical_invocation=canonical_invocation,
+            approval_decision=approval_decision,
         )
         return result
 
@@ -286,6 +324,7 @@ class CapabilityInvoker:
         error_code: str | None = None,
         *,
         canonical_invocation: DomainToolInvocation | None = None,
+        approval_decision: str | None = None,
     ) -> None:
         await self._observer.record(
             InvocationRecord(
@@ -299,6 +338,9 @@ class CapabilityInvoker:
                 canonical_tool_invocation_id=(
                     canonical_invocation.id if canonical_invocation is not None else None
                 ),
+                node_id=registration.node_id,
+                worker_id=registration.worker_id,
+                approval_decision=approval_decision,
                 error_code=error_code,
                 adapter_metadata=registration.adapter_metadata,
             )

@@ -27,21 +27,39 @@ from ai_multi_agent_platform.contracts.types import (
 
 @dataclass(frozen=True, slots=True)
 class MCPServerConfig:
-    """Transport-neutral MCP server configuration."""
+    """Transport-neutral MCP server configuration.
+
+    Exactly one transport target is configured: ``endpoint`` for Streamable HTTP or
+    ``command`` for a local stdio subprocess. Environment values are transport input and
+    deliberately never copied into adapter metadata.
+    """
 
     server_id: str
     endpoint: str | None = None
     command: tuple[str, ...] = ()
+    environment: dict[str, str] = field(default_factory=dict)
+    cwd: str | None = None
+    read_timeout_seconds: float | None = None
     capability_id_overrides: dict[str, str] = field(default_factory=dict)
     priority: int = 0
 
     def __post_init__(self) -> None:
         if not self.server_id.strip():
             raise ValueError("server_id must not be blank")
-        if self.endpoint is None and not self.command:
-            raise ValueError("MCP server requires endpoint or command")
+        has_endpoint = self.endpoint is not None
+        has_command = bool(self.command)
+        if has_endpoint == has_command:
+            raise ValueError("MCP server requires exactly one of endpoint or command")
         if self.endpoint is not None and not self.endpoint.strip():
             raise ValueError("endpoint must not be blank")
+        if self.command and not self.command[0].strip():
+            raise ValueError("MCP command executable must not be blank")
+        if self.cwd is not None and not self.cwd.strip():
+            raise ValueError("cwd must not be blank")
+        if self.read_timeout_seconds is not None and self.read_timeout_seconds <= 0:
+            raise ValueError("read_timeout_seconds must be greater than zero")
+        if any(not key.strip() for key in self.environment):
+            raise ValueError("MCP environment keys must not be blank")
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +69,7 @@ class MCPTool:
     name: str
     description: str = ""
     input_schema: dict[str, JsonValue] = field(default_factory=dict)
+    output_schema: dict[str, JsonValue] | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -132,7 +151,7 @@ class MCPToolProvider(CapabilityToolProvider):
                             "$schema": "https://json-schema.org/draft/2020-12/schema",
                             "type": "object",
                         },
-                        output_schema=None,
+                        output_schema=tool.output_schema,
                         side_effects=SideEffectClassification.EXTERNAL,
                         health=health,
                         available=health is not HealthStatus.UNAVAILABLE,

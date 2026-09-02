@@ -60,7 +60,7 @@ class ProtocolTransport:
             {
                 "choices": [
                     {
-                        "message": {"content": "{\"answer\":42}"},
+                        "message": {"content": '{"answer":42}'},
                         "finish_reason": "stop",
                     }
                 ],
@@ -177,9 +177,7 @@ def test_rich_request_runs_end_to_end_through_router_registry_and_local_provider
                         input_schema={"type": "object"},
                     ),
                 ),
-                response=StructuredResponseExpectation(
-                    kind=StructuredResponseKind.JSON_OBJECT
-                ),
+                response=StructuredResponseExpectation(kind=StructuredResponseKind.JSON_OBJECT),
                 routing_requirements={
                     "local_only": True,
                     "tool_calling": True,

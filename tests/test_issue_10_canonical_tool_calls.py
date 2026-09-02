@@ -47,7 +47,7 @@ class ToolCallTransport:
                                     "type": "function",
                                     "function": {
                                         "name": "lookup",
-                                        "arguments": "{\"key\":\"value\"}",
+                                        "arguments": '{"key":"value"}',
                                     },
                                 }
                             ],
