@@ -20,9 +20,11 @@ jobs:
         with:
           python-version: "3.12"
       - name: Apply issue 10 completion
-        run: python scripts/issue10_complete.py
-      - name: Remove temporary implementation helper
-        run: rm scripts/issue10_complete.py
+        run: |
+          python scripts/issue10_complete.py
+          python scripts/issue10_type_fixes.py
+      - name: Remove temporary implementation helpers
+        run: rm scripts/issue10_complete.py scripts/issue10_type_fixes.py
       - name: Normalize inherited OpenAPI line lengths
         run: |
           python - <<'PY'
@@ -70,6 +72,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/ai_multi_agent_platform/control_plane docs/MODELS.md tests
-          git add -u scripts/issue10_complete.py
+          git add -u scripts/issue10_complete.py scripts/issue10_type_fixes.py
           git commit -m "feat(models): complete issue 10 control plane inventory" || exit 0
           git push origin HEAD:feat/issue-10-control-plane-completion
