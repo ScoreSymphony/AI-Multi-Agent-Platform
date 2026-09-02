@@ -97,9 +97,7 @@ def _raise_configured_failure(provider_id: str, failure: FakeFailure | None) -> 
         failure.message,
         retryable=failure.retryable,
         provider_id=provider_id,
-        adapter_metadata=(
-            AdapterMetadata(namespace="fake", values={"configured": True}),
-        ),
+        adapter_metadata=(AdapterMetadata(namespace="fake", values={"configured": True}),),
     )
 
 
