@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.contracts.types import JsonValue as JsonValue
 from ai_multi_agent_platform.domain import RunStatus
 
 ExecutionStatus = RunStatus
