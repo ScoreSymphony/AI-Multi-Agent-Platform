@@ -22,8 +22,8 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.repository import EventRepository
 
+from .http import ControlPlaneHTTP as BaseControlPlaneHTTP
 from .http import (
-    ControlPlaneHTTP as BaseControlPlaneHTTP,
     HTTPRequest,
     HTTPResponse,
     _header,
