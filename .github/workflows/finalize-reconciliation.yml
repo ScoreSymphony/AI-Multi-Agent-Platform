@@ -1,0 +1,97 @@
+name: Finalize issue 5 reconciliation
+
+on:
+  push:
+    branches:
+      - fix/issue-5-main-reconciliation
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/issue-5-main-reconciliation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply semantic and regression fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f'expected text not found in {path}: {old[:80]!r}')
+              p.write_text(text.replace(old, new))
+
+          # Provider tool handles remain opaque until the explicit canonical mapping boundary.
+          replace(
+              'src/ai_multi_agent_platform/contracts/types.py',
+              '''        if not self.invocation_id.strip():\n            raise ValueError("tool invocation_id must not be blank")\n        validate_id(self.tool_ref, "tool")\n        frozen = MappingProxyType(\n''',
+              '''        if not self.invocation_id.strip():\n            raise ValueError("tool invocation_id must not be blank")\n        if not self.tool_ref.strip():\n            raise ValueError("tool_ref must not be blank")\n        frozen = MappingProxyType(\n''',
+          )
+
+          # Align normative contract docs with ADR/#64 provider-handle mapping semantics.
+          replace(
+              'docs/CONTRACTS.md',
+              '- `ToolInvocation.tool_ref` is a canonical Tool ID. Native/MCP/HTTP/provider tool identifiers are adapter-private mappings, not canonical IDs.\n',
+              '- `ToolInvocation.tool_ref` and `invocation_id` are opaque provider/transport handles, not canonical domain IDs. Per-invocation governance resolves the canonical Tool ID at `map_tool_invocation_to_domain(...)`; provider handles are retained only as external references on the resulting canonical Tool Invocation.\n',
+          )
+          replace(
+              'docs/CONTRACTS.md',
+              '- canonical Task/Run/Tool/Node/Worker identities at boundaries;\n',
+              '- canonical Task/Run/Node/Worker identities at boundaries and explicit provider-handle-to-canonical Tool Invocation mapping;\n',
+          )
+
+          # Conformance terminology must not imply provider invocation handles are canonical IDs.
+          replace(
+              'src/ai_multi_agent_platform/testing/conformance.py',
+              '    """Verify canonical invocation identity preservation for tool providers."""\n',
+              '    """Verify provider invocation-handle preservation for tool providers."""\n',
+          )
+          replace(
+              'src/ai_multi_agent_platform/testing/conformance.py',
+              '        raise AssertionError("tool provider must preserve canonical invocation_id")\n',
+              '        raise AssertionError("tool provider must preserve the provider invocation handle")\n',
+          )
+
+          # #5 boundary validation now rejects blank provider handles, not non-canonical handles.
+          replace(
+              'tests/test_core_contracts.py',
+              '''    with pytest.raises(ValueError):\n        ToolInvocation(\n            invocation_id="invoke-invalid",\n            tool_ref="tool.invalid",\n            arguments={},\n            context=CTX,\n        )\n''',
+              '''    with pytest.raises(ValueError):\n        ToolInvocation(\n            invocation_id="invoke-invalid",\n            tool_ref="   ",\n            arguments={},\n            context=CTX,\n        )\n\n    provider_tool = ToolInvocation(\n        invocation_id="provider-invoke",\n        tool_ref="provider-tool-write",\n        arguments={},\n        context=CTX,\n    )\n    assert provider_tool.tool_ref == "provider-tool-write"\n''',
+          )
+
+          # Canonical Event deep-freeze intentionally normalizes nested lists to immutable tuples.
+          replace(
+              'tests/test_executor_kernel_integration.py',
+              '        assert run.output["artifacts"] == ["artifact.txt"]\n',
+              '        assert run.output["artifacts"] == ("artifact.txt",)\n',
+          )
+
+          # Replay tests consume the canonical Event directly, not the removed parallel context/metadata DTO.
+          replace(
+              'tests/test_kernel.py',
+              '''    for revision, event in enumerate(history, 1):\n        assert event.context.correlation_id == task_id and event.context.causation_id\n        assert event.payload["actor_ref"] and event.payload["source"]\n        assert event.payload["canonical_payload_version"] == "1.0"\n        assert event.payload["stream_revision"] == revision\n    succeeded = next(event for event in history if event.event_type == "run.succeeded")\n    assert succeeded.adapter_metadata == metadata\n''',
+              '''    for revision, event in enumerate(history, 1):\n        assert event.correlation_id == task_id and event.causation_id\n        assert event.owner_ref is not None\n        assert event.payload["actor_ref"] and event.payload["source"]\n        assert event.payload["canonical_payload_version"] == "1.0"\n        assert event.payload["stream_revision"] == revision\n    succeeded = next(event for event in history if event.event_type == "run.succeeded")\n    assert succeeded.payload["adapter_metadata"] == {\n        "fake.executor": {"delivery": "1"}\n    }\n''',
+          )
+          PY
+
+          python -m pip install "ruff==0.16.5"
+          ruff check --fix .
+          ruff format .
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/finalize-reconciliation.yml
+          git add -A
+          git commit -m "fix: align issue 5 tool and event semantics with current main"
+          git push origin HEAD:fix/issue-5-main-reconciliation
