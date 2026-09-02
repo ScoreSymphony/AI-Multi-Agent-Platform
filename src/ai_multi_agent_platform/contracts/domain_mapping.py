@@ -72,3 +72,56 @@ def map_tool_invocation_to_domain(
             ),
         ),
     )
+
+
+def validate_tool_invocation_binding(
+    invocation: ContractToolInvocation,
+    canonical_invocation: DomainToolInvocation,
+    *,
+    provider_namespace: str = "tool_provider",
+) -> None:
+    """Reject a governed execution when its provider call changed after mapping.
+
+    The canonical Tool Invocation is the approval/audit identity. Before a governed
+    provider call is executed, callers can use this function to prove that the current
+    provider invocation still has the same provider handles, correlation/causation
+    context and immutable argument snapshot that were mapped into that identity.
+
+    Ownership/project fields on ``OperationContext`` are optional contract hooks. When
+    present they must match the canonical invocation; absence does not invent a new
+    owner/project identity.
+    """
+
+    if not provider_namespace.strip():
+        raise ValueError("provider_namespace must not be blank")
+
+    context = invocation.context
+    if context.owner_type is not None or context.owner_id is not None:
+        if (
+            context.owner_type != canonical_invocation.owner_ref.type
+            or context.owner_id != canonical_invocation.owner_ref.id
+        ):
+            raise ValueError("tool invocation ownership context changed after governance binding")
+    if context.project_id is not None and context.project_id != canonical_invocation.project_id:
+        raise ValueError("tool invocation project context changed after governance binding")
+    if context.correlation_id != canonical_invocation.correlation_id:
+        raise ValueError("tool invocation correlation context changed after governance binding")
+    if context.causation_id != canonical_invocation.causation_id:
+        raise ValueError("tool invocation causation context changed after governance binding")
+
+    refs = {(ref.system, ref.kind, ref.value) for ref in canonical_invocation.external_refs}
+    if (provider_namespace, "invocation_id", invocation.invocation_id) not in refs:
+        raise ValueError("tool invocation provider handle changed after governance binding")
+    if (provider_namespace, "tool_ref", invocation.tool_ref) not in refs:
+        raise ValueError("tool reference changed after governance binding")
+
+    provenance = canonical_invocation.provenance
+    if provenance is None or provenance.source != "tool_invocation_contract_mapping":
+        raise ValueError("canonical tool invocation has no governed argument binding")
+    recorded_digest = provenance.details.get("arguments_sha256")
+    if not isinstance(recorded_digest, str):
+        raise ValueError("canonical tool invocation has no governed argument digest")
+
+    current_digest = tool_invocation_arguments_digest(invocation)
+    if current_digest != recorded_digest:
+        raise ValueError("tool invocation arguments changed after governance binding")
