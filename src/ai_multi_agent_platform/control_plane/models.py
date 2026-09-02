@@ -52,6 +52,42 @@ _ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.BACKEND_ERROR: 502,
 }
 
+_ERROR_CATEGORY: dict[str, str] = {
+    ErrorCode.INVALID_REQUEST.value: "validation",
+    ErrorCode.INVALID_CONFIGURATION.value: "configuration",
+    ErrorCode.UNSUPPORTED_CAPABILITY.value: "capability",
+    ErrorCode.NOT_FOUND.value: "resource",
+    ErrorCode.MODEL_UNAVAILABLE.value: "availability",
+    ErrorCode.NO_COMPATIBLE_ROUTE.value: "availability",
+    ErrorCode.INPUT_TOO_LARGE.value: "validation",
+    ErrorCode.INVALID_PROVIDER_RESPONSE.value: "provider",
+    ErrorCode.CONFLICT.value: "conflict",
+    ErrorCode.UNAVAILABLE.value: "availability",
+    ErrorCode.TIMEOUT.value: "timeout",
+    ErrorCode.CANCELLED.value: "cancellation",
+    ErrorCode.RATE_LIMITED.value: "capacity",
+    ErrorCode.RESOURCE_EXHAUSTED.value: "capacity",
+    ErrorCode.UNAUTHORIZED.value: "authentication",
+    ErrorCode.FORBIDDEN.value: "authorization",
+    ErrorCode.TRANSIENT_FAILURE.value: "transient",
+    ErrorCode.PERMANENT_FAILURE.value: "execution",
+    ErrorCode.CONTRACT_VIOLATION.value: "contract",
+    ErrorCode.BACKEND_ERROR.value: "backend",
+    "unsupported_api_version": "versioning",
+    "method_not_allowed": "transport",
+    "stream_transport_required": "transport",
+    "invalid_cursor": "validation",
+    "invalid_json": "validation",
+    "unsupported_media_type": "validation",
+}
+
+
+def api_error_category(code: str | ErrorCode) -> str:
+    """Return the stable northbound category for a canonical API error code."""
+
+    value = code.value if isinstance(code, ErrorCode) else code
+    return _ERROR_CATEGORY.get(value, "internal")
+
 
 @dataclass(frozen=True, slots=True)
 class ActorContext:
@@ -131,9 +167,14 @@ class APIError:
     details: dict[str, JsonValue] | None = None
     diagnostics: dict[str, dict[str, JsonValue]] | None = None
 
+    @property
+    def category(self) -> str:
+        return api_error_category(self.code)
+
     def to_json(self) -> dict[str, JsonValue]:
         payload: dict[str, JsonValue] = {
             "code": self.code,
+            "category": self.category,
             "message": self.message,
             "request_id": self.request_id,
             "correlation_id": self.correlation_id,
