@@ -37,11 +37,13 @@ from ai_multi_agent_platform.contracts.types import (
     KnowledgeQuery,
     ModelRequest,
     ModelResponse,
+    ModelSelection,
     NodeDescriptor,
     OperationContext,
     OperationControl,
     PlanRequest,
     PlanResponse,
+    PlanStepProposal,
     PlatformEvent,
     ProviderDescriptor,
     StoredObject,
@@ -154,9 +156,14 @@ class FakeOrchestrator(Orchestrator):
         self.calls.append(request)
         _raise_configured_failure(self.descriptor.provider_id, self.failure)
         return PlanResponse(
-            plan_ref=f"plan:{request.task_id}",
             summary=f"{self.summary_prefix} {request.objective}",
-            step_refs=(f"step:{request.task_id}:1",),
+            steps=(
+                PlanStepProposal(
+                    key="step-1",
+                    title="Execute requested work",
+                    objective=request.objective,
+                ),
+            ),
         )
 
 
@@ -292,16 +299,18 @@ class FakeModelRouter(ModelRouter):
         self,
         provider_id: str = "fake-model",
         *,
+        model_ref: str | None = None,
         failure: FakeFailure | None = None,
     ) -> None:
         self.provider_id = provider_id
+        self.model_ref = model_ref
         self.failure = failure
         self.calls: list[ModelRequest] = []
 
-    async def select_provider(self, request: ModelRequest) -> str:
+    async def select_provider(self, request: ModelRequest) -> ModelSelection:
         self.calls.append(request)
         _raise_configured_failure(self.descriptor.provider_id, self.failure)
-        return self.provider_id
+        return ModelSelection(provider_id=self.provider_id, model_ref=self.model_ref)
 
 
 class FakeToolProvider(ToolProvider):
@@ -500,11 +509,11 @@ class FakeEventProvider(EventProvider):
     ) -> tuple[PlatformEvent, ...]:
         self.read_calls.append((correlation_id, after_event_id, control))
         _raise_configured_failure(self.descriptor.provider_id, self.failure)
-        events = [event for event in self._events if event.context.correlation_id == correlation_id]
+        events = [event for event in self._events if event.correlation_id == correlation_id]
         if after_event_id is None:
             return tuple(events)
         for index, event in enumerate(events):
-            if event.event_id == after_event_id:
+            if event.id == after_event_id:
                 return tuple(events[index + 1 :])
         raise ContractError(ErrorCode.NOT_FOUND, f"Event cursor not found: {after_event_id}")
 
