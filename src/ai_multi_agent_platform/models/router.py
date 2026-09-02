@@ -95,7 +95,15 @@ class DeterministicModelRouter(ModelRouter):
 
         candidates = [
             config
-            for config in self.registry.list_models(enabled=True)
+            for config in self.registry.query_models(
+                enabled=True,
+                min_context_window=requirements.min_context_window,
+                tool_calling=True if requirements.tool_calling else None,
+                structured_output=True if requirements.structured_output else None,
+                streaming=True if requirements.streaming else None,
+                modalities=requirements.modalities,
+                reasoning=requirements.reasoning,
+            )
             if self._eligible(config, requirements)
         ]
         candidates.sort(key=lambda item: (-item.priority, item.config_id))
@@ -111,6 +119,7 @@ class DeterministicModelRouter(ModelRouter):
                     "structured_output": requirements.structured_output,
                     "streaming": requirements.streaming,
                     "modalities": list(requirements.modalities),
+                    "reasoning": list(requirements.reasoning),
                     "min_context_window": requirements.min_context_window,
                 },
             )
@@ -166,6 +175,10 @@ class DeterministicModelRouter(ModelRouter):
             return False
         if requirements.modalities and not set(requirements.modalities).issubset(
             capabilities.modalities
+        ):
+            return False
+        if requirements.reasoning and not set(requirements.reasoning).issubset(
+            capabilities.reasoning
         ):
             return False
         return True
