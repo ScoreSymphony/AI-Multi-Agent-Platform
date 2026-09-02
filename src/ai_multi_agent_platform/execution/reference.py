@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic
@@ -16,7 +17,22 @@ from .contracts import (
     ExecutionStatus,
     Executor,
     ExecutorDescriptor,
+    JsonValue,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class _ActionResult:
+    output: dict[str, JsonValue]
+    stdout: str = ""
+    stderr: str = ""
+    artifacts: tuple[ExecutionArtifact, ...] = ()
+
+
+class _ControlledFailure(Exception):
+    def __init__(self, message: str, code: int) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class ReferenceExecutor(Executor):
@@ -37,60 +53,76 @@ class ReferenceExecutor(Executor):
         )
 
     async def execute(self, request: ExecutionRequest) -> ExecutionResult:
-        started_wall = datetime.now(UTC)
+        started_at = datetime.now(UTC).isoformat()
         started = monotonic()
-        base = dict(
-            task_id=request.task_id,
-            run_id=request.run_id,
-            correlation_id=request.correlation_id,
-            step_id=request.step_id,
-            started_at=started_wall.isoformat(),
-        )
         try:
             workspace = self._workspace(request.workspace)
         except ValueError as exc:
-            return self._failure(base, started, ExecutionErrorCategory.WORKSPACE_ERROR, str(exc))
+            return self._failure(request, started_at, started, ExecutionErrorCategory.WORKSPACE_ERROR, str(exc))
 
         if request.action not in self._CAPABILITIES:
             return self._failure(
-                base,
+                request,
+                started_at,
                 started,
                 ExecutionErrorCategory.UNSUPPORTED_CAPABILITY,
                 f"unsupported action: {request.action}",
             )
         if request.cancellation is not None and request.cancellation.cancelled:
-            return self._cancelled(base, started)
+            return self._cancelled(request, started_at, started)
 
         try:
-            coro = self._run_action(request, workspace)
-            if request.timeout_seconds is None:
-                result = await coro
-            else:
-                result = await asyncio.wait_for(coro, timeout=request.timeout_seconds)
+            operation = self._run_action(request, workspace)
+            action_result = (
+                await operation
+                if request.timeout_seconds is None
+                else await asyncio.wait_for(operation, timeout=request.timeout_seconds)
+            )
         except TimeoutError:
             return self._failure(
-                base,
+                request,
+                started_at,
                 started,
                 ExecutionErrorCategory.TIMEOUT,
                 "execution timed out",
                 status=ExecutionStatus.TIMED_OUT,
             )
         except asyncio.CancelledError:
-            return self._cancelled(base, started)
+            return self._cancelled(request, started_at, started)
+        except _ControlledFailure as exc:
+            return self._failure(
+                request,
+                started_at,
+                started,
+                ExecutionErrorCategory.EXECUTION_FAILED,
+                str(exc),
+                code=exc.code,
+            )
         except ValueError as exc:
-            return self._failure(base, started, ExecutionErrorCategory.INVALID_REQUEST, str(exc))
-        except Exception as exc:  # defensive backend normalization
-            return self._failure(base, started, ExecutionErrorCategory.INTERNAL, str(exc))
+            return self._failure(
+                request, started_at, started, ExecutionErrorCategory.INVALID_REQUEST, str(exc)
+            )
+        except Exception as exc:
+            return self._failure(
+                request, started_at, started, ExecutionErrorCategory.INTERNAL, str(exc)
+            )
 
         if request.cancellation is not None and request.cancellation.cancelled:
-            return self._cancelled(base, started)
+            return self._cancelled(request, started_at, started)
         return ExecutionResult(
-            **base,
+            task_id=request.task_id,
+            run_id=request.run_id,
+            correlation_id=request.correlation_id,
+            step_id=request.step_id,
             status=ExecutionStatus.SUCCEEDED,
             result_code=0,
+            output=action_result.output,
+            stdout=action_result.stdout,
+            stderr=action_result.stderr,
+            artifacts=action_result.artifacts,
+            started_at=started_at,
             finished_at=datetime.now(UTC).isoformat(),
             duration_seconds=monotonic() - started,
-            **result,
         )
 
     def _workspace(self, workspace: str) -> Path:
@@ -101,10 +133,10 @@ class ReferenceExecutor(Executor):
             raise ValueError("workspace is missing or unavailable")
         return candidate
 
-    async def _run_action(self, request: ExecutionRequest, workspace: Path) -> dict[str, object]:
+    async def _run_action(self, request: ExecutionRequest, workspace: Path) -> _ActionResult:
         if request.action == "echo":
             text = str(request.arguments.get("text", ""))
-            return {"stdout": text, "output": {"text": text}}
+            return _ActionResult(output={"text": text}, stdout=text)
         if request.action == "write_artifact":
             relative = str(request.arguments.get("path", "artifact.txt"))
             content = str(request.arguments.get("content", ""))
@@ -113,18 +145,24 @@ class ReferenceExecutor(Executor):
                 raise ValueError("artifact path escapes execution workspace")
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_text(content, encoding="utf-8")
-            artifact = ExecutionArtifact(relative_path=relative, media_type="text/plain", size_bytes=len(content.encode()))
-            return {"stdout": relative, "output": {"artifact": relative}, "artifacts": (artifact,)}
+            artifact = ExecutionArtifact(
+                relative_path=relative,
+                media_type="text/plain",
+                size_bytes=len(content.encode("utf-8")),
+            )
+            return _ActionResult(
+                output={"artifact": relative}, stdout=relative, artifacts=(artifact,)
+            )
         if request.action == "fail":
             message = str(request.arguments.get("message", "controlled failure"))
             code = int(request.arguments.get("code", 1))
-            return self._controlled_failure(message, code)
+            raise _ControlledFailure(message, code)
         if request.action == "sleep":
             seconds = float(request.arguments.get("seconds", 0))
             if seconds < 0:
                 raise ValueError("sleep seconds must not be negative")
             await self._sleep_with_cancellation(seconds, request)
-            return {"stdout": "", "output": {"slept_seconds": seconds}}
+            return _ActionResult(output={"slept_seconds": seconds})
         raise AssertionError("capability validation bug")
 
     async def _sleep_with_cancellation(self, seconds: float, request: ExecutionRequest) -> None:
@@ -141,13 +179,10 @@ class ReferenceExecutor(Executor):
         if cancel_task in done:
             raise asyncio.CancelledError
 
-    @staticmethod
-    def _controlled_failure(message: str, code: int) -> dict[str, object]:
-        raise _ControlledFailure(message, code)
-
     def _failure(
         self,
-        base: dict[str, object],
+        request: ExecutionRequest,
+        started_at: str,
         started: float,
         category: ExecutionErrorCategory,
         message: str,
@@ -156,26 +191,25 @@ class ReferenceExecutor(Executor):
         code: int | None = None,
     ) -> ExecutionResult:
         return ExecutionResult(
-            **base,  # type: ignore[arg-type]
+            task_id=request.task_id,
+            run_id=request.run_id,
+            correlation_id=request.correlation_id,
+            step_id=request.step_id,
             status=status,
             result_code=code,
             stderr=message,
             error=ExecutionError(category=category, message=message),
+            started_at=started_at,
             finished_at=datetime.now(UTC).isoformat(),
             duration_seconds=monotonic() - started,
         )
 
-    def _cancelled(self, base: dict[str, object], started: float) -> ExecutionResult:
+    def _cancelled(self, request: ExecutionRequest, started_at: str, started: float) -> ExecutionResult:
         return self._failure(
-            base,
+            request,
+            started_at,
             started,
             ExecutionErrorCategory.CANCELLED,
             "execution cancelled",
             status=ExecutionStatus.CANCELLED,
         )
-
-
-class _ControlledFailure(Exception):
-    def __init__(self, message: str, code: int) -> None:
-        super().__init__(message)
-        self.code = code
