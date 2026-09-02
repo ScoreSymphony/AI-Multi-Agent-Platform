@@ -232,9 +232,7 @@ class ModelRegistry:
         if reasoning:
             required_reasoning = set(reasoning)
             models = [
-                item
-                for item in models
-                if required_reasoning.issubset(item.capabilities.reasoning)
+                item for item in models if required_reasoning.issubset(item.capabilities.reasoning)
             ]
         return tuple(models)
 

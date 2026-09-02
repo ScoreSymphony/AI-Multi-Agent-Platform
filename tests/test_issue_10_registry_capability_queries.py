@@ -114,9 +114,7 @@ def test_reasoning_metadata_is_part_of_deterministic_routing() -> None:
     registry = ModelRegistry()
     registry.register_provider(CapabilityProvider())
     registry.register_model(model("model-basic", tool_calling=True, reasoning=()))
-    registry.register_model(
-        model("model-reasoning", tool_calling=True, reasoning=("reasoning",))
-    )
+    registry.register_model(model("model-reasoning", tool_calling=True, reasoning=("reasoning",)))
 
     route = DeterministicModelRouter(registry).route(
         RoutingRequirements(local_only=True, reasoning=("reasoning",))

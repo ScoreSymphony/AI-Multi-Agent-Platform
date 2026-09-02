@@ -70,12 +70,8 @@ def build_openapi() -> dict[str, Any]:
                 ],
             }
         },
-        f"/api/{API_VERSION}/runs": {
-            "get": _list_operation("listRuns", "Run page")
-        },
-        f"/api/{API_VERSION}/runs/{{run_id}}": {
-            "get": _read_operation("getRun", "run_id", "Run")
-        },
+        f"/api/{API_VERSION}/runs": {"get": _list_operation("listRuns", "Run page")},
+        f"/api/{API_VERSION}/runs/{{run_id}}": {"get": _read_operation("getRun", "run_id", "Run")},
         f"/api/{API_VERSION}/tasks/{{task_id}}/timeline": {
             "get": {
                 **_list_operation("getTaskTimeline", "Canonical event page"),

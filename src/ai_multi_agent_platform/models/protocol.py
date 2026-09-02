@@ -206,9 +206,7 @@ class CanonicalModelRequest:
     messages: tuple[ModelMessage, ...]
     system_instruction: str | None = None
     tools: tuple[ModelToolDefinition, ...] = ()
-    response: StructuredResponseExpectation = field(
-        default_factory=StructuredResponseExpectation
-    )
+    response: StructuredResponseExpectation = field(default_factory=StructuredResponseExpectation)
     generation: ModelGenerationParameters = field(default_factory=ModelGenerationParameters)
     model_config_id: str | None = None
     task_id: str | None = None
@@ -242,9 +240,7 @@ class CanonicalModelRequest:
             )
 
         requirements = dict(self.routing_requirements)
-        requirements["canonical_messages"] = [
-            message.to_json() for message in canonical_messages
-        ]
+        requirements["canonical_messages"] = [message.to_json() for message in canonical_messages]
         requirements["canonical_tools"] = [tool.to_json() for tool in self.tools]
         requirements["response_expectation"] = self.response.to_json()
         requirements.update(self.generation.to_json())

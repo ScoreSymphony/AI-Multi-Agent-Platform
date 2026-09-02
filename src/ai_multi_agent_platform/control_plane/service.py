@@ -103,7 +103,9 @@ class ScopeStore:
         try:
             return self._workspaces[workspace_id]
         except KeyError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, f"workspace not found: {workspace_id}") from exc
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"workspace not found: {workspace_id}"
+            ) from exc
 
     def list_workspaces(self) -> tuple[WorkspaceIdentity, ...]:
         return tuple(self._workspaces.values())
@@ -178,7 +180,9 @@ class ControlPlane:
         query: PageQuery,
     ) -> dict[str, JsonValue]:
         await self._authorize(context, "project:list", "projects")
-        return paginate([_project_resource(project) for project in self._scopes.list_projects()], query)
+        return paginate(
+            [_project_resource(project) for project in self._scopes.list_projects()], query
+        )
 
     async def get_project(
         self,
@@ -455,7 +459,9 @@ class ControlPlane:
                     emit = True
                     found = True
             if not found:
-                raise ContractError(ErrorCode.NOT_FOUND, f"event cursor not found: {after_event_id}")
+                raise ContractError(
+                    ErrorCode.NOT_FOUND, f"event cursor not found: {after_event_id}"
+                )
 
         return iterator()
 

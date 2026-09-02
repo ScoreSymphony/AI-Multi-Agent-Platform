@@ -508,7 +508,9 @@ class OpenAICompatibleModelProvider(ModelProvider):
         try:
             parsed: object = json.loads(content)
         except json.JSONDecodeError as exc:
-            raise self._invalid_response("provider returned invalid structured JSON output") from exc
+            raise self._invalid_response(
+                "provider returned invalid structured JSON output"
+            ) from exc
         if not self._is_json_value(parsed):
             raise self._invalid_response("provider structured output is not JSON compatible")
         return cast(JsonValue, parsed)
