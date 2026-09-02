@@ -114,22 +114,26 @@ def _transition_run(run: Run, target: RunStatus, event: PlatformEvent) -> Run:
     except ValueError as exc:
         raise ContractError(ErrorCode.CONFLICT, str(exc)) from exc
     occurred = _timestamp(event)
-    changes: dict[str, object] = {
-        "status": target,
-        "updated_at": occurred,
-        "causation_id": event.context.causation_id,
-        "provenance": _event_provenance(event),
-    }
-    if target is RunStatus.RUNNING and run.started_at is None:
-        changes["started_at"] = occurred
+    started_at = run.started_at
+    if target is RunStatus.RUNNING and started_at is None:
+        started_at = occurred
+    finished_at = run.finished_at
     if target in {
         RunStatus.SUCCEEDED,
         RunStatus.FAILED,
         RunStatus.CANCELLED,
         RunStatus.TIMED_OUT,
     }:
-        changes["finished_at"] = occurred
-    return replace(run, **changes)
+        finished_at = occurred
+    return replace(
+        run,
+        status=target,
+        updated_at=occurred,
+        causation_id=event.context.causation_id,
+        provenance=_event_provenance(event),
+        started_at=started_at,
+        finished_at=finished_at,
+    )
 
 
 def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
