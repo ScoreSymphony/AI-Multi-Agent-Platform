@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from executor_contract_suite import ExecutorContractSuite
+
 from ai_multi_agent_platform.execution import (
     Executor,
     ExecutorRegistry,
     ReferenceExecutor,
 )
-
-from executor_contract_suite import ExecutorContractSuite
 
 
 class TestReferenceExecutorContract(ExecutorContractSuite):
