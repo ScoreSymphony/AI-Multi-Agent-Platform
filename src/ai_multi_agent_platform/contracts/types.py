@@ -328,10 +328,10 @@ class ToolInvocation:
 class ToolResult:
     invocation_id: str
     output: JsonValue
+    adapter_metadata: tuple[AdapterMetadata, ...] = ()
     result_ref: str | None = None
     artifact_refs: tuple[str, ...] = ()
     evidence_refs: tuple[str, ...] = ()
-    adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
