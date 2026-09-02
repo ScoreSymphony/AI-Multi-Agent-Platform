@@ -140,9 +140,15 @@ class ModelRegistry:
             for alias in config.aliases:
                 existing_id = self._aliases.get(alias)
                 if alias in self._models and alias != config.config_id:
-                    raise ContractError(ErrorCode.CONFLICT, f"model alias already registered: {alias}")
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        f"model alias already registered: {alias}",
+                    )
                 if existing_id is not None and existing_id != config.config_id:
-                    raise ContractError(ErrorCode.CONFLICT, f"model alias already registered: {alias}")
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        f"model alias already registered: {alias}",
+                    )
             self._models[config.config_id] = config
             for alias in config.aliases:
                 self._aliases[alias] = config.config_id
@@ -181,11 +187,11 @@ class ModelRegistry:
         provider_id: str | None = None,
         enabled: bool | None = None,
     ) -> tuple[ModelConfiguration, ...]:
-        models = self._models.values()
+        models = list(self._models.values())
         if provider_id is not None:
-            models = (item for item in models if item.provider_id == provider_id)
+            models = [item for item in models if item.provider_id == provider_id]
         if enabled is not None:
-            models = (item for item in models if item.enabled is enabled)
+            models = [item for item in models if item.enabled is enabled]
         return tuple(sorted(models, key=lambda item: item.config_id))
 
     def provider_health(self, provider_id: str) -> HealthStatus:
