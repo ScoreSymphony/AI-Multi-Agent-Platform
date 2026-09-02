@@ -1,4 +1,5 @@
 from collections import deque
+from enum import Enum
 
 import pytest
 
@@ -25,6 +26,10 @@ class MutableBox:
         self.value = "mutable"
 
 
+class MutableEnum(Enum):
+    VALUE = ["mutable"]
+
+
 def test_event_payload_rejects_arbitrary_mutable_custom_objects() -> None:
     with pytest.raises(TypeError):
         Event(
@@ -33,6 +38,17 @@ def test_event_payload_rejects_arbitrary_mutable_custom_objects() -> None:
             subject_id="task_123e4567-e89b-12d3-a456-426614174000",
             correlation_id="corr-custom-mutable",
             payload={"box": MutableBox()},
+        )
+
+
+def test_event_payload_rejects_mutable_enum_members() -> None:
+    with pytest.raises(TypeError):
+        Event(
+            event_type="task.updated",
+            subject_type="task",
+            subject_id="task_123e4567-e89b-12d3-a456-426614174000",
+            correlation_id="corr-mutable-enum",
+            payload={"enum": MutableEnum.VALUE},
         )
 
 

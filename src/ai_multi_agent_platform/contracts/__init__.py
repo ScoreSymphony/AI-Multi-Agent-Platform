@@ -1,6 +1,10 @@
 """Public provider-neutral contract surface."""
 
-from .domain_mapping import map_tool_invocation_to_domain
+from .domain_mapping import (
+    map_tool_invocation_to_domain,
+    tool_arguments_digest,
+    validate_tool_invocation_binding,
+)
 from .errors import ContractError, ErrorCode
 from .interfaces import (
     AuthorizationProvider,
@@ -93,4 +97,6 @@ __all__ = [
     "WorkerDescriptor",
     "WorkerProvider",
     "map_tool_invocation_to_domain",
+    "tool_arguments_digest",
+    "validate_tool_invocation_binding",
 ]

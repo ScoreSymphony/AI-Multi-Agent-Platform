@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from enum import Enum, StrEnum
+from enum import StrEnum
 from types import MappingProxyType
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -35,7 +35,7 @@ CANONICAL_SUBJECT_PREFIXES: Mapping[str, str] = MappingProxyType(
     }
 )
 
-IMMUTABLE_LEAF_TYPES = (str, bytes, int, float, bool, type(None), datetime, UUID, Enum)
+IMMUTABLE_LEAF_TYPES = (str, bytes, int, float, bool, type(None), datetime, UUID)
 
 
 def utc_now() -> datetime:

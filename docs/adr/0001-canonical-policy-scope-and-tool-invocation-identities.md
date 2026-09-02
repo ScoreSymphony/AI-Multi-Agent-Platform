@@ -40,7 +40,15 @@ It references a canonical `tool_<uuid>` and supplies the stable governed-action 
 
 Provider-neutral contract DTOs may continue to carry implementation/provider handles such as `invocation_id="invoke-1"` and `tool_ref="provider-tool-write"`. Those values do not become canonical IDs.
 
-The explicit boundary function `contracts.domain_mapping.map_tool_invocation_to_domain(...)` maps a contract `ToolInvocation` to the canonical domain Tool Invocation. It requires the already-resolved canonical Tool ID and stores the contract invocation/tool handles as `ExternalRef` values. This creates a deterministic governance/audit link without coupling the domain model to a ToolProvider implementation.
+The explicit boundary function `contracts.domain_mapping.map_tool_invocation_to_domain(...)` maps a contract `ToolInvocation` to the canonical domain Tool Invocation. It requires the already-resolved canonical Tool ID and stores the contract invocation/tool handles as `ExternalRef` values. It also records a deterministic `sha256:` digest of the exact JSON argument payload as an external governance reference.
+
+Before a governed provider invocation is executed, `contracts.validate_tool_invocation_binding(...)` must verify that the provider invocation ID, provider tool reference and current argument digest still match the canonical Tool Invocation. Mutating or replacing arguments after approval therefore invalidates the binding instead of silently changing the approved action.
+
+The digest is a binding mechanism, not a canonical identifier. It does not replace the canonical `tool_invocation_<uuid>` and does not make provider payloads part of platform identity.
+
+### Canonical metadata immutability
+
+Canonical structured metadata accepts recursively frozen mappings and collection containers plus explicitly immutable scalar/leaf types. Arbitrary `Enum` members are not treated as immutable leaves: Python Enum members may carry mutable values or attributes. String enums remain naturally acceptable because they are strings, while unsupported generic Enum/custom-object leaves are rejected.
 
 ### Event contract versioning
 
@@ -52,14 +60,17 @@ Event schema `1.0` retains its previously published compatibility rules. Strict 
 
 - model assignment can target policy scope without arbitrary backend IDs;
 - one sensitive tool invocation can be approved/audited independently from the reusable Tool definition;
+- an approval is bound to the exact provider invocation handle, tool reference and argument payload that was governed;
 - provider invocation IDs remain replaceable external references;
 - ToolProvider implementations do not become lifecycle or identity authorities;
 - Event v1 consumers are not broken by a silent contract narrowing;
-- future adapters have one explicit mapping point between provider DTOs and canonical governance identity.
+- future adapters have one explicit mapping and validation point between provider DTOs and canonical governance identity;
+- canonical Event/metadata immutability cannot be bypassed with mutable-valued generic Enum members.
 
 ### Costs / constraints
 
 - callers that need per-invocation governance must create/map a canonical Tool Invocation before creating the Approval/Event subject;
+- governed execution paths must call `validate_tool_invocation_binding(...)` immediately before provider execution;
 - callers must resolve the canonical Tool ID at the boundary;
 - Policy Scope is an additional canonical scope identity that persistence/API work must eventually support;
 - Event v1 and v2 coexist until migration policy retires v1.
@@ -73,6 +84,18 @@ Rejected. Provider invocation handles are backend-private, may collide, may chan
 ### Make the reusable Tool the Approval subject
 
 Rejected for invocation-specific approvals because it over-broadly identifies a tool definition rather than the exact governed action.
+
+### Approve only the canonical invocation ID without binding arguments
+
+Rejected. A caller could mutate or replace provider arguments after approval and execute a materially different action under the same approved identity.
+
+### Store the full provider argument payload in canonical identity
+
+Rejected. Arguments can be sensitive and transport-specific. A deterministic digest is sufficient to bind the governed action while keeping provider payload storage outside canonical identity.
+
+### Treat every Python Enum member as immutable
+
+Rejected. Enum members can contain mutable values or attributes and would bypass the deep-immutability guarantee.
 
 ### Remove policy-scoped Model Assignment until authorization is implemented
 
@@ -89,10 +112,13 @@ Rejected because changing previously accepted subject values is a breaking contr
   - canonical `ToolInvocation`
   - `ModelAssignment`
   - Approval/Event subject validation
+  - canonical metadata deep-freeze leaf policy
 - `src/ai_multi_agent_platform/contracts/types.py`
   - provider-neutral contract `ToolInvocation` remains transport-facing
 - `src/ai_multi_agent_platform/contracts/domain_mapping.py`
   - explicit contract-to-domain Tool Invocation mapping
+  - deterministic tool-argument digest
+  - pre-execution binding validation
 - `schemas/domain/common.schema.json`
   - `policyScopeId`
   - `toolInvocationId`
@@ -100,4 +126,4 @@ Rejected because changing previously accepted subject values is a breaking contr
   - backward-compatible Event v1
 - `schemas/domain/event.v2.schema.json`
   - strict canonical Event v2 subjects
-- Issue #4 and PR #54
+- Issue #4, merged PR #54 and the final governance-gap follow-up PR
