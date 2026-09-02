@@ -11,6 +11,7 @@ from .contracts import (
     Executor,
     ExecutorDescriptor,
 )
+from .lifecycle import ExecutorLifecycleBackend
 from .reference import ReferenceExecutor
 from .registry import ExecutorRegistry
 
@@ -24,6 +25,7 @@ __all__ = [
     "ExecutionStatus",
     "Executor",
     "ExecutorDescriptor",
+    "ExecutorLifecycleBackend",
     "ExecutorRegistry",
     "ReferenceExecutor",
 ]
