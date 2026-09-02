@@ -463,7 +463,11 @@ def test_timeline_query_preserves_correlation_and_can_filter_run_events() -> Non
                 query={"filter[subject_id]": run_id},
             )
         )
-        assert_page(run_events.body, total=1)
+        run_items = assert_page(run_events.body)
+        assert run_items
+        assert all(
+            isinstance(item, dict) and item.get("subject_id") == run_id for item in run_items
+        )
 
     asyncio.run(scenario())
 
@@ -560,7 +564,7 @@ def test_core_api_starts_without_future_optional_subsystems() -> None:
     asyncio.run(scenario())
 
 
-def test_openapi_is_current_scope_only_and_documents_evolution() -> None:
+def test_openapi_documents_full_issue_32_scope_and_evolution() -> None:
     spec = build_openapi()
     assert spec["openapi"] == "3.1.0"
     paths = spec["paths"]
@@ -568,23 +572,29 @@ def test_openapi_is_current_scope_only_and_documents_evolution() -> None:
         "projects",
         "workspaces",
         "tasks",
-        "runs",
         "plans",
         "steps",
+        "runs",
+        "agents",
+        "teams",
         "artifacts",
         "results",
+        "files",
+        "memory",
+        "knowledge",
+        "models",
+        "providers",
+        "tools",
+        "capabilities",
+        "nodes",
+        "workers",
+        "approvals",
+        "automations",
+        "evaluations",
+        "plugins",
+        "adapters",
     ):
         assert f"/api/v1/{resource}" in paths
     assert "/api/v1/tasks/{task_id}/timeline" in paths
     assert "/api/v1/tasks/{task_id}/events/stream" in paths
-    for future_resource in (
-        "agents",
-        "models",
-        "tools",
-        "nodes",
-        "automations",
-        "evaluations",
-        "plugins",
-    ):
-        assert f"/api/v1/{future_resource}" not in paths
     assert spec["x-evolution-policy"]["breaking_changes"] == "require a new major path namespace"
