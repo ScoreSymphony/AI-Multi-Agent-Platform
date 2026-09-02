@@ -1,0 +1,2 @@
+src/ai_multi_agent_platform/observability/instrumentation.py:380: error: Incompatible types in assignment (expression has type "None", variable has type "FailureClassification")  [assignment]
+Found 1 error in 1 file (checked 74 source files)
