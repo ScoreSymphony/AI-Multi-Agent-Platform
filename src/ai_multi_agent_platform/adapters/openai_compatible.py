@@ -14,7 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from time import perf_counter, time
 from types import MappingProxyType
-from typing import Protocol
+from typing import Protocol, cast
 from urllib import error, request
 
 from ai_multi_agent_platform.contracts import (
@@ -291,27 +291,40 @@ class OpenAICompatibleModelProvider(ModelProvider):
                 if isinstance(key, str) and self._is_json_value(value)
             }
 
-        metadata_values: dict[str, JsonValue] = {
+        normalized_finish = "unknown"
+        finish_reason = first.get("finish_reason")
+        if isinstance(finish_reason, str):
+            normalized_finish = self._normalize_finish_reason(finish_reason)
+
+        raw_tool_calls = message.get("tool_calls")
+        canonical_tool_calls = self._canonical_tool_calls(raw_tool_calls)
+        structured_output = self._structured_output(request_data, content)
+
+        adapter_values: dict[str, JsonValue] = {
             "provider_native_model": native_model,
             "correlation_id": request_data.context.correlation_id,
             "latency_ms": elapsed_ms,
             "started_unix_ms": started_wall_ms,
             "ended_unix_ms": ended_wall_ms,
             "status": "success",
+            "finish_reason": normalized_finish,
         }
-        self._copy_context_metadata(request_data, metadata_values)
+        self._copy_context_metadata(request_data, adapter_values)
+        if isinstance(raw_tool_calls, list) and self._is_json_value(raw_tool_calls):
+            adapter_values["tool_calls"] = raw_tool_calls
 
-        finish_reason = first.get("finish_reason")
-        if isinstance(finish_reason, str):
-            metadata_values["finish_reason"] = self._normalize_finish_reason(finish_reason)
-
-        tool_calls = message.get("tool_calls")
-        if isinstance(tool_calls, list) and self._is_json_value(tool_calls):
-            metadata_values["tool_calls"] = tool_calls
-
-        structured_output = self._structured_output(request_data, content)
+        protocol_values: dict[str, JsonValue] = {
+            "correlation_id": request_data.context.correlation_id,
+            "latency_ms": elapsed_ms,
+            "started_unix_ms": started_wall_ms,
+            "ended_unix_ms": ended_wall_ms,
+            "finish_reason": normalized_finish,
+        }
+        self._copy_context_metadata(request_data, protocol_values)
+        if canonical_tool_calls:
+            protocol_values["tool_calls"] = canonical_tool_calls
         if structured_output is not None:
-            metadata_values["structured_output"] = structured_output
+            protocol_values["structured_output"] = structured_output
 
         return ModelResponse(
             request_id=request_data.request_id,
@@ -321,7 +334,11 @@ class OpenAICompatibleModelProvider(ModelProvider):
             adapter_metadata=(
                 AdapterMetadata(
                     namespace="openai-compatible",
-                    values=metadata_values,
+                    values=adapter_values,
+                ),
+                AdapterMetadata(
+                    namespace="model-protocol",
+                    values=protocol_values,
                 ),
             ),
         )
@@ -494,7 +511,47 @@ class OpenAICompatibleModelProvider(ModelProvider):
             raise self._invalid_response("provider returned invalid structured JSON output") from exc
         if not self._is_json_value(parsed):
             raise self._invalid_response("provider structured output is not JSON compatible")
-        return parsed  # type: ignore[return-value]
+        return cast(JsonValue, parsed)
+
+    def _canonical_tool_calls(self, value: object) -> list[JsonValue]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise self._invalid_response("provider tool_calls must be a list")
+
+        result: list[JsonValue] = []
+        for raw_call in value:
+            if not isinstance(raw_call, dict):
+                raise self._invalid_response("provider tool call must be an object")
+            call_id = raw_call.get("id")
+            function = raw_call.get("function")
+            if not isinstance(call_id, str) or not isinstance(function, dict):
+                raise self._invalid_response("provider tool call requires id and function")
+            tool_name = function.get("name")
+            raw_arguments = function.get("arguments", "{}")
+            if not isinstance(tool_name, str):
+                raise self._invalid_response("provider tool call requires function name")
+
+            arguments: object
+            if isinstance(raw_arguments, str):
+                try:
+                    arguments = json.loads(raw_arguments)
+                except json.JSONDecodeError as exc:
+                    raise self._invalid_response(
+                        "provider tool call arguments are not valid JSON"
+                    ) from exc
+            else:
+                arguments = raw_arguments
+            if not isinstance(arguments, dict) or not self._is_json_value(arguments):
+                raise self._invalid_response("provider tool call arguments must be a JSON object")
+            result.append(
+                {
+                    "call_id": call_id,
+                    "tool_name": tool_name,
+                    "arguments": cast(dict[str, JsonValue], arguments),
+                }
+            )
+        return result
 
     def _copy_context_metadata(
         self,
