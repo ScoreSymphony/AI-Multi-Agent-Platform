@@ -10,6 +10,9 @@ Issue #4 was originally closed after the documentation-focused PR #27 and then s
 - canonical relationship fields validate the expected canonical ID type;
 - backend/provider IDs remain `ExternalRef` values and cannot replace canonical relationship identities;
 - ownership/project/provenance hooks exist where applicable;
+- nested configuration/metadata collections are defensively deep-frozen so immutable value objects cannot be changed indirectly;
+- Agent contains canonical model/capability relationships plus a provider-neutral structured policy-requirements hook while final authorization semantics remain deferred;
+- Result contains canonical Artifact references plus immutable structured `status_data` in addition to its semantic outcome;
 - Task, Run and Event remain versioned cross-boundary JSON contracts;
 - all common canonical ID types are defined in the shared schema vocabulary.
 
@@ -48,7 +51,10 @@ Regression tests additionally prove that:
 - relationship fields reject provider/database IDs where canonical IDs are required;
 - canonical IDs cannot be reassigned after creation;
 - direct status assignment cannot bypass transition rules;
-- mutable caller-owned Event data cannot rewrite an existing Event;
+- caller-owned nested metadata/configuration cannot mutate canonical value state after construction;
+- mutable caller-owned Event/provenance data cannot rewrite an existing Event;
+- Agent policy requirements are preserved as provider-neutral immutable structured data;
+- Result structured status data is preserved immutably;
 - the core domain package imports no Hermes, Forge or Temporal types.
 
 ## Review findings addressed
@@ -68,4 +74,4 @@ PR #50 findings:
 
 ## Deliberately out of scope
 
-Persistence, concrete Hermes/Forge mappings, final scheduler implementation, final authorization/policy entity design, UI and provider-specific runtime integration remain later work items. Model Assignment therefore targets canonical Agent, Task or Step identities; policy-scoped assignment is deferred until a canonical policy contract exists instead of using an untyped string relationship.
+Persistence, concrete Hermes/Forge mappings, final scheduler implementation, final authorization/policy entity design, UI and provider-specific runtime integration remain later work items. Agent therefore carries only neutral policy requirements, while Model Assignment targets canonical Agent, Task or Step identities; policy-scoped assignment is deferred until a canonical policy contract exists instead of using an untyped string relationship.
