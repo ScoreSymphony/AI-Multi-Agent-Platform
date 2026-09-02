@@ -2,7 +2,7 @@
 
 Issue: #32
 
-The Control Plane is the stable northbound boundary for web, CLI, automations and external clients. It exposes platform-owned resources and explicit commands only. Hermes, Forge, model-provider SDKs, MCP servers, worker runtimes and other backend-private APIs are never client contracts.
+The Control Plane is the stable northbound boundary for web, CLI, automations and external clients. It exposes platform-owned canonical resources and explicit commands only. Hermes, Forge, model-provider SDKs, MCP servers, worker runtimes and other backend-private APIs are never client contracts.
 
 ## Ownership boundary
 
@@ -13,11 +13,55 @@ Web / CLI / Automation / External Client
                   |
             Control Plane
        /           |            \
- canonical      resource       provider
-  kernel         services      contracts
+ canonical      registered     provider
+  kernel       domain services contracts
 ```
 
-The Control Plane does not create a second Task/Run/Event domain model. Existing canonical services remain authoritative. The API serializes their platform-owned state and delegates lifecycle actions back to those services.
+The Control Plane does not create a second Task/Run/Event domain model. Existing canonical services remain authoritative. The API serializes platform-owned state and delegates lifecycle actions back to those services.
+
+## Issue #32 foundation scope
+
+The foundation owned by #32 is intentionally small and contains only the resources available at that stage:
+
+- projects;
+- workspaces at identity/ownership baseline level;
+- tasks;
+- plans;
+- steps;
+- runs;
+- artifacts;
+- results;
+- canonical task/run timeline events;
+- task/run lifecycle commands;
+- health/readiness;
+- SSE task/run lifecycle updates;
+- generated OpenAPI and common API conventions.
+
+#32 does **not** predeclare APIs or command vocabularies for future domains such as Agents, Tools, Workers, Approvals, Automations, Evaluations, Plugins, Search or other later subsystems. Those domains extend the same Control Plane only after their canonical contracts exist.
+
+## Current later-domain integrations
+
+The repository can contain APIs added after #32. They are not retroactively part of the #32 foundation.
+
+At the current repository state, #10 has added the canonical Model Registry/Provider API, including:
+
+- `/api/v1/models`;
+- `/api/v1/model-providers`;
+- their read and supported enable/disable/health commands.
+
+These routes are legitimate because the Model domain now exists. The distinction is therefore:
+
+```text
+#32 foundation contract
+        +
+implemented later-domain APIs
+        +
+explicitly registered future extensions
+        =
+current composed Control Plane
+```
+
+This prevents the foundation from guessing future schemas while allowing the API to grow additively.
 
 ## API versioning
 
@@ -29,30 +73,9 @@ The first stable major is `/api/v1`.
 - Unsupported versions return `unsupported_api_version` with the supported versions.
 - Adapter or upstream version changes do not change the northbound API major unless a canonical platform contract changes.
 
-## Resource surface
+## Foundation commands
 
-`/api/v1` reserves and exposes canonical collection routes for:
-
-- projects and workspaces;
-- tasks, plans, steps and runs;
-- agents and teams;
-- artifacts, results and files;
-- memory and knowledge;
-- models and providers;
-- tools and capabilities;
-- nodes and workers;
-- approvals;
-- automations;
-- evaluations;
-- plugins and adapters.
-
-The kernel-backed resources are served by the existing canonical kernel and scope services. Other domains attach through the platform-owned `ResourceService` registration seam. A missing service returns canonical `unavailable`; clients are never redirected to a concrete backend API.
-
-Provider and capability inventory is derived only from `ProviderContract` metadata. `adapter_metadata`, backend handles, SDK objects and raw backend exceptions are not part of the northbound representation.
-
-## Commands
-
-Lifecycle and administrative mutations use commands rather than arbitrary status patches.
+Lifecycle mutations use commands rather than arbitrary status patches.
 
 Kernel-owned task/run commands include:
 
@@ -62,17 +85,61 @@ Kernel-owned task/run commands include:
 - `POST /api/v1/tasks/{task_id}:retry`
 - `POST /api/v1/tasks/{task_id}/runs/{run_id}:cancel`
 
-Additional canonical commands include:
+These commands delegate to canonical kernel behavior. #32 does not reserve approval, worker, plugin, automation or evaluation commands before those domains define them.
 
-- approval approve/deny;
-- adapter/plugin enable/disable;
-- worker drain/restore;
-- automation test run;
-- evaluation start.
+## Extension contract for later domains
 
-They are exposed through dedicated command routes and the canonical `/api/v1/commands/{command}` dispatch seam. Concrete subsystems register `CommandHandler` implementations; absent handlers return canonical `unavailable`.
+Later issues extend the Control Plane through explicit platform-owned registration instead of modifying a speculative global list.
 
-Every mutating command requires `Idempotency-Key`. Task/run commands are deduplicated by the canonical kernel. Extension handlers receive the same idempotency key in `RequestContext` so their owning subsystem can apply its canonical idempotency semantics.
+### Resource registration
+
+A later domain can provide a `ResourceService` for its canonical collection and register it with the Control Plane:
+
+```python
+control_plane.register_resource_service("widgets", widget_service)
+```
+
+A registered collection receives the common Control Plane read conventions:
+
+- `GET /api/v1/widgets`
+- `GET /api/v1/widgets/{resource_id}`
+- pagination/filter/sort/search/field selection;
+- request/correlation context;
+- authorization hooks;
+- backend-private payload rejection;
+- generated OpenAPI entries.
+
+The collection name comes from the owning canonical domain. An unregistered future collection is neither advertised nor treated as a #32 resource.
+
+### Command registration
+
+A later domain can register a canonical command handler:
+
+```python
+control_plane.register_command("widget.refresh", refresh_widget)
+```
+
+Registered generic extension commands are exposed through:
+
+```text
+POST /api/v1/commands/{command}
+```
+
+The request identifies the canonical `resource_ref`. Mutating extension commands require `Idempotency-Key` and receive the same `RequestContext` used elsewhere by the Control Plane.
+
+The owning later-domain issue may also implement dedicated canonical routes once its own contract exists, as #10 does for Models. #32 itself does not guess those routes.
+
+### Manifest and OpenAPI
+
+`GET /api/v1` reports the current composed surface:
+
+- #32 foundation resources;
+- APIs implemented by completed later domains;
+- explicitly registered extension resources and commands;
+- the OpenAPI URL;
+- the live-update mechanism.
+
+`GET /api/v1/openapi.json` generates OpenAPI 3.1 for the same current API. Future domains that have not been implemented or registered are absent.
 
 ## Query conventions
 
@@ -99,7 +166,7 @@ Collection responses use:
 }
 ```
 
-Stable platform IDs or stable platform references are required for resources returned by registered services.
+Stable platform IDs or stable platform references are required for resources returned through the Control Plane.
 
 ## Error model
 
@@ -137,10 +204,18 @@ When an `EventProvider` is configured, its `subscribe()` contract is used. Clien
 - `GET /api/v1/health`
 - `GET /api/v1/readiness`
 
-Provider health is normalized through `ProviderContract.health()`.
+Health/readiness use canonical provider contracts and remain extensible for later observability work.
 
-## HTTP and OpenAPI
+## HTTP and framework boundary
 
-`ControlPlane` is framework-independent application logic. `ControlPlaneHTTP` maps `/api/v1` to the service boundary. `ControlPlaneASGI` proves that HTTP/SSE transport works without binding the platform to a specific web framework.
+`ControlPlane` is framework-independent application logic. `ControlPlaneHTTP` maps `/api/v1` to the service boundary. `ControlPlaneASGI` proves that HTTP/SSE transport works without binding the platform permanently to one web framework.
 
-`build_openapi()` generates the OpenAPI 3.1 specification and `/api/v1/openapi.json` serves that generated contract. Contract tests verify required resource paths, explicit command paths, error behavior, authorization propagation, pagination/filtering, live updates and backend-private type exclusion.
+## Architecture invariants
+
+- Clients use the Control Plane for canonical operations.
+- No browser/CLI canonical flow calls Hermes, Forge, LiteLLM, MCP or Workers directly.
+- Task/Run lifecycle authority remains in the canonical kernel.
+- Direct database mutations do not bypass application services.
+- Backend-private IDs/types remain implementation metadata.
+- Future resource schemas are defined by their owning domain issues, not speculatively by #32.
+- Missing future optional domains do not affect foundation startup.

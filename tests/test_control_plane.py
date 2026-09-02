@@ -564,7 +564,7 @@ def test_core_api_starts_without_future_optional_subsystems() -> None:
     asyncio.run(scenario())
 
 
-def test_openapi_documents_full_issue_32_scope_and_evolution() -> None:
+def test_openapi_documents_current_scope_without_speculative_future_domains() -> None:
     spec = build_openapi()
     assert spec["openapi"] == "3.1.0"
     paths = spec["paths"]
@@ -575,14 +575,18 @@ def test_openapi_documents_full_issue_32_scope_and_evolution() -> None:
         "plans",
         "steps",
         "runs",
-        "agents",
-        "teams",
         "artifacts",
         "results",
+        "model-providers",
+        "models",
+    ):
+        assert f"/api/v1/{resource}" in paths
+    for future_resource in (
+        "agents",
+        "teams",
         "files",
         "memory",
         "knowledge",
-        "models",
         "providers",
         "tools",
         "capabilities",
@@ -594,7 +598,7 @@ def test_openapi_documents_full_issue_32_scope_and_evolution() -> None:
         "plugins",
         "adapters",
     ):
-        assert f"/api/v1/{resource}" in paths
+        assert f"/api/v1/{future_resource}" not in paths
     assert "/api/v1/tasks/{task_id}/timeline" in paths
     assert "/api/v1/tasks/{task_id}/events/stream" in paths
     assert spec["x-evolution-policy"]["breaking_changes"] == "require a new major path namespace"

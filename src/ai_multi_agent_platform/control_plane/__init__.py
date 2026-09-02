@@ -1,6 +1,8 @@
 """Versioned platform-owned northbound Control Plane."""
 
 from .extensions import (
+    FOUNDATION_COLLECTIONS,
+    IMPLEMENTED_DOMAIN_COLLECTIONS,
     PLATFORM_COLLECTIONS,
     REQUIRED_COMMANDS,
     CommandHandler,
@@ -35,8 +37,10 @@ __all__ = [
     "ControlPlane",
     "ControlPlaneASGI",
     "ControlPlaneHTTP",
+    "FOUNDATION_COLLECTIONS",
     "HTTPRequest",
     "HTTPResponse",
+    "IMPLEMENTED_DOMAIN_COLLECTIONS",
     "InMemoryResourceService",
     "PLATFORM_COLLECTIONS",
     "PageQuery",
