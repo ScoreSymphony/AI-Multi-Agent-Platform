@@ -5,6 +5,14 @@
   "type": "object",
   "$defs": {
     "timestamp": {"type": "string", "format": "date-time"},
+    "goalId": {"type": "string", "pattern": "^goal_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "projectId": {"type": "string", "pattern": "^project_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "taskId": {"type": "string", "pattern": "^task_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "planId": {"type": "string", "pattern": "^plan_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "stepId": {"type": "string", "pattern": "^step_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "runId": {"type": "string", "pattern": "^run_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "eventId": {"type": "string", "pattern": "^event_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
+    "workerId": {"type": "string", "pattern": "^worker_[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"},
     "ownerRef": {
       "type": "object",
       "additionalProperties": false,
@@ -22,6 +30,16 @@
         "system": {"type": "string", "minLength": 1},
         "kind": {"type": "string", "minLength": 1},
         "value": {"type": "string", "minLength": 1}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": {"type": "string", "minLength": 1},
+        "actor_ref": {"type": ["string", "null"]},
+        "details": {"type": "object", "additionalProperties": true}
       }
     },
     "metadata": {"type": "object", "additionalProperties": true}
