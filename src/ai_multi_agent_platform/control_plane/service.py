@@ -92,7 +92,7 @@ class ScopeStore:
         workspace = WorkspaceIdentity(
             id=workspace_id or "",
             project_id=project_id,
-            owner_type=cast(OwnerType, project.owner_ref.type),
+            owner_type=project.owner_ref.type,
             owner_id=project.owner_ref.id,
         )
         if workspace.id in self._workspaces:
@@ -507,10 +507,11 @@ class ControlPlane:
         task = await self._kernel.get_task(task_id)
         await self._authorize_for_task(context, "event:subscribe", task_id, task)
 
-        if self._live_events is not None:
+        live_events = self._live_events
+        if live_events is not None:
 
             async def live_iterator() -> AsyncIterator[dict[str, JsonValue]]:
-                async for event in self._live_events.subscribe(
+                async for event in live_events.subscribe(
                     task_id,
                     after_event_id=after_event_id,
                     control=OperationControl(),
