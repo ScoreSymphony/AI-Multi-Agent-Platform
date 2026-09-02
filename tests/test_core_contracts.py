@@ -178,9 +178,7 @@ def test_reusable_interface_conformance_checks_run_against_reference_providers()
     asyncio.run(assert_lifecycle_backend_contract(FakeLifecycleBackend(), execution_request))
     asyncio.run(assert_knowledge_provider_contract(FakeKnowledgeProvider(), CTX))
     asyncio.run(assert_node_provider_contract(FakeNodeProvider(), node, CTX))
-    asyncio.run(
-        assert_worker_provider_contract(FakeWorkerProvider(), worker, execution_request)
-    )
+    asyncio.run(assert_worker_provider_contract(FakeWorkerProvider(), worker, execution_request))
 
 
 def test_second_model_implementation_passes_same_contract_without_domain_changes() -> None:
@@ -291,7 +289,9 @@ def test_fake_only_canonical_task_flow_uses_replaceable_contracts() -> None:
         )
     )
     model_response = asyncio.run(
-        model.generate(ModelRequest(request_id="req-flow", messages=(plan.summary,), context=context))
+        model.generate(
+            ModelRequest(request_id="req-flow", messages=(plan.summary,), context=context)
+        )
     )
     tool_result = asyncio.run(
         tool.invoke(
