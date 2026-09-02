@@ -330,6 +330,12 @@ class PlatformKernel:
                 ErrorCode.CONFLICT,
                 f"task {task_id} cannot succeed from {task.status.value}",
             )
+        active = await self._latest_active_run(task)
+        if active is not None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"task {task_id} cannot succeed while run {active.run_id} is {active.status.value}",
+            )
         await self._commit_task_command(
             task=task,
             key=idempotency_key,
@@ -357,6 +363,12 @@ class PlatformKernel:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"task {task_id} cannot fail from {task.status.value}",
+            )
+        active = await self._latest_active_run(task)
+        if active is not None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"task {task_id} cannot fail while run {active.run_id} is {active.status.value}",
             )
         payload: dict[str, JsonValue] = {}
         if reason is not None:
@@ -423,6 +435,17 @@ class PlatformKernel:
                     key=idempotency_key,
                     operation="cancel_task",
                     event_specs=(("task.cancel_acknowledged", "task", task_id, {}, ()),),
+                    result_id=task_id,
+                    actor_ref=actor_ref,
+                    source=source,
+                )
+                return await self.get_task(task_id)
+            if active.run.subject_type == "step":
+                await self._commit_task_command(
+                    task=refreshed,
+                    key=idempotency_key,
+                    operation="cancel_task",
+                    event_specs=(("task.cancelled", "task", task_id, {}, ()),),
                     result_id=task_id,
                     actor_ref=actor_ref,
                     source=source,
@@ -506,15 +529,27 @@ class PlatformKernel:
         duplicate = await self._task_command(task_id, idempotency_key, "create_run")
         if duplicate is not None:
             return await self.get_run(task_id, duplicate.result_id)
-        if task.status is not TaskStatus.READY:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"task {task_id} cannot create a run from {task.status.value}",
-            )
         canonical_subject_id = subject_id or task_id
         validate_subject_id(subject_type, canonical_subject_id)
+        allowed_task_statuses = (
+            {TaskStatus.READY} if subject_type == "task" else {TaskStatus.READY, TaskStatus.RUNNING}
+        )
+        if task.status not in allowed_task_statuses:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"task {task_id} cannot create a {subject_type} run from {task.status.value}",
+            )
+        active_subject_run = await self._active_run_for_subject(
+            task, subject_type, canonical_subject_id
+        )
+        if active_subject_run is not None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"subject {canonical_subject_id} already has active run "
+                f"{active_subject_run.run_id}",
+            )
         run_id = new_id("run")
-        attempt = len(task.run_ids) + 1
+        attempt = await self._next_attempt(task, subject_type, canonical_subject_id)
         Run(
             id=run_id,
             subject_type=subject_type,
@@ -563,8 +598,14 @@ class PlatformKernel:
                 ErrorCode.CONFLICT,
                 f"task {task_id} cannot retry from {task.status.value}",
             )
+        active = await self._latest_active_run(task)
+        if active is not None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"task {task_id} cannot retry while run {active.run_id} is {active.status.value}",
+            )
         run_id = new_id("run")
-        attempt = len(task.run_ids) + 1
+        attempt = await self._next_attempt(task, "task", task_id)
         payload: dict[str, JsonValue] = {
             "task_id": task_id,
             "subject_type": "task",
@@ -607,10 +648,16 @@ class PlatformKernel:
             if run.status in {RunStatus.STARTING, RunStatus.RUNNING}:
                 await self._reconcile_started_run(task_id, run_id, f"retry:{idempotency_key}")
             return await self.get_run(task_id, run_id)
-        if task.status is not TaskStatus.READY:
+        allowed_task_statuses = (
+            {TaskStatus.READY}
+            if run.run.subject_type == "task"
+            else {TaskStatus.READY, TaskStatus.RUNNING}
+        )
+        if task.status not in allowed_task_statuses:
             raise ContractError(
                 ErrorCode.CONFLICT,
-                f"task {task_id} cannot start a run from {task.status.value}",
+                f"task {task_id} cannot start a {run.run.subject_type} run "
+                f"from {task.status.value}",
             )
         if run.status is not RunStatus.QUEUED:
             raise ContractError(
@@ -1358,6 +1405,9 @@ class PlatformKernel:
         event_type = f"run.{target.value}"
         specs.append((event_type, "run", run.run_id, {"output": output}, adapter_metadata))
 
+        if run.run.subject_type == "step":
+            return tuple(specs)
+
         task_status = task.status
         if any(spec[0] == "task.running" for spec in specs):
             task_status = TaskStatus.RUNNING
@@ -1426,6 +1476,35 @@ class PlatformKernel:
             source=source,
             event_specs=(("run.recovery_cleared", "run", run_id, {}, ()),),
         )
+
+    async def _active_run_for_subject(
+        self,
+        task: TaskState,
+        subject_type: RunSubjectType,
+        subject_id: str,
+    ) -> RunState | None:
+        for run_id in reversed(task.run_ids):
+            run = await self.get_run(task.task_id, run_id)
+            if (
+                run.run.subject_type == subject_type
+                and run.run.subject_id == subject_id
+                and run.status not in TERMINAL_RUN_STATUSES
+            ):
+                return run
+        return None
+
+    async def _next_attempt(
+        self,
+        task: TaskState,
+        subject_type: RunSubjectType,
+        subject_id: str,
+    ) -> int:
+        latest = 0
+        for run_id in task.run_ids:
+            run = await self.get_run(task.task_id, run_id)
+            if run.run.subject_type == subject_type and run.run.subject_id == subject_id:
+                latest = max(latest, run.run.attempt)
+        return latest + 1
 
     async def _latest_active_run(self, task: TaskState) -> RunState | None:
         for run_id in reversed(task.run_ids):
