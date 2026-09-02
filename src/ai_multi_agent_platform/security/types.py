@@ -126,9 +126,7 @@ def _safe_metadata(metadata: Mapping[str, SecretMetadataValue]) -> dict[str, Jso
 
 def _freeze_metadata_value(value: SecretMetadataValue) -> FrozenJsonValue:
     if isinstance(value, Mapping):
-        return MappingProxyType(
-            {key: _freeze_metadata_value(item) for key, item in value.items()}
-        )
+        return MappingProxyType({key: _freeze_metadata_value(item) for key, item in value.items()})
     if isinstance(value, list | tuple):
         return tuple(_freeze_metadata_value(item) for item in value)
     return value
