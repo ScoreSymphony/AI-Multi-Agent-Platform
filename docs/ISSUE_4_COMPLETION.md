@@ -1,20 +1,22 @@
 # Issue #4 completion audit
 
-Issue #4 was originally closed after the documentation-focused PR #27 and then strengthened by PR #50. A final post-merge audit found additional invariant gaps that could still allow canonical identity or lifecycle rules to be bypassed. This document records the complete closure state.
+Issue #4 was originally closed after the documentation-focused PR #27 and then strengthened by PR #50 and PR #53. Post-merge Codex reviews exposed additional invariant and compatibility gaps. This document records the final closure state after addressing those findings as well.
 
 ## Canonical model coverage
 
 - platform-owned Python definitions exist for every canonical entity requested by issue #4;
+- a small canonical `PolicyScope` support type preserves the architecture requirement for policy-scoped model assignment without defining the final authorization engine;
+- a canonical `ToolInvocation` support type provides a stable per-call identity so approvals can govern one sensitive invocation rather than the reusable Tool definition;
 - canonical IDs use platform-owned type-prefixed UUID identities;
 - canonical IDs are immutable after object creation;
 - canonical relationship fields validate the expected canonical ID type;
 - backend/provider IDs remain `ExternalRef` values and cannot replace canonical relationship identities;
 - ownership/project/provenance hooks exist where applicable;
 - nested configuration/metadata collections are defensively deep-frozen so immutable value objects cannot be changed indirectly;
-- Agent contains canonical model/capability relationships plus a provider-neutral structured policy-requirements hook while final authorization semantics remain deferred;
+- Agent contains canonical model/capability relationships plus a provider-neutral structured policy-requirements hook;
+- Model Assignment targets canonical Agent, Task, Step, Capability or Policy Scope identities as required by the product/architecture principles;
 - Result contains canonical Artifact references plus immutable structured `status_data` in addition to its semantic outcome;
-- Task, Run and Event remain versioned cross-boundary JSON contracts;
-- all common canonical ID types are defined in the shared schema vocabulary.
+- all common canonical ID types, including `policy_scope_...` and `tool_invocation_...`, are defined in the shared schema vocabulary.
 
 ## Lifecycle coverage
 
@@ -28,8 +30,10 @@ Issue #4 was originally closed after the documentation-focused PR #27 and then s
 ## Event and execution integrity
 
 - Event is an append-only immutable value object;
-- Event payload and provenance details are defensively deep-frozen, including nested mappings/collections;
-- Event subjects are canonical entity references both in Python and in the JSON Schema;
+- Event payload and provenance details are defensively deep-frozen, including nested arbitrary `Mapping` implementations and collections;
+- the Python Event model requires canonical subject identities;
+- Event schema `1.0` remains backward-compatible with the previously published nonempty subject-type/subject-id contract;
+- Event schema `2.0` is the strict canonical-subject contract and validates subject type against the corresponding canonical ID type, including Policy Scope and Tool Invocation;
 - Event exposes optional ownership/project hooks plus correlation, causation and trace metadata;
 - Worker Job carries Run/Worker identity plus optional project, correlation, causation and trace metadata.
 
@@ -52,9 +56,12 @@ Regression tests additionally prove that:
 - canonical IDs cannot be reassigned after creation;
 - direct status assignment cannot bypass transition rules;
 - caller-owned nested metadata/configuration cannot mutate canonical value state after construction;
-- mutable caller-owned Event/provenance data cannot rewrite an existing Event;
+- mutable caller-owned Event/provenance data, including nested non-`dict` mappings, cannot rewrite an existing Event;
 - Agent policy requirements are preserved as provider-neutral immutable structured data;
 - Result structured status data is preserved immutably;
+- Capability- and Policy-scoped Model Assignments use canonical IDs;
+- an Approval can target one canonical `tool_invocation_...` identity and rejects backend invocation IDs;
+- Event v1 continues accepting its historical subject contract while Event v2 enforces strict canonical subject relationships;
 - the core domain package imports no Hermes, Forge or Temporal types.
 
 ## Review findings addressed
@@ -70,8 +77,19 @@ PR #50 findings:
 1. canonical IDs cannot be reassigned after construction;
 2. lifecycle status cannot be mutated around transition tables;
 3. append-only Event payload data is deeply immutable;
-4. Model Assignment subjects must use canonical Agent/Task/Step IDs.
+4. Model Assignment subjects use canonical IDs.
+
+PR #53 first Codex pass findings:
+
+1. capability/policy-scoped Model Assignments are preserved through canonical Capability and Policy Scope targets;
+2. mutable fields on otherwise frozen entities are defensively deep-frozen;
+3. `_deep_freeze` handles the declared `Mapping` interface rather than only concrete dictionaries.
+
+PR #53 later Codex findings:
+
+1. per-invocation approval targeting is preserved through canonical `ToolInvocation` identities;
+2. the stricter Event subject contract is published as schema `2.0` instead of silently narrowing the existing `1.0` public contract.
 
 ## Deliberately out of scope
 
-Persistence, concrete Hermes/Forge mappings, final scheduler implementation, final authorization/policy entity design, UI and provider-specific runtime integration remain later work items. Agent therefore carries only neutral policy requirements, while Model Assignment targets canonical Agent, Task or Step identities; policy-scoped assignment is deferred until a canonical policy contract exists instead of using an untyped string relationship.
+Persistence, concrete Hermes/Forge mappings, final scheduler implementation, final authorization/policy evaluation model, UI and provider-specific runtime integration remain later work items. `PolicyScope` supplies a stable platform-owned target for model assignment without defining policy evaluation/enforcement, and `ToolInvocation` supplies a stable governed-action identity without selecting a concrete tool transport.
