@@ -1,0 +1,54 @@
+{
+  "schema_version": "1",
+  "providers": [
+    {
+      "provider_id": "local-openai-compatible",
+      "adapter": "openai-compatible",
+      "base_url": "http://127.0.0.1:8000/v1",
+      "api_key_env": null,
+      "timeout_seconds": 120.0,
+      "models": {
+        "model-local-general": "replace-with-provider-native-model-name"
+      }
+    }
+  ],
+  "models": [
+    {
+      "config_id": "model-local-general",
+      "display_name": "Local general model",
+      "provider_id": "local-openai-compatible",
+      "revision": 1,
+      "aliases": ["general-default"],
+      "location": "local",
+      "node_ref": null,
+      "health": "unknown",
+      "enabled": true,
+      "priority": 50,
+      "capabilities": {
+        "context_window": 32768,
+        "tool_calling": true,
+        "structured_output": true,
+        "streaming": false,
+        "modalities": ["text"],
+        "reasoning": []
+      },
+      "resource_hints": {},
+      "cost_metadata": {
+        "recurring_paid_api": false
+      },
+      "adapter_metadata": [
+        {
+          "namespace": "openai-compatible",
+          "values": {
+            "model": "replace-with-provider-native-model-name"
+          }
+        }
+      ]
+    }
+  ],
+  "routing": {
+    "default_requirements": {
+      "self_hosted_only": true
+    }
+  }
+}
