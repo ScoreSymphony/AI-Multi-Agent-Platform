@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,6 +26,19 @@ jobs:
           python -m pip install -e ".[dev]"
           echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Capture issue 16 mypy diagnostics
+        if: github.actor != 'github-actions[bot]'
+        shell: bash
+        run: mypy > .issue16-mypy.txt 2>&1 || true
+      - name: Commit issue 16 mypy diagnostics
+        if: github.actor != 'github-actions[bot]'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .issue16-mypy.txt
+          git commit -m "chore: capture issue 16 mypy diagnostics" || exit 0
+          git push origin HEAD:issue-16-observability-foundation
       - name: Ruff format
         run: ruff format --check .
       - name: Ruff lint
