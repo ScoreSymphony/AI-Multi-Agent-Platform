@@ -211,7 +211,7 @@ class ToolInvocation:
 @dataclass(frozen=True, slots=True)
 class ToolResult:
     invocation_id: str
-    output: JsonValue
+    output: JsonValue | Mapping[str, JsonValue]
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
 
