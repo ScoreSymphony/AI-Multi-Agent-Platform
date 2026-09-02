@@ -24,6 +24,8 @@ from ai_multi_agent_platform.kernel.repository import EventRepository
 
 from .http import (
     ControlPlaneHTTP as BaseControlPlaneHTTP,
+)
+from .http import (
     HTTPRequest,
     HTTPResponse,
     _header,
