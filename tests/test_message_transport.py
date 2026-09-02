@@ -327,9 +327,7 @@ def test_publish_operation_control_binds_idempotency_key() -> None:
 
 def test_publish_operation_control_timeout_is_enforced() -> None:
     class SlowTransport(InProcessMessageTransport):
-        async def _publish_once(
-            self, topic: str, envelope: TransportEnvelope
-        ) -> PublishReceipt:
+        async def _publish_once(self, topic: str, envelope: TransportEnvelope) -> PublishReceipt:
             await asyncio.sleep(0.05)
             return await super()._publish_once(topic, envelope)
 
