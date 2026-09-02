@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 
-from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue
+from ai_multi_agent_platform.contracts.types import AdapterMetadata, FrozenJsonValue, JsonValue
+
+type SecretMetadataValue = JsonValue | FrozenJsonValue
 
 
 class SecurityDecision(StrEnum):
@@ -50,13 +54,13 @@ class SecurityContext:
 
 @dataclass(frozen=True, slots=True)
 class SecretReference:
-    """A scoped reference to secret material; the plaintext value is intentionally absent."""
+    """A scoped reference to secret material; plaintext is never retained in metadata."""
 
     provider: str
     secret_id: str
     scope: str
     version: str | None = None
-    metadata: dict[str, JsonValue] = field(default_factory=dict)
+    metadata: Mapping[str, SecretMetadataValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for name in ("provider", "secret_id", "scope"):
@@ -65,14 +69,23 @@ class SecretReference:
         if self.version is not None and not self.version.strip():
             raise ValueError("version must not be blank when provided")
 
+        safe_metadata = _safe_metadata(self.metadata)
+        object.__setattr__(
+            self,
+            "metadata",
+            MappingProxyType(
+                {key: _freeze_metadata_value(value) for key, value in safe_metadata.items()}
+            ),
+        )
+
     def to_dict(self) -> dict[str, JsonValue]:
-        """Return the canonical non-secret serialization form."""
+        """Return the canonical serialization form with recursively redacted metadata."""
 
         payload: dict[str, JsonValue] = {
             "provider": self.provider,
             "secret_id": self.secret_id,
             "scope": self.scope,
-            "metadata": dict(self.metadata),
+            "metadata": _safe_metadata(self.metadata),
         }
         if self.version is not None:
             payload["version"] = self.version
@@ -95,3 +108,35 @@ class SecurityAuditEvent:
             raise ValueError("event_type must not be blank")
         if not self.reason.strip():
             raise ValueError("reason must not be blank")
+
+
+def _safe_metadata(metadata: Mapping[str, SecretMetadataValue]) -> dict[str, JsonValue]:
+    """Thaw, recursively redact and copy secret-reference metadata."""
+
+    from .redaction import redact_sensitive
+
+    raw: dict[str, JsonValue] = {
+        key: _thaw_metadata_value(value) for key, value in metadata.items()
+    }
+    redacted = redact_sensitive(raw)
+    if not isinstance(redacted, dict):
+        raise ValueError("secret reference metadata redaction returned an invalid representation")
+    return redacted
+
+
+def _freeze_metadata_value(value: SecretMetadataValue) -> FrozenJsonValue:
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {key: _freeze_metadata_value(item) for key, item in value.items()}
+        )
+    if isinstance(value, list | tuple):
+        return tuple(_freeze_metadata_value(item) for item in value)
+    return value
+
+
+def _thaw_metadata_value(value: SecretMetadataValue) -> JsonValue:
+    if isinstance(value, Mapping):
+        return {key: _thaw_metadata_value(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_thaw_metadata_value(item) for item in value]
+    return value
