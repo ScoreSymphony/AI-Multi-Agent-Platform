@@ -13,6 +13,7 @@ from ai_multi_agent_platform.contracts import (
     ModelSelection,
 )
 
+from .protocol import CanonicalModelRequest, CanonicalModelResponse
 from .registry import ModelRegistry
 from .router import DeterministicModelRouter
 
@@ -72,3 +73,12 @@ class ModelRuntime:
             model_ref=config.config_id,
             adapter_metadata=provider_response.adapter_metadata + (runtime_metadata,),
         )
+
+    async def generate_canonical(
+        self,
+        request: CanonicalModelRequest,
+    ) -> CanonicalModelResponse:
+        """Execute the rich issue-#10 request shape through the stable provider seam."""
+
+        response = await self.generate(request.to_contract_request())
+        return CanonicalModelResponse.from_contract_response(response)
