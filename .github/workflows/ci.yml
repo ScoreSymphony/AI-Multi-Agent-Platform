@@ -36,7 +36,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .issue16-mypy.txt
+          git add -f .issue16-mypy.txt
           git commit -m "chore: capture issue 16 mypy diagnostics" || exit 0
           git push origin HEAD:issue-16-observability-foundation
       - name: Ruff format
