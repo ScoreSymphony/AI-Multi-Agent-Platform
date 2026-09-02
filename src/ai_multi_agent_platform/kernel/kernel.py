@@ -396,17 +396,6 @@ class PlatformKernel:
         task = await self.get_task(task_id)
         if await self._task_command(task_id, idempotency_key, "cancel_task") is not None:
             return await self.get_task(task_id)
-        if task.status is TaskStatus.CANCELLED:
-            await self._commit_task_command(
-                task=task,
-                key=idempotency_key,
-                operation="cancel_task",
-                event_specs=(("task.cancel_duplicate_ignored", "task", task_id, {}, ()),),
-                result_id=task_id,
-                actor_ref=actor_ref,
-                source=source,
-            )
-            return await self.get_task(task_id)
         if task.status is TaskStatus.SUCCEEDED:
             raise ContractError(ErrorCode.CONFLICT, f"task {task_id} already succeeded")
         if task.status is TaskStatus.FAILED:
@@ -415,60 +404,66 @@ class PlatformKernel:
                 "canonical lifecycle requires failed tasks to be retried to ready "
                 "rather than cancelled",
             )
-
-        active = await self._latest_active_run(task)
-        if active is not None and task.status in {
-            TaskStatus.READY,
-            TaskStatus.RUNNING,
-            TaskStatus.WAITING,
-        }:
-            await self.cancel_run(
-                idempotency_key=f"{idempotency_key}:run",
-                task_id=task_id,
-                run_id=active.run_id,
-                actor_ref=actor_ref,
-                source=source,
-            )
-            refreshed = await self.get_task(task_id)
-            if refreshed.status is TaskStatus.CANCELLED:
-                await self._commit_task_command(
-                    task=refreshed,
-                    key=idempotency_key,
-                    operation="cancel_task",
-                    event_specs=(("task.cancel_acknowledged", "task", task_id, {}, ()),),
-                    result_id=task_id,
-                    actor_ref=actor_ref,
-                    source=source,
-                )
-                return await self.get_task(task_id)
-            if active.run.subject_type == "step":
-                await self._commit_task_command(
-                    task=refreshed,
-                    key=idempotency_key,
-                    operation="cancel_task",
-                    event_specs=(("task.cancelled", "task", task_id, {}, ()),),
-                    result_id=task_id,
-                    actor_ref=actor_ref,
-                    source=source,
-                )
-                return await self.get_task(task_id)
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                f"run cancellation completed as {refreshed.status.value}, not task cancellation",
-            )
-
         if task.status not in {
             TaskStatus.DRAFT,
             TaskStatus.READY,
             TaskStatus.RUNNING,
             TaskStatus.WAITING,
+            TaskStatus.CANCELLED,
         }:
             raise ContractError(ErrorCode.CONFLICT, f"task {task_id} cannot be cancelled")
+
+        active_runs = await self._active_runs(task)
+        step_runs = tuple(run for run in active_runs if run.run.subject_type == "step")
+        task_runs = tuple(run for run in active_runs if run.run.subject_type == "task")
+        for run in (*step_runs, *task_runs):
+            await self.cancel_run(
+                idempotency_key=f"{idempotency_key}:run:{run.run_id}",
+                task_id=task_id,
+                run_id=run.run_id,
+                actor_ref=actor_ref,
+                source=source,
+            )
+
+        refreshed = await self.get_task(task_id)
+        remaining = await self._active_runs(refreshed)
+        if remaining:
+            remaining_ids = ", ".join(run.run_id for run in remaining)
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"task {task_id} cancellation is incomplete; active runs: {remaining_ids}",
+            )
+
+        if refreshed.status in {TaskStatus.SUCCEEDED, TaskStatus.FAILED}:
+            await self._commit_task_command(
+                task=refreshed,
+                key=idempotency_key,
+                operation="cancel_task",
+                event_specs=(
+                    (
+                        "task.cancel_lost_race",
+                        "task",
+                        task_id,
+                        {"status": refreshed.status.value},
+                        (),
+                    ),
+                ),
+                result_id=task_id,
+                actor_ref=actor_ref,
+                source=source,
+            )
+            return await self.get_task(task_id)
+
+        event_type = (
+            "task.cancel_acknowledged"
+            if refreshed.status is TaskStatus.CANCELLED
+            else "task.cancelled"
+        )
         await self._commit_task_command(
-            task=task,
+            task=refreshed,
             key=idempotency_key,
             operation="cancel_task",
-            event_specs=(("task.cancelled", "task", task_id, {}, ()),),
+            event_specs=((event_type, "task", task_id, {}, ()),),
             result_id=task_id,
             actor_ref=actor_ref,
             source=source,
@@ -576,6 +571,13 @@ class PlatformKernel:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"task {task_id} cannot create a {subject_type} run from {task.status.value}",
+            )
+        active_runs = await self._active_runs(task)
+        active_modes = {active.run.subject_type for active in active_runs}
+        if active_modes and subject_type not in active_modes:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "task-level and step-level runs cannot be active at the same time",
             )
         active_subject_run = await self._active_run_for_subject(
             task, subject_type, canonical_subject_id
@@ -696,6 +698,14 @@ class PlatformKernel:
                 ErrorCode.CONFLICT,
                 f"task {task_id} cannot start a {run.run.subject_type} run "
                 f"from {task.status.value}",
+            )
+        other_active_runs = tuple(
+            active for active in await self._active_runs(task) if active.run_id != run_id
+        )
+        if any(active.run.subject_type != run.run.subject_type for active in other_active_runs):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "task-level and step-level runs cannot be active at the same time",
             )
         if run.status is not RunStatus.QUEUED:
             raise ContractError(
@@ -1514,6 +1524,14 @@ class PlatformKernel:
             source=source,
             event_specs=(("run.recovery_cleared", "run", run_id, {}, ()),),
         )
+
+    async def _active_runs(self, task: TaskState) -> tuple[RunState, ...]:
+        active: list[RunState] = []
+        for run_id in task.run_ids:
+            run = await self.get_run(task.task_id, run_id)
+            if run.status not in TERMINAL_RUN_STATUSES:
+                active.append(run)
+        return tuple(active)
 
     async def _active_run_for_subject(
         self,
