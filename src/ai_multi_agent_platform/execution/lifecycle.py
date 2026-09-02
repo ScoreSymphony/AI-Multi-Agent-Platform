@@ -85,9 +85,7 @@ class ExecutorLifecycleBackend(LifecycleBackend):
                 "stdout": result.stdout,
                 "stderr": result.stderr,
                 "output": result.output,
-                "artifacts": [
-                    artifact.relative_path for artifact in result.artifacts
-                ],
+                "artifacts": [artifact.relative_path for artifact in result.artifacts],
             },
         )
 
