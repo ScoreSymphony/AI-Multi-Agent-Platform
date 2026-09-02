@@ -78,6 +78,47 @@ class PlatformKernel:
         )
         return await self.get_task(task_id)
 
+    async def update_task(
+        self,
+        *,
+        command_id: str,
+        task_id: str,
+        title: str | None = None,
+        objective: str | None = None,
+    ) -> TaskView:
+        history = await self._events.read(task_id)
+        marker = self._command_marker(history, command_id)
+        if marker is not None:
+            if marker.event_type != "task.updated" or marker.subject_id != task_id:
+                self._raise_command_conflict(command_id, marker)
+            return reduce_task(history, task_id)
+
+        task = reduce_task(history, task_id)
+        if task.status in TERMINAL_TASK_STATUSES:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"Task {task_id} cannot be updated from {task.status.value}",
+            )
+        if title is None and objective is None:
+            raise ContractError(ErrorCode.INVALID_REQUEST, "Task update contains no changes")
+        if title == "" or objective == "":
+            raise ContractError(ErrorCode.INVALID_REQUEST, "Task fields cannot be empty")
+
+        payload: dict[str, JsonValue] = {"command_id": command_id}
+        if title is not None:
+            payload["title"] = title
+        if objective is not None:
+            payload["objective"] = objective
+
+        await self._publish(
+            event_type="task.updated",
+            subject_type="task",
+            subject_id=task_id,
+            context=self._context(task, command_id),
+            payload=payload,
+        )
+        return await self.get_task(task_id)
+
     async def ready_task(self, *, command_id: str, task_id: str) -> TaskView:
         history = await self._events.read(task_id)
         marker = self._command_marker(history, command_id)
@@ -187,6 +228,7 @@ class PlatformKernel:
 
         task = reduce_task(history, task_id)
         run = reduce_run(history, run_id)
+        self._require_run_task(run, task_id)
         if run.status in TERMINAL_RUN_STATUSES:
             return run
 
@@ -216,6 +258,7 @@ class PlatformKernel:
 
         task = reduce_task(history, task_id)
         run = reduce_run(history, run_id)
+        self._require_run_task(run, task_id)
         if run.status in TERMINAL_RUN_STATUSES:
             return run
 
@@ -302,7 +345,9 @@ class PlatformKernel:
         return reduce_task(await self._events.read(task_id), task_id)
 
     async def get_run(self, task_id: str, run_id: str) -> RunView:
-        return reduce_run(await self._events.read(task_id), run_id)
+        run = reduce_run(await self._events.read(task_id), run_id)
+        self._require_run_task(run, task_id)
+        return run
 
     async def history(self, task_id: str) -> tuple[PlatformEvent, ...]:
         return await self._events.read(task_id)
@@ -311,10 +356,21 @@ class PlatformKernel:
         history = await self._events.read(task_id)
         task = reduce_task(history, task_id)
         run = reduce_run(history, run_id)
+        self._require_run_task(run, task_id)
         if run.status is not ExecutionStatus.QUEUED:
             return
 
         context = self._context(task, command_id)
+        if task.status is TaskStatus.READY:
+            await self._publish(
+                event_type="task.running",
+                subject_type="task",
+                subject_id=task_id,
+                context=context,
+            )
+            task = await self.get_task(task_id)
+            context = self._context(task, command_id)
+
         try:
             snapshot = await self._lifecycle.get(run_id, context)
         except ContractError as exc:
@@ -328,11 +384,6 @@ class PlatformKernel:
                     context=context,
                     input={"plan_ref": task.plan_ref},
                 )
-            )
-            snapshot = ExecutionSnapshot(
-                run_id=run_id,
-                status=ExecutionStatus.RUNNING,
-                output={},
             )
             await self._publish(
                 event_type="run.running",
@@ -400,6 +451,14 @@ class PlatformKernel:
         if status is ExecutionStatus.CANCELLED:
             return "task.cancelled"
         return None
+
+    @staticmethod
+    def _require_run_task(run: RunView, task_id: str) -> None:
+        if run.task_id != task_id:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"Run {run.run_id} does not belong to task {task_id}",
+            )
 
     @staticmethod
     def _context(task: TaskView, causation_id: str) -> OperationContext:
