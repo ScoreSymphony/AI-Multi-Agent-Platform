@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Awaitable, Mapping
 from pathlib import Path
 
 import pytest
@@ -416,3 +416,53 @@ def test_reference_transport_passes_reusable_contract_suite() -> None:
         "bounded_backpressure",
         "graceful_shutdown",
     )
+
+
+def test_reference_outage_covers_delivery_ack_nack_and_dead_letter_reads() -> None:
+    async def assert_unavailable(operation: Awaitable[object]) -> None:
+        try:
+            await operation
+        except ContractError as exc:
+            assert exc.code is ErrorCode.UNAVAILABLE
+            assert exc.retryable is True
+        else:
+            raise AssertionError("operation unexpectedly succeeded during outage")
+
+    async def scenario() -> None:
+        transport = InProcessMessageTransport()
+        await transport.publish("commands", _envelope(1))
+        stream = transport.subscribe(Subscription("commands", "consumer-a", "workers"))
+        delivery = await anext(stream)
+        await transport.set_available(False)
+
+        await assert_unavailable(transport.ack(delivery))
+        await assert_unavailable(transport.nack(delivery, retry=True, reason="outage"))
+        await assert_unavailable(transport.dead_letters("commands", "workers"))
+
+        await transport.set_available(True)
+        await transport.ack(delivery)
+        await stream.aclose()
+        await transport.close(graceful=True)
+
+        delivery_transport = InProcessMessageTransport()
+        expected = _envelope(2)
+        await delivery_transport.publish("delivery", expected)
+        blocked = delivery_transport.subscribe(Subscription("delivery", "consumer-a", "workers"))
+        await delivery_transport.set_available(False)
+        await assert_unavailable(anext(blocked))
+        await blocked.aclose()
+
+        await delivery_transport.set_available(True)
+        recovered = delivery_transport.subscribe(Subscription("delivery", "consumer-b", "workers"))
+        recovered_delivery = await anext(recovered)
+        assert recovered_delivery.envelope.message_id == expected.message_id
+        await delivery_transport.ack(recovered_delivery)
+        await recovered.aclose()
+        await delivery_transport.close(graceful=True)
+
+        shutdown_transport = InProcessMessageTransport()
+        await shutdown_transport.set_available(False)
+        assert shutdown_transport.descriptor.available is False
+        await shutdown_transport.close(graceful=False)
+
+    asyncio.run(scenario())

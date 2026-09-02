@@ -208,13 +208,24 @@ consumer group retains the cursor and the next consumer in that group receives
 the same message as a redelivery with an incremented attempt count.
 
 The reference implementation exposes `set_available(...)` only as a deterministic
-test hook. While unavailable, operations fail with retryable
-`ErrorCode.UNAVAILABLE`. A production adapter maps backend/network outages into
-the same canonical failure category and lets the platform decide when to retry
-or reconnect.
+test hook. While unavailable, transport I/O operations fail with retryable
+`ErrorCode.UNAVAILABLE`: publish, delivery acquisition, acknowledgement, negative
+acknowledgement and dead-letter reads. Subscription-handle creation is lazy, so
+availability is enforced when the consumer requests a delivery. Provider
+descriptor inspection and `close(...)` remain locally available during an outage
+so callers can diagnose or shut down a degraded adapter without requiring the
+backend to recover first.
+
+A production adapter maps backend/network outages for the same transport-I/O
+surface into the canonical unavailable failure category and lets the platform
+decide when to retry or reconnect. Failed acknowledgements or negative
+acknowledgements must not be treated as successful state advancement.
 
 The reusable conformance suite receives an adapter-specific availability-toggle
-fixture rather than adding outage simulation to the production transport API.
+fixture rather than adding outage simulation to the production transport API. It
+verifies outage behavior across publish, delivery acquisition, ack, nack and
+dead-letter reads, recovery after the outage, descriptor health and local
+shutdown during an outage.
 
 ## Shutdown
 
