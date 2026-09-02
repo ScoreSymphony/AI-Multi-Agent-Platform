@@ -1,45 +1,43 @@
 # Platform Security Threat Model
 
-Status: normative baseline for issue #43. This document is intentionally living and must be extended as security-sensitive subsystems land.
+Status: normative baseline for issue #43. This is a living document and must be extended as security-sensitive subsystems land.
 
 ## 1. Purpose and scope
 
-The platform coordinates agents, models, tools, executors, files, external systems and potentially multiple machines. A core assumption is that natural-language content, model output, retrieved content, tool output and external events may be malicious or compromised even when they originate from an otherwise legitimate task.
+The platform coordinates Agents, models, tools, executors, files, external systems and potentially multiple machines. Natural-language content, model output, retrieved content, tool output and external events may be malicious or compromised even when they originate from an otherwise legitimate Task.
 
 The threat model therefore separates **intent** from **authority**. Models may propose actions, but only canonical identity, policy, approval and enforcement paths may authorize them.
 
-This baseline covers the current foundation and defines required hooks for future workers, plugins, browser/network access, connectors, imports/exports, registries and update systems. Those later components extend this model; they are not prerequisites for establishing it.
+This baseline covers the current platform foundation and defines required security hooks for future Workers, plugins, browser/network access, Connectors, imports/exports, registries and update systems. Those later components extend this model; they are not prerequisites for establishing it.
 
 ## 2. Security objectives
 
 The platform should preserve:
 
-- confidentiality of user/project/workspace data and credentials;
+- confidentiality of user, Project and Workspace data and credentials;
 - integrity of canonical Task, Run, Approval, Event, Agent, configuration and provenance state;
-- confinement of execution to authorized capabilities, workspaces and network scopes;
-- isolation between users, projects, workspaces, providers, workers and sessions;
+- confinement of execution to authorized capabilities, Workspaces and network scopes;
+- isolation between users, Projects, Workspaces, providers, Workers and sessions;
 - availability against accidental or malicious resource exhaustion within configured limits;
 - auditability of security-critical decisions and side effects;
-- recoverability after worker loss, compromise, replay, crash or update failure;
+- recoverability after Worker loss, compromise, replay, crash or update failure;
 - replaceability of adapters without weakening canonical security ownership.
 
 ## 3. Protected assets
 
-Protected assets include at minimum:
-
 | Asset | Primary risks |
 | --- | --- |
-| User, project and workspace data | disclosure, modification, cross-project access |
+| User, Project and Workspace data | disclosure, modification, cross-project access |
 | Source code and files | traversal, overwrite, exfiltration, malicious modification |
 | Secrets and credentials | logging, prompt leakage, provider leakage, theft, replay |
-| Canonical database/state/events | tampering, forged transitions, rollback, replay |
-| Task/Run/Approval integrity | forged authority, mismatched approval, duplicate execution |
-| Agent/AgentTeam definitions | capability escalation, model/prompt tampering |
+| Canonical database, state and Events | tampering, forged transitions, rollback, replay |
+| Task, Run and Approval integrity | forged authority, mismatched Approval, duplicate execution |
+| Agent and AgentTeam definitions | capability escalation, model/prompt tampering |
 | Model/tool configuration | provider redirection, unsafe capability expansion |
-| Worker/node access | impersonation, unauthorized dispatch, secret theft |
-| Artifacts/results/provenance | tampering, malicious payloads, false provenance |
-| Administrative privileges | escalation, session theft, confused deputy behavior |
-| Plugins/extensions | supply-chain compromise, permission escalation |
+| Worker and Node access | impersonation, unauthorized dispatch, secret theft |
+| Artifacts, results and provenance | tampering, malicious payloads, false provenance |
+| Administrative privileges | escalation, session theft, confused-deputy behavior |
+| Plugins and extensions | supply-chain compromise, permission escalation |
 | Connector/browser/repository sessions | token/cookie leakage, session confusion, external side effects |
 | Backup/update/import packages | tampering, rollback, malicious payloads, secret inclusion |
 
@@ -49,15 +47,15 @@ Relevant actors include:
 
 - authenticated users with legitimate but limited access;
 - platform administrators;
-- service identities and workers;
+- service identities and Workers;
 - model providers and local/self-hosted models;
-- tool/MCP/capability providers;
-- adapters/plugins;
-- external connector services and webhook senders;
+- tool, MCP and capability providers;
+- adapters and plugins;
+- external Connector services and webhook senders;
 - upstream package/repository maintainers;
 - unauthenticated network clients where an endpoint is exposed;
-- an attacker controlling task text, files, retrieved knowledge, webpage content, tool output or downloaded artifacts;
-- a compromised worker, plugin, provider, model endpoint, connector, dependency or upstream release.
+- an attacker controlling Task text, files, retrieved knowledge, webpage content, tool output or downloaded Artifacts;
+- a compromised Worker, plugin, provider, model endpoint, Connector, dependency or upstream release.
 
 Assume an attacker may attempt prompt injection, schema abuse, path traversal, symlink escape, replay, forged metadata, identity confusion, SSRF, credential exfiltration, excessive resource use and supply-chain substitution.
 
@@ -66,11 +64,11 @@ Assume an attacker may attempt prompt injection, schema abuse, path traversal, s
 These rules are binding baseline architecture requirements:
 
 1. **Model and Agent output is untrusted input to privileged systems.**
-2. **Authority comes from canonical identity, policy and approval decisions, never from an LLM request or natural-language claim.**
+2. **Authority comes from canonical identity, policy and Approval decisions, never from an LLM request or natural-language claim.**
 3. **Sensitive operations pass canonical backend enforcement points and cannot be authorized only in the frontend.**
-4. **Canonical workspace/file boundaries cannot be bypassed through provider-private paths.**
-5. **Plaintext secrets are excluded from normal canonical serialization, logs, events, traces, diagnostics and exports.**
-6. **Backend, plugin, provider, node or worker identifiers do not confer authorization.**
+4. **Canonical Workspace/file boundaries cannot be bypassed through provider-private paths.**
+5. **Plaintext secrets are excluded from normal canonical serialization, logs, Events, traces, diagnostics and exports.**
+6. **Backend, plugin, provider, Node or Worker identifiers do not confer authorization.**
 7. **External content, retrieved knowledge and webpage/tool output cannot silently elevate permissions.**
 8. **Optional adapters/plugins are not trusted merely because they are installed.**
 9. **Single-node operation uses the same security ownership model as distributed mode.**
@@ -84,16 +82,16 @@ The initial trust boundaries are:
 
 1. client/browser/CLI -> Control Plane;
 2. authenticated actor -> authorization/policy boundary;
-3. user/task/external content -> Agent/model context;
+3. user/Task/external content -> Agent/model context;
 4. model output -> canonical capability/tool invocation;
 5. capability/tool provider -> Executor or external side effect;
-6. Executor -> workspace/filesystem/network/host resources;
+6. Executor -> Workspace/filesystem/network/host resources;
 7. platform core -> adapter/plugin implementation;
 8. Control Plane -> local or remote Worker;
 9. platform -> model provider;
 10. platform -> MCP/tool provider;
-11. external webhook/event -> Automation;
-12. connector/browser/repository content -> Agent/task context;
+11. external webhook/Event -> Automation;
+12. Connector/browser/repository content -> Agent/Task context;
 13. upstream/update/package -> installed platform code/configuration;
 14. backup/import/export package -> canonical platform state/files.
 
@@ -116,7 +114,7 @@ flowchart LR
     UP[Upstream / Update / Package] -->|supply-chain boundary| INST[Installed Code / Config]
 ```
 
-No arrow in this diagram implies authorization. Each privileged transition must still satisfy the relevant canonical policy and enforcement decision.
+No arrow implies authorization. Each privileged transition must still satisfy the relevant canonical policy and enforcement decision.
 
 ## 7. External entry points
 
@@ -124,11 +122,11 @@ Current or future entry points include:
 
 - Control Plane HTTP/API requests;
 - CLI and web-client requests through canonical APIs;
-- task goals, prompts and uploaded files;
+- Task goals, prompts and uploaded files;
 - model responses;
 - MCP/tool/provider responses;
-- worker registration, dispatch callbacks and results;
-- webhook and connector events;
+- Worker registration, dispatch callbacks and results;
+- webhook and Connector Events;
 - browser/retrieval/repository content;
 - plugin manifests and plugin code;
 - import packages, backup restores and registry packages;
@@ -139,7 +137,7 @@ All external entry points require schema/structural validation, bounded resource
 
 ## 8. Privileged actions
 
-Examples of privileged actions include:
+Examples include:
 
 - filesystem read/write/delete outside ephemeral in-memory state;
 - command/process execution;
@@ -147,36 +145,36 @@ Examples of privileged actions include:
 - sending messages or mutating external services;
 - repository writes, commits, pushes or merges;
 - reading or delivering secret material;
-- changing identity, authorization, approval or policy state;
-- registering or trusting a worker/plugin/provider;
+- changing identity, authorization, Approval or policy state;
+- registering or trusting a Worker/plugin/provider;
 - installing or updating code/packages;
 - importing/restoring canonical state;
 - administrative configuration changes;
-- destructive task/run/workspace operations.
+- destructive Task/Run/Workspace operations.
 
-Sensitive actions should be deny-by-default unless a canonical policy explicitly allows them, and should require approval when policy or capability classification says approval is required.
+Sensitive actions should be deny-by-default unless canonical policy explicitly allows them, and should require Approval when policy or capability classification says Approval is required.
 
 ## 9. Baseline controls
 
 ### 9.1 Canonical security context
 
-Security-critical decisions should carry canonical actor, action, resource, project/workspace and correlation context. Provider-private metadata may be retained for diagnostics but must not grant authority.
+Security-critical decisions should carry canonical actor, action, resource, Project/Workspace and correlation context. Provider-private metadata may be retained for diagnostics but must not grant authority.
 
 The initial reusable type is `ai_multi_agent_platform.security.SecurityContext`.
 
 ### 9.2 Secure-default decisions
 
-The baseline decision model is explicit `ALLOW`, `DENY` or `REQUIRE_APPROVAL`. `baseline_decision(...)` is deny-by-default and deliberately ignores adapter metadata. Issue #15 will supply the final authorization/approval engine while preserving these semantics.
+The baseline decision model is explicit `ALLOW`, `DENY` or `REQUIRE_APPROVAL`. `baseline_decision(...)` is deny-by-default and deliberately ignores adapter metadata. Issue #15 owns the final authorization/Approval engine and must preserve or deliberately supersede these semantics through an explicit architecture decision.
 
 ### 9.3 Input validation
 
-Untrusted inputs must be validated at the nearest canonical boundary. Schema validation remains required for endpoint/capability-specific contracts. The reusable `validate_untrusted_json(...)` helper provides baseline rejection of non-JSON objects, non-finite numbers and excessive nesting/item/string sizes.
+Untrusted inputs must be validated at the nearest canonical boundary. Endpoint/capability schemas remain required for semantic validation. The reusable `validate_untrusted_json(...)` helper provides baseline rejection of non-JSON objects, non-finite numbers and excessive nesting/item/string sizes.
 
 ### 9.4 Workspace and path confinement
 
 Filesystem operations must:
 
-- use platform-selected workspace roots;
+- use platform-selected Workspace roots;
 - reject absolute paths where a relative path is required;
 - reject parent traversal;
 - normalize/resolve paths before access;
@@ -189,15 +187,13 @@ Filesystem operations must:
 
 ### 9.5 Secrets and redaction
 
-Plaintext secret material must not be part of normal canonical objects. Use scoped secret references where possible. The initial `SecretReference` type contains locator/scope metadata but no plaintext secret value.
+Plaintext secret material must not be part of normal canonical objects. Scoped secret references should be used instead of embedded values. Centralized redaction must run before logs, Events, traces, diagnostics, API display, prompts where applicable, evaluation Artifacts and exports can expose sensitive values.
 
-Before logs, traces, events, diagnostics or exports, sensitive mappings must pass reusable redaction. `redact_sensitive(...)` recursively redacts common password/token/key fields and serializes secret references without resolving them.
-
-Issue #34 must integrate real secret storage/config resolution and expand classification/redaction coverage.
+**Contract ownership:** issue #34 owns the canonical `SecretReference`, secret-provider boundary and reusable redaction implementation. Issue #43 defines the security invariant and leak surfaces but intentionally does not create a competing secret contract while #34 is active. Downstream subsystems must consume the #34 contract once merged rather than defining provider-private alternatives.
 
 ### 9.6 Network and SSRF hooks
 
-Future network/browser/connector implementations must have a policy seam before performing outbound requests. At minimum support:
+Future network/browser/Connector implementations must have a policy seam before performing outbound requests. At minimum support:
 
 - allow/deny destination policy;
 - scheme restrictions;
@@ -207,23 +203,23 @@ Future network/browser/connector implementations must have a policy seam before 
 - response/download size limits;
 - timeout and concurrency limits;
 - explicit classification of external side effects;
-- cookie/session isolation per provider/user/project scope.
+- cookie/session isolation per provider/user/Project scope.
 
 Issue #74 extends these requirements for browser/web content.
 
 ### 9.7 Replay and deduplication hooks
 
-External/distributed messages must carry stable identities/idempotency keys where repeated delivery can cause side effects. Consumers must distinguish duplicate delivery from a new authorized action. Issue #35 owns transport semantics; #14/#36 extend worker identity and dispatch security; #44 extends webhook/connector verification.
+External/distributed messages must carry stable identities/idempotency keys where repeated delivery can cause side effects. Consumers must distinguish duplicate delivery from a new authorized action. Issue #35 owns transport semantics; #14/#36 extend Worker identity and dispatch security; #44 extends webhook/Connector verification.
 
 ### 9.8 Resource limits
 
-Security-sensitive boundaries should expose time, size, concurrency and rate-limit hooks. Unbounded model/tool/executor/network payloads are not acceptable secure defaults.
+Security-sensitive boundaries should expose time, size, concurrency and rate-limit hooks. Unbounded model/tool/Executor/network payloads are not acceptable secure defaults.
 
-### 9.9 Audit events
+### 9.9 Audit Events
 
-Security-critical actions should produce an audit/security event with canonical actor/action/resource context, decision, reason, correlation data and side-effect classification. Plaintext secrets must be excluded before persistence/telemetry.
+Security-critical actions should produce an audit/security Event with canonical actor/action/resource context, decision, reason, correlation data and side-effect classification. Plaintext secrets must be excluded before persistence/telemetry.
 
-The initial reusable `SecurityAuditEvent` defines this minimal shape. A later observability subsystem may transport it but must not redefine authority semantics.
+The initial reusable `SecurityAuditEvent` defines this minimal security-owned shape. Observability may transport/serialize it later but must not redefine authorization semantics.
 
 ### 9.10 Supply-chain provenance
 
@@ -236,8 +232,8 @@ Dependencies, vendored/forked/ported source and architecture-significant upstrea
 **Threats**
 
 - prompt injection attempts to trigger unauthorized tools;
-- retrieved/web/tool content asks the agent to override system policy;
-- an Agent fabricates approval or identity claims;
+- retrieved/web/tool content asks the Agent to override system policy;
+- an Agent fabricates Approval or identity claims;
 - malicious model/tool output influences a later privileged operation;
 - an attacker hides instructions in files or retrieved knowledge.
 
@@ -245,48 +241,48 @@ Dependencies, vendored/forked/ported source and architecture-significant upstrea
 
 - treat all model/external content as data, not authority;
 - authorize the concrete canonical action after model planning;
-- bind approval to the exact reviewed actor/resource/action/invocation;
+- bind Approval to the exact reviewed actor/resource/action/invocation;
 - revalidate tool input at invocation time;
 - do not infer permissions from free-form text or adapter metadata;
 - keep sensitive capabilities deny-by-default.
 
 **Residual risk**
 
-A sufficiently capable model may still be manipulated into proposing harmful but apparently plausible actions. The protection is enforcement, least privilege and approvals, not model obedience alone.
+A sufficiently capable model may still be manipulated into proposing harmful but apparently plausible actions. Protection comes from enforcement, least privilege and Approvals, not model obedience alone.
 
 ### Execution and filesystem
 
 **Threats**
 
-- arbitrary command execution outside allowed capability;
-- workspace traversal or symlink/junction escape;
+- arbitrary command execution outside an allowed capability;
+- Workspace traversal or symlink/junction escape;
 - host filesystem leakage;
-- environment variable and secret leakage;
-- unsafe temporary files/artifacts;
+- environment-variable and secret leakage;
+- unsafe temporary files/Artifacts;
 - TOCTOU path races;
 - resource exhaustion.
 
 **Required mitigations**
 
 - explicit capability allow-listing;
-- workspace confinement and symlink-aware resolution;
+- Workspace confinement and symlink-aware resolution;
 - filtered environment/secret delivery;
-- per-run time/resource limits;
+- per-Run time/resource limits;
 - least-privilege process/container identity;
 - production sandbox/container boundary where risk warrants it;
-- artifacts treated as untrusted on later consumption.
+- Artifacts treated as untrusted on later consumption.
 
-### Network, browser and connectors
+### Network, browser and Connectors
 
 **Threats**
 
 - SSRF into loopback/private networks/cloud metadata services;
 - unauthorized outbound requests;
 - malicious redirects/downloads/uploads;
-- side effects triggered without approval;
+- side effects triggered without Approval;
 - cookie/token/session confusion;
 - webhook spoofing/replay;
-- malicious webpage/connector content used as instructions.
+- malicious webpage/Connector content used as instructions.
 
 **Required mitigations**
 
@@ -295,7 +291,7 @@ A sufficiently capable model may still be manipulated into proposing harmful but
 - isolated sessions/cookies/tokens;
 - signature/nonce/timestamp verification for webhooks where supported;
 - replay/deduplication;
-- download/content limits and safe artifact handling;
+- download/content limits and safe Artifact handling;
 - external content remains untrusted after retrieval.
 
 ### Authentication and authorization
@@ -303,20 +299,20 @@ A sufficiently capable model may still be manipulated into proposing harmful but
 **Threats**
 
 - privilege escalation;
-- cross-project/resource access;
-- service/worker impersonation;
+- cross-Project/resource access;
+- service/Worker impersonation;
 - stale sessions after revocation;
 - direct adapter calls bypassing canonical policy;
-- approval replay against a different action.
+- Approval replay against a different action.
 
 **Required mitigations for #15/#36**
 
 - canonical identity with revocation semantics;
 - authorization at backend enforcement points;
-- exact resource/action/project scope;
+- exact resource/action/Project scope;
 - no authorization by backend identifier;
-- service and worker authentication distinct from user identity;
-- immutable approval binding to the reviewed action/invocation;
+- service and Worker authentication distinct from user identity;
+- immutable Approval binding to the reviewed action/invocation;
 - denial remains effective when optional adapters are absent.
 
 ### Secrets and data leakage
@@ -325,20 +321,20 @@ A sufficiently capable model may still be manipulated into proposing harmful but
 
 - logs/traces/errors;
 - prompts/model requests;
-- events/messages;
+- Events/messages;
 - exports/imports;
-- artifacts;
+- Artifacts;
 - plugin/tool payloads;
 - backups;
 - diagnostics.
 
 **Required mitigations**
 
-- SecretReference rather than plaintext canonical storage;
+- canonical secret references from #34 rather than plaintext canonical storage;
 - scoped secret delivery only to the authorized operation;
 - centralized classification/redaction;
 - avoid broad environment inheritance;
-- retention/minimization rules for telemetry and artifacts;
+- retention/minimization rules for telemetry and Artifacts;
 - backups/exports require explicit secret policy.
 
 ### Plugins, dependencies and upstream supply chain
@@ -361,26 +357,26 @@ A sufficiently capable model may still be manipulated into proposing harmful but
 - explicit update workflow and rollback;
 - no silent upstream replacement of canonical contracts.
 
-### Distributed workers
+### Distributed Workers
 
 **Threats**
 
-- worker/service impersonation;
+- Worker/service impersonation;
 - replayed dispatch;
 - capability misrepresentation;
-- compromised/lost worker;
+- compromised/lost Worker;
 - over-broad secret delivery;
 - malicious/fabricated results.
 
 **Required model for #14/#36**
 
-- canonical worker/service identity;
+- canonical Worker/service identity;
 - authenticated registration and dispatch;
 - replay-resistant job semantics;
 - explicit trust level/capabilities;
 - least-privilege scoped secrets;
-- revocation/quarantine for compromised workers;
-- worker results treated according to trust/policy and validated before privileged reuse.
+- revocation/quarantine for compromised Workers;
+- Worker results validated and treated according to trust/policy before privileged reuse.
 
 ## 11. Residual risks
 
@@ -391,8 +387,8 @@ The baseline does not claim to eliminate:
 - TOCTOU filesystem races in hostile multi-process environments;
 - model-provider retention or misuse when a deployment intentionally sends data to an external provider;
 - deployment-specific firewall/TLS/host-hardening failures;
-- social engineering of humans granting approvals;
-- unknown vulnerabilities in future plugins, browsers, connectors or imported packages.
+- social engineering of humans granting Approvals;
+- unknown vulnerabilities in future plugins, browsers, Connectors or imported packages.
 
 High-risk deployments should use independent security review and penetration testing.
 
@@ -404,7 +400,7 @@ Current assumptions include:
 - canonical persistence is protected by deployment-level filesystem/database permissions;
 - Python/runtime dependencies are obtained from intended sources;
 - the ReferenceExecutor is a deterministic development/reference executor, not a complete hostile-code sandbox;
-- later authentication/authorization, secret, worker and network subsystems will extend rather than bypass this baseline.
+- later authentication/authorization, secret, Worker and network subsystems will extend rather than bypass this baseline.
 
 ## 13. Re-evaluation triggers
 
@@ -412,13 +408,13 @@ Review this threat model when any of the following changes:
 
 - new privileged capability or execution primitive;
 - remote Worker/Node support;
-- authentication, authorization or approval semantics;
+- authentication, authorization or Approval semantics;
 - secret/config handling;
-- transport/event bus or webhook ingestion;
-- workspace/materialization behavior;
+- transport/Event bus or webhook ingestion;
+- Workspace/materialization behavior;
 - plugin system or executable extension loading;
 - browser/network access;
-- connector/repository write access;
+- Connector/repository write access;
 - import/export/backup package formats;
 - package registry/distribution;
 - update/release/upstream workflow;
@@ -431,19 +427,19 @@ The following issues must revisit this document and add subsystem-specific tests
 
 - #12 capability/tool invocation threats;
 - #14 remote Worker/Node threats;
-- #15 authorization/approval enforcement;
+- #15 authorization/Approval enforcement;
 - #20 plugin isolation and supply chain;
-- #34 secret/config handling;
+- #34 secret/config handling and canonical redaction;
 - #35 transport/replay/message security;
 - #36 authentication/session/service identity;
-- #37 workspace/materialization isolation;
+- #37 Workspace/materialization isolation;
 - #42 update/upstream integrity;
-- #44 connectors/external events;
+- #44 Connectors/external Events;
 - #74 browser/network/web-content threats;
 - #79 import/export package threats;
 - #81 registry/distribution trust;
 - #82 repository/Git side effects;
-- #46 end-to-end conformance of the accumulated security invariants.
+- #46 end-to-end conformance of accumulated security invariants.
 
 Use [`SECURITY_EXTENSION_CHECKLIST.md`](SECURITY_EXTENSION_CHECKLIST.md) for every security-sensitive subsystem.
 
@@ -452,12 +448,12 @@ Use [`SECURITY_EXTENSION_CHECKLIST.md`](SECURITY_EXTENSION_CHECKLIST.md) for eve
 `tests/test_security_baseline.py` establishes regression fixtures for currently implementable invariants:
 
 - traversal and absolute-path rejection;
-- symlink-resolved workspace/artifact escape;
-- sensitive-value redaction;
-- SecretReference non-plaintext serialization;
+- symlink-resolved Workspace/Artifact escape;
 - malformed/non-finite/unbounded input rejection;
 - deny-by-default decisions;
 - adapter-private metadata cannot grant authority;
 - optional adapter absence does not alter canonical security ownership.
+
+Secret serialization/redaction regression belongs to #34's canonical secret/config implementation and must be integrated into this threat model after that subsystem merges.
 
 Future subsystem tests should extend this baseline rather than create separate, incompatible security rules.
