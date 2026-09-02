@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -15,6 +16,7 @@ from ai_multi_agent_platform.domain import (
     Approval,
     ApprovalStatus,
     Artifact,
+    Capability,
     Event,
     ExternalRef,
     Goal,
@@ -22,6 +24,7 @@ from ai_multi_agent_platform.domain import (
     Node,
     OwnerRef,
     Plan,
+    PolicyScope,
     Provenance,
     Result,
     Run,
@@ -230,6 +233,22 @@ def test_event_payload_and_provenance_are_defensively_deep_frozen() -> None:
         event.payload["outcome"]["other"] = "value"
 
 
+def test_deep_freeze_copies_non_dict_mapping_implementations() -> None:
+    backing = {"labels": ["initial"]}
+    wrapped = MappingProxyType(backing)
+    event = Event(
+        event_type="task.updated",
+        subject_type="task",
+        subject_id=new_id("task"),
+        correlation_id="corr-proxy",
+        payload={"wrapped": wrapped},
+    )
+
+    backing["labels"].append("mutated")
+
+    assert event.payload["wrapped"]["labels"] == ("initial",)
+
+
 def test_non_event_domain_metadata_is_also_deeply_immutable() -> None:
     source_metadata = {"nested": {"items": ["initial"]}}
     task = Task(title="Immutable metadata", owner_ref=OWNER, metadata=source_metadata)
@@ -285,6 +304,39 @@ def test_model_assignment_requires_canonical_subject_identity() -> None:
         requirements={"context": "large"},
     )
     validate_id(assignment.subject_id, "task")
+
+
+def test_model_assignment_supports_capability_and_policy_scopes() -> None:
+    capability = Capability(name="large-context")
+    policy_scope = PolicyScope(
+        name="sensitive-work",
+        owner_ref=OWNER,
+        criteria={"approval_required": True},
+    )
+
+    capability_assignment = ModelAssignment(
+        subject_type="capability",
+        subject_id=capability.id,
+        owner_ref=OWNER,
+        requirements={"context_window": 128000},
+    )
+    policy_assignment = ModelAssignment(
+        subject_type="policy",
+        subject_id=policy_scope.id,
+        owner_ref=OWNER,
+        requirements={"local_only": True},
+    )
+
+    validate_id(capability_assignment.subject_id, "cap")
+    validate_id(policy_assignment.subject_id, "policy_scope")
+
+    with pytest.raises(ValueError):
+        ModelAssignment(
+            subject_type="policy",
+            subject_id="backend-policy-default",
+            owner_ref=OWNER,
+            requirements={},
+        )
 
 
 def test_relationship_fields_reject_noncanonical_ids() -> None:
