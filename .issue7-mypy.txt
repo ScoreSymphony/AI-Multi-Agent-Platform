@@ -1,3 +1,0 @@
-src/ai_multi_agent_platform/execution/reference.py:181: error: Argument 1 to "int" has incompatible type "str | int | float | list[JsonValue] | dict[str, JsonValue] | None"; expected "str | Buffer | SupportsInt | SupportsIndex | SupportsTrunc"  [arg-type]
-src/ai_multi_agent_platform/execution/reference.py:184: error: Argument 1 to "float" has incompatible type "str | int | float | list[JsonValue] | dict[str, JsonValue] | None"; expected "str | Buffer | SupportsFloat | SupportsIndex"  [arg-type]
-Found 2 errors in 1 file (checked 24 source files)
