@@ -1,0 +1,33 @@
+name: Reconcile PR62 with latest main
+
+on:
+  push:
+    branches:
+      - fix/issue-5-main-reconciliation
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/issue-5-main-reconciliation
+          fetch-depth: 0
+      - name: Merge latest main while preserving newer main conflict decisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git merge origin/main --no-edit -X theirs
+          rm -f .github/workflows/reconcile-pr62-latest-main.yml
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "ci: remove temporary PR62 reconciliation workflow"
+          fi
+          git push origin HEAD:fix/issue-5-main-reconciliation
