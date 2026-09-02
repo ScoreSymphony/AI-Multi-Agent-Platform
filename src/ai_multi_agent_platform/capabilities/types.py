@@ -13,6 +13,7 @@ from ai_multi_agent_platform.contracts.types import (
     JsonValue,
     OperationContext,
 )
+from ai_multi_agent_platform.domain import validate_id
 
 
 def _freeze_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
@@ -124,12 +125,11 @@ class InvocationTrace:
     def __post_init__(self) -> None:
         if not self.correlation_id.strip():
             raise ValueError("correlation_id must not be blank")
-        if not self.task_id.strip():
-            raise ValueError("task_id must not be blank")
-        if not self.run_id.strip():
-            raise ValueError("run_id must not be blank")
-        if not self.agent_id.strip():
-            raise ValueError("agent_id must not be blank")
+        validate_id(self.task_id, "task")
+        validate_id(self.run_id, "run")
+        validate_id(self.agent_id, "agent")
+        if self.project_id is not None:
+            validate_id(self.project_id, "project")
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +154,10 @@ class CapabilityInvocation:
             raise ValueError("version must not be blank")
         if self.trace.correlation_id != self.context.correlation_id:
             raise ValueError("trace/context correlation_id must match")
+        if self.trace.causation_id != self.context.causation_id:
+            raise ValueError("trace/context causation_id must match")
+        if self.trace.project_id != self.context.project_id:
+            raise ValueError("trace/context project_id must match")
         object.__setattr__(self, "arguments", _freeze_mapping(self.arguments))
 
 
@@ -182,6 +186,8 @@ class CapabilityInvocationResult:
             raise ValueError("capability_version must not be blank")
         if not self.provider_id.strip():
             raise ValueError("provider_id must not be blank")
+        if self.canonical_tool_invocation_id is not None:
+            validate_id(self.canonical_tool_invocation_id, "tool_invocation")
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,3 +204,7 @@ class InvocationRecord:
     canonical_tool_invocation_id: str | None = None
     error_code: str | None = None
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.canonical_tool_invocation_id is not None:
+            validate_id(self.canonical_tool_invocation_id, "tool_invocation")
