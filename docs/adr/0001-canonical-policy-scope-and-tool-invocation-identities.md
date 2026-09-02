@@ -42,6 +42,12 @@ Provider-neutral contract DTOs may continue to carry implementation/provider han
 
 The explicit boundary function `contracts.domain_mapping.map_tool_invocation_to_domain(...)` maps a contract `ToolInvocation` to the canonical domain Tool Invocation. It requires the already-resolved canonical Tool ID and stores the contract invocation/tool handles as `ExternalRef` values. This creates a deterministic governance/audit link without coupling the domain model to a ToolProvider implementation.
 
+A governed invocation must also be bound to the exact arguments that were approved. Provider Contract `2.0` therefore defensively deep-freezes `ToolInvocation.arguments` when the contract value is created. The mapping boundary computes a deterministic SHA-256 digest of that immutable JSON-compatible argument value and records the digest in canonical Tool Invocation provenance as `arguments_sha256`. The same contract object subsequently passed to a ToolProvider cannot be mutated in-place to execute different arguments under an already-approved canonical invocation identity.
+
+Adapters that need a conventional JSON transport object use `ToolInvocation.arguments_json()`. It returns a detached recursive `dict`/`list` copy suitable for standard JSON encoding; mutations to that exported copy do not alter the governed snapshot or its digest.
+
+Because Provider Contract `1.0` exposed mutable argument-dictionary semantics, the immutable behavior is a breaking contract change and is published as Provider Contract `2.0`. Providers relying on the new behavior must advertise `2.0` rather than silently changing `1.0` semantics.
+
 ### Event contract versioning
 
 Event schema `1.0` retains its previously published compatibility rules. Strict canonical subject-type/ID enforcement is published as Event schema `2.0`. New canonical subject identities (`policy_scope`, `tool_invocation`) are part of the v2 vocabulary rather than silently narrowing v1.
@@ -53,6 +59,8 @@ Event schema `1.0` retains its previously published compatibility rules. Strict 
 - model assignment can target policy scope without arbitrary backend IDs;
 - one sensitive tool invocation can be approved/audited independently from the reusable Tool definition;
 - provider invocation IDs remain replaceable external references;
+- approved tool-call identity is cryptographically bound to an immutable argument snapshot;
+- adapters retain a supported standard JSON export path through `arguments_json()`;
 - ToolProvider implementations do not become lifecycle or identity authorities;
 - Event v1 consumers are not broken by a silent contract narrowing;
 - future adapters have one explicit mapping point between provider DTOs and canonical governance identity.
@@ -61,6 +69,9 @@ Event schema `1.0` retains its previously published compatibility rules. Strict 
 
 - callers that need per-invocation governance must create/map a canonical Tool Invocation before creating the Approval/Event subject;
 - callers must resolve the canonical Tool ID at the boundary;
+- Provider Contract `2.0` Tool Invocation arguments are read-only after construction and callers must create a new invocation for changed arguments;
+- adapters that serialize invocation arguments must use the detached `arguments_json()` export rather than serializing the internal frozen representation directly;
+- Provider Contract `1.0` adapters require an explicit migration to `2.0` before claiming the immutable semantics;
 - Policy Scope is an additional canonical scope identity that persistence/API work must eventually support;
 - Event v1 and v2 coexist until migration policy retires v1.
 
@@ -73,6 +84,14 @@ Rejected. Provider invocation handles are backend-private, may collide, may chan
 ### Make the reusable Tool the Approval subject
 
 Rejected for invocation-specific approvals because it over-broadly identifies a tool definition rather than the exact governed action.
+
+### Keep invocation arguments mutable and approve only the invocation ID
+
+Rejected because a caller could mutate the arguments after approval and execute a different action under the same approved identity. Identity-only approval is insufficient for action-level governance.
+
+### Change ToolInvocation semantics while continuing to advertise Provider Contract 1.0
+
+Rejected because existing `1.0` adapters could legitimately mutate or normalize the supplied argument dictionary. The normative contract-versioning rules require a new major version for that semantic change.
 
 ### Remove policy-scoped Model Assignment until authorization is implemented
 
@@ -89,10 +108,16 @@ Rejected because changing previously accepted subject values is a breaking contr
   - canonical `ToolInvocation`
   - `ModelAssignment`
   - Approval/Event subject validation
+  - deep-freeze handling of Enum values
 - `src/ai_multi_agent_platform/contracts/types.py`
-  - provider-neutral contract `ToolInvocation` remains transport-facing
+  - Provider Contract `2.0`
+  - provider-neutral contract `ToolInvocation` deep-freezes invocation arguments
+  - supported `arguments_json()` transport export
 - `src/ai_multi_agent_platform/contracts/domain_mapping.py`
   - explicit contract-to-domain Tool Invocation mapping
+  - deterministic `arguments_sha256` binding
+- `docs/CONTRACTS.md`
+  - Provider Contract `2.0` migration semantics
 - `schemas/domain/common.schema.json`
   - `policyScopeId`
   - `toolInvocationId`
@@ -100,4 +125,4 @@ Rejected because changing previously accepted subject values is a breaking contr
   - backward-compatible Event v1
 - `schemas/domain/event.v2.schema.json`
   - strict canonical Event v2 subjects
-- Issue #4 and PR #54
+- Issue #4, PR #54 and its final follow-up PR

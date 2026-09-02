@@ -27,11 +27,11 @@ Tasks support draft, ready, running, waiting/blocked, succeeded, failed and canc
 
 A failed Task may be retried. Retry transitions the Task back to ready and creates a **new** canonical Run with an incremented attempt number. Previous attempts remain immutable history.
 
-## Planning ownership
+### Task/run consistency and step-run semantics
 
-The `Orchestrator` returns provider-neutral planning proposals only. Proposal-local step keys are coordination data, not canonical identifiers.
+Direct `complete_task()` and `fail_task()` operations are rejected while any canonical run is still non-terminal. Task terminal state therefore cannot diverge from an active run, and task retry is likewise rejected while unfinished work remains.
 
-When a proposal is accepted, the kernel creates the canonical `Plan` and `Step` identities itself, translates proposal dependencies to canonical `step_*` references and persists those identifiers in `plan.created`. An orchestrator workflow/session/job ID therefore cannot become a platform Plan or Step ID merely because one adapter supplied it.
+Attempts are scoped to the canonical run subject `(subject_type, subject_id)`, not to the task-wide number of runs. Task runs may be created/started only while the task is `ready`. Step runs may be created/started while the task is `ready` or `running`; their success, failure, timeout or cancellation terminalizes the step run only and does not implicitly terminalize the parent task. Cancelling the parent task still cancels an active step run first and then terminalizes the task. A second non-terminal run for the same subject is rejected.
 
 ## Event history and read models
 
