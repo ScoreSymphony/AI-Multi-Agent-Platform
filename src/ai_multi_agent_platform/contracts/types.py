@@ -198,7 +198,7 @@ class ModelResponse:
 class ToolInvocation:
     invocation_id: str
     tool_ref: str
-    arguments: Mapping[str, FrozenJsonValue]
+    arguments: Mapping[str, JsonValue]
     context: OperationContext
 
     def __post_init__(self) -> None:
