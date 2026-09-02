@@ -21,7 +21,12 @@ class ExecutorRegistry:
             raise KeyError(f"unknown executor: {name}") from exc
 
     @classmethod
-    def from_config(cls, config: dict[str, Executor], *, default: str | None = None) -> tuple["ExecutorRegistry", Executor | None]:
+    def from_config(
+        cls,
+        config: dict[str, Executor],
+        *,
+        default: str | None = None,
+    ) -> tuple[ExecutorRegistry, Executor | None]:
         registry = cls()
         for name, executor in config.items():
             registry.register(name, executor)
