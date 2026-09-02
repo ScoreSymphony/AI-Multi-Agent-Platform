@@ -897,6 +897,20 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                         _json_dump(source.metadata),
                     ),
                 )
+                connection.execute(
+                    """
+                    INSERT INTO data_knowledge_indexes (
+                        index_id, source_id, revision, status, updated_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        new_knowledge_index_id(),
+                        source.source_id,
+                        source.revision,
+                        KnowledgeStatus.REGISTERED.value,
+                        source.updated_at.isoformat(),
+                    ),
+                )
         except sqlite3.IntegrityError as exc:
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -954,39 +968,19 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
                     """,
                     (KnowledgeStatus.READY.value, document.checksum, now.isoformat(), source_id),
                 )
-                existing = connection.execute(
-                    "SELECT index_id FROM data_knowledge_indexes WHERE source_id = ?",
-                    (source_id,),
-                ).fetchone()
-                if existing is None:
-                    connection.execute(
-                        """
-                        INSERT INTO data_knowledge_indexes (
-                            index_id, source_id, revision, status, updated_at
-                        ) VALUES (?, ?, ?, ?, ?)
-                        """,
-                        (
-                            new_knowledge_index_id(),
-                            source_id,
-                            source.revision,
-                            KnowledgeStatus.READY.value,
-                            now.isoformat(),
-                        ),
-                    )
-                else:
-                    connection.execute(
-                        """
-                        UPDATE data_knowledge_indexes
-                        SET revision = ?, status = ?, updated_at = ?
-                        WHERE source_id = ?
-                        """,
-                        (
-                            source.revision,
-                            KnowledgeStatus.READY.value,
-                            now.isoformat(),
-                            source_id,
-                        ),
-                    )
+                connection.execute(
+                    """
+                    UPDATE data_knowledge_indexes
+                    SET revision = ?, status = ?, updated_at = ?
+                    WHERE source_id = ?
+                    """,
+                    (
+                        source.revision,
+                        KnowledgeStatus.READY.value,
+                        now.isoformat(),
+                        source_id,
+                    ),
+                )
         except sqlite3.Error as exc:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR, "failed to ingest knowledge source"
@@ -1010,12 +1004,9 @@ class LocalKnowledgeProvider(_SqliteMixin, KnowledgeProvider):
         except sqlite3.Error as exc:
             raise ContractError(ErrorCode.BACKEND_ERROR, "failed to read knowledge index") from exc
         if row is None:
-            return IndexReference(
-                index_id=new_knowledge_index_id(),
-                source_id=source_id,
-                revision=source.revision,
-                status=KnowledgeStatus.REGISTERED,
-                updated_at=source.updated_at,
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                f"missing canonical knowledge index: {source_id}",
             )
         return IndexReference(
             index_id=cast(str, row["index_id"]),
