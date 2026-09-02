@@ -13,7 +13,7 @@ without changing canonical event ownership established by #6.
 - at-least-once duplicate/redelivery semantics;
 - explicit consumer identity/group, acknowledgement and negative acknowledgement;
 - retry/backoff and dead-letter handling;
-- bounded backpressure and normalized outage errors;
+- bounded backpressure and normalized outage errors across publish, delivery acquisition, ack, nack and dead-letter reads;
 - graceful/forced shutdown semantics;
 - `OperationControl.timeout_seconds` enforcement for reference publishes;
 - binding between operation and envelope idempotency keys without an exactly-once claim;
@@ -49,7 +49,7 @@ without changing canonical event ownership established by #6.
 - failed delivery retry and configured backoff;
 - poison/dead-letter behavior;
 - defined-scope ordering;
-- transport-unavailable behavior;
+- transport-unavailable behavior across the full transport-I/O surface plus recovery and local shutdown;
 - bounded backpressure;
 - graceful shutdown;
 - correlation/causation/full trace-context preservation;

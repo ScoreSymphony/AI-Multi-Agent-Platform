@@ -251,6 +251,7 @@ class InProcessMessageTransport(MessageTransport):
                 state.condition.notify_all()
 
     async def ack(self, delivery: MessageDelivery) -> None:
+        self._require_available()
         state, group = self._delivery_state(delivery)
         async with state.condition:
             inflight = self._require_matching_inflight(group, delivery)
@@ -269,6 +270,7 @@ class InProcessMessageTransport(MessageTransport):
         retry: bool = True,
         reason: str | None = None,
     ) -> None:
+        self._require_available()
         state, group = self._delivery_state(delivery)
         async with state.condition:
             inflight = self._require_matching_inflight(group, delivery)
@@ -306,6 +308,7 @@ class InProcessMessageTransport(MessageTransport):
             state.condition.notify_all()
 
     async def dead_letters(self, topic: str, consumer_group: str) -> tuple[DeadLetter, ...]:
+        self._require_available()
         state = self._topics.get(topic)
         if state is None:
             return ()

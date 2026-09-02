@@ -228,18 +228,74 @@ class MessageTransportContractSuite:
         await transport.close(graceful=True)
 
     async def _transport_unavailable(self) -> None:
+        async def assert_unavailable(operation: Awaitable[object], message: str) -> None:
+            try:
+                await operation
+            except ContractError as exc:
+                assert exc.code is ErrorCode.UNAVAILABLE
+                assert exc.retryable is True
+            else:
+                raise AssertionError(message)
+
         transport = self._factory()
+        await transport.publish("outage", self._envelope(1))
+        stream = transport.subscribe(Subscription("outage", "consumer-a", "group-a"))
+        delivery = await anext(stream)
         await self._availability_toggle(transport, False)
+        assert transport.descriptor.available is False
+
+        await assert_unavailable(
+            transport.publish("outage", self._envelope(2)),
+            "transport publish did not expose canonical unavailable behavior",
+        )
+        await assert_unavailable(
+            transport.ack(delivery),
+            "transport ack did not expose canonical unavailable behavior",
+        )
+        await assert_unavailable(
+            transport.nack(delivery, retry=True, reason="outage"),
+            "transport nack did not expose canonical unavailable behavior",
+        )
+        await assert_unavailable(
+            transport.dead_letters("outage", "group-a"),
+            "transport dead-letter read did not expose canonical unavailable behavior",
+        )
+
+        await self._availability_toggle(transport, True)
+        await transport.ack(delivery)
+        await stream.aclose()
+        await transport.close(graceful=True)
+
+        delivery_transport = self._factory()
+        expected = self._envelope(3)
+        await delivery_transport.publish("outage-delivery", expected)
+        blocked_stream = delivery_transport.subscribe(
+            Subscription("outage-delivery", "consumer-a", "group-a")
+        )
+        await self._availability_toggle(delivery_transport, False)
         try:
-            await transport.publish("outage", self._envelope(1))
+            await anext(blocked_stream)
         except ContractError as exc:
             assert exc.code is ErrorCode.UNAVAILABLE
             assert exc.retryable is True
         else:
-            raise AssertionError("transport did not expose canonical unavailable behavior")
-        await self._availability_toggle(transport, True)
-        await transport.publish("outage", self._envelope(2))
-        await transport.close(graceful=False)
+            raise AssertionError("delivery acquisition succeeded while transport was unavailable")
+        await blocked_stream.aclose()
+
+        await self._availability_toggle(delivery_transport, True)
+        recovered_stream = delivery_transport.subscribe(
+            Subscription("outage-delivery", "consumer-b", "group-a")
+        )
+        recovered = await anext(recovered_stream)
+        assert recovered.envelope.message_id == expected.message_id
+        await delivery_transport.ack(recovered)
+        await recovered_stream.aclose()
+        await delivery_transport.close(graceful=True)
+
+        shutdown_transport = self._factory()
+        await self._availability_toggle(shutdown_transport, False)
+        assert shutdown_transport.descriptor.available is False
+        await shutdown_transport.close(graceful=False)
 
     async def _bounded_backpressure(self) -> None:
         transport = self._bounded_factory()
