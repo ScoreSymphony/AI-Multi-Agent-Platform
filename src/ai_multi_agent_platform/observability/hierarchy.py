@@ -308,7 +308,7 @@ class TraceHierarchy:
         )
 
 
-async def observe_agent_run(
+async def observe_agent_run[T](
     hierarchy: TraceHierarchy,
     *,
     agent_id: str,
