@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationControl
 from ai_multi_agent_platform.domain import Event, new_id
 from ai_multi_agent_platform.messaging import (
     ENVELOPE_VERSION,
     IdempotentConsumer,
     InProcessMessageTransport,
     MessageKind,
+    MessageTransport,
     MessageTransportContractSuite,
     RetryPolicy,
     Subscription,
@@ -65,6 +69,52 @@ def test_transport_envelope_is_versioned_and_detached_from_caller_mutation() -> 
             correlation_id="corr-1",
         )
 
+    with pytest.raises(ValueError, match="unsupported envelope_version"):
+        TransportEnvelope(
+            message_type="invalid.version",
+            kind=MessageKind.SIGNAL,
+            payload_schema_version="1.0",
+            source_component="tests",
+            correlation_id="corr-1",
+            envelope_version="2.0",
+            payload={"ok": True},
+        )
+
+
+def test_transport_envelope_wire_round_trip_validates_against_schema() -> None:
+    envelope = TransportEnvelope(
+        message_type="test.command",
+        kind=MessageKind.COMMAND,
+        payload_schema_version="1.0",
+        source_component="tests",
+        correlation_id="corr-1",
+        causation_id="cause-1",
+        project_id=new_id("project"),
+        task_id=new_id("task"),
+        run_id=new_id("run"),
+        idempotency_key="wire-roundtrip-1",
+        trace_context=TraceContext(
+            trace_id="trace-1",
+            span_id="span-1",
+            trace_flags="01",
+            tracestate="vendor=value",
+            baggage={"tenant": "test"},
+        ),
+        attributes={"routing": {"priority": "normal"}},
+        payload={"nested": [1, {"ok": True}]},
+    )
+    schema_path = Path(__file__).parents[1] / "schemas" / "transport" / "envelope.v1.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    validator = Draft202012Validator(schema)
+
+    wire = envelope.to_dict()
+    validator.validate(wire)
+    restored = TransportEnvelope.from_dict(wire)
+
+    assert restored == envelope
+    validator.validate(restored.to_dict())
+
 
 def test_publish_subscribe_preserves_correlation_causation_and_trace() -> None:
     async def scenario() -> None:
@@ -111,6 +161,43 @@ def test_duplicate_delivery_is_safe_with_idempotent_consumer_helper() -> None:
         assert handled == [envelope.message_id]
 
         await stream.aclose()
+        await transport.close(graceful=True)
+
+    asyncio.run(scenario())
+
+
+def test_concurrent_duplicates_do_not_run_handler_concurrently() -> None:
+    async def scenario() -> None:
+        transport = InProcessMessageTransport()
+        envelope = _envelope(1)
+        await transport.publish("commands", envelope)
+        stream_a = transport.subscribe(Subscription("commands", "consumer-a", "group-a"))
+        stream_b = transport.subscribe(Subscription("commands", "consumer-b", "group-b"))
+        delivery_a = await anext(stream_a)
+        delivery_b = await anext(stream_b)
+        consumer = IdempotentConsumer(transport)
+        handled: list[str] = []
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def handler(message: TransportEnvelope) -> None:
+            handled.append(message.message_id)
+            started.set()
+            await release.wait()
+
+        first_task = asyncio.create_task(consumer.handle(delivery_a, handler))
+        await started.wait()
+        duplicate_task = asyncio.create_task(consumer.handle(delivery_b, handler))
+        await asyncio.sleep(0)
+        assert duplicate_task.done() is False
+
+        release.set()
+        results = await asyncio.gather(first_task, duplicate_task)
+        assert sorted(results) == [False, True]
+        assert handled == [envelope.message_id]
+
+        await stream_a.aclose()
+        await stream_b.aclose()
         await transport.close(graceful=True)
 
     asyncio.run(scenario())
@@ -214,6 +301,50 @@ def test_bounded_queue_applies_explicit_backpressure() -> None:
     asyncio.run(scenario())
 
 
+def test_publish_operation_control_binds_idempotency_key() -> None:
+    async def scenario() -> None:
+        transport = InProcessMessageTransport()
+        envelope = _envelope(1)
+        receipt = await transport.publish(
+            "commands",
+            envelope,
+            control=OperationControl(idempotency_key=envelope.idempotency_key),
+        )
+        assert receipt.message_id == envelope.message_id
+
+        with pytest.raises(ContractError) as exc_info:
+            await transport.publish(
+                "commands",
+                envelope,
+                control=OperationControl(idempotency_key="different-key"),
+            )
+        assert exc_info.value.code is ErrorCode.INVALID_REQUEST
+        await transport.close(graceful=False)
+
+    asyncio.run(scenario())
+
+
+def test_publish_operation_control_timeout_is_enforced() -> None:
+    class SlowTransport(InProcessMessageTransport):
+        async def _publish_once(self, topic: str, envelope: TransportEnvelope):  # type: ignore[no-untyped-def]
+            await asyncio.sleep(0.05)
+            return await super()._publish_once(topic, envelope)
+
+    async def scenario() -> None:
+        transport = SlowTransport()
+        with pytest.raises(ContractError) as exc_info:
+            await transport.publish(
+                "commands",
+                _envelope(1),
+                control=OperationControl(timeout_seconds=0.01),
+            )
+        assert exc_info.value.code is ErrorCode.TIMEOUT
+        assert exc_info.value.retryable is True
+        await transport.close(graceful=False)
+
+    asyncio.run(scenario())
+
+
 def test_graceful_shutdown_rejects_publish_and_allows_pending_delivery_to_drain() -> None:
     async def scenario() -> None:
         transport = InProcessMessageTransport()
@@ -260,12 +391,27 @@ def test_domain_event_envelope_references_canonical_history_without_copying_owne
 
 
 def test_reference_transport_passes_reusable_contract_suite() -> None:
-    checks = asyncio.run(MessageTransportContractSuite(lambda: InProcessMessageTransport()).run())
+    async def availability_toggle(transport: MessageTransport, available: bool) -> None:
+        assert isinstance(transport, InProcessMessageTransport)
+        await transport.set_available(available)
+
+    checks = asyncio.run(
+        MessageTransportContractSuite(
+            lambda: InProcessMessageTransport(),
+            bounded_factory=lambda: InProcessMessageTransport(max_queue_size=1),
+            availability_toggle=availability_toggle,
+        ).run()
+    )
     assert checks == (
         "descriptor_semantics",
         "publish_subscribe_metadata",
+        "operation_control_binding",
         "redelivery_ordering",
+        "idempotent_consumer",
+        "retry_backoff",
         "consumer_restart",
         "dead_letter",
+        "transport_unavailable",
+        "bounded_backpressure",
         "graceful_shutdown",
     )
