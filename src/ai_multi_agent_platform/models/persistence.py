@@ -195,4 +195,4 @@ def _string_tuple(value: JsonValue | None, field_name: str) -> tuple[str, ...]:
         return ()
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
         raise ValueError(f"{field_name} must be a list of strings")
-    return tuple(value)
+    return tuple(item for item in value if isinstance(item, str))
