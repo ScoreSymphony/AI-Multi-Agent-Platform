@@ -31,8 +31,13 @@ OwnerType = Literal["user", "organization", "team", "service"]
 
 _ERROR_STATUS: dict[ErrorCode, int] = {
     ErrorCode.INVALID_REQUEST: 400,
+    ErrorCode.INVALID_CONFIGURATION: 422,
     ErrorCode.UNSUPPORTED_CAPABILITY: 400,
     ErrorCode.NOT_FOUND: 404,
+    ErrorCode.MODEL_UNAVAILABLE: 503,
+    ErrorCode.NO_COMPATIBLE_ROUTE: 503,
+    ErrorCode.INPUT_TOO_LARGE: 413,
+    ErrorCode.INVALID_PROVIDER_RESPONSE: 502,
     ErrorCode.CONFLICT: 409,
     ErrorCode.UNAVAILABLE: 503,
     ErrorCode.TIMEOUT: 504,
