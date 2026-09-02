@@ -49,37 +49,6 @@ class SecurityContext:
 
 
 @dataclass(frozen=True, slots=True)
-class SecretReference:
-    """A scoped reference to secret material; the plaintext value is intentionally absent."""
-
-    provider: str
-    secret_id: str
-    scope: str
-    version: str | None = None
-    metadata: dict[str, JsonValue] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        for name in ("provider", "secret_id", "scope"):
-            if not getattr(self, name).strip():
-                raise ValueError(f"{name} must not be blank")
-        if self.version is not None and not self.version.strip():
-            raise ValueError("version must not be blank when provided")
-
-    def to_dict(self) -> dict[str, JsonValue]:
-        """Return the canonical non-secret serialization form."""
-
-        payload: dict[str, JsonValue] = {
-            "provider": self.provider,
-            "secret_id": self.secret_id,
-            "scope": self.scope,
-            "metadata": dict(self.metadata),
-        }
-        if self.version is not None:
-            payload["version"] = self.version
-        return payload
-
-
-@dataclass(frozen=True, slots=True)
 class SecurityAuditEvent:
     """Minimal reusable shape for security-sensitive audit records."""
 
