@@ -125,6 +125,4 @@ def test_run_rejects_backend_specific_subject_id() -> None:
 
 def test_run_rejects_step_id_when_subject_type_is_task() -> None:
     with pytest.raises(ValidationError):
-        _validator("run").validate(
-            _run(subject_id="step_123e4567-e89b-12d3-a456-426614174003")
-        )
+        _validator("run").validate(_run(subject_id="step_123e4567-e89b-12d3-a456-426614174003"))
