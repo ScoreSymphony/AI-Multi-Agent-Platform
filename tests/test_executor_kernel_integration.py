@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.execution import (
     ExecutorLifecycleBackend,
     ReferenceExecutor,
@@ -14,7 +15,7 @@ from ai_multi_agent_platform.testing import FakeOrchestrator
 def test_kernel_executes_end_to_end_through_reference_executor(
     tmp_path: Path,
 ) -> None:
-    task_id = "task_demo"
+    task_id = new_id("task")
     workspace_root = tmp_path / "workspaces"
     workspace = workspace_root / task_id
     workspace.mkdir(parents=True)
