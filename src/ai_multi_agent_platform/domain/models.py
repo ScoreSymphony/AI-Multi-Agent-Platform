@@ -28,6 +28,7 @@ CANONICAL_SUBJECT_PREFIXES: Mapping[str, str] = MappingProxyType(
         "worker": "worker",
         "worker_job": "worker_job",
         "tool": "tool",
+        "tool_invocation": "tool_invocation",
         "capability": "cap",
         "policy_scope": "policy_scope",
         "policy": "policy_scope",
@@ -546,6 +547,27 @@ class Tool:
         validate_id(self.id, "tool")
         _validate_ids(self.capability_ids, "cap")
         _validate_optional_id(self.project_id, "project")
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolInvocation:
+    tool_id: str
+    owner_ref: OwnerRef
+    id: str = field(default_factory=lambda: new_id("tool_invocation"))
+    project_id: str | None = None
+    correlation_id: str | None = None
+    causation_id: str | None = None
+    trace_id: str | None = None
+    created_at: datetime = field(default_factory=utc_now)
+    schema_version: str = SCHEMA_VERSION
+    provenance: Provenance | None = None
+    external_refs: tuple[ExternalRef, ...] = ()
+
+    def __post_init__(self) -> None:
+        validate_id(self.id, "tool_invocation")
+        validate_id(self.tool_id, "tool")
+        _validate_optional_id(self.project_id, "project")
+        _freeze_tuple_field(self, "external_refs")
 
 
 @dataclass(frozen=True, kw_only=True)
