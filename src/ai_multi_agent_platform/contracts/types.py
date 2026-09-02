@@ -2,13 +2,26 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from types import MappingProxyType
 
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
+type FrozenJsonValue = JsonScalar | tuple[FrozenJsonValue, ...] | Mapping[str, FrozenJsonValue]
 
 CONTRACT_VERSION = "1.0"
+
+
+def _freeze_json(value: JsonValue) -> FrozenJsonValue:
+    """Copy a JSON-compatible value into an immutable representation."""
+
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze_json(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return tuple(_freeze_json(item) for item in value)
+    return value
 
 
 class CapabilityKind(StrEnum):
@@ -185,8 +198,14 @@ class ModelResponse:
 class ToolInvocation:
     invocation_id: str
     tool_ref: str
-    arguments: dict[str, JsonValue]
+    arguments: Mapping[str, FrozenJsonValue]
     context: OperationContext
+
+    def __post_init__(self) -> None:
+        frozen = MappingProxyType(
+            {key: _freeze_json(value) for key, value in dict(self.arguments).items()}
+        )
+        object.__setattr__(self, "arguments", frozen)
 
 
 @dataclass(frozen=True, slots=True)
