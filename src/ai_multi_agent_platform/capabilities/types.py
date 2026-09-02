@@ -110,6 +110,10 @@ class CapabilityRegistration:
             raise ValueError("provider_id must not be blank")
         if not self.provider_tool_ref.strip():
             raise ValueError("provider_tool_ref must not be blank")
+        if self.node_id is not None:
+            validate_id(self.node_id, "node")
+        if self.worker_id is not None:
+            validate_id(self.worker_id, "worker")
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,6 +208,8 @@ class InvocationRecord:
     trace: InvocationTrace
     recorded_at: datetime = field(default_factory=utc_now)
     canonical_tool_invocation_id: str | None = None
+    node_id: str | None = None
+    worker_id: str | None = None
     approval_decision: str | None = None
     error_code: str | None = None
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
@@ -211,5 +217,9 @@ class InvocationRecord:
     def __post_init__(self) -> None:
         if self.canonical_tool_invocation_id is not None:
             validate_id(self.canonical_tool_invocation_id, "tool_invocation")
+        if self.node_id is not None:
+            validate_id(self.node_id, "node")
+        if self.worker_id is not None:
+            validate_id(self.worker_id, "worker")
         if self.approval_decision is not None and not self.approval_decision.strip():
             raise ValueError("approval_decision must not be blank")
