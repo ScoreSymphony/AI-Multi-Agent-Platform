@@ -60,16 +60,15 @@ class RecordingTransport:
                 200,
                 {"data": [{"id": "Qwen/Qwen3-Coder-30B-A3B-Instruct"}]},
             )
+        structured = payload is not None and payload.get("response_format") is not None
+        content = '{"answer":"local answer"}' if structured else "local answer"
         return HttpJsonResponse(
             200,
             {
                 "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
                 "choices": [
                     {
-                        "message": {
-                            "role": "assistant",
-                            "content": '{"answer":"local answer"}',
-                        },
+                        "message": {"role": "assistant", "content": content},
                         "finish_reason": "stop",
                     }
                 ],
