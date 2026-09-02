@@ -30,11 +30,7 @@ def _imported_modules(path: Path) -> tuple[str, ...]:
 
 
 def _core_python_files() -> tuple[Path, ...]:
-    return tuple(
-        path
-        for path in CORE_ROOT.rglob("*.py")
-        if "adapters" not in path.parts
-    )
+    return tuple(path for path in CORE_ROOT.rglob("*.py") if "adapters" not in path.parts)
 
 
 def _module_name(path: Path) -> str:
