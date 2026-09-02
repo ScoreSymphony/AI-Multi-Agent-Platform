@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-from ai_multi_agent_platform.domain import (
-    ExternalRef,
-    OwnerRef,
-    ToolInvocation as DomainToolInvocation,
-    validate_id,
-)
+from ai_multi_agent_platform.domain import ExternalRef, OwnerRef, validate_id
+from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocation
 
 from .types import ToolInvocation as ContractToolInvocation
 
