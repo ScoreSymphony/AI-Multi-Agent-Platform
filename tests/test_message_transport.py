@@ -17,6 +17,7 @@ from ai_multi_agent_platform.messaging import (
     MessageKind,
     MessageTransport,
     MessageTransportContractSuite,
+    PublishReceipt,
     RetryPolicy,
     Subscription,
     TraceContext,
@@ -326,7 +327,9 @@ def test_publish_operation_control_binds_idempotency_key() -> None:
 
 def test_publish_operation_control_timeout_is_enforced() -> None:
     class SlowTransport(InProcessMessageTransport):
-        async def _publish_once(self, topic: str, envelope: TransportEnvelope):  # type: ignore[no-untyped-def]
+        async def _publish_once(
+            self, topic: str, envelope: TransportEnvelope
+        ) -> PublishReceipt:
             await asyncio.sleep(0.05)
             return await super()._publish_once(topic, envelope)
 
