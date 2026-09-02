@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import replace
+from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import HealthStatus
+from ai_multi_agent_platform.contracts.types import HealthStatus, JsonValue
 
 from .provider import CapabilityToolProvider
 from .types import CapabilityRegistration, CapabilitySpec
@@ -163,7 +164,7 @@ class CapabilityRegistry:
                     f"capability {capability_id!r} does not provide requested "
                     f"version {selected_version!r}"
                 ),
-                details={"available_versions": versions},
+                details={"available_versions": cast(JsonValue, versions)},
             )
 
         registrations = self._registrations[(capability_id, selected_version)]

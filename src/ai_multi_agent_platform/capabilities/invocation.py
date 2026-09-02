@@ -6,8 +6,8 @@ import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Protocol
 
-from jsonschema import Draft202012Validator
-from jsonschema.exceptions import SchemaError, ValidationError
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+from jsonschema.exceptions import SchemaError, ValidationError  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.contracts.domain_mapping import validate_tool_invocation_binding
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
