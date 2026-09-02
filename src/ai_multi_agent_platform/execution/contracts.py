@@ -6,9 +6,10 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
 
-JsonValue = str | int | float | bool | None | list["JsonValue"] | dict[str, "JsonValue"]
+type JsonValue = (
+    str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+)
 
 
 class ExecutionStatus(StrEnum):
@@ -128,8 +129,3 @@ class Executor(ABC):
 
     async def cancel(self, token: CancellationToken) -> None:
         token.cancel()
-
-
-def json_value(value: Any) -> JsonValue:
-    """Narrow helper for deterministic internal values used by executors."""
-    return value  # type: ignore[return-value]
