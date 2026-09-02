@@ -133,6 +133,14 @@ def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskView:
         if task is None:
             continue
 
+        if event.event_type == "task.updated" and event.subject_id == task_id:
+            title = event.payload.get("title", task.title)
+            objective = event.payload.get("objective", task.objective)
+            if not isinstance(title, str) or not isinstance(objective, str):
+                raise ContractError(ErrorCode.BACKEND_ERROR, "Invalid task.updated payload")
+            task = replace(task, title=title, objective=objective)
+            continue
+
         target_status = _TASK_EVENT_STATUS.get(event.event_type)
         if target_status is not None and event.subject_id == task_id:
             task = replace(task, status=_transition_task(task.status, target_status))
