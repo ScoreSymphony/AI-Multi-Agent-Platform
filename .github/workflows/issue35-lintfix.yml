@@ -1,0 +1,59 @@
+name: Issue 35 lint fixer
+
+on:
+  push:
+    branches: [issue-35-completion-hardening]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  lintfix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: issue-35-completion-hardening
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Ruff
+        run: python -m pip install "ruff>=0.12,<1"
+      - name: Apply safe lint fixes and formatter
+        shell: bash
+        run: |
+          ruff check --fix . || true
+          ruff format .
+      - name: Commit automatic fixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No automatic lint changes required."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "style: apply ruff lint fixes for issue 35"
+            git push origin HEAD:issue-35-completion-hardening
+          fi
+      - name: Report remaining lint failures
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ruff check . > /tmp/ruff-output.txt 2>&1; then
+            echo "No remaining lint failures."
+          else
+            {
+              echo 'Remaining Ruff lint output after automatic fixes:'
+              echo
+              echo '```text'
+              cat /tmp/ruff-output.txt
+              echo '```'
+            } > /tmp/comment.md
+            gh pr comment 115 --body-file /tmp/comment.md
+            exit 1
+          fi
