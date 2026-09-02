@@ -195,7 +195,9 @@ class PlanResponse:
         for step in self.steps:
             unknown = set(step.depends_on) - known
             if unknown:
-                raise ValueError(f"plan step proposal has unknown dependencies: {sorted(unknown)!r}")
+                raise ValueError(
+                    f"plan step proposal has unknown dependencies: {sorted(unknown)!r}"
+                )
 
 
 @dataclass(frozen=True, slots=True)
