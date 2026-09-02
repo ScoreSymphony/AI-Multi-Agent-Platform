@@ -12,6 +12,7 @@ from ai_multi_agent_platform.contracts.interfaces import (
     ProviderContract,
 )
 from ai_multi_agent_platform.contracts.types import (
+    AuthorizationDecision,
     AuthorizationRequest,
     JsonValue,
     OperationContext,
@@ -629,7 +630,7 @@ class ControlPlane:
         owner_type: str | None = None,
         owner_id: str | None = None,
         project_id: str | None = None,
-    ):
+    ) -> AuthorizationDecision | None:
         if self._authorization is None:
             return None
         effective_owner_type = owner_type if owner_type is not None else context.actor.owner_type
