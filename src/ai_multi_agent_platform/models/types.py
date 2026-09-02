@@ -46,6 +46,8 @@ class ModelCapabilities:
             raise ValueError("modalities must be unique")
         if any(not item.strip() for item in self.reasoning):
             raise ValueError("reasoning metadata values must not be blank")
+        if len(self.reasoning) != len(set(self.reasoning)):
+            raise ValueError("reasoning metadata values must be unique")
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +104,7 @@ class RoutingRequirements:
     structured_output: bool = False
     streaming: bool = False
     modalities: tuple[str, ...] = ()
+    reasoning: tuple[str, ...] = ()
     local_only: bool = False
     self_hosted_only: bool = False
 
@@ -110,12 +113,17 @@ class RoutingRequirements:
             raise ValueError("explicit_model_id must not be blank")
         if self.min_context_window is not None and self.min_context_window <= 0:
             raise ValueError("min_context_window must be greater than zero")
-        if any(not item.strip() for item in self.modalities):
-            raise ValueError("required modalities must not be blank")
-        if len(self.modalities) != len(set(self.modalities)):
-            raise ValueError("required modalities must be unique")
+        self._validate_unique_strings(self.modalities, "modalities")
+        self._validate_unique_strings(self.reasoning, "reasoning")
         if self.local_only and self.self_hosted_only:
             raise ValueError("local_only and self_hosted_only are mutually exclusive policies")
+
+    @staticmethod
+    def _validate_unique_strings(values: tuple[str, ...], field_name: str) -> None:
+        if any(not item.strip() for item in values):
+            raise ValueError(f"required {field_name} must not be blank")
+        if len(values) != len(set(values)):
+            raise ValueError(f"required {field_name} must be unique")
 
     @classmethod
     def from_request(cls, request: ModelRequest) -> RoutingRequirements:
@@ -145,14 +153,16 @@ class RoutingRequirements:
                 raise ValueError(f"{key} must be a boolean")
             return value
 
-        raw_modalities = values.get("modalities", [])
-        if not isinstance(raw_modalities, list):
-            raise ValueError("modalities must be a list of strings")
-        modalities: list[str] = []
-        for item in raw_modalities:
-            if not isinstance(item, str):
-                raise ValueError("modalities must be a list of strings")
-            modalities.append(item)
+        def string_tuple(key: str) -> tuple[str, ...]:
+            raw_values = values.get(key, [])
+            if not isinstance(raw_values, list):
+                raise ValueError(f"{key} must be a list of strings")
+            parsed: list[str] = []
+            for item in raw_values:
+                if not isinstance(item, str):
+                    raise ValueError(f"{key} must be a list of strings")
+                parsed.append(item)
+            return tuple(parsed)
 
         return cls(
             explicit_model_id=optional_string("model_config_id"),
@@ -160,7 +170,8 @@ class RoutingRequirements:
             tool_calling=boolean("tool_calling"),
             structured_output=boolean("structured_output"),
             streaming=boolean("streaming"),
-            modalities=tuple(modalities),
+            modalities=string_tuple("modalities"),
+            reasoning=string_tuple("reasoning"),
             local_only=boolean("local_only"),
             self_hosted_only=boolean("self_hosted_only"),
         )
