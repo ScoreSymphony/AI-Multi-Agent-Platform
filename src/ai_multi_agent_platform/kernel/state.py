@@ -21,9 +21,18 @@ _TASK_TRANSITIONS: dict[TaskStatus, frozenset[TaskStatus]] = {
     TaskStatus.CANCELLED: frozenset(),
 }
 
+# A backend may complete before the platform persists an intermediate running event.
+# Recovery therefore permits queued -> terminal transitions while keeping all
+# subsequent terminal transitions forbidden.
 _RUN_TRANSITIONS: dict[ExecutionStatus, frozenset[ExecutionStatus]] = {
     ExecutionStatus.QUEUED: frozenset(
-        {ExecutionStatus.RUNNING, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED}
+        {
+            ExecutionStatus.RUNNING,
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+            ExecutionStatus.TIMED_OUT,
+        }
     ),
     ExecutionStatus.RUNNING: frozenset(
         {
