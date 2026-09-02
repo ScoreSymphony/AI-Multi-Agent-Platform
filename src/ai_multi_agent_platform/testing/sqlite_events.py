@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import cast
 
@@ -17,6 +18,7 @@ from ai_multi_agent_platform.contracts import (
 from ai_multi_agent_platform.contracts.types import (
     JsonValue,
     OperationContext,
+    OperationControl,
     PlatformEvent,
     ProviderDescriptor,
 )
@@ -28,6 +30,7 @@ class SqliteEventProvider(EventProvider):
     descriptor = ProviderDescriptor(
         provider_id="sqlite-event-reference",
         provider_type="event",
+        supported_operations=("publish", "read", "subscribe"),
         capabilities=(Capability(name="event.durable", kind=CapabilityKind.EVENT),),
     )
 
@@ -69,10 +72,12 @@ class SqliteEventProvider(EventProvider):
             )
 
     async def publish(self, event: PlatformEvent) -> None:
+        """Append once by event ID so deterministic command reservations are atomic."""
+
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT INTO platform_events (
+                INSERT OR IGNORE INTO platform_events (
                     event_id, event_type, subject_type, subject_id, occurred_at,
                     correlation_id, causation_id, owner_type, owner_id, project_id,
                     schema_version, payload_json
@@ -99,7 +104,9 @@ class SqliteEventProvider(EventProvider):
         correlation_id: str,
         *,
         after_event_id: str | None = None,
+        control: OperationControl | None = None,
     ) -> tuple[PlatformEvent, ...]:
+        del control
         query = """
             SELECT sequence, event_id, event_type, subject_type, subject_id, occurred_at,
                    correlation_id, causation_id, owner_type, owner_id, project_id,
@@ -130,6 +137,23 @@ class SqliteEventProvider(EventProvider):
             rows = connection.execute(query, parameters).fetchall()
 
         return tuple(self._to_event(row) for row in rows)
+
+    def subscribe(
+        self,
+        correlation_id: str,
+        *,
+        after_event_id: str | None = None,
+        control: OperationControl | None = None,
+    ) -> AsyncIterator[PlatformEvent]:
+        async def iterator() -> AsyncIterator[PlatformEvent]:
+            for event in await self.read(
+                correlation_id,
+                after_event_id=after_event_id,
+                control=control,
+            ):
+                yield event
+
+        return iterator()
 
     @staticmethod
     def _nullable_text(value: object) -> str | None:
