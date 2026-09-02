@@ -131,8 +131,8 @@ def test_reference_lookup_traverses_beyond_first_api_page() -> None:
                 actor_ref="seed:test",
                 source="test",
             )
-            await kernel.ready_task(
-                idempotency_key=f"ready-task-{index}",
+            await kernel.plan_task(
+                idempotency_key=f"plan-task-{index}",
                 task_id=task.task_id,
                 actor_ref="seed:test",
                 source="test",
