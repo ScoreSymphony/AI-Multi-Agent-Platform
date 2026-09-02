@@ -62,7 +62,7 @@ pytest
 python -m build
 ```
 
-These commands mirror the baseline CI checks.
+GitHub Actions starts from a fresh checkout on a clean runner, creates and activates `.venv` with the same Linux/macOS bootstrap commands above, installs the same development dependencies, and then runs the validation commands in the same order. This keeps the documented fresh-clone path and CI behavior directly aligned.
 
 ## Repository boundaries
 
