@@ -1,9 +1,18 @@
 """Versioned platform-owned northbound Control Plane."""
 
-from .http import ControlPlaneASGI, ControlPlaneHTTP, HTTPRequest, HTTPResponse
+from .extensions import (
+    PLATFORM_COLLECTIONS,
+    REQUIRED_COMMANDS,
+    CommandHandler,
+    ControlPlane,
+    ControlPlaneHTTP,
+    InMemoryResourceService,
+    ResourceService,
+    build_openapi,
+)
+from .http import ControlPlaneASGI, HTTPRequest, HTTPResponse
 from .models import (
     API_VERSION,
-    CURRENT_COLLECTIONS,
     SUPPORTED_API_VERSIONS,
     ActorContext,
     APIError,
@@ -12,8 +21,9 @@ from .models import (
     RequestContext,
     WorkspaceIdentity,
 )
-from .openapi import build_openapi
-from .service import ControlPlane, ScopeStore
+from .service import ScopeStore
+
+CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS
 
 __all__ = [
     "APIError",
@@ -21,13 +31,18 @@ __all__ = [
     "API_VERSION",
     "ActorContext",
     "CURRENT_COLLECTIONS",
+    "CommandHandler",
     "ControlPlane",
     "ControlPlaneASGI",
     "ControlPlaneHTTP",
     "HTTPRequest",
     "HTTPResponse",
+    "InMemoryResourceService",
+    "PLATFORM_COLLECTIONS",
     "PageQuery",
+    "REQUIRED_COMMANDS",
     "RequestContext",
+    "ResourceService",
     "SUPPORTED_API_VERSIONS",
     "ScopeStore",
     "WorkspaceIdentity",
