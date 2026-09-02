@@ -1,3 +1,4 @@
+# Reference-only self-hosted profile. Provider choices are replaceable and non-canonical.
 [data]
 profile = "local-reference"
 
