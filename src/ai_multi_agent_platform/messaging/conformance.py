@@ -120,7 +120,7 @@ class MessageTransportContractSuite:
         except ContractError as exc:
             assert exc.code is ErrorCode.INVALID_REQUEST
         else:
-            raise AssertionError("transport accepted mismatched operation/envelope idempotency keys")
+            raise AssertionError("transport accepted mismatched idempotency keys")
         await transport.close(graceful=False)
 
     async def _redelivery_and_ordering(self) -> None:
