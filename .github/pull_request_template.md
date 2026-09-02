@@ -36,6 +36,7 @@ For architecture-significant updates, summarize old/new revisions, relevant `sec
 
 ## Validation
 
+- [ ] `ruff format --check .`
 - [ ] `ruff check .`
 - [ ] `mypy`
 - [ ] `pytest`
