@@ -34,9 +34,7 @@ def build_executor(tmp_path: Path) -> tuple[Executor, str]:
 
 def test_success_and_identity_preservation(tmp_path: Path) -> None:
     executor, workspace = build_executor(tmp_path)
-    result = asyncio.run(
-        executor.execute(request(workspace, "echo", text="hello"))
-    )
+    result = asyncio.run(executor.execute(request(workspace, "echo", text="hello")))
     assert result.status is ExecutionStatus.SUCCEEDED
     assert result.stdout == "hello"
     assert result.task_id == "task-1"
@@ -47,11 +45,7 @@ def test_success_and_identity_preservation(tmp_path: Path) -> None:
 
 def test_controlled_failure_is_canonical(tmp_path: Path) -> None:
     executor, workspace = build_executor(tmp_path)
-    result = asyncio.run(
-        executor.execute(
-            request(workspace, "fail", message="boom", code=7)
-        )
-    )
+    result = asyncio.run(executor.execute(request(workspace, "fail", message="boom", code=7)))
     assert result.status is ExecutionStatus.FAILED
     assert result.result_code == 7
     assert result.error is not None
