@@ -6,12 +6,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
 
-from ai_multi_agent_platform.domain import (
-    Event as PlatformEvent,
-    RunStatus as ExecutionStatus,
-    validate_id,
-    validate_subject_id,
-)
+from ai_multi_agent_platform.domain import Event, RunStatus, validate_id, validate_subject_id
+
+ExecutionStatus = RunStatus
+PlatformEvent = Event
 
 type JsonScalar = str | int | float | bool | None
 type JsonValue = JsonScalar | list[JsonValue] | dict[str, JsonValue]
