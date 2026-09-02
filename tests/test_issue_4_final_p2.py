@@ -1,3 +1,4 @@
+import json
 from enum import Enum
 
 import pytest
@@ -74,6 +75,38 @@ def test_tool_invocation_arguments_are_frozen_and_digest_bound_to_canonical_iden
     assert canonical_invocation.provenance is not None
     assert canonical_invocation.provenance.details["arguments_sha256"] == digest_before_mutation
     assert approval.subject_id == canonical_invocation.id
+
+
+def test_tool_invocation_arguments_json_is_nested_serializable_detached_copy() -> None:
+    invocation = ContractToolInvocation(
+        invocation_id="provider-invoke-json",
+        tool_ref="provider-tool-write",
+        arguments={
+            "path": "notes.txt",
+            "options": {"labels": ["approved"], "overwrite": False},
+        },
+        context=OperationContext(correlation_id="corr-tool-json"),
+    )
+    digest_before_export = tool_invocation_arguments_digest(invocation)
+
+    exported = invocation.arguments_json()
+    serialized = json.dumps(exported, sort_keys=True)
+
+    assert json.loads(serialized) == {
+        "options": {"labels": ["approved"], "overwrite": False},
+        "path": "notes.txt",
+    }
+
+    exported["path"] = "changed-after-export.txt"
+    options = exported["options"]
+    assert isinstance(options, dict)
+    labels = options["labels"]
+    assert isinstance(labels, list)
+    labels.append("changed-after-export")
+
+    assert invocation.arguments["path"] == "notes.txt"
+    assert invocation.arguments["options"]["labels"] == ("approved",)
+    assert tool_invocation_arguments_digest(invocation) == digest_before_export
 
 
 def test_tool_invocation_digest_changes_when_arguments_change() -> None:
