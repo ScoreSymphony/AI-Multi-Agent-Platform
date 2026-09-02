@@ -1,9 +1,21 @@
 """Testing helpers for platform contract and integration tests."""
 
+from .conformance import (
+    assert_canonical_error,
+    assert_knowledge_provider_contract,
+    assert_lifecycle_backend_contract,
+    assert_model_provider_contract,
+    assert_namespaced_adapter_metadata,
+    assert_node_provider_contract,
+    assert_provider_contract,
+    assert_tool_provider_contract,
+    assert_worker_provider_contract,
+)
 from .fakes import (
     FakeAuthorizationProvider,
     FakeCapabilityProvider,
     FakeEventProvider,
+    FakeFailure,
     FakeFileProvider,
     FakeKnowledgeProvider,
     FakeLifecycleBackend,
@@ -20,6 +32,7 @@ __all__ = [
     "FakeAuthorizationProvider",
     "FakeCapabilityProvider",
     "FakeEventProvider",
+    "FakeFailure",
     "FakeFileProvider",
     "FakeKnowledgeProvider",
     "FakeLifecycleBackend",
@@ -30,4 +43,13 @@ __all__ = [
     "FakeOrchestrator",
     "FakeToolProvider",
     "FakeWorkerProvider",
+    "assert_canonical_error",
+    "assert_knowledge_provider_contract",
+    "assert_lifecycle_backend_contract",
+    "assert_model_provider_contract",
+    "assert_namespaced_adapter_metadata",
+    "assert_node_provider_contract",
+    "assert_provider_contract",
+    "assert_tool_provider_contract",
+    "assert_worker_provider_contract",
 ]
