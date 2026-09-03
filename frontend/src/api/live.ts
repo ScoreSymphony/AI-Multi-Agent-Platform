@@ -11,6 +11,11 @@ export interface TaskEventStreamOptions {
   onState?: (state: LiveConnectionState) => void;
 }
 
+export function describeLiveStreamError(error: APIErrorBody | Error): string {
+  if (error instanceof Error) return error.message;
+  return `${error.category}/${error.code}: ${error.message} · request ${error.request_id}`;
+}
+
 export class TaskEventStream {
   private source: EventSource | null = null;
   private readonly options: TaskEventStreamOptions;
