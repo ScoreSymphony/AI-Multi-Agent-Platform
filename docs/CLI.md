@@ -167,6 +167,10 @@ List commands support the Control Plane conventions `--limit`, `--cursor`, `--so
 
 The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. Provider/worker/auth/secret/permission checks are added only after the corresponding canonical platform domains exist.
 
+## Verification
+
+CLI changes are covered by the repository's normal quality gates (`ruff format --check`, `ruff check`, strict `mypy`, `pytest`, and package build). The integration tests use an in-process HTTP transport so the exercised path is still the real versioned Control Plane boundary rather than direct kernel or repository access.
+
 ## Progressive #38 work still open
 
 This slice does not close #38. Later work should extend the same client with canonical APIs from the owning issues, including Agents/Teams, Models/Tools, Nodes/Workers, approvals, observability logs/metrics, automation, plugins, evaluation, search, deployment/update operations, and secure authentication/session handling.
