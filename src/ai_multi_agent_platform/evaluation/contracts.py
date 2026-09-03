@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from .context import EvaluationExecutionContext
 from .models import (
     ComparisonReport,
     EvaluationAttempt,
@@ -38,6 +39,7 @@ class EvaluationCaseExecutor(Protocol):
         *,
         case: EvaluationCase,
         attempt: EvaluationAttempt,
+        execution_context: EvaluationExecutionContext,
     ) -> EvaluationObservation: ...
 
 
@@ -46,9 +48,21 @@ class EvaluationIsolation(Protocol):
 
     async def reset_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None: ...
 
-    async def setup_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None: ...
+    async def setup_case(
+        self,
+        *,
+        case: EvaluationCase,
+        attempt: EvaluationAttempt,
+    ) -> EvaluationExecutionContext: ...
 
-    async def teardown_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None: ...
+    async def teardown_case(
+        self,
+        *,
+        case: EvaluationCase,
+        attempt: EvaluationAttempt,
+        execution_context: EvaluationExecutionContext,
+        succeeded: bool,
+    ) -> None: ...
 
 
 class EvaluationRepository(Protocol):
