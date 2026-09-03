@@ -49,6 +49,15 @@ class RunWorkspaceBinding:
         if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
             raise ValueError("run workspace binding created_at must be timezone-aware")
 
+    def same_target(self, other: RunWorkspaceBinding) -> bool:
+        return (
+            self.run_id == other.run_id
+            and self.task_id == other.task_id
+            and self.workspace_id == other.workspace_id
+            and self.workspace_snapshot_id == other.workspace_snapshot_id
+            and self.content_checksum == other.content_checksum
+        )
+
 
 class RunWorkspaceBindingRepository(ABC):
     """Canonical persistence seam for immutable Run workspace input bindings."""
@@ -67,7 +76,7 @@ class InMemoryRunWorkspaceBindingRepository(RunWorkspaceBindingRepository):
     async def bind(self, binding: RunWorkspaceBinding) -> RunWorkspaceBinding:
         existing = self._bindings.get(binding.run_id)
         if existing is not None:
-            if existing != binding:
+            if not existing.same_target(binding):
                 raise ContractError(
                     ErrorCode.CONFLICT,
                     f"run already has a different workspace binding: {binding.run_id}",
@@ -118,7 +127,7 @@ class SqliteRunWorkspaceBindingRepository(RunWorkspaceBindingRepository):
     async def bind(self, binding: RunWorkspaceBinding) -> RunWorkspaceBinding:
         existing = await self.get(binding.run_id)
         if existing is not None:
-            if existing != binding:
+            if not existing.same_target(binding):
                 raise ContractError(
                     ErrorCode.CONFLICT,
                     f"run already has a different workspace binding: {binding.run_id}",
@@ -144,8 +153,8 @@ class SqliteRunWorkspaceBindingRepository(RunWorkspaceBindingRepository):
                 )
         except sqlite3.IntegrityError:
             raced = await self.get(binding.run_id)
-            if raced == binding:
-                return binding
+            if raced is not None and raced.same_target(binding):
+                return raced
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"run already has a different workspace binding: {binding.run_id}",
