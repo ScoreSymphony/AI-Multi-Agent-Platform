@@ -5,7 +5,12 @@ from __future__ import annotations
 from threading import RLock
 from typing import Protocol
 
-from .models import NotificationCandidate, NotificationPreference, NotificationSeverity, RecipientRef
+from .models import (
+    NotificationCandidate,
+    NotificationPreference,
+    NotificationSeverity,
+    RecipientRef,
+)
 
 
 _SEVERITY_ORDER = {
