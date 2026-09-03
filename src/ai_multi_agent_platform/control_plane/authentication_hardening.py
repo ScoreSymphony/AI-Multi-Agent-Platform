@@ -53,7 +53,7 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
             cookie_name=cookie_name,
             secure_cookie=secure_cookie,
         )
-        self._authentication = authentication
+        self._hardened_authentication = authentication
 
     def _authenticate_request(
         self,
@@ -67,7 +67,7 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
             request_id=request_id,
             correlation_id=correlation_id,
         )
-        self._authentication.check_authenticated_request(actor)
+        self._hardened_authentication.check_authenticated_request(actor)
         self._enforce_credential_scope(request, actor)
         return actor, session_token
 
@@ -109,8 +109,8 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
                     correlation_id=correlation_id,
                 )
                 credentials: list[JsonValue] = [
-                    safe_credential_with_scope(self._authentication, item)
-                    for item in self._authentication.list_credentials(user_id)
+                    safe_credential_with_scope(self._hardened_authentication, item)
+                    for item in self._hardened_authentication.list_credentials(user_id)
                 ]
                 return self._response(
                     200,
@@ -132,7 +132,7 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
                 purpose = _required_string(request.body, "purpose")
                 expires_at = _optional_datetime(request.body.get("expires_at"))
                 scope = CredentialScope.from_json(request.body.get("scope"))
-                issued = self._authentication.create_personal_access_token(
+                issued = self._hardened_authentication.create_personal_access_token(
                     user_id,
                     purpose=purpose,
                     expires_at=expires_at,
@@ -169,7 +169,7 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
     ) -> None:
         if actor.method not in _TOKEN_METHODS or actor.credential_id is None:
             return
-        scope = self._authentication.credential_scope(actor.credential_id)
+        scope = self._hardened_authentication.credential_scope(actor.credential_id)
         if not scope.restricted:
             return
         target = _authorization_target(request)
@@ -249,9 +249,8 @@ def _authorization_target(
         resource_id = None
     else:
         resource_id = _strip_command(segments[1])
-        verb = _command(segments[1])
-        if verb is None:
-            verb = "read" if request.method == "GET" else "modify"
+        command = _command(segments[1])
+        verb = command or ("read" if request.method == "GET" else "modify")
 
     action, resource_type = canonical_control_plane_vocabulary(f"{resource_name}:{verb}")
     return action, resource_type, resource_id
