@@ -75,7 +75,8 @@ class PluginCatalog:
             ) from exc
 
     def install(self, plugin_id: str, registry: PluginRegistry) -> PluginSnapshot:
-        return registry.install(self.candidate(plugin_id).manifest)
+        candidate = self.candidate(plugin_id)
+        return registry.install(candidate.manifest, install_source=candidate.install_source)
 
     def create_runtime(self, plugin_id: str) -> PluginRuntime:
         return self.candidate(plugin_id).runtime_factory()
