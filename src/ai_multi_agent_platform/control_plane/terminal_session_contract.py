@@ -490,15 +490,22 @@ def _json_optional_string(payload: Mapping[str, Any], name: str) -> str | None:
 def _string_tuple(value: JsonValue) -> tuple[str, ...]:
     if value is None:
         return ()
-    if not isinstance(value, list) or any(
-        not isinstance(item, str) or not item.strip() for item in value
-    ):
+    if not isinstance(value, list):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "policy_classification must be a list of non-blank strings",
             details={"field": "policy_classification"},
         )
-    return tuple(value)
+    classifications: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "policy_classification must be a list of non-blank strings",
+                details={"field": "policy_classification"},
+            )
+        classifications.append(item)
+    return tuple(classifications)
 
 
 def _dimensions(value: JsonValue | Mapping[str, Any]) -> TerminalDimensions | None:
