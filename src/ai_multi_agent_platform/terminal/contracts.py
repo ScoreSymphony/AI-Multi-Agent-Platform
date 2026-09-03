@@ -112,7 +112,7 @@ class TerminalSessionAdapter(ABC):
     ) -> tuple[AdapterFrame, ...]: ...
 
     @abstractmethod
-    async def stream_frames(
+    def stream_frames(
         self,
         handle: AdapterSessionHandle,
         *,
