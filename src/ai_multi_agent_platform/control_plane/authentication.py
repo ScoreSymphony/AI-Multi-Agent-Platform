@@ -694,7 +694,9 @@ def _augment_authentication_openapi(
             )
         },
         f"/api/{API_VERSION}/auth/me": {
-            "get": _auth_operation("getAuthenticatedActor", "Return the canonical authenticated actor.")
+            "get": _auth_operation(
+                "getAuthenticatedActor", "Return the canonical authenticated actor."
+            )
         },
         f"/api/{API_VERSION}/auth/logout": {
             "post": _auth_operation(
@@ -711,7 +713,9 @@ def _augment_authentication_openapi(
             )
         },
         f"/api/{API_VERSION}/auth/sessions": {
-            "get": _auth_operation("listBrowserSessions", "List browser sessions for the current user.")
+            "get": _auth_operation(
+                "listBrowserSessions", "List browser sessions for the current user."
+            )
         },
         f"/api/{API_VERSION}/auth/sessions/{{session_id}}:revoke": {
             "post": _auth_operation(
