@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { isControlPlaneError } from "../api/client";
+import { describeError } from "../api/errorPresentation";
 import { compactCanonicalId } from "../platform/id";
 
 export function LoadingState({ label = "Loading…" }: { label?: string }) {
@@ -25,25 +26,13 @@ export function DegradedState({ title, detail }: { title: string; detail: string
 }
 
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
-  const message = isControlPlaneError(error)
-    ? `${error.body.category}: ${error.body.message}`
-    : error instanceof Error
-      ? error.message
-      : "Unknown error";
-  const hint = isControlPlaneError(error)
-    ? error.status === 401
-      ? "Authentication is required for this operation."
-      : error.status === 403
-        ? "The Control Plane denied this operation."
-        : error.body.retryable
-          ? "The Control Plane reports this failure as retryable."
-          : undefined
-    : undefined;
+  const presentation = describeError(error);
   return (
     <div className="state state-error" role="alert">
-      <strong>Request failed</strong>
-      <p>{message}</p>
-      {hint && <p>{hint}</p>}
+      <strong>{presentation.title}</strong>
+      <p>{presentation.message}</p>
+      {presentation.hint && <p>{presentation.hint}</p>}
+      {presentation.reference && <p>Reference <CanonicalId value={presentation.reference} /></p>}
       {isControlPlaneError(error) && <small>Request {error.body.request_id}</small>}
       {onRetry && <button onClick={onRetry}>Retry</button>}
     </div>
