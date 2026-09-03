@@ -103,7 +103,10 @@ class PluginStateMigrator:
             if migration.spec != spec:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    f"plugin state migration hook {spec.migration_id!r} does not match the manifest",
+                    (
+                        f"plugin state migration hook {spec.migration_id!r} does not match "
+                        "the manifest"
+                    ),
                 )
             payload = await migration.migrate(deepcopy(payload))
             if not isinstance(payload, dict):
