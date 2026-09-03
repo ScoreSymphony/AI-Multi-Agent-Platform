@@ -76,6 +76,48 @@ class AccountingService:
         self.record(record)
         return record
 
+    def record_external_cost(
+        self,
+        *,
+        amount: float,
+        currency: str,
+        source: str,
+        quality: MeasurementQuality,
+        scope: UsageScope | None = None,
+        provider: str | None = None,
+        confidence: float | None = None,
+        provenance: dict[str, JsonValue] | None = None,
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+    ) -> UsageRecord:
+        """Record an explicitly supplied external monetary amount.
+
+        Cost is never inferred from provider usage units or free-form model metadata.
+        The ISO currency is also the canonical unit so unlike currencies cannot be
+        silently aggregated.
+        """
+
+        if quality not in {MeasurementQuality.REPORTED, MeasurementQuality.ESTIMATED}:
+            raise ValueError("external cost quality must be reported or estimated")
+        canonical_currency = currency.upper()
+        record = UsageRecord(
+            metric_type="external.cost.amount",
+            unit=canonical_currency,
+            quality=quality,
+            source=source,
+            quantity=amount,
+            scope=scope or UsageScope(),
+            provider=provider,
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            cost_amount=amount,
+            currency=canonical_currency,
+            confidence=confidence,
+            provenance=dict(provenance or {}),
+        )
+        self.record(record)
+        return record
+
     def query(self, query: UsageQuery | None = None) -> tuple[UsageRecord, ...]:
         return self.store.query(query or UsageQuery())
 
@@ -159,6 +201,8 @@ class AccountingService:
             remaining=max(0.0, budget.limit - consumed),
             fraction=fraction,
             level=level,
+            window_start=start,
+            window_end=end,
         )
 
     def _evaluate_matching_budgets(self, record: UsageRecord) -> None:
@@ -327,6 +371,7 @@ def usage_from_metric(metric: MetricRecord) -> UsageRecord | None:
     if mapping is None:
         return None
     metric_type, unit, quality = mapping
+    aggregation_mode = _aggregation_mode(metric)
     attributes = dict(metric.attributes)
     provider = metric.context.provider_id or metric.context.model_provider_id
     provenance: dict[str, JsonValue] = {
@@ -352,6 +397,7 @@ def usage_from_metric(metric: MetricRecord) -> UsageRecord | None:
         quantity=metric.value,
         unit=unit,
         quality=quality,
+        aggregation_mode=aggregation_mode,
         source="observability",
         timestamp=metric.timestamp,
         scope=UsageScope(
@@ -383,6 +429,20 @@ def _metric_mapping(
             return None
         subject = "task" if metric.name == "platform.tasks.terminal" else "run"
         return f"{subject}.outcome.{outcome}.count", "count", MeasurementQuality.MEASURED
+
+    if metric.name in {
+        "platform.node.reported_resource",
+        "platform.worker.reported_resource",
+    }:
+        resource_key = _normalized_metric_label(metric.attributes.get("resource_key"))
+        if resource_key is None:
+            return None
+        subject = "node" if metric.name.startswith("platform.node.") else "worker"
+        return (
+            f"{subject}.provider_reported.{resource_key}",
+            metric.unit,
+            MeasurementQuality.REPORTED,
+        )
 
     if metric.name == "platform.model.usage":
         usage_key = _normalized_metric_label(metric.attributes.get("usage_key"))
@@ -456,8 +516,32 @@ def _metric_mapping(
             "seconds",
             MeasurementQuality.MEASURED,
         ),
+        "platform.worker.dispatch.calls": (
+            "worker.dispatch.count",
+            "count",
+            MeasurementQuality.MEASURED,
+        ),
+        "platform.worker.dispatch.duration_seconds": (
+            "worker.dispatch.duration",
+            "seconds",
+            MeasurementQuality.MEASURED,
+        ),
+        "platform.worker.dispatch.failures": (
+            "worker.dispatch.failure.count",
+            "count",
+            MeasurementQuality.MEASURED,
+        ),
     }
     return exact.get(metric.name)
+
+
+def _aggregation_mode(metric: MetricRecord) -> AggregationMode:
+    if metric.name in {
+        "platform.node.reported_resource",
+        "platform.worker.reported_resource",
+    }:
+        return AggregationMode.LATEST
+    return AggregationMode.ADDITIVE
 
 
 def _normalized_metric_label(value: object) -> str | None:
@@ -492,6 +576,8 @@ def _budget_scope(budget: UsageBudget) -> UsageScope:
             return UsageScope(agent_id=value)
         case "capability":
             return UsageScope(capability_id=value)
+        case "model_config":
+            return UsageScope(model_config_id=value)
         case "model_provider":
             return UsageScope(model_provider_id=value)
         case "worker":
@@ -517,6 +603,7 @@ def _scope_value(scope: UsageScope, scope_type: str) -> str | None:
         "run": scope.run_id,
         "agent": scope.agent_id,
         "capability": scope.capability_id,
+        "model_config": scope.model_config_id,
         "model_provider": scope.model_provider_id,
         "worker": scope.worker_id,
         "node": scope.node_id,

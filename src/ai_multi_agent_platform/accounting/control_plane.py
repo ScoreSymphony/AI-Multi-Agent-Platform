@@ -10,6 +10,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .models import (
+    AggregationMode,
     UsageAggregate,
     UsageBudget,
     UsageQuery,
@@ -75,32 +76,36 @@ class UsageAggregateResourceService:
         )
         pairs = sorted({(record.metric_type, record.unit) for record in records})
         resources: list[dict[str, JsonValue]] = []
-        scope_key = _scope_key(context)
+        owner_scope_key = _scope_key(context)
         trend_end = utc_now()
         trend_start = trend_end - timedelta(seconds=self._trend_window_seconds)
         for metric_type, unit in pairs:
             selected = _metric_records(records, metric_type, unit)
-            aggregate = aggregate_usage_records(selected, metric_type=metric_type, unit=unit)
-            trend = trend_usage_records(
-                selected,
-                metric_type=metric_type,
-                unit=unit,
-                start=trend_start,
-                end=trend_end,
-                bucket_seconds=self._trend_bucket_seconds,
-            )
-            resources.append(
-                _aggregate_resource(
-                    metric_type,
-                    unit,
-                    aggregate,
-                    scope_key,
-                    trend=trend,
-                    trend_start=trend_start,
-                    trend_end=trend_end,
-                    trend_bucket_seconds=self._trend_bucket_seconds,
+            for aggregate_scope, scoped_records in _aggregate_groups(selected, context):
+                aggregate = aggregate_usage_records(
+                    scoped_records, metric_type=metric_type, unit=unit
                 )
-            )
+                trend = trend_usage_records(
+                    scoped_records,
+                    metric_type=metric_type,
+                    unit=unit,
+                    start=trend_start,
+                    end=trend_end,
+                    bucket_seconds=self._trend_bucket_seconds,
+                )
+                resources.append(
+                    _aggregate_resource(
+                        metric_type,
+                        unit,
+                        aggregate,
+                        f"{owner_scope_key}|{_usage_scope_key(aggregate_scope)}",
+                        aggregate_scope,
+                        trend=trend,
+                        trend_start=trend_start,
+                        trend_end=trend_end,
+                        trend_bucket_seconds=self._trend_bucket_seconds,
+                    )
+                )
         return tuple(resources)
 
     async def get_resource(
@@ -194,11 +199,32 @@ def _metric_records(
     )
 
 
-def _aggregate_visible(
-    records: tuple[UsageRecord, ...], metric_type: str, unit: str
-) -> UsageAggregate:
-    selected = _metric_records(records, metric_type, unit)
-    return aggregate_usage_records(selected, metric_type=metric_type, unit=unit)
+def _aggregate_groups(
+    records: tuple[UsageRecord, ...],
+    context: RequestContext,
+) -> tuple[tuple[UsageScope, tuple[UsageRecord, ...]], ...]:
+    """Keep point-in-time gauges scoped to the resource they describe."""
+
+    modes = {record.aggregation_mode for record in records}
+    if len(modes) > 1:
+        raise ValueError("one metric/unit aggregate cannot mix aggregation modes")
+    if not records or next(iter(modes), AggregationMode.ADDITIVE) is AggregationMode.ADDITIVE:
+        return ((_owner_query(context).scope, records),)
+
+    grouped: dict[tuple[tuple[str, str], ...], list[UsageRecord]] = {}
+    scopes: dict[tuple[tuple[str, str], ...], UsageScope] = {}
+    for record in records:
+        key = tuple(sorted(record.scope.fields().items()))
+        grouped.setdefault(key, []).append(record)
+        scopes[key] = record.scope
+    return tuple((scopes[key], tuple(grouped[key])) for key in sorted(grouped))
+
+
+def _usage_scope_key(scope: UsageScope) -> str:
+    fields = scope.fields()
+    if not fields:
+        return "unscoped"
+    return "|".join(f"{key}={fields[key]}" for key in sorted(fields))
 
 
 def _record_resource(record: UsageRecord) -> dict[str, JsonValue]:
@@ -233,6 +259,7 @@ def _aggregate_resource(
     unit: str,
     aggregate: UsageAggregate,
     scope_key: str,
+    scope: UsageScope,
     *,
     trend: tuple[UsageAggregate, ...] = (),
     trend_start: datetime | None = None,
@@ -243,6 +270,7 @@ def _aggregate_resource(
     quality_counts: dict[str, JsonValue] = {
         quality.value: count for quality, count in aggregate.quality_counts.items()
     }
+    scope_resource: dict[str, JsonValue] = dict(scope.fields())
     trend_points: list[JsonValue] = []
     for point in trend:
         point_quality: dict[str, JsonValue] = {
@@ -267,6 +295,7 @@ def _aggregate_resource(
         "unavailable_count": aggregate.unavailable_count,
         "quality_counts": quality_counts,
         "aggregation_mode": aggregate.aggregation_mode.value,
+        "scope": scope_resource,
         "trend_window_start": None if trend_start is None else trend_start.isoformat(),
         "trend_window_end": None if trend_end is None else trend_end.isoformat(),
         "trend_bucket_seconds": trend_bucket_seconds,
@@ -287,6 +316,9 @@ def _budget_resource(accounting: AccountingService, budget: UsageBudget) -> dict
         "action": budget.action.value,
         "warning_fraction": budget.warning_fraction,
         "window_seconds": budget.window_seconds,
+        "window_mode": budget.window_mode.value,
+        "window_start": None if state.window_start is None else state.window_start.isoformat(),
+        "window_end": None if state.window_end is None else state.window_end.isoformat(),
         "include_estimated": budget.include_estimated,
         "owner_type": budget.owner_type,
         "owner_id": budget.owner_id,
