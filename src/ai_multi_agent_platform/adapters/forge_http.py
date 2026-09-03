@@ -6,7 +6,7 @@ import asyncio
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Protocol, cast
+from typing import Protocol
 from urllib import error, parse, request
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -224,7 +224,7 @@ class ForgeHttpClient:
     def _object(value: JsonValue, label: str) -> dict[str, JsonValue]:
         if not isinstance(value, dict):
             raise RuntimeError(f"Forge sidecar {label} must be a JSON object")
-        return cast(dict[str, JsonValue], value)
+        return value
 
     @staticmethod
     def _strings(value: JsonValue | None) -> tuple[str, ...]:
@@ -295,7 +295,7 @@ class ForgeHttpClient:
                 if isinstance(result_code, int) and not isinstance(result_code, bool)
                 else None
             ),
-            output=cast(dict[str, JsonValue], output) if isinstance(output, dict) else {},
+            output=output if isinstance(output, dict) else {},
             stdout=stdout if isinstance(stdout, str) else "",
             stderr=stderr if isinstance(stderr, str) else "",
             artifacts=artifacts,
@@ -307,7 +307,7 @@ class ForgeHttpClient:
                 if isinstance(retry_after, (int, float)) and not isinstance(retry_after, bool)
                 else None
             ),
-            metadata=cast(dict[str, JsonValue], metadata) if isinstance(metadata, dict) else {},
+            metadata=metadata if isinstance(metadata, dict) else {},
         )
 
     def _verify_identity(
