@@ -161,9 +161,7 @@ class AgentCapabilityPolicy:
             item.capability_id for item in self.constraints if item.required
         }.intersection(self.denied)
         if denied_required:
-            raise ValueError(
-                f"required capabilities cannot be denied: {sorted(denied_required)!r}"
-            )
+            raise ValueError(f"required capabilities cannot be denied: {sorted(denied_required)!r}")
         if self.allowed:
             outside_allowlist = set(constraint_ids) - set(self.allowed)
             if outside_allowlist:
