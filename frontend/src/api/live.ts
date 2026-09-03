@@ -1,4 +1,4 @@
-import type { APIErrorBody, CanonicalEvent } from "./types";
+import type { APIErrorBody, CanonicalEvent, JsonValue } from "./types";
 
 export type LiveConnectionState = "connecting" | "open" | "reconnecting" | "closed";
 
@@ -7,6 +7,22 @@ export interface TaskEventStreamOptions {
   taskId: string;
   afterEventId?: string;
   onEvent: (event: CanonicalEvent) => void;
+  onError?: (error: APIErrorBody | Error) => void;
+  onState?: (state: LiveConnectionState) => void;
+}
+
+export interface NotificationLiveEvent {
+  id: string;
+  event: string;
+  recipient: { type: string; id: string };
+  occurred_at: string;
+  payload: Record<string, JsonValue>;
+}
+
+export interface NotificationEventStreamOptions {
+  baseUrl?: string;
+  afterEventId?: string;
+  onEvent: (event: NotificationLiveEvent) => void;
   onError?: (error: APIErrorBody | Error) => void;
   onState?: (state: LiveConnectionState) => void;
 }
@@ -52,6 +68,53 @@ export class TaskEventStream {
         this.options.onError?.(error);
       } catch {
         this.options.onError?.(new Error("Malformed canonical stream error"));
+      }
+    });
+    source.onerror = () => this.options.onState?.("reconnecting");
+  }
+
+  close(): void {
+    if (this.source) {
+      this.source.close();
+      this.source = null;
+      this.options.onState?.("closed");
+    }
+  }
+}
+
+export class NotificationEventStream {
+  private source: EventSource | null = null;
+  private readonly options: NotificationEventStreamOptions;
+
+  constructor(options: NotificationEventStreamOptions) {
+    this.options = options;
+  }
+
+  open(): void {
+    this.close();
+    this.options.onState?.("connecting");
+    const base = (this.options.baseUrl ?? "").replace(/\/$/, "");
+    const url = new URL(`${base}/api/v1/notifications/stream`, window.location.origin);
+    if (this.options.afterEventId) {
+      url.searchParams.set("after_event_id", this.options.afterEventId);
+    }
+    const source = new EventSource(url, { withCredentials: true });
+    this.source = source;
+    source.onopen = () => this.options.onState?.("open");
+    source.addEventListener("notification.event", (message) => {
+      try {
+        const event = JSON.parse((message as MessageEvent<string>).data) as NotificationLiveEvent;
+        this.options.onEvent(event);
+      } catch {
+        this.options.onError?.(new Error("Malformed notification event payload"));
+      }
+    });
+    source.addEventListener("platform.error", (message) => {
+      try {
+        const error = JSON.parse((message as MessageEvent<string>).data) as APIErrorBody;
+        this.options.onError?.(error);
+      } catch {
+        this.options.onError?.(new Error("Malformed notification stream error"));
       }
     });
     source.onerror = () => this.options.onState?.("reconnecting");
