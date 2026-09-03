@@ -79,3 +79,23 @@ class EvaluationRepository(Protocol):
     def save_comparison(self, comparison: ComparisonReport) -> None: ...
 
     def get_comparison(self, current_run_id: str) -> ComparisonReport | None: ...
+
+
+class EvaluationHistoryRepository(EvaluationRepository, Protocol):
+    """Durable/history-capable extension used for runs, case history and trend projection."""
+
+    def list_runs(
+        self,
+        *,
+        suite_id: str | None = None,
+        suite_version: str | None = None,
+        limit: int = 100,
+    ) -> tuple[EvaluationRun, ...]: ...
+
+    def list_case_results(
+        self,
+        *,
+        case_id: str,
+        evaluator_id: str | None = None,
+        limit: int = 100,
+    ) -> tuple[EvaluationResult, ...]: ...
