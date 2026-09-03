@@ -73,7 +73,7 @@ def _optional_int(obj: dict[str, Any], key: str) -> int | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"stored evaluation field '{key}' must be an integer or null")
-    return value
+    return cast(int, value)
 
 
 def _optional_float(obj: dict[str, Any], key: str) -> float | None:
@@ -112,7 +112,7 @@ def _list(obj: dict[str, Any], key: str) -> list[Any]:
     value = obj.get(key)
     if not isinstance(value, list):
         raise ValueError(f"stored evaluation field '{key}' must be a list")
-    return cast(list[Any], value)
+    return value
 
 
 def _dict(value: Any, field: str) -> dict[str, Any]:
