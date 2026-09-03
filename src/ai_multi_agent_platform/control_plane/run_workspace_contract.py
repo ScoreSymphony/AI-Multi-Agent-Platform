@@ -153,7 +153,7 @@ class ControlPlane(_WorkspaceControlPlane):
         decorated: list[JsonValue] = []
         for item in items:
             if isinstance(item, dict):
-                decorated.append(await self._decorate_binding(cast(dict[str, JsonValue], item)))
+                decorated.append(await self._decorate_binding(item))
             else:
                 decorated.append(item)
         result = dict(page)
