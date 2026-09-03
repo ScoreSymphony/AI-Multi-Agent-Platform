@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from ai_multi_agent_platform.configuration.secrets import SecretAccessContext, SecretProvider
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
+    AdapterMetadata,
     Capability,
     CapabilityKind,
     HealthStatus,
@@ -29,7 +30,9 @@ from .models import (
     ExternalNativeReference,
     ExternalResourceReference,
     SyncCheckpoint,
+    SyncMode,
     SyncStatus,
+    connector_definition_id,
 )
 from .provider import ConnectorProvider
 
@@ -49,7 +52,6 @@ class ReferenceConnectorProvider(ConnectorProvider):
     ) -> None:
         self._secret_provider = secret_provider
         self._provider_id = provider_id
-        self._definition_id = new_id("connector_definition")
         self._health = HealthStatus.HEALTHY
         self._validated_connections: set[str] = set()
         self._records: dict[str, dict[str, str]] = {
@@ -62,7 +64,7 @@ class ReferenceConnectorProvider(ConnectorProvider):
     @property
     def definition(self) -> ConnectorDefinition:
         return ConnectorDefinition(
-            id=self._definition_id,
+            id=connector_definition_id(REFERENCE_CONNECTOR_TYPE, REFERENCE_CONNECTOR_VERSION),
             connector_type_id=REFERENCE_CONNECTOR_TYPE,
             name="Reference Local Connector",
             version=REFERENCE_CONNECTOR_VERSION,
@@ -74,8 +76,11 @@ class ReferenceConnectorProvider(ConnectorProvider):
                 "resource.read",
                 "action.invoke",
                 "sync",
+                "sync.incremental",
+                "sync.resync",
+                "sync.rebuild",
             ),
-            features=("resources", "actions", "events", "sync"),
+            features=("resources", "actions", "events", "sync", "resync", "rebuild"),
             authentication_requirements=("token",),
             resource_types=("record",),
             actions=(REFERENCE_ACTION,),
@@ -89,6 +94,12 @@ class ReferenceConnectorProvider(ConnectorProvider):
                 "healthy": "provider fixture available",
                 "unavailable": "provider fixture disabled for failure testing",
             },
+            adapter_metadata=(
+                AdapterMetadata(
+                    namespace="platform.reference",
+                    values={"source": "bundled", "provider_id": self._provider_id},
+                ),
+            ),
         )
 
     @property
@@ -147,6 +158,16 @@ class ReferenceConnectorProvider(ConnectorProvider):
         )
         self._validated_connections.add(connection.id)
         now = datetime.now(UTC)
+        adapter_metadata = tuple(
+            metadata
+            for metadata in connection.adapter_metadata
+            if metadata.namespace != REFERENCE_CONNECTOR_TYPE
+        ) + (
+            AdapterMetadata(
+                namespace=REFERENCE_CONNECTOR_TYPE,
+                values={"account_id": "local-fixture"},
+            ),
+        )
         return replace(
             connection,
             status=(
@@ -158,6 +179,7 @@ class ReferenceConnectorProvider(ConnectorProvider):
             granted_scopes=connection.requested_scopes,
             last_checked_at=now,
             updated_at=now,
+            adapter_metadata=adapter_metadata,
         )
 
     async def connection_health(
@@ -223,7 +245,11 @@ class ReferenceConnectorProvider(ConnectorProvider):
         self._require_connection(request.connection_id)
         self._require_available()
         start = 0
-        if request.checkpoint is not None and request.checkpoint.cursor is not None:
+        if (
+            request.mode is SyncMode.INCREMENTAL
+            and request.checkpoint is not None
+            and request.checkpoint.cursor is not None
+        ):
             try:
                 start = int(request.checkpoint.cursor)
             except ValueError as exc:
@@ -260,7 +286,11 @@ class ReferenceConnectorProvider(ConnectorProvider):
                 project_id=request.context.project_id,
                 resource_id=self._resource_ids[native_id],
                 verified=True,
-                provenance={"source": "reference-local", "revision": "1"},
+                provenance={
+                    "source": "reference-local",
+                    "revision": "1",
+                    "sync_mode": request.mode.value,
+                },
                 payload={"native_id": native_id},
             )
             for native_id in selected
