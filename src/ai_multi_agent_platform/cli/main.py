@@ -266,6 +266,8 @@ def _build_parser() -> argparse.ArgumentParser:
         ("step", "steps"),
         ("artifact", "artifacts"),
         ("result", "results"),
+        ("capability", "capabilities"),
+        ("capability-provider", "capability-providers"),
     ):
         reference = areas.add_parser(area_name, help=f"inspect canonical {collection}")
         reference.set_defaults(area="reference", collection=collection)
