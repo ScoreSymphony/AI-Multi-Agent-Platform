@@ -15,6 +15,7 @@ from ai_multi_agent_platform.workspaces import (
     MaterializationOutcome,
     RetentionManagedWorkspaceProvider,
     SqliteWorkspaceProvider,
+    Workspace,
     WorkspaceRetention,
     WorkspaceRetentionGuard,
     WorkspaceType,
@@ -34,12 +35,14 @@ def _context(project_id: str) -> DataAccessContext:
 
 
 class DenyCleanup(WorkspaceRetentionGuard):
-    async def allow_cleanup(self, workspace: object) -> bool:
+    async def allow_cleanup(self, workspace: Workspace) -> bool:
         del workspace
         return False
 
 
-def test_ephemeral_workspace_is_deleted_only_after_use_and_preserves_snapshot(tmp_path: Path) -> None:
+def test_ephemeral_workspace_is_deleted_only_after_use_and_preserves_snapshot(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         project_id = new_id("project")
         context = _context(project_id)
