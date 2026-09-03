@@ -66,6 +66,12 @@ class ConnectorService:
         approval_id: str | None = None,
     ) -> Connection:
         self._validate_scope(connection, context)
+        endpoint_metadata = dict(connection.endpoint_metadata)
+        if redact_sensitive(endpoint_metadata) != endpoint_metadata:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "connection endpoint metadata must not contain embedded credentials",
+            )
         provider = self.registry.resolve(connection.connector_type_id, connection.connector_version)
         self._validate_safe_adapter_metadata(connection, provider)
         definition = provider.definition
