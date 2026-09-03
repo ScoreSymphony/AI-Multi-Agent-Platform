@@ -212,13 +212,13 @@ class NotificationQuery:
     project_id: str | None = None
     unread_only: bool = False
     include_archived: bool = False
-    limit: int = 100
+    limit: int | None = None
     offset: int = 0
 
     def __post_init__(self) -> None:
         _validate_optional_id(self.project_id, "project")
-        if self.limit < 1 or self.limit > 500:
-            raise ValueError("limit must be between 1 and 500")
+        if self.limit is not None and self.limit < 1:
+            raise ValueError("limit must be positive when provided")
         if self.offset < 0:
             raise ValueError("offset must not be negative")
 
