@@ -9,7 +9,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.domain import new_id, validate_id
 
 
 def utc_now() -> datetime:
@@ -60,8 +60,7 @@ class RecipientRef:
     id: str
 
     def __post_init__(self) -> None:
-        if not self.id.strip():
-            raise ValueError("recipient id must not be blank")
+        validate_id(self.id, self.type.value)
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,25 +128,23 @@ class Notification:
     delivery_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        validate_id(self.id, "notification")
         if not self.title.strip():
             raise ValueError("notification title must not be blank")
         if self.occurrence_count < 1:
             raise ValueError("occurrence_count must be at least one")
         if self.aggregation_key is not None and not self.aggregation_key.strip():
             raise ValueError("aggregation_key must not be blank when provided")
-        for name in (
-            "project_id",
-            "workspace_id",
-            "task_id",
-            "run_id",
-            "approval_id",
-            "verification_id",
-            "node_id",
-            "automation_id",
-            "membership_id",
-            "correlation_id",
-            "causation_id",
-        ):
+        _validate_optional_id(self.project_id, "project")
+        _validate_optional_id(self.workspace_id, "workspace")
+        _validate_optional_id(self.task_id, "task")
+        _validate_optional_id(self.run_id, "run")
+        _validate_optional_id(self.approval_id, "approval")
+        _validate_optional_id(self.verification_id, "verification")
+        _validate_optional_id(self.node_id, "node")
+        _validate_optional_id(self.automation_id, "automation")
+        _validate_optional_id(self.membership_id, "membership")
+        for name in ("correlation_id", "causation_id"):
             value = getattr(self, name)
             if value is not None and not value.strip():
                 raise ValueError(f"{name} must not be blank when provided")
@@ -167,6 +164,7 @@ class Notification:
             raise ValueError("updated_at cannot precede created_at")
         if self.expires_at is not None and self.expires_at <= self.created_at:
             raise ValueError("expires_at must be after created_at")
+        object.__setattr__(self, "actions", tuple(self.actions))
         object.__setattr__(self, "summary", MappingProxyType(dict(self.summary)))
         object.__setattr__(self, "delivery_metadata", MappingProxyType(dict(self.delivery_metadata)))
 
@@ -187,8 +185,8 @@ class NotificationPreference:
     aggregate_duplicates: bool = True
 
     def __post_init__(self) -> None:
-        if any(not value.strip() for value in self.project_ids):
-            raise ValueError("project_ids must not contain blank values")
+        for project_id in self.project_ids:
+            validate_id(project_id, "project")
         if any(not value.strip() for value in self.external_channels):
             raise ValueError("external_channels must not contain blank values")
 
@@ -205,8 +203,7 @@ class NotificationQuery:
     offset: int = 0
 
     def __post_init__(self) -> None:
-        if self.project_id is not None and not self.project_id.strip():
-            raise ValueError("project_id must not be blank")
+        _validate_optional_id(self.project_id, "project")
         if self.limit < 1 or self.limit > 500:
             raise ValueError("limit must be between 1 and 500")
         if self.offset < 0:
@@ -241,5 +238,24 @@ class NotificationCandidate:
     def __post_init__(self) -> None:
         if not self.title.strip():
             raise ValueError("notification candidate title must not be blank")
+        if self.aggregation_key is not None and not self.aggregation_key.strip():
+            raise ValueError("aggregation_key must not be blank when provided")
+        _validate_optional_id(self.project_id, "project")
+        _validate_optional_id(self.workspace_id, "workspace")
+        _validate_optional_id(self.task_id, "task")
+        _validate_optional_id(self.run_id, "run")
+        _validate_optional_id(self.approval_id, "approval")
+        _validate_optional_id(self.verification_id, "verification")
+        _validate_optional_id(self.node_id, "node")
+        _validate_optional_id(self.automation_id, "automation")
+        _validate_optional_id(self.membership_id, "membership")
+        if self.expires_at is not None and self.expires_at.utcoffset() is None:
+            raise ValueError("expires_at must be timezone-aware")
+        object.__setattr__(self, "actions", tuple(self.actions))
         object.__setattr__(self, "summary", MappingProxyType(dict(self.summary)))
         object.__setattr__(self, "delivery_metadata", MappingProxyType(dict(self.delivery_metadata)))
+
+
+def _validate_optional_id(value: str | None, prefix: str) -> None:
+    if value is not None:
+        validate_id(value, prefix)
