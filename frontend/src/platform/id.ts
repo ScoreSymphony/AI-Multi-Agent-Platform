@@ -5,8 +5,8 @@ export function isCanonicalId(value: string): boolean {
 }
 
 export function compactCanonicalId(value: string): string {
+  if (!isCanonicalId(value)) return value;
   const separator = value.indexOf("_");
-  if (separator < 0 || value.length <= separator + 14) return value;
   const prefix = value.slice(0, separator);
   const uuid = value.slice(separator + 1);
   return `${prefix}_${uuid.slice(0, 8)}…${uuid.slice(-4)}`;

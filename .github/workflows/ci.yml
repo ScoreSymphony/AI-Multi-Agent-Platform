@@ -33,3 +33,22 @@ jobs:
         run: pytest
       - name: Build package
         run: python -m build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck frontend
+        run: npm run typecheck
+      - name: Test frontend
+        run: npm test
+      - name: Build frontend
+        run: npm run build

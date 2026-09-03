@@ -32,7 +32,7 @@ export function RouterProvider({ children }: { children: ReactNode }) {
       window.history.pushState({}, "", normalized);
     }
     setPath(normalized);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
 
   const value = useMemo(() => ({ path, navigate }), [path, navigate]);

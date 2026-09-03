@@ -1,7 +1,6 @@
 import type {
   APIErrorBody,
   APImanifest,
-  CanonicalEvent,
   CanonicalRun,
   CanonicalTask,
   CreateTaskInput,
@@ -9,6 +8,7 @@ import type {
   JsonValue,
   ListQuery,
   Page,
+  TimelineItem,
 } from "./types";
 
 export interface AuthBoundary {
@@ -104,15 +104,15 @@ export class ControlPlaneClient {
     );
   }
 
-  timeline(taskId: string, query: ListQuery = {}): Promise<Page<CanonicalEvent>> {
-    return this.request<Page<CanonicalEvent>>(
+  timeline(taskId: string, query: ListQuery = {}): Promise<Page<TimelineItem>> {
+    return this.request<Page<TimelineItem>>(
       `/tasks/${encodeURIComponent(taskId)}/timeline${toQuery(query)}`,
     );
   }
 
   private command<T>(
     path: string,
-    options: { method?: string; body?: Record<string, unknown> } = {},
+    options: { method?: string; body?: unknown } = {},
   ): Promise<T> {
     return this.request<T>(path, {
       method: options.method ?? "POST",
@@ -125,7 +125,7 @@ export class ControlPlaneClient {
     path: string,
     options: {
       method?: string;
-      body?: Record<string, unknown>;
+      body?: unknown;
       idempotencyKey?: string;
     } = {},
   ): Promise<T> {

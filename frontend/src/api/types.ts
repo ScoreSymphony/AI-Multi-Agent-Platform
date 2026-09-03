@@ -94,6 +94,21 @@ export interface CanonicalEvent {
   payload: Record<string, JsonValue>;
 }
 
+export interface TelemetryTimelineEntry {
+  id: string;
+  type: "telemetry";
+  event_name: string;
+  component: string;
+  timestamp: string;
+  outcome: string;
+  duration_seconds: number | null;
+  failure: JsonValue;
+  context: Record<string, JsonValue>;
+  attributes: Record<string, JsonValue>;
+}
+
+export type TimelineItem = CanonicalEvent | TelemetryTimelineEntry;
+
 export interface APIErrorBody {
   code: string;
   category: string;
