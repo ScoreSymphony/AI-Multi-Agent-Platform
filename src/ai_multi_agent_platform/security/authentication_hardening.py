@@ -654,7 +654,9 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
     ) -> None:
         details: dict[str, JsonValue] = dict(metadata or {})
         if failure is not None:
-            details["failure"] = failure.value if isinstance(failure, AuthenticationFailure) else failure
+            details["failure"] = (
+                failure.value if isinstance(failure, AuthenticationFailure) else failure
+            )
         self._audit(
             event,
             now=now,
