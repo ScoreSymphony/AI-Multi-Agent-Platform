@@ -58,7 +58,9 @@ class PluginRegistry:
 
     def install(self, manifest: PluginManifest) -> PluginSnapshot:
         if manifest.plugin_id in self._plugins:
-            raise ContractError(ErrorCode.CONFLICT, f"plugin {manifest.plugin_id!r} is already installed")
+            raise ContractError(
+                ErrorCode.CONFLICT, f"plugin {manifest.plugin_id!r} is already installed"
+            )
         self._validate_compatibility(manifest)
         self._plugins[manifest.plugin_id] = _PluginRecord(manifest=manifest)
         return self.get(manifest.plugin_id)
@@ -95,7 +97,11 @@ class PluginRegistry:
             raise ContractError(
                 ErrorCode.FORBIDDEN,
                 f"plugin {plugin_id!r} is missing granted permissions",
-                details={"missing_permissions": sorted(permission.value for permission in missing_permissions)},
+                details={
+                    "missing_permissions": sorted(
+                        permission.value for permission in missing_permissions
+                    )
+                },
             )
 
         context = PluginContext(
@@ -200,9 +206,14 @@ class PluginRegistry:
             compatibility=record.compatibility,
             health=record.health,
             extension_ids=tuple(extension.extension_id for extension in record.manifest.extensions),
-            requested_permissions=tuple(sorted(permission.value for permission in record.manifest.requested_permissions)),
-            granted_permissions=tuple(sorted(permission.value for permission in record.granted_permissions)),
-            configured=record.state in {PluginState.CONFIGURED, PluginState.ENABLED, PluginState.DISABLED},
+            requested_permissions=tuple(
+                sorted(permission.value for permission in record.manifest.requested_permissions)
+            ),
+            granted_permissions=tuple(
+                sorted(permission.value for permission in record.granted_permissions)
+            ),
+            configured=record.state
+            in {PluginState.CONFIGURED, PluginState.ENABLED, PluginState.DISABLED},
             health_detail=record.health_detail,
         )
 
@@ -216,7 +227,9 @@ class PluginRegistry:
         try:
             return self._plugins[plugin_id]
         except KeyError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, f"plugin {plugin_id!r} is not installed") from exc
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"plugin {plugin_id!r} is not installed"
+            ) from exc
 
     def _validate_compatibility(self, manifest: PluginManifest) -> None:
         if manifest.manifest_version != PLUGIN_MANIFEST_VERSION:
@@ -266,7 +279,9 @@ class PluginRegistry:
         declared = {extension.extension_id: extension for extension in manifest.extensions}
         runtime_ids = [registration.spec.extension_id for registration in extensions]
         if len(set(runtime_ids)) != len(runtime_ids):
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "runtime returned duplicate extension IDs")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "runtime returned duplicate extension IDs"
+            )
         if set(runtime_ids) != set(declared):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
