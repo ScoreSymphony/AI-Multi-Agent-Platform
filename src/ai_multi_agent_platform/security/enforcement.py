@@ -12,13 +12,18 @@ from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
     JsonValue,
+    OperationContext,
     normalize_authorization_decision,
 )
 
 from .approvals import ApprovalRecord, ApprovalService
 from .authorization import (
+    ActorIdentity,
+    AuthorizationAction,
     AuthorizationAuditRecord,
+    AuthorizationContext,
     ProposedAction,
+    ResourceType,
     RiskClassification,
 )
 
@@ -125,6 +130,106 @@ class AuthorizationGate:
             details=details,
         )
 
+    async def decide_approval(
+        self,
+        approval_id: str,
+        *,
+        approver: ActorIdentity,
+        approve: bool,
+        operation: OperationContext,
+        comment: str | None = None,
+    ) -> ApprovalRecord:
+        """Approve or reject only after the approver itself is authorized.
+
+        Approval decisions deliberately do not recurse into another approval flow. The
+        configured policy must return ``allow`` for the canonical ``approve`` action.
+        """
+
+        record = self.approvals.get(approval_id)
+        resource_type = _resource_type(record.resource_type)
+        action = ProposedAction(
+            AuthorizationContext(
+                actor=approver,
+                action=AuthorizationAction.APPROVE,
+                resource_type=resource_type,
+                resource_id=record.resource_id,
+                operation=operation,
+                task_id=record.task_id,
+                run_id=record.run_id,
+                capability_ref=record.capability_ref,
+                side_effect="approval_decision",
+            ),
+            payload={
+                "approval_id": approval_id,
+                "decision": "approve" if approve else "reject",
+                "requested_action_digest": record.requested_action_digest,
+            },
+        )
+        decision = normalize_authorization_decision(
+            await self.provider.authorize(
+                action.context.to_request(requested_action_digest=action.digest)
+            )
+        )
+        self._audit(action, decision, approval_id)
+        if decision.outcome is not AuthorizationOutcome.ALLOW:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                decision.reason or "approver is not authorized",
+                provider_id=self.provider.descriptor.provider_id,
+                details={
+                    "authorization_outcome": decision.outcome.value,
+                    "policy_id": decision.policy_id,
+                    "approval_id": approval_id,
+                },
+            )
+        return self.approvals._decide_authorized(
+            approval_id,
+            approver_ref=approver.actor_id,
+            approve=approve,
+            comment=comment,
+        )
+
+    async def cancel_approval(
+        self,
+        approval_id: str,
+        *,
+        actor: ActorIdentity,
+        operation: OperationContext,
+    ) -> ApprovalRecord:
+        """Cancel a pending request as requester or as an authorized approver."""
+
+        record = self.approvals.get(approval_id)
+        if actor.actor_id != record.requester_ref:
+            resource_type = _resource_type(record.resource_type)
+            action = ProposedAction(
+                AuthorizationContext(
+                    actor=actor,
+                    action=AuthorizationAction.APPROVE,
+                    resource_type=resource_type,
+                    resource_id=record.resource_id,
+                    operation=operation,
+                    task_id=record.task_id,
+                    run_id=record.run_id,
+                    capability_ref=record.capability_ref,
+                    side_effect="approval_cancel",
+                ),
+                payload={"approval_id": approval_id, "decision": "cancel"},
+            )
+            decision = normalize_authorization_decision(
+                await self.provider.authorize(
+                    action.context.to_request(requested_action_digest=action.digest)
+                )
+            )
+            self._audit(action, decision, approval_id)
+            if decision.outcome is not AuthorizationOutcome.ALLOW:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    decision.reason or "actor cannot cancel this approval",
+                    provider_id=self.provider.descriptor.provider_id,
+                    details={"approval_id": approval_id},
+                )
+        return self.approvals._cancel_authorized(approval_id, actor_ref=actor.actor_id)
+
     def ensure_pending_approval(
         self,
         action: ProposedAction,
@@ -167,3 +272,10 @@ class AuthorizationGate:
         self._audit_records.append(record)
         if self._audit_sink is not None:
             self._audit_sink(record)
+
+
+def _resource_type(value: str) -> ResourceType:
+    try:
+        return ResourceType(value)
+    except ValueError:
+        return ResourceType.GENERIC

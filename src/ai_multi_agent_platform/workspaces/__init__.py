@@ -21,12 +21,51 @@ from .models import (
     validate_relative_path,
 )
 from .reference import LocalWorkspaceProvider
+from .remote import (
+    RemoteCleanupAcknowledgement,
+    RemoteMaterializationReceipt,
+    RemoteMaterializationResult,
+    RemoteWorkspaceMaterializer,
+)
+from .retention import (
+    RetentionManagedWorkspaceProvider,
+    WorkspaceRetentionController,
+    WorkspaceRetentionGuard,
+    WorkspaceRetentionReport,
+)
+from .run_bindings import (
+    InMemoryRunWorkspaceBindingRepository,
+    RunWorkspaceBinding,
+    RunWorkspaceBindingRepository,
+    SqliteRunWorkspaceBindingRepository,
+)
+from .sources import (
+    EmptyWorkspaceSourceResolver,
+    ResolvedWorkspaceSource,
+    SnapshotWorkspaceSourceResolver,
+    WorkspaceSourceResolver,
+    WorkspaceSourceResolverRegistry,
+)
+from .sqlite import SqliteWorkspaceProvider
 
 __all__ = [
     "CleanupReport",
+    "EmptyWorkspaceSourceResolver",
+    "InMemoryRunWorkspaceBindingRepository",
     "LocalWorkspaceProvider",
     "MaterializationOutcome",
+    "RemoteCleanupAcknowledgement",
+    "RemoteMaterializationReceipt",
     "RemoteMaterializationRequest",
+    "RemoteMaterializationResult",
+    "RemoteWorkspaceMaterializer",
+    "ResolvedWorkspaceSource",
+    "RetentionManagedWorkspaceProvider",
+    "RunWorkspaceBinding",
+    "RunWorkspaceBindingRepository",
+    "SnapshotWorkspaceSourceResolver",
+    "SqliteRunWorkspaceBindingRepository",
+    "SqliteWorkspaceProvider",
     "Workspace",
     "WorkspaceAccessMode",
     "WorkspaceChange",
@@ -36,9 +75,14 @@ __all__ = [
     "WorkspaceMaterialization",
     "WorkspaceProvider",
     "WorkspaceRetention",
+    "WorkspaceRetentionController",
+    "WorkspaceRetentionGuard",
+    "WorkspaceRetentionReport",
     "WorkspaceSnapshot",
     "WorkspaceSourceKind",
     "WorkspaceSourceRef",
+    "WorkspaceSourceResolver",
+    "WorkspaceSourceResolverRegistry",
     "WorkspaceStatus",
     "WorkspaceType",
     "validate_relative_path",

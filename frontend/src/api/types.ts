@@ -24,6 +24,15 @@ export type TaskPriority = "low" | "normal" | "high" | "urgent";
 export type TaskResponsibilityKind = "user" | "team" | "organization";
 export type AgentAssignmentKind = "agent" | "agent_team";
 export type TaskDependencyKind = "depends_on" | "related_to";
+export type WorkspaceType =
+  | "persistent_project"
+  | "ephemeral_task"
+  | "isolated_run"
+  | "read_only_source"
+  | "cloned"
+  | "remote";
+export type WorkspaceAccessMode = "read_write" | "read_only";
+export type WorkspaceRetention = "persistent" | "ephemeral" | "until";
 
 export interface Page<T> {
   items: T[];
@@ -41,14 +50,45 @@ export interface CanonicalProject {
   updated_at: string;
 }
 
-export interface CanonicalWorkspaceIdentity {
+export interface WorkspaceSourceRef {
+  kind: string;
+  ref: string;
+  revision: string | null;
+  checksum: string | null;
+  metadata: Record<string, JsonValue>;
+}
+
+interface WorkspaceIdentityBase {
   id: string;
   type: "workspace";
   project_id: string;
   owner: { type: OwnerType; id: string };
   created_at: string | null;
-  lifecycle: string;
 }
+
+export interface IdentityOnlyWorkspace extends WorkspaceIdentityBase {
+  lifecycle: "identity_only";
+}
+
+export interface CanonicalWorkspace extends WorkspaceIdentityBase {
+  lifecycle: "canonical";
+  workspace_type: WorkspaceType;
+  status: string;
+  access_mode: WorkspaceAccessMode;
+  retention: WorkspaceRetention;
+  revision: number;
+  base_snapshot_id: string | null;
+  source_refs: WorkspaceSourceRef[];
+  policy_labels: string[];
+  active_task_ids: string[];
+  active_run_ids: string[];
+  created_at: string;
+  updated_at: string;
+  last_used_at: string;
+  expires_at: string | null;
+}
+
+export type CanonicalWorkspaceIdentity = IdentityOnlyWorkspace | CanonicalWorkspace;
 
 export interface TaskResponsibility {
   kind: TaskResponsibilityKind;
@@ -355,6 +395,9 @@ export interface CreateProjectInput {
 
 export interface CreateWorkspaceInput {
   project_id: string;
+  workspace_type?: WorkspaceType;
+  access_mode?: WorkspaceAccessMode;
+  retention?: WorkspaceRetention;
 }
 
 export interface CreateTaskInput extends TaskManagementChanges {
