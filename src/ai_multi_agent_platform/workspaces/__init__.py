@@ -39,10 +39,18 @@ from .run_bindings import (
     RunWorkspaceBindingRepository,
     SqliteRunWorkspaceBindingRepository,
 )
+from .sources import (
+    EmptyWorkspaceSourceResolver,
+    ResolvedWorkspaceSource,
+    SnapshotWorkspaceSourceResolver,
+    WorkspaceSourceResolver,
+    WorkspaceSourceResolverRegistry,
+)
 from .sqlite import SqliteWorkspaceProvider
 
 __all__ = [
     "CleanupReport",
+    "EmptyWorkspaceSourceResolver",
     "InMemoryRunWorkspaceBindingRepository",
     "LocalWorkspaceProvider",
     "MaterializationOutcome",
@@ -51,9 +59,11 @@ __all__ = [
     "RemoteMaterializationRequest",
     "RemoteMaterializationResult",
     "RemoteWorkspaceMaterializer",
+    "ResolvedWorkspaceSource",
     "RetentionManagedWorkspaceProvider",
     "RunWorkspaceBinding",
     "RunWorkspaceBindingRepository",
+    "SnapshotWorkspaceSourceResolver",
     "SqliteRunWorkspaceBindingRepository",
     "SqliteWorkspaceProvider",
     "Workspace",
@@ -71,6 +81,8 @@ __all__ = [
     "WorkspaceSnapshot",
     "WorkspaceSourceKind",
     "WorkspaceSourceRef",
+    "WorkspaceSourceResolver",
+    "WorkspaceSourceResolverRegistry",
     "WorkspaceStatus",
     "WorkspaceType",
     "validate_relative_path",
