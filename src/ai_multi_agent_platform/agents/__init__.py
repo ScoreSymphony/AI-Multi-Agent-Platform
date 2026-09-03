@@ -39,6 +39,7 @@ from .models import (
     new_agent_run_id,
     new_team_id,
 )
+from .persistence import AGENT_REPOSITORY_SCHEMA_VERSION, JsonAgentRepository
 from .repository import AgentRepository, InMemoryAgentRepository
 from .runtime import AgentOrchestratorMapper, AgentRuntime, ReferenceOrchestratorMapper
 from .service import AgentService
@@ -46,6 +47,7 @@ from .service import AgentService
 __all__ = [
     "AGENT_COLLECTION",
     "AGENT_COMMANDS",
+    "AGENT_REPOSITORY_SCHEMA_VERSION",
     "AGENT_RUN_COLLECTION",
     "AGENT_TEAM_COLLECTION",
     "AgentCapabilityPolicy",
@@ -77,6 +79,7 @@ __all__ = [
     "CapabilityConstraint",
     "InMemoryAgentRepository",
     "InstructionSource",
+    "JsonAgentRepository",
     "ModelFallbackPolicy",
     "OrchestratorMapping",
     "ReferenceOrchestratorMapper",
