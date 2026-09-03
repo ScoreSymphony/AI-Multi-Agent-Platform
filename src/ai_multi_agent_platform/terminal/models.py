@@ -139,6 +139,8 @@ class TerminalSession:
     encoding: str = "utf-8"
     dimensions: TerminalDimensions | None = None
     policy_classification: tuple[str, ...] = ()
+    inactivity_timeout_seconds: int | None = None
+    retain_transcript: bool = False
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
     def __post_init__(self) -> None:
@@ -151,6 +153,8 @@ class TerminalSession:
             raise ValueError("encoding must not be blank")
         if any(not label.strip() for label in self.policy_classification):
             raise ValueError("policy classifications must not contain blank values")
+        if self.inactivity_timeout_seconds is not None and self.inactivity_timeout_seconds <= 0:
+            raise ValueError("inactivity_timeout_seconds must be positive")
         if self.mode is SessionMode.INTERACTIVE and not self.capabilities.interactive_input:
             raise ValueError("interactive session requires interactive_input capability")
         if self.capabilities.pty and self.dimensions is None:
@@ -160,7 +164,12 @@ class TerminalSession:
         if self.status not in TERMINAL_SESSION_STATUSES and self.ended_at is not None:
             raise ValueError("non-terminal session must not have ended_at")
 
-    def transition(self, status: SessionStatus) -> TerminalSession:
+    def transition(
+        self,
+        status: SessionStatus,
+        *,
+        occurred_at: datetime | None = None,
+    ) -> TerminalSession:
         if self.status in TERMINAL_SESSION_STATUSES:
             raise ValueError("terminal session has no outgoing status transition")
         allowed = {
@@ -177,7 +186,7 @@ class TerminalSession:
         return replace(
             self,
             status=status,
-            ended_at=utc_now() if status in TERMINAL_SESSION_STATUSES else None,
+            ended_at=(occurred_at or utc_now()) if status in TERMINAL_SESSION_STATUSES else None,
         )
 
     def with_dimensions(self, dimensions: TerminalDimensions) -> TerminalSession:
@@ -204,6 +213,8 @@ class TerminalSession:
             "encoding": self.encoding,
             "dimensions": self.dimensions.to_json() if self.dimensions is not None else None,
             "policy_classification": list(self.policy_classification),
+            "inactivity_timeout_seconds": self.inactivity_timeout_seconds,
+            "retain_transcript": self.retain_transcript,
             "adapter_metadata": adapter_metadata,
         }
 
