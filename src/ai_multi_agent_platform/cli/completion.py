@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import sys
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 from .main import _build_parser
 
@@ -84,7 +83,7 @@ def candidates(words: Sequence[str]) -> tuple[str, ...]:
 
     subcommands = _subcommands(parser)
     if subcommands:
-        return _matching(subcommands, current)
+        return _matching(subcommands.keys(), current)
     return ()
 
 
@@ -115,15 +114,8 @@ def _option_name(token: str) -> tuple[str, bool]:
     return token, False
 
 
-def _matching(values: Sequence[str] | dict[str, argparse.ArgumentParser] | object, prefix: str) -> tuple[str, ...]:
-    if isinstance(values, dict):
-        items = values.keys()
-    else:
-        try:
-            items = iter(values)  # type: ignore[arg-type]
-        except TypeError:
-            return ()
-    return tuple(sorted(str(value) for value in items if str(value).startswith(prefix)))
+def _matching(values: Iterable[str], prefix: str) -> tuple[str, ...]:
+    return tuple(sorted(value for value in values if value.startswith(prefix)))
 
 
 def _bash_script() -> str:
