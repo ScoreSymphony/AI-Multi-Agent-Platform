@@ -84,9 +84,7 @@ async def _stack(
 
 
 async def _search(http: ControlPlaneHTTP, **query: str) -> dict[str, object]:
-    response = await http.handle(
-        HTTPRequest(method="GET", path="/api/v1/search", query=query)
-    )
+    response = await http.handle(HTTPRequest(method="GET", path="/api/v1/search", query=query))
     assert response.status == 200
     assert isinstance(response.body, dict)
     return response.body
