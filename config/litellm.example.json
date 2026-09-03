@@ -1,0 +1,26 @@
+{
+  "library_local_example": {
+    "enabled": true,
+    "mode": "library",
+    "provider_id": "litellm-local-library",
+    "base_url": "http://127.0.0.1:11434",
+    "api_key_env": null,
+    "timeout_seconds": 120.0,
+    "models": {
+      "model-local-example": "ollama/llama3.1"
+    },
+    "extra_headers": {}
+  },
+  "proxy_local_example": {
+    "enabled": true,
+    "mode": "proxy",
+    "provider_id": "litellm-local-proxy",
+    "base_url": "http://127.0.0.1:4000/v1",
+    "api_key_env": "LITELLM_PROXY_API_KEY",
+    "timeout_seconds": 120.0,
+    "models": {
+      "model-local-example": "local-model-alias"
+    },
+    "extra_headers": {}
+  }
+}
