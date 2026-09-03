@@ -173,16 +173,6 @@ class MetricThresholdEvaluator:
             value = observation.metrics.get(rule.metric_name)
             if value is None:
                 passed = False
-                results.append(
-                    MetricResult(
-                        metric_name=rule.metric_name,
-                        value=float("nan"),
-                        passed=False,
-                        threshold=rule.threshold,
-                        operator=rule.operator,
-                        unit=rule.unit,
-                    )
-                )
                 continue
             rule_passed = _metric_compare(value, rule.operator, rule.threshold)
             passed = passed and rule_passed
