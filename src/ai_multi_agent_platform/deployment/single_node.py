@@ -185,6 +185,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         authorization=authorization,
         workspace_provider=workspaces,
         health_providers=(orchestrator, lifecycle, files),
+        automation_state_path=database_dir / "automation.sqlite3",
     )
     http = AuthenticatedControlPlaneHTTP(
         control_plane,
