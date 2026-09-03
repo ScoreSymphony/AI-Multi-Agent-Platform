@@ -110,22 +110,26 @@ class ControlPlane(_BaseControlPlane):
 
         workspace_provider = self.workspace_provider
         if workspace_provider is None:
-            for workspace in self._scopes.list_workspaces():
-                documents.append(document_from_resource(_workspace_resource(workspace)))
+            for legacy_workspace in self._scopes.list_workspaces():
+                documents.append(document_from_resource(_workspace_resource(legacy_workspace)))
         else:
-            for workspace in await workspace_provider.list_workspaces():
+            for canonical_workspace in await workspace_provider.list_workspaces():
                 documents.append(
                     SearchDocument(
                         resource_type="workspace",
-                        resource_id=workspace.id,
-                        title=f"Workspace {workspace.id}",
-                        project_id=workspace.project_id,
-                        workspace_id=workspace.id,
-                        owner_type=workspace.owner_ref.type,
-                        owner_id=workspace.owner_ref.id,
-                        keywords=("workspace", workspace.id, workspace.project_id),
-                        updated_at=workspace.updated_at.isoformat(),
-                        canonical_ref=f"/api/{API_VERSION}/workspaces/{workspace.id}",
+                        resource_id=canonical_workspace.id,
+                        title=f"Workspace {canonical_workspace.id}",
+                        project_id=canonical_workspace.project_id,
+                        workspace_id=canonical_workspace.id,
+                        owner_type=canonical_workspace.owner_ref.type,
+                        owner_id=canonical_workspace.owner_ref.id,
+                        keywords=(
+                            "workspace",
+                            canonical_workspace.id,
+                            canonical_workspace.project_id,
+                        ),
+                        updated_at=canonical_workspace.updated_at.isoformat(),
+                        canonical_ref=f"/api/{API_VERSION}/workspaces/{canonical_workspace.id}",
                         provenance={"indexed_from": "canonical-workspace-provider"},
                     )
                 )
