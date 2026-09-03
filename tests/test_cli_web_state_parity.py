@@ -12,12 +12,7 @@ from ai_multi_agent_platform.cli.main import run_cli
 
 
 FIXTURE_PATH = (
-    Path(__file__).parents[1]
-    / "frontend"
-    / "src"
-    / "api"
-    / "__fixtures__"
-    / "canonical-task.json"
+    Path(__file__).parents[1] / "frontend" / "src" / "api" / "__fixtures__" / "canonical-task.json"
 )
 
 
