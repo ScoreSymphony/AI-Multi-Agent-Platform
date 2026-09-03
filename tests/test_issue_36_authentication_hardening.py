@@ -202,5 +202,23 @@ def test_worker_rotation_revokes_old_secret_and_preserves_scope() -> None:
     assert compromised.value.failure is AuthenticationFailure.CREDENTIAL_REVOKED
 
 
+def test_scoped_credential_openapi_matches_request_contract() -> None:
+    auth = _service()
+    http = AuthenticatedControlPlaneHTTP(_PermissiveControlPlane(), auth, secure_cookie=False)
+
+    response = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json")))
+
+    assert response.status == 200
+    credential_post = response.body["paths"]["/api/v1/auth/credentials"]["post"]
+    schema = credential_post["requestBody"]["content"]["application/json"]["schema"]
+    assert schema["required"] == ["purpose"]
+    assert schema["properties"]["expires_at"]["format"] == "date-time"
+    scope_schema = schema["properties"]["scope"]
+    assert scope_schema["type"] == "object"
+    assert scope_schema["properties"]["actions"]["type"] == "array"
+    assert scope_schema["properties"]["resource_types"]["type"] == "array"
+    assert scope_schema["properties"]["resource_ids"]["type"] == "array"
+
+
 def _run(awaitable: object) -> object:
     return asyncio.run(awaitable)
