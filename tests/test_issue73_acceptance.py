@@ -222,12 +222,8 @@ def test_canonical_session_and_stream_payloads_do_not_leak_backend_private_handl
             )
         )
     )
-    frames = asyncio.run(
-        service.read_frames(session.id, actor_ref=principal, operation=operation)
-    )
-    attachment = asyncio.run(
-        service.attach(session.id, actor_ref=principal, operation=operation)
-    )
+    frames = asyncio.run(service.read_frames(session.id, actor_ref=principal, operation=operation))
+    attachment = asyncio.run(service.attach(session.id, actor_ref=principal, operation=operation))
     serialized = repr(
         {
             "session": session.to_json(),
