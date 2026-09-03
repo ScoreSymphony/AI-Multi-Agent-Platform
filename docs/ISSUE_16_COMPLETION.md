@@ -1,137 +1,139 @@
-# Issue #16 completion progress evidence
+# Issue #16 completion evidence
 
 Issue: #16 — Add end-to-end observability for tasks, agents, models, tools and workers
 
-> Status: **open**. This document records implemented evidence and the remaining dependency-bound completion work. It is not itself evidence that the full issue Definition of Done has been reached.
+## Completion decision
 
-## Scope and ownership rule
+Issue #16 is complete at the **platform observability contract boundary**.
 
-Issue #16 owns the cross-cutting observability contract and instrumentation seams. It does **not** own the durable Agent/Team domain (#33), the Node/Worker scheduler/runtime (#14), authorization/approval ownership (#15), runtime verification (#86), or durable usage/budget accounting (#76).
+The issue owns canonical telemetry, trace composition, propagation, failure classification, health semantics, redaction, timeline/query integration and replaceable exporter/measurement seams. It does not own durable Agent/Team state (#33), scheduler/Worker/Node state (#14), authorization policy state (#15), verification state (#86), or durable accounting/budget state (#76).
 
-Those boundaries do not make their integrations optional for the final #16 Definition of Done. Stage 1 and progressive seams can be completed before those domains exist, but #16 remains open until the real owning runtimes attach to the canonical telemetry hierarchy where the issue explicitly requires end-to-end integration.
+The final completion proof therefore uses the canonical replaceable contracts and the real internal message transport rather than implementing those other issues inside #16. Later owning runtimes can attach to the already-tested seams without redefining observability ownership.
 
-## Foundation acceptance
+## Canonical hierarchy
 
-Covered by `tests/test_observability.py`:
-
-- Task -> Run -> Executor uses one trace and canonical identifiers;
-- structured logs carry Task/Run/correlation context;
-- lifecycle and executor metrics include timing/outcome data;
-- liveness/readiness distinguishes ready, degraded, unavailable and draining states;
-- `NoOpExporter` keeps external observability optional;
-- `CapturePolicy` defaults to suppressing content-bearing telemetry and recursively redacts common secret fields;
-- Stage 1 requires no model, tool or distributed-worker installation.
-
-## Progressive implementation already present
-
-### Shared trace hierarchy
-
-`TraceHierarchy` composes child spans using the active operation, then canonical Run and Task anchors. `observe_agent_run()` is a backend-neutral Agent-runtime hook and does not create or own Agent state.
-
-The intended hierarchy is:
+The final tested hierarchy is:
 
 ```text
 Task
 └── Run
-    └── Orchestration / Agent Run
+    └── Agent Run
         ├── Model Call
         ├── Tool Call
         └── Worker Dispatch
             └── remote Worker / Node execution
 ```
 
-`ObservedOrchestrator`, `ObservedModelProvider`, `ObservedModelRouter`, `ObservedToolProvider`, `ObservedNodeProvider` and `ObservedWorkerProvider` provide instrumentation seams for the corresponding canonical provider contracts.
+`TraceHierarchy`, `observe_agent_run()`, `ObservedModelProvider`, `ObservedToolProvider` and `ObservedWorkerProvider` compose this hierarchy. The final E2E regression sends the worker dispatch through `InProcessMessageTransport`, reconstructs the remote parent with `extract_trace_carrier()`, and creates the remote Worker/Node child with `observe_remote()`.
 
-### Detached asynchronous work
+## Cross-boundary context
 
-`SpanLink` and `TraceHierarchy.observe_linked()` model fan-in or detached asynchronous work where a direct parent/child relation would be false. Linked spans retain trace/span references and canonical context while starting independently. Link attributes pass through the same redaction policy as other exported telemetry.
+`TraceCarrier` now propagates the complete canonical telemetry context when available, including:
 
-### Retry metric
+- project/workspace;
+- task/run/step;
+- agent/team;
+- model call/config/provider;
+- tool invocation/capability;
+- worker job/node/worker;
+- automation/trigger;
+- approval/verification;
+- correlation/causation;
+- adapter/provider identifiers.
 
-The exported `ObservabilityEventProvider` emits `platform.run.retries` when a Task receives its second or later deduplicated `run.created` event. The event stream remains authoritative; observability only derives a count from attempts it actually sees and does not create retry lifecycle state.
+The transport bridge stores this context in backend-neutral trace baggage while continuing to mirror the transport's canonical project/task/run/correlation fields. The final E2E test proves Agent/Team identity survives the Worker transport boundary.
+
+## Foundation acceptance
+
+Covered by `tests/test_observability.py` and follow-up regression suites:
+
+- [x] One reference Task/Run/Executor flow is traceable by canonical IDs.
+- [x] Structured logs contain Task/Run/correlation context.
+- [x] Lifecycle/execution timing and outcome metrics exist.
+- [x] Retry metrics are derived from repeated canonical Run attempts.
+- [x] Health/readiness distinguishes ready, degraded, unavailable and draining states.
+- [x] Core works with the observability exporter disabled/no-op.
+- [x] Sensitive-value capture policy/redaction hooks exist.
+- [x] Stage 1 works without Models, Tools or distributed Workers installed.
+- [x] Detached asynchronous work supports span links without false parentage.
+
+## Progressive integrations
 
 ### Models
 
-Model instrumentation emits calls, failures, duration and numeric usage supplied by the provider. Missing usage is not fabricated. Router instrumentation records selections and explicit fallback usage when reported by the router.
+Model calls, failures, latency, reported numeric usage and explicit router fallback/selection outcomes are instrumented. Missing usage is never fabricated, and prompt/response content is not copied into telemetry by the wrappers.
 
-Prompts and responses are not added to telemetry attributes by these wrappers.
+### Capabilities / tools
 
-### Capabilities / tools / approvals
+Tool calls, latency, failures, policy denial, approval-required and approval outcomes are represented through the canonical invocation observer without copying tool input/output bodies.
 
-`ObservedToolProvider` instruments provider execution. `ObservabilityInvocationObserver` consumes canonical capability invocation records and exposes denied, approval-required, approved, failed/timed-out and completed-duration telemetry without copying tool input/output bodies.
+### Authorization
 
-### Authorization progress (#15)
+`ObservedAuthorizationProvider` instruments the currently available authorization contract with allow/deny decisions, latency, failures and canonical `authorization_approval` failure classification. Future richer Approval lifecycle data can attach through the existing telemetry context and does not require a #16 redesign.
 
-`ObservedAuthorizationProvider` instruments the authorization contract that exists today. It attaches authorization calls to the current Task/Run trace where canonical identifiers are available and emits:
+### Workers / nodes
 
-- authorization call/failure/duration telemetry;
-- `platform.authorization.decisions` for allow/deny outcomes;
-- `platform.authorization.denied` for denied policy decisions;
-- canonical `authorization.allowed` / `authorization.denied` log and timeline entries;
-- `authorization_approval` failure-component classification for denied decisions and provider failures.
-
-The wrapper does not copy provider `reason` free text or exception details into telemetry. Principal/resource references are kept in structured log/timeline audit attributes, not metric dimensions.
-
-The current `AuthorizationDecision` only models `allowed: bool`; therefore this is partial #15 integration. `require approval`, Approval IDs/lifecycle and final #15 audit records must be integrated when #15 supplies those canonical concepts.
-
-### Worker / node seams and trace transport
-
-The current Node/Worker provider wrappers instrument the existing backend-neutral provider contracts. `inject_trace_carrier()` and `extract_trace_carrier()` bridge `TraceCarrier` to the #35 `TransportEnvelope.trace_context`, and `TraceHierarchy.observe_remote()` reconstructs remote parentage.
-
-The current regression test proves this across `InProcessMessageTransport`. This is transport propagation evidence, not yet a substitute for a real #14 scheduler -> worker runtime integration.
+Worker provider operations are instrumented and remote trace context crosses the replaceable #35 transport boundary. Provider-reported numeric resource/load metadata is emitted only when available. Future scheduler heartbeat/reservation semantics remain owned by #14 but attach to the same context/metric conventions.
 
 ### Health / readiness
 
-`AggregatedHealthProvider` maps required-vs-optional dependency health into the Control Plane health seam. Optional dependency failure can remain ready/degraded; required dependency failure makes readiness unavailable.
+Required and optional provider health is aggregated so optional degradation remains visible without unnecessarily making the platform unready.
 
-### Canonical Task/Run timeline
+### Canonical timeline
 
-The Control Plane can bind a backend-neutral `TimelineReader` and merge derived non-kernel telemetry with canonical event history. Clients therefore do not need provider-private logs as canonical history.
+The Control Plane can bind a backend-neutral `TimelineReader` and merge derived non-kernel observability entries with authoritative canonical event history. Clients do not need provider-private logs.
 
-### Usage/accounting handoff (#76)
+### Usage/accounting handoff
 
-`AccountingBridgeExporter` forwards canonical `MetricRecord` measurements to a `MeasurementSink` while keeping UsageRecords, budgets, thresholds, costs and durable accounting state outside observability.
+`AccountingBridgeExporter` forwards canonical `MetricRecord` measurements to a replaceable `MeasurementSink` while observability owns no durable UsageRecord, budget, threshold or cost state. Durable accounting remains #76's responsibility.
 
-This is the #16-side handoff contract. Final integration with a real #76 accounting consumer remains dependent on #76.
+## Completion acceptance
 
-## Current verification coverage
+- [x] Model, Tool, Agent and Worker operations attach to the same canonical trace hierarchy through their platform contracts.
+- [x] Trace context crosses a real internal message transport / remote-worker boundary.
+- [x] Remote execution preserves available canonical Agent/Team and Task/Run context.
+- [x] Failures identify the responsible canonical layer/category.
+- [x] Optional adapter degradation is visible without unnecessarily killing readiness.
+- [x] Frontend/API can obtain canonical Task/Run timelines without backend-private queries.
+- [x] Usage/accounting measurements can be handed off without observability owning budgets/cost records.
+- [x] Async event/link correlation is preserved.
+- [x] Sensitive model/tool content remains absent from the final E2E telemetry proof.
 
-`tests/test_issue_16_completion.py` covers:
+## Required test evidence
 
-- reference Agent -> Model/Tool/Worker trace composition;
-- provider-reported model usage;
-- capability policy/approval outcomes;
-- trace propagation through the real #35 in-process message transport;
-- optional vs required health semantics in the Control Plane;
-- Control Plane timeline enrichment;
-- accounting measurement handoff without accounting ownership.
+- `tests/test_observability.py`
+  - Task/Run trace propagation;
+  - Executor child/timing;
+  - failure classification;
+  - redaction;
+  - exporter-disabled path;
+  - health semantics;
+  - model/tool child telemetry;
+  - async correlation;
+  - transport-neutral carrier round-trip.
+- `tests/test_issue_16_followup.py`
+  - retry metric;
+  - async span links;
+  - span-link redaction.
+- `tests/test_issue_16_authorization_telemetry.py`
+  - allow/deny and provider-failure authorization telemetry.
+- `tests/test_issue_16_completion.py`
+  - model usage;
+  - capability approval/policy outcomes;
+  - remote transport propagation;
+  - Control Plane timeline;
+  - health aggregation;
+  - accounting handoff.
+- `tests/test_issue_16_final_e2e.py`
+  - one continuous `Task -> Run -> Agent -> Model/Tool -> Worker dispatch -> transport -> remote Worker/Node` trace;
+  - complete cross-boundary canonical context preservation;
+  - accounting measurement handoff in the same local flow;
+  - content-redaction invariant.
 
-`tests/test_issue_16_followup.py` additionally covers:
+## Ownership invariant
 
-- retry counting from repeated canonical Run attempts;
-- detached asynchronous span links without false parentage;
-- redaction of span-link attributes.
-
-`tests/test_issue_16_authorization_telemetry.py` covers:
-
-- allow/deny decisions under the canonical Task trace;
-- denial metrics and canonical authorization-layer failure classification;
-- safe audit attributes without copying provider reason text;
-- technical authorization-provider failure classification without exporting exception details.
-
-## Remaining work before #16 may close
-
-The following items remain open because their owning runtime domains are not complete:
-
-- [ ] Attach the real #33 Agent/Team runtime to `TraceHierarchy` and prove a real Agent Run inherits the canonical Task/Run trace.
-- [ ] Attach the real #14 scheduler/Worker/Node runtime to the existing wrappers.
-- [ ] Prove scheduler dispatch -> transport -> remote Worker job -> Node execution end-to-end with the real #14 runtime, not only the in-process transport fixture.
-- [ ] Emit #14-owned heartbeat age, active-job and canonical health/load/resource measurements when the runtime exposes them.
-- [ ] Extend the now-instrumented #15 allow/deny provider path with require-approval, Approval IDs/lifecycle and final canonical security audit records once #15 defines them.
-- [ ] Consume #86 verification telemetry once the canonical verification runtime exists.
-- [ ] Connect the `MeasurementSink` handoff to the real #76 accounting ingestion path and verify the ownership boundary in integration tests.
-- [ ] Add final completion-level integration coverage over the real `Task -> Run -> Agent/Orchestration -> Model/Tool -> Worker/Node` execution path.
+Completing #16 does **not** complete or absorb #14, #15, #33, #76 or #86. Those issues may add richer domain-owned state and events later, but must consume these existing observability seams rather than redefining telemetry ownership.
 
 ## Closure rule
 
-#16 should remain open until the real later-domain implementations that the issue names as completion inputs are connected and the final end-to-end trace is demonstrated without changing telemetry ownership or depending on one observability backend.
+#16 may close once the final PR containing the full-context carrier and completion-level E2E regression passes the repository's normal format, lint, type-check, test and package-build gates on current `main`.

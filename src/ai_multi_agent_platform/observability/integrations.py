@@ -16,7 +16,7 @@ from .health import DependencyHealth, ReadinessState, ServiceHealth, aggregate_h
 from .models import MetricRecord, SpanRecord, StructuredLog, TimelineEntry
 from .propagation import TraceCarrier
 
-_TRACE_BAGGAGE_STEP_ID = "ai-observability-step-id"
+_TRACE_PREFIX = "ai-observability-"
 
 
 class TimelineReader(Protocol):
@@ -147,11 +147,10 @@ def inject_trace_carrier(
     envelope: TransportEnvelope,
     carrier: TraceCarrier,
 ) -> TransportEnvelope:
-    """Attach canonical trace parentage to a replaceable #35 transport envelope."""
+    """Attach trace parentage and canonical observability context to a #35 envelope."""
 
     baggage = dict(envelope.trace_context.baggage)
-    if carrier.step_id is not None:
-        baggage[_TRACE_BAGGAGE_STEP_ID] = carrier.step_id
+    baggage.update(carrier.to_mapping())
     trace_context = TraceContext(
         trace_id=carrier.trace_id,
         span_id=carrier.parent_span_id,
@@ -171,7 +170,7 @@ def inject_trace_carrier(
 
 
 def extract_trace_carrier(envelope: TransportEnvelope) -> TraceCarrier:
-    """Reconstruct a trace parent after a message crossed a process/worker boundary."""
+    """Reconstruct the full canonical trace context after a transport boundary."""
 
     trace_id = envelope.trace_context.trace_id
     parent_span_id = envelope.trace_context.span_id
@@ -179,17 +178,20 @@ def extract_trace_carrier(envelope: TransportEnvelope) -> TraceCarrier:
         raise ValueError("transport envelope is missing trace_id")
     if parent_span_id is None or not parent_span_id.strip():
         raise ValueError("transport envelope is missing parent span_id")
-    step_id = envelope.trace_context.baggage.get(_TRACE_BAGGAGE_STEP_ID)
-    return TraceCarrier(
-        trace_id=trace_id,
-        parent_span_id=parent_span_id,
-        correlation_id=envelope.correlation_id,
-        causation_id=envelope.causation_id,
-        project_id=envelope.project_id,
-        task_id=envelope.task_id,
-        run_id=envelope.run_id,
-        step_id=step_id,
-    )
+
+    values = dict(envelope.trace_context.baggage)
+    values[f"{_TRACE_PREFIX}trace-id"] = trace_id
+    values[f"{_TRACE_PREFIX}parent-span-id"] = parent_span_id
+    values[f"{_TRACE_PREFIX}correlation-id"] = envelope.correlation_id
+    for key, value in (
+        ("causation-id", envelope.causation_id),
+        ("project-id", envelope.project_id),
+        ("task-id", envelope.task_id),
+        ("run-id", envelope.run_id),
+    ):
+        if value is not None:
+            values[f"{_TRACE_PREFIX}{key}"] = value
+    return TraceCarrier.from_mapping(values)
 
 
 def timeline_entry_resource(entry: TimelineEntry) -> dict[str, JsonValue]:
