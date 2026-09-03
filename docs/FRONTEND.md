@@ -43,12 +43,17 @@ The initial shell has progressed beyond the first Task/Run vertical slice. The c
 - Projects/Workspaces — Project list/create/detail and Workspace list/create/detail, including canonical Workspace lifecycle fields where a Workspace provider is composed and explicit `identity_only` fallback otherwise;
 - Tasks — canonical Task management, including the practical #88 queue/filter/sort/metadata/dependency/bulk-management surface already exposed by the Control Plane;
 - Runs — canonical Run list/detail;
+- Agents — canonical Agent definitions with immutable current revision, role, model/capability/data-access policy metadata and read-only AgentRun evidence linked through canonical Agent/Task/Run IDs;
+- Agent Teams — canonical Team definitions with immutable current revision, exact pinned member Agent revisions, delegation relationships, shared capabilities and runtime limits;
 - Files/Artifacts — read-only canonical Artifact, Result, Plan and Step references with Task/Plan links; raw file bytes, storage paths and provider-private storage metadata are intentionally not inferred;
+- Search — global canonical Search over `GET /api/v1/search` with authorization-filtered results, filters and opaque cursor pagination; unsupported semantic/hybrid modes remain optional/degraded rather than mandatory;
+- Tools/Capabilities — canonical Capability inventory plus public Capability Provider descriptors, including versioned health, safety, side effects, permissions, approval requirements and schema summaries; no provider-private invocation path is invented;
 - Models/Providers — canonical model inventory, provider inventory, health/capabilities and supported model/provider commands;
+- Terminal/Sessions — canonical Terminal session UI and Control Plane streaming gateway from #73, without exposing backend process/session handles as frontend identity;
 - Events/Observability — Task-scoped timeline and available backend-neutral observability information;
 - Usage & Limits — canonical usage records, aggregates and budgets exposed by the Control Plane.
 
-Paginated list surfaces use opaque server cursors. The frontend stores only cursor history required for local Previous navigation; it never decodes a cursor or derives an offset from it. Combined inventory pages such as Projects/Workspaces and Models/Providers keep independent pagination state for each canonical collection.
+Paginated list surfaces use opaque server cursors. The frontend stores only cursor history required for local Previous navigation; it never decodes a cursor or derives an offset from it. Combined inventory pages such as Projects/Workspaces, Models/Providers, Agents/AgentRuns and Capabilities/Capability Providers keep independent pagination state for each canonical collection.
 
 ## Task / Run vertical slice
 
@@ -66,7 +71,7 @@ Every mutating client call generates an `Idempotency-Key`; every HTTP request em
 
 ## Authentication and authorization boundary
 
-The HTTP client always uses `credentials: include` so a future #36 same-origin/session-cookie implementation can be attached without rewriting page code. An optional access-token callback exists as an integration seam; token storage is deliberately not implemented here.
+The HTTP client always uses `credentials: include` so the #36 same-origin/session-cookie implementation can be attached without rewriting page code once its canonical surface is merged. An optional access-token callback exists as an integration seam; token storage is deliberately not implemented here.
 
 Permission hooks are advisory presentation hints only. Buttons are never proof of authorization: the Control Plane remains authoritative. Canonical unauthenticated and authorization-denied responses are presented separately. Approval-required authorization outcomes are surfaced with their canonical approval reference when the Control Plane returns one; the frontend does not manufacture or bypass approval state.
 
@@ -90,6 +95,8 @@ Common loading, empty, error and degraded components are used across integrated 
 - unavailable/retryable subsystem failures;
 - ordinary contract/request failures.
 
+The shell also distinguishes initial Control Plane discovery (`Checking API`) from a real manifest failure (`API unavailable`), so accessibility live regions do not announce a false outage during normal startup.
+
 Reserved product routes inspect the Control Plane manifest. If a canonical resource is absent, they remain visibly unavailable and do not call private implementation services. If a resource becomes advertised before its dedicated UI is implemented, the shell reports that the integration is pending rather than guessing the resource schema.
 
 ## Timeline compatibility
@@ -98,7 +105,7 @@ The timeline may contain both canonical domain events (`type=event`) and backend
 
 ## Accessibility and responsive baseline
 
-The shell includes a skip link, semantic navigation/main landmarks, labelled command groups, visible focusable controls, table overflow handling, accessible pagination status/controls and a mobile sidebar. This is a baseline rather than a claim of a completed end-to-end accessibility audit.
+The shell includes a skip link, semantic navigation/main landmarks, labelled command groups, visible focusable controls, table overflow handling, accessible pagination status/controls and a mobile sidebar. Active navigation exposes `aria-current`, menu controls reference the sidebar with `aria-controls`, API availability is announced separately from loading, and Task live-transport status is announced separately from Task lifecycle state. This is a baseline rather than a claim of a completed end-to-end accessibility audit.
 
 ## Frontend contract tests
 
@@ -109,10 +116,15 @@ The frontend test suite now includes focused contract coverage for:
 - idempotency and correlation headers on mutations;
 - canonical Workspace and reference-resource contracts;
 - Task-management client contracts;
+- CLI/Web canonical Task-state parity fixtures;
 - opaque cursor forwarding and pagination state behavior;
-- independent Project/Workspace and Model/Provider cursors;
+- independent Project/Workspace, Model/Provider, Agent/AgentRun and Capability/Capability Provider cursors;
+- canonical Agent, Agent Team, AgentRun, Capability and Capability Provider route forwarding;
+- global Search query/result navigation through the canonical Search endpoint;
+- canonical Terminal session/gateway client behavior;
 - canonical SSE URL, credential handling, event/error delivery and reconnect/close state;
-- explicit unavailable/degraded navigation behavior.
+- explicit unavailable/degraded navigation behavior;
+- shell accessibility status semantics, including loading versus actual API outage.
 
 These tests validate the client boundary; backend lifecycle, authorization and persistence remain owned by their canonical services.
 
@@ -141,14 +153,11 @@ The #17 shell is established. Reserved routes are activated progressively by the
 
 At the current repository state, dedicated browser integrations must still wait for the owning northbound APIs for areas such as:
 
-- Agents / Agent Teams;
-- Capabilities / Tools;
-- Nodes / Workers / Compute;
+- Nodes / Workers / Compute (#14);
 - Approvals as a browsable/actionable canonical collection;
-- Authentication/session UI from #36;
-- Verification / Review;
-- Organizations / Memberships;
-- Search;
+- Authentication/session UI from #36 until its current implementation is merged and composed on `main`;
+- Verification / Review (#86);
+- Organizations / Memberships (#87), which itself depends on #36;
 - Notifications;
 - Memory/Knowledge beyond currently available reference-level data;
 - other later product surfaces such as Automations, Evaluations, Plugins, Templates and Import/Export where their canonical contracts are not yet composed.
