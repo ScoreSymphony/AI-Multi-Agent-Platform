@@ -1,12 +1,18 @@
-"""Observability adapter for the currently available authorization provider contract."""
+"""Observability adapter for the provider-neutral authorization contract."""
 
 from __future__ import annotations
 
 from ai_multi_agent_platform.contracts import (
-    AuthorizationDecision,
+    AuthorizationOutcome,
     AuthorizationProvider,
-    AuthorizationRequest,
     ProviderDescriptor,
+    normalize_authorization_decision,
+)
+from ai_multi_agent_platform.contracts.types import (
+    AuthorizationDecision as BaseAuthorizationDecision,
+)
+from ai_multi_agent_platform.contracts.types import (
+    AuthorizationRequest as BaseAuthorizationRequest,
 )
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -22,11 +28,7 @@ from .models import (
 
 
 class ObservedAuthorizationProvider(AuthorizationProvider):
-    """Instrument allow/deny authorization decisions without owning policy state.
-
-    The current canonical authorization contract exposes only allow/deny. Approval
-    lifecycle telemetry is intentionally left to #15 once that richer contract exists.
-    """
+    """Instrument authorization decisions without owning policy or approval state."""
 
     def __init__(
         self,
@@ -43,7 +45,7 @@ class ObservedAuthorizationProvider(AuthorizationProvider):
     def descriptor(self) -> ProviderDescriptor:
         return self._provider.descriptor
 
-    async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision:
+    async def authorize(self, request: BaseAuthorizationRequest) -> BaseAuthorizationDecision:
         context = _authorization_context(request, self.descriptor.provider_id)
         audit_attributes: dict[str, JsonValue] = {
             "action": request.action,
@@ -52,10 +54,10 @@ class ObservedAuthorizationProvider(AuthorizationProvider):
             "provider_id": self.descriptor.provider_id,
         }
 
-        async def operation() -> AuthorizationDecision:
+        async def operation() -> BaseAuthorizationDecision:
             return await self._provider.authorize(request)
 
-        decision = await self.hierarchy.observe(
+        raw_decision = await self.hierarchy.observe(
             span_name="authorization.authorize",
             metric_prefix="platform.authorization",
             event_prefix="authorization",
@@ -67,19 +69,31 @@ class ObservedAuthorizationProvider(AuthorizationProvider):
                 "provider_id": self.descriptor.provider_id,
             },
         )
+        decision = normalize_authorization_decision(raw_decision)
 
-        outcome = TelemetryOutcome.SUCCEEDED if decision.allowed else TelemetryOutcome.FAILED
         failure = None
         severity = TelemetrySeverity.INFO
-        event_name = "authorization.allowed"
-        if not decision.allowed:
+        if decision.outcome is AuthorizationOutcome.ALLOW:
+            outcome = TelemetryOutcome.SUCCEEDED
+            event_name = "authorization.allowed"
+        elif decision.outcome is AuthorizationOutcome.REQUIRE_APPROVAL:
+            outcome = TelemetryOutcome.SUCCEEDED
+            event_name = "authorization.approval_required"
+            self._telemetry.metric(
+                "platform.authorization.approval_required",
+                1.0,
+                context=context,
+                attributes={"action": request.action},
+            )
+        else:
+            outcome = TelemetryOutcome.FAILED
+            event_name = "authorization.denied"
             failure = FailureClassification(
                 component=FailureComponent.AUTHORIZATION_APPROVAL,
                 code="authorization_denied",
                 retryable=False,
             )
             severity = TelemetrySeverity.WARNING
-            event_name = "authorization.denied"
             self._telemetry.metric(
                 "platform.authorization.denied",
                 1.0,
@@ -91,7 +105,11 @@ class ObservedAuthorizationProvider(AuthorizationProvider):
             "platform.authorization.decisions",
             1.0,
             context=context,
-            attributes={"action": request.action, "allowed": decision.allowed},
+            attributes={
+                "action": request.action,
+                "allowed": decision.allowed,
+                "outcome": decision.outcome.value,
+            },
         )
         self._telemetry.log(
             severity=severity,
@@ -113,7 +131,10 @@ class ObservedAuthorizationProvider(AuthorizationProvider):
         return decision
 
 
-def _authorization_context(request: AuthorizationRequest, provider_id: str) -> TelemetryContext:
+def _authorization_context(
+    request: BaseAuthorizationRequest,
+    provider_id: str,
+) -> TelemetryContext:
     task_id = None
     run_id = None
     if request.resource_ref.startswith("task_"):

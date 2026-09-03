@@ -1,4 +1,9 @@
-"""Minimal secure-default decision helpers used before issue #15 lands."""
+"""Compatibility helper for simple secure-default decisions.
+
+Issue #15's canonical policy engine is ``LocalAuthorizationProvider`` plus
+``AuthorizationGate``. This helper remains for older narrow call sites that only need
+an explicit allow/approval boolean without a provider round-trip.
+"""
 
 from __future__ import annotations
 
@@ -12,13 +17,7 @@ def baseline_decision(
     approval_required: bool = False,
     approval_granted: bool = False,
 ) -> SecurityDecision:
-    """Return a deterministic deny-by-default decision.
-
-    Adapter/private metadata is deliberately not consulted. Authority must come
-    from canonical policy/approval inputs, never backend identity or model text.
-    ``context`` is accepted so callers keep actor/action/resource binding at the
-    enforcement point and so the API can evolve without changing that ownership.
-    """
+    """Return a deterministic deny-by-default compatibility decision."""
 
     _ = context
     if not explicitly_allowed:

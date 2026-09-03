@@ -1,5 +1,11 @@
 """Public provider-neutral contract surface."""
 
+from .authorization import (
+    AuthorizationDecision,
+    AuthorizationOutcome,
+    AuthorizationRequest,
+    normalize_authorization_decision,
+)
 from .domain_mapping import (
     map_tool_invocation_to_domain,
     tool_invocation_arguments_digest,
@@ -25,8 +31,6 @@ from .interfaces import (
 from .types import (
     CONTRACT_VERSION,
     AdapterMetadata,
-    AuthorizationDecision,
-    AuthorizationRequest,
     Capability,
     CapabilityKind,
     ExecutionHandle,
@@ -59,8 +63,10 @@ __all__ = [
     "CONTRACT_VERSION",
     "AdapterMetadata",
     "AuthorizationDecision",
+    "AuthorizationOutcome",
     "AuthorizationProvider",
     "AuthorizationRequest",
+    "normalize_authorization_decision",
     "Capability",
     "CapabilityKind",
     "CapabilityProvider",
