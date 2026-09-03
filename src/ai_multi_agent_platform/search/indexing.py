@@ -205,11 +205,19 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "location",
         "health",
         "effective_health",
+        "task_id",
+        "plan_id",
     ):
         value = _optional_string(resource, field)
         if value is not None:
             values.append(value)
-    for field in ("aliases", "supported_operations", "modalities", "reasoning"):
+    for field in (
+        "aliases",
+        "supported_operations",
+        "modalities",
+        "reasoning",
+        "step_ids",
+    ):
         values.extend(_string_sequence(resource, field))
     for field, positive, negative in (
         ("enabled", "enabled", "disabled"),
