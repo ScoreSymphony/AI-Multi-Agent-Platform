@@ -8,14 +8,24 @@ describe("#17 stable navigation baseline", () => {
       "/projects",
       "/tasks",
       "/runs",
+      "/agents",
+      "/agent-teams",
       "/files",
+      "/search",
+      "/tools",
       "/models",
+      "/terminal",
       "/events",
       "/observability",
       "/usage",
     ]) {
       expect(paths.has(path)).toBe(true);
     }
+  });
+
+  it("binds the Tools route to the canonical capability collection", () => {
+    const tools = navigation.find((item) => item.path === "/tools");
+    expect(tools?.apiResource).toBe("capabilities");
   });
 
   it("does not expose optional Registry or HA navigation in the baseline shell", () => {
