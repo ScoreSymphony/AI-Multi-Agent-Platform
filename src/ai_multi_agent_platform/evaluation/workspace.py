@@ -129,7 +129,9 @@ class WorkspaceEvaluationIsolation:
         if not case.fixtures:
             return ResolvedEvaluationFixtures()
         if self._fixture_resolver is None:
-            raise ValueError("evaluation case declares fixtures but no fixture resolver is configured")
+            raise ValueError(
+                "evaluation case declares fixtures but no fixture resolver is configured"
+            )
         return await self._fixture_resolver.resolve_fixtures(case=case, attempt=attempt)
 
     async def reset_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None:
