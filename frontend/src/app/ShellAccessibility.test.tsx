@@ -68,6 +68,10 @@ describe("#17 shell accessibility semantics", () => {
     expect(terminal).toContain("Checking Terminal availability");
     expect(terminal).not.toContain("Execution sessions");
 
+    const automations = renderShell("/automations");
+    expect(automations).toContain("Checking Automations availability");
+    expect(automations).not.toContain("Canonical automation management");
+
     const approvals = renderShell("/approvals");
     expect(approvals).toContain("Checking Approvals availability");
     expect(approvals).not.toContain("Read-only inspection of exact-action approval records");
@@ -76,11 +80,12 @@ describe("#17 shell accessibility semantics", () => {
   it("distinguishes advertised, absent and unavailable manifest resources", () => {
     const manifest = {
       api_version: "v1",
-      resources: ["agents", "capabilities", "terminal-sessions", "approvals"],
+      resources: ["agents", "capabilities", "terminal-sessions", "automations", "approvals"],
     } as APImanifest;
 
     expect(manifestResourceState("loading", null, "agents")).toBe("loading");
     expect(manifestResourceState("ready", manifest, "agents")).toBe("available");
+    expect(manifestResourceState("ready", manifest, "automations")).toBe("available");
     expect(manifestResourceState("ready", manifest, "approvals")).toBe("available");
     expect(manifestResourceState("ready", manifest, "agent-teams")).toBe("unavailable");
     expect(manifestResourceState("unavailable", null, "agents")).toBe("unavailable");

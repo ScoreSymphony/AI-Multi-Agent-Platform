@@ -50,6 +50,7 @@ The initial shell has progressed beyond the first Task/Run vertical slice. The c
 - Tools/Capabilities — canonical Capability inventory plus public Capability Provider descriptors, including versioned health, safety, side effects, permissions, approval requirements and schema summaries; no provider-private invocation path is invented;
 - Models/Providers — canonical model inventory, provider inventory, health/capabilities and supported model/provider commands;
 - Terminal/Sessions — canonical Terminal session UI and Control Plane streaming gateway from #73, without exposing backend process/session handles as frontend identity;
+- Automations — canonical `automations` and `automation-deliveries` management from #18, including create/update, pause/resume/disable, manual test delivery, delivery history and failed-delivery retry. Webhook ingestion, platform-event injection and scheduler evaluation remain system/integration paths rather than ordinary browser buttons;
 - Approvals — read-only canonical exact-action approval queue and detail views with risk, policy, digest, Task/Run/Capability references and decision metadata; proposed payload values are not exposed and no approve/deny command is invented;
 - Settings/Authentication — #36 browser login, current canonical identity, browser-session inventory, renewal, targeted session revocation and logout; the HttpOnly session secret remains opaque to frontend code;
 - Events/Observability — Task-scoped timeline and available backend-neutral observability information;
@@ -57,7 +58,7 @@ The initial shell has progressed beyond the first Task/Run vertical slice. The c
 
 Paginated list surfaces use opaque server cursors. The frontend stores only cursor history required for local Previous navigation; it never decodes a cursor or derives an offset from it. Combined inventory pages such as Projects/Workspaces, Models/Providers, Agents/AgentRuns and Capabilities/Capability Providers keep independent pagination state for each canonical collection.
 
-Read-only extension collections such as `approvals` use the same versioned Control Plane and session-aware browser transport through a constrained collection reader. Collection names are validated before URL construction, opaque cursor/filter values are forwarded without decoding, and there is no provider/private-backend fallback.
+Read-only extension collections such as `approvals`, `automations` and `automation-deliveries` use the same versioned Control Plane and session-aware browser transport through a constrained collection reader. Collection names are validated before URL construction, opaque cursor/filter values are forwarded without decoding, and there is no provider/private-backend fallback. Domain mutations remain explicit typed clients rather than a generic arbitrary-command surface.
 
 ## Task / Run vertical slice
 
@@ -77,13 +78,15 @@ Every mutating client call generates an `Idempotency-Key`; every HTTP request em
 
 The shell composes the #36 browser-session boundary in front of the shared `ControlPlaneClient`. All requests continue to use `credentials: include`; the opaque session secret exists only in the server-issued `HttpOnly` cookie and is never read or persisted by frontend code.
 
-`POST /api/v1/auth/login` and `POST /api/v1/auth/session:renew` return the separate browser CSRF token required by #36. The frontend retains only that CSRF token in same-origin `localStorage`; it is not a bearer credential or session secret. Before every unsafe cookie-authenticated request, the shared session-aware fetch boundary re-reads the current stored value and injects `X-CSRF-Token`. This keeps concurrent tabs aligned when session renewal rotates the CSRF token while allowing the HttpOnly authentication cookie to remain opaque. Existing Task, Model, Workspace and Terminal mutations therefore inherit #36 CSRF protection without duplicating security logic in individual pages. Requests carrying an explicit Bearer `Authorization` header do not receive the browser CSRF header.
+`POST /api/v1/auth/login` and `POST /api/v1/auth/session:renew` return the separate browser CSRF token required by #36. The frontend retains only that CSRF token in same-origin `localStorage`; it is not a bearer credential or session secret. Before every unsafe cookie-authenticated request, the shared session-aware fetch boundary re-reads the current stored value and injects `X-CSRF-Token`. This keeps concurrent tabs aligned when session renewal rotates the CSRF token while allowing the HttpOnly authentication cookie to remain opaque. Existing Task, Model, Workspace, Terminal and Automation mutations therefore inherit #36 CSRF protection without duplicating security logic in individual pages. Requests carrying an explicit Bearer `Authorization` header do not receive the browser CSRF header.
 
 The Settings surface consumes only canonical #36 routes for login, `auth/me`, session enumeration, renewal, targeted session revocation and logout. First-user bootstrap, password recovery and credential/PAT administration are intentionally not inferred as ordinary browser workflows merely because backend hooks exist; they retain their separate operator/authorization semantics.
 
 Authentication establishes identity only. Permission hooks remain advisory presentation hints, and buttons are never proof of authorization: the Control Plane and #15 remain authoritative. Canonical unauthenticated and authorization-denied responses are presented separately. Approval-required authorization outcomes are surfaced with their canonical approval reference when the Control Plane returns one; the frontend does not manufacture or bypass approval state.
 
 The Approval surface is deliberately inspection-only. It consumes the canonical `approvals` ResourceService projection and shows exact-action binding metadata without proposed payload values. Decision authority remains inside #15. Until a northbound decision route exists that preserves exact digest, actor, expiry, policy and authorization semantics, the web client exposes no Approve/Deny buttons.
+
+Automation ownership is also server-derived. Creation uses the authenticated canonical actor context rather than client-supplied identity. Configuration mutations use the exact #18 command names and remain authorization-gated server-side. Webhook configuration accepts only the canonical verification reference; embedded webhook secrets are not a browser configuration field. Delivery payloads are not rendered by default in history views.
 
 SSE relies on browser credential handling because native `EventSource` does not allow arbitrary Authorization headers. #36 authenticates the stream request server-side before the canonical event transport constructs its request context.
 
@@ -134,7 +137,8 @@ The frontend test suite now includes focused contract coverage for:
 - global Search query/result navigation through the canonical Search endpoint;
 - canonical Terminal session/gateway client behavior;
 - constrained read-only extension collection URL/filter/cursor forwarding and path-injection rejection;
-- manifest-gated read-only Approval queue routing;
+- canonical Automation create/update/lifecycle/manual-test/retry command routing with idempotency;
+- manifest-gated Automation and Approval routing;
 - canonical SSE URL, credential handling, event/error delivery and reconnect/close state;
 - explicit unavailable/degraded navigation behavior and manifest-gated optional routes;
 - shell accessibility status semantics, including loading versus actual API outage and the real Settings/session route.
@@ -164,15 +168,15 @@ No upstream source is copied, vendored, forked or selectively ported into this r
 
 The #17 shell is established. Reserved routes are activated progressively by their owning domain issues when a canonical northbound Control Plane resource/command is actually composed.
 
-At the current repository state, the remaining browser work is split between APIs that are still absent and newly available APIs whose dedicated #17 presentation has not yet been integrated:
+At the current repository state, the remaining browser work is blocked by owning domains or missing northbound product contracts rather than by hidden frontend fallbacks:
 
 - Nodes / Workers / Compute still waits for #14;
 - Verification / Review still waits for #86;
 - Organizations / Memberships still waits for #87;
-- Notifications still lacks its dedicated canonical browser surface;
-- Memory/Knowledge content management remains beyond the currently available reference/provider-level data;
-- canonical `automations` and `automation-deliveries` now exist and can be integrated through their #18 Control Plane contracts;
-- Plugins waits for the #20 Control Plane/CLI lifecycle work to merge and stabilize;
+- Notifications still waits for #75;
+- Memory/Knowledge content management remains beyond the currently available provider-level `data-providers` diagnostics surface from #13; provider diagnostics must not be mistaken for content CRUD;
+- Approval decision mutation waits for a safe northbound #15 decision route; the existing `approvals` collection is intentionally read-only;
+- Plugins waits for the #20 Control Plane lifecycle work to be fully merged and stabilized;
 - other later product surfaces such as Evaluations, Templates and Import/Export remain progressive according to their owning canonical contracts.
 
 Backend implementations existing in Python are not sufficient to activate a browser page. The frontend integrates a domain only after the platform exposes its versioned canonical API through the Control Plane. Until then, the stable route remains unavailable/degraded and no browser-side fallback is permitted.
