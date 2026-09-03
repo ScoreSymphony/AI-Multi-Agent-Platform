@@ -96,12 +96,28 @@ HERMES_CONFIGURATION_SCHEMA = ConfigurationSchema(
                 ]
             },
             "model_bridge": {
-                "type": "object",
-                "additionalProperties": {"type": "string", "minLength": 1},
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "canonical_id": {"type": "string", "minLength": 1},
+                        "hermes_target": {"type": "string", "minLength": 1},
+                    },
+                    "required": ["canonical_id", "hermes_target"],
+                    "additionalProperties": False,
+                },
             },
             "capability_bridge": {
-                "type": "object",
-                "additionalProperties": {"type": "string", "minLength": 1},
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "canonical_id": {"type": "string", "minLength": 1},
+                        "hermes_target": {"type": "string", "minLength": 1},
+                    },
+                    "required": ["canonical_id", "hermes_target"],
+                    "additionalProperties": False,
+                },
             },
         },
         "additionalProperties": False,
@@ -311,14 +327,29 @@ class HermesAdapterConfig:
                 raise ValueError(f"unsupported Hermes {name}: {raw}") from exc
 
         def bridge_field(name: str) -> dict[str, str]:
-            raw = values.get(name, {})
-            if not isinstance(raw, Mapping):
-                raise ValueError(f"{name} must be an object")
+            raw = values.get(name, [])
+            if not isinstance(raw, list):
+                raise ValueError(f"{name} must be an array of bridge entries")
             result: dict[str, str] = {}
-            for raw_key, raw_value in raw.items():
-                if not isinstance(raw_key, str) or not isinstance(raw_value, str):
-                    raise ValueError(f"{name} must contain string keys and values")
-                result[raw_key] = raw_value
+            for index, raw_entry in enumerate(raw):
+                if not isinstance(raw_entry, Mapping):
+                    raise ValueError(f"{name}[{index}] must be an object")
+                unknown_entry_fields = sorted(
+                    set(raw_entry) - {"canonical_id", "hermes_target"}
+                )
+                if unknown_entry_fields:
+                    raise ValueError(
+                        f"{name}[{index}] has unknown fields: {unknown_entry_fields!r}"
+                    )
+                canonical_id = raw_entry.get("canonical_id")
+                hermes_target = raw_entry.get("hermes_target")
+                if not isinstance(canonical_id, str) or not canonical_id.strip():
+                    raise ValueError(f"{name}[{index}].canonical_id must be non-blank")
+                if not isinstance(hermes_target, str) or not hermes_target.strip():
+                    raise ValueError(f"{name}[{index}].hermes_target must be non-blank")
+                if canonical_id in result:
+                    raise ValueError(f"{name} contains duplicate canonical_id {canonical_id!r}")
+                result[canonical_id] = hermes_target
             return result
 
         enabled = values.get("enabled", False)
@@ -545,12 +576,33 @@ class HermesOrchestrator(Orchestrator):
         self,
         external_run_id: str,
         context: OperationContext,
-        *,
-        timeout_seconds: float | None = None,
     ) -> HermesRunSnapshot:
         """Read one Hermes-native run without promoting it to canonical lifecycle state."""
 
         self._require_enabled()
+        timeout_seconds = context.control.timeout_seconds
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                return await self._reconcile_external_run(
+                    external_run_id,
+                    context,
+                    timeout_seconds=timeout_seconds,
+                )
+        except TimeoutError as exc:
+            raise self._provider_error(
+                ErrorCode.TIMEOUT,
+                "Hermes reconciliation exceeded the canonical provider-boundary timeout",
+                retryable=True,
+                external_run_id=external_run_id,
+            ) from exc
+
+    async def _reconcile_external_run(
+        self,
+        external_run_id: str,
+        context: OperationContext,
+        *,
+        timeout_seconds: float | None,
+    ) -> HermesRunSnapshot:
         response = await self._request(
             "GET",
             f"/v1/runs/{parse.quote(external_run_id, safe='')}",
@@ -568,14 +620,33 @@ class HermesOrchestrator(Orchestrator):
         """Request Hermes cancellation and then return its adapter-private status."""
 
         self._require_enabled()
-        response = await self._request(
-            "POST",
-            f"/v1/runs/{parse.quote(external_run_id, safe='')}/stop",
-            payload={},
-            context=context,
-        )
-        self._raise_for_status(response, operation="cancel run")
-        return await self.reconcile_external_run(external_run_id, context)
+        timeout_seconds = context.control.timeout_seconds
+        deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                response = await self._request(
+                    "POST",
+                    f"/v1/runs/{parse.quote(external_run_id, safe='')}/stop",
+                    payload={},
+                    context=context,
+                    timeout_seconds=timeout_seconds,
+                )
+                self._raise_for_status(response, operation="cancel run")
+                remaining = None if deadline is None else deadline - time.monotonic()
+                if remaining is not None and remaining <= 0:
+                    raise TimeoutError
+                return await self._reconcile_external_run(
+                    external_run_id,
+                    context,
+                    timeout_seconds=remaining,
+                )
+        except TimeoutError as exc:
+            raise self._provider_error(
+                ErrorCode.TIMEOUT,
+                "Hermes cancellation exceeded the canonical provider-boundary timeout",
+                retryable=True,
+                external_run_id=external_run_id,
+            ) from exc
 
     async def _wait_for_terminal_run(
         self,
@@ -594,7 +665,7 @@ class HermesOrchestrator(Orchestrator):
                     retryable=True,
                     external_run_id=external_run_id,
                 )
-            snapshot = await self.reconcile_external_run(
+            snapshot = await self._reconcile_external_run(
                 external_run_id,
                 context,
                 timeout_seconds=remaining,

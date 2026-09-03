@@ -29,7 +29,7 @@ No Hermes Python package or source tree is required by platform core or referenc
 
 ## Configuration
 
-`HermesAdapterConfig` is disabled by default. `config/hermes.example.json` shows the configuration shape.
+`HermesAdapterConfig` is disabled by default. `config/hermes.example.json` shows the configuration shape, and `HERMES_CONFIGURATION_SCHEMA` validates that shape through the platform-owned configuration resolver.
 
 Important fields:
 
@@ -39,18 +39,25 @@ Important fields:
 - `pinned_revision`: expected upstream compatibility target;
 - request/poll/plan timeouts;
 - optional Hermes multiplex `profile`;
-- `model_bridge`: canonical model-configuration ID -> Hermes model selector;
-- `capability_bridge`: canonical Capability ID -> Hermes tool selector.
+- `runtime_mode`: currently only explicit external `api_server` mode;
+- `retry_behavior`: currently `platform_owned`, so the adapter has no hidden retry loop;
+- `bridge_mode`: currently fail-closed `strict` mapping;
+- `diagnostics_mode`: currently `platform_only` diagnostics/logging ownership;
+- `compatibility_status`: `verified_pin` only for the repository-tested pin, otherwise an explicit `unverified_pin` deployment;
+- `model_bridge`: list of `canonical_id` -> `hermes_target` entries;
+- `capability_bridge`: list of `canonical_id` -> `hermes_target` entries.
+
+The external bridge representation deliberately uses arrays of explicit entries rather than JSON object keys. Canonical IDs may contain dots, for example `tool.echo`; the platform `ConfigurationResolver` treats dots in configuration paths structurally, so using an ID as an object key would make the resolved configuration ambiguous. `HermesAdapterConfig.from_mapping(...)` converts the validated entry lists into immutable lookup maps and rejects duplicate canonical IDs.
 
 The baseline runtime mode is deliberately **external API server only**. `base_url` and optional `profile` select that endpoint; there is no hidden in-process Hermes mode. A future runtime mode must be added as an explicit adapter capability/configuration choice rather than inferred from imports or environment state.
 
 Retry behavior is also explicit: the adapter performs **no hidden automatic request retry loop**. HTTP 429, HTTP 5xx and connection failures are normalized as canonical retryable errors, after which platform/caller retry policy decides whether another canonical operation attempt is appropriate. `/v1/runs` admission carries the canonical idempotency key so a caller-authorized retry can reuse Hermes' idempotency boundary rather than inventing a second lifecycle.
 
-Supported behavior is advertised through `ProviderDescriptor`: the adapter publishes its canonical operations/capabilities, availability/health, transport mode and expected upstream revision. Features not listed there or in the supported-behavior section below are not implied by the presence of a Hermes deployment.
+Supported behavior is advertised through `ProviderDescriptor`: the adapter publishes its canonical operations/capabilities, availability/health, transport mode, retry/bridge/diagnostic modes, compatibility status and expected upstream revision. Features not listed there or in the supported-behavior section below are not implied by the presence of a Hermes deployment.
 
 Baseline diagnostics are intentionally bounded: the adapter propagates `X-Correlation-Id`, exposes health, and preserves backend identity/status details only in the `hermes` adapter-metadata namespace. Secret values are resolved only when sending a request and are not copied into canonical metadata. The baseline adapter does not log request/response payloads or credentials. Cross-layer logs, traces and metrics belong to the platform observability work in #16 rather than to a Hermes-private logging model.
 
-`pinned_revision` is the **expected compatibility target**, not a claim that an arbitrary remote service has cryptographically attested its running source revision. The repository treats a revision as verified only after the pinned compatibility fixture and full CI pass for that revision. Pointing `base_url` at another Hermes revision is therefore an explicit unverified deployment choice until the pin, provenance record and compatibility tests are updated together.
+`pinned_revision` is the **expected compatibility target**, not a claim that an arbitrary remote service has cryptographically attested its running source revision. The repository treats a revision as verified only after the pinned compatibility fixture and full CI pass for that revision. Pointing `base_url` at another Hermes revision therefore requires `compatibility_status=unverified_pin` until the pin, provenance record and compatibility tests are updated together.
 
 The adapter never requires a paid Hermes/model service. A locally/self-hosted Hermes instance and local/self-hosted model endpoint are valid targets.
 
@@ -65,7 +72,7 @@ A canonical `PlanRequest` maps as follows:
 | `task_id` | included as trace context in the planning input; never used as Hermes `run_id` | platform |
 | `context.correlation_id` | planning trace text + `X-Correlation-Id` diagnostic header | platform |
 | `context.control.idempotency_key` | Hermes `Idempotency-Key` header | platform intent; Hermes stores private replay state |
-| `context.control.timeout_seconds` | platform-side orchestration deadline | platform |
+| `context.control.timeout_seconds` | hard provider-boundary deadline covering admission plus polling | platform |
 | `objective` | `/v1/runs` `input` | platform intent |
 | planner contract | `/v1/runs` `instructions` | platform adapter |
 | Hermes returned `run_id` | `AdapterMetadata(namespace="hermes")` only | Hermes/private |
@@ -172,6 +179,8 @@ Hermes' documented run endpoints are used only as adapter operations:
 - an asyncio cancellation of canonical `plan()` triggers a best-effort Hermes stop before cancellation propagates;
 - a platform-side planning timeout triggers a best-effort stop and canonical `TIMEOUT`.
 
+`OperationContext.control.timeout_seconds` is a hard provider-boundary deadline for public reconciliation and cancellation calls as well. Cancellation bounds the combined stop request plus status reconciliation rather than granting a fresh timeout to each HTTP operation. Transport request timeouts are capped by the remaining canonical deadline and the configured per-request timeout.
+
 Reconciliation never overwrites canonical Task/Run lifecycle. It returns `HermesRunSnapshot`, an adapter-private value object.
 
 ## Approval boundary
@@ -193,7 +202,7 @@ HTTP and run outcomes are normalized before leaving the adapter:
 | HTTP 409 | `CONFLICT` |
 | HTTP 429 | `RATE_LIMITED` (retryable) |
 | HTTP 5xx / connection failure | `UNAVAILABLE` (retryable) |
-| request/planning timeout | `TIMEOUT` |
+| request/planning/reconciliation/cancellation timeout | `TIMEOUT` |
 | run cancelled/interrupted | `CANCELLED` |
 | invalid Hermes plan payload | `INVALID_PROVIDER_RESPONSE` |
 | Hermes run failure | `BACKEND_ERROR` |

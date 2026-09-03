@@ -47,9 +47,16 @@ class RecordedCall:
 
 
 class SlowHermesTransport:
-    def __init__(self, *, admission_delay: float = 0.0, status_delay: float = 0.0) -> None:
+    def __init__(
+        self,
+        *,
+        admission_delay: float = 0.0,
+        status_delay: float = 0.0,
+        stop_delay: float = 0.0,
+    ) -> None:
         self.admission_delay = admission_delay
         self.status_delay = status_delay
+        self.stop_delay = stop_delay
         self.calls: list[RecordedCall] = []
         self.stop_seen = asyncio.Event()
 
@@ -71,6 +78,7 @@ class SlowHermesTransport:
             await asyncio.sleep(self.status_delay)
             return HermesHttpResponse(200, {"run_id": "run_timeout", "status": "running"})
         if method == "POST" and url.endswith("/v1/runs/run_timeout/stop"):
+            await asyncio.sleep(self.stop_delay)
             self.stop_seen.set()
             return HermesHttpResponse(200, {"ok": True})
         raise AssertionError(f"unexpected Hermes request: {method} {url}")
@@ -87,6 +95,13 @@ def _request(timeout_seconds: float) -> PlanRequest:
                 idempotency_key="hermes-timeout-test",
             ),
         ),
+    )
+
+
+def _context(timeout_seconds: float) -> OperationContext:
+    return OperationContext(
+        correlation_id="corr-hermes-run-control",
+        control=OperationControl(timeout_seconds=timeout_seconds),
     )
 
 
@@ -111,6 +126,8 @@ def test_committed_hermes_example_uses_platform_configuration_schema() -> None:
     assert config.diagnostics_mode is HermesDiagnosticsMode.PLATFORM_ONLY
     assert config.compatibility_status is HermesCompatibilityStatus.VERIFIED_PIN
     assert config.pinned_revision == HERMES_PINNED_REVISION
+    assert config.model_bridge["model-local-example"] == "openai-compatible/local-model"
+    assert config.capability_bridge["tool.echo"] == "echo"
 
 
 def test_hermes_configuration_is_strict_and_compatibility_status_is_truthful() -> None:
@@ -128,6 +145,16 @@ def test_hermes_configuration_is_strict_and_compatibility_status_is_truthful() -
         compatibility_status=HermesCompatibilityStatus.UNVERIFIED_PIN,
     )
     assert unverified.compatibility_status is HermesCompatibilityStatus.UNVERIFIED_PIN
+
+    with pytest.raises(ValueError, match="duplicate canonical_id"):
+        HermesAdapterConfig.from_mapping(
+            {
+                "capability_bridge": [
+                    {"canonical_id": "tool.echo", "hermes_target": "echo"},
+                    {"canonical_id": "tool.echo", "hermes_target": "echo-again"},
+                ]
+            }
+        )
 
 
 def test_descriptor_advertises_explicit_runtime_retry_bridge_and_compatibility_modes() -> None:
@@ -195,6 +222,46 @@ def test_timeout_after_admission_schedules_best_effort_stop_without_extending_bo
         await asyncio.wait_for(transport.stop_seen.wait(), timeout=0.25)
         status_call = next(call for call in transport.calls if call.method == "GET")
         assert status_call.timeout_seconds <= 0.03
+
+    asyncio.run(scenario())
+
+
+def test_reconcile_honors_canonical_provider_boundary_timeout() -> None:
+    async def scenario() -> None:
+        transport = SlowHermesTransport(status_delay=1.0)
+        orchestrator = HermesOrchestrator(
+            HermesAdapterConfig(enabled=True, request_timeout_seconds=5.0),
+            transport=transport,
+            secret_resolver=lambda _: None,
+        )
+        started = monotonic()
+        with pytest.raises(ContractError) as captured:
+            await orchestrator.reconcile_external_run("run_timeout", _context(0.02))
+        elapsed = monotonic() - started
+
+        assert captured.value.code is ErrorCode.TIMEOUT
+        assert elapsed < 0.25
+        assert transport.calls[0].timeout_seconds <= 0.02
+
+    asyncio.run(scenario())
+
+
+def test_cancel_honors_canonical_provider_boundary_timeout() -> None:
+    async def scenario() -> None:
+        transport = SlowHermesTransport(stop_delay=1.0)
+        orchestrator = HermesOrchestrator(
+            HermesAdapterConfig(enabled=True, request_timeout_seconds=5.0),
+            transport=transport,
+            secret_resolver=lambda _: None,
+        )
+        started = monotonic()
+        with pytest.raises(ContractError) as captured:
+            await orchestrator.cancel_external_run("run_timeout", _context(0.02))
+        elapsed = monotonic() - started
+
+        assert captured.value.code is ErrorCode.TIMEOUT
+        assert elapsed < 0.25
+        assert transport.calls[0].timeout_seconds <= 0.02
 
     asyncio.run(scenario())
 
