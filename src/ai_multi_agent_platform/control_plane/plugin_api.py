@@ -351,6 +351,7 @@ def _plugin_resource(registry: PluginRegistry, snapshot: PluginSnapshot) -> dict
         "configured": snapshot.configured,
         "configuration_version": snapshot.configuration_version,
         "state_version": snapshot.state_version,
+        "capabilities": list(manifest.capabilities),
         "extension_ids": list(snapshot.extension_ids),
         "extension_types": list(snapshot.extension_types),
         "requested_permissions": list(snapshot.requested_permissions),
@@ -375,6 +376,7 @@ def _candidate_resource(candidate: DiscoveredPlugin) -> dict[str, JsonValue]:
         "plugin_version": manifest.plugin_version,
         "manifest_version": manifest.manifest_version,
         "install_source": candidate.install_source,
+        "capabilities": list(manifest.capabilities),
         "requested_permissions": cast(
             JsonValue,
             sorted(permission.value for permission in manifest.requested_permissions),
@@ -438,6 +440,7 @@ def _manifest_document(manifest: PluginManifest) -> dict[str, JsonValue]:
             "maximum": manifest.supported_platform.maximum,
         },
         "extensions": extensions,
+        "capabilities": list(manifest.capabilities),
         "requested_permissions": cast(
             JsonValue,
             sorted(permission.value for permission in manifest.requested_permissions),
