@@ -30,11 +30,8 @@ from .notifications_composition import (
     NOTIFICATION_COLLECTION,
     NOTIFICATION_COMMANDS,
     NOTIFICATION_PREFERENCE_COLLECTION,
-    ControlPlane,
-    ControlPlaneASGI,
-    ControlPlaneHTTP,
-    build_openapi,
 )
+from .notifications_live import ControlPlane, ControlPlaneASGI, ControlPlaneHTTP, build_openapi
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
