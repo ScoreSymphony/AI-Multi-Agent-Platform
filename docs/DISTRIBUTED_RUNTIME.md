@@ -1,4 +1,4 @@
-# Distributed runtime baseline
+# Distributed runtime
 
 Issue #14 introduces platform-owned Node, Worker, placement and remote-job semantics without making one host layout, GPU vendor, broker, container system or cloud provider canonical.
 
@@ -21,7 +21,9 @@ The scheduler does not own Task or Run lifecycle. It chooses an eligible Worker 
 
 A one-machine installation uses this same path with one registered Node and `LocalWorker`. Adding remote workers therefore changes deployment topology, not canonical Task/Run semantics.
 
-## Canonical runtime records
+The persisted domain `Node` and `Worker` objects remain the canonical ownership/identity entities defined by the platform domain. `NodeRecord` and `WorkerRecord` are distributed-runtime state projections using those same canonical IDs; they do not introduce a second ownership model. Provider `NodeDescriptor` and `WorkerDescriptor` remain normalized discovery views.
+
+## Distributed runtime records
 
 `NodeRecord` describes a participating device using stable canonical `node_*` identity plus backend-neutral runtime facts:
 
@@ -56,12 +58,31 @@ The reference `DistributedRegistry` supports:
 - re-registration with the same canonical Node/Worker IDs;
 - monotonic heartbeat sequence numbers;
 - duplicate-heartbeat idempotency;
+- independent Node and Worker liveness expiry;
 - deterministic heartbeat expiry to offline state;
 - drain/maintenance controls;
 - graceful deregistration;
 - reservation release on deregistration.
 
-A worker that disappears is not trusted as healthy indefinitely. Re-registration restores participation using the same canonical identity.
+A Worker that disappears is not trusted as healthy indefinitely. Re-registration restores participation using the same canonical identity.
+
+### Authenticated remote reporter
+
+`WorkerProtocolService` is the worker-facing security boundary. It reuses #36 authentication and #15 authorization instead of inventing a second identity or permission system.
+
+A remote registration identifies one reporter through `RegistrationRequest.service_identity_ref`. The reporter must:
+
+- authenticate with a #36 Worker credential;
+- match the credential-bound Worker identity;
+- be present in the reported Worker snapshot;
+- pass the credential's canonical `CredentialScope` ceiling;
+- pass #15 authorization for the Node and every reported Worker.
+
+Authenticated registration is treated as an authoritative Worker snapshot for that Node. A re-registration cannot silently omit known Workers; removal uses explicit deregistration. Authenticated heartbeats likewise report the complete registered Worker snapshot and cannot inject an unknown Worker.
+
+Remote reports never control administrative trust state. For a new remotely enrolled Node, the reference service assigns `trust_level="untrusted"` unless the deployment chooses another explicit initial policy. Re-registration and heartbeat preserve Control-Plane-owned Node trust, maintenance and drain state as well as existing Worker drain state.
+
+#36 replay protection and optional TLS peer binding are applied before the registry is mutated. The raw Worker credential is never persisted in distributed runtime state.
 
 ## Placement policy
 
@@ -80,7 +101,7 @@ Hard filters currently cover:
 - required labels;
 - anti-affinity exclusions;
 - network requirement;
-- worker concurrency.
+- Worker concurrency.
 
 Eligible candidates are scored only by explicit preferences such as preferred Worker/Node, labels and workspace/model/runtime locality. Equal scores use canonical Worker ID as a deterministic tie-break.
 
@@ -88,11 +109,11 @@ Every rejected candidate carries structured `RejectionReason` entries. The sched
 
 ## Capacity leases
 
-Scheduling creates a `Reservation` before dispatch. The reference lease tracks CPU, RAM, storage and concurrency claims and has a bounded expiry.
+Scheduling creates a `Reservation` before dispatch. Node CPU/RAM/storage capacity is accounted node-wide even when multiple Workers share the same host. Accelerator reservations bind a concrete accelerator ID and account VRAM so concurrent jobs cannot independently consume the same reported accelerator memory.
 
-The registry prevents a second Worker from claiming the same canonical Worker Job while its reservation is active, and it prevents subsequent jobs from overcommitting the already-reserved capacity.
+A newly selected reservation is `reserved`. Successful Worker acceptance commits it to `active`. Active leases are renewed by fresh Worker/reconciliation evidence and remain capacity-owning until terminal release or expiry. This prevents a long-running accepted job from losing its capacity claim merely because the initial dispatch lease elapsed.
 
-The reservation layer is intentionally independent from a future persistent database implementation. A persistent registry can implement the same semantics without changing the scheduler contract.
+The registry prevents a second Worker from claiming the same canonical Worker Job while its reservation is active and prevents subsequent jobs from overcommitting already-reserved capacity.
 
 ## Worker protocol and local reference worker
 
@@ -105,11 +126,11 @@ The reservation layer is intentionally independent from a future persistent data
 - secret references rather than secret values;
 - actor/cancellation/timeout/idempotency/trace context.
 
-`LocalWorker` implements the same `WorkerDispatcher` boundary that a future remote transport adapter uses. It delegates execution to the existing `LifecycleBackend`, so ReferenceExecutor, Forge or another executor remain behind the established execution seam.
+`LocalWorker` implements the same `WorkerDispatcher` boundary that a remote transport adapter implements. It delegates execution to the existing `LifecycleBackend`, so ReferenceExecutor, Forge or another executor remain behind the established execution seam.
 
 Duplicate delivery of the same exact `worker_job_id` is idempotent. Reusing that ID with a different payload is rejected.
 
-## Failure and reconciliation baseline
+## Failure and reconciliation
 
 `DistributedRuntime` records dispatch ownership and reconciles active work.
 
@@ -120,23 +141,40 @@ Current reference behavior:
 - cancellation requested while a Worker is unreachable becomes `cancel_pending`;
 - once the Worker is reachable again the pending cancellation is applied;
 - terminal execution releases the active capacity reservation;
-- a lost acknowledgement cannot cause duplicate local execution because Worker dispatch is idempotent by Worker Job ID.
+- a lost acknowledgement preserves dispatch ownership and capacity until reconciliation instead of making unsafe parallel redispatch possible;
+- Worker dispatch remains idempotent by Worker Job ID.
 
-This deliberately avoids an unsafe "still running forever" assumption after loss of liveness.
+This deliberately avoids both an unsafe "still running forever" assumption and an unsafe immediate duplicate dispatch after loss of an acknowledgement.
 
-## Security integration points
+## Restart persistence
 
-This baseline carries security references but does not invent a second authentication/authorization system.
+`DistributedStateStore` is a replaceable persistence boundary. `JsonDistributedStateStore` is the dependency-free reference implementation and atomically replaces one versioned JSON snapshot containing:
 
-Follow-up composition for #14 must use the existing platform security boundaries for:
+- Node runtime records;
+- Worker runtime records;
+- heartbeat sequence state;
+- active/reserved capacity claims;
+- dispatch ownership records and portable Worker Job data.
 
-- authenticated Node/Worker enrollment and request identity;
-- authorization of register, heartbeat, dispatch, drain and deregister actions;
-- trust-level admission;
-- scoped SecretReference delivery;
-- replay resistance and transport security for remote adapters.
+The runtime persists dispatch ownership before the external Worker acknowledgement can be lost. After Control-Plane restart, persisted health is deliberately restored as offline rather than trusted as fresh liveness evidence. Re-registration/heartbeat then re-establishes reachability and reconciliation continues without duplicating execution.
 
-No plaintext secret belongs in Node/Worker registration, heartbeat or ordinary scheduling diagnostics.
+The JSON store is a reference backend, not a canonical database choice. A durable database implementation can replace it without changing scheduling semantics.
+
+## Control Plane integration
+
+`register_distributed_control_plane(...)` extends the existing generic Control Plane registration seam rather than creating a separate API stack.
+
+Registered read collections are:
+
+- `nodes`;
+- `workers`;
+- `worker-jobs`.
+
+Administrative commands currently include Node drain/undrain, Node maintenance enable/disable and Worker drain/undrain. They inherit the existing Control Plane idempotency and #15 authorization boundary.
+
+Worker-job projections intentionally omit `secret_refs`. Secret values never belong in Node/Worker/job diagnostic resources.
+
+Remote Worker registration and heartbeat are not implemented as ordinary human/admin Control Plane commands. They use `WorkerProtocolService`, because they require #36 Worker-token authentication, replay protection, reporter binding and protocol-specific authorization before any runtime mutation.
 
 ## Workspace integration
 
@@ -146,13 +184,15 @@ The distributed job contract therefore carries canonical workspace/snapshot refe
 
 ## Remaining #14 integration work
 
-The current baseline establishes contracts, in-memory reference registry, deterministic scheduling, leases, local Worker dispatch and reconciliation. Full issue completion still requires composition work including:
+The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration and an authenticated/authorized Worker registration-heartbeat boundary.
 
-- Control Plane Node/Worker/job APIs;
-- #15/#36 authorization and Worker authentication enforcement at those APIs;
-- scoped secret delivery integration;
-- concrete remote workspace materialization/return flow;
-- distributed trace/resource telemetry hooks;
-- persistence/restart reconciliation beyond the in-memory reference registry;
-- a real remote transport fixture while keeping the transport replaceable;
-- the remaining acceptance/security/recovery tests from #14.
+Full issue completion still requires the remaining composition work, especially:
+
+- scoped secret-resolution/delivery at the Worker execution boundary without putting plaintext secrets into `WorkerJobRequest` persistence or diagnostics;
+- concrete #37 remote workspace materialization, artifact/result return and cleanup flow;
+- distributed trace/resource telemetry integration using the existing #16 observability seams;
+- `NodeProvider`/`WorkerProvider` adapters over the distributed runtime where existing #5 discovery contracts are required;
+- a real replaceable remote transport fixture while keeping local/single-node operation on the same abstractions;
+- explicit remote result/evidence return and terminal reconciliation semantics;
+- controlled failover/re-dispatch policy for work proven safe to retry after Worker loss;
+- remaining acceptance/security/recovery tests and final cross-issue integration review.
