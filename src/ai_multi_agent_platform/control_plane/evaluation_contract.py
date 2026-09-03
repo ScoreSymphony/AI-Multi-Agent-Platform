@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, cast
+from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -13,10 +13,12 @@ from ai_multi_agent_platform.evaluation.codec import (
     encode_run,
 )
 from ai_multi_agent_platform.evaluation.models import (
+    ComparisonReport,
     ConfigurationSnapshot,
     EvaluationCase,
+    EvaluationResult,
+    EvaluationRun,
     EvaluationSuite,
-    RegressionPolicy,
     SnapshotValue,
     VersionReference,
 )
@@ -160,7 +162,7 @@ def _case_resource(case: EvaluationCase) -> dict[str, JsonValue]:
     }
 
 
-def _run_resource(run: Any) -> dict[str, JsonValue]:
+def _run_resource(run: EvaluationRun) -> dict[str, JsonValue]:
     resource = _encoded_object(encode_run(run))
     resource["id"] = run.run_id
     resource["type"] = "evaluation-run"
@@ -176,14 +178,14 @@ def _run_detail_resource(detail: EvaluationRunDetail) -> dict[str, JsonValue]:
     return resource
 
 
-def _result_resource(result: Any) -> dict[str, JsonValue]:
+def _result_resource(result: EvaluationResult) -> dict[str, JsonValue]:
     resource = _encoded_object(encode_result(result))
     resource["id"] = result.result_id
     resource["type"] = "evaluation-result"
     return resource
 
 
-def _comparison_resource(comparison: Any) -> dict[str, JsonValue]:
+def _comparison_resource(comparison: ComparisonReport) -> dict[str, JsonValue]:
     resource = _encoded_object(encode_comparison(comparison))
     resource["id"] = comparison.current_run_id
     resource["type"] = "evaluation-comparison"
@@ -206,37 +208,40 @@ def _parse_snapshot(payload: dict[str, JsonValue]) -> ConfigurationSnapshot:
     raw_references = payload.get("references", [])
     if not isinstance(raw_references, list):
         raise ValueError("snapshot.references must be an array")
-    references = tuple(
-        VersionReference(
-            kind=_required_string(_object(item, "snapshot.references[]"), "kind"),
-            ref_id=_required_string(_object(item, "snapshot.references[]"), "ref_id"),
-            version=_required_string(_object(item, "snapshot.references[]"), "version"),
-            revision=_optional_string(_object(item, "snapshot.references[]"), "revision"),
+    references: list[VersionReference] = []
+    for raw_reference in raw_references:
+        item = _object(raw_reference, "snapshot.references[]")
+        references.append(
+            VersionReference(
+                kind=_required_string(item, "kind"),
+                ref_id=_required_string(item, "ref_id"),
+                version=_required_string(item, "version"),
+                revision=_optional_string(item, "revision"),
+            )
         )
-        for item in raw_references
-    )
 
     raw_environment = payload.get("environment", [])
     if not isinstance(raw_environment, list):
         raise ValueError("snapshot.environment must be an array")
-    environment = tuple(
-        SnapshotValue(
-            key=_required_string(_object(item, "snapshot.environment[]"), "key"),
-            value=_required_string(_object(item, "snapshot.environment[]"), "value"),
+    environment: list[SnapshotValue] = []
+    for raw_value in raw_environment:
+        item = _object(raw_value, "snapshot.environment[]")
+        environment.append(
+            SnapshotValue(
+                key=_required_string(item, "key"),
+                value=_required_string(item, "value"),
+            )
         )
-        for item in raw_environment
-    )
     return ConfigurationSnapshot(
         platform_version=_required_string(payload, "platform_version"),
         platform_commit=_optional_string(payload, "platform_commit"),
-        references=references,
-        environment=environment,
+        references=tuple(references),
+        environment=tuple(environment),
     )
 
 
 def _required_object(payload: dict[str, JsonValue], key: str) -> dict[str, JsonValue]:
-    value = payload.get(key)
-    return _object(value, key)
+    return _object(payload.get(key), key)
 
 
 def _object(value: JsonValue, field: str) -> dict[str, JsonValue]:
