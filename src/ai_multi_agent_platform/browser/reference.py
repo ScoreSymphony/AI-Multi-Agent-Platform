@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import socket
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -20,8 +19,8 @@ from typing import Any, Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin
 from urllib.request import (
-    HTTPRedirectHandler,
     HTTPCookieProcessor,
+    HTTPRedirectHandler,
     Request,
     build_opener,
 )
@@ -791,7 +790,7 @@ class StdlibBrowserProvider(BrowserProvider):
             response = opener.open(request, timeout=timeout)
         except HTTPError as exc:
             response = exc
-        except socket.timeout as exc:
+        except TimeoutError as exc:
             raise ContractError(
                 ErrorCode.TIMEOUT,
                 "reference browser network request timed out",
@@ -799,7 +798,7 @@ class StdlibBrowserProvider(BrowserProvider):
                 retryable=True,
             ) from exc
         except URLError as exc:
-            if isinstance(exc.reason, socket.timeout):
+            if isinstance(exc.reason, TimeoutError):
                 raise ContractError(
                     ErrorCode.TIMEOUT,
                     "reference browser network request timed out",
