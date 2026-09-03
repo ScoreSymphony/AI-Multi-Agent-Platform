@@ -17,7 +17,9 @@ from ai_multi_agent_platform.browser import (
     BROWSER_FOLLOW_LINK_CAPABILITY_ID,
     BROWSER_NAVIGATE_CAPABILITY_ID,
     BROWSER_SUBMIT_FORM_CAPABILITY_ID,
+    BoundBrowserProvider,
     BrowserNetworkPolicy,
+    BrowserOperation,
     StdlibBrowserProvider,
 )
 from ai_multi_agent_platform.capabilities import (
@@ -26,11 +28,13 @@ from ai_multi_agent_platform.capabilities import (
     CapabilityRegistry,
     CapabilitySpec,
     InvocationRecord,
+    InvocationStatus,
     InvocationTrace,
     PolicyDecision,
 )
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
+    AdapterMetadata,
     JsonValue,
     OperationContext,
     OperationControl,
@@ -65,7 +69,7 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path == "/next":
             self._write_html("<html><head><title>Next</title></head><body>next body</body></html>")
             return
-        if self.path == "/file":
+        if self.path.startswith("/file"):
             payload = b"download-me"
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")
@@ -132,6 +136,20 @@ class RecordingObserver:
         self.records.append(record)
 
 
+class _RecordingNetworkPolicyHook:
+    def __init__(self) -> None:
+        self.thread_ids: list[int] = []
+
+    def check(
+        self,
+        url: str,
+        operation: BrowserOperation,
+        context: OperationContext,
+    ) -> None:
+        del url, operation, context
+        self.thread_ids.append(threading.get_ident())
+
+
 def _operation(*, project_id: str | None = None, timeout: float | None = None) -> OperationContext:
     return OperationContext(
         correlation_id="browser-correlation",
@@ -164,6 +182,10 @@ def _request(
         ),
         granted_permissions=permissions,
     )
+
+
+def _metadata(items: tuple[AdapterMetadata, ...], namespace: str) -> AdapterMetadata:
+    return next(item for item in items if item.namespace == namespace)
 
 
 def _provider(
@@ -243,17 +265,20 @@ def test_navigation_extract_follow_and_trace_preservation(tmp_path: Path) -> Non
     asyncio.run(scenario())
 
 
-def test_download_enters_canonical_file_and_artifact_path_with_provenance(tmp_path: Path) -> None:
+def test_download_enters_canonical_file_and_artifact_path_with_redacted_provenance(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         with _FixtureServer() as fixture:
             provider, files = _provider(tmp_path)
             registry = CapabilityRegistry()
             await registry.register_provider(provider)
             context = _operation()
+            requested_url = fixture.base_url + "/file?token=secret#fragment"
             result = await CapabilityInvoker(registry).invoke(
                 _request(
                     BROWSER_DOWNLOAD_CAPABILITY_ID,
-                    {"url": fixture.base_url + "/file"},
+                    {"url": requested_url},
                     context=context,
                     permissions=frozenset(
                         {"browser.network.read", "file.create", "artifact.create"}
@@ -270,6 +295,8 @@ def test_download_enters_canonical_file_and_artifact_path_with_provenance(tmp_pa
             assert result.result_ref == file_ref
             assert result.artifact_refs == (artifact_ref,)
             assert result.evidence_refs == (file_ref, artifact_ref)
+            assert output["source_url"] == fixture.base_url + "/file"
+            assert "secret" not in repr(output)
             assert await files.read(file_ref, context) == b"download-me"
             record = await files.get_file(
                 file_ref,
@@ -278,6 +305,7 @@ def test_download_enters_canonical_file_and_artifact_path_with_provenance(tmp_pa
             assert record.sha256 == hashlib.sha256(b"download-me").hexdigest()
             assert record.artifact_ids == (artifact_ref,)
             assert record.metadata["source_url"] == fixture.base_url + "/file"
+            assert "secret" not in repr(record.metadata)
             assert record.metadata["provenance"] == "browser_download"
             assert record.metadata["content_trust"] == "untrusted_web_content"
 
@@ -398,6 +426,34 @@ def test_network_policy_blocks_private_target(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+def test_network_policy_checks_run_off_event_loop(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        with _FixtureServer() as fixture:
+            files = LocalFileProvider(tmp_path / "objects", tmp_path / "files.sqlite")
+            hook = _RecordingNetworkPolicyHook()
+            provider = StdlibBrowserProvider(
+                files,
+                network_policy=BrowserNetworkPolicy(allow_private_networks=True),
+                network_policy_hook=hook,
+            )
+            registry = CapabilityRegistry()
+            await registry.register_provider(provider)
+            event_loop_thread = threading.get_ident()
+            await CapabilityInvoker(registry).invoke(
+                _request(
+                    BROWSER_NAVIGATE_CAPABILITY_ID,
+                    {"url": fixture.base_url + "/"},
+                    context=_operation(),
+                    permissions=frozenset({"browser.network.read"}),
+                    invocation_id="browser-policy-thread",
+                )
+            )
+            assert hook.thread_ids
+            assert all(thread_id != event_loop_thread for thread_id in hook.thread_ids)
+
+    asyncio.run(scenario())
+
+
 def test_session_isolation_by_project(tmp_path: Path) -> None:
     async def scenario() -> None:
         with _FixtureServer() as fixture:
@@ -436,32 +492,88 @@ def test_session_isolation_by_project(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_timeout_and_cancellation_use_canonical_errors(tmp_path: Path) -> None:
+def test_session_ttl_evicts_abandoned_sessions(tmp_path: Path) -> None:
     async def scenario() -> None:
         with _FixtureServer() as fixture:
-            provider, _ = _provider(tmp_path)
+            files = LocalFileProvider(tmp_path / "objects", tmp_path / "files.sqlite")
+            provider = StdlibBrowserProvider(
+                files,
+                network_policy=BrowserNetworkPolicy(
+                    allowed_domains=("127.0.0.1",), allow_private_networks=True
+                ),
+                session_ttl_seconds=0.01,
+            )
             registry = CapabilityRegistry()
             await registry.register_provider(provider)
-
-            timeout_context = _operation(timeout=0.01)
-            with pytest.raises(ContractError) as timeout_error:
+            context = _operation()
+            nav = await CapabilityInvoker(registry).invoke(
+                _request(
+                    BROWSER_NAVIGATE_CAPABILITY_ID,
+                    {"url": fixture.base_url + "/"},
+                    context=context,
+                    permissions=frozenset({"browser.network.read"}),
+                    invocation_id="browser-expiry-nav",
+                )
+            )
+            output = nav.output
+            assert isinstance(output, dict)
+            session_id = output["session_id"]
+            assert isinstance(session_id, str)
+            await asyncio.sleep(0.02)
+            with pytest.raises(ContractError) as expired:
                 await CapabilityInvoker(registry).invoke(
                     _request(
+                        BROWSER_EXTRACT_CAPABILITY_ID,
+                        {"session_id": session_id},
+                        context=context,
+                        permissions=frozenset({"browser.content.read"}),
+                        invocation_id="browser-expiry-read",
+                    )
+                )
+            assert expired.value.code is ErrorCode.NOT_FOUND
+
+    asyncio.run(scenario())
+
+
+def test_timeout_and_cancellation_use_canonical_errors_and_browser_metadata(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        with _FixtureServer() as fixture:
+            inner, _ = _provider(tmp_path)
+            provider = BoundBrowserProvider(inner)
+            registry = CapabilityRegistry()
+            await registry.register_provider(provider)
+            observer = RecordingObserver()
+            invoker = CapabilityInvoker(registry, observer=observer)
+
+            timeout_context = _operation(timeout=0.01)
+            timeout_url = fixture.base_url + "/slow?token=timeout-secret"
+            with pytest.raises(ContractError) as timeout_error:
+                await invoker.invoke(
+                    _request(
                         BROWSER_NAVIGATE_CAPABILITY_ID,
-                        {"url": fixture.base_url + "/slow"},
+                        {"url": timeout_url},
                         context=timeout_context,
                         permissions=frozenset({"browser.network.read"}),
                         invocation_id="browser-timeout",
                     )
                 )
             assert timeout_error.value.code is ErrorCode.TIMEOUT
+            timeout_metadata = _metadata(timeout_error.value.adapter_metadata, "browser.operation")
+            assert timeout_metadata.values["outcome"] == "timed_out"
+            assert timeout_metadata.values["error_code"] == ErrorCode.TIMEOUT.value
+            assert "timeout-secret" not in repr(timeout_metadata.values)
+            timed_out = next(
+                record for record in observer.records if record.status is InvocationStatus.TIMED_OUT
+            )
+            assert _metadata(timed_out.adapter_metadata, "browser.operation") == timeout_metadata
 
             cancel_context = _operation(timeout=1.0)
+            cancel_url = fixture.base_url + "/slow?token=cancel-secret"
             pending = asyncio.create_task(
-                CapabilityInvoker(registry).invoke(
+                invoker.invoke(
                     _request(
                         BROWSER_NAVIGATE_CAPABILITY_ID,
-                        {"url": fixture.base_url + "/slow"},
+                        {"url": cancel_url},
                         context=cancel_context,
                         permissions=frozenset({"browser.network.read"}),
                         invocation_id="browser-cancel",
@@ -473,6 +585,16 @@ def test_timeout_and_cancellation_use_canonical_errors(tmp_path: Path) -> None:
             with pytest.raises(ContractError) as cancellation_error:
                 await pending
             assert cancellation_error.value.code is ErrorCode.CANCELLED
+            cancel_metadata = _metadata(
+                cancellation_error.value.adapter_metadata, "browser.operation"
+            )
+            assert cancel_metadata.values["outcome"] == "cancelled"
+            assert cancel_metadata.values["error_code"] == ErrorCode.CANCELLED.value
+            assert "cancel-secret" not in repr(cancel_metadata.values)
+            cancelled = next(
+                record for record in observer.records if record.status is InvocationStatus.CANCELLED
+            )
+            assert _metadata(cancelled.adapter_metadata, "browser.operation") == cancel_metadata
 
     asyncio.run(scenario())
 
