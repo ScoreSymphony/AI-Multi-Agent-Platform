@@ -95,6 +95,7 @@ Completed:
 - #35 — event transport and internal messaging architecture
 - #37 — Workspace and project-environment management
 - #43 — threat model and security-hardening baseline
+- #73 — canonical Terminal and execution-session interface
 
 ## Product/accounting work already completed
 
@@ -229,12 +230,6 @@ This is useful now because it begins producing evidence before more adapters and
 Stage 1 is ready because its only hard dependencies, #15 and #32, are complete.
 
 Do not wait for every later searchable domain. Start with currently available canonical resources and add Agents, Workers, Connectors, Conversations, Verification and other resources progressively.
-
-## #73 — Terminal and execution-session interface
-
-Ready because #7, #15, #32 and #37 are complete.
-
-The reference/local session path can be built now. #14 later adds remote Worker sessions and #36 adds the final authenticated user/service context.
 
 ## #74 — Replaceable Browser/Web capability
 
@@ -527,7 +522,6 @@ Add independent lanes in roughly this order:
 - #19 Evaluation/Regression;
 - #45 Search foundation;
 - #38 CLI progressive completion;
-- #73 Terminal;
 - #74 Browser.
 
 The exact order among these secondary lanes may be adjusted to product priorities because they do not currently unlock as many downstream hard dependencies as #36/#33/#14/#18/#20.
@@ -551,7 +545,7 @@ Examples:
 ```text
 COMPLETED BASELINE
 #1-#7, #9-#13, #15-#17,
-#32, #34, #35, #37, #43, #76, #88
+#32, #34, #35, #37, #43, #73, #76, #88
         |
         +------------------------------------------------------------+
         |              |              |              |              |
@@ -590,7 +584,7 @@ COMPLETED BASELINE
 #36 + #39 + #40 --> #89 optional HA
 
 READY IN PARALLEL NOW:
-#19 Evaluation, #45 Search, #73 Terminal, #74 Browser, progressive #38 CLI
+#19 Evaluation, #45 Search, #74 Browser, progressive #38 CLI
 
 FINAL:
 #46 End-to-End Platform Acceptance
@@ -613,4 +607,4 @@ The remaining work no longer has one simple linear chain. The most important con
 #36 -> #75 + #87 -> #171 ------------> #46
 ```
 
-The best immediate strategy is therefore **not** to resume the old model/tool/data/control-plane wave. Those foundations are already complete. The current bottlenecks are Authentication, canonical Agents/Teams, distributed Workers, Automations and Plugins, with Evaluation/Search/Terminal/Browser/CLI able to advance in parallel.
+The best immediate strategy is therefore **not** to resume the old model/tool/data/control-plane wave. Those foundations are already complete. The current bottlenecks are Authentication, canonical Agents/Teams, distributed Workers, Automations and Plugins, with Evaluation/Search/Browser/CLI able to advance in parallel.
