@@ -672,7 +672,7 @@ def _augment_authentication_openapi(
         "name": "X-CSRF-Token",
         "in": "header",
         "required": False,
-        "description": "Required for state-changing browser-session requests; not used by bearer clients.",
+        "description": "CSRF token required for state-changing browser sessions; unused by bearer clients.",
         "schema": {"type": "string"},
     }
     auth_paths: dict[str, Any] = {
