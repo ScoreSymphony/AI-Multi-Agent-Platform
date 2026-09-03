@@ -128,13 +128,18 @@ class SnapshotWorkspaceSourceResolver(WorkspaceSourceResolver):
         source_ref: WorkspaceSourceRef,
         context: DataAccessContext,
     ) -> ResolvedWorkspaceSource:
-        del context
         if source_ref.kind is not self.kind:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "snapshot resolver received another source kind",
             )
         snapshot = await self._workspaces.get_snapshot(source_ref.ref)
+        source_workspace = await self._workspaces.get_workspace(snapshot.workspace_id)
+        if context.project_id is None or source_workspace.project_id != context.project_id:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "workspace source snapshot belongs to another project",
+            )
         if source_ref.checksum is not None and source_ref.checksum != snapshot.content_checksum:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
