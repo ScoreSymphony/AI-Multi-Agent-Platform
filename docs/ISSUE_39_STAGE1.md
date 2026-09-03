@@ -13,20 +13,28 @@ Implemented in this slice:
 - existing SQLite WorkspaceProvider;
 - existing ReferenceExecutor through the canonical lifecycle bridge;
 - schema-validated deployment configuration using the #34 resolver;
+- explicit blocking failure when required persistence paths cannot be prepared;
 - authenticated Control Plane + ASGI application composition;
 - retry-safe first-admin identity + explicit authorization-policy bootstrap;
-- optional Uvicorn server packaging/entrypoint;
-- safe environment example and operator documentation;
-- restart regression covering Task/Run, Project, authentication session/token and admin-policy state.
+- side-effect-free module/console entrypoints and optional Uvicorn server packaging;
+- credential-free configuration example with regression validation;
+- `platform-server smoke` for retry-safe canonical local Task/Run execution;
+- operator documentation covering install, configuration loading, bootstrap, smoke, startup,
+  health/readiness, restart, conservative backup hooks and data-retaining uninstall;
+- restart regression covering Task/Run, Project, authentication session/token and admin-policy
+  state;
+- smoke regression proving a restart/retry reuses canonical smoke Task/Run IDs rather than
+  duplicating work.
 
 Still progressive under the parent issue:
 
 - richer single-server process isolation/reverse-proxy packaging;
-- distributed Worker profile after #14 integration;
+- distributed Worker profile after #14/#35 integration;
 - heterogeneous multi-device examples;
-- #40 backup/restore relocation integration;
+- #40 tested backup/restore relocation integration;
 - #41 upgrade/migration integration;
 - optional #89 HA packaging.
 
 The Stage-1 profile remains independent from Hermes, Forge, LiteLLM, MCP, Kubernetes, a cloud
-provider or a particular VPS/hardware SKU.
+provider or a particular VPS/hardware SKU. Those optional components are not canonical
+requirements for the baseline topology.
