@@ -195,13 +195,15 @@ class TerminalSession:
         return replace(self, dimensions=dimensions)
 
     def to_json(self) -> dict[str, JsonValue]:
-        adapter_metadata: list[JsonValue] = [
+        diagnostics: list[JsonValue] = [
             {"namespace": item.namespace, "values": dict(item.values)}
             for item in self.adapter_metadata
         ]
         return {
             "id": self.id,
             "session_type": self.session_type.value,
+            "project_id": self.context.project_id,
+            "workspace_id": self.context.workspace_id,
             "context": self.context.to_json(),
             "mode": self.mode.value,
             "owner_actor_ref": self.owner_actor_ref,
@@ -215,7 +217,7 @@ class TerminalSession:
             "policy_classification": list(self.policy_classification),
             "inactivity_timeout_seconds": self.inactivity_timeout_seconds,
             "retain_transcript": self.retain_transcript,
-            "adapter_metadata": adapter_metadata,
+            "diagnostics": diagnostics,
         }
 
 
