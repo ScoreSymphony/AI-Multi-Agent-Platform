@@ -5,7 +5,14 @@ from __future__ import annotations
 import hashlib
 from collections.abc import AsyncIterator
 
-from ai_multi_agent_platform.contracts import JsonValue, ProviderDescriptor
+from ai_multi_agent_platform.contracts import (
+    JsonValue,
+    KnowledgeHit,
+    KnowledgeQuery,
+    OperationContext,
+    ProviderDescriptor,
+    StoredObject,
+)
 from ai_multi_agent_platform.data.contracts import (
     FileProvider,
     KnowledgeProvider,
@@ -204,13 +211,13 @@ class AuthorizedDataFileProvider(FileProvider):
         self,
         object_ref: str,
         data: bytes,
-        context,
+        context: OperationContext,
         *,
         metadata: dict[str, JsonValue] | None = None,
-    ):
+    ) -> StoredObject:
         return await self._inner.write(object_ref, data, context, metadata=metadata)
 
-    async def read(self, object_ref: str, context):
+    async def read(self, object_ref: str, context: OperationContext) -> bytes:
         return await self._inner.read(object_ref, context)
 
 
@@ -340,10 +347,18 @@ class AuthorizedDataMemoryProvider(MemoryProvider):
         )
         return await self._inner.expire_entries(context)
 
-    async def put(self, namespace, key, value, context, *, metadata=None):
+    async def put(
+        self,
+        namespace: str,
+        key: str,
+        value: JsonValue,
+        context: OperationContext,
+        *,
+        metadata: dict[str, JsonValue] | None = None,
+    ) -> StoredObject:
         return await self._inner.put(namespace, key, value, context, metadata=metadata)
 
-    async def get(self, namespace, key, context):
+    async def get(self, namespace: str, key: str, context: OperationContext) -> JsonValue:
         return await self._inner.get(namespace, key, context)
 
 
@@ -473,11 +488,16 @@ class AuthorizedDataKnowledgeProvider(KnowledgeProvider):
         )
         await self._inner.remove_source(source_id, context)
 
-    async def index(self, source_ref, content, context):
+    async def index(
+        self,
+        source_ref: str,
+        content: str,
+        context: OperationContext,
+    ) -> StoredObject:
         return await self._inner.index(source_ref, content, context)
 
-    async def query(self, request):
+    async def query(self, request: KnowledgeQuery) -> tuple[KnowledgeHit, ...]:
         return await self._inner.query(request)
 
-    async def get(self, source_ref, context):
+    async def get(self, source_ref: str, context: OperationContext) -> KnowledgeHit:
         return await self._inner.get(source_ref, context)
