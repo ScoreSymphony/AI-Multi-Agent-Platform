@@ -6,6 +6,13 @@ from .automation_api import (
     AUTOMATION_COMMANDS,
     DELIVERY_COLLECTION,
 )
+from .automation_runtime_composition import (
+    AUTOMATION_STATE_ENV,
+    ControlPlane,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
+)
 from .extensions import (
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
@@ -33,14 +40,12 @@ from .plugin_api import (
     PLUGIN_COMMANDS,
     PluginPermissionResolver,
 )
-from .plugin_terminal_composition import ControlPlane
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
-from .terminal_composition import ControlPlaneASGI, ControlPlaneHTTP, build_openapi
 
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (AUTOMATION_COLLECTION, DELIVERY_COLLECTION)
 
@@ -50,6 +55,7 @@ __all__ = [
     "API_VERSION",
     "AUTOMATION_COLLECTION",
     "AUTOMATION_COMMANDS",
+    "AUTOMATION_STATE_ENV",
     "ActorContext",
     "AuthenticatedControlPlaneHTTP",
     "CURRENT_COLLECTIONS",
