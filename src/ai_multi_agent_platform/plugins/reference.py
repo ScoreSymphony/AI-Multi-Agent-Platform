@@ -82,7 +82,9 @@ class ReferenceCapabilityPlugin:
 
     async def initialize(self, context: PluginContext) -> tuple[ExtensionRegistration, ...]:
         if self._fail_initialize:
-            raise ContractError(ErrorCode.PERMANENT_FAILURE, "reference plugin initialization failed")
+            raise ContractError(
+                ErrorCode.PERMANENT_FAILURE, "reference plugin initialization failed"
+            )
         prefix = context.configuration.get("prefix", "")
         if not isinstance(prefix, str):
             raise ContractError(ErrorCode.INVALID_CONFIGURATION, "prefix must be a string")
