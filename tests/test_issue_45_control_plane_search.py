@@ -136,9 +136,7 @@ def test_global_search_exact_keyword_project_filter_and_run_lookup() -> None:
         items = keyword.body["items"]
         assert isinstance(items, list)
         identities = {
-            (item["resource_type"], item["resource_id"])
-            for item in items
-            if isinstance(item, dict)
+            (item["resource_type"], item["resource_id"]) for item in items if isinstance(item, dict)
         }
         assert ("project", project_id) in identities
         assert ("task", task_id) in identities
