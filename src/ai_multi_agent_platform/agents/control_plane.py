@@ -585,6 +585,7 @@ def _team_profile_from_json(value: object) -> AgentTeamProfile:
         ),
         leader_agent_id=_optional_string(data, "leader_agent_id"),
         shared_capability_ids=_string_tuple(data, "shared_capability_ids"),
+        shared_resource_refs=_string_tuple(data, "shared_resource_refs"),
         max_parallel_agents=_optional_positive_int(
             data,
             "max_parallel_agents",
