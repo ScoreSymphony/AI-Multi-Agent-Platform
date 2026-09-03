@@ -366,11 +366,6 @@ class TerminalSessionService:
         approval_id: str | None = None,
     ) -> None:
         session = self._session(session_id)
-        if (
-            session.mode is not SessionMode.INTERACTIVE
-            or not session.capabilities.interactive_input
-        ):
-            raise ContractError(ErrorCode.FORBIDDEN, "terminal session does not accept input")
         await self._authorize_session(
             session,
             actor_ref=actor_ref,
@@ -384,6 +379,11 @@ class TerminalSessionService:
             approval_id=approval_id,
             risk=RiskClassification.ELEVATED,
         )
+        if (
+            session.mode is not SessionMode.INTERACTIVE
+            or not session.capabilities.interactive_input
+        ):
+            raise ContractError(ErrorCode.FORBIDDEN, "terminal session does not accept input")
         await self._adapter(session).send_input(self._handles[session_id], data)
         self._record(
             session_id,
@@ -402,10 +402,6 @@ class TerminalSessionService:
         operation: OperationContext,
     ) -> TerminalSession:
         session = self._session(session_id)
-        if not session.capabilities.resize:
-            raise ContractError(
-                ErrorCode.UNSUPPORTED_CAPABILITY, "terminal session does not resize"
-            )
         await self._authorize_session(
             session,
             actor_ref=actor_ref,
@@ -415,6 +411,10 @@ class TerminalSessionService:
             payload=dimensions.to_json(),
             risk=RiskClassification.STANDARD,
         )
+        if not session.capabilities.resize:
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY, "terminal session does not resize"
+            )
         await self._adapter(session).resize(self._handles[session_id], dimensions)
         updated = session.with_dimensions(dimensions)
         self._sessions[session_id] = updated
@@ -431,8 +431,6 @@ class TerminalSessionService:
         approval_id: str | None = None,
     ) -> TerminalSession:
         session = self._session(session_id)
-        if session.status in TERMINAL_SESSION_STATUSES:
-            return session
         await self._authorize_session(
             session,
             actor_ref=actor_ref,
@@ -443,6 +441,8 @@ class TerminalSessionService:
             approval_id=approval_id,
             risk=RiskClassification.HIGH,
         )
+        if session.status in TERMINAL_SESSION_STATUSES:
+            return session
         await self._adapter(session).terminate(self._handles[session_id], reason=reason)
         updated = await self._refresh(session_id)
         self._record(session_id, actor_ref, "session.terminate", operation)
