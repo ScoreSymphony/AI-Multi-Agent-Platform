@@ -91,7 +91,7 @@ class AuthorizationBoundaryHardeningMixin:
             )
         result = await handler(context, resource_ref, effective_payload)
         _reject_private_payload(result)
-        return result
+        return cast(dict[str, JsonValue], result)
 
     async def _update_management_command(
         self,
@@ -116,7 +116,7 @@ class AuthorizationBoundaryHardeningMixin:
             actor_ref=context.actor.principal_ref,
             source="control-plane",
         )
-        return await cp.get_task(context, resource_ref)
+        return cast(dict[str, JsonValue], await cp.get_task(context, resource_ref))
 
     async def _bulk_update_management_command(
         self,
@@ -186,7 +186,10 @@ class AuthorizationBoundaryHardeningMixin:
         cp = cast(Any, self)
         provider = cp.workspace_provider
         if provider is None:
-            return await super().create_workspace(context, payload)  # type: ignore[misc]
+            return cast(
+                dict[str, JsonValue],
+                await super().create_workspace(context, payload),  # type: ignore[misc]
+            )
 
         project_id = _required_string(payload, "project_id")
         project = cp._scopes.get_project(project_id)
@@ -298,7 +301,10 @@ class AuthorizationBoundaryHardeningMixin:
     ) -> dict[str, JsonValue]:
         cp = cast(Any, self)
         if not _has_binding_fields(payload):
-            return await super().start_task(context, task_id, payload)  # type: ignore[misc]
+            return cast(
+                dict[str, JsonValue],
+                await super().start_task(context, task_id, payload),  # type: ignore[misc]
+            )
 
         task = await cp._kernel.get_task(task_id)
         workspace, snapshot = await cp._resolve_workspace_input(context, task_id, payload or {})
@@ -337,7 +343,10 @@ class AuthorizationBoundaryHardeningMixin:
             actor_ref=context.actor.principal_ref,
             source="control-plane",
         )
-        return await super().get_run(context, run.run_id, task_id=task_id)  # type: ignore[misc]
+        return cast(
+            dict[str, JsonValue],
+            await super().get_run(context, run.run_id, task_id=task_id),  # type: ignore[misc]
+        )
 
     async def retry_task(
         self,
@@ -353,7 +362,10 @@ class AuthorizationBoundaryHardeningMixin:
             previous_binding = await cp._latest_binding(task.run_ids)
 
         if not explicit_binding and previous_binding is None:
-            return await super().retry_task(context, task_id, payload)  # type: ignore[misc]
+            return cast(
+                dict[str, JsonValue],
+                await super().retry_task(context, task_id, payload),  # type: ignore[misc]
+            )
 
         workspace = None
         snapshot = None
@@ -395,4 +407,7 @@ class AuthorizationBoundaryHardeningMixin:
             await cp._bind_run(run.run_id, task_id, workspace, snapshot)
         elif previous_binding is not None:
             await cp._bind_existing_target(run.run_id, task_id, previous_binding)
-        return await super().get_run(context, run.run_id, task_id=task_id)  # type: ignore[misc]
+        return cast(
+            dict[str, JsonValue],
+            await super().get_run(context, run.run_id, task_id=task_id),  # type: ignore[misc]
+        )
