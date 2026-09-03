@@ -15,6 +15,7 @@ from .models import API_VERSION, PageQuery, RequestContext
 from .search_contract import ControlPlane as _BaseSearchControlPlane
 from .search_contract import ControlPlaneHTTP, build_openapi
 from .service import (
+    ReferenceCollection,
     _model_provider_resource,
     _model_resource,
     _project_resource,
@@ -29,7 +30,12 @@ _MODEL_SEARCH_AUTHORIZATION = {
     "model": ("models", "model:list"),
     "model-provider": ("model-providers", "model-provider:list"),
 }
-_REFERENCE_COLLECTIONS = ("plans", "steps", "artifacts", "results")
+_REFERENCE_COLLECTIONS: tuple[ReferenceCollection, ...] = (
+    "plans",
+    "steps",
+    "artifacts",
+    "results",
+)
 _REFERENCE_SEARCH_AUTHORIZATION = {
     "plan": ("plans", "plans:list"),
     "step": ("steps", "steps:list"),
