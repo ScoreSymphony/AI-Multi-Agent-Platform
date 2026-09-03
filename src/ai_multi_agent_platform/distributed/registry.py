@@ -201,9 +201,9 @@ class DistributedRegistry:
                 expired_nodes.append(node_id)
 
         for worker_id, worker in tuple(self._workers.items()):
-            node = self._nodes.get(worker.node_id)
+            worker_node = self._nodes.get(worker.node_id)
             worker_stale = timestamp - worker.last_heartbeat_at > self.heartbeat_timeout
-            node_offline = node is None or node.status is NodeStatus.OFFLINE
+            node_offline = worker_node is None or worker_node.status is NodeStatus.OFFLINE
             if worker_stale or node_offline:
                 if worker.status is not WorkerStatus.OFFLINE:
                     self._workers[worker_id] = replace(worker, status=WorkerStatus.OFFLINE)
