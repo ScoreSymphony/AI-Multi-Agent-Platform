@@ -215,9 +215,9 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         ("enabled", "enabled", "disabled"),
         ("available", "available", "unavailable"),
     ):
-        value = resource.get(field)
-        if isinstance(value, bool):
-            values.append(positive if value else negative)
+        boolean_value = resource.get(field)
+        if isinstance(boolean_value, bool):
+            values.append(positive if boolean_value else negative)
     return _deduplicate_strings(tuple(values))
 
 
