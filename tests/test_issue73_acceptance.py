@@ -227,16 +227,16 @@ def test_inactivity_timeout_terminates_session_and_is_auditable() -> None:
 
     now[0] += timedelta(seconds=61)
     reconciled = asyncio.run(service.reconcile_session(session.id))
-    frames = asyncio.run(
-        service.read_frames(session.id, actor_ref=principal, operation=operation)
-    )
+    frames = asyncio.run(service.read_frames(session.id, actor_ref=principal, operation=operation))
 
     assert reconciled.status is SessionStatus.CANCELLED
     assert reconciled.ended_at == now[0]
     assert frames[-1].final is True
     assert "inactivity timeout" in frames[-1].data
     timeout_records = [
-        record for record in service.activity_records if record.action == "session.inactivity_timeout"
+        record
+        for record in service.activity_records
+        if record.action == "session.inactivity_timeout"
     ]
     assert len(timeout_records) == 1
     assert timeout_records[0].actor_ref == "service:terminal-policy"
@@ -271,9 +271,7 @@ def test_transcript_retention_uses_redacted_canonical_frames_once_per_sequence()
         )
     )
 
-    initial = asyncio.run(
-        service.read_frames(session.id, actor_ref=principal, operation=operation)
-    )
+    initial = asyncio.run(service.read_frames(session.id, actor_ref=principal, operation=operation))
     asyncio.run(
         service.send_input(
             session.id,
@@ -290,9 +288,7 @@ def test_transcript_retention_uses_redacted_canonical_frames_once_per_sequence()
             after_sequence=initial[-1].sequence,
         )
     )
-    replay = asyncio.run(
-        service.read_frames(session.id, actor_ref=principal, operation=operation)
-    )
+    replay = asyncio.run(service.read_frames(session.id, actor_ref=principal, operation=operation))
 
     assert after_input[-1].data == "[REDACTED]"
     assert "secret-token" not in repr(retained)
