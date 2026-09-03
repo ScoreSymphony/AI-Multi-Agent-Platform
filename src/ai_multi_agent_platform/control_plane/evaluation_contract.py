@@ -246,7 +246,7 @@ def _required_object(payload: dict[str, JsonValue], key: str) -> dict[str, JsonV
 def _object(value: JsonValue, field: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ValueError(f"{field} must be an object")
-    return cast(dict[str, JsonValue], value)
+    return value
 
 
 def _required_string(payload: dict[str, JsonValue], key: str) -> str:
