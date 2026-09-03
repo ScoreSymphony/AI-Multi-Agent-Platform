@@ -13,6 +13,16 @@ from .automation_runtime_composition import (
     ControlPlaneHTTP,
     build_openapi,
 )
+from .evaluation_contract import (
+    EVALUATION_COLLECTIONS,
+    EVALUATION_COMMANDS,
+    EVALUATION_RUN_COLLECTION,
+    EVALUATION_SUITE_COLLECTION,
+    EvaluationRunResourceService,
+    EvaluationSuiteResourceService,
+    evaluation_command_handlers,
+    evaluation_resource_services,
+)
 from .extensions import (
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
@@ -64,6 +74,12 @@ __all__ = [
     "ControlPlaneASGI",
     "ControlPlaneHTTP",
     "DELIVERY_COLLECTION",
+    "EVALUATION_COLLECTIONS",
+    "EVALUATION_COMMANDS",
+    "EVALUATION_RUN_COLLECTION",
+    "EVALUATION_SUITE_COLLECTION",
+    "EvaluationRunResourceService",
+    "EvaluationSuiteResourceService",
     "FOUNDATION_COLLECTIONS",
     "HTTPRequest",
     "HTTPResponse",
@@ -86,4 +102,6 @@ __all__ = [
     "TASK_MANAGEMENT_UPDATE_COMMAND",
     "WorkspaceIdentity",
     "build_openapi",
+    "evaluation_command_handlers",
+    "evaluation_resource_services",
 ]
