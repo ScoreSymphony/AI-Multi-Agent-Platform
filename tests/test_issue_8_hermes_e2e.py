@@ -125,10 +125,11 @@ def test_kernel_uses_hermes_for_planning_and_reference_executor_for_execution(
         assert (workspace / "artifact.txt").exists()
         assert any(event.event_type == "plan.created" for event in history)
         plan_event = next(event for event in history if event.event_type == "plan.created")
-        assert any(
-            item.namespace == "hermes" and item.values["external_run_id"] == "run_hermes_e2e"
-            for item in plan_event.adapter_metadata
-        )
+        adapter_metadata = plan_event.payload["adapter_metadata"]
+        assert isinstance(adapter_metadata, dict)
+        hermes_metadata = adapter_metadata["hermes"]
+        assert isinstance(hermes_metadata, dict)
+        assert hermes_metadata["external_run_id"] == "run_hermes_e2e"
         assert run.run.id.startswith("run_")
         assert run.run.id != "run_hermes_e2e"
         assert transport.status_reads == 1
