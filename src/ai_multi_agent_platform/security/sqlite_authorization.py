@@ -1,0 +1,138 @@
+"""Durable SQLite policy store for the self-hosted local authorization provider."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from pathlib import Path
+
+from .authorization import (
+    ActorType,
+    AuthorizationAction,
+    LocalAuthorizationProvider,
+    LocalPrincipalPolicy,
+    ResourceType,
+)
+
+
+class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
+    """Persist deterministic #15 local principal policies across restarts."""
+
+    def __init__(self, path: str | Path, *, provider_id: str = "local-authorization") -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._loading = True
+        self._initialize_schema()
+        policies = self._load_policies()
+        super().__init__(policies, provider_id=provider_id)
+        self._loading = False
+
+    def register(self, policy: LocalPrincipalPolicy) -> None:
+        if not self._loading:
+            self._persist_policy(policy)
+        try:
+            super().register(policy)
+        except Exception:
+            if not self._loading:
+                self._delete_policy(policy.principal_ref)
+            raise
+
+    def has_policy(self, principal_ref: str) -> bool:
+        return principal_ref in self._policies
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.path)
+        connection.execute("PRAGMA busy_timeout = 5000")
+        return connection
+
+    def _initialize_schema(self) -> None:
+        with self._connect() as connection:
+            connection.executescript(
+                """
+                PRAGMA journal_mode = WAL;
+                CREATE TABLE IF NOT EXISTS authorization_policies (
+                    principal_ref TEXT PRIMARY KEY,
+                    actor_types_json TEXT NOT NULL,
+                    allowed_actions_json TEXT NOT NULL,
+                    approval_actions_json TEXT NOT NULL,
+                    resource_types_json TEXT NOT NULL,
+                    project_ids_json TEXT NOT NULL,
+                    organization_ids_json TEXT NOT NULL,
+                    team_ids_json TEXT NOT NULL,
+                    workspace_ids_json TEXT NOT NULL,
+                    administrator INTEGER NOT NULL
+                );
+                """
+            )
+
+    def _load_policies(self) -> tuple[LocalPrincipalPolicy, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT principal_ref, actor_types_json, allowed_actions_json, "
+                "approval_actions_json, resource_types_json, project_ids_json, "
+                "organization_ids_json, team_ids_json, workspace_ids_json, administrator "
+                "FROM authorization_policies ORDER BY principal_ref"
+            ).fetchall()
+        return tuple(
+            LocalPrincipalPolicy(
+                principal_ref=str(row[0]),
+                actor_types=frozenset(ActorType(value) for value in _string_list(row[1])),
+                allowed_actions=frozenset(
+                    AuthorizationAction(value) for value in _string_list(row[2])
+                ),
+                approval_actions=frozenset(
+                    AuthorizationAction(value) for value in _string_list(row[3])
+                ),
+                resource_types=frozenset(ResourceType(value) for value in _string_list(row[4])),
+                project_ids=frozenset(_string_list(row[5])),
+                organization_ids=frozenset(_string_list(row[6])),
+                team_ids=frozenset(_string_list(row[7])),
+                workspace_ids=frozenset(_string_list(row[8])),
+                administrator=bool(row[9]),
+            )
+            for row in rows
+        )
+
+    def _persist_policy(self, policy: LocalPrincipalPolicy) -> None:
+        values = (
+            policy.principal_ref,
+            _enum_json(policy.actor_types),
+            _enum_json(policy.allowed_actions),
+            _enum_json(policy.approval_actions),
+            _enum_json(policy.resource_types),
+            _strings_json(policy.project_ids),
+            _strings_json(policy.organization_ids),
+            _strings_json(policy.team_ids),
+            _strings_json(policy.workspace_ids),
+            int(policy.administrator),
+        )
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO authorization_policies (principal_ref, actor_types_json, "
+                "allowed_actions_json, approval_actions_json, resource_types_json, "
+                "project_ids_json, organization_ids_json, team_ids_json, workspace_ids_json, "
+                "administrator) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                values,
+            )
+
+    def _delete_policy(self, principal_ref: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM authorization_policies WHERE principal_ref = ?",
+                (principal_ref,),
+            )
+
+
+def _enum_json(values: frozenset[object]) -> str:
+    return json.dumps(sorted(str(getattr(value, "value")) for value in values))
+
+
+def _strings_json(values: frozenset[str]) -> str:
+    return json.dumps(sorted(values))
+
+
+def _string_list(value: object) -> list[str]:
+    parsed = json.loads(str(value))
+    if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+        raise ValueError("persisted authorization policy contains invalid list data")
+    return parsed
