@@ -19,6 +19,7 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceProvider,
 )
 
+from .authorization_hardening import AuthorizationBoundaryHardeningMixin
 from .extensions import CommandHandler, ResourceService
 from .run_workspace_contract import ControlPlane as _RunWorkspaceControlPlane
 from .run_workspace_contract import ControlPlaneHTTP as _RunWorkspaceControlPlaneHTTP
@@ -30,8 +31,12 @@ from .task_management_api import build_openapi as _build_task_management_openapi
 from .workspace_contract import _augment_workspace_openapi
 
 
-class ControlPlane(_RunWorkspaceControlPlane, _TaskManagementControlPlane):
-    """Compose #37 Workspace semantics with the current #88 Task-management API."""
+class ControlPlane(
+    AuthorizationBoundaryHardeningMixin,
+    _RunWorkspaceControlPlane,
+    _TaskManagementControlPlane,
+):
+    """Compose #37/#88 semantics while preserving canonical #15 authorization."""
 
     def __init__(
         self,
