@@ -6,10 +6,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Mapping
+from typing import Mapping, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
+from ai_multi_agent_platform.security.redaction import redact_sensitive
 
 
 def utc_now() -> datetime:
@@ -164,9 +165,21 @@ class Notification:
             raise ValueError("updated_at cannot precede created_at")
         if self.expires_at is not None and self.expires_at <= self.created_at:
             raise ValueError("expires_at must be after created_at")
+        safe_summary = redact_sensitive(dict(self.summary))
+        safe_delivery = redact_sensitive(dict(self.delivery_metadata))
+        if not isinstance(safe_summary, dict) or not isinstance(safe_delivery, dict):
+            raise TypeError("notification metadata must serialize as JSON objects")
         object.__setattr__(self, "actions", tuple(self.actions))
-        object.__setattr__(self, "summary", MappingProxyType(dict(self.summary)))
-        object.__setattr__(self, "delivery_metadata", MappingProxyType(dict(self.delivery_metadata)))
+        object.__setattr__(
+            self,
+            "summary",
+            MappingProxyType(cast(dict[str, JsonValue], safe_summary)),
+        )
+        object.__setattr__(
+            self,
+            "delivery_metadata",
+            MappingProxyType(cast(dict[str, JsonValue], safe_delivery)),
+        )
 
     @property
     def unread(self) -> bool:
@@ -251,9 +264,21 @@ class NotificationCandidate:
         _validate_optional_id(self.membership_id, "membership")
         if self.expires_at is not None and self.expires_at.utcoffset() is None:
             raise ValueError("expires_at must be timezone-aware")
+        safe_summary = redact_sensitive(dict(self.summary))
+        safe_delivery = redact_sensitive(dict(self.delivery_metadata))
+        if not isinstance(safe_summary, dict) or not isinstance(safe_delivery, dict):
+            raise TypeError("notification candidate metadata must serialize as JSON objects")
         object.__setattr__(self, "actions", tuple(self.actions))
-        object.__setattr__(self, "summary", MappingProxyType(dict(self.summary)))
-        object.__setattr__(self, "delivery_metadata", MappingProxyType(dict(self.delivery_metadata)))
+        object.__setattr__(
+            self,
+            "summary",
+            MappingProxyType(cast(dict[str, JsonValue], safe_summary)),
+        )
+        object.__setattr__(
+            self,
+            "delivery_metadata",
+            MappingProxyType(cast(dict[str, JsonValue], safe_delivery)),
+        )
 
 
 def _validate_optional_id(value: str | None, prefix: str) -> None:
