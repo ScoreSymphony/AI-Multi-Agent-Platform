@@ -155,6 +155,20 @@ platform run cancel run_... --task-id task_...
 
 List commands support the Control Plane conventions `--limit`, `--cursor`, `--sort`, `--direction`, `--q`, repeatable `--filter FIELD=VALUE`, and `--fields`.
 
+## Shell completion
+
+The package also installs a dependency-free `platform-completion` helper. It introspects the same `argparse` command tree as `platform`; it does not read CLI profiles, contact the Control Plane, or resolve secrets.
+
+Enable completion for the current shell session with one of:
+
+```bash
+eval "$(platform-completion bash)"
+eval "$(platform-completion zsh)"
+platform-completion fish | source
+```
+
+The helper completes the current command hierarchy, command options, and finite option choices such as `--direction` and `--owner-type`. Dynamic resource IDs are intentionally not fetched during tab completion, so completion cannot cause network access or administrative side effects.
+
 ## Initial doctor contract
 
 `platform doctor` currently validates the foundation that exists today:
