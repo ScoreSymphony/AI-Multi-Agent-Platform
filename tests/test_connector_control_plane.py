@@ -137,7 +137,7 @@ def test_control_plane_exposes_canonical_connector_resources_and_lifecycle() -> 
         assert isinstance(created.body, dict)
         assert connection_id.startswith("connection_")
         assert created.body["status"] == "ready"
-        assert created.body["adapter_metadata"] == [
+        assert created.body["account_metadata"] == [
             {
                 "namespace": "reference.local",
                 "values": {"account_id": "local-fixture"},
@@ -159,7 +159,7 @@ def test_control_plane_exposes_canonical_connector_resources_and_lifecycle() -> 
         assert len(items) == 1
         assert isinstance(items[0], dict)
         assert items[0]["id"].startswith("connector_definition_")
-        assert items[0]["adapter_metadata"] == [
+        assert items[0]["source_metadata"] == [
             {
                 "namespace": "platform.reference",
                 "values": {
