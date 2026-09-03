@@ -40,6 +40,23 @@ Active and historical `AgentRunRecord` objects pin `AgentRevisionRef` and, for t
 execution, `AgentTeamRevisionRef`. Updating or disabling the current definition cannot
 silently change an already-started run.
 
+## Durable persistence
+
+`AgentRepository` is the persistence boundary. Two reference implementations exist:
+
+- `InMemoryAgentRepository` for deterministic tests and ephemeral compositions;
+- `JsonAgentRepository` for durable bootstrap/reference deployments.
+
+`JsonAgentRepository` persists the current Agent and Agent Team definitions, every
+immutable historical revision, and every AgentRun record in a versioned JSON document.
+Writes use a temporary file followed by atomic replacement. Opening a new repository
+instance for the same path replays the persisted history through the normal repository
+validation rules, so restart recovery cannot bypass revision or identity invariants.
+
+The persisted format is versioned independently through
+`AGENT_REPOSITORY_SCHEMA_VERSION`. A repository with an unsupported schema version is
+rejected explicitly rather than being interpreted heuristically.
+
 ## Agent profile
 
 An `AgentProfile` contains provider-neutral policy and configuration:
@@ -94,8 +111,10 @@ runtime can be given an explicit set of available capability IDs for determinist
 tests and bootstrap execution. Missing, denied or incompatible capabilities fail before
 execution.
 
-Approval references are policy hooks; the existing authorization/approval subsystem is
-responsible for the actual decision and approval lifecycle.
+Approval references are retained as Agent capability policy metadata. Actual approval
+requirements and decisions remain enforced by the canonical capability invocation and
+authorization/approval pipeline; the Agent runtime does not create a second approval
+authority or bypass that pipeline.
 
 ## Memory and knowledge
 
@@ -187,6 +206,6 @@ The #33 implementation does not:
 - mutate active runs when a newer Agent revision is created.
 
 Future orchestrator adapters should consume `AgentExecutionSpec` and return an
-`OrchestratorMapping`. Persistent production repositories may replace
-`InMemoryAgentRepository` behind the `AgentRepository` protocol without changing the
-canonical models or application service.
+`OrchestratorMapping`. Production persistence backends may replace the provided JSON
+reference store behind the same `AgentRepository` protocol without changing canonical
+models, stable identities, revision semantics, or application-service behavior.
