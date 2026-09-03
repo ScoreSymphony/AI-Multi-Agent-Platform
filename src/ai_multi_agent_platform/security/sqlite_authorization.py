@@ -28,13 +28,18 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
         self._loading = False
 
     def register(self, policy: LocalPrincipalPolicy) -> None:
-        if not self._loading:
-            self._persist_policy(policy)
+        if self._loading:
+            super().register(policy)
+            return
+        if self.has_policy(policy.principal_ref):
+            raise ValueError(
+                f"authorization policy already registered for principal: {policy.principal_ref}"
+            )
+        self._persist_policy(policy)
         try:
             super().register(policy)
         except Exception:
-            if not self._loading:
-                self._delete_policy(policy.principal_ref)
+            self._delete_policy(policy.principal_ref)
             raise
 
     def has_policy(self, principal_ref: str) -> bool:
