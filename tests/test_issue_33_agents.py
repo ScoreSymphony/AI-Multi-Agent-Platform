@@ -8,6 +8,7 @@ import pytest
 from ai_multi_agent_platform.agents import (
     AgentCapabilityPolicy,
     AgentDataAccess,
+    AgentExecutionSpec,
     AgentInstructions,
     AgentModelPolicy,
     AgentProfile,
@@ -25,8 +26,8 @@ from ai_multi_agent_platform.agents import (
     UnavailableMemberPolicy,
 )
 from ai_multi_agent_platform.capabilities import (
-    CapabilityRegistry,
     ECHO_CAPABILITY_ID,
+    CapabilityRegistry,
     NativeEchoProvider,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, HealthStatus
@@ -136,13 +137,11 @@ class NamedMapper:
     def adapter_id(self) -> str:
         return self._adapter_id
 
-    async def map_agent(self, spec: object) -> OrchestratorMapping:
-        agent_spec = spec
-        run_id = getattr(agent_spec, "run_id")
-        revision = getattr(agent_spec, "agent_revision")
+    async def map_agent(self, spec: AgentExecutionSpec) -> OrchestratorMapping:
+        revision = spec.agent_revision
         return OrchestratorMapping(
             adapter_id=self.adapter_id,
-            runtime_ref=f"{self.adapter_id}:{revision.agent_id}:{revision.revision}:{run_id}",
+            runtime_ref=f"{self.adapter_id}:{revision.agent_id}:{revision.revision}:{spec.run_id}",
         )
 
 
