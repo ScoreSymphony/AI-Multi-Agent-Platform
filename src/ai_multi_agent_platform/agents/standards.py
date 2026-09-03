@@ -1,13 +1,4 @@
-"""Editable standard Agent and Agent Team starter catalog for issue #77.
-
-The catalog deliberately materializes the existing canonical Agent contracts from issue
-#33. It does not introduce a second Agent schema and it does not depend on a concrete
-model provider, orchestrator, executor, capability provider, memory backend or host.
-
-Bundled definitions use stable IDs so a deployment can bootstrap them idempotently.
-Bootstrap never updates an existing bundled identity: local edits remain untouched and
-new platform releases cannot silently overwrite user-modified revisions.
-"""
+"""Provider-neutral standard Agent and Agent Team starters for issue #77."""
 
 from __future__ import annotations
 
@@ -58,7 +49,6 @@ STANDARD_AGENT_IDS: Mapping[str, str] = MappingProxyType(
         "system_administrator": "agent_bc8fea68-0147-5260-af83-66ac6b127b54",
     }
 )
-
 STANDARD_TEAM_IDS: Mapping[str, str] = MappingProxyType(
     {
         "software_development": "team_300c9c45-1c4a-53bc-9942-c588b6c9dd71",
@@ -68,7 +58,7 @@ STANDARD_TEAM_IDS: Mapping[str, str] = MappingProxyType(
 
 
 class CapabilityInventory(Protocol):
-    """Small #12-compatible seam used for optional starter readiness checks."""
+    """Minimal #12 inventory seam used for starter readiness checks."""
 
     def inventory_capabilities(
         self,
@@ -93,9 +83,9 @@ class StandardAgentTemplate:
     @property
     def optional_capability_ids(self) -> tuple[str, ...]:
         return tuple(
-            item.capability_id
-            for item in self.profile.capabilities.constraints
-            if not item.required
+            constraint.capability_id
+            for constraint in self.profile.capabilities.constraints
+            if not constraint.required
         )
 
 
@@ -141,6 +131,23 @@ class StarterBootstrapResult:
     readiness: tuple[StandardAgentReadiness, ...] = ()
 
 
+@dataclass(frozen=True, slots=True)
+class _AgentSpec:
+    key: str
+    name: str
+    role: str
+    description: str
+    instruction: str
+    permission_profile: str
+    changelog: str
+    required: tuple[str, ...] = ()
+    optional: tuple[str, ...] = ()
+    denied: tuple[str, ...] = ()
+    approvals: tuple[tuple[str, str], ...] = ()
+    memory_scopes: tuple[MemoryScope, ...] = (MemoryScope.TASK,)
+    enabled: bool = True
+
+
 def _metadata(
     *,
     key: str,
@@ -175,269 +182,193 @@ def _provenance(*, key: str, kind: str, action: str) -> Provenance:
     )
 
 
-def _model_policy() -> AgentModelPolicy:
-    return AgentModelPolicy(
-        requirements=RoutingRequirements(modalities=("text",)),
-        allow_task_override=True,
-        fallback=ModelFallbackPolicy.ROUTE,
-    )
-
-
-def _capability_policy(
-    *,
-    required: tuple[str, ...] = (),
-    optional: tuple[str, ...] = (),
-    denied: tuple[str, ...] = (),
-    approval_refs: Mapping[str, str] | None = None,
-) -> AgentCapabilityPolicy:
-    approval_refs = approval_refs or {}
-    allowed = (*required, *optional)
-    return AgentCapabilityPolicy(
+def _profile(spec: _AgentSpec) -> AgentProfile:
+    approval_refs = dict(spec.approvals)
+    allowed = (*spec.required, *spec.optional)
+    capabilities = AgentCapabilityPolicy(
         allowed=allowed,
-        denied=denied,
+        denied=spec.denied,
         constraints=tuple(
             CapabilityConstraint(
                 capability_id=capability_id,
-                required=capability_id in required,
+                required=capability_id in spec.required,
                 approval_ref=approval_refs.get(capability_id),
             )
             for capability_id in allowed
         ),
     )
-
-
-def _profile(
-    *,
-    key: str,
-    name: str,
-    role: str,
-    description: str,
-    instruction: str,
-    permission_profile: str,
-    required_capabilities: tuple[str, ...] = (),
-    optional_capabilities: tuple[str, ...] = (),
-    denied_capabilities: tuple[str, ...] = (),
-    approval_refs: Mapping[str, str] | None = None,
-    memory_scopes: tuple[MemoryScope, ...] = (MemoryScope.TASK,),
-    enabled: bool = True,
-    changelog: str = "Initial standard definition for issue #77.",
-) -> AgentProfile:
     return AgentProfile(
-        name=name,
-        role=role,
-        description=description,
+        name=spec.name,
+        role=spec.role,
+        description=spec.description,
         instructions=AgentInstructions(
-            role=InstructionSource(content=instruction, version=STARTER_CATALOG_VERSION)
+            role=InstructionSource(
+                content=spec.instruction,
+                version=STARTER_CATALOG_VERSION,
+            )
         ),
-        model=_model_policy(),
-        capabilities=_capability_policy(
-            required=required_capabilities,
-            optional=optional_capabilities,
-            denied=denied_capabilities,
-            approval_refs=approval_refs,
+        model=AgentModelPolicy(
+            requirements=RoutingRequirements(modalities=("text",)),
+            allow_task_override=True,
+            fallback=ModelFallbackPolicy.ROUTE,
         ),
-        data_access=AgentDataAccess(memory_scopes=memory_scopes),
-        enabled=enabled,
+        capabilities=capabilities,
+        data_access=AgentDataAccess(memory_scopes=spec.memory_scopes),
+        enabled=spec.enabled,
         metadata=_metadata(
-            key=key,
+            key=spec.key,
             kind="agent",
-            permission_profile=permission_profile,
-            changelog=changelog,
+            permission_profile=spec.permission_profile,
+            changelog=spec.changelog,
         ),
     )
 
 
-STANDARD_AGENT_TEMPLATES: tuple[StandardAgentTemplate, ...] = (
-    StandardAgentTemplate(
+_AGENT_SPECS = (
+    _AgentSpec(
         key="general_assistant",
-        agent_id=STANDARD_AGENT_IDS["general_assistant"],
-        version=STARTER_CATALOG_VERSION,
+        name="General Assistant",
+        role="general_assistant",
+        description="General-purpose assistant with conservative optional read capabilities.",
+        instruction=(
+            "Handle general tasks through provider-neutral platform contracts. Use only granted "
+            "capabilities and prefer least-privileged actions. Never assume a specific model, "
+            "provider, orchestrator, executor, memory backend, host, or credential source."
+        ),
         permission_profile="least-privilege-general",
         changelog="Initial general-purpose assistant starter.",
-        profile=_profile(
-            key="general_assistant",
-            name="General Assistant",
-            role="general_assistant",
-            description="General-purpose assistant with conservative, optional read capabilities.",
-            instruction=(
-                "Handle general user tasks using provider-neutral platform contracts. "
-                "Use only capabilities granted for the current task and prefer read-only, "
-                "least-privileged actions. Do not assume a specific model, tool provider, "
-                "orchestrator, executor, memory backend, host, or credential source."
-            ),
-            permission_profile="least-privilege-general",
-            optional_capabilities=("tool.web.read", "tool.file.read"),
-            denied_capabilities=("tool.shell.execute",),
-            memory_scopes=(MemoryScope.TASK, MemoryScope.AGENT),
-        ),
+        optional=("tool.web.read", "tool.file.read"),
+        denied=("tool.shell.execute",),
+        memory_scopes=(MemoryScope.TASK, MemoryScope.AGENT),
     ),
-    StandardAgentTemplate(
+    _AgentSpec(
         key="planner",
-        agent_id=STANDARD_AGENT_IDS["planner"],
-        version=STARTER_CATALOG_VERSION,
+        name="Planner",
+        role="planner",
+        description="Planning specialist that decomposes goals without performing execution.",
+        instruction=(
+            "Translate goals into ordered plans with dependencies, assumptions, risks, acceptance "
+            "criteria, and handoff points. Plan against canonical platform capabilities instead "
+            "of provider-specific tools. Do not perform destructive or privileged execution."
+        ),
         permission_profile="planning-only",
         changelog="Initial planning specialist starter.",
-        profile=_profile(
-            key="planner",
-            name="Planner",
-            role="planner",
-            description="Planning specialist that decomposes goals without performing execution.",
-            instruction=(
-                "Translate goals into explicit, ordered plans with dependencies, assumptions, "
-                "risks, acceptance criteria, and handoff points. Plan against canonical platform "
-                "capabilities instead of provider-specific tools. Do not perform destructive or "
-                "privileged execution."
-            ),
-            permission_profile="planning-only",
-            denied_capabilities=("tool.file.write", "tool.shell.execute"),
-            memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
-        ),
+        denied=("tool.file.write", "tool.shell.execute"),
+        memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
     ),
-    StandardAgentTemplate(
+    _AgentSpec(
         key="researcher",
-        agent_id=STANDARD_AGENT_IDS["researcher"],
-        version=STARTER_CATALOG_VERSION,
+        name="Researcher",
+        role="researcher",
+        description="Research specialist with optional read-only web and file capabilities.",
+        instruction=(
+            "Research claims from available sources, preserve source references, and distinguish "
+            "evidence from inference. Prefer authoritative primary sources where available. "
+            "Operate read-only by default and never use destructive filesystem or shell actions."
+        ),
         permission_profile="research-read-only",
         changelog="Initial read-oriented researcher starter.",
-        profile=_profile(
-            key="researcher",
-            name="Researcher",
-            role="researcher",
-            description="Research specialist with optional read-only web and file capabilities.",
-            instruction=(
-                "Research claims from available sources, preserve source references, "
-                "and distinguish evidence from inference. Prefer authoritative primary "
-                "sources when available. Operate read-only by default and never use "
-                "destructive filesystem or shell actions."
-            ),
-            permission_profile="research-read-only",
-            optional_capabilities=("tool.web.read", "tool.file.read"),
-            denied_capabilities=("tool.file.write", "tool.shell.execute"),
-            memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
-        ),
+        optional=("tool.web.read", "tool.file.read"),
+        denied=("tool.file.write", "tool.shell.execute"),
+        memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
     ),
-    StandardAgentTemplate(
+    _AgentSpec(
         key="developer",
-        agent_id=STANDARD_AGENT_IDS["developer"],
-        version=STARTER_CATALOG_VERSION,
+        name="Developer",
+        role="developer",
+        description="Software-development specialist scoped to an assigned workspace.",
+        instruction=(
+            "Analyze, implement, and test changes inside the assigned project/workspace. Use "
+            "canonical capabilities and keep changes reviewable. Never assume credentials, "
+            "unrestricted host access, or permission to act outside the assigned scope."
+        ),
         permission_profile="workspace-developer",
         changelog="Initial scoped software-development starter.",
-        profile=_profile(
-            key="developer",
-            name="Developer",
-            role="developer",
-            description="Software-development specialist scoped to an assigned workspace.",
-            instruction=(
-                "Analyze, implement, and test software changes inside the assigned "
-                "project/workspace. Use canonical capabilities and keep changes reviewable. "
-                "Never assume credentials, secrets, unrestricted host access, or permission "
-                "to act outside the assigned scope."
-            ),
-            permission_profile="workspace-developer",
-            required_capabilities=("tool.file.read",),
-            optional_capabilities=("tool.file.write", "tool.shell.execute"),
-            approval_refs={"tool.shell.execute": "approval:standard-shell-execution"},
-            memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
-        ),
+        required=("tool.file.read",),
+        optional=("tool.file.write", "tool.shell.execute"),
+        approvals=(("tool.shell.execute", "approval:standard-shell-execution"),),
+        memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
     ),
-    StandardAgentTemplate(
+    _AgentSpec(
         key="reviewer",
-        agent_id=STANDARD_AGENT_IDS["reviewer"],
-        version=STARTER_CATALOG_VERSION,
+        name="Reviewer",
+        role="reviewer",
+        description="Independent reviewer/tester with read-only defaults.",
+        instruction=(
+            "Review plans, code, artifacts, evidence, and results independently. Identify defects, "
+            "regressions, unsupported claims, missing tests, and policy violations. Prefer "
+            "verification over modification and do not silently repair reviewed work."
+        ),
         permission_profile="independent-review-read-only",
         changelog="Initial independent reviewer/tester starter.",
-        profile=_profile(
-            key="reviewer",
-            name="Reviewer",
-            role="reviewer",
-            description="Independent reviewer/tester with read-only defaults.",
-            instruction=(
-                "Review plans, code, artifacts, evidence, and results independently. "
-                "Identify concrete defects, regressions, unsupported claims, missing tests, "
-                "and policy violations. Prefer verification over modification and do not "
-                "silently repair the work being reviewed."
-            ),
-            permission_profile="independent-review-read-only",
-            optional_capabilities=("tool.file.read",),
-            denied_capabilities=("tool.file.write", "tool.shell.execute"),
-            memory_scopes=(MemoryScope.TASK,),
-        ),
+        optional=("tool.file.read",),
+        denied=("tool.file.write", "tool.shell.execute"),
     ),
-    StandardAgentTemplate(
+    _AgentSpec(
         key="data_analyst",
-        agent_id=STANDARD_AGENT_IDS["data_analyst"],
-        version=STARTER_CATALOG_VERSION,
+        name="Data Analyst",
+        role="data_analyst",
+        description="Structured-data analyst with read-oriented defaults.",
+        instruction=(
+            "Analyze structured data, state assumptions, retain reproducible steps, and separate "
+            "observed values from interpretation. Do not mutate source datasets unless an "
+            "explicitly granted write capability and task require it."
+        ),
         permission_profile="data-analysis-read-only",
         changelog="Initial data-analysis starter.",
-        profile=_profile(
-            key="data_analyst",
-            name="Data Analyst",
-            role="data_analyst",
-            description="Structured-data analyst with read-oriented defaults.",
-            instruction=(
-                "Inspect and analyze structured data, state assumptions, and retain "
-                "reproducible steps. Separate observed values from interpretation. "
-                "Do not mutate source datasets unless an explicitly granted write "
-                "capability and task require it."
-            ),
-            permission_profile="data-analysis-read-only",
-            optional_capabilities=("tool.data.read", "tool.file.read"),
-            denied_capabilities=("tool.file.write", "tool.shell.execute"),
-            memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
-        ),
+        optional=("tool.data.read", "tool.file.read"),
+        denied=("tool.file.write", "tool.shell.execute"),
+        memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
     ),
-    StandardAgentTemplate(
+    _AgentSpec(
         key="file_assistant",
-        agent_id=STANDARD_AGENT_IDS["file_assistant"],
-        version=STARTER_CATALOG_VERSION,
+        name="File Assistant",
+        role="file_assistant",
+        description="File specialist restricted to platform-assigned project/workspace scope.",
+        instruction=(
+            "Inspect and organize files only through platform capabilities and only within the "
+            "assigned project/workspace scope. Treat writes as optional elevated functionality; "
+            "never infer broader filesystem access from a path supplied by a user."
+        ),
         permission_profile="workspace-files-scoped",
         changelog="Initial scoped file-assistant starter.",
-        profile=_profile(
-            key="file_assistant",
-            name="File Assistant",
-            role="file_assistant",
-            description="File specialist restricted to platform-assigned project/workspace scope.",
-            instruction=(
-                "Inspect and organize files only through platform capabilities and only "
-                "within the assigned project/workspace scope. Treat writes as optional "
-                "elevated functionality; never infer broader filesystem access from a "
-                "file path supplied by a user."
-            ),
-            permission_profile="workspace-files-scoped",
-            required_capabilities=("tool.file.read",),
-            optional_capabilities=("tool.file.write",),
-            denied_capabilities=("tool.shell.execute",),
-            memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
-        ),
+        required=("tool.file.read",),
+        optional=("tool.file.write",),
+        denied=("tool.shell.execute",),
+        memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
     ),
-    StandardAgentTemplate(
+    _AgentSpec(
         key="system_administrator",
-        agent_id=STANDARD_AGENT_IDS["system_administrator"],
-        version=STARTER_CATALOG_VERSION,
+        name="System Administrator",
+        role="system_administrator",
+        description="Privileged operations starter; disabled by default and approval-gated.",
+        instruction=(
+            "Perform system administration only inside explicitly authorized infrastructure "
+            "scope. Privileged or mutating actions require the canonical approval path. Never "
+            "bypass policy, expand credentials, or treat this profile as implicit host authority."
+        ),
         permission_profile="restricted-admin-approval-required",
         changelog="Initial disabled-by-default system-administration starter.",
-        profile=_profile(
-            key="system_administrator",
-            name="System Administrator",
-            role="system_administrator",
-            description="Privileged operations starter; disabled by default and approval-gated.",
-            instruction=(
-                "Perform system administration only inside explicitly authorized "
-                "infrastructure scope. Privileged or mutating actions require the canonical "
-                "approval path. Never bypass policy, expand credentials, or treat this "
-                "profile as implicit host authority."
-            ),
-            permission_profile="restricted-admin-approval-required",
-            required_capabilities=("tool.shell.execute",),
-            optional_capabilities=("tool.file.read", "tool.file.write"),
-            approval_refs={
-                "tool.shell.execute": "approval:standard-privileged-admin",
-                "tool.file.write": "approval:standard-privileged-admin",
-            },
-            memory_scopes=(MemoryScope.TASK,),
-            enabled=False,
+        required=("tool.shell.execute",),
+        optional=("tool.file.read", "tool.file.write"),
+        approvals=(
+            ("tool.shell.execute", "approval:standard-privileged-admin"),
+            ("tool.file.write", "approval:standard-privileged-admin"),
         ),
+        enabled=False,
     ),
+)
+
+STANDARD_AGENT_TEMPLATES: tuple[StandardAgentTemplate, ...] = tuple(
+    StandardAgentTemplate(
+        key=spec.key,
+        agent_id=STANDARD_AGENT_IDS[spec.key],
+        version=STARTER_CATALOG_VERSION,
+        profile=_profile(spec),
+        permission_profile=spec.permission_profile,
+        changelog=spec.changelog,
+    )
+    for spec in _AGENT_SPECS
 )
 
 STANDARD_TEAM_TEMPLATES: tuple[StandardTeamTemplate, ...] = (
@@ -449,16 +380,16 @@ STANDARD_TEAM_TEMPLATES: tuple[StandardTeamTemplate, ...] = (
         description="Planner + Developer + independent Reviewer/Tester starter team.",
         members=(
             StandardTeamMemberTemplate(
-                agent_key="planner",
-                role="planner",
+                "planner",
+                "planner",
                 can_delegate_to_keys=("developer", "reviewer"),
             ),
             StandardTeamMemberTemplate(
-                agent_key="developer",
-                role="developer",
+                "developer",
+                "developer",
                 can_delegate_to_keys=("reviewer",),
             ),
-            StandardTeamMemberTemplate(agent_key="reviewer", role="reviewer_tester"),
+            StandardTeamMemberTemplate("reviewer", "reviewer_tester"),
         ),
         leader_agent_key="planner",
         max_parallel_agents=2,
@@ -473,12 +404,12 @@ STANDARD_TEAM_TEMPLATES: tuple[StandardTeamTemplate, ...] = (
         description="Researcher + source-checking Reviewer + Data Analyst starter team.",
         members=(
             StandardTeamMemberTemplate(
-                agent_key="researcher",
-                role="researcher",
+                "researcher",
+                "researcher",
                 can_delegate_to_keys=("reviewer", "data_analyst"),
             ),
-            StandardTeamMemberTemplate(agent_key="reviewer", role="source_checker_reviewer"),
-            StandardTeamMemberTemplate(agent_key="data_analyst", role="analyst_writer"),
+            StandardTeamMemberTemplate("reviewer", "source_checker_reviewer"),
+            StandardTeamMemberTemplate("data_analyst", "analyst_writer"),
         ),
         leader_agent_key="researcher",
         max_parallel_agents=3,
@@ -487,11 +418,11 @@ STANDARD_TEAM_TEMPLATES: tuple[StandardTeamTemplate, ...] = (
     ),
 )
 
-_AGENT_TEMPLATES_BY_KEY: Mapping[str, StandardAgentTemplate] = MappingProxyType(
-    {item.key: item for item in STANDARD_AGENT_TEMPLATES}
+_AGENT_TEMPLATES_BY_KEY = MappingProxyType(
+    {template.key: template for template in STANDARD_AGENT_TEMPLATES}
 )
-_TEAM_TEMPLATES_BY_KEY: Mapping[str, StandardTeamTemplate] = MappingProxyType(
-    {item.key: item for item in STANDARD_TEAM_TEMPLATES}
+_TEAM_TEMPLATES_BY_KEY = MappingProxyType(
+    {template.key: template for template in STANDARD_TEAM_TEMPLATES}
 )
 
 
@@ -513,19 +444,19 @@ def assess_standard_agent_capabilities(
     template: StandardAgentTemplate,
     inventory: CapabilityInventory,
 ) -> StandardAgentReadiness:
-    available_ids = {
+    available = {
         capability.capability_id
         for capability in inventory.inventory_capabilities(include_unavailable=False)
     }
     missing_required = tuple(
         capability_id
         for capability_id in template.required_capability_ids
-        if capability_id not in available_ids
+        if capability_id not in available
     )
     missing_optional = tuple(
         capability_id
         for capability_id in template.optional_capability_ids
-        if capability_id not in available_ids
+        if capability_id not in available
     )
     return StandardAgentReadiness(
         agent_key=template.key,
@@ -563,13 +494,10 @@ def _validate_existing_agent_identity(
         or metadata.get("starter_key") != template.key
         or metadata.get("starter_kind") != "agent"
     ):
-        message = (
-            "stable standard Agent ID is occupied by a non-catalog definition: "
-            f"{template.agent_id}"
-        )
+        prefix = "stable standard Agent ID is occupied by a non-catalog definition: "
         raise ContractError(
             ErrorCode.CONFLICT,
-            message,
+            prefix + template.agent_id,
             details={"agent_key": template.key, "agent_id": template.agent_id},
         )
     return service.get_agent_revision(template.agent_id)
@@ -577,14 +505,14 @@ def _validate_existing_agent_identity(
 
 def _materialize_team_profile(
     template: StandardTeamTemplate,
-    base_agent_revisions: Mapping[str, AgentRevision],
+    base_agents: Mapping[str, AgentRevision],
 ) -> AgentTeamProfile:
-    member_ids = {key: base_agent_revisions[key].agent_id for key in base_agent_revisions}
+    member_ids = {key: revision.agent_id for key, revision in base_agents.items()}
     members = tuple(
         AgentTeamMember(
             agent=AgentRevisionRef(
-                agent_id=base_agent_revisions[member.agent_key].agent_id,
-                revision=base_agent_revisions[member.agent_key].revision,
+                agent_id=base_agents[member.agent_key].agent_id,
+                revision=base_agents[member.agent_key].revision,
             ),
             role=member.role,
             required=member.required,
@@ -621,13 +549,10 @@ def _validate_existing_team_identity(
         or metadata.get("starter_key") != template.key
         or metadata.get("starter_kind") != "team"
     ):
-        message = (
-            "stable standard Agent Team ID is occupied by a non-catalog definition: "
-            f"{template.team_id}"
-        )
+        prefix = "stable standard Agent Team ID is occupied by a non-catalog definition: "
         raise ContractError(
             ErrorCode.CONFLICT,
-            message,
+            prefix + template.team_id,
             details={"team_key": template.key, "team_id": template.team_id},
         )
     return service.get_team_revision(template.team_id)
@@ -639,49 +564,50 @@ def bootstrap_standard_agents(
     capability_inventory: CapabilityInventory | None = None,
     owner_ref: OwnerRef = STARTER_OWNER,
 ) -> StarterBootstrapResult:
-    """Install missing starter definitions without mutating existing identities.
+    """Install missing starters without mutating an existing starter identity."""
 
-    Existing bundled identities are preserved at their current revision. Starter teams are
-    initially pinned to revision 1 of the bundled Agents so a local edit of a standard Agent
-    cannot silently change the meaning of a subsequently installed starter team.
-    """
-
-    existing_agent_ids = {item.agent_id for item in service.repository.list_agents()}
-    installed_agent_keys: list[str] = []
-    preserved_agent_keys: list[str] = []
-    base_agent_revisions: dict[str, AgentRevision] = {}
+    existing_agent_ids = {agent.agent_id for agent in service.repository.list_agents()}
+    installed_agents: list[str] = []
+    preserved_agents: list[str] = []
+    base_agents: dict[str, AgentRevision] = {}
 
     for template in STANDARD_AGENT_TEMPLATES:
         if template.agent_id in existing_agent_ids:
             _validate_existing_agent_identity(service, template)
-            preserved_agent_keys.append(template.key)
+            preserved_agents.append(template.key)
         else:
             service.create_agent(
                 template.profile,
                 owner_ref=owner_ref,
-                provenance=_provenance(key=template.key, kind="agent", action="bootstrap"),
+                provenance=_provenance(
+                    key=template.key,
+                    kind="agent",
+                    action="bootstrap",
+                ),
                 agent_id=template.agent_id,
             )
-            installed_agent_keys.append(template.key)
-        base_agent_revisions[template.key] = service.repository.get_agent_revision(
-            template.agent_id, 1
-        )
+            installed_agents.append(template.key)
+        base_agents[template.key] = service.repository.get_agent_revision(template.agent_id, 1)
 
-    existing_team_ids = {item.team_id for item in service.repository.list_teams()}
-    installed_team_keys: list[str] = []
-    preserved_team_keys: list[str] = []
+    existing_team_ids = {team.team_id for team in service.repository.list_teams()}
+    installed_teams: list[str] = []
+    preserved_teams: list[str] = []
     for template in STANDARD_TEAM_TEMPLATES:
         if template.team_id in existing_team_ids:
             _validate_existing_team_identity(service, template)
-            preserved_team_keys.append(template.key)
-            continue
-        service.create_team(
-            _materialize_team_profile(template, base_agent_revisions),
-            owner_ref=owner_ref,
-            provenance=_provenance(key=template.key, kind="team", action="bootstrap"),
-            team_id=template.team_id,
-        )
-        installed_team_keys.append(template.key)
+            preserved_teams.append(template.key)
+        else:
+            service.create_team(
+                _materialize_team_profile(template, base_agents),
+                owner_ref=owner_ref,
+                provenance=_provenance(
+                    key=template.key,
+                    kind="team",
+                    action="bootstrap",
+                ),
+                team_id=template.team_id,
+            )
+            installed_teams.append(template.key)
 
     readiness: tuple[StandardAgentReadiness, ...] = ()
     if capability_inventory is not None:
@@ -691,10 +617,10 @@ def bootstrap_standard_agents(
         )
 
     return StarterBootstrapResult(
-        installed_agent_keys=tuple(installed_agent_keys),
-        preserved_agent_keys=tuple(preserved_agent_keys),
-        installed_team_keys=tuple(installed_team_keys),
-        preserved_team_keys=tuple(preserved_team_keys),
+        installed_agent_keys=tuple(installed_agents),
+        preserved_agent_keys=tuple(preserved_agents),
+        installed_team_keys=tuple(installed_teams),
+        preserved_team_keys=tuple(preserved_teams),
         readiness=readiness,
     )
 
@@ -706,7 +632,7 @@ def clone_standard_agent(
     owner_ref: OwnerRef,
     name: str | None = None,
 ) -> AgentRevision:
-    """Create a user-owned editable copy of the immutable bundled base revision."""
+    """Clone bundled revision 1 into a user-owned canonical Agent identity."""
 
     template = get_standard_agent_template(key)
     _validate_existing_agent_identity(service, template)
@@ -726,7 +652,7 @@ def clone_standard_team(
     owner_ref: OwnerRef,
     name: str | None = None,
 ) -> AgentTeamRevision:
-    """Create a user-owned editable copy of the bundled starter Team revision."""
+    """Clone bundled revision 1 into a user-owned canonical Agent Team identity."""
 
     template = get_standard_team_template(key)
     _validate_existing_team_identity(service, template)
