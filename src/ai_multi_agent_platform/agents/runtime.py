@@ -246,7 +246,8 @@ class AgentRuntime:
                 )
 
         records = tuple(
-            self._record_from_spec(spec, mapping) for spec, mapping in zip(specs, mappings, strict=True)
+            self._record_from_spec(spec, mapping)
+            for spec, mapping in zip(specs, mappings, strict=True)
         )
         for record in records:
             self.service.repository.create_agent_run(record)
