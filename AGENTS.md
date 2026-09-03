@@ -48,6 +48,7 @@ Use these rules when selecting work:
 6. If an issue discovers a missing prerequisite, do not silently create a competing architecture. Update the issue/dependency graph or create a narrowly scoped prerequisite issue.
 7. Downstream issues extend existing canonical contracts; they must not redefine upstream ownership merely to simplify implementation.
 8. When parallel branches touch shared contracts, merge the contract-owning prerequisite first, then rebase/update downstream work before merging.
+9. Treat the roadmap as a point-in-time planning view: current GitHub issue state and current issue wording take precedence over stale roadmap status when they diverge.
 
 ## Merge priority for parallel work
 
@@ -68,11 +69,21 @@ Use the categories defined in `LICENSE_POLICY.md`: protocol/specification integr
 
 A public or open-source repository is not automatically safe to copy. Prefer the least coupled integration category that satisfies the requirement.
 
-## Initial foundation status
+## Current implementation status
 
-The initial architecture foundation (#1–#7) established product vision, repository baseline, upstream/license policy, canonical domain contracts, replaceable interfaces, the canonical task/run/event kernel and the reference execution path.
+As of 2026-09-03, the completed substantive baseline includes #1–#7, #9–#13, #15–#17, #32, #34, #35, #37, #43, #76 and #88.
 
-Further implementation must follow the dependency-driven roadmap rather than simple numeric issue order.
+The highest-leverage current parallel lanes are:
+
+- #36 Authentication and session management;
+- #33 canonical Agent/AgentTeam runtime;
+- #14 Node/Worker protocol and scheduling;
+- #18 Automations and trigger-driven Task creation;
+- #20 Plugin/extension runtime.
+
+Additional ready work includes #19 Evaluation/Regression, #45 Search, #73 Terminal and #74 Browser. #38 CLI remains a progressive open client lane and should consume canonical Authentication/Agent/Worker APIs as they land rather than invent temporary private equivalents.
+
+Always re-check [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) and the target issue immediately before assigning an agent, because newly merged work can move the execution frontier without any change in issue numbering.
 
 ## Source layout direction
 

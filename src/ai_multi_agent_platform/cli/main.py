@@ -274,6 +274,20 @@ def _build_parser() -> argparse.ArgumentParser:
         show = commands.add_parser("show", help=f"show {area_name} reference")
         show.add_argument("resource_id")
 
+    usage = areas.add_parser("usage", help="inspect canonical usage and resource accounting")
+    usage_kinds = usage.add_subparsers(dest="usage_kind", required=True)
+    for kind, collection in (
+        ("record", "usage-records"),
+        ("aggregate", "usage-aggregates"),
+        ("budget", "usage-budgets"),
+    ):
+        usage_kind = usage_kinds.add_parser(kind, help=f"inspect canonical {collection}")
+        usage_kind.set_defaults(area="reference", collection=collection)
+        usage_commands = usage_kind.add_subparsers(dest="command", required=True)
+        _add_list_parser(usage_commands, "list", f"list {collection}")
+        usage_show = usage_commands.add_parser("show", help=f"show one {kind}")
+        usage_show.add_argument("resource_id")
+
     extension = areas.add_parser(
         "extension",
         help="inspect explicitly registered canonical extension surfaces",
