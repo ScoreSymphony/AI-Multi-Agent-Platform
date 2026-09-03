@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ControlPlaneClient } from "../api/client";
 import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
+import { LoadingState } from "../components/States";
 import { PermissionHintsProvider } from "../security/permissions";
 import { navigation } from "./navigation";
 import { AppLink, matchPath, useRouter } from "./router";
@@ -34,7 +35,8 @@ import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagem
 import { TerminalPage } from "../pages/TerminalPage";
 import { UsagePage } from "../pages/UsagePage";
 
-type ManifestState = "loading" | "ready" | "unavailable";
+export type ManifestState = "loading" | "ready" | "unavailable";
+export type ManifestResourceState = "loading" | "available" | "unavailable";
 
 export function Shell() {
   const { path } = useRouter();
@@ -83,21 +85,101 @@ export function Shell() {
   else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;
   else if (path === "/runs") content = <RunsPage client={client} />;
   else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;
-  else if (path === "/agents") content = <AgentsPage client={client} />;
-  else if (agentMatch) content = <AgentDetailPage client={client} agentId={agentMatch.agentId} />;
-  else if (path === "/agent-teams") content = <AgentTeamsPage client={client} />;
-  else if (agentTeamMatch) content = <AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} />;
-  else if (path === "/files") content = <ReferencesPage client={client} />;
+  else if (path === "/agents") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Agents"
+        resource="agents"
+      >
+        <AgentsPage client={client} manifest={manifest} />
+      </ManifestResourcePage>
+    );
+  } else if (agentMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Agents"
+        resource="agents"
+      >
+        <AgentDetailPage client={client} agentId={agentMatch.agentId} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/agent-teams") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Agent Teams"
+        resource="agent-teams"
+      >
+        <AgentTeamsPage client={client} />
+      </ManifestResourcePage>
+    );
+  } else if (agentTeamMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Agent Teams"
+        resource="agent-teams"
+      >
+        <AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/files") content = <ReferencesPage client={client} />;
   else if (referenceMatch) content = <ReferenceDetailPage client={client} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
   else if (path === "/search") content = <SearchPage client={client} />;
-  else if (path === "/tools") content = <CapabilitiesPage client={client} />;
-  else if (capabilityProviderMatch) content = <CapabilityProviderDetailPage client={client} providerId={capabilityProviderMatch.providerId} />;
-  else if (capabilityMatch) content = <CapabilityDetailPage client={client} capabilityId={capabilityMatch.capabilityId} />;
-  else if (path === "/models") content = <ModelsPage client={client} />;
+  else if (path === "/tools") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Tools"
+        resource="capabilities"
+      >
+        <CapabilitiesPage client={client} manifest={manifest} />
+      </ManifestResourcePage>
+    );
+  } else if (capabilityProviderMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Tools"
+        resource="capability-providers"
+      >
+        <CapabilityProviderDetailPage client={client} providerId={capabilityProviderMatch.providerId} />
+      </ManifestResourcePage>
+    );
+  } else if (capabilityMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Tools"
+        resource="capabilities"
+      >
+        <CapabilityDetailPage client={client} capabilityId={capabilityMatch.capabilityId} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/models") content = <ModelsPage client={client} />;
   else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
   else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
-  else if (path === "/terminal") content = <TerminalPage client={client} />;
-  else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
+  else if (path === "/terminal") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Terminal"
+        resource="terminal-sessions"
+      >
+        <TerminalPage client={client} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
   else if (path === "/observability") content = <ObservabilityPage client={client} view="observability" />;
   else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
   else if (navItem) content = <UnavailablePage item={navItem} manifest={manifest} />;
@@ -156,6 +238,39 @@ export function Shell() {
       </div>
     </PermissionHintsProvider>
   );
+}
+
+function ManifestResourcePage({
+  state,
+  manifest,
+  label,
+  resource,
+  children,
+}: {
+  state: ManifestState;
+  manifest: APImanifest | null;
+  label: string;
+  resource: string;
+  children: ReactNode;
+}) {
+  const resourceState = manifestResourceState(state, manifest, resource);
+  if (resourceState === "loading") {
+    return <LoadingState label={`Checking ${label} availability…`} />;
+  }
+  if (resourceState === "unavailable") {
+    return <UnavailablePage item={{ label, apiResource: resource }} manifest={manifest} />;
+  }
+  return children;
+}
+
+export function manifestResourceState(
+  state: ManifestState,
+  manifest: APImanifest | null,
+  resource: string,
+): ManifestResourceState {
+  if (state === "loading") return "loading";
+  if (state !== "ready" || manifest === null) return "unavailable";
+  return manifest.resources.includes(resource) ? "available" : "unavailable";
 }
 
 export function apiStatusLabel(state: ManifestState, manifest: APImanifest | null): string {
