@@ -22,6 +22,13 @@ from .models import (
 from .repository import AgentRepository
 
 
+class _Unspecified:
+    pass
+
+
+_UNSPECIFIED = _Unspecified()
+
+
 class AgentService:
     def __init__(self, repository: AgentRepository) -> None:
         self.repository = repository
@@ -67,8 +74,8 @@ class AgentService:
         *,
         expected_revision: int | None = None,
         owner_ref: OwnerRef | None = None,
-        project_id: str | None = None,
-        workspace_id: str | None = None,
+        project_id: str | None | _Unspecified = _UNSPECIFIED,
+        workspace_id: str | None | _Unspecified = _UNSPECIFIED,
         provenance: Provenance | None = None,
     ) -> AgentRevision:
         current = self.repository.get_agent(agent_id)
@@ -84,8 +91,10 @@ class AgentService:
         next_revision = current.current_revision + 1
         now = datetime.now(UTC)
         resolved_owner = owner_ref or current.owner_ref
-        resolved_project = project_id if project_id is not None else current.project_id
-        resolved_workspace = workspace_id if workspace_id is not None else current.workspace_id
+        resolved_project = current.project_id if isinstance(project_id, _Unspecified) else project_id
+        resolved_workspace = (
+            current.workspace_id if isinstance(workspace_id, _Unspecified) else workspace_id
+        )
         revision = AgentRevision(
             agent_id=agent_id,
             revision=next_revision,
@@ -132,8 +141,8 @@ class AgentService:
         *,
         revision: int | None = None,
         owner_ref: OwnerRef | None = None,
-        project_id: str | None = None,
-        workspace_id: str | None = None,
+        project_id: str | None | _Unspecified = _UNSPECIFIED,
+        workspace_id: str | None | _Unspecified = _UNSPECIFIED,
         name: str | None = None,
         provenance: Provenance | None = None,
     ) -> AgentRevision:
@@ -145,13 +154,17 @@ class AgentService:
         profile = source_revision.profile
         if name is not None:
             profile = replace(profile, name=name)
+        resolved_project = (
+            source_revision.project_id if isinstance(project_id, _Unspecified) else project_id
+        )
+        resolved_workspace = (
+            source_revision.workspace_id if isinstance(workspace_id, _Unspecified) else workspace_id
+        )
         return self.create_agent(
             profile,
             owner_ref=owner_ref or source_revision.owner_ref,
-            project_id=project_id if project_id is not None else source_revision.project_id,
-            workspace_id=(
-                workspace_id if workspace_id is not None else source_revision.workspace_id
-            ),
+            project_id=resolved_project,
+            workspace_id=resolved_workspace,
             provenance=provenance,
         )
 
@@ -232,8 +245,8 @@ class AgentService:
         *,
         expected_revision: int | None = None,
         owner_ref: OwnerRef | None = None,
-        project_id: str | None = None,
-        workspace_id: str | None = None,
+        project_id: str | None | _Unspecified = _UNSPECIFIED,
+        workspace_id: str | None | _Unspecified = _UNSPECIFIED,
         provenance: Provenance | None = None,
     ) -> AgentTeamRevision:
         self._validate_team_members(profile)
@@ -250,8 +263,10 @@ class AgentService:
         next_revision = current.current_revision + 1
         now = datetime.now(UTC)
         resolved_owner = owner_ref or current.owner_ref
-        resolved_project = project_id if project_id is not None else current.project_id
-        resolved_workspace = workspace_id if workspace_id is not None else current.workspace_id
+        resolved_project = current.project_id if isinstance(project_id, _Unspecified) else project_id
+        resolved_workspace = (
+            current.workspace_id if isinstance(workspace_id, _Unspecified) else workspace_id
+        )
         revision = AgentTeamRevision(
             team_id=team_id,
             revision=next_revision,
@@ -272,6 +287,58 @@ class AgentService:
         )
         self.repository.update_team(definition, revision)
         return revision
+
+    def rollback_team(
+        self,
+        team_id: str,
+        target_revision: int,
+        *,
+        expected_revision: int | None = None,
+        provenance: Provenance | None = None,
+    ) -> AgentTeamRevision:
+        historical = self.repository.get_team_revision(team_id, target_revision)
+        return self.update_team(
+            team_id,
+            historical.profile,
+            expected_revision=expected_revision,
+            owner_ref=historical.owner_ref,
+            project_id=historical.project_id,
+            workspace_id=historical.workspace_id,
+            provenance=provenance,
+        )
+
+    def clone_team(
+        self,
+        source_team_id: str,
+        *,
+        revision: int | None = None,
+        owner_ref: OwnerRef | None = None,
+        project_id: str | None | _Unspecified = _UNSPECIFIED,
+        workspace_id: str | None | _Unspecified = _UNSPECIFIED,
+        name: str | None = None,
+        provenance: Provenance | None = None,
+    ) -> AgentTeamRevision:
+        source_definition = self.repository.get_team(source_team_id)
+        source_revision = self.repository.get_team_revision(
+            source_team_id,
+            revision or source_definition.current_revision,
+        )
+        profile = source_revision.profile
+        if name is not None:
+            profile = replace(profile, name=name)
+        resolved_project = (
+            source_revision.project_id if isinstance(project_id, _Unspecified) else project_id
+        )
+        resolved_workspace = (
+            source_revision.workspace_id if isinstance(workspace_id, _Unspecified) else workspace_id
+        )
+        return self.create_team(
+            profile,
+            owner_ref=owner_ref or source_revision.owner_ref,
+            project_id=resolved_project,
+            workspace_id=resolved_workspace,
+            provenance=provenance,
+        )
 
     def get_team_revision(self, team_id: str, revision: int | None = None) -> AgentTeamRevision:
         definition = self.repository.get_team(team_id)

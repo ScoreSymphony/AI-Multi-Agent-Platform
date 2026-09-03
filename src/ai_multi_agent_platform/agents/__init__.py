@@ -29,6 +29,7 @@ from .models import (
     new_team_id,
 )
 from .repository import AgentRepository, InMemoryAgentRepository
+from .runtime import AgentOrchestratorMapper, AgentRuntime, ReferenceOrchestratorMapper
 from .service import AgentService
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "AgentExecutionSpec",
     "AgentInstructions",
     "AgentModelPolicy",
+    "AgentOrchestratorMapper",
     "AgentPolicyHooks",
     "AgentProfile",
     "AgentRepository",
@@ -45,6 +47,7 @@ __all__ = [
     "AgentRevisionRef",
     "AgentRunRecord",
     "AgentRunStatus",
+    "AgentRuntime",
     "AgentService",
     "AgentTeamDefinition",
     "AgentTeamMember",
@@ -57,6 +60,7 @@ __all__ = [
     "InstructionSource",
     "ModelFallbackPolicy",
     "OrchestratorMapping",
+    "ReferenceOrchestratorMapper",
     "UnavailableMemberPolicy",
     "new_agent_id",
     "new_agent_run_id",
