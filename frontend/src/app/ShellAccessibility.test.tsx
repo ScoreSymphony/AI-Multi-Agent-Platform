@@ -66,7 +66,7 @@ describe("#17 shell accessibility semantics", () => {
 
     const terminal = renderShell("/terminal");
     expect(terminal).toContain("Checking Terminal availability");
-    expect(terminal).not.toContain("Canonical terminal sessions");
+    expect(terminal).not.toContain("Execution sessions");
   });
 
   it("distinguishes advertised, absent and unavailable manifest resources", () => {
