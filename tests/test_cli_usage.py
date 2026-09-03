@@ -101,17 +101,16 @@ def _invoke(
 def _accounting() -> tuple[AccountingService, str, str]:
     accounting = AccountingService(InMemoryUsageStore())
     project_id = "project_usage_test"
-    record = accounting.record(
-        UsageRecord(
-            metric_type="storage.file.bytes.current",
-            unit="bytes",
-            quality=MeasurementQuality.REPORTED,
-            source="file-provider",
-            quantity=42.0,
-            aggregation_mode=AggregationMode.LATEST,
-            scope=UsageScope(project_id=project_id),
-        )
+    record = UsageRecord(
+        metric_type="storage.file.bytes.current",
+        unit="bytes",
+        quality=MeasurementQuality.REPORTED,
+        source="file-provider",
+        quantity=42.0,
+        aggregation_mode=AggregationMode.LATEST,
+        scope=UsageScope(project_id=project_id),
     )
+    accounting.record(record)
     budget = UsageBudget(
         metric_type="storage.file.bytes.current",
         unit="bytes",
