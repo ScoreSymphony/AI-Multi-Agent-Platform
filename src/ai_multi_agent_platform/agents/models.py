@@ -31,6 +31,14 @@ def _freeze_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
     return MappingProxyType(dict(value))
 
 
+def _freeze_string_mapping(value: Mapping[str, str], name: str) -> Mapping[str, str]:
+    frozen = dict(value)
+    for key, item in frozen.items():
+        _require_nonblank(key, f"{name} key")
+        _require_nonblank(item, f"{name} value")
+    return MappingProxyType(frozen)
+
+
 def _validate_optional_canonical_id(value: str | None, prefix: str) -> None:
     if value is not None:
         validate_id(value, prefix)
@@ -417,6 +425,7 @@ class AgentRunRecord:
     selected_model_config_id: str | None = None
     selected_provider_id: str | None = None
     capability_ids: tuple[str, ...] = ()
+    capability_versions: Mapping[str, str] = field(default_factory=dict)
     orchestrator_adapter_id: str | None = None
     orchestrator_runtime_ref: str | None = None
     artifact_ids: tuple[str, ...] = ()
@@ -433,6 +442,8 @@ class AgentRunRecord:
         validate_id(self.agent_run_id, "agent_run")
         validate_id(self.run_id, "run")
         validate_id(self.task_id, "task")
+        if set(self.capability_versions) - set(self.capability_ids):
+            raise ValueError("capability versions must refer to recorded capability IDs")
         for artifact_id in self.artifact_ids:
             validate_id(artifact_id, "artifact")
         for result_id in self.result_ids:
@@ -448,6 +459,11 @@ class AgentRunRecord:
                 _require_nonblank(value, name)
         if self.finished_at is not None and self.finished_at < self.started_at:
             raise ValueError("agent run finished_at cannot precede started_at")
+        object.__setattr__(
+            self,
+            "capability_versions",
+            _freeze_string_mapping(self.capability_versions, "capability version"),
+        )
         object.__setattr__(self, "telemetry", _freeze_mapping(self.telemetry))
         object.__setattr__(self, "verification_context", _freeze_mapping(self.verification_context))
 
@@ -460,6 +476,7 @@ class AgentExecutionSpec:
     run_id: str
     agent_revision: AgentRevision
     capability_ids: tuple[str, ...]
+    capability_versions: Mapping[str, str] = field(default_factory=dict)
     selected_model_config_id: str | None = None
     selected_provider_id: str | None = None
     team_revision: AgentTeamRevision | None = None
@@ -469,6 +486,13 @@ class AgentExecutionSpec:
     def __post_init__(self) -> None:
         validate_id(self.task_id, "task")
         validate_id(self.run_id, "run")
+        if set(self.capability_versions) - set(self.capability_ids):
+            raise ValueError("capability versions must refer to selected capability IDs")
+        object.__setattr__(
+            self,
+            "capability_versions",
+            _freeze_string_mapping(self.capability_versions, "capability version"),
+        )
         object.__setattr__(self, "task_context", _freeze_mapping(self.task_context))
         object.__setattr__(self, "project_context", _freeze_mapping(self.project_context))
 
