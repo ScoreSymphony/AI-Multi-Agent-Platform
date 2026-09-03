@@ -3,8 +3,8 @@
 The primitives in :mod:`security.authentication` remain provider-neutral. This module
 adds the public self-hosted composition used by the platform: credential scopes are a
 restrictive upper bound persisted with each credential, worker credentials have an
-explicit rotation/compromise flow, and authenticated requests expose a replaceable
-rate-limit hook.
+explicit rotation/compromise flow, authenticated requests expose a replaceable
+rate-limit hook, and security-sensitive authentication attempts emit redacted audit hooks.
 """
 
 from __future__ import annotations
@@ -24,10 +24,12 @@ from .authentication import (
     AuthenticationFailure,
     AuthenticationRateLimiter,
     CredentialKind,
+    IdentityProviderAdapter,
     InMemoryAuthenticationStore,
     IssuedCredential,
     ReplayProtector,
     ScryptPasswordHasher,
+    SessionGrant,
     StoredCredential,
     safe_credential,
 )
@@ -158,7 +160,7 @@ class InMemoryRequestRateLimiter:
 
 
 class LocalAuthenticationService(_BaseLocalAuthenticationService):
-    """Public #36 self-hosted composition with scoped credentials and rotation hooks."""
+    """Public #36 self-hosted composition with scoped credentials and complete audit hooks."""
 
     def __init__(
         self,
@@ -180,6 +182,133 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
             session_ttl=session_ttl,
         )
         self.request_rate_limiter = request_rate_limiter or InMemoryRequestRateLimiter()
+
+    def authenticate_password(
+        self,
+        username: str,
+        password: str,
+        *,
+        now: datetime | None = None,
+        request_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> AuthenticatedActor:
+        current = _current(now)
+        try:
+            return super().authenticate_password(
+                username,
+                password,
+                now=current,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+        except AuthenticationError as exc:
+            if exc.failure in {
+                AuthenticationFailure.ACCOUNT_DISABLED,
+                AuthenticationFailure.ACCOUNT_LOCKED,
+            }:
+                self._audit_authentication_result(
+                    "auth.login",
+                    now=current,
+                    success=False,
+                    correlation_id=correlation_id,
+                    failure=exc.failure,
+                )
+            raise
+
+    def create_browser_session(
+        self,
+        user_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> SessionGrant:
+        current = _current(now)
+        grant = super().create_browser_session(user_id, now=current)
+        self._audit_authentication_result(
+            "auth.session_created",
+            now=current,
+            success=True,
+            actor_id=user_id,
+            credential_id=grant.session_id,
+        )
+        return grant
+
+    def authenticate_session(
+        self,
+        token: str,
+        *,
+        csrf_token: str | None = None,
+        require_csrf: bool = False,
+        now: datetime | None = None,
+        request_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> AuthenticatedActor:
+        current = _current(now)
+        try:
+            actor = super().authenticate_session(
+                token,
+                csrf_token=csrf_token,
+                require_csrf=require_csrf,
+                now=current,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+        except AuthenticationError as exc:
+            self._audit_authentication_result(
+                "auth.session_authentication",
+                now=current,
+                success=False,
+                correlation_id=correlation_id,
+                failure=exc.failure,
+            )
+            raise
+        self._audit_authentication_result(
+            "auth.session_authentication",
+            now=current,
+            success=True,
+            actor=actor,
+        )
+        return actor
+
+    def logout(self, token: str, *, now: datetime | None = None) -> None:
+        current = _current(now)
+        try:
+            super().logout(token, now=current)
+        except AuthenticationError as exc:
+            self._audit_authentication_result(
+                "auth.logout",
+                now=current,
+                success=False,
+                failure=exc.failure,
+            )
+            raise
+
+    def change_password(
+        self,
+        user_id: str,
+        current_password: str,
+        new_password: str,
+        *,
+        now: datetime | None = None,
+        invalidate_sessions: bool = True,
+    ) -> None:
+        current = _current(now)
+        try:
+            super().change_password(
+                user_id,
+                current_password,
+                new_password,
+                now=current,
+                invalidate_sessions=invalidate_sessions,
+            )
+        except AuthenticationError as exc:
+            self._audit_authentication_result(
+                "auth.password_changed",
+                now=current,
+                success=False,
+                actor_id=user_id,
+                failure=exc.failure,
+            )
+            raise
 
     def create_credential(
         self,
@@ -279,16 +408,41 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
         request_id: str | None = None,
         correlation_id: str | None = None,
     ) -> AuthenticatedActor:
-        actor = super().authenticate_bearer(
-            token,
-            now=now,
-            request_id=request_id,
-            correlation_id=correlation_id,
-        )
+        current = _current(now)
         try:
-            return self._with_scope_metadata(actor)
+            actor = super().authenticate_bearer(
+                token,
+                now=current,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            actor = self._with_scope_metadata(actor)
+        except AuthenticationError as exc:
+            self._audit_authentication_result(
+                "auth.bearer_authentication",
+                now=current,
+                success=False,
+                correlation_id=correlation_id,
+                failure=exc.failure,
+            )
+            raise
         except (KeyError, ValueError) as exc:
-            raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS) from exc
+            failure = AuthenticationFailure.INVALID_CREDENTIALS
+            self._audit_authentication_result(
+                "auth.bearer_authentication",
+                now=current,
+                success=False,
+                correlation_id=correlation_id,
+                failure=failure,
+            )
+            raise AuthenticationError(failure) from exc
+        self._audit_authentication_result(
+            "auth.bearer_authentication",
+            now=current,
+            success=True,
+            actor=actor,
+        )
+        return actor
 
     def authenticate_worker_request(
         self,
@@ -301,19 +455,91 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
         request_id: str | None = None,
         correlation_id: str | None = None,
     ) -> AuthenticatedActor:
-        actor = super().authenticate_worker_request(
-            token,
-            nonce=nonce,
-            issued_at=issued_at,
-            tls_peer_ref=tls_peer_ref,
-            now=now,
-            request_id=request_id,
-            correlation_id=correlation_id,
-        )
+        current = _current(now)
         try:
-            return self._with_scope_metadata(actor)
+            actor = super().authenticate_worker_request(
+                token,
+                nonce=nonce,
+                issued_at=issued_at,
+                tls_peer_ref=tls_peer_ref,
+                now=current,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            actor = self._with_scope_metadata(actor)
+        except AuthenticationError as exc:
+            self._audit_authentication_result(
+                "auth.worker_request_authentication",
+                now=current,
+                success=False,
+                correlation_id=correlation_id,
+                failure=exc.failure,
+            )
+            raise
         except (KeyError, ValueError) as exc:
-            raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS) from exc
+            failure = AuthenticationFailure.INVALID_CREDENTIALS
+            self._audit_authentication_result(
+                "auth.worker_request_authentication",
+                now=current,
+                success=False,
+                correlation_id=correlation_id,
+                failure=failure,
+            )
+            raise AuthenticationError(failure) from exc
+        self._audit_authentication_result(
+            "auth.worker_request_authentication",
+            now=current,
+            success=True,
+            actor=actor,
+        )
+        return actor
+
+    def authenticate_external(
+        self,
+        adapter: IdentityProviderAdapter,
+        assertion: str,
+        *,
+        now: datetime | None = None,
+        request_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> AuthenticatedActor:
+        current = _current(now)
+        try:
+            actor = super().authenticate_external(
+                adapter,
+                assertion,
+                now=current,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+        except AuthenticationError as exc:
+            self._audit_authentication_result(
+                "auth.external_authentication",
+                now=current,
+                success=False,
+                correlation_id=correlation_id,
+                failure=exc.failure,
+                metadata={"provider_id": adapter.provider_id},
+            )
+            raise
+        except Exception:
+            self._audit_authentication_result(
+                "auth.external_authentication",
+                now=current,
+                success=False,
+                correlation_id=correlation_id,
+                failure="provider_verification_failed",
+                metadata={"provider_id": adapter.provider_id},
+            )
+            raise
+        self._audit_authentication_result(
+            "auth.external_authentication",
+            now=current,
+            success=True,
+            actor=actor,
+            metadata={"provider_id": adapter.provider_id},
+        )
+        return actor
 
     def check_authenticated_request(
         self,
@@ -412,6 +638,36 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
             "scope_is_restrictive": scope.restricted,
         }
         return replace(actor, provider_metadata=metadata)
+
+    def _audit_authentication_result(
+        self,
+        event: str,
+        *,
+        now: datetime,
+        success: bool,
+        actor: AuthenticatedActor | None = None,
+        actor_id: str | None = None,
+        credential_id: str | None = None,
+        correlation_id: str | None = None,
+        failure: AuthenticationFailure | str | None = None,
+        metadata: Mapping[str, JsonValue] | None = None,
+    ) -> None:
+        details: dict[str, JsonValue] = dict(metadata or {})
+        if failure is not None:
+            details["failure"] = failure.value if isinstance(failure, AuthenticationFailure) else failure
+        self._audit(
+            event,
+            now=now,
+            success=success,
+            actor_id=actor.identity.actor_id if actor is not None else actor_id,
+            credential_id=actor.credential_id if actor is not None else credential_id,
+            correlation_id=(
+                actor.correlation_id
+                if actor is not None and actor.correlation_id is not None
+                else correlation_id
+            ),
+            metadata=details,
+        )
 
 
 def safe_credential_with_scope(
