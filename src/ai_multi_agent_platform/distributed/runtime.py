@@ -395,10 +395,14 @@ class DistributedRuntime:
             last_error = "reservation_missing"
         else:
             if reservation.status is ReservationStatus.RESERVED:
-                updated_reservation = self.registry.commit_reservation(record.reservation_id, now=now)
+                updated_reservation = self.registry.commit_reservation(
+                    record.reservation_id, now=now
+                )
                 reservation_event = "committed"
             else:
-                updated_reservation = self.registry.renew_reservation(record.reservation_id, now=now)
+                updated_reservation = self.registry.renew_reservation(
+                    record.reservation_id, now=now
+                )
                 reservation_event = "renewed"
             if self.telemetry is not None:
                 self.telemetry.reservation(
