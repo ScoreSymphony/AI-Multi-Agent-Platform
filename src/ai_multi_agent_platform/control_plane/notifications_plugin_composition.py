@@ -31,9 +31,7 @@ from .notifications_live import ControlPlaneASGI
 from .notifications_live import ControlPlaneHTTP as _NotificationControlPlaneHTTP
 from .notifications_live import build_openapi as _build_notification_live_openapi
 
-_NOTIFICATION_COLLECTIONS = frozenset(
-    {NOTIFICATION_COLLECTION, NOTIFICATION_PREFERENCE_COLLECTION}
-)
+_NOTIFICATION_COLLECTIONS = frozenset({NOTIFICATION_COLLECTION, NOTIFICATION_PREFERENCE_COLLECTION})
 _NOTIFICATION_COMMAND_SET = frozenset(NOTIFICATION_COMMANDS)
 
 
@@ -81,9 +79,7 @@ class ControlPlaneHTTP(_NotificationControlPlaneHTTP):
                     (NOTIFICATION_COLLECTION, NOTIFICATION_PREFERENCE_COLLECTION),
                 )
             )
-            body["commands"] = _json_string_list(
-                _append_unique(commands, NOTIFICATION_COMMANDS)
-            )
+            body["commands"] = _json_string_list(_append_unique(commands, NOTIFICATION_COMMANDS))
             return HTTPResponse(status=response.status, body=body, headers=dict(response.headers))
 
         if request.method == "GET" and request.path.rstrip("/") == (
