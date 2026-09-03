@@ -37,7 +37,7 @@ class FileSearchAuthorization(FakeAuthorizationProvider):
         self.calls.append(request)
         if (
             self.denied_project_id is not None
-            and request.action == "file:list"
+            and request.action in {"file:list", "file:read"}
             and request.context.project_id == self.denied_project_id
         ):
             return AuthorizationDecision(allowed=False, reason="file-project-hidden")
@@ -160,6 +160,32 @@ def test_file_resource_service_and_search_use_canonical_file_metadata(tmp_path: 
         assert direct_items[0]["content_type"] == "application/pdf"
         assert direct_items[0]["artifact_ids"] == [artifact_id]
 
+        direct_all = await http.handle(HTTPRequest(method="GET", path="/api/v1/files"))
+        assert direct_all.status == 200, direct_all.body
+        assert isinstance(direct_all.body, dict)
+        direct_all_items = direct_all.body["items"]
+        assert isinstance(direct_all_items, list)
+        assert [item["id"] for item in direct_all_items] == [visible_record.file_id]
+        serialized_direct = json.dumps(direct_all.body, sort_keys=True)
+        assert hidden_record.file_id not in serialized_direct
+        assert hidden.id not in serialized_direct
+        assert "hidden-owner" not in serialized_direct
+
+        visible_direct = await http.handle(
+            HTTPRequest(method="GET", path=f"/api/v1/files/{visible_record.file_id}")
+        )
+        assert visible_direct.status == 200, visible_direct.body
+        assert isinstance(visible_direct.body, dict)
+        assert visible_direct.body["id"] == visible_record.file_id
+
+        hidden_direct = await http.handle(
+            HTTPRequest(method="GET", path=f"/api/v1/files/{hidden_record.file_id}")
+        )
+        assert hidden_direct.status == 404
+        assert isinstance(hidden_direct.body, dict)
+        assert hidden_direct.body["code"] == "not_found"
+        assert hidden_record.file_id not in json.dumps(hidden_direct.body, sort_keys=True)
+
         exact = await _search(http, id=visible_record.file_id)
         assert exact["total"] == 1
         result = _items(exact)[0]
@@ -201,6 +227,10 @@ def test_file_resource_service_and_search_use_canonical_file_metadata(tmp_path: 
 
         assert any(
             call.action == "file:list" and call.context.project_id == hidden.id
+            for call in authorization.calls
+        )
+        assert any(
+            call.action == "file:read" and call.context.project_id == hidden.id
             for call in authorization.calls
         )
 
