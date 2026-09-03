@@ -158,4 +158,28 @@ describe("ControlPlaneClient", () => {
     expect(init.method).toBe("POST");
     expect((init.headers as Headers).get("Idempotency-Key")).toBeTruthy();
   });
+
+  it("reads usage records through the registered Control Plane extension collection", async () => {
+    const page = { items: [], next_cursor: null, total: 0, limit: 100 };
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify(page), { status: 200 }));
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.listUsageRecords({ limit: 100, q: "task_123" });
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("/api/v1/usage-records?limit=100&q=task_123");
+    expect(init.method).toBe("GET");
+  });
+
+  it("keeps usage aggregates and budgets on their canonical extension routes", async () => {
+    const page = { items: [], next_cursor: null, total: 0, limit: 200 };
+    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify(page), { status: 200 }));
+    const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
+
+    await client.listUsageAggregates({ limit: 200 });
+    await client.listUsageBudgets({ limit: 200 });
+
+    expect((fetchSpy.mock.calls[0] as [string, RequestInit])[0]).toBe("/api/v1/usage-aggregates?limit=200");
+    expect((fetchSpy.mock.calls[1] as [string, RequestInit])[0]).toBe("/api/v1/usage-budgets?limit=200");
+  });
 });
