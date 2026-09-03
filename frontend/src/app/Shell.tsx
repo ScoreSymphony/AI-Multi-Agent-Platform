@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { BrowserSessionClient } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
 import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
@@ -30,6 +31,7 @@ import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ProjectsPage } from "../pages/ProjectListPage";
 import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
 import { SearchPage } from "../pages/SearchPage";
+import { SettingsPage } from "../pages/SettingsPage";
 import { TaskDetailPage } from "../pages/TaskDetailPage";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
 import { TerminalPage } from "../pages/TerminalPage";
@@ -40,9 +42,11 @@ export type ManifestResourceState = "loading" | "available" | "unavailable";
 
 export function Shell() {
   const { path } = useRouter();
+  const baseUrl = import.meta.env.VITE_CONTROL_PLANE_URL ?? "";
+  const session = useMemo(() => new BrowserSessionClient({ baseUrl }), [baseUrl]);
   const client = useMemo(
-    () => new ControlPlaneClient({ baseUrl: import.meta.env.VITE_CONTROL_PLANE_URL ?? "" }),
-    [],
+    () => new ControlPlaneClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
   );
   const [manifest, setManifest] = useState<APImanifest | null>(null);
   const [manifestState, setManifestState] = useState<ManifestState>("loading");
@@ -182,6 +186,7 @@ export function Shell() {
   } else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
   else if (path === "/observability") content = <ObservabilityPage client={client} view="observability" />;
   else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
+  else if (path === "/settings") content = <SettingsPage session={session} />;
   else if (navItem) content = <UnavailablePage item={navItem} manifest={manifest} />;
   else content = <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
 
