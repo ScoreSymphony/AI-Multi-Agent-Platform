@@ -153,7 +153,14 @@ class ControlPlane(_BaseSearchControlPlane):
         if extension is None:
             return False
         collection, action = extension
-        return await self._allowed(context, action, collection)
+        return await self._allowed(
+            context,
+            action,
+            collection,
+            owner_type=result.owner_type,
+            owner_id=result.owner_id,
+            project_id=result.project_id,
+        )
 
 
 __all__ = ["ControlPlane", "ControlPlaneHTTP", "build_openapi"]
