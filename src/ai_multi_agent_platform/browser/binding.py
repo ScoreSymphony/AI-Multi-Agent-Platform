@@ -24,28 +24,26 @@ from .models import BrowserProviderFeatures, BrowserSessionRef
 
 @dataclass(frozen=True, slots=True)
 class BrowserPlacement:
-    """Optional placement constraints applied without changing canonical browser requests."""
+    """Optional provider placement applied without changing canonical browser requests."""
 
     node_id: str | None = None
     worker_id: str | None = None
     priority: int | None = None
-    required_worker_capabilities: tuple[str, ...] = ()
+    worker_labels: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.node_id is not None:
             validate_id(self.node_id, "node")
         if self.worker_id is not None:
             validate_id(self.worker_id, "worker")
-        if any(not capability.strip() for capability in self.required_worker_capabilities):
-            raise ValueError("required_worker_capabilities must not contain blank values")
-        if len(set(self.required_worker_capabilities)) != len(
-            self.required_worker_capabilities
-        ):
-            raise ValueError("required_worker_capabilities must not contain duplicates")
+        if any(not label.strip() for label in self.worker_labels):
+            raise ValueError("worker_labels must not contain blank values")
+        if len(set(self.worker_labels)) != len(self.worker_labels):
+            raise ValueError("worker_labels must not contain duplicates")
 
 
 class BoundBrowserProvider(BrowserProvider):
-    """Decorate any browser provider with canonical placement and operation evidence metadata."""
+    """Decorate any browser provider with placement and operation evidence metadata."""
 
     def __init__(
         self,
@@ -84,26 +82,13 @@ class BoundBrowserProvider(BrowserProvider):
             self._tool_capabilities[registration.provider_tool_ref] = (
                 registration.capability.capability_id
             )
-            capability = registration.capability
-            if self._placement.required_worker_capabilities:
-                merged = tuple(
-                    dict.fromkeys(
-                        (
-                            *capability.required_worker_capabilities,
-                            *self._placement.required_worker_capabilities,
-                        )
-                    )
-                )
-                capability = replace(
-                    capability,
-                    required_worker_capabilities=merged,
-                )
 
             placement_metadata: tuple[AdapterMetadata, ...] = ()
             if (
                 self._placement.node_id is not None
                 or self._placement.worker_id is not None
-                or self._placement.required_worker_capabilities
+                or self._placement.priority is not None
+                or self._placement.worker_labels
             ):
                 placement_metadata = (
                     AdapterMetadata(
@@ -111,9 +96,8 @@ class BoundBrowserProvider(BrowserProvider):
                         values={
                             "node_id": self._placement.node_id,
                             "worker_id": self._placement.worker_id,
-                            "required_worker_capabilities": list(
-                                self._placement.required_worker_capabilities
-                            ),
+                            "priority": self._placement.priority,
+                            "worker_labels": list(self._placement.worker_labels),
                         },
                     ),
                 )
@@ -121,7 +105,6 @@ class BoundBrowserProvider(BrowserProvider):
             bound.append(
                 replace(
                     registration,
-                    capability=capability,
                     priority=(
                         registration.priority
                         if self._placement.priority is None
