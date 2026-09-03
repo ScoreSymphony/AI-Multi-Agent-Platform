@@ -12,6 +12,7 @@ from ai_multi_agent_platform.distributed import (
     Heartbeat,
     NodeRecord,
     RegistrationRequest,
+    RegistryError,
     ResourceSnapshot,
     WorkerRecord,
 )
