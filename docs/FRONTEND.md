@@ -74,7 +74,7 @@ Every mutating client call generates an `Idempotency-Key`; every HTTP request em
 
 The shell composes the #36 browser-session boundary in front of the shared `ControlPlaneClient`. All requests continue to use `credentials: include`; the opaque session secret exists only in the server-issued `HttpOnly` cookie and is never read or persisted by frontend code.
 
-`POST /api/v1/auth/login` and `POST /api/v1/auth/session:renew` return the separate browser CSRF token required by #36. The frontend retains only that CSRF token in tab-scoped `sessionStorage`. For unsafe cookie-authenticated requests, the shared session-aware fetch boundary injects `X-CSRF-Token` before the request reaches the Control Plane. Existing Task, Model, Workspace and Terminal mutations therefore inherit #36 CSRF protection without duplicating security logic in individual pages. Requests carrying an explicit Bearer `Authorization` header do not receive the browser CSRF header.
+`POST /api/v1/auth/login` and `POST /api/v1/auth/session:renew` return the separate browser CSRF token required by #36. The frontend retains only that CSRF token in same-origin `localStorage`; it is not a bearer credential or session secret. Before every unsafe cookie-authenticated request, the shared session-aware fetch boundary re-reads the current stored value and injects `X-CSRF-Token`. This keeps concurrent tabs aligned when session renewal rotates the CSRF token while allowing the HttpOnly authentication cookie to remain opaque. Existing Task, Model, Workspace and Terminal mutations therefore inherit #36 CSRF protection without duplicating security logic in individual pages. Requests carrying an explicit Bearer `Authorization` header do not receive the browser CSRF header.
 
 The Settings surface consumes only canonical #36 routes for login, `auth/me`, session enumeration, renewal, targeted session revocation and logout. First-user bootstrap, password recovery and credential/PAT administration are intentionally not inferred as ordinary browser workflows merely because backend hooks exist; they retain their separate operator/authorization semantics.
 
@@ -119,7 +119,7 @@ The frontend test suite now includes focused contract coverage for:
 - centralized canonical API error mapping and presentation;
 - the browser-only `/api/v1` boundary for representative reads and mutations;
 - idempotency and correlation headers on mutations;
-- #36 browser-session login/CSRF behavior, including CSRF propagation to existing Control Plane mutations, Bearer separation and logout cleanup;
+- #36 browser-session login/CSRF behavior, including CSRF propagation to existing Control Plane mutations, cross-tab rotation synchronization, Bearer separation and logout cleanup;
 - canonical Workspace and reference-resource contracts;
 - Task-management client contracts;
 - CLI/Web canonical Task-state parity fixtures;
