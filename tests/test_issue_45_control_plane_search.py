@@ -4,6 +4,7 @@ import asyncio
 
 from control_plane_contract_helpers import api_headers
 
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
     AuthorizationDecision,
     AuthorizationRequest,
@@ -17,7 +18,11 @@ from ai_multi_agent_platform.control_plane import (
 )
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
-from ai_multi_agent_platform.search import SearchDocument
+from ai_multi_agent_platform.search import (
+    LocalSearchProvider,
+    SearchDocument,
+    SearchProvider,
+)
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
     FakeLifecycleBackend,
@@ -41,8 +46,24 @@ class ProjectFilteringAuthorization(FakeAuthorizationProvider):
         return AuthorizationDecision(allowed=True, reason="project-visible")
 
 
+class UnavailableSearchProvider(LocalSearchProvider):
+    async def rebuild(
+        self,
+        documents: tuple[SearchDocument, ...],
+        context: OperationContext,
+    ) -> None:
+        del documents, context
+        raise ContractError(
+            ErrorCode.UNAVAILABLE,
+            "search provider unavailable",
+            retryable=True,
+        )
+
+
 def _stack(
     authorization: FakeAuthorizationProvider | None = None,
+    *,
+    search_provider: SearchProvider | None = None,
 ) -> tuple[ControlPlane, ControlPlaneHTTP]:
     repository = InMemoryKernelRepository()
     kernel = PlatformKernel(
@@ -54,6 +75,7 @@ def _stack(
         kernel=kernel,
         events=repository,
         authorization=authorization,
+        search_provider=search_provider,
     )
     return control_plane, ControlPlaneHTTP(control_plane)
 
@@ -178,6 +200,21 @@ def test_global_search_exact_keyword_project_filter_and_run_lookup() -> None:
             "run",
         }
 
+        time_scoped = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/search",
+                query={
+                    "type": "task",
+                    "updated_after": "2000-01-01T00:00:00+00:00",
+                    "updated_before": "2100-01-01T00:00:00+00:00",
+                },
+            )
+        )
+        assert time_scoped.status == 200
+        assert isinstance(time_scoped.body, dict)
+        assert time_scoped.body["total"] == 1
+
         rebuilt = await control_plane.rebuild_search_index()
         assert rebuilt >= 3
 
@@ -271,8 +308,49 @@ def test_search_rebuild_removes_stale_provider_state_and_semantic_degrades_clean
     asyncio.run(scenario())
 
 
+def test_search_provider_unavailable_returns_retryable_503() -> None:
+    async def scenario() -> None:
+        _, http = _stack(
+            FakeAuthorizationProvider(),
+            search_provider=UnavailableSearchProvider(),
+        )
+
+        response = await http.handle(
+            HTTPRequest(method="GET", path="/api/v1/search", query={"q": "search"})
+        )
+
+        assert response.status == 503
+        assert isinstance(response.body, dict)
+        assert response.body["code"] == "unavailable"
+        assert response.body["retryable"] is True
+
+    asyncio.run(scenario())
+
+
+def test_search_time_filter_rejects_naive_timestamp() -> None:
+    async def scenario() -> None:
+        _, http = _stack(FakeAuthorizationProvider())
+        response = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/search",
+                query={"updated_after": "2026-09-03T10:00:00"},
+            )
+        )
+        assert response.status == 400
+        assert isinstance(response.body, dict)
+        assert response.body["code"] == "invalid_request"
+
+    asyncio.run(scenario())
+
+
 def test_search_openapi_is_published() -> None:
     specification = build_openapi()
     assert "/api/v1/search" in specification["paths"]
     assert "SearchResult" in specification["components"]["schemas"]
     assert "SearchPage" in specification["components"]["schemas"]
+    parameters = specification["paths"]["/api/v1/search"]["get"]["parameters"]
+    assert {parameter["name"] for parameter in parameters} >= {
+        "updated_after",
+        "updated_before",
+    }
