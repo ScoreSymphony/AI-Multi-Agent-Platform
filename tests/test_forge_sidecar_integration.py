@@ -41,7 +41,9 @@ def _executor(*, delay_seconds: int = 0) -> ForgeExecutor:
     )
 
 
-def _request(workspace_name: str, *, cancellation: CancellationToken | None = None) -> ExecutionRequest:
+def _request(
+    workspace_name: str, *, cancellation: CancellationToken | None = None
+) -> ExecutionRequest:
     task_id = f"task_{uuid4().hex}"
     run_id = f"run_{uuid4().hex}"
     return ExecutionRequest(
