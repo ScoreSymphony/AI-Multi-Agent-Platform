@@ -4,153 +4,163 @@ Issue: #37
 
 ## Purpose
 
-The platform owns workspace identity and lifecycle. Executors, source connectors and future remote workers must not invent incompatible workspace semantics or treat host filesystem paths as canonical IDs.
+The platform owns workspace identity and lifecycle. Executors, source connectors and remote workers must not invent incompatible workspace semantics or treat host filesystem paths as canonical IDs.
 
-A workspace is a portable project/task/run working context identified by `workspace_*`. Its immutable content states are identified by `workspace_snapshot_*`. A local or remote execution copy is a temporary `materialization_*` and is never the durable identity of the workspace.
+A workspace is a portable project/task/run working context identified by `workspace_*`. Its immutable content states are identified by `workspace_snapshot_*`. Local and remote execution copies are disposable materializations and never replace the durable workspace/snapshot identity.
 
-## Canonical models
+## Canonical models and boundaries
 
 `ai_multi_agent_platform.workspaces` defines:
 
-- `Workspace`
-  - canonical workspace/project/owner identity;
-  - workspace type and access mode;
-  - lifecycle status;
-  - optimistic revision;
-  - source references;
-  - current base snapshot;
-  - retention and active task/run references.
-- `WorkspaceSnapshot`
-  - immutable workspace content manifest;
-  - content checksum;
-  - canonical `FileProvider` references;
-  - parent snapshot and source provenance;
-  - optional artifact/source revision references.
-- `WorkspaceMaterialization`
-  - one isolated execution copy bound to an exact snapshot and base revision;
-  - an opaque executor-local token (`execution_workspace`), not a host path.
-- `WorkspaceChangeSet`
-  - created/modified files returned as canonical `file_*` evidence;
-  - deletions represented explicitly;
-  - base revision retained for conflict detection.
-- `RemoteMaterializationRequest`
-  - the stable canonical information a future worker transport needs to fetch/materialize a snapshot without redefining workspace identity.
+- `Workspace` — canonical project/owner identity, type, access mode, status, revision, source references, head snapshot, retention and active task/run references.
+- `WorkspaceSnapshot` — immutable content manifest with deterministic checksum, canonical `file_*` references, provenance, parent snapshot and optional artifact/source revision references.
+- `WorkspaceMaterialization` — one bounded execution copy tied to an exact snapshot and base revision; `execution_workspace` is an opaque local token rather than a host path.
+- `WorkspaceChangeSet` — created/modified/deleted paths with changed bytes returned through canonical `FileProvider` references.
+- `WorkspaceProvider` — replaceable platform-owned lifecycle/materialization boundary.
+- `RunWorkspaceBinding` — immutable canonical record linking a Run to the exact `workspace_*`, `workspace_snapshot_*` and snapshot checksum selected as its input.
+
+The platform Control Plane accepts a canonical `WorkspaceProvider`. When configured, `/api/v1/workspaces` reads and creates canonical Workspaces rather than the historical identity-only placeholder. Existing extension services and command handlers continue to compose through the same Control Plane boundary.
 
 ## Workspace types
 
-The contract reserves explicit types for:
+The contract has explicit semantics for:
 
 - persistent project workspaces;
 - ephemeral task workspaces;
 - isolated run workspaces;
 - read-only source workspaces;
 - cloned workspaces;
-- remote materializations.
+- remote workspaces/materializations.
 
-The type does not imply a specific Git provider, container engine, VPS layout or operating system.
+These types do not imply a particular Git provider, container engine, VPS layout, operating system or storage product.
 
 ## Source attachment
 
-`WorkspaceSourceRef` is provider-neutral and can describe empty/template sources, canonical files, snapshots, artifacts and repositories. Repository authentication and source-control operations remain connector responsibilities; they do not redefine the workspace domain.
+`WorkspaceSourceRef` is provider-neutral and can represent empty sources, canonical files, snapshots, artifacts, repositories and templates. Authentication and source-control behavior remain connector responsibilities and do not redefine workspace identity.
 
-The local reference implementation currently materializes canonical `WorkspaceFile` entries from the platform `FileProvider`. Repository/template/artifact resolvers can be added behind the same contracts later.
+`WorkspaceSourceResolverRegistry` is the extension boundary for turning source references into canonical `WorkspaceFile` manifests. The local platform includes:
+
+- `EmptyWorkspaceSourceResolver`;
+- `SnapshotWorkspaceSourceResolver`, including optional revision/checksum verification.
+
+Repository, artifact and template connectors register resolvers for their source kinds later. If no resolver exists, the operation is explicitly unavailable rather than silently falling back to host files. Resolution of multiple sources rejects overlapping relative paths.
 
 ## Local materialization flow
 
-`LocalWorkspaceProvider` implements the reference path:
+`LocalWorkspaceProvider` implements the deterministic reference path:
 
-1. verify canonical workspace and snapshot IDs;
+1. resolve canonical workspace and exact snapshot IDs;
 2. verify the snapshot manifest checksum;
 3. resolve canonical `file_*` entries through `FileProvider`;
-4. create a unique local `materialization_*` directory;
+4. allocate a unique local materialization directory;
 5. validate all relative paths before writing;
 6. verify source checksums after materialization;
-7. apply read-only filesystem permissions when required;
-8. execute through the opaque materialization token;
+7. apply read/write policy;
+8. execute through an opaque materialization token;
 9. scan for changed/deleted files;
-10. return changed bytes to `FileProvider` and expose only canonical file IDs in the change set;
-11. commit with optimistic workspace revision checks;
-12. release/clean the local materialization.
+10. return changed bytes through `FileProvider` and expose canonical file IDs in the change set;
+11. commit only against the expected workspace revision;
+12. release/clean the disposable materialization.
 
-`materialization_root` and `local_path()` are deliberately reference-implementation helpers. They are local details for wiring the existing `ReferenceExecutor` and tests, not northbound or distributed identities.
+`materialization_root` and `local_path()` are reference-implementation helpers for local execution/tests. They are not canonical northbound or distributed identities.
 
 ## Isolation rules
 
-The canonical relative-path validator rejects:
+The canonical path validator rejects absolute paths, `..` traversal, empty or `.` segments, backslash alternate separators and drive-style prefixes.
 
-- absolute paths;
-- `..` traversal;
-- empty or `.` path segments;
-- backslash-based alternate separators;
-- drive-style prefixes.
+The local provider additionally rejects symlink escapes before change capture. Each materialization has its own directory, so isolated runs do not share a write root by default. Read-only materializations are filesystem-protected and change capture independently rejects mutation, preserving the semantic boundary even if local permission bits are bypassed.
 
-The local implementation additionally rejects symlinks in materialized workspace trees before change capture. Every materialization has its own directory, so concurrent runs do not share a write root by default.
+## Snapshots, persistence and reproducibility
 
-Read-only materializations are chmod-protected locally and change capture independently rejects any detected mutation. The latter preserves the semantic boundary even when local filesystem permissions are bypassed by a privileged process.
+Snapshot checksums are deterministic over the sorted tuple of relative path, canonical file ID and file SHA-256. Re-materializing the same snapshot therefore resolves the same canonical content while using a different disposable local directory.
 
-## Snapshots and reproducibility
+`SqliteWorkspaceProvider` persists canonical Workspace metadata, head snapshot identity and complete historical WorkspaceSnapshot manifests. Workspace/snapshot IDs, revisions, source provenance, retention/access metadata and file manifests survive process restart. Local materialization paths do not survive as canonical state; stale active materialization references are cleared and crash-orphan directories remain cleanup candidates.
 
-Snapshot checksums are deterministic over the sorted tuple of:
+A workspace revision changes only when a change set is committed. Additional snapshots of unchanged content may have different snapshot IDs while retaining the same content checksum and revision.
 
-`relative path + canonical file ID + file SHA-256`
+## Run input binding
 
-Repeated materialization of the same snapshot therefore resolves the same canonical content while using different local directories.
+A workspace-aware Run is bound before execution starts. The Control Plane resolves and validates the selected Workspace and exact WorkspaceSnapshot, checks that the Workspace belongs to the Task project, then persists a `RunWorkspaceBinding` before dispatching the Run.
 
-A workspace revision changes only when a change set is committed. Additional snapshots of unchanged content may have different snapshot IDs but the same content checksum and revision.
+The binding records:
+
+- Run ID;
+- Task ID;
+- Workspace ID;
+- exact WorkspaceSnapshot ID;
+- snapshot content checksum.
+
+`SqliteRunWorkspaceBindingRepository` makes that binding restart-safe and immutable. Reusing a Run ID with a different workspace/snapshot target is rejected. A retry inherits the previous exact snapshot by default unless a new explicit binding is supplied. Run API resources expose the workspace ID, snapshot ID and checksum so clients can inspect the reproducible input.
+
+The binding is a canonical adjunct record rather than a host-materialization field. Ordering is deliberate: a Run may be queued before a binding write completes, but it is not started until its durable binding has succeeded. Retrying the same idempotent start recovers the same queued Run and completes the binding before dispatch.
 
 ## Concurrency
 
-Each materialization records the workspace revision on which it was based. `commit_changes(..., expected_revision=...)` rejects stale writers with the canonical `CONFLICT` error. A second run cannot silently overwrite a revision already committed by another run.
+Every materialization records the workspace revision on which it was based. `commit_changes(..., expected_revision=...)` rejects stale writers with the canonical `CONFLICT` error, preventing silent overwrite by concurrent runs.
 
-The current reference implementation intentionally chooses isolated-copy plus optimistic revision checking. Shared-write leases/locks can be added later without changing canonical workspace or snapshot IDs.
+The reference implementation deliberately uses isolated-copy plus optimistic revision checking. Future shared-write leases/locks can be added without changing Workspace or WorkspaceSnapshot identity.
 
 ## Cleanup and retention
 
-Local materializations are ephemeral execution copies and are removed by `release_materialization()` for success, failure or cancellation. `cleanup()` reports missing known materializations and removes orphaned local `materialization_*` directories without touching canonical FileProvider objects.
+Local materializations are disposable execution copies. `release_materialization()` removes them for success, failure or cancellation; `cleanup()` detects missing known materializations and removes orphaned local materialization directories without deleting canonical FileProvider objects or WorkspaceSnapshots.
 
-Canonical workspace retention (`persistent`, `ephemeral`, `until`) is part of the model. Full scheduled expiration/quota enforcement belongs to the remaining #37 lifecycle integration work.
+`RetentionManagedWorkspaceProvider` adds deterministic lifecycle policy over any `WorkspaceProvider`:
 
-## Executor integration
+- `persistent` workspaces are retained;
+- `ephemeral` workspaces become eligible only after they have actually been materialized;
+- `until` workspaces become eligible at an explicit timezone-aware expiration instant;
+- active materializations and active task/run references defer deletion;
+- materialization and retention decisions are serialized so cleanup cannot race an in-progress materialization;
+- `WorkspaceRetentionGuard` provides a policy/quota hook that can defer cleanup;
+- retention tombstones can be persisted in SQLite;
+- deleting a Workspace lifecycle identity never silently deletes its canonical snapshots or file objects.
 
-The existing `ReferenceExecutor` can be pointed at `LocalWorkspaceProvider.materialization_root` and receives only `WorkspaceMaterialization.execution_workspace`. It therefore executes inside a provider-created bounded directory rather than receiving a canonical workspace as a host path.
-
-A future executor/worker adapter should receive the canonical workspace/snapshot binding plus materialization instructions and construct its own local execution token.
+Cleanup failures are represented in reports rather than silently treated as success.
 
 ## Distributed extension
 
-Remote workers can consume `RemoteMaterializationRequest` containing:
+`RemoteMaterializationRequest` carries the canonical workspace ID, snapshot ID, expected checksum, access mode and cache key required by a future worker transport.
 
-- workspace ID;
-- snapshot ID;
-- expected checksum;
-- access mode;
-- cache key.
+The #37 boundary also defines:
 
-Future #14 transport adds snapshot transfer/fetch, worker-local caching, verification, result return and cleanup acknowledgement. None of those operations may replace the canonical workspace or snapshot identity with a worker path.
+- `RemoteMaterializationReceipt` — worker acknowledgement of the exact snapshot actually materialized, including checksum verification and opaque worker/materialization references;
+- `RemoteMaterializationResult` — changed canonical File references and artifact references returned from remote execution;
+- `RemoteCleanupAcknowledgement` — explicit success/failure acknowledgement for disposable worker-local cleanup;
+- `RemoteWorkspaceMaterializer` — transport-neutral materialize/result/cleanup interface.
 
-## Current implementation boundary
+Remote receipts reject checksum mismatch and path-like materialization references. #14 can implement actual worker transfer, caching and transport over these contracts without redefining Workspace identity.
 
-This first #37 implementation slice provides:
+## Follow-up integration boundaries
 
-- canonical workspace/snapshot/materialization/change models;
-- replaceable `WorkspaceProvider` lifecycle contract;
-- deterministic local FileProvider-backed materialization;
-- traversal and symlink isolation;
-- read-only mutation detection;
-- snapshot checksums;
-- isolated concurrent materializations;
-- optimistic stale-write conflict rejection;
-- changed-file return through canonical FileProvider references;
-- cancellation/release cleanup and orphan cleanup reporting;
-- remote materialization request hooks;
-- reference-executor integration coverage.
+The workspace domain is complete without requiring concrete implementations of later subsystems:
 
-Still required before #37 can close:
+- #14 supplies actual remote-worker transport/materialization execution;
+- #15 supplies authorization enforcement around the existing workspace policy context;
+- #34 supplies secret references for authenticated external sources;
+- #44 supplies concrete repository/artifact/template source connectors/resolvers;
+- #17 can expose richer workspace/project UI over the canonical Control Plane.
 
-- replace the Control Plane `WorkspaceIdentity` placeholder/`ScopeStore` workspace internals with the canonical workspace service;
-- bind exact workspace/snapshot references into canonical Run state/events so every run records its reproducible input;
-- persist workspace/snapshot metadata across process restart rather than keeping reference metadata in memory;
-- implement canonical workspace expiration/quota cleanup policy execution;
-- add connector-backed repository/artifact/template source resolvers;
-- finalize #14 remote-worker materialization response/acknowledgement integration;
-- perform final acceptance-criteria and architecture-conformance review.
+Those integrations consume the #37 contracts rather than changing their identities or lifecycle semantics.
+
+## Acceptance coverage
+
+The implementation and tests cover:
+
+- canonical path-independent Workspace and WorkspaceSnapshot IDs;
+- persistent, ephemeral, isolated-run and read-only semantics;
+- bounded local executor materialization;
+- exact restart-safe Run → WorkspaceSnapshot bindings;
+- traversal and symlink escape rejection;
+- read-only mutation rejection;
+- deterministic snapshot integrity verification;
+- stale/concurrent update conflicts;
+- cancellation/release and crash-orphan cleanup;
+- deterministic retention and expiration with policy/quota guard hooks;
+- missing canonical source/reference handling;
+- canonical changed-file/artifact return contracts;
+- repeated materialization of the same canonical snapshot;
+- restart-safe Workspace/Snapshot metadata;
+- source-resolver extension boundaries;
+- remote materialization/result/cleanup acknowledgement contracts.
+
+The local/reference test path requires neither remote workers nor source-control credentials.
