@@ -136,9 +136,7 @@ def test_control_plane_bridge_uses_canonical_vocabulary_and_resumes_after_approv
             LocalPrincipalPolicy(
                 principal_ref="user:test",
                 actor_types=frozenset({ActorType.HUMAN}),
-                allowed_actions=frozenset(
-                    {AuthorizationAction.CREATE, AuthorizationAction.READ}
-                ),
+                allowed_actions=frozenset({AuthorizationAction.CREATE, AuthorizationAction.READ}),
                 approval_actions=frozenset({AuthorizationAction.EXECUTE}),
                 resource_types=frozenset({ResourceType.TASK}),
             ),
