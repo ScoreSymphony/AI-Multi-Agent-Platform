@@ -37,6 +37,7 @@ from .persistence import (
     DistributedStateStore,
     JsonDistributedStateStore,
 )
+from .providers import DistributedNodeProvider, DistributedWorkerProvider
 from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
 from .scheduler import DeterministicScheduler, NoEligibleWorkerError, ScheduledPlacement
@@ -64,9 +65,11 @@ __all__ = [
     "DispatchRecord",
     "DispatchState",
     "DistributedAdminCommandHandlers",
+    "DistributedNodeProvider",
     "DistributedRegistry",
     "DistributedRuntime",
     "DistributedStateStore",
+    "DistributedWorkerProvider",
     "Heartbeat",
     "JobRequirements",
     "JobResultStatus",
