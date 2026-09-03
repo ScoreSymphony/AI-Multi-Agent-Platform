@@ -148,7 +148,10 @@ def test_scheduler_restart_restores_claim_and_dispatch_ownership(tmp_path: Path)
         assert restored_record.job.snapshot_ref == "snapshot:portable"
         assert restored_record.job.artifact_refs == ("artifact:input",)
         assert restored_record.job.secret_refs == ("secret:scoped-reference",)
-        assert restored_record.job.execution.context.correlation_id == job.execution.context.correlation_id
+        assert (
+            restored_record.job.execution.context.correlation_id
+            == job.execution.context.correlation_id
+        )
 
         restored_runtime.register(request, now=BASE_TIME + timedelta(seconds=1))
         restored_runtime.attach_worker(local_worker)
