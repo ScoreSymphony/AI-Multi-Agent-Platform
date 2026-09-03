@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import replace
 
 import pytest
@@ -88,23 +89,20 @@ def _manifest(
 def _registry(
     *,
     binders: dict[ExtensionType, CapabilityRegistryBinder] | None = None,
-    guard: object | None = None,
+    guard: Callable[[str], bool] | None = None,
 ) -> PluginRegistry:
-    reference_guard = guard if callable(guard) else None
     return PluginRegistry(
         platform_version="0.0.1",
         supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
         binders=binders,
-        canonical_reference_guard=reference_guard,
+        canonical_reference_guard=guard,
     )
 
 
 def test_reference_plugin_registers_disables_and_removes_cleanly() -> None:
     capability_registry = CapabilityRegistry()
     registry = _registry(
-        binders={
-            ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(capability_registry)
-        }
+        binders={ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(capability_registry)}
     )
     registry.install(reference_manifest())
     registry.configure(reference_manifest().plugin_id, {"prefix": "plugin:"})
