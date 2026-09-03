@@ -1,0 +1,16 @@
+{
+  "enabled": false,
+  "base_url": "http://127.0.0.1:8642",
+  "api_key_env": "API_SERVER_KEY",
+  "pinned_revision": "63279301bcbdc185c1b07b98a9312eb0c862f26d",
+  "request_timeout_seconds": 10.0,
+  "plan_timeout_seconds": 120.0,
+  "poll_interval_seconds": 0.2,
+  "profile": null,
+  "model_bridge": {
+    "model-local-example": "openai-compatible/local-model"
+  },
+  "capability_bridge": {
+    "tool.echo": "echo"
+  }
+}
