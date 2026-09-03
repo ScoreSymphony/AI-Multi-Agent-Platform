@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { BrowserSessionClient } from "./browserSession";
+import { ControlPlaneClient } from "./client";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -61,6 +62,23 @@ describe("BrowserSessionClient", () => {
     expect(loginHeaders.has("x-csrf-token")).toBe(false);
     expect(mutationHeaders.get("x-csrf-token")).toBe("csrf_123");
     expect(session.hasCsrfToken()).toBe(true);
+  });
+
+  it("applies the stored CSRF token to existing ControlPlaneClient commands", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem("ai-agent-platform.csrf-token", "csrf_stored");
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      expect(headers.get("x-csrf-token")).toBe("csrf_stored");
+      expect(headers.has("idempotency-key")).toBe(true);
+      return jsonResponse({ id: "task_1", status: "cancelled" });
+    });
+    const session = new BrowserSessionClient({ fetchImpl, storage });
+    const client = new ControlPlaneClient({ fetchImpl: session.fetch });
+
+    await client.cancelTask("task_1");
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it("does not attach a browser CSRF token to bearer-authenticated mutations", async () => {
