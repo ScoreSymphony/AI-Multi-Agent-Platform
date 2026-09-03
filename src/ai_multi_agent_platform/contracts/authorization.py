@@ -7,12 +7,9 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from types import MappingProxyType
 
-from .types import (
-    AdapterMetadata,
-    AuthorizationDecision as LegacyAuthorizationDecision,
-    AuthorizationRequest as LegacyAuthorizationRequest,
-    JsonValue,
-)
+from .types import AdapterMetadata, JsonValue
+from .types import AuthorizationDecision as LegacyAuthorizationDecision
+from .types import AuthorizationRequest as LegacyAuthorizationRequest
 
 
 class AuthorizationOutcome(StrEnum):
