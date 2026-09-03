@@ -112,15 +112,14 @@ def _accounting() -> tuple[AccountingService, str, str]:
             scope=UsageScope(project_id=project_id),
         )
     )
-    budget = accounting.put_budget(
-        UsageBudget(
-            metric_type="storage.file.bytes.current",
-            unit="bytes",
-            scope_type="project",
-            scope_id=project_id,
-            limit=100.0,
-        )
+    budget = UsageBudget(
+        metric_type="storage.file.bytes.current",
+        unit="bytes",
+        scope_type="project",
+        scope_id=project_id,
+        limit=100.0,
     )
+    accounting.put_budget(budget)
     return accounting, record.id, budget.id
 
 
