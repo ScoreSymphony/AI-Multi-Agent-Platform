@@ -75,6 +75,7 @@ class ConnectorService:
             action=AuthorizationAction.MANAGE_INTEGRATIONS,
             side_effect="connection_create",
             approval_id=approval_id,
+            payload=_connection_security_payload(connection),
         )
         normalized = await provider.validate_connection(connection, context)
         self._validate_provider_connection(connection, normalized, provider)
@@ -98,22 +99,19 @@ class ConnectorService:
             action=AuthorizationAction.MANAGE_INTEGRATIONS,
             side_effect="connection_enable" if enabled else "connection_disable",
             approval_id=approval_id,
+            payload={"connection_id": connection.id, "enabled": enabled},
         )
         now = datetime.now(UTC)
         updated = replace(
             connection,
             enabled=enabled,
-            status=(
-                ConnectionStatus.CONFIGURING if enabled else ConnectionStatus.DISABLED
-            ),
+            status=(ConnectionStatus.CONFIGURING if enabled else ConnectionStatus.DISABLED),
             health=HealthStatus.UNKNOWN if enabled else HealthStatus.UNAVAILABLE,
             updated_at=now,
             revision=connection.revision + 1,
         )
         if enabled:
-            provider = self.registry.resolve(
-                updated.connector_type_id, updated.connector_version
-            )
+            provider = self.registry.resolve(updated.connector_type_id, updated.connector_version)
             normalized = await provider.validate_connection(updated, context)
             self._validate_provider_connection(updated, normalized, provider)
             updated = normalized
@@ -136,6 +134,7 @@ class ConnectorService:
             action=AuthorizationAction.DELETE,
             side_effect="connection_remove",
             approval_id=approval_id,
+            payload={"connection_id": connection.id, "remove": True},
         )
         await self.repository.delete_connection(connection_id)
 
@@ -154,12 +153,11 @@ class ConnectorService:
             context=context,
             action=AuthorizationAction.READ,
             side_effect="health_read",
+            payload={"connection_id": connection.id},
         )
         if not connection.enabled:
             return connection
-        provider = self.registry.resolve(
-            connection.connector_type_id, connection.connector_version
-        )
+        provider = self.registry.resolve(connection.connector_type_id, connection.connector_version)
         health = await provider.connection_health(connection, context)
         status = (
             ConnectionStatus.READY
@@ -188,8 +186,14 @@ class ConnectorService:
         context: OperationContext,
         query: dict[str, JsonValue] | None = None,
     ) -> tuple[ExternalResourceReference, ...]:
+        query_payload = query or {}
         connection, provider = await self._usable_connection(
-            connection_id, actor=actor, context=context, action=AuthorizationAction.READ
+            connection_id,
+            actor=actor,
+            context=context,
+            action=AuthorizationAction.READ,
+            side_effect="external_read",
+            payload={"resource_type": resource_type, "query": query_payload},
         )
         if resource_type not in provider.definition.resource_types:
             raise ContractError(
@@ -202,7 +206,7 @@ class ConnectorService:
                 connection_id=connection.id,
                 resource_type=resource_type,
                 context=context,
-                query=query or {},
+                query=query_payload,
             )
         )
         for resource in resources:
@@ -218,7 +222,12 @@ class ConnectorService:
         context: OperationContext,
     ) -> ExternalResourceReference:
         connection, provider = await self._usable_connection(
-            connection_id, actor=actor, context=context, action=AuthorizationAction.READ
+            connection_id,
+            actor=actor,
+            context=context,
+            action=AuthorizationAction.READ,
+            side_effect="external_read",
+            payload={"external_resource_id": resource.id},
         )
         self._validate_resource_binding(resource, connection, provider)
         refreshed = await provider.read_resource(connection, resource, context)
@@ -249,6 +258,13 @@ class ConnectorService:
             action=AuthorizationAction.EXECUTE,
             side_effect="external_action",
             approval_id=approval_id,
+            capability_ref=action,
+            payload={
+                "connection_id": connection_id,
+                "action": action,
+                "arguments": arguments,
+                "invocation_id": invocation_id,
+            },
         )
         if action not in provider.definition.actions:
             raise ContractError(
@@ -284,7 +300,12 @@ class ConnectorService:
         context: OperationContext,
     ) -> ConnectorSyncResult:
         connection, provider = await self._usable_connection(
-            connection_id, actor=actor, context=context, action=AuthorizationAction.READ
+            connection_id,
+            actor=actor,
+            context=context,
+            action=AuthorizationAction.READ,
+            side_effect="external_sync",
+            payload={"connection_id": connection_id, "stream": stream},
         )
         checkpoint = await self.repository.get_checkpoint(connection.id, stream)
         result = await provider.synchronize(
@@ -295,10 +316,7 @@ class ConnectorService:
                 checkpoint=checkpoint,
             )
         )
-        if (
-            result.checkpoint.connection_id != connection.id
-            or result.checkpoint.stream != stream
-        ):
+        if result.checkpoint.connection_id != connection.id or result.checkpoint.stream != stream:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "connector returned checkpoint for another connection or stream",
@@ -331,6 +349,8 @@ class ConnectorService:
         action: AuthorizationAction,
         side_effect: str | None = None,
         approval_id: str | None = None,
+        capability_ref: str | None = None,
+        payload: dict[str, JsonValue] | None = None,
     ) -> tuple[Connection, ConnectorProvider]:
         connection = await self.repository.get_connection(connection_id)
         self._validate_scope(connection, context)
@@ -341,12 +361,12 @@ class ConnectorService:
             action=action,
             side_effect=side_effect,
             approval_id=approval_id,
+            capability_ref=capability_ref,
+            payload=payload,
         )
         if not connection.enabled or connection.status is ConnectionStatus.DISABLED:
             raise ContractError(ErrorCode.UNAVAILABLE, "connection is disabled")
-        provider = self.registry.resolve(
-            connection.connector_type_id, connection.connector_version
-        )
+        provider = self.registry.resolve(connection.connector_type_id, connection.connector_version)
         return connection, provider
 
     async def _authorize(
@@ -358,6 +378,8 @@ class ConnectorService:
         action: AuthorizationAction,
         side_effect: str | None,
         approval_id: str | None = None,
+        capability_ref: str | None = None,
+        payload: dict[str, JsonValue] | None = None,
     ) -> None:
         if self.authorization_gate is None:
             return
@@ -370,15 +392,11 @@ class ConnectorService:
                 operation=context,
                 organization_id=connection.organization_id,
                 workspace_id=None,
+                capability_ref=capability_ref,
                 side_effect=side_effect,
                 security_labels=("external_integration",),
             ),
-            payload={
-                "connection_id": connection.id,
-                "connector_type_id": connection.connector_type_id,
-                "connector_version": connection.connector_version,
-                "project_id": connection.project_id,
-            },
+            payload=payload or _connection_security_payload(connection),
         )
         await self.authorization_gate.enforce(proposed, approval_id=approval_id)
 
@@ -435,3 +453,22 @@ class ConnectorService:
                 "external resource type is not declared by connector",
                 provider_id=provider.descriptor.provider_id,
             )
+
+
+def _connection_security_payload(connection: Connection) -> dict[str, JsonValue]:
+    """Bind approvals to the exact safe connection configuration, never secret material."""
+
+    return {
+        "connection_id": connection.id,
+        "connector_type_id": connection.connector_type_id,
+        "connector_version": connection.connector_version,
+        "owner_type": connection.owner_type,
+        "owner_id": connection.owner_id,
+        "project_id": connection.project_id,
+        "organization_id": connection.organization_id,
+        "display_name": connection.display_name,
+        "endpoint_metadata": dict(connection.endpoint_metadata),
+        "secret_references": [reference.to_dict() for reference in connection.secret_references],
+        "requested_scopes": list(connection.requested_scopes),
+        "enabled": connection.enabled,
+    }
