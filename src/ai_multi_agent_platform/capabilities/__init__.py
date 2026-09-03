@@ -11,12 +11,15 @@ from .invocation import (
 from .native import ECHO_CAPABILITY_ID, NativeEchoProvider
 from .observer import EventRepositoryInvocationObserver
 from .provider import CapabilityToolProvider
-from .registry import CapabilityRegistry
+from .registry import CapabilityDiscoveryPolicyHook, CapabilityRegistry
 from .types import (
+    CapabilityCompatibilityRequest,
+    CapabilityDiscoveryRequest,
     CapabilityInvocation,
     CapabilityInvocationResult,
     CapabilityRegistration,
     CapabilitySpec,
+    CredentialRequirement,
     InvocationRecord,
     InvocationStatus,
     InvocationTrace,
@@ -27,6 +30,9 @@ from .types import (
 
 __all__ = [
     "ApprovalHook",
+    "CapabilityCompatibilityRequest",
+    "CapabilityDiscoveryPolicyHook",
+    "CapabilityDiscoveryRequest",
     "CapabilityInvocation",
     "CapabilityInvocationResult",
     "CapabilityInvoker",
@@ -34,6 +40,7 @@ __all__ = [
     "CapabilityRegistry",
     "CapabilitySpec",
     "CapabilityToolProvider",
+    "CredentialRequirement",
     "ECHO_CAPABILITY_ID",
     "EventRepositoryInvocationObserver",
     "GovernanceBindingHook",

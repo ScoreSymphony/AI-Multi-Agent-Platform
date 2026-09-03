@@ -4,9 +4,9 @@ Issue: #12
 
 ## Architectural rule
 
-The platform owns capability identity, schemas, policy hooks, trace metadata and invocation semantics. A concrete tool backend implements `CapabilityToolProvider`. MCP is one optional adapter and is never the canonical tool model.
+The platform owns capability identity, schemas, compatibility metadata, policy hooks, trace metadata and invocation semantics. A concrete tool backend implements `CapabilityToolProvider`. MCP is one optional adapter and is never the canonical tool model.
 
-Canonical flow:
+Canonical invocation flow:
 
 ```text
 CapabilityInvocation
@@ -14,7 +14,8 @@ CapabilityInvocation
         v
 CapabilityRegistry.resolve()
         |
-        +-- version / permission / worker placement checks
+        +-- exact version OR canonical compatibility request
+        +-- feature / permission / worker placement checks
         |
         v
 CapabilityInvoker
@@ -39,6 +40,47 @@ optional EventRepositoryInvocationObserver
 ```
 
 Provider-private tool names only appear in `CapabilityRegistration.provider_tool_ref` and namespaced adapter metadata. Agents request `capability_id`, not MCP/native/backend names.
+
+## Inventory versus policy-aware discovery
+
+`CapabilityRegistry.list_capabilities()` is the synchronous static inventory view. It filters availability, health, declared permissions and worker placement but deliberately does **not** claim that a capability is authorized for a caller. It remains useful for administration, diagnostics and composition code that needs a backend-neutral inventory.
+
+Caller-facing usable discovery uses `CapabilityRegistry.discover_capabilities()` with a canonical `CapabilityDiscoveryRequest`. The request carries the existing `OperationContext` plus granted permissions and available worker capabilities. A replaceable `CapabilityDiscoveryPolicyHook` receives that caller/scope context and each otherwise eligible `CapabilitySpec`:
+
+- `DENY` removes the capability from caller-visible discovery;
+- `ALLOW` keeps it visible;
+- `REQUIRE_APPROVAL` keeps it visible because it remains usable through the canonical approval path.
+
+The hook is an integration seam, not the final authorization engine. It works without a concrete implementation of issue #15 and can later delegate to that platform policy backend. Invocation remains the enforcement point and evaluates its invocation policy hook again immediately before governance/provider execution; a discovery result is never treated as a cached authorization grant.
+
+## Version and feature compatibility
+
+Exact backend-neutral version selection remains available through `CapabilityInvocation.version` / `CapabilityRegistry.resolve(..., version=...)`. Exact matching can use any non-blank provider version identifier because no compatibility is inferred.
+
+When the caller needs compatible selection it uses `CapabilityCompatibilityRequest` instead. The request can declare:
+
+- a minimum version and whether that bound is inclusive;
+- a maximum version and whether that bound is inclusive;
+- required canonical feature names.
+
+`CapabilitySpec.features` publishes the provider-neutral feature set of a capability version. Compatible resolution first filters by required features, then applies the version range, then chooses the highest matching version deterministically.
+
+Compatibility ordering intentionally supports only one-to-three-part dotted numeric versions such as `1`, `1.4` or `2.0.3`. This is the canonical baseline and avoids silently inventing ordering semantics for labels such as `stable`, provider build identifiers or other opaque strings. Such versions remain fully usable by exact selection. If compatibility would require ordering an opaque label, or two distinct labels normalize to the same numeric compatibility version (for example `1.0` and `1.0.0`), resolution fails with a canonical conflict and requires exact selection.
+
+If no version satisfies the requested bounds/features, the registry returns a canonical `UNSUPPORTED_CAPABILITY` error with available versions and the compatibility request details.
+
+`version` and `compatibility` are mutually exclusive on a canonical invocation.
+
+## Credential-requiring capabilities
+
+Credential need is first-class capability metadata through `CredentialRequirement`:
+
+- `none` — the capability does not declare a credential requirement;
+- `required` — use requires credential material supplied through the appropriate security/configuration path.
+
+This classification is deliberately separate from safety sensitivity, side-effect classification, permissions and approvals. Discovery and invocation policy hooks receive the `CapabilitySpec`, so they can apply policy to credential-requiring capabilities without learning where credentials are stored or how they are fetched.
+
+The capability contract contains **no secret value, secret reference, secret provider, vault type or backend credential object**. Secret storage/retrieval remains outside #12 and belongs to the dedicated configuration/secrets and authorization boundaries.
 
 ## Capability identity versus governed invocation identity
 
@@ -125,11 +167,13 @@ The capability contract distinguishes:
 
 - safety classification;
 - side-effect classification;
+- credential requirement;
 - required permissions;
 - required approvals;
-- required worker capabilities.
+- required worker capabilities;
+- version-compatible feature metadata.
 
-The registry rejects missing permissions before provider execution. A policy hook can allow, deny or require approval. Approval decisions receive the canonical governed `tool_invocation_*` object. Invocation records retain `approved` or `required` where an approval decision is applicable.
+The registry rejects missing permissions before provider execution. Policy-aware discovery can hide denied capabilities before callers treat them as usable. The invocation policy hook can allow, deny or require approval. Approval decisions receive the canonical governed `tool_invocation_*` object. Invocation records retain `approved` or `required` where an approval decision is applicable.
 
 ## Schema validation
 
