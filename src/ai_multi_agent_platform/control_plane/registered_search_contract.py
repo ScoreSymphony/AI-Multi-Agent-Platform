@@ -1,4 +1,4 @@
-"""Progressive Search integration for explicitly registered canonical domains (#45)."""
+"""Progressive Search integration for canonical and registered platform domains (#45)."""
 
 from __future__ import annotations
 
@@ -13,21 +13,34 @@ from .extensions import _singular, _validate_resources
 from .models import API_VERSION, PageQuery, RequestContext
 from .search_contract import ControlPlane as _BaseSearchControlPlane
 from .search_contract import ControlPlaneHTTP, build_openapi
-from .service import _project_resource, _run_resource, _task_resource, _workspace_resource
+from .service import (
+    _model_provider_resource,
+    _model_resource,
+    _project_resource,
+    _run_resource,
+    _task_resource,
+    _workspace_resource,
+)
 
-_CORE_SEARCH_TYPES = frozenset({"project", "workspace", "task", "run"})
+_FOUNDATION_SEARCH_TYPES = frozenset({"project", "workspace", "task", "run"})
+_MODEL_SEARCH_AUTHORIZATION = {
+    "model": ("models", "model:list"),
+    "model-provider": ("model-providers", "model-provider:list"),
+}
+_BUILTIN_SEARCH_TYPES = _FOUNDATION_SEARCH_TYPES | frozenset(_MODEL_SEARCH_AUTHORIZATION)
 
 
 class ControlPlane(_BaseSearchControlPlane):
-    """Search Stage 1 plus safe discovery of registered canonical extensions.
+    """Search foundation plus progressive discovery of canonical platform resources.
 
-    Registered ResourceServices remain the schema authorities for their domains. Search
-    only derives documents from the same northbound resources and mirrors each
-    collection's canonical list-authorization action before returning matches.
+    Built-in canonical domains are rebuilt directly from their owning platform source.
+    Registered ResourceServices remain the schema authorities for extension domains.
+    Search only derives documents from canonical northbound shapes and reuses each
+    domain's existing authorization vocabulary before returning matches.
     """
 
     async def rebuild_search_index(self, *, correlation_id: str = "search-rebuild") -> int:
-        """Rebuild core and currently registered canonical resources from source state."""
+        """Rebuild all currently searchable canonical resources from source state."""
 
         documents: list[SearchDocument] = []
         for project in self._scopes.list_projects():
@@ -80,6 +93,15 @@ class ControlPlane(_BaseSearchControlPlane):
                     )
                 )
 
+        model_registry = self._model_registry
+        if model_registry is not None:
+            for provider in model_registry.list_providers():
+                documents.append(
+                    document_from_resource(_model_provider_resource(model_registry, provider))
+                )
+            for model in model_registry.list_models():
+                documents.append(document_from_resource(_model_resource(model_registry, model)))
+
         (
             extension_documents,
             extension_authorization,
@@ -115,10 +137,10 @@ class ControlPlane(_BaseSearchControlPlane):
 
             for resource in resources:
                 document = document_from_resource(resource, collection=collection)
-                if document.resource_type in _CORE_SEARCH_TYPES:
+                if document.resource_type in _BUILTIN_SEARCH_TYPES:
                     raise ContractError(
                         ErrorCode.CONTRACT_VIOLATION,
-                        "registered Search resource type conflicts with a core Search type",
+                        "registered Search resource type conflicts with a built-in Search type",
                         details={
                             "resource_type": document.resource_type,
                             "collection": collection,
@@ -146,8 +168,13 @@ class ControlPlane(_BaseSearchControlPlane):
         context: RequestContext,
         result: SearchResult,
     ) -> bool:
-        if result.resource_type in _CORE_SEARCH_TYPES:
+        if result.resource_type in _FOUNDATION_SEARCH_TYPES:
             return await super()._search_result_allowed(context, result)
+
+        model_authorization = _MODEL_SEARCH_AUTHORIZATION.get(result.resource_type)
+        if model_authorization is not None:
+            collection, action = model_authorization
+            return await self._allowed(context, action, collection)
 
         authorization = getattr(self, "_search_extension_authorization", {})
         extension = authorization.get(result.resource_type)
