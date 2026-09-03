@@ -176,6 +176,12 @@ through the pinned Team revision.
 - model-call and tool-invocation references;
 - errors, telemetry and verification context.
 
+After creation, the start-time execution identity is immutable: Task/Run IDs, pinned
+Agent/Team revisions, selected model/provider, capability IDs and versions, orchestrator
+references and `started_at` cannot be rewritten by later AgentRun updates. Lifecycle,
+evidence, telemetry, verification and terminal fields may still advance through their
+normal service paths.
+
 The orchestrator runtime reference is adapter-owned metadata, not canonical lifecycle
 truth.
 
