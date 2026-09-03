@@ -60,6 +60,11 @@ class WorkspaceSourceResolverRegistry:
         context: DataAccessContext,
     ) -> ResolvedWorkspaceSource:
         resolver = self._resolvers.get(source_ref.kind)
+        if resolver is None and source_ref.kind is WorkspaceSourceKind.FILES:
+            # Canonical uploaded/project files are carried explicitly in the Workspace
+            # create manifest. The source ref records their provenance and does not need
+            # a second provider lookup.
+            return ResolvedWorkspaceSource(source_ref=source_ref)
         if resolver is None:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
