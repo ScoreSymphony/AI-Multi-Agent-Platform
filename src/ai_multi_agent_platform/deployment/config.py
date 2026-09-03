@@ -92,7 +92,16 @@ class SingleNodeConfig:
             self.workspaces_dir,
             self.executor_dir,
         ):
-            path.mkdir(parents=True, exist_ok=True)
+            try:
+                path.mkdir(parents=True, exist_ok=True)
+            except OSError as exc:
+                raise ConfigurationError(
+                    f"single-node deployment cannot prepare required persistence path: {path}"
+                ) from exc
+            if not path.is_dir():
+                raise ConfigurationError(
+                    f"single-node deployment persistence path is not a directory: {path}"
+                )
 
 
 def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleNodeConfig:
