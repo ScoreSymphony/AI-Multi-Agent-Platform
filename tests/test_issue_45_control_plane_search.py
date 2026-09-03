@@ -4,14 +4,20 @@ import asyncio
 
 from control_plane_contract_helpers import api_headers
 
-from ai_multi_agent_platform.contracts.types import AuthorizationDecision, AuthorizationRequest
+from ai_multi_agent_platform.contracts.types import (
+    AuthorizationDecision,
+    AuthorizationRequest,
+    OperationContext,
+)
 from ai_multi_agent_platform.control_plane import (
     ControlPlane,
     ControlPlaneHTTP,
     HTTPRequest,
     build_openapi,
 )
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
+from ai_multi_agent_platform.search import SearchDocument
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
     FakeLifecycleBackend,
@@ -100,6 +106,14 @@ def test_global_search_exact_keyword_project_filter_and_run_lookup() -> None:
         control_plane, http = _stack(FakeAuthorizationProvider())
         project_id = await _create_project(http, "search-project", "Search Platform")
         task_id = await _create_task(http, "search-task", "Build global search", project_id)
+        queued = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/tasks/{task_id}:queue",
+                headers=api_headers(idempotency_key="search-queue"),
+            )
+        )
+        assert queued.status == 200
 
         started = await http.handle(
             HTTPRequest(
@@ -219,16 +233,14 @@ def test_search_rebuild_removes_stale_provider_state_and_semantic_degrades_clean
     async def scenario() -> None:
         control_plane, http = _stack(FakeAuthorizationProvider())
         project_id = await _create_project(http, "canonical-project", "Canonical Search")
-
-        from ai_multi_agent_platform.search import SearchDocument
-        from ai_multi_agent_platform.contracts.types import OperationContext
+        stale_id = new_id("project")
 
         await control_plane.search_provider.upsert(
             SearchDocument(
                 resource_type="project",
-                resource_id="project_00000000-0000-0000-0000-000000000000",
+                resource_id=stale_id,
                 title="Stale search-only project",
-                project_id="project_00000000-0000-0000-0000-000000000000",
+                project_id=stale_id,
             ),
             OperationContext(correlation_id="stale-search-test"),
         )
