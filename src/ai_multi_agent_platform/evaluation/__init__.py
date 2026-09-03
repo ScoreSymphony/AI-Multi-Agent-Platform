@@ -1,5 +1,6 @@
 """Canonical evaluation and regression framework."""
 
+from .context import EvaluationExecutionContext
 from .contracts import (
     EvaluationCaseExecutor,
     EvaluationIsolation,
@@ -39,6 +40,13 @@ from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
 from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolation
+from .workspace import (
+    EvaluationFixture,
+    EvaluationFixtureResolver,
+    ResolvedEvaluationFixtures,
+    StaticEvaluationFixtureResolver,
+    WorkspaceEvaluationIsolation,
+)
 
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
@@ -53,6 +61,9 @@ __all__ = [
     "EvaluationAttempt",
     "EvaluationCase",
     "EvaluationCaseExecutor",
+    "EvaluationExecutionContext",
+    "EvaluationFixture",
+    "EvaluationFixtureResolver",
     "EvaluationIsolation",
     "EvaluationObservation",
     "EvaluationOutcome",
@@ -76,8 +87,11 @@ __all__ = [
     "RegressionPolicy",
     "RegressionRule",
     "RegressionRuleKind",
+    "ResolvedEvaluationFixtures",
     "RubricCriterion",
     "SafeEvaluator",
     "SnapshotValue",
+    "StaticEvaluationFixtureResolver",
     "VersionReference",
+    "WorkspaceEvaluationIsolation",
 ]
