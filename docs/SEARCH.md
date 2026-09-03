@@ -9,7 +9,7 @@ Issue #45 introduces Search as a progressive, derived discovery layer over canon
 3. The search index must be rebuildable from canonical resource APIs/stores.
 4. No baseline feature requires embeddings, a vector database or a paid search service.
 5. `SearchProvider` is replaceable. Provider-private IDs are not canonical identities.
-6. Raw provider results are not a northbound authorization boundary. The Control Plane must authorize/filter candidates before returning results or counts to callers.
+6. Raw provider results are not a northbound authorization boundary. The Control Plane authorizes candidates before returning results or counts to callers.
 7. Search must not reveal inaccessible resource existence through snippets, result counts or facets.
 
 ## Foundation contracts
@@ -21,19 +21,31 @@ Issue #45 introduces Search as a progressive, derived discovery layer over canon
 - `SearchDocument`: derived index representation;
 - `SearchProvider`: replaceable search/index boundary;
 - `LocalSearchProvider`: dependency-free baseline implementation;
+- `SearchService`: authorization-safe candidate filtering and canonical pagination;
 - `document_from_resource(...)`: mapping from safe canonical Control Plane resources into derived documents.
 
 The canonical vocabulary includes `semantic` and `hybrid` modes, but providers advertise what they actually support. The baseline local provider intentionally supports only exact, keyword and metadata modes and reports unsupported semantic/hybrid requests explicitly.
 
-## Initial searchable domains
+## Stage 1 Control Plane integration
 
-The first Control Plane integration should rebuild/index resources that already have canonical APIs:
+The composed Control Plane exposes `GET /api/v1/search` and currently rebuilds/indexes the canonical resources that already have stable APIs:
 
 - Projects;
 - Workspaces;
 - Tasks;
-- Runs;
-- optionally Plans/Steps/Artifacts/Results where their current metadata is useful and safe.
+- Runs.
+
+Supported Stage 1 query features include:
+
+- exact canonical ID lookup;
+- keyword/text search over safe indexed metadata;
+- resource-type filtering;
+- Project and Workspace scoping;
+- status and tag filters;
+- inclusive timezone-aware `updated_after` / `updated_before` filters where `updated_at` exists;
+- source/provider filters;
+- pagination and deterministic sorting;
+- explicit unsupported-capability responses for semantic/hybrid modes on the local provider.
 
 Later domains are added only after their owning canonical APIs exist. Search must not invent a second schema authority for Agents, Files, Knowledge, Connectors, Conversations, Verification, Organizations or future domains.
 
@@ -47,35 +59,37 @@ The provider boundary supports:
 
 The baseline local provider replaces documents by `(resource_type, resource_id)`, so updates do not create duplicate identities. `rebuild(...)` atomically replaces its in-memory derived state.
 
-Future durable providers may persist index revision/checkpoint metadata, but that metadata remains provider provenance and must never become canonical resource state.
+For the initial Stage 1 Control Plane path, the index is rebuilt from canonical sources before each query. This is intentionally correctness-first: updates and deletions cannot remain silently stale even without a durable index or event bus. Later durable providers may replace this with write-through/event-driven synchronization plus revision/checkpoint metadata, but that metadata remains provider provenance and never becomes canonical resource state.
 
 ## Authorization placement
 
 Authorization-aware search is a Control Plane/application concern above the raw `SearchProvider`.
 
-The required request path is:
+The request path is:
 
 ```text
 Client / Agent
     -> Control Plane Search API
-    -> canonical authorization/resource-discovery checks
     -> SearchProvider candidate discovery
+    -> canonical authorization checks for each candidate
     -> authorization-safe result filtering/counting/snippets
     -> canonical SearchResult page
 ```
 
-A provider may use precomputed scope metadata as an optimization, but this must not replace canonical authorization. The Control Plane must not expose the provider's raw `total` or facets when doing so could reveal unauthorized resources.
+The baseline `SearchService` scans provider candidates and applies canonical authorization before calculating the caller-visible `total`, cursor or result snippets. A provider may later use precomputed scope metadata as an optimization, but this must not replace canonical authorization.
 
-## Next implementation slice
+## Failure and degraded behavior
 
-The next slice for #45 should add the Control Plane search service/endpoint and a canonical rebuild operation that gathers current Project/Workspace/Task/Run resources. That integration must include tests for:
+- A SearchProvider outage is returned through the canonical error contract (for example `503 unavailable` when retryable).
+- Unsupported optional query modes return `unsupported_capability` rather than silently changing semantics.
+- The baseline has no dependency on Registry connectivity, embeddings, vector databases or paid search services.
 
-- authorized and unauthorized discovery;
-- private-resource non-disclosure through result counts;
-- exact Task/Project/Run lookup;
-- project scoping;
-- rebuild from canonical sources;
-- provider unavailable/degraded behavior;
-- update/delete propagation from canonical lifecycle changes.
+## Remaining #45 integrations
 
-CLI and frontend surfaces should consume that Control Plane endpoint later rather than calling a SearchProvider directly.
+Stage 1 establishes the secure canonical search surface. Future work in #45 can add:
+
+- progressive indexing for Agents/Teams, Models/Capabilities, Files/Memory/Knowledge, Connectors, Conversations, Verification, Organizations, Templates and other domains after their canonical APIs are available;
+- richer domain-specific filters such as Task priority/deadline/assignment once owned by the corresponding canonical domain;
+- CLI search command and frontend global-search UI consuming `/api/v1/search`;
+- durable/event-driven indexing and stale-index checkpoints for larger deployments;
+- optional semantic/hybrid provider adapters without making them baseline requirements.
