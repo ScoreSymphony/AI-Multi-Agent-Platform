@@ -50,6 +50,8 @@ class SessionCreateRequest:
     dimensions: TerminalDimensions | None = None
     encoding: str = "utf-8"
     policy_classification: tuple[str, ...] = ()
+    inactivity_timeout_seconds: int | None = None
+    retain_transcript: bool = False
 
     def __post_init__(self) -> None:
         validate_id(self.session_id, "terminal_session")
@@ -63,6 +65,8 @@ class SessionCreateRequest:
             raise ValueError("operation project_id must match session context")
         if any(not label.strip() for label in self.policy_classification):
             raise ValueError("policy classifications must not contain blank values")
+        if self.inactivity_timeout_seconds is not None and self.inactivity_timeout_seconds <= 0:
+            raise ValueError("inactivity_timeout_seconds must be positive")
 
 
 @dataclass(frozen=True, slots=True)
