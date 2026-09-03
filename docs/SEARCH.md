@@ -41,6 +41,28 @@ The foundation rebuild covers:
 
 These resources use their existing canonical list/discovery authorization actions before a Search result becomes caller-visible.
 
+### Task reference resources
+
+The rebuild also derives the existing canonical Task reference resources exposed by the Control Plane:
+
+- Plans;
+- Steps;
+- Artifacts;
+- Results.
+
+Search does not create a second Plan, Step, Artifact or Result store. These documents are rebuilt from the same canonical Task state and the same northbound reference projections used by `/api/v1/plans`, `/api/v1/steps`, `/api/v1/artifacts` and `/api/v1/results`.
+
+For an unambiguous reference attached to one Task, safe relationship metadata can be used for discovery:
+
+- `task_id` for Plan, Step, Artifact and Result references;
+- `plan_id` for Step references;
+- `step_ids` for Plan references;
+- parent Task owner and Project scope for authorization-aware Project filtering.
+
+Reference results reuse the existing plural Control Plane authorization actions: `plans:list`, `steps:list`, `artifacts:list` and `results:list`. Exact-ID lookup, keyword results and caller-visible totals all pass through those canonical checks.
+
+A canonical reference ID can theoretically be attached to more than one Task. Search therefore tracks every Task scope associated with that `(resource_type, resource_id)` identity. When multiple attachments exist, the derived document is deliberately reduced to scope-neutral ID/type metadata: parent Task IDs, owner information and Project relationships are not indexed or exposed. Authorization succeeds only if at least one canonical attachment is visible to the caller. This preserves discoverability of the shared canonical identity without leaking relationships from another Task or Project.
+
 ### Progressive registered domains
 
 Canonical domains exposed through the generic Control Plane `ResourceService` registration seam are automatically eligible for Search. The registered service remains the domain/schema authority; Search reads its canonical northbound resource shape, validates it through the same private-field leak checks used by the Control Plane, derives a `SearchDocument`, and retains the registered collection in result provenance.
@@ -175,9 +197,9 @@ Exact-ID lookup follows the same rule: knowing or guessing a canonical ID does n
 
 ## Remaining #45 integrations
 
-The secure foundation, progressive registration bridge, Model/Capability inventory support and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
+The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
 
-- additional core resources such as Plans, Steps, Artifacts, Results and policy-permitted Events where not yet included in the rebuild;
+- policy-permitted Events where useful for global discovery;
 - Files, scoped Memory and Knowledge;
 - Nodes/Workers;
 - Approvals, Automations and Evaluations;
