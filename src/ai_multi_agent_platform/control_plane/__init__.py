@@ -1,6 +1,5 @@
 """Versioned platform-owned northbound Control Plane."""
 
-from .authenticated_authorization import ControlPlane
 from .authentication_hardening import AuthenticatedControlPlaneHTTP
 from .automation_api import (
     AUTOMATION_COLLECTION,
@@ -28,6 +27,14 @@ from .models import (
     PageQuery,
     RequestContext,
     WorkspaceIdentity,
+)
+from .plugin_api import (
+    PLUGIN_CANDIDATE_COLLECTION,
+    PLUGIN_COLLECTION,
+    PLUGIN_COLLECTIONS,
+    PLUGIN_COMMANDS,
+    ControlPlane,
+    PluginPermissionResolver,
 )
 from .service import ScopeStore
 from .task_management_contract import (
@@ -58,7 +65,12 @@ __all__ = [
     "IMPLEMENTED_DOMAIN_COLLECTIONS",
     "InMemoryResourceService",
     "PLATFORM_COLLECTIONS",
+    "PLUGIN_CANDIDATE_COLLECTION",
+    "PLUGIN_COLLECTION",
+    "PLUGIN_COLLECTIONS",
+    "PLUGIN_COMMANDS",
     "PageQuery",
+    "PluginPermissionResolver",
     "REQUIRED_COMMANDS",
     "RequestContext",
     "ResourceService",
