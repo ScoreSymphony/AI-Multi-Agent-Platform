@@ -6,7 +6,7 @@ import hashlib
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
 
@@ -14,6 +14,7 @@ from ai_multi_agent_platform.contracts import (
     AuthorizationDecision,
     AuthorizationOutcome,
     AuthorizationProvider,
+    AuthorizationRequest,
     HealthStatus,
     JsonValue,
     OperationContext,
@@ -145,8 +146,6 @@ class AuthorizationContext:
         requested_action_digest: str | None = None,
         approval_id: str | None = None,
     ) -> AuthorizationRequest:
-        from ai_multi_agent_platform.contracts import AuthorizationRequest
-
         return AuthorizationRequest(
             principal_ref=self.actor.actor_id,
             actor_type=self.actor.actor_type.value,
