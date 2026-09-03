@@ -11,6 +11,7 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, TaskStatus
 from ai_multi_agent_platform.kernel import TaskState
 from ai_multi_agent_platform.task_management import TaskManagementView
@@ -47,14 +48,10 @@ def task_management_change_candidates(
     if assignment_changed:
         responsibility = after.metadata.responsibility
         agent_assignment = after.metadata.agent_assignment
-        assignment_summary = {
+        assignment_summary: dict[str, JsonValue] = {
             "task_id": task.task_id,
-            "responsibility": (
-                None if responsibility is None else responsibility.to_json()
-            ),
-            "agent_assignment": (
-                None if agent_assignment is None else agent_assignment.to_json()
-            ),
+            "responsibility": (None if responsibility is None else responsibility.to_json()),
+            "agent_assignment": (None if agent_assignment is None else agent_assignment.to_json()),
         }
         candidates.append(
             _candidate(
@@ -83,7 +80,7 @@ def task_management_change_candidates(
 
     if before.metadata.due_at != after.metadata.due_at:
         due_at = after.metadata.due_at
-        deadline_summary = {
+        deadline_summary: dict[str, JsonValue] = {
             "task_id": task.task_id,
             "due_at": None if due_at is None else due_at.isoformat(),
             "deadline_timezone": after.metadata.deadline_timezone,
@@ -96,9 +93,7 @@ def task_management_change_candidates(
                 recipient=recipient,
                 category=NotificationCategory.DEADLINE,
                 severity=(
-                    NotificationSeverity.WARNING
-                    if after.overdue
-                    else NotificationSeverity.INFO
+                    NotificationSeverity.WARNING if after.overdue else NotificationSeverity.INFO
                 ),
                 title="Task deadline removed" if due_at is None else "Task deadline updated",
                 summary=deadline_summary,
@@ -146,7 +141,7 @@ def task_attention_state_candidates(
     due_at = view.metadata.due_at
     if due_at is not None:
         if view.overdue:
-            summary = {
+            summary: dict[str, JsonValue] = {
                 "task_id": task.task_id,
                 "phase": "overdue",
                 "due_at": due_at.isoformat(),
@@ -215,14 +210,12 @@ def _dependency_candidate(
         title = "Task dependencies cleared"
         severity = NotificationSeverity.INFO
         state = "clear"
-    summary = {
+    summary: dict[str, JsonValue] = {
         "task_id": task.task_id,
         "state": state,
         "blocking_task_ids": list(view.blocking_task_ids),
         "failed_dependency_ids": list(view.failed_dependency_ids),
-        "effective_blocking_reason": view.planning_resource().get(
-            "effective_blocking_reason"
-        ),
+        "effective_blocking_reason": view.planning_resource().get("effective_blocking_reason"),
     }
     return _candidate(
         task=task,
@@ -244,7 +237,7 @@ def _candidate(
     category: NotificationCategory,
     severity: NotificationSeverity,
     title: str,
-    summary: dict[str, object],
+    summary: dict[str, JsonValue],
     aggregation_key: str,
     expires_at: datetime | None = None,
 ) -> NotificationCandidate:
@@ -299,7 +292,7 @@ def _recipient(kind: str, identifier: str) -> RecipientRef | None:
         return None
 
 
-def _aggregation_key(kind: str, task_id: str, state: object) -> str:
+def _aggregation_key(kind: str, task_id: str, state: JsonValue) -> str:
     encoded = json.dumps(
         state,
         sort_keys=True,
