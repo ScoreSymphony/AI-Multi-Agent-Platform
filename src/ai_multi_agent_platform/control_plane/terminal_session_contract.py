@@ -109,6 +109,11 @@ def terminal_command_handlers(
             dimensions=_dimensions(payload.get("dimensions")),
             encoding=_optional_string(payload, "encoding") or "utf-8",
             policy_classification=_string_tuple(payload.get("policy_classification")),
+            inactivity_timeout_seconds=_optional_positive_int(
+                payload,
+                "inactivity_timeout_seconds",
+            ),
+            retain_transcript=_optional_bool(payload, "retain_transcript"),
         )
         session = await sessions.create_session(
             request,
@@ -473,6 +478,37 @@ def _optional_string(payload: Mapping[str, JsonValue], name: str) -> str | None:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             f"{name} must be a non-blank string when provided",
+            details={"field": name},
+        )
+    return value
+
+
+def _optional_positive_int(payload: Mapping[str, JsonValue], name: str) -> int | None:
+    value = payload.get(name)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{name} must be a positive integer when provided",
+            details={"field": name},
+        )
+    return value
+
+
+def _optional_bool(
+    payload: Mapping[str, JsonValue],
+    name: str,
+    *,
+    default: bool = False,
+) -> bool:
+    value = payload.get(name)
+    if value is None:
+        return default
+    if not isinstance(value, bool):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{name} must be a boolean when provided",
             details={"field": name},
         )
     return value
