@@ -22,7 +22,7 @@ The current implementation uses React + TypeScript with Vite as build/dev toolin
 
 The client code is split into:
 
-- `src/api/` — typed Control Plane models, centralized HTTP client, error presentation, pagination contracts and SSE stream client;
+- `src/api/` — typed Control Plane models, centralized HTTP client, browser-session/CSRF boundary, error presentation, pagination contracts and SSE stream client;
 - `src/platform/` — canonical identifier helpers;
 - `src/security/` — presentation-only permission hints; the server is authoritative;
 - `src/app/` — routing, navigation, shell and reusable cursor-pagination state;
@@ -50,6 +50,7 @@ The initial shell has progressed beyond the first Task/Run vertical slice. The c
 - Tools/Capabilities — canonical Capability inventory plus public Capability Provider descriptors, including versioned health, safety, side effects, permissions, approval requirements and schema summaries; no provider-private invocation path is invented;
 - Models/Providers — canonical model inventory, provider inventory, health/capabilities and supported model/provider commands;
 - Terminal/Sessions — canonical Terminal session UI and Control Plane streaming gateway from #73, without exposing backend process/session handles as frontend identity;
+- Settings/Authentication — #36 browser login, current canonical identity, browser-session inventory, renewal, targeted session revocation and logout; the HttpOnly session secret remains opaque to frontend code;
 - Events/Observability — Task-scoped timeline and available backend-neutral observability information;
 - Usage & Limits — canonical usage records, aggregates and budgets exposed by the Control Plane.
 
@@ -71,11 +72,15 @@ Every mutating client call generates an `Idempotency-Key`; every HTTP request em
 
 ## Authentication and authorization boundary
 
-The HTTP client always uses `credentials: include` so the #36 same-origin/session-cookie implementation can be attached without rewriting page code once its canonical surface is merged. An optional access-token callback exists as an integration seam; token storage is deliberately not implemented here.
+The shell composes the #36 browser-session boundary in front of the shared `ControlPlaneClient`. All requests continue to use `credentials: include`; the opaque session secret exists only in the server-issued `HttpOnly` cookie and is never read or persisted by frontend code.
 
-Permission hooks are advisory presentation hints only. Buttons are never proof of authorization: the Control Plane remains authoritative. Canonical unauthenticated and authorization-denied responses are presented separately. Approval-required authorization outcomes are surfaced with their canonical approval reference when the Control Plane returns one; the frontend does not manufacture or bypass approval state.
+`POST /api/v1/auth/login` and `POST /api/v1/auth/session:renew` return the separate browser CSRF token required by #36. The frontend retains only that CSRF token in same-origin `localStorage`; it is not a bearer credential or session secret. Before every unsafe cookie-authenticated request, the shared session-aware fetch boundary re-reads the current stored value and injects `X-CSRF-Token`. This keeps concurrent tabs aligned when session renewal rotates the CSRF token while allowing the HttpOnly authentication cookie to remain opaque. Existing Task, Model, Workspace and Terminal mutations therefore inherit #36 CSRF protection without duplicating security logic in individual pages. Requests carrying an explicit Bearer `Authorization` header do not receive the browser CSRF header.
 
-SSE relies on browser credential handling because native `EventSource` does not allow arbitrary Authorization headers.
+The Settings surface consumes only canonical #36 routes for login, `auth/me`, session enumeration, renewal, targeted session revocation and logout. First-user bootstrap, password recovery and credential/PAT administration are intentionally not inferred as ordinary browser workflows merely because backend hooks exist; they retain their separate operator/authorization semantics.
+
+Authentication establishes identity only. Permission hooks remain advisory presentation hints, and buttons are never proof of authorization: the Control Plane and #15 remain authoritative. Canonical unauthenticated and authorization-denied responses are presented separately. Approval-required authorization outcomes are surfaced with their canonical approval reference when the Control Plane returns one; the frontend does not manufacture or bypass approval state.
+
+SSE relies on browser credential handling because native `EventSource` does not allow arbitrary Authorization headers. #36 authenticates the stream request server-side before the canonical event transport constructs its request context.
 
 ## Live updates
 
@@ -97,7 +102,7 @@ Common loading, empty, error and degraded components are used across integrated 
 
 The shell also distinguishes initial Control Plane discovery (`Checking API`) from a real manifest failure (`API unavailable`), so accessibility live regions do not announce a false outage during normal startup.
 
-Reserved product routes inspect the Control Plane manifest. If a canonical resource is absent, they remain visibly unavailable and do not call private implementation services. If a resource becomes advertised before its dedicated UI is implemented, the shell reports that the integration is pending rather than guessing the resource schema.
+Reserved product routes inspect the Control Plane manifest. If a canonical resource is absent, they remain visibly unavailable and do not call private implementation services. Optional functional routes are not mounted while manifest discovery is unresolved, preventing speculative requests to unregistered collections. If a resource becomes advertised before its dedicated UI is implemented, the shell reports that the integration is pending rather than guessing the resource schema.
 
 ## Timeline compatibility
 
@@ -114,6 +119,7 @@ The frontend test suite now includes focused contract coverage for:
 - centralized canonical API error mapping and presentation;
 - the browser-only `/api/v1` boundary for representative reads and mutations;
 - idempotency and correlation headers on mutations;
+- #36 browser-session login/CSRF behavior, including CSRF propagation to existing Control Plane mutations, cross-tab rotation synchronization, Bearer separation and logout cleanup;
 - canonical Workspace and reference-resource contracts;
 - Task-management client contracts;
 - CLI/Web canonical Task-state parity fixtures;
@@ -123,8 +129,8 @@ The frontend test suite now includes focused contract coverage for:
 - global Search query/result navigation through the canonical Search endpoint;
 - canonical Terminal session/gateway client behavior;
 - canonical SSE URL, credential handling, event/error delivery and reconnect/close state;
-- explicit unavailable/degraded navigation behavior;
-- shell accessibility status semantics, including loading versus actual API outage.
+- explicit unavailable/degraded navigation behavior and manifest-gated optional routes;
+- shell accessibility status semantics, including loading versus actual API outage and the real Settings/session route.
 
 These tests validate the client boundary; backend lifecycle, authorization and persistence remain owned by their canonical services.
 
@@ -151,15 +157,16 @@ No upstream source is copied, vendored, forked or selectively ported into this r
 
 The #17 shell is established. Reserved routes are activated progressively by their owning domain issues when a canonical northbound Control Plane resource/command is actually composed.
 
-At the current repository state, dedicated browser integrations must still wait for the owning northbound APIs for areas such as:
+At the current repository state, the remaining browser work is split between APIs that are still absent and newly available APIs whose dedicated #17 presentation has not yet been integrated:
 
-- Nodes / Workers / Compute (#14);
-- Approvals as a browsable/actionable canonical collection;
-- Authentication/session UI from #36 until its current implementation is merged and composed on `main`;
-- Verification / Review (#86);
-- Organizations / Memberships (#87), which itself depends on #36;
-- Notifications;
-- Memory/Knowledge beyond currently available reference-level data;
-- other later product surfaces such as Automations, Evaluations, Plugins, Templates and Import/Export where their canonical contracts are not yet composed.
+- Nodes / Workers / Compute still waits for #14;
+- Verification / Review still waits for #86;
+- Organizations / Memberships still waits for #87;
+- Notifications still lacks its dedicated canonical browser surface;
+- Memory/Knowledge content management remains beyond the currently available reference/provider-level data;
+- canonical read-only `approvals` now exists and can be integrated as an inspection queue, but approve/deny must not be invented before the exact #15 decision route exists;
+- canonical `automations` and `automation-deliveries` now exist and can be integrated through their #18 Control Plane contracts;
+- Plugins waits for the #20 Control Plane/CLI lifecycle work to merge and stabilize;
+- other later product surfaces such as Evaluations, Templates and Import/Export remain progressive according to their owning canonical contracts.
 
 Backend implementations existing in Python are not sufficient to activate a browser page. The frontend integrates a domain only after the platform exposes its versioned canonical API through the Control Plane. Until then, the stable route remains unavailable/degraded and no browser-side fallback is permitted.
