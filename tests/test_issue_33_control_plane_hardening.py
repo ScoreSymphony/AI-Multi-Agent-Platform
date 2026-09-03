@@ -4,6 +4,7 @@ import asyncio
 
 from ai_multi_agent_platform.agents import AgentService, InMemoryAgentRepository
 from ai_multi_agent_platform.agents.control_plane import AgentCommandHandlers
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 
@@ -22,7 +23,7 @@ def _context() -> RequestContext:
     )
 
 
-def _profile(name: str) -> dict[str, object]:
+def _profile(name: str) -> dict[str, JsonValue]:
     return {
         "name": name,
         "role": "worker",
@@ -30,7 +31,7 @@ def _profile(name: str) -> dict[str, object]:
     }
 
 
-def _team_profile(name: str, agent_id: str) -> dict[str, object]:
+def _team_profile(name: str, agent_id: str) -> dict[str, JsonValue]:
     return {
         "name": name,
         "leader_agent_id": agent_id,
