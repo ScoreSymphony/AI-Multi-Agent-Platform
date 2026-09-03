@@ -34,6 +34,32 @@ jobs:
       - name: Build package
         run: python -m build
 
+  single-node-install-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Create clean server-only installation
+        shell: bash
+        run: |
+          python -m venv .install-smoke-venv
+          source .install-smoke-venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install ".[server]"
+          python - <<'PY'
+          import importlib.util
+
+          assert importlib.util.find_spec("uvicorn") is not None
+          assert importlib.util.find_spec("pytest") is None
+          PY
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Run fresh-install process lifecycle smoke
+        run: python scripts/ci/issue39_install_lifecycle_smoke.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
