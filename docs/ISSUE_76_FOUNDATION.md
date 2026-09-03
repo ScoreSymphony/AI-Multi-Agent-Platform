@@ -14,6 +14,7 @@ This slice establishes the durable accounting contract after #16 Stage-1 telemet
 - Current model provider usage can already be ingested as provider-reported measurements when supplied.
 - Control Plane extension collections expose records, aggregates and budget state.
 - Owner-scoped records, aggregates and budgets deny cross-owner disclosure at the accounting service boundary.
+- Repository Ruff format/lint and strict `mypy` checks pass for the accounting foundation after the final typing fixes.
 
 ## Still progressive
 
