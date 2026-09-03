@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from .models import (
+    WORKER_PROTOCOL_VERSION,
     AcceleratorResource,
     Heartbeat,
     JobRequirements,
@@ -15,7 +16,6 @@ from .models import (
     Reservation,
     ReservationStatus,
     ResourceSnapshot,
-    WORKER_PROTOCOL_VERSION,
     WorkerRecord,
     WorkerStatus,
     utc_now,
