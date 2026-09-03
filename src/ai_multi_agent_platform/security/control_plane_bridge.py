@@ -76,6 +76,24 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
     if action.startswith("task-management."):
         return AuthorizationAction.MODIFY, ResourceType.TASK
 
+    if action.startswith("automation."):
+        automation_verb = action.removeprefix("automation.")
+        automation_actions = {
+            "create": AuthorizationAction.CREATE,
+            "update": AuthorizationAction.MODIFY,
+            "pause": AuthorizationAction.ADMINISTER,
+            "resume": AuthorizationAction.ADMINISTER,
+            "disable": AuthorizationAction.ADMINISTER,
+            "test": AuthorizationAction.EXECUTE,
+            "webhook": AuthorizationAction.EXECUTE,
+            "event": AuthorizationAction.EXECUTE,
+            "evaluate": AuthorizationAction.EXECUTE,
+            "retry-delivery": AuthorizationAction.EXECUTE,
+        }
+        return automation_actions.get(
+            automation_verb, AuthorizationAction.MODIFY
+        ), ResourceType.AUTOMATION
+
     resource_name, separator, verb = action.partition(":")
     if not separator:
         resource_name, verb = "generic", action
@@ -105,6 +123,8 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "artifacts": ResourceType.ARTIFACT,
         "model-provider": ResourceType.PROVIDER_CONFIGURATION,
         "model": ResourceType.MODEL_CONFIGURATION,
+        "automation": ResourceType.AUTOMATION,
+        "automation-delivery": ResourceType.AUTOMATION,
     }
     return (
         action_map.get(verb, AuthorizationAction.MODIFY),
