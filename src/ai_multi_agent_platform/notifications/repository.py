@@ -76,6 +76,8 @@ class InMemoryNotificationRepository(NotificationRepository):
             and (query.include_archived or item.state is not NotificationState.ARCHIVED)
         ]
         items.sort(key=lambda item: (item.updated_at, item.created_at, item.id), reverse=True)
+        if query.limit is None:
+            return tuple(items[query.offset :])
         return tuple(items[query.offset : query.offset + query.limit])
 
     async def find_active_aggregate(
