@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane import (
     ActorContext,
     AuthenticatedControlPlaneHTTP,
@@ -19,6 +20,7 @@ from ai_multi_agent_platform.notifications import (
     NotificationCandidate,
     NotificationCategory,
     NotificationProjectingEventProvider,
+    NotificationQuery,
     NotificationService,
     NotificationSeverity,
     RecipientRef,
@@ -152,8 +154,8 @@ def test_control_plane_preference_update_cannot_target_another_recipient() -> No
                 other_user_id,
                 {"muted": True},
             )
-        except Exception as exc:
-            assert getattr(exc, "code", None).value == "not_found"
+        except ContractError as exc:
+            assert exc.code is ErrorCode.NOT_FOUND
         else:
             raise AssertionError("cross-recipient preference update must not succeed")
 
@@ -225,23 +227,13 @@ def test_event_provider_projects_task_event_and_replay_aggregates_safely() -> No
 
         await provider.publish(event)
         recipient = RecipientRef(RecipientType.USER, user_id)
-        inbox = await service.list(
-            __import__(
-                "ai_multi_agent_platform.notifications",
-                fromlist=["NotificationQuery"],
-            ).NotificationQuery(recipient=recipient)
-        )
+        inbox = await service.list(NotificationQuery(recipient=recipient))
         assert len(inbox) == 1
         assert inbox[0].occurrence_count == 1
 
         projected = await provider.replay((event,))
         assert projected == 1
-        replayed = await service.list(
-            __import__(
-                "ai_multi_agent_platform.notifications",
-                fromlist=["NotificationQuery"],
-            ).NotificationQuery(recipient=recipient)
-        )
+        replayed = await service.list(NotificationQuery(recipient=recipient))
         assert len(replayed) == 1
         assert replayed[0].occurrence_count == 2
 
