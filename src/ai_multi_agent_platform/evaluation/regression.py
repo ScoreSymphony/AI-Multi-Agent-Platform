@@ -165,9 +165,7 @@ class RegressionEngine:
                 rule.metric_operator,
                 rule.threshold,
             )
-            baseline_value = (
-                None if baseline is None else _metric_value(baseline, rule.metric_name)
-            )
+            baseline_value = None if baseline is None else _metric_value(baseline, rule.metric_name)
             baseline_passes = (
                 None
                 if baseline_value is None
