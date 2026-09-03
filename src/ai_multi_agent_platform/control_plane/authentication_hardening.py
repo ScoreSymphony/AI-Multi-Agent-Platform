@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+from uuid import uuid4
+
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.security.authentication import (
     AuthenticatedActor,
+    AuthenticationError,
+    AuthenticationFailure,
     AuthenticationMethod,
 )
 from ai_multi_agent_platform.security.authentication_hardening import (
@@ -12,20 +17,23 @@ from ai_multi_agent_platform.security.authentication_hardening import (
     LocalAuthenticationService,
     safe_credential_with_scope,
 )
-from ai_multi_agent_platform.security.authorization import (
-    AuthorizationAction,
-    ResourceType,
-)
-from ai_multi_agent_platform.security.control_plane_bridge import (
-    canonical_control_plane_vocabulary,
-)
 
 from .authentication import (
     AuthenticatedControlPlaneHTTP as _BaseAuthenticatedControlPlaneHTTP,
 )
-from .authentication import _optional_datetime, _relative_path, _required_string
-from .http import HTTPRequest, HTTPResponse
-from .models import API_VERSION, APIException
+from .authentication import (
+    _augment_authentication_openapi,
+    _header,
+    _optional_datetime,
+    _payload_digest,
+    _public_route,
+    _relative_path,
+    _required_string,
+    _with_request_ids,
+)
+from .automation_api import ControlPlaneHTTP as _CurrentControlPlaneHTTP
+from .http import HTTPRequest, HTTPResponse, _request_context
+from .models import API_VERSION, ActorContext, APIException
 
 _TOKEN_METHODS = {
     AuthenticationMethod.PERSONAL_ACCESS_TOKEN,
@@ -37,11 +45,15 @@ _TOKEN_METHODS = {
 
 
 class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
-    """Public #36 boundary with request limits and credential-scope ceilings."""
+    """Public #36 boundary over the current composed Control Plane HTTP surface.
+
+    Authentication establishes the canonical actor and transports credential-local scope
+    as trusted context. Scope authorization itself is deliberately evaluated by #15.
+    """
 
     def __init__(
         self,
-        control_plane: object,
+        control_plane: Any,
         authentication: LocalAuthenticationService,
         *,
         cookie_name: str = "amp_session",
@@ -54,9 +66,66 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
             secure_cookie=secure_cookie,
         )
         self._hardened_authentication = authentication
+        self._current_http = _CurrentControlPlaneHTTP(control_plane)
 
     async def handle(self, request: HTTPRequest) -> HTTPResponse:
-        response = await super().handle(request)
+        relative = _relative_path(request.path)
+        if relative.startswith("/auth/"):
+            response = await super().handle(request)
+            return self._augment_openapi_if_needed(request, response)
+
+        if _public_route(request.method, relative):
+            response = await self._current_http.handle(request)
+            if (
+                request.method == "GET"
+                and relative == "/openapi.json"
+                and response.status == 200
+                and isinstance(response.body, dict)
+            ):
+                response = HTTPResponse(
+                    status=response.status,
+                    body=cast(
+                        dict[str, JsonValue],
+                        _augment_authentication_openapi(
+                            cast(dict[str, Any], response.body),
+                            cookie_name=self._cookie_name,
+                        ),
+                    ),
+                    headers=response.headers,
+                )
+            return self._augment_openapi_if_needed(request, response)
+
+        request_id = _header(request.headers, "x-request-id") or f"request_{uuid4()}"
+        correlation_id = _header(request.headers, "x-correlation-id") or request_id
+        try:
+            actor, _ = self._authenticate_request(
+                request,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            trusted = self._trusted_request(
+                request,
+                actor,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+            return await self._current_http.handle(trusted)
+        except AuthenticationError as exc:
+            return self._authentication_error(exc, request_id, correlation_id)
+        except APIException as exc:
+            return self._error_response(exc, request_id, correlation_id)
+        except (KeyError, TypeError, ValueError):
+            return self._authentication_error(
+                AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS),
+                request_id,
+                correlation_id,
+            )
+
+    def _augment_openapi_if_needed(
+        self,
+        request: HTTPRequest,
+        response: HTTPResponse,
+    ) -> HTTPResponse:
         if (
             request.method == "GET"
             and request.path == f"/api/{API_VERSION}/openapi.json"
@@ -83,7 +152,6 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
             correlation_id=correlation_id,
         )
         self._hardened_authentication.check_authenticated_request(actor)
-        self._enforce_credential_scope(request, actor)
         return actor, session_token
 
     def prepare_stream_request(
@@ -94,13 +162,25 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
         correlation_id: str,
     ) -> HTTPRequest | HTTPResponse:
         try:
-            return super().prepare_stream_request(
+            actor, _ = self._authenticate_request(
                 request,
                 request_id=request_id,
                 correlation_id=correlation_id,
             )
-        except APIException as exc:
-            return self._error_response(exc, request_id, correlation_id)
+            return self._trusted_request(
+                request,
+                actor,
+                request_id=request_id,
+                correlation_id=correlation_id,
+            )
+        except AuthenticationError as exc:
+            return self._authentication_error(exc, request_id, correlation_id)
+        except (KeyError, TypeError, ValueError):
+            return self._authentication_error(
+                AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS),
+                request_id,
+                correlation_id,
+            )
 
     async def _authenticated_auth_route(
         self,
@@ -177,98 +257,85 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
             correlation_id=correlation_id,
         )
 
-    def _enforce_credential_scope(
+    async def _authorize_credential_operation(
         self,
         request: HTTPRequest,
         actor: AuthenticatedActor,
+        *,
+        action: str,
+        resource_ref: str,
+        request_id: str,
+        correlation_id: str,
+        bind_payload: bool = False,
     ) -> None:
-        if actor.method not in _TOKEN_METHODS or actor.credential_id is None:
-            return
-        scope = self._hardened_authentication.credential_scope(actor.credential_id)
-        if not scope.restricted:
-            return
-        target = _authorization_target(request)
-        if target is None:
-            return
-        action, resource_type, resource_id = target
-        if scope.allows(action, resource_type, resource_id):
-            return
-        raise APIException(
-            status=403,
-            code="forbidden",
-            message="credential scope does not permit this operation",
-            details={
-                "credential_id": actor.credential_id,
-                "action": action.value,
-                "resource_type": resource_type.value,
-            },
+        authorize = getattr(self._control_plane, "_authorize", None)
+        if authorize is None:
+            raise APIException(
+                status=503,
+                code="authorization_unavailable",
+                message="credential management requires the canonical authorization boundary",
+            )
+        trusted = self._trusted_request(
+            request,
+            actor,
+            request_id=request_id,
+            correlation_id=correlation_id,
+        )
+        context = _request_context(trusted, request_id, correlation_id)
+        digest = _payload_digest(request.body) if bind_payload else None
+        await authorize(
+            context,
+            f"credential:{action}",
+            resource_ref,
+            request_payload_digest=digest,
         )
 
-
-def _authorization_target(
-    request: HTTPRequest,
-) -> tuple[AuthorizationAction, ResourceType, str | None] | None:
-    relative = _relative_path(request.path)
-    segments = [segment for segment in relative.split("/") if segment]
-    if not segments:
-        return None
-
-    if segments[0] == "auth":
-        if relative == "/auth/me":
-            return None
-        if len(segments) >= 2 and segments[1] == "credentials":
-            verb = "list" if request.method == "GET" else "create"
-            resource_id: str | None = "credential:self"
-            if len(segments) == 3 and segments[2].endswith(":revoke"):
-                verb = "revoke"
-                resource_id = segments[2].removesuffix(":revoke")
-            action, resource_type = canonical_control_plane_vocabulary(f"credential:{verb}")
-            return action, resource_type, resource_id
-        return (
-            AuthorizationAction.MANAGE_CREDENTIALS,
-            ResourceType.SECRET_REFERENCE,
-            "authentication:self",
+    def _trusted_request(
+        self,
+        request: HTTPRequest,
+        actor: AuthenticatedActor,
+        *,
+        request_id: str,
+        correlation_id: str,
+    ) -> HTTPRequest:
+        with_ids = _with_request_ids(request, request_id, correlation_id)
+        headers = {
+            key: value
+            for key, value in with_ids.headers.items()
+            if key.casefold()
+            not in {
+                "x-principal-ref",
+                "x-owner-id",
+                "x-owner-type",
+                "x-authenticated-actor",
+            }
+        }
+        authentication_context: dict[str, JsonValue] = {
+            "method": actor.method.value,
+            "credential_id": actor.credential_id,
+        }
+        if actor.method in _TOKEN_METHODS:
+            if actor.credential_id is None:
+                raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS)
+            scope = self._hardened_authentication.credential_scope(actor.credential_id)
+            authentication_context["credential_scope"] = scope.to_json()
+        trusted_context: dict[str, JsonValue] = {"authentication": authentication_context}
+        owner_type = "user" if actor.identity.actor_type.value == "human" else "service"
+        trusted_actor = ActorContext(
+            principal_ref=actor.identity.actor_id,
+            owner_type=cast(Any, owner_type),
+            owner_id=actor.identity.actor_id,
+            actor_type=actor.identity.actor_type.value,
+            trust_context=trusted_context,
         )
-
-    if segments[0] == "search":
-        return AuthorizationAction.READ, ResourceType.GENERIC, "search"
-
-    root = segments[0]
-    resource_name = {
-        "model-providers": "model-provider",
-        "agents": "agent",
-        "agent-teams": "agent-team",
-        "workers": "worker",
-        "integrations": "integration",
-    }.get(root, root[:-1] if root.endswith("s") else root)
-
-    if root == "tasks" and len(segments) >= 3:
-        task_id = _strip_command(segments[1])
-        if segments[2] == "runs":
-            if len(segments) == 3:
-                action, resource_type = canonical_control_plane_vocabulary("run:list")
-                return action, resource_type, task_id
-            run_id = _strip_command(segments[3])
-            verb = _command(segments[3]) or "read"
-            action, resource_type = canonical_control_plane_vocabulary(f"run:{verb}")
-            return action, resource_type, run_id
-        if segments[2] == "events":
-            action, resource_type = canonical_control_plane_vocabulary("task:subscribe")
-            return action, resource_type, task_id
-        if segments[2] == "timeline":
-            action, resource_type = canonical_control_plane_vocabulary("task:read")
-            return action, resource_type, task_id
-
-    if len(segments) == 1:
-        verb = "list" if request.method == "GET" else "create"
-        resource_id = None
-    else:
-        resource_id = _strip_command(segments[1])
-        command = _command(segments[1])
-        verb = command or ("read" if request.method == "GET" else "modify")
-
-    action, resource_type = canonical_control_plane_vocabulary(f"{resource_name}:{verb}")
-    return action, resource_type, resource_id
+        return HTTPRequest(
+            method=request.method,
+            path=request.path,
+            headers=headers,
+            query=request.query,
+            body=request.body,
+            trusted_actor=trusted_actor,
+        )
 
 
 def _augment_scoped_credentials_openapi(
@@ -312,7 +379,7 @@ def _augment_scoped_credentials_openapi(
         "scope": {
             "type": "object",
             "description": (
-                "Credential-local restrictive ceiling; it never grants #15 authorization."
+                "Credential-local restrictive ceiling evaluated by #15; it never grants rights."
             ),
             "properties": scope_properties,
             "additionalProperties": False,
@@ -333,12 +400,3 @@ def _augment_scoped_credentials_openapi(
     paths[path_key] = credentials_path
     document["paths"] = paths
     return document
-
-
-def _command(segment: str) -> str | None:
-    _, separator, command = segment.partition(":")
-    return command if separator and command else None
-
-
-def _strip_command(segment: str) -> str:
-    return segment.split(":", 1)[0]

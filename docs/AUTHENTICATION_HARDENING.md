@@ -11,13 +11,41 @@ Scopes use the canonical #15 `AuthorizationAction` and `ResourceType` vocabulary
 optional exact resource IDs.
 
 An empty scope is unrestricted **only with respect to the credential itself**. It does
-not grant permission. A non-empty scope is a restrictive ceiling: the authenticated
-request must satisfy the credential scope and then still pass the normal #15
-authorization decision. Scope denial is therefore a `403` authorization outcome, not a
-`401` authentication failure.
+not grant permission. A non-empty scope is a restrictive ceiling. Authentication only
+establishes the actor and transports the credential scope as trusted context. The
+canonical #15 authorization boundary evaluates that scope using the same action/resource
+vocabulary as the normal policy decision. A request must pass the credential ceiling and
+then still pass the configured #15 policy. Scope denial is therefore a `403`
+authorization outcome, not a `401` authentication failure.
+
+Credential scope is stored atomically with the credential record rather than in
+process-local side state. Every stored credential contains an explicit complete scope
+object (`actions`, `resource_types`, `resource_ids`), including unrestricted credentials.
+Recreating the authentication service over the same store therefore preserves the exact
+scope. Missing, malformed or unknown persisted scope metadata fails closed during token
+authentication instead of silently becoming unrestricted.
 
 Credential secrets remain one-time output. Scope metadata is safe to enumerate and does
 not contain verifier or secret material.
+
+## Trusted Control Plane propagation
+
+The exposed HTTP/ASGI boundary never trusts caller-provided principal or owner headers as
+authenticated identity. After authentication it attaches an internal, transport-neutral
+`ActorContext` to the in-process `HTTPRequest`. That context contains the canonical actor
+ID/type and a namespaced authentication trust context. External ASGI clients cannot set
+this internal field.
+
+The current composed `ControlPlane` carries the trusted actor metadata into the canonical
+`AuthorizationRequest.trust_context`. `ControlPlaneAuthorizationBridge` then evaluates
+the credential ceiling before delegating to the normal #15 gate. Passing the ceiling is
+not an allow decision; the configured authorization provider still owns the final policy
+outcome.
+
+`AuthenticatedControlPlaneHTTP` delegates non-authentication routes to the current
+composed Control Plane HTTP surface rather than inheriting a historical Search-era route
+set. New Control Plane features therefore remain behind the same authentication boundary
+without requiring a parallel authentication router update.
 
 ## Worker credential rotation and compromise handling
 
@@ -43,10 +71,14 @@ topology.
 
 ## Security invariants
 
-- Credential scopes can deny but never grant #15 permissions.
+- Credential scopes are evaluated by #15 and can deny but never grant permissions.
+- Scope state is part of the stored credential record and survives service recreation.
+- Missing or malformed persisted scope state never expands permissions.
 - Browser sessions are not converted into API-token scopes.
 - `/auth/me` remains available for token introspection even when a token is scoped.
-- Unknown or newly introduced protected operations fail closed when a restrictive scope
-  cannot match their canonical action/resource target.
+- Canonical action/resource mapping is owned by the authorization boundary rather than
+  duplicated in the authentication router.
+- Caller-supplied identity headers are never promoted into the internal trusted actor
+  produced by authentication.
 - Worker rotation never returns the old secret and audit metadata never contains secret
   values.

@@ -5,9 +5,10 @@ from __future__ import annotations
 import base64
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
+from types import MappingProxyType
 from typing import Any, Literal
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -91,17 +92,22 @@ def api_error_category(code: str | ErrorCode) -> str:
 
 @dataclass(frozen=True, slots=True)
 class ActorContext:
-    """Transport-neutral actor context; authentication itself belongs to #36."""
+    """Transport-neutral actor context consumed by authentication and #15 authorization."""
 
     principal_ref: str = "local:anonymous"
     owner_type: OwnerType | None = None
     owner_id: str | None = None
+    actor_type: str | None = None
+    trust_context: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.principal_ref.strip():
             raise ValueError("principal_ref must not be blank")
         if (self.owner_type is None) != (self.owner_id is None):
             raise ValueError("owner_type and owner_id must both be set or both be omitted")
+        if self.actor_type is not None and not self.actor_type.strip():
+            raise ValueError("actor_type must not be blank when provided")
+        object.__setattr__(self, "trust_context", MappingProxyType(dict(self.trust_context)))
 
 
 @dataclass(frozen=True, slots=True)

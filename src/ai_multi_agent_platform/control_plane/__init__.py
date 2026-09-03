@@ -1,5 +1,6 @@
 """Versioned platform-owned northbound Control Plane."""
 
+from .authenticated_authorization import ControlPlane
 from .authentication_hardening import AuthenticatedControlPlaneHTTP
 from .automation_api import (
     AUTOMATION_COLLECTION,
@@ -17,7 +18,6 @@ from .extensions import (
     InMemoryResourceService,
     ResourceService,
 )
-from .hardened_automation_api import ControlPlane
 from .http import ControlPlaneASGI, HTTPRequest, HTTPResponse
 from .models import (
     API_VERSION,

@@ -34,6 +34,7 @@ class HTTPRequest:
     headers: Mapping[str, str] = field(default_factory=dict)
     query: Mapping[str, str] = field(default_factory=dict)
     body: dict[str, JsonValue] = field(default_factory=dict)
+    trusted_actor: ActorContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -575,22 +576,24 @@ def _request_context(
     request_id: str,
     correlation_id: str,
 ) -> RequestContext:
-    owner_type_value = _header(request.headers, "x-owner-type")
-    owner_type: OwnerType | None = None
-    if owner_type_value is not None:
-        if owner_type_value not in {"user", "organization", "team", "service"}:
-            raise APIException(
-                status=400,
-                code="invalid_request",
-                message="X-Owner-Type is invalid",
-                details={"header": "X-Owner-Type"},
-            )
-        owner_type = cast(OwnerType, owner_type_value)
-    actor = ActorContext(
-        principal_ref=_header(request.headers, "x-principal-ref") or "local:anonymous",
-        owner_type=owner_type,
-        owner_id=_header(request.headers, "x-owner-id"),
-    )
+    actor = request.trusted_actor
+    if actor is None:
+        owner_type_value = _header(request.headers, "x-owner-type")
+        owner_type: OwnerType | None = None
+        if owner_type_value is not None:
+            if owner_type_value not in {"user", "organization", "team", "service"}:
+                raise APIException(
+                    status=400,
+                    code="invalid_request",
+                    message="X-Owner-Type is invalid",
+                    details={"header": "X-Owner-Type"},
+                )
+            owner_type = cast(OwnerType, owner_type_value)
+        actor = ActorContext(
+            principal_ref=_header(request.headers, "x-principal-ref") or "local:anonymous",
+            owner_type=owner_type,
+            owner_id=_header(request.headers, "x-owner-id"),
+        )
     return RequestContext(
         request_id=request_id,
         correlation_id=correlation_id,
