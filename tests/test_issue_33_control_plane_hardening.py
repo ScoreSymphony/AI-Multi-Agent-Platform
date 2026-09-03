@@ -7,6 +7,8 @@ from ai_multi_agent_platform.agents.control_plane import AgentCommandHandlers
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 
+SHARED_RESOURCE_REF = "workspace-resource:shared-cache"
+
 
 def _context() -> RequestContext:
     return RequestContext(
@@ -32,6 +34,7 @@ def _team_profile(name: str, agent_id: str) -> dict[str, object]:
     return {
         "name": name,
         "leader_agent_id": agent_id,
+        "shared_resource_refs": [SHARED_RESOURCE_REF],
         "members": [
             {
                 "agent": {"agent_id": agent_id, "revision": 1},
@@ -125,7 +128,7 @@ def test_agent_control_plane_mutations_preserve_scopes_and_record_provenance() -
     asyncio.run(scenario())
 
 
-def test_team_control_plane_mutations_preserve_scopes_and_record_provenance() -> None:
+def test_team_control_plane_mutations_preserve_scopes_resources_and_provenance() -> None:
     async def scenario() -> None:
         repository = InMemoryAgentRepository()
         service = AgentService(repository)
@@ -157,6 +160,7 @@ def test_team_control_plane_mutations_preserve_scopes_and_record_provenance() ->
         first = repository.get_team_revision(team_id, 1)
         assert first.project_id == first_project
         assert first.workspace_id == first_workspace
+        assert first.profile.shared_resource_refs == (SHARED_RESOURCE_REF,)
         assert first.provenance is not None
         assert first.provenance.actor_ref == "user:issue-33-actor"
         assert first.provenance.details["operation"] == "agent-team.create"
@@ -176,6 +180,7 @@ def test_team_control_plane_mutations_preserve_scopes_and_record_provenance() ->
         assert second.team_id == first.team_id
         assert second.project_id is None
         assert second.workspace_id == second_workspace
+        assert second.profile.shared_resource_refs == (SHARED_RESOURCE_REF,)
         assert second.owner_ref == OwnerRef(type="team", id="issue-33-sharing-team")
         assert repository.get_team_revision(team_id, 1) == first
         assert second.provenance is not None
@@ -197,6 +202,7 @@ def test_team_control_plane_mutations_preserve_scopes_and_record_provenance() ->
         assert clone.team_id != team_id
         assert clone.project_id == first_project
         assert clone.workspace_id is None
+        assert clone.profile.shared_resource_refs == (SHARED_RESOURCE_REF,)
         assert clone.provenance is not None
         assert clone.provenance.details["operation"] == "agent-team.clone"
 
@@ -209,6 +215,7 @@ def test_team_control_plane_mutations_preserve_scopes_and_record_provenance() ->
         assert rollback.project_id == first.project_id
         assert rollback.workspace_id == first.workspace_id
         assert rollback.owner_ref == first.owner_ref
+        assert rollback.profile.shared_resource_refs == (SHARED_RESOURCE_REF,)
         assert rollback.provenance is not None
         assert rollback.provenance.details["operation"] == "agent-team.rollback"
 
