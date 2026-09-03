@@ -69,6 +69,23 @@ def _context(
     )
 
 
+def _reviewer_policy(resource_type: ResourceType) -> LocalPrincipalPolicy:
+    return LocalPrincipalPolicy(
+        principal_ref="user:reviewer",
+        actor_types=frozenset({ActorType.HUMAN}),
+        allowed_actions=frozenset({AuthorizationAction.APPROVE}),
+        resource_types=frozenset({resource_type}),
+    )
+
+
+def _review_operation(correlation_id: str = "corr-review") -> OperationContext:
+    return OperationContext(
+        correlation_id=correlation_id,
+        owner_type="user",
+        owner_id="reviewer",
+    )
+
+
 def test_authorization_decision_keeps_issue_five_allowed_compatibility() -> None:
     allowed = AuthorizationDecision(allowed=True, reason="legacy")
     denied = AuthorizationDecision(allowed=False, reason="legacy")
@@ -130,6 +147,7 @@ def test_required_approval_resumes_only_the_exact_action() -> None:
                 approval_actions=frozenset({AuthorizationAction.EXECUTE}),
                 resource_types=frozenset({ResourceType.TOOL}),
             ),
+            _reviewer_policy(ResourceType.TOOL),
         )
     )
     approvals = ApprovalService()
@@ -146,7 +164,14 @@ def test_required_approval_resumes_only_the_exact_action() -> None:
     assert first.outcome is AuthorizationOutcome.REQUIRE_APPROVAL
     approval_id = first.constraints["approval_id"]
     assert isinstance(approval_id, str)
-    approvals.decide(approval_id, approver_ref="user:reviewer", approve=True)
+    asyncio.run(
+        gate.decide_approval(
+            approval_id,
+            approver=ActorIdentity("user:reviewer", ActorType.HUMAN),
+            approve=True,
+            operation=_review_operation(),
+        )
+    )
 
     resumed = asyncio.run(gate.enforce(original, approval_id=approval_id))
     assert resumed.allowed
@@ -158,7 +183,50 @@ def test_required_approval_resumes_only_the_exact_action() -> None:
     assert captured.value.details["approval_id"] != approval_id
 
 
-def test_rejected_cancelled_and_expired_approvals_never_authorize() -> None:
+def test_unauthorized_actor_cannot_approve_pending_action() -> None:
+    agent = ActorIdentity(new_id("agent"), ActorType.AGENT)
+    provider = LocalAuthorizationProvider(
+        (
+            LocalPrincipalPolicy(
+                principal_ref=agent.actor_id,
+                actor_types=frozenset({ActorType.AGENT}),
+                approval_actions=frozenset({AuthorizationAction.EXECUTE}),
+                resource_types=frozenset({ResourceType.TOOL}),
+            ),
+        )
+    )
+    gate = AuthorizationGate(provider)
+    action = ProposedAction(
+        _context(
+            agent,
+            action=AuthorizationAction.EXECUTE,
+            resource_type=ResourceType.TOOL,
+            resource_id="tool:dangerous",
+        ),
+        payload={"delete": True},
+    )
+    pending = asyncio.run(gate.decide(action))
+    approval_id = pending.constraints["approval_id"]
+    assert isinstance(approval_id, str)
+
+    with pytest.raises(ContractError) as captured:
+        asyncio.run(
+            gate.decide_approval(
+                approval_id,
+                approver=ActorIdentity("user:untrusted", ActorType.HUMAN),
+                approve=True,
+                operation=OperationContext(
+                    correlation_id="corr-untrusted",
+                    owner_type="user",
+                    owner_id="untrusted",
+                ),
+            )
+        )
+    assert captured.value.code is ErrorCode.FORBIDDEN
+    assert gate.approvals.get(approval_id).status is ApprovalStatus.PENDING
+
+
+def test_direct_approval_mutation_is_forbidden() -> None:
     actor = ActorIdentity("service:automation", ActorType.SERVICE)
     action = ProposedAction(
         _context(
@@ -169,9 +237,37 @@ def test_rejected_cancelled_and_expired_approvals_never_authorize() -> None:
         )
     )
     approvals = ApprovalService()
+    pending = approvals.request(action, reason="review", policy_id="test")
+
+    with pytest.raises(ContractError):
+        approvals.decide(pending.approval_id, approver_ref="user:any", approve=True)
+    with pytest.raises(ContractError):
+        approvals.cancel(pending.approval_id, actor_ref=actor.actor_id)
+
+
+def test_rejected_cancelled_and_expired_approvals_never_authorize() -> None:
+    actor = ActorIdentity("service:automation", ActorType.SERVICE)
+    provider = LocalAuthorizationProvider((_reviewer_policy(ResourceType.TASK),))
+    approvals = ApprovalService()
+    gate = AuthorizationGate(provider, approvals=approvals)
+    action = ProposedAction(
+        _context(
+            actor,
+            action=AuthorizationAction.EXECUTE,
+            resource_type=ResourceType.TASK,
+            resource_id=new_id("task"),
+        )
+    )
 
     rejected = approvals.request(action, reason="review", policy_id="test")
-    approvals.decide(rejected.approval_id, approver_ref="user:reviewer", approve=False)
+    asyncio.run(
+        gate.decide_approval(
+            rejected.approval_id,
+            approver=ActorIdentity("user:reviewer", ActorType.HUMAN),
+            approve=False,
+            operation=_review_operation("corr-reject"),
+        )
+    )
     assert approvals.get(rejected.approval_id).status is ApprovalStatus.REJECTED
     assert not approvals.valid_for(rejected.approval_id, action)
 
@@ -184,7 +280,17 @@ def test_rejected_cancelled_and_expired_approvals_never_authorize() -> None:
         )
     )
     cancelled = approvals.request(other, reason="review", policy_id="test")
-    approvals.cancel(cancelled.approval_id, actor_ref=actor.actor_id)
+    asyncio.run(
+        gate.cancel_approval(
+            cancelled.approval_id,
+            actor=actor,
+            operation=OperationContext(
+                correlation_id="corr-cancel",
+                owner_type="service",
+                owner_id="automation",
+            ),
+        )
+    )
     assert approvals.get(cancelled.approval_id).status is ApprovalStatus.CANCELLED
     assert not approvals.valid_for(cancelled.approval_id, other)
 
@@ -264,6 +370,46 @@ def test_project_isolation_is_enforced_before_file_provider() -> None:
     with pytest.raises(ContractError):
         asyncio.run(secured.write("file:blocked", b"payload", context))
     assert raw.calls == []
+
+
+def test_file_approval_binds_to_content_not_only_size() -> None:
+    actor = "user:alice"
+    raw = FakeFileProvider()
+    provider = LocalAuthorizationProvider(
+        (
+            LocalPrincipalPolicy(
+                principal_ref=actor,
+                actor_types=frozenset({ActorType.HUMAN}),
+                approval_actions=frozenset({AuthorizationAction.MODIFY}),
+                resource_types=frozenset({ResourceType.FILE}),
+            ),
+            _reviewer_policy(ResourceType.FILE),
+        )
+    )
+    gate = AuthorizationGate(provider)
+    secured = AuthorizedFileProvider(raw, gate)
+    context = OperationContext(
+        correlation_id="corr-file-content",
+        owner_type="user",
+        owner_id="alice",
+    )
+
+    with pytest.raises(ContractError):
+        asyncio.run(secured.write("file:bound", b"AAAA", context))
+    first = gate.approvals.all()[0]
+    asyncio.run(
+        gate.decide_approval(
+            first.approval_id,
+            approver=ActorIdentity("user:reviewer", ActorType.HUMAN),
+            approve=True,
+            operation=_review_operation("corr-file-approve"),
+        )
+    )
+    asyncio.run(secured.write("file:bound", b"AAAA", context))
+
+    with pytest.raises(ContractError):
+        asyncio.run(secured.write("file:bound", b"BBBB", context))
+    assert len(gate.approvals.all()) == 2
 
 
 def test_service_identity_secret_resolution_uses_policy_without_secret_value_in_audit() -> None:
@@ -357,6 +503,7 @@ def test_capability_bridge_routes_agent_policy_and_approval_to_issue_15_gate() -
                 resource_types=frozenset({ResourceType.CAPABILITY}),
                 project_ids=frozenset({project_id}),
             ),
+            _reviewer_policy(ResourceType.CAPABILITY),
         )
     )
     gate = AuthorizationGate(provider)
@@ -382,10 +529,13 @@ def test_capability_bridge_routes_agent_policy_and_approval_to_issue_15_gate() -
     assert first is PolicyDecision.REQUIRE_APPROVAL
     pending = bridge.pending_approval(request.invocation_id)
     assert pending is not None
-    gate.approvals.decide(
-        pending.approval_id,
-        approver_ref="user:reviewer",
-        approve=True,
+    asyncio.run(
+        gate.decide_approval(
+            pending.approval_id,
+            approver=ActorIdentity("user:reviewer", ActorType.HUMAN),
+            approve=True,
+            operation=_review_operation("corr-cap-approve"),
+        )
     )
 
     second = asyncio.run(bridge.policy_hook(request, capability))
