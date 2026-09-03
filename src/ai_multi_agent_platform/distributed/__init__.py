@@ -1,5 +1,16 @@
 """Canonical distributed node, worker and scheduling primitives."""
 
+from .control_plane import (
+    DISTRIBUTED_ADMIN_COMMANDS,
+    NODE_COLLECTION,
+    WORKER_COLLECTION,
+    WORKER_JOB_COLLECTION,
+    DistributedAdminCommandHandlers,
+    NodeResourceService,
+    WorkerJobResourceService,
+    WorkerResourceService,
+    register_distributed_control_plane,
+)
 from .models import (
     WORKER_PROTOCOL_VERSION,
     AcceleratorResource,
@@ -32,13 +43,18 @@ from .scheduler import DeterministicScheduler, NoEligibleWorkerError, ScheduledP
 from .worker import LocalWorker, WorkerDispatcher
 
 __all__ = [
+    "DISTRIBUTED_ADMIN_COMMANDS",
     "DISTRIBUTED_STATE_SCHEMA_VERSION",
+    "NODE_COLLECTION",
+    "WORKER_COLLECTION",
+    "WORKER_JOB_COLLECTION",
     "WORKER_PROTOCOL_VERSION",
     "AcceleratorResource",
     "CandidateEvaluation",
     "DeterministicScheduler",
     "DispatchRecord",
     "DispatchState",
+    "DistributedAdminCommandHandlers",
     "DistributedRegistry",
     "DistributedRuntime",
     "DistributedStateStore",
@@ -49,6 +65,7 @@ __all__ = [
     "LocalWorker",
     "NoEligibleWorkerError",
     "NodeRecord",
+    "NodeResourceService",
     "NodeStatus",
     "RegistrationRequest",
     "RegistryError",
@@ -62,7 +79,10 @@ __all__ = [
     "SchedulingDecision",
     "WorkerDispatcher",
     "WorkerJobRequest",
+    "WorkerJobResourceService",
     "WorkerJobResult",
     "WorkerRecord",
+    "WorkerResourceService",
     "WorkerStatus",
+    "register_distributed_control_plane",
 ]
