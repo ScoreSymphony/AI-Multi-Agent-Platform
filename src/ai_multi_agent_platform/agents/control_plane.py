@@ -510,7 +510,9 @@ def _team_profile_from_json(value: object) -> AgentTeamProfile:
     members_raw = data.get("members")
     if not isinstance(members_raw, list | tuple) or not members_raw:
         raise ValueError("team profile.members must be a non-empty array")
-    policy_raw = _optional_string(data, "unavailable_member_policy") or UnavailableMemberPolicy.FAIL.value
+    policy_raw = (
+        _optional_string(data, "unavailable_member_policy") or UnavailableMemberPolicy.FAIL.value
+    )
     return AgentTeamProfile(
         name=_required_string(data, "name"),
         members=tuple(_team_member(item) for item in members_raw),
