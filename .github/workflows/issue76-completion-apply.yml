@@ -1,0 +1,203 @@
+name: Issue 76 completion apply
+
+on:
+  push:
+    branches: [feat/issue-76-completion]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Apply completion patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected snippet missing in {path}: {old[:80]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          models = "src/ai_multi_agent_platform/accounting/models.py"
+          replace(
+              models,
+              '        "capability",\n        "model_provider",',
+              '        "capability",\n        "model_config",\n        "model_provider",',
+          )
+          replace(
+              models,
+              'class BudgetKind(StrEnum):\n    SOFT = "soft"\n    HARD = "hard"\n\n\nclass BudgetAction',
+              'class BudgetKind(StrEnum):\n    SOFT = "soft"\n    HARD = "hard"\n\n\nclass BudgetWindowMode(StrEnum):\n    """How a budget consumption window advances over time."""\n\n    LIFETIME = "lifetime"\n    ROLLING = "rolling"\n\n\nclass BudgetAction',
+          )
+          replace(
+              models,
+              '        if self.version < 1:\n            raise ValueError("budget version must be >= 1")\n\n\n@dataclass(frozen=True, slots=True)\nclass BudgetState:\n    budget: UsageBudget\n    consumed: float\n    remaining: float\n    fraction: float\n    level: ThresholdLevel | None\n',
+              '        if self.version < 1:\n            raise ValueError("budget version must be >= 1")\n\n    @property\n    def window_mode(self) -> BudgetWindowMode:\n        return (\n            BudgetWindowMode.LIFETIME\n            if self.window_seconds is None\n            else BudgetWindowMode.ROLLING\n        )\n\n\n@dataclass(frozen=True, slots=True)\nclass BudgetState:\n    budget: UsageBudget\n    consumed: float\n    remaining: float\n    fraction: float\n    level: ThresholdLevel | None\n    window_start: datetime | None = None\n    window_end: datetime | None = None\n',
+          )
+
+          init = "src/ai_multi_agent_platform/accounting/__init__.py"
+          replace(init, '    BudgetKind,\n    BudgetState,', '    BudgetKind,\n    BudgetState,\n    BudgetWindowMode,')
+          replace(init, '    "BudgetState",\n    "BudgetThresholdEvent",', '    "BudgetState",\n    "BudgetThresholdEvent",\n    "BudgetWindowMode",')
+
+          service = "src/ai_multi_agent_platform/accounting/service.py"
+          replace(
+              service,
+              '    def query(self, query: UsageQuery | None = None) -> tuple[UsageRecord, ...]:\n        return self.store.query(query or UsageQuery())\n',
+              '''    def record_external_cost(\n        self,\n        *,\n        amount: float,\n        currency: str,\n        source: str,\n        quality: MeasurementQuality,\n        scope: UsageScope | None = None,\n        provider: str | None = None,\n        confidence: float | None = None,\n        provenance: dict[str, JsonValue] | None = None,\n        correlation_id: str | None = None,\n        causation_id: str | None = None,\n    ) -> UsageRecord:\n        """Record an explicitly supplied external monetary amount.\n\n        Cost is never inferred from provider usage units or free-form model metadata.\n        The ISO currency is also the canonical unit so unlike currencies cannot be\n        silently aggregated.\n        """\n\n        if quality not in {MeasurementQuality.REPORTED, MeasurementQuality.ESTIMATED}:\n            raise ValueError("external cost quality must be reported or estimated")\n        canonical_currency = currency.upper()\n        record = UsageRecord(\n            metric_type="external.cost.amount",\n            unit=canonical_currency,\n            quality=quality,\n            source=source,\n            quantity=amount,\n            scope=scope or UsageScope(),\n            provider=provider,\n            correlation_id=correlation_id,\n            causation_id=causation_id,\n            cost_amount=amount,\n            currency=canonical_currency,\n            confidence=confidence,\n            provenance=dict(provenance or {}),\n        )\n        self.record(record)\n        return record\n\n    def query(self, query: UsageQuery | None = None) -> tuple[UsageRecord, ...]:\n        return self.store.query(query or UsageQuery())\n''',
+          )
+          replace(
+              service,
+              '            fraction=fraction,\n            level=level,\n        )',
+              '            fraction=fraction,\n            level=level,\n            window_start=start,\n            window_end=end,\n        )',
+          )
+          replace(
+              service,
+              '    metric_type, unit, quality = mapping\n',
+              '    metric_type, unit, quality = mapping\n    aggregation_mode = _aggregation_mode(metric)\n',
+          )
+          replace(
+              service,
+              '        quality=quality,\n        source="observability",',
+              '        quality=quality,\n        aggregation_mode=aggregation_mode,\n        source="observability",',
+          )
+          replace(
+              service,
+              '    if metric.name == "platform.model.usage":\n',
+              '''    if metric.name in {\n        "platform.node.reported_resource",\n        "platform.worker.reported_resource",\n    }:\n        resource_key = _normalized_metric_label(metric.attributes.get("resource_key"))\n        if resource_key is None:\n            return None\n        subject = "node" if metric.name.startswith("platform.node.") else "worker"\n        return (\n            f"{subject}.provider_reported.{resource_key}",\n            metric.unit,\n            MeasurementQuality.REPORTED,\n        )\n\n    if metric.name == "platform.model.usage":\n''',
+          )
+          replace(
+              service,
+              '        "platform.tool.duration_seconds": (\n            "capability.invocation.duration",\n            "seconds",\n            MeasurementQuality.MEASURED,\n        ),\n',
+              '''        "platform.tool.duration_seconds": (\n            "capability.invocation.duration",\n            "seconds",\n            MeasurementQuality.MEASURED,\n        ),\n        "platform.worker.dispatch.calls": (\n            "worker.dispatch.count",\n            "count",\n            MeasurementQuality.MEASURED,\n        ),\n        "platform.worker.dispatch.duration_seconds": (\n            "worker.dispatch.duration",\n            "seconds",\n            MeasurementQuality.MEASURED,\n        ),\n        "platform.worker.dispatch.failures": (\n            "worker.dispatch.failure.count",\n            "count",\n            MeasurementQuality.MEASURED,\n        ),\n''',
+          )
+          replace(
+              service,
+              '\n\ndef _normalized_metric_label(value: object) -> str | None:\n',
+              '''\n\ndef _aggregation_mode(metric: MetricRecord) -> AggregationMode:\n    if metric.name in {\n        "platform.node.reported_resource",\n        "platform.worker.reported_resource",\n    }:\n        return AggregationMode.LATEST\n    return AggregationMode.ADDITIVE\n\n\ndef _normalized_metric_label(value: object) -> str | None:\n''',
+          )
+          replace(
+              service,
+              '        case "capability":\n            return UsageScope(capability_id=value)\n        case "model_provider":',
+              '        case "capability":\n            return UsageScope(capability_id=value)\n        case "model_config":\n            return UsageScope(model_config_id=value)\n        case "model_provider":',
+          )
+          replace(
+              service,
+              '        "capability": scope.capability_id,\n        "model_provider": scope.model_provider_id,',
+              '        "capability": scope.capability_id,\n        "model_config": scope.model_config_id,\n        "model_provider": scope.model_provider_id,',
+          )
+
+          cp = "src/ai_multi_agent_platform/accounting/control_plane.py"
+          replace(
+              cp,
+              'from .models import (\n    UsageAggregate,',
+              'from .models import (\n    AggregationMode,\n    UsageAggregate,',
+          )
+          old_loop = '''        pairs = sorted({(record.metric_type, record.unit) for record in records})\n        resources: list[dict[str, JsonValue]] = []\n        scope_key = _scope_key(context)\n        trend_end = utc_now()\n        trend_start = trend_end - timedelta(seconds=self._trend_window_seconds)\n        for metric_type, unit in pairs:\n            selected = _metric_records(records, metric_type, unit)\n            aggregate = aggregate_usage_records(selected, metric_type=metric_type, unit=unit)\n            trend = trend_usage_records(\n                selected,\n                metric_type=metric_type,\n                unit=unit,\n                start=trend_start,\n                end=trend_end,\n                bucket_seconds=self._trend_bucket_seconds,\n            )\n            resources.append(\n                _aggregate_resource(\n                    metric_type,\n                    unit,\n                    aggregate,\n                    scope_key,\n                    trend=trend,\n                    trend_start=trend_start,\n                    trend_end=trend_end,\n                    trend_bucket_seconds=self._trend_bucket_seconds,\n                )\n            )\n        return tuple(resources)\n'''
+          new_loop = '''        pairs = sorted({(record.metric_type, record.unit) for record in records})\n        resources: list[dict[str, JsonValue]] = []\n        owner_scope_key = _scope_key(context)\n        trend_end = utc_now()\n        trend_start = trend_end - timedelta(seconds=self._trend_window_seconds)\n        for metric_type, unit in pairs:\n            selected = _metric_records(records, metric_type, unit)\n            for aggregate_scope, scoped_records in _aggregate_groups(selected, context):\n                aggregate = aggregate_usage_records(\n                    scoped_records, metric_type=metric_type, unit=unit\n                )\n                trend = trend_usage_records(\n                    scoped_records,\n                    metric_type=metric_type,\n                    unit=unit,\n                    start=trend_start,\n                    end=trend_end,\n                    bucket_seconds=self._trend_bucket_seconds,\n                )\n                resources.append(\n                    _aggregate_resource(\n                        metric_type,\n                        unit,\n                        aggregate,\n                        f"{owner_scope_key}|{_usage_scope_key(aggregate_scope)}",\n                        aggregate_scope,\n                        trend=trend,\n                        trend_start=trend_start,\n                        trend_end=trend_end,\n                        trend_bucket_seconds=self._trend_bucket_seconds,\n                    )\n                )\n        return tuple(resources)\n'''
+          replace(cp, old_loop, new_loop)
+          replace(
+              cp,
+              '\n\ndef _aggregate_visible(\n    records: tuple[UsageRecord, ...], metric_type: str, unit: str\n) -> UsageAggregate:\n    selected = _metric_records(records, metric_type, unit)\n    return aggregate_usage_records(selected, metric_type=metric_type, unit=unit)\n',
+              '''\n\ndef _aggregate_groups(\n    records: tuple[UsageRecord, ...],\n    context: RequestContext,\n) -> tuple[tuple[UsageScope, tuple[UsageRecord, ...]], ...]:\n    """Keep point-in-time gauges scoped to the resource they describe.\n\n    Additive metrics retain the existing visible-owner total. A latest-mode metric\n    cannot safely collapse multiple workers/nodes/projects into the most recently\n    sampled resource, so each distinct canonical scope is aggregated separately.\n    """\n\n    modes = {record.aggregation_mode for record in records}\n    if len(modes) > 1:\n        raise ValueError("one metric/unit aggregate cannot mix aggregation modes")\n    if not records or next(iter(modes), AggregationMode.ADDITIVE) is AggregationMode.ADDITIVE:\n        return ((_owner_query(context).scope, records),)\n\n    grouped: dict[tuple[tuple[str, str], ...], list[UsageRecord]] = {}\n    scopes: dict[tuple[tuple[str, str], ...], UsageScope] = {}\n    for record in records:\n        key = tuple(sorted(record.scope.fields().items()))\n        grouped.setdefault(key, []).append(record)\n        scopes[key] = record.scope\n    return tuple((scopes[key], tuple(grouped[key])) for key in sorted(grouped))\n\n\ndef _usage_scope_key(scope: UsageScope) -> str:\n    fields = scope.fields()\n    if not fields:\n        return "unscoped"\n    return "|".join(f"{key}={fields[key]}" for key in sorted(fields))\n''',
+          )
+          replace(
+              cp,
+              '    aggregate: UsageAggregate,\n    scope_key: str,\n    *,',
+              '    aggregate: UsageAggregate,\n    scope_key: str,\n    scope: UsageScope,\n    *,',
+          )
+          replace(
+              cp,
+              '    quality_counts: dict[str, JsonValue] = {\n        quality.value: count for quality, count in aggregate.quality_counts.items()\n    }\n',
+              '    quality_counts: dict[str, JsonValue] = {\n        quality.value: count for quality, count in aggregate.quality_counts.items()\n    }\n    scope_resource: dict[str, JsonValue] = dict(scope.fields())\n',
+          )
+          replace(
+              cp,
+              '        "aggregation_mode": aggregate.aggregation_mode.value,\n        "trend_window_start":',
+              '        "aggregation_mode": aggregate.aggregation_mode.value,\n        "scope": scope_resource,\n        "trend_window_start":',
+          )
+          replace(
+              cp,
+              '        "window_seconds": budget.window_seconds,\n        "include_estimated": budget.include_estimated,',
+              '        "window_seconds": budget.window_seconds,\n        "window_mode": budget.window_mode.value,\n        "window_start": None if state.window_start is None else state.window_start.isoformat(),\n        "window_end": None if state.window_end is None else state.window_end.isoformat(),\n        "include_estimated": budget.include_estimated,',
+          )
+
+          types = "frontend/src/api/types.ts"
+          replace(
+              types,
+              '  aggregation_mode: AggregationMode;\n  trend_window_start:',
+              '  aggregation_mode: AggregationMode;\n  scope: Record<string, string>;\n  trend_window_start:',
+          )
+          replace(
+              types,
+              '  window_seconds: number | null;\n  include_estimated: boolean;',
+              '  window_seconds: number | null;\n  window_mode: "lifetime" | "rolling";\n  window_start: string | null;\n  window_end: string | null;\n  include_estimated: boolean;',
+          )
+
+          page = "frontend/src/pages/UsagePage.tsx"
+          replace(
+              page,
+              '<thead><tr><th>Metric</th><th>Value</th><th>Mode</th><th>Records</th><th>Quality mix</th><th>Recent history</th></tr></thead>',
+              '<thead><tr><th>Metric</th><th>Value</th><th>Mode</th><th>Scope</th><th>Records</th><th>Quality mix</th><th>Recent history</th></tr></thead>',
+          )
+          replace(
+              page,
+              '              <td>{aggregate.aggregation_mode}</td>\n              <td>{aggregate.record_count}</td>',
+              '              <td>{aggregate.aggregation_mode}</td>\n              <td>{scopeSummary(aggregate.scope)}</td>\n              <td>{aggregate.record_count}</td>',
+          )
+          replace(
+              page,
+              '<td>{budget.kind} · {budget.action}{budget.include_estimated ? " · estimates included" : ""}</td>',
+              '<td>{budget.kind} · {budget.action} · {budget.window_mode}{budget.include_estimated ? " · estimates included" : ""}</td>',
+          )
+
+          Path("tests/test_issue76_completion.py").write_text(r'''from __future__ import annotations\n\nimport asyncio\nfrom datetime import UTC, datetime, timedelta\n\nfrom ai_multi_agent_platform.accounting import (\n    AccountingService,\n    AggregationMode,\n    BudgetWindowMode,\n    InMemoryUsageStore,\n    MeasurementQuality,\n    UsageAggregateResourceService,\n    UsageBudget,\n    UsageQuery,\n    UsageRecord,\n    UsageRecordResourceService,\n    UsageScope,\n    accounting_resource_services,\n)\nfrom ai_multi_agent_platform.contracts import (\n    AuthorizationDecision,\n    AuthorizationProvider,\n    HealthStatus,\n    ProviderDescriptor,\n)\nfrom ai_multi_agent_platform.contracts.types import AuthorizationRequest\nfrom ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest\nfrom ai_multi_agent_platform.control_plane.models import ActorContext, PageQuery, RequestContext\nfrom ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel\nfrom ai_multi_agent_platform.observability import MetricRecord, TelemetryContext\nfrom ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator\n\n\nclass DenyAuthorizationProvider(AuthorizationProvider):\n    @property\n    def descriptor(self) -> ProviderDescriptor:\n        return ProviderDescriptor(\n            provider_id="deny-accounting-test",\n            provider_type="authorization",\n            health=HealthStatus.HEALTHY,\n        )\n\n    async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision:\n        del request\n        return AuthorizationDecision(False, reason="accounting access denied by #15")\n\n\ndef _context(owner_type: str, owner_id: str) -> RequestContext:\n    return RequestContext(\n        request_id=f"request-{owner_id}",\n        correlation_id=f"correlation-{owner_id}",\n        actor=ActorContext(\n            principal_ref=f"{owner_type}:{owner_id}",\n            owner_type=owner_type,\n            owner_id=owner_id,\n        ),\n    )\n\n\ndef _http(\n    accounting: AccountingService,\n    authorization: AuthorizationProvider | None = None,\n) -> ControlPlaneHTTP:\n    repository = InMemoryKernelRepository()\n    kernel = PlatformKernel(\n        orchestrator=FakeOrchestrator(),\n        lifecycle=FakeLifecycleBackend(),\n        repository=repository,\n    )\n    return ControlPlaneHTTP(\n        ControlPlane(\n            kernel=kernel,\n            events=repository,\n            authorization=authorization,\n            resource_services=accounting_resource_services(accounting),\n        )\n    )\n\n\ndef test_worker_and_node_reported_resources_are_latest_provider_neutral_gauges() -> None:\n    service = AccountingService(InMemoryUsageStore())\n    first_context = TelemetryContext(\n        worker_id="worker-a", node_id="node-a", provider_id="provider-v1"\n    )\n    replacement_context = TelemetryContext(\n        worker_id="worker-a", node_id="node-a", provider_id="provider-v2"\n    )\n    service.ingest_metric(\n        MetricRecord(\n            "platform.worker.reported_resource",\n            4.0,\n            unit="reported_units",\n            context=first_context,\n            attributes={"resource_key": "gpu-load"},\n        )\n    )\n    service.ingest_metric(\n        MetricRecord(\n            "platform.worker.reported_resource",\n            7.0,\n            unit="reported_units",\n            context=replacement_context,\n            attributes={"resource_key": "gpu-load"},\n        )\n    )\n    service.ingest_metric(\n        MetricRecord(\n            "platform.node.reported_resource",\n            1024.0,\n            unit="reported_units",\n            context=TelemetryContext(node_id="node-a", provider_id="provider-v2"),\n            attributes={"resource_key": "memory-bytes-native"},\n        )\n    )\n\n    worker = service.aggregate(\n        UsageQuery(\n            metric_type="worker.provider_reported.gpu_load",\n            unit="reported_units",\n            scope=UsageScope(worker_id="worker-a"),\n        )\n    )\n    assert worker.aggregation_mode is AggregationMode.LATEST\n    assert worker.total == 7.0\n    records = service.query(\n        UsageQuery(\n            metric_type="worker.provider_reported.gpu_load",\n            unit="reported_units",\n            scope=UsageScope(worker_id="worker-a"),\n        )\n    )\n    assert {record.provider for record in records} == {"provider-v1", "provider-v2"}\n    assert all(record.scope.worker_id == "worker-a" for record in records)\n    assert all(record.quality is MeasurementQuality.REPORTED for record in records)\n\n    node = service.aggregate(\n        UsageQuery(\n            metric_type="node.provider_reported.memory_bytes_native",\n            unit="reported_units",\n            scope=UsageScope(node_id="node-a"),\n        )\n    )\n    assert node.aggregation_mode is AggregationMode.LATEST\n    assert node.total == 1024.0\n\n\ndef test_worker_dispatch_usage_is_additive_and_attributed() -> None:\n    service = AccountingService(InMemoryUsageStore())\n    context = TelemetryContext(\n        project_id="project-a",\n        task_id="task-a",\n        run_id="run-a",\n        worker_id="worker-a",\n        node_id="node-a",\n        provider_id="worker-provider",\n    )\n    service.ingest_metric(MetricRecord("platform.worker.dispatch.calls", 1.0, context=context))\n    service.ingest_metric(\n        MetricRecord(\n            "platform.worker.dispatch.duration_seconds",\n            2.5,\n            unit="seconds",\n            context=context,\n        )\n    )\n    assert (\n        service.aggregate(\n            UsageQuery(\n                metric_type="worker.dispatch.count",\n                unit="count",\n                scope=UsageScope(worker_id="worker-a"),\n            )\n        ).total\n        == 1.0\n    )\n    duration = service.query(\n        UsageQuery(metric_type="worker.dispatch.duration", unit="seconds")\n    )[0]\n    assert duration.scope.worker_id == "worker-a"\n    assert duration.scope.node_id == "node-a"\n\n\ndef test_external_cost_requires_explicit_currency_and_quality() -> None:\n    service = AccountingService(InMemoryUsageStore())\n    record = service.record_external_cost(\n        amount=0.125,\n        currency="eur",\n        source="configured-price-estimator",\n        quality=MeasurementQuality.ESTIMATED,\n        scope=UsageScope(project_id="project-a"),\n        provider="provider-a",\n        confidence=0.8,\n        provenance={"price_source": "operator-configured"},\n    )\n    assert record.metric_type == "external.cost.amount"\n    assert record.unit == "EUR"\n    assert record.currency == "EUR"\n    assert record.cost_amount == 0.125\n    assert record.quality is MeasurementQuality.ESTIMATED\n\n    excluded = UsageBudget(\n        metric_type="external.cost.amount",\n        unit="EUR",\n        scope_type="project",\n        scope_id="project-a",\n        limit=1.0,\n    )\n    included = UsageBudget(\n        metric_type="external.cost.amount",\n        unit="EUR",\n        scope_type="project",\n        scope_id="project-a",\n        limit=1.0,\n        include_estimated=True,\n    )\n    service.put_budget(excluded)\n    service.put_budget(included)\n    assert service.budget_state(excluded.id).consumed == 0.0\n    assert service.budget_state(included.id).consumed == 0.125\n\n\ndef test_model_configuration_is_a_first_class_budget_scope() -> None:\n    service = AccountingService(InMemoryUsageStore())\n    budget = UsageBudget(\n        metric_type="model.tokens.total",\n        unit="tokens",\n        scope_type="model_config",\n        scope_id="model-config-a",\n        limit=100.0,\n    )\n    service.put_budget(budget)\n    service.record(\n        UsageRecord(\n            metric_type="model.tokens.total",\n            unit="tokens",\n            quality=MeasurementQuality.REPORTED,\n            source="model-provider",\n            quantity=40.0,\n            scope=UsageScope(model_config_id="model-config-a"),\n        )\n    )\n    assert service.budget_state(budget.id).consumed == 40.0\n\n\ndef test_budget_window_contract_distinguishes_lifetime_and_rolling() -> None:\n    service = AccountingService(InMemoryUsageStore())\n    now = datetime.now(UTC)\n    rolling = UsageBudget(\n        metric_type="task.count",\n        unit="count",\n        scope_type="project",\n        scope_id="project-a",\n        limit=10.0,\n        window_seconds=5,\n    )\n    lifetime = UsageBudget(\n        metric_type="task.count",\n        unit="count",\n        scope_type="project",\n        scope_id="project-a",\n        limit=10.0,\n    )\n    service.put_budget(rolling)\n    service.put_budget(lifetime)\n    for timestamp in (now - timedelta(seconds=20), now):\n        service.record(\n            UsageRecord(\n                metric_type="task.count",\n                unit="count",\n                quality=MeasurementQuality.MEASURED,\n                source="test",\n                quantity=1.0,\n                timestamp=timestamp,\n                scope=UsageScope(project_id="project-a"),\n            )\n        )\n    rolling_state = service.budget_state(rolling.id)\n    lifetime_state = service.budget_state(lifetime.id)\n    assert rolling.window_mode is BudgetWindowMode.ROLLING\n    assert rolling_state.consumed == 1.0\n    assert rolling_state.window_start is not None\n    assert rolling_state.window_end is not None\n    assert lifetime.window_mode is BudgetWindowMode.LIFETIME\n    assert lifetime_state.consumed == 2.0\n    assert lifetime_state.window_start is None\n    assert lifetime_state.window_end is None\n\n\ndef test_latest_control_plane_aggregates_remain_separate_per_worker_scope() -> None:\n    accounting = AccountingService(InMemoryUsageStore())\n    for worker_id, value in (("worker-a", 2.0), ("worker-b", 8.0)):\n        accounting.record(\n            UsageRecord(\n                metric_type="worker.provider_reported.load",\n                unit="reported_units",\n                quality=MeasurementQuality.REPORTED,\n                source="worker-provider",\n                quantity=value,\n                aggregation_mode=AggregationMode.LATEST,\n                scope=UsageScope(\n                    worker_id=worker_id, owner_type="user", owner_id="alice"\n                ),\n            )\n        )\n    resources = asyncio.run(\n        UsageAggregateResourceService(accounting).list_resources(\n            _context("user", "alice"), PageQuery()\n        )\n    )\n    assert len(resources) == 2\n    by_worker = {\n        resource["scope"]["worker_id"]: resource["total"]\n        for resource in resources\n        if isinstance(resource["scope"], dict)\n    }\n    assert by_worker == {"worker-a": 2.0, "worker-b": 8.0}\n\n\ndef test_organization_usage_isolation_does_not_depend_on_team_membership_implementation() -> None:\n    accounting = AccountingService(InMemoryUsageStore())\n    for org_id, value in (("org-a", 1.0), ("org-b", 50.0)):\n        accounting.record(\n            UsageRecord(\n                metric_type="task.count",\n                unit="count",\n                quality=MeasurementQuality.MEASURED,\n                source="test",\n                quantity=value,\n                scope=UsageScope(\n                    organization_id=org_id,\n                    owner_type="organization",\n                    owner_id=org_id,\n                ),\n            )\n        )\n    records = asyncio.run(\n        UsageRecordResourceService(accounting).list_resources(\n            _context("organization", "org-a"), PageQuery()\n        )\n    )\n    assert len(records) == 1\n    assert records[0]["quantity"] == 1.0\n\n\ndef test_control_plane_accounting_routes_follow_authorization_gate() -> None:\n    accounting = AccountingService(InMemoryUsageStore())\n    accounting.record(\n        UsageRecord(\n            metric_type="task.count",\n            unit="count",\n            quality=MeasurementQuality.MEASURED,\n            source="test",\n            quantity=1.0,\n            scope=UsageScope(owner_type="user", owner_id="alice"),\n        )\n    )\n    http = _http(accounting, DenyAuthorizationProvider())\n    response = asyncio.run(\n        http.handle(\n            HTTPRequest(\n                method="GET",\n                path="/api/v1/usage-records",\n                headers={\n                    "X-Request-Id": "request-denied",\n                    "X-Correlation-Id": "correlation-denied",\n                    "X-Principal-Ref": "user:alice",\n                    "X-Owner-Type": "user",\n                    "X-Owner-Id": "alice",\n                },\n            )\n        )\n    )\n    assert response.status == 403\n''')
+
+          Path("docs/ISSUE_76_COMPLETION.md").write_text(r'''# Issue #76 completion\n\nIssue #76 owns the canonical, provider-neutral accounting layer. Measurement-producing domains remain replaceable and may add richer signals later without changing the accounting contract.\n\n## Completed surface\n\n- Durable immutable `UsageRecord` data with canonical IDs, explicit units, attribution scopes, provenance, correlation/causation and measured/reported/estimated/unavailable quality.\n- Additive and point-in-time (`latest`) aggregation with missing data preserved as unavailable rather than fabricated zero.\n- Task, Run, Executor, model and Capability/Tool accounting from the observability measurement seam.\n- Canonical selected `ModelConfiguration` plus provider attribution for model calls, duration and provider-reported usage.\n- File storage accounting using current READY bytes.\n- Worker dispatch accounting and Worker/Node provider-reported resource gauges. Provider-native numeric metadata remains namespaced as `*.provider_reported.*` in its reported unit; #76 does not rename an untyped provider number into CPU, RAM, GPU or VRAM semantics.\n- Gauge-safe Control Plane aggregation: distinct Worker/Node/resource scopes are not collapsed into one arbitrary latest sample.\n- Explicit external monetary records through `record_external_cost`; currency is an ISO code and the aggregation unit, so unlike currencies never combine. Cost is never inferred from arbitrary provider units or free-form model metadata.\n- Budgets for user, organization, team, project, workspace, task, run, agent, capability, canonical model configuration, model provider, worker and node scopes.\n- Lifetime and rolling-window budget state, warning/exceeded threshold events, persisted threshold deduplication and budget version history. Estimated usage is excluded unless policy explicitly opts in.\n- Read-only Control Plane resources for records, aggregates/trends and budget state. These routes pass through the canonical #15 authorization gate and then apply owner isolation.\n- `/usage` UI for current records, scope-aware aggregates, historical trends, source quality, costs and budget state.\n\n## Dependency boundaries\n\nThe accounting contract is complete without fabricating unfinished domain data. Open source-domain issues can enrich it later:\n\n- #14 may emit typed CPU/RAM/GPU/VRAM/capacity metrics. Until then generic numeric Worker/Node metadata is explicitly provider-reported rather than relabeled.\n- #33 may supply authoritative executed Agent/AgentTeam identity. #76 does not infer execution from planning assignments.\n- #44/#74/#82 may emit Connector/Browser/Repository operation measurements through the existing capability/telemetry seams.\n- #75 may consume canonical `BudgetThresholdEvent` values for notifications. Accounting already owns event state/deduplication; it does not own notification delivery.\n- #87 may add membership/role-based Team/Organization visibility. #76 already enforces exact owner/organization isolation and delegates authorization to #15; it does not invent memberships.\n\nThese are progressive measurement producers or consumers, not reasons to keep the accounting contract itself open.\n\n## Acceptance / required-test mapping\n\n- Task/Run/duration/retry, quality, missing metrics, thresholds, restart persistence, budget history: `tests/test_issue76_accounting.py`.\n- Current storage and latest-gauge semantics: `tests/test_issue76_storage_accounting.py`.\n- Real Control Plane HTTP/OpenAPI resources: `tests/test_issue76_control_plane_http.py`.\n- Bounded historical trends without synthetic zero/carry-forward: `tests/test_issue76_trends.py`.\n- Canonical model configuration attribution under automatic routing: `tests/test_issue76_model_attribution.py`.\n- Worker/Node resource ingestion, Worker dispatch, provider replacement semantics, external cost, model-config budgets, rolling/lifetime windows, gauge scope isolation, organization isolation and #15 authorization composition: `tests/test_issue76_completion.py`.\n\nProvider-specific replacement changes provenance/provider attribution but not canonical Task/Run/ModelConfiguration/Worker/Node scope semantics. Unknown or unavailable measurements remain absent/unavailable, never guessed.\n''')
+          PY
+      - name: Verify Python completion gates
+        run: |
+          ruff format .
+          ruff check .
+          mypy
+          pytest -q tests/test_issue76_accounting.py tests/test_issue76_storage_accounting.py tests/test_issue76_control_plane_http.py tests/test_issue76_trends.py tests/test_issue76_model_attribution.py tests/test_issue76_completion.py
+          python -m build
+      - name: Verify frontend completion gates
+        working-directory: frontend
+        run: |
+          npm install --global npm@11.6.0
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src frontend tests docs
+          if git diff --cached --quiet; then
+            echo "No implementation changes to commit"
+            exit 1
+          fi
+          git commit -m "feat: complete #76 usage and resource accounting"
+          git push
