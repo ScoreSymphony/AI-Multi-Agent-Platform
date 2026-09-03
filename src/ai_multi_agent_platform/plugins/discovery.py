@@ -63,7 +63,9 @@ class PluginCatalog:
         return self.list_candidates()
 
     def list_candidates(self) -> tuple[DiscoveredPlugin, ...]:
-        return tuple(deepcopy(self._candidates[plugin_id]) for plugin_id in sorted(self._candidates))
+        return tuple(
+            deepcopy(self._candidates[plugin_id]) for plugin_id in sorted(self._candidates)
+        )
 
     def candidate(self, plugin_id: str) -> DiscoveredPlugin:
         try:
