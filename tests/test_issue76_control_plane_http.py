@@ -99,6 +99,10 @@ def test_accounting_collections_are_real_versioned_control_plane_resources() -> 
         assert isinstance(aggregate_items[0], dict)
         assert aggregate_items[0]["total"] == 42.0
         assert aggregate_items[0]["aggregation_mode"] == "latest"
+        assert aggregate_items[0]["trend_bucket_seconds"] == 3600
+        trend = aggregate_items[0]["trend"]
+        assert isinstance(trend, list)
+        assert any(isinstance(point, dict) and point["value"] == 42.0 for point in trend)
 
         budgets = await http.handle(
             HTTPRequest(method="GET", path="/api/v1/usage-budgets", headers=_headers())
