@@ -18,26 +18,41 @@ The browser MUST NOT call Hermes, Forge, model gateways, MCP servers, worker tra
 
 ## Implementation baseline
 
-The initial implementation uses React + TypeScript with Vite as build/dev tooling. This is a web-client implementation choice, not a canonical platform contract. Replacing React must require no Task/Run/Event schema migration and no backend lifecycle change; the versioned Control Plane remains the compatibility boundary.
+The current implementation uses React + TypeScript with Vite as build/dev tooling. This is a web-client implementation choice, not a canonical platform contract. Replacing React must require no Task/Run/Event schema migration and no backend lifecycle change; the versioned Control Plane remains the compatibility boundary.
 
 The client code is split into:
 
-- `src/api/` — typed Control Plane models, centralized HTTP client and SSE stream client;
+- `src/api/` — typed Control Plane models, centralized HTTP client, error presentation, pagination contracts and SSE stream client;
 - `src/platform/` — canonical identifier helpers;
 - `src/security/` — presentation-only permission hints; the server is authoritative;
-- `src/app/` — routing, navigation and shell;
+- `src/app/` — routing, navigation, shell and reusable cursor-pagination state;
 - `src/pages/` — product surfaces;
-- `src/components/` — reusable states and presentation components.
+- `src/components/` — reusable states, pagination and presentation components.
 
 ## Stable navigation
 
 The shell reserves routes for the ideal platform areas required by #17: Home, Chat, Projects/Workspaces, Tasks, Runs, Agents, Agent Teams, Verification, Organizations, Files/Artifacts, Memory, Knowledge, Search, Tools, Integrations, Models, Compute, Terminal, Automations, Approvals, Notifications, Events, Observability, Evaluations, Usage/Limits, Templates, Plugins, Import/Export and Settings.
 
-A reserved route does not imply its owning subsystem exists. When the canonical API is absent, the page renders an explicit unavailable state. The UI never substitutes a direct provider/backend connection.
+A reserved route does not imply its owning subsystem exists or is composed northbound. When the canonical API is absent, the page renders an explicit unavailable state. The UI never substitutes a direct provider/backend connection.
+
+## Current functional surfaces
+
+The initial shell has progressed beyond the first Task/Run vertical slice. The currently integrated surfaces use canonical Control Plane resources only:
+
+- Home/Overview — canonical health plus recent Task and Run activity;
+- Projects/Workspaces — Project list/create/detail and Workspace list/create/detail, including canonical Workspace lifecycle fields where a Workspace provider is composed and explicit `identity_only` fallback otherwise;
+- Tasks — canonical Task management, including the practical #88 queue/filter/sort/metadata/dependency/bulk-management surface already exposed by the Control Plane;
+- Runs — canonical Run list/detail;
+- Files/Artifacts — read-only canonical Artifact, Result, Plan and Step references with Task/Plan links; raw file bytes, storage paths and provider-private storage metadata are intentionally not inferred;
+- Models/Providers — canonical model inventory, provider inventory, health/capabilities and supported model/provider commands;
+- Events/Observability — Task-scoped timeline and available backend-neutral observability information;
+- Usage & Limits — canonical usage records, aggregates and budgets exposed by the Control Plane.
+
+Paginated list surfaces use opaque server cursors. The frontend stores only cursor history required for local Previous navigation; it never decodes a cursor or derives an offset from it. Combined inventory pages such as Projects/Workspaces and Models/Providers keep independent pagination state for each canonical collection.
 
 ## Task / Run vertical slice
 
-The first functional slice consumes the #32 API:
+The Task/Run workflow consumes the versioned Control Plane:
 
 - `GET/POST /api/v1/tasks`;
 - `GET /api/v1/tasks/{task_id}`;
@@ -53,11 +68,29 @@ Every mutating client call generates an `Idempotency-Key`; every HTTP request em
 
 The HTTP client always uses `credentials: include` so a future #36 same-origin/session-cookie implementation can be attached without rewriting page code. An optional access-token callback exists as an integration seam; token storage is deliberately not implemented here.
 
-Permission hooks are advisory presentation hints only. Buttons are never proof of authorization: the Control Plane remains authoritative and 401/403 responses are rendered explicitly. SSE currently relies on browser credential handling because native `EventSource` does not allow arbitrary Authorization headers.
+Permission hooks are advisory presentation hints only. Buttons are never proof of authorization: the Control Plane remains authoritative. Canonical unauthenticated and authorization-denied responses are presented separately. Approval-required authorization outcomes are surfaced with their canonical approval reference when the Control Plane returns one; the frontend does not manufacture or bypass approval state.
+
+SSE relies on browser credential handling because native `EventSource` does not allow arbitrary Authorization headers.
 
 ## Live updates
 
-Task detail subscribes to the canonical `platform.event` SSE stream and refreshes Task, Run and timeline state on canonical events. Browser-native EventSource reconnection is exposed as connection state. No WebSocket/provider event channel is introduced.
+Task detail subscribes to the canonical `platform.event` SSE stream and refreshes Task, Run and timeline state on canonical events.
+
+Browser-native EventSource reconnect behavior is exposed as transport connection state (`connecting`, `open`, `reconnecting`, `closed`). That transport state is not Task lifecycle state and is not recovery authority.
+
+Canonical `platform.error` payloads are handled separately from transport reconnects. The UI surfaces their category/code/message and request reference as a degraded state while the latest successfully read Task data remains usable. A later successful stream open or canonical event clears the stale live-stream error. Malformed canonical event/error payloads are surfaced explicitly rather than silently converted into Task state.
+
+## Error, unavailable and degraded states
+
+Common loading, empty, error and degraded components are used across integrated pages. Canonical error presentation distinguishes at least:
+
+- unauthenticated/session-required outcomes;
+- authorization denial;
+- approval-required authorization outcomes;
+- unavailable/retryable subsystem failures;
+- ordinary contract/request failures.
+
+Reserved product routes inspect the Control Plane manifest. If a canonical resource is absent, they remain visibly unavailable and do not call private implementation services. If a resource becomes advertised before its dedicated UI is implemented, the shell reports that the integration is pending rather than guessing the resource schema.
 
 ## Timeline compatibility
 
@@ -65,11 +98,27 @@ The timeline may contain both canonical domain events (`type=event`) and backend
 
 ## Accessibility and responsive baseline
 
-The shell includes a skip link, semantic navigation/main landmarks, labelled command groups, visible focusable controls, table overflow handling and a mobile sidebar. This is a baseline rather than the final accessibility audit required for full #17 completion.
+The shell includes a skip link, semantic navigation/main landmarks, labelled command groups, visible focusable controls, table overflow handling, accessible pagination status/controls and a mobile sidebar. This is a baseline rather than a claim of a completed end-to-end accessibility audit.
+
+## Frontend contract tests
+
+The frontend test suite now includes focused contract coverage for:
+
+- centralized canonical API error mapping and presentation;
+- the browser-only `/api/v1` boundary for representative reads and mutations;
+- idempotency and correlation headers on mutations;
+- canonical Workspace and reference-resource contracts;
+- Task-management client contracts;
+- opaque cursor forwarding and pagination state behavior;
+- independent Project/Workspace and Model/Provider cursors;
+- canonical SSE URL, credential handling, event/error delivery and reconnect/close state;
+- explicit unavailable/degraded navigation behavior.
+
+These tests validate the client boundary; backend lifecycle, authorization and persistence remain owned by their canonical services.
 
 ## Frontend toolchain reproducibility
 
-The frontend declares `packageManager: npm@11.6.0` and CI installs that exact npm release before resolving dependencies. This is deliberate: npm 10.9.8 has a current Arborist `edgesOut` crash on Node 22 dependency resolution. Node 22.22.2+ is used because npm 11's current engine range requires it. The package-manager pin is tooling only and does not alter platform runtime contracts.
+The frontend declares `packageManager: npm@11.6.0` and CI installs that exact npm release before resolving dependencies. This is deliberate: npm 10.9.8 has an Arborist `edgesOut` crash on the supported Node 22 dependency-resolution path. Node 22.22.2+ is used because npm 11's engine range requires it. The package-manager pin is tooling only and does not alter platform runtime contracts.
 
 ## Direct frontend dependencies
 
@@ -86,6 +135,22 @@ Reviewed 2026-09-03 under `LICENSE_POLICY.md` as normal package dependencies/bui
 
 No upstream source is copied, vendored, forked or selectively ported into this repository. Dependency changes use explicit PR review; the Vite production build has `build.license=true` so distributed bundles retain a generated dependency-license inventory.
 
-## Remaining #17 scope
+## Progressive API-gated scope
 
-This foundation does not close #17. Later stages still need dedicated functional pages as their owning APIs become available (Projects/Workspaces, Agents/Teams, Models, Tools, Compute, Approvals, Automations, Files/Memory/Knowledge, Observability/Evaluations, Settings, etc.), plus stronger frontend integration/acceptance tests and final UX/accessibility polish.
+The #17 shell is established. Reserved routes are activated progressively by their owning domain issues when a canonical northbound Control Plane resource/command is actually composed.
+
+At the current repository state, dedicated browser integrations must still wait for the owning northbound APIs for areas such as:
+
+- Agents / Agent Teams;
+- Capabilities / Tools;
+- Nodes / Workers / Compute;
+- Approvals as a browsable/actionable canonical collection;
+- Authentication/session UI from #36;
+- Verification / Review;
+- Organizations / Memberships;
+- Search;
+- Notifications;
+- Memory/Knowledge beyond currently available reference-level data;
+- other later product surfaces such as Automations, Evaluations, Plugins, Templates and Import/Export where their canonical contracts are not yet composed.
+
+Backend implementations existing in Python are not sufficient to activate a browser page. The frontend integrates a domain only after the platform exposes its versioned canonical API through the Control Plane. Until then, the stable route remains unavailable/degraded and no browser-side fallback is permitted.
