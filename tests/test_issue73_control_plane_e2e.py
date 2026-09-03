@@ -13,12 +13,7 @@ from ai_multi_agent_platform.control_plane import (
     ControlPlaneHTTP,
     HTTPRequest,
 )
-from ai_multi_agent_platform.control_plane.terminal_session_contract import (
-    TerminalSessionASGI,
-    terminal_command_handlers,
-    terminal_resource_services,
-)
-from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.domain import RunStatus, new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.security import (
     ActorType,
@@ -55,8 +50,9 @@ class TrackingReferenceTerminalAdapter(ReferenceTerminalAdapter):
 def _terminal_stack() -> tuple[
     TerminalSessionService,
     TrackingReferenceTerminalAdapter,
+    PlatformKernel,
     ControlPlaneHTTP,
-    TerminalSessionASGI,
+    ControlPlaneASGI,
     str,
     str,
     str,
@@ -94,12 +90,11 @@ def _terminal_stack() -> tuple[
     control_plane = ControlPlane(
         kernel=kernel,
         events=repository,
-        resource_services=terminal_resource_services(service),
-        command_handlers=terminal_command_handlers(service),
+        terminal_sessions=service,
     )
     http = ControlPlaneHTTP(control_plane)
-    app = TerminalSessionASGI(ControlPlaneASGI(http), service)
-    return service, adapter, http, app, principal, project_id, workspace_id
+    app = ControlPlaneASGI(http)
+    return service, adapter, kernel, http, app, principal, project_id, workspace_id
 
 
 def _headers(principal: str, *, key: str | None = None) -> dict[str, str]:
@@ -116,26 +111,31 @@ def _headers(principal: str, *, key: str | None = None) -> dict[str, str]:
     return headers
 
 
-def test_terminal_http_resource_and_command_survive_private_payload_guard_and_filtering() -> None:
+def test_terminal_http_resource_and_command_use_standard_composition_and_idempotent_create() -> (
+    None
+):
     async def scenario() -> None:
-        _, _, http, _, principal, project_id, workspace_id = _terminal_stack()
-        created = await http.handle(
-            HTTPRequest(
-                method="POST",
-                path="/api/v1/commands/terminal.session.create",
-                headers=_headers(principal, key="terminal-create-e2e"),
-                body={
-                    "resource_ref": project_id,
-                    "workspace_id": workspace_id,
-                    "session_type": "debug",
-                    "mode": "interactive",
-                },
-            )
+        _, _, _, http, _, principal, project_id, workspace_id = _terminal_stack()
+        request = HTTPRequest(
+            method="POST",
+            path="/api/v1/commands/terminal.session.create",
+            headers=_headers(principal, key="terminal-create-e2e"),
+            body={
+                "resource_ref": project_id,
+                "workspace_id": workspace_id,
+                "session_type": "debug",
+                "mode": "interactive",
+            },
         )
+        created = await http.handle(request)
+        retried = await http.handle(request)
         assert created.status == 200
+        assert retried.status == 200
         assert isinstance(created.body, dict)
+        assert isinstance(retried.body, dict)
         session_id = created.body["id"]
         assert isinstance(session_id, str)
+        assert retried.body["id"] == session_id
         assert created.body["project_id"] == project_id
         assert created.body["workspace_id"] == workspace_id
         assert created.body["context"] == {
@@ -147,7 +147,23 @@ def test_terminal_http_resource_and_command_survive_private_payload_guard_and_fi
             "node_id": None,
         }
         assert "adapter_metadata" not in created.body
+        assert "backend_handle_kind" not in repr(created.body)
         assert isinstance(created.body["diagnostics"], list)
+
+        conflicting_retry = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/terminal.session.create",
+                headers=_headers(principal, key="terminal-create-e2e"),
+                body={
+                    "resource_ref": project_id,
+                    "workspace_id": workspace_id,
+                    "session_type": "debug",
+                    "mode": "read_only",
+                },
+            )
+        )
+        assert conflicting_retry.status == 409
 
         listed = await http.handle(
             HTTPRequest(
@@ -193,9 +209,66 @@ def test_terminal_http_resource_and_command_survive_private_payload_guard_and_fi
     asyncio.run(scenario())
 
 
-def test_terminal_websocket_stream_and_reconnect_use_canonical_gateway() -> None:
+def test_run_bound_process_termination_cancels_canonical_run() -> None:
     async def scenario() -> None:
-        service, adapter, _, app, principal, project_id, workspace_id = _terminal_stack()
+        _, _, kernel, http, _, principal, project_id, workspace_id = _terminal_stack()
+        task = await kernel.create_task(
+            idempotency_key="terminal-task-create",
+            title="Terminal cancellation",
+            objective="Prove canonical cancellation",
+            owner_type="user",
+            owner_id="terminal-e2e",
+            project_id=project_id,
+            actor_ref=principal,
+        )
+        await kernel.ready_task(
+            idempotency_key="terminal-task-ready",
+            task_id=task.task.id,
+            actor_ref=principal,
+        )
+        run = await kernel.start_task(
+            idempotency_key="terminal-task-start",
+            task_id=task.task.id,
+            actor_ref=principal,
+        )
+        created = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/terminal.session.create",
+                headers=_headers(principal, key="terminal-process-create"),
+                body={
+                    "resource_ref": project_id,
+                    "workspace_id": workspace_id,
+                    "session_type": "process",
+                    "mode": "read_only",
+                    "task_id": task.task.id,
+                    "run_id": run.run_id,
+                },
+            )
+        )
+        assert created.status == 200
+        assert isinstance(created.body, dict)
+        session_id = created.body["id"]
+        assert isinstance(session_id, str)
+
+        terminated = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/terminal.session.terminate",
+                headers=_headers(principal, key="terminal-process-terminate"),
+                body={"resource_ref": session_id, "reason": "operator cancelled execution"},
+            )
+        )
+        assert terminated.status == 200
+        canonical_run = await kernel.get_run(task.task.id, run.run_id)
+        assert canonical_run.status is RunStatus.CANCELLED
+
+    asyncio.run(scenario())
+
+
+def test_terminal_websocket_stream_and_reconnect_use_standard_gateway() -> None:
+    async def scenario() -> None:
+        service, adapter, _, _, app, principal, project_id, workspace_id = _terminal_stack()
         session = await service.create_session(
             SessionCreateRequest(
                 session_type=SessionType.DEBUG,
@@ -233,6 +306,38 @@ def test_terminal_websocket_stream_and_reconnect_use_canonical_gateway() -> None
         assert len(replayed) == 1
         assert replayed[0]["sequence"] == 3
         assert replayed[0]["id"] == frames[2]["id"]
+
+    asyncio.run(scenario())
+
+
+def test_terminal_websocket_rejects_missing_required_subprotocol() -> None:
+    async def scenario() -> None:
+        service, _, _, _, app, principal, project_id, workspace_id = _terminal_stack()
+        session = await service.create_session(
+            SessionCreateRequest(
+                session_type=SessionType.LOG_STREAM,
+                context=SessionContext(project_id=project_id, workspace_id=workspace_id),
+                mode=SessionMode.READ_ONLY,
+                actor_ref=principal,
+                operation=OperationContext(
+                    correlation_id="corr-ws-protocol", project_id=project_id
+                ),
+            )
+        )
+        messages = await _run_websocket(
+            app,
+            session.id,
+            principal,
+            after_sequence=0,
+            subprotocols=[],
+        )
+        assert messages == [
+            {
+                "type": "websocket.close",
+                "code": 4406,
+                "reason": "terminal subprotocol required",
+            }
+        ]
 
     asyncio.run(scenario())
 
@@ -300,11 +405,12 @@ def test_transcript_sink_failure_is_retryable_without_changing_canonical_frame_i
 
 
 async def _run_websocket(
-    app: TerminalSessionASGI,
+    app: ControlPlaneASGI,
     session_id: str,
     principal: str,
     *,
     after_sequence: int,
+    subprotocols: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     sent: list[dict[str, Any]] = []
     connected = False
@@ -334,6 +440,7 @@ async def _run_websocket(
             "path": f"/api/v1/terminal-sessions/{session_id}/stream",
             "query_string": query_string,
             "headers": headers,
+            "subprotocols": subprotocols if subprotocols is not None else ["platform.terminal.v1"],
         },
         receive,
         send,

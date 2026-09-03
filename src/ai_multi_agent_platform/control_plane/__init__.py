@@ -1,13 +1,10 @@
 """Versioned platform-owned northbound Control Plane."""
 
-from .authenticated_authorization import ControlPlane
 from .authentication_hardening import AuthenticatedControlPlaneHTTP
 from .automation_api import (
     AUTOMATION_COLLECTION,
     AUTOMATION_COMMANDS,
     DELIVERY_COLLECTION,
-    ControlPlaneHTTP,
-    build_openapi,
 )
 from .extensions import (
     FOUNDATION_COLLECTIONS,
@@ -18,7 +15,7 @@ from .extensions import (
     InMemoryResourceService,
     ResourceService,
 )
-from .http import ControlPlaneASGI, HTTPRequest, HTTPResponse
+from .http import HTTPRequest, HTTPResponse
 from .models import (
     API_VERSION,
     SUPPORTED_API_VERSIONS,
@@ -35,6 +32,7 @@ from .task_management_contract import (
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
+from .terminal_composition import ControlPlane, ControlPlaneASGI, ControlPlaneHTTP, build_openapi
 
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (AUTOMATION_COLLECTION, DELIVERY_COLLECTION)
 
