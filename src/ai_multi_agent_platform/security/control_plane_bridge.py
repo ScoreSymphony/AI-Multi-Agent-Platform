@@ -6,6 +6,7 @@ from ai_multi_agent_platform.contracts import (
     AuthorizationDecision,
     AuthorizationProvider,
     HealthStatus,
+    JsonValue,
     ProviderDescriptor,
 )
 from ai_multi_agent_platform.contracts.authorization import (
@@ -52,7 +53,7 @@ class ControlPlaneAuthorizationBridge(AuthorizationProvider):
             if isinstance(request, CanonicalAuthorizationRequest)
             else None
         )
-        proposed_payload = {"northbound_action": request.action}
+        proposed_payload: dict[str, JsonValue] = {"northbound_action": request.action}
         if request_payload_digest is not None:
             proposed_payload["request_payload_sha256"] = request_payload_digest
         proposed = ProposedAction(
