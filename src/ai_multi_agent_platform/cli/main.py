@@ -583,9 +583,7 @@ def _extension_command(args: argparse.Namespace, client: ControlPlaneClient) -> 
     if args.command == "list":
         return CommandResult(client.get(f"/{_segment(collection)}", query=_page_query(args)))
     if args.command == "show":
-        return CommandResult(
-            client.get(f"/{_segment(collection)}/{_segment(args.resource_id)}")
-        )
+        return CommandResult(client.get(f"/{_segment(collection)}/{_segment(args.resource_id)}"))
     raise ProfileError(f"unsupported extension command: {args.command}")
 
 
