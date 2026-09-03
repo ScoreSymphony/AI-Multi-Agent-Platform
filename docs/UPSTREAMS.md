@@ -107,6 +107,31 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **Provenance:** `upstream/litellm.yaml`.
 - **Adoption/mapping review:** `docs/LITELLM_ADAPTER.md`.
 
+### NousResearch Hermes Agent
+
+- **Purpose:** optional production-oriented orchestration/planning runtime behind the platform-owned `Orchestrator` and `AgentOrchestratorMapper` boundaries.
+- **Status:** approved for integration in #8; integrated once the corresponding PR is merged.
+- **Integration category/categories:** optional external service; orchestrator adapter integration.
+- **Canonical upstream repository:** `https://github.com/NousResearch/hermes-agent`.
+- **Pinned version/tag/commit or deployed revision:** `63279301bcbdc185c1b07b98a9312eb0c862f26d`.
+- **Verified license:** MIT.
+- **License verification date:** 2026-09-03.
+- **Last review date:** 2026-09-03.
+- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.hermes.HermesOrchestrator` implements the canonical `Orchestrator`; `HermesAgentMapper` implements the platform-owned Agent/Team mapping seam. The baseline transport is the separately deployed Hermes API server `/v1/runs` surface.
+- **Local source path:** `src/ai_multi_agent_platform/adapters/hermes.py` contains platform-owned adapter code only; no Hermes source is vendored.
+- **Source origin/path:** no upstream source is copied. Compatibility is pinned to the documented API-server run/status/stop/health surface at the revision above.
+- **Modified locally:** no upstream source is vendored or modified in this repository.
+- **Required notices / attribution:** the external Hermes deployment retains upstream MIT licensing. Preserve the upstream MIT notice if substantial Hermes source is ever copied locally.
+- **Known compatibility constraints:** the baseline adapter depends only on the pinned HTTP JSON contract. Canonical Task/Run/Agent/Team/Plan/Step identity and lifecycle remain platform-owned; Hermes run/session IDs stay namespaced adapter metadata. Agent model/capability mappings are explicit and fail closed. Hermes approval state is not canonical approval state and is not auto-approved by the adapter.
+- **Security/deployment/resource constraints:** Hermes is an optional separately deployed service. API credentials are resolved from the configured environment/secret reference and are not stored in canonical metadata. Network exposure, model/runtime resource needs, tool execution and Hermes-side sandboxing remain deployment concerns and do not weaken platform authorization policy.
+- **Required for baseline:** no; core/reference startup, orchestration contracts, reference execution and ordinary CI must remain Hermes-independent.
+- **Recurring paid service required:** no; Hermes and compatible model endpoints may be self-hosted/local.
+- **Update/review method:** explicit pinned-revision update PR; re-check license, API-server `/v1/runs`/status/stop/approval/capabilities/health contracts and security/auth/profile behavior; update provenance/mapping docs; run adapter contracts, real pinned-Hermes compatibility coverage, the Hermes + non-Hermes-executor E2E path and full repository CI.
+- **Exit/replacement strategy:** remove the Hermes adapter/configuration and external service, then select another canonical `Orchestrator`/Agent mapper. No canonical Task/Run/Agent/Team/Plan/Event migration is required.
+- **ADR:** none required while Hermes remains a subordinate optional adapter; any proposal to move canonical lifecycle/domain/approval ownership into Hermes requires explicit architecture review.
+- **Provenance:** `upstream/hermes-agent.yaml`.
+- **Adoption/mapping review:** `docs/upstream/HERMES_AGENT_ADOPTION.md` and `docs/HERMES_ADAPTER.md`.
+
 ### ScoreSymphony AI-Agent-VPS Forge subsystem
 
 - **Purpose:** optional execution-only runtime reusing the mature Forge executor/CLI-adapter layer, plus source/reference material for workspace, idempotency, recovery and event behavior harvested for issue #9.
