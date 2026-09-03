@@ -24,6 +24,8 @@ from .service import AccountingService, aggregate_usage_records, trend_usage_rec
 class UsageRecordResourceService:
     """Read-only canonical usage records with explicit owner isolation."""
 
+    search_indexable = False
+
     def __init__(self, accounting: AccountingService) -> None:
         self._accounting = accounting
 
@@ -74,38 +76,26 @@ class UsageAggregateResourceService:
             for record in self._accounting.query(_owner_query(context))
             if _visible(record, context)
         )
-        pairs = sorted({(record.metric_type, record.unit) for record in records})
+        return _aggregate_resources(
+            records,
+            _owner_query(context).scope,
+            trend_window_seconds=self._trend_window_seconds,
+            trend_bucket_seconds=self._trend_bucket_seconds,
+        )
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate canonical aggregate projections across owners for Search rebuild."""
+
         resources: list[dict[str, JsonValue]] = []
-        owner_scope_key = _scope_key(context)
-        trend_end = utc_now()
-        trend_start = trend_end - timedelta(seconds=self._trend_window_seconds)
-        for metric_type, unit in pairs:
-            selected = _metric_records(records, metric_type, unit)
-            for aggregate_scope, scoped_records in _aggregate_groups(selected, context):
-                aggregate = aggregate_usage_records(
-                    scoped_records, metric_type=metric_type, unit=unit
+        for owner_scope, records in _owner_groups(tuple(self._accounting.query(UsageQuery()))):
+            resources.extend(
+                _aggregate_resources(
+                    records,
+                    owner_scope,
+                    trend_window_seconds=self._trend_window_seconds,
+                    trend_bucket_seconds=self._trend_bucket_seconds,
                 )
-                trend = trend_usage_records(
-                    scoped_records,
-                    metric_type=metric_type,
-                    unit=unit,
-                    start=trend_start,
-                    end=trend_end,
-                    bucket_seconds=self._trend_bucket_seconds,
-                )
-                resources.append(
-                    _aggregate_resource(
-                        metric_type,
-                        unit,
-                        aggregate,
-                        f"{owner_scope_key}|{_usage_scope_key(aggregate_scope)}",
-                        aggregate_scope,
-                        trend=trend,
-                        trend_start=trend_start,
-                        trend_end=trend_end,
-                        trend_bucket_seconds=self._trend_bucket_seconds,
-                    )
-                )
+            )
         return tuple(resources)
 
     async def get_resource(
@@ -136,6 +126,14 @@ class UsageBudgetResourceService:
             if _budget_visible(budget, context):
                 resources.append(_budget_resource(self._accounting, budget))
         return tuple(resources)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate canonical budget projections across owners for Search rebuild."""
+
+        return tuple(
+            _budget_resource(self._accounting, budget)
+            for budget in self._accounting.store.list_budgets()
+        )
 
     async def get_resource(
         self,
@@ -184,11 +182,69 @@ def _budget_visible(budget: UsageBudget, context: RequestContext) -> bool:
     return budget.owner_type == actor.owner_type and budget.owner_id == actor.owner_id
 
 
-def _scope_key(context: RequestContext) -> str:
-    actor = context.actor
-    if actor.owner_type is None or actor.owner_id is None:
+def _owner_scope_key(scope: UsageScope) -> str:
+    if scope.owner_type is None or scope.owner_id is None:
         return "unowned"
-    return f"{actor.owner_type}:{actor.owner_id}"
+    return f"{scope.owner_type}:{scope.owner_id}"
+
+
+def _owner_groups(
+    records: tuple[UsageRecord, ...],
+) -> tuple[tuple[UsageScope, tuple[UsageRecord, ...]], ...]:
+    grouped: dict[tuple[str | None, str | None], list[UsageRecord]] = {}
+    for record in records:
+        key = (record.scope.owner_type, record.scope.owner_id)
+        grouped.setdefault(key, []).append(record)
+    return tuple(
+        (
+            UsageScope(owner_type=owner_type, owner_id=owner_id),
+            tuple(grouped[(owner_type, owner_id)]),
+        )
+        for owner_type, owner_id in sorted(
+            grouped,
+            key=lambda value: (value[0] or "", value[1] or ""),
+        )
+    )
+
+
+def _aggregate_resources(
+    records: tuple[UsageRecord, ...],
+    owner_scope: UsageScope,
+    *,
+    trend_window_seconds: int,
+    trend_bucket_seconds: int,
+) -> tuple[dict[str, JsonValue], ...]:
+    pairs = sorted({(record.metric_type, record.unit) for record in records})
+    resources: list[dict[str, JsonValue]] = []
+    owner_scope_key = _owner_scope_key(owner_scope)
+    trend_end = utc_now()
+    trend_start = trend_end - timedelta(seconds=trend_window_seconds)
+    for metric_type, unit in pairs:
+        selected = _metric_records(records, metric_type, unit)
+        for aggregate_scope, scoped_records in _aggregate_groups(selected, owner_scope):
+            aggregate = aggregate_usage_records(scoped_records, metric_type=metric_type, unit=unit)
+            trend = trend_usage_records(
+                scoped_records,
+                metric_type=metric_type,
+                unit=unit,
+                start=trend_start,
+                end=trend_end,
+                bucket_seconds=trend_bucket_seconds,
+            )
+            resources.append(
+                _aggregate_resource(
+                    metric_type,
+                    unit,
+                    aggregate,
+                    f"{owner_scope_key}|{_usage_scope_key(aggregate_scope)}",
+                    aggregate_scope,
+                    trend=trend,
+                    trend_start=trend_start,
+                    trend_end=trend_end,
+                    trend_bucket_seconds=trend_bucket_seconds,
+                )
+            )
+    return tuple(resources)
 
 
 def _metric_records(
@@ -201,7 +257,7 @@ def _metric_records(
 
 def _aggregate_groups(
     records: tuple[UsageRecord, ...],
-    context: RequestContext,
+    owner_scope: UsageScope,
 ) -> tuple[tuple[UsageScope, tuple[UsageRecord, ...]], ...]:
     """Keep point-in-time gauges scoped to the resource they describe."""
 
@@ -209,7 +265,7 @@ def _aggregate_groups(
     if len(modes) > 1:
         raise ValueError("one metric/unit aggregate cannot mix aggregation modes")
     if not records or next(iter(modes), AggregationMode.ADDITIVE) is AggregationMode.ADDITIVE:
-        return ((_owner_query(context).scope, records),)
+        return ((owner_scope, records),)
 
     grouped: dict[tuple[tuple[str, str], ...], list[UsageRecord]] = {}
     scopes: dict[tuple[tuple[str, str], ...], UsageScope] = {}
@@ -233,6 +289,7 @@ def _record_resource(record: UsageRecord) -> dict[str, JsonValue]:
         scope[key] = value
     return {
         "id": record.id,
+        "type": "usage-record",
         "metric_type": record.metric_type,
         "quantity": record.quantity,
         "unit": record.unit,
@@ -288,6 +345,7 @@ def _aggregate_resource(
         )
     return {
         "id": f"usage_aggregate_{digest}",
+        "type": "usage-aggregate",
         "metric_type": metric_type,
         "unit": unit,
         "total": aggregate.total,
@@ -307,6 +365,7 @@ def _budget_resource(accounting: AccountingService, budget: UsageBudget) -> dict
     state = accounting.budget_state(budget.id)
     return {
         "id": budget.id,
+        "type": "usage-budget",
         "metric_type": budget.metric_type,
         "unit": budget.unit,
         "scope_type": budget.scope_type,
