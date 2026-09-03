@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Mapping
 
 import pytest
+
 from ai_multi_agent_platform.adapters.forge import ForgeClientRequest, ForgeExecutionStatus
 from ai_multi_agent_platform.adapters.forge_http import (
     ForgeHttpClient,
