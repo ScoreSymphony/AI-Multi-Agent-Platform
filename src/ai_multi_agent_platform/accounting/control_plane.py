@@ -171,6 +171,7 @@ def _record_resource(record: UsageRecord) -> dict[str, JsonValue]:
         "quantity": record.quantity,
         "unit": record.unit,
         "quality": record.quality.value,
+        "aggregation_mode": record.aggregation_mode.value,
         "source": record.source,
         "provider": record.provider,
         "timestamp": record.timestamp.isoformat(),
