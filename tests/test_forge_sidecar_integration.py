@@ -8,7 +8,10 @@ from uuid import uuid4
 import pytest
 
 from ai_multi_agent_platform.adapters.forge import ForgeExecutor
-from ai_multi_agent_platform.adapters.forge_http import ForgeHttpClient, ForgeHttpClientConfig
+from ai_multi_agent_platform.adapters.forge_http import (
+    ForgeHttpClient,
+    ForgeHttpClientConfig,
+)
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.execution import CancellationToken, ExecutionRequest
 
