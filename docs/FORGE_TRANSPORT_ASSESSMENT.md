@@ -1,16 +1,16 @@
 # Forge transport assessment
 
-Status: **Current legacy public HTTP API rejected as the first concrete `ForgeClient.execute` transport.**
+Status: **Execution-only transport integrated; legacy Forge task-launch API remains rejected.**
 
-This assessment follows the Phase 1–3 reuse audit and the platform-owned `ForgeClient` / `ForgeExecutor` boundary added for issue #9.
+This document records the final transport decision for issue #9. The original assessment correctly rejected the legacy Forge task-launch HTTP path because it would import Forge Task/Project lifecycle ownership. That decision still stands. The exit criterion from the original assessment has since been satisfied by a separate execution-only runtime boundary.
 
-## Source reviewed
+## Historical source assessment
 
 Repository: `ScoreSymphony/AI-Agent-VPS`
 
-Audited revision: `5a9f317e3bab056a4cebe214b03912a9b7ad3824`
+Original audited revision: `5a9f317e3bab056a4cebe214b03912a9b7ad3824`
 
-Relevant legacy routes and implementation:
+Relevant legacy routes reviewed included:
 
 - `GET /healthz`
 - `GET /api/v1/executions/{id}`
@@ -18,80 +18,126 @@ Relevant legacy routes and implementation:
 - `GET /api/v1/executions/{id}/logs`
 - `GET /api/v1/tasks/{id}/executions`
 - `POST /api/v1/tasks/{id}/launch`
-- task claim/start routes and Forge task/project/workspace services
 
-Primary inspected files:
+The legacy manual launch path calls Forge task services before starting an execution. Using it as the platform's concrete `ForgeClient.execute` transport would therefore require mirrored Forge Tasks and surrounding project/workflow assumptions. That would create a shadow lifecycle and violate the platform-owned Task/Run model.
 
-- `core/forge/crates/api/src/lib.rs`
-- `core/forge/crates/api/src/routes/executions.rs`
-- `core/forge/crates/api/src/routes/tasks/execution.rs`
+## Legacy API decision — unchanged
 
-## Finding
+**The legacy `POST /api/v1/tasks/{id}/launch` path remains rejected as the platform execution transport.**
 
-The legacy API has useful **observation and cancellation** endpoints for an execution that already exists, but it does not expose a clean executor-only launch endpoint corresponding to the new platform's canonical `ExecutionRequest`.
+This is an architecture compatibility decision, not a defect claim about Forge's original application. The platform still requires:
 
-The public manual launch path is:
+- one canonical Task/Run lifecycle owned by the platform kernel;
+- canonical IDs and contracts owned by the platform;
+- no Forge Task/Project source of truth;
+- adapter-owned translation;
+- Forge optionality and clean removal without canonical-state migration.
 
-`POST /api/v1/tasks/{id}/launch`
+## Exit criterion — satisfied
 
-and its implementation calls Forge's own `task_service.launch_execution(id, ...)` before `task_service.start_execution(execution_id)`.
+The original assessment said the decision could be revisited once an executor-only start boundary existed that did not require Forge Task lifecycle ownership. That boundary now exists.
 
-Consequently, using the existing API as `ForgeClient.execute` would require the new platform to first create or maintain a Forge Task and its surrounding Forge project/agent/workspace assumptions. That would turn backend-private execution plumbing into a shadow task lifecycle.
+`ScoreSymphony/AI-Agent-VPS` PR #71 introduced `core/forge/crates/executor-sidecar` and merged it at:
 
-## Decision
+`00b821bc94767865457814bf282982ca242a2e10`
 
-**Do not implement the current task-launch HTTP API as the concrete Forge executor transport.**
+The sidecar reuses the mature Forge execution implementation through:
 
-This is an architecture decision, not a claim that the API is defective for its original application. It is unsuitable for this integration because issue #9 requires:
+- `crates/executors`
+- `crates/cli-adapters`
+- `crates/git`
+- `crates/api-types`
 
-- one canonical Task/Run lifecycle owned by the new platform kernel;
-- Forge-private task/execution types not becoming canonical;
-- no second task/run source of truth;
-- adapter-owned translation rather than architecture inheritance;
-- removing/disabling Forge without migrating canonical task state.
+It does **not** require the Forge DB, TaskService, Project lifecycle, Workflow engine or domain-event service.
 
-Creating mirrored Forge Tasks merely to reach `launch_execution` would violate or weaken those requirements.
+## Integrated concrete transport
 
-## What can still be reused from the existing HTTP API
+The final transport chain is:
 
-The following route behavior is useful for a future transport once a backend execution has been created through a clean boundary:
+```text
+PlatformKernel
+    -> ExecutorLifecycleBackend
+        -> ForgeExecutor
+            -> ForgeClient
+                -> ForgeHttpClient
+                    -> forge-executor-sidecar/v1
+```
 
-- `/healthz` for basic process reachability;
-- `GET /api/v1/executions/{id}` for backend-private execution observation;
-- `POST /api/v1/executions/{id}/cancel` for cancellation;
-- `GET /api/v1/executions/{id}/logs` for bounded execution evidence/log retrieval.
+`src/ai_multi_agent_platform/adapters/forge_http.py` is a platform-owned, standard-library HTTP client implementing the existing platform-owned `ForgeClient` protocol.
 
-These routes remain backend-private. Their response types must be translated into platform `ExecutionResult`, canonical error categories and namespaced adapter metadata.
+The sidecar protocol exposes only the execution-level operations required by the adapter:
 
-## Required shape of a future concrete transport
+- `GET /healthz`
+- `POST /v1/executions`
+- `GET /v1/executions/{execution_id}`
+- `GET /v1/requests/{request_ref}`
+- `POST /v1/executions/{execution_id}/cancel`
+- `GET /v1/executions/{execution_id}/logs`
 
-A concrete Forge transport should expose or wrap an executor-level operation that can start work from platform execution data **without creating a canonical Forge Task**.
+The protocol compatibility target is explicitly `forge-executor-sidecar/v1`.
 
-The boundary needs, at minimum:
+## Identity and lifecycle ownership
 
-1. an external request/idempotency reference derived from the canonical Run;
-2. action/instruction and filtered execution inputs;
-3. an explicitly selected workspace or backend workspace reference;
-4. timeout/cancellation information;
-5. a returned backend execution/job reference;
-6. backend status/result/error/evidence retrieval;
-7. cancellation by the backend execution/job reference;
-8. health/capability discovery;
-9. no authority to transition the platform Task/Run directly.
+The transport preserves the canonical platform identities across the boundary:
 
-Possible implementation forms include a dedicated executor-job HTTP endpoint, a small execution protocol around Forge's executor subsystem, or another adapter-local transport. The transport choice is intentionally not made until such a boundary is verified or introduced.
+- canonical `task_id` remains the Task identity;
+- canonical `run_id` remains the Run identity;
+- canonical `step_id` remains independent of task identity;
+- canonical `correlation_id` remains platform-owned;
+- `request_ref` is derived from the canonical Run ID and is used only as a backend idempotency/recovery key;
+- the sidecar-generated Forge execution ID remains backend-private and is stored under namespaced adapter metadata.
 
-## Relationship to current implementation
+`ForgeHttpClient` verifies the returned request/task/run/step identities before accepting a terminal result. A protocol or identity mismatch is treated as an adapter/runtime error rather than silently translated.
 
-`src/ai_multi_agent_platform/adapters/forge.py` therefore keeps `ForgeClient` as a small platform-owned protocol. The fake implementation used by contract and regression tests is deliberate: it lets the canonical translation, identity, workspace, error, cancellation and recovery semantics be completed without coupling the platform to an unsuitable legacy launch API.
+The sidecar never transitions canonical Task/Run state. It reports backend execution state; the platform kernel remains the lifecycle authority.
 
-This also keeps the current reuse mode truthful: adapter integration plus reference-only behavioral reuse, with no copied Forge source and no hidden requirement to run the legacy Forge application.
+## Recovery and idempotency boundary
 
-## Exit criterion for this transport decision
+The transport deliberately splits recovery responsibilities:
 
-Revisit this decision when one of the following is true:
+- the **platform kernel** owns canonical historical event replay, lifecycle reconstruction and Run reconciliation;
+- the **sidecar** owns backend-private dispatch idempotency and durable mapping from `request_ref` to backend execution identity;
+- a restarted sidecar does not blindly redispatch a previously running request; persisted in-flight jobs become interrupted/reconciliation-required;
+- duplicate submission of the same request identity resolves to the existing backend execution;
+- reuse of the same idempotency key with conflicting canonical identity is rejected;
+- a late backend completion cannot overwrite an already terminal cancellation or timeout.
 
-- `AI-Agent-VPS` exposes a stable executor-only start boundary that does not require Forge Task lifecycle ownership; or
-- issue #9 deliberately introduces a minimal execution-only boundary around the reusable Forge executor subsystem and validates it with integration tests.
+This preserves proven Forge recovery/idempotency behavior without introducing a second canonical event or lifecycle store.
 
-Until then, the absence of a concrete HTTP `ForgeClient` is intentional architecture protection rather than unfinished wiring by accident.
+## Security and deployment boundary
+
+The integrated sidecar is deliberately conservative:
+
+- its current entrypoint binds to loopback only;
+- executor families are controlled by an explicit allowlist;
+- the deterministic `null` executor is the default validated integration target;
+- both platform adapter and sidecar independently validate workspace containment;
+- no Forge database or project/task services are needed;
+- enabling Shell, Codex, Claude Code, Gemini, Cursor, OpenCode, Smith or other process-backed families requires explicit policy/security validation rather than implicit activation.
+
+Forge remains optional and is not required for platform core/reference execution.
+
+## Validation evidence
+
+### Upstream runtime
+
+`AI-Agent-VPS` PR #71 compiled and tested the execution-only sidecar. Its regression suite covers workspace escape, executor allowlisting, idempotent submission, persisted idempotency across restart, conflicting request identity, interrupted in-flight recovery and cancellation terminality.
+
+### Platform client
+
+Platform PR #148 added `ForgeHttpClient`, protocol/identity unit tests and a real cross-repository integration job.
+
+The integration job checks out the exact pinned runtime revision `00b821bc94767865457814bf282982ca242a2e10`, builds the Rust sidecar, starts it on loopback with only `null` enabled, verifies health, then runs real execution and cancellation through:
+
+`ForgeExecutor -> ForgeHttpClient -> Rust sidecar -> Forge null adapter`
+
+CI run #628 passed the normal Python, frontend and LiteLLM gates and the real Forge sidecar integration job. PR #148 was then merged as `c9ebf166ebe91ba17c47fdc69b5383fc9711abc2`.
+
+## Final decision
+
+The two conclusions are intentionally simultaneous:
+
+1. **The old Forge Task-based public launch API remains unsuitable and remains rejected.**
+2. **A separate execution-only Forge transport is now integrated and validated.**
+
+This is the transport outcome intended by issue #9: reuse the mature Forge executor engineering without adopting Forge's original Task/Project application architecture.
