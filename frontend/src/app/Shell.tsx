@@ -23,6 +23,8 @@ import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagem
 import { TerminalPage } from "../pages/TerminalPage";
 import { UsagePage } from "../pages/UsagePage";
 
+type ManifestState = "loading" | "ready" | "unavailable";
+
 export function Shell() {
   const { path } = useRouter();
   const client = useMemo(
@@ -30,10 +32,20 @@ export function Shell() {
     [],
   );
   const [manifest, setManifest] = useState<APImanifest | null>(null);
+  const [manifestState, setManifestState] = useState<ManifestState>("loading");
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
-    void client.manifest().then(setManifest).catch(() => setManifest(null));
+    void client
+      .manifest()
+      .then((loadedManifest) => {
+        setManifest(loadedManifest);
+        setManifestState("ready");
+      })
+      .catch(() => {
+        setManifest(null);
+        setManifestState("unavailable");
+      });
   }, [client]);
   useEffect(() => setMenuOpen(false), [path]);
 
@@ -70,6 +82,7 @@ export function Shell() {
   else content = <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
 
   const groups = Array.from(new Set(navigation.map((item) => item.group)));
+  const apiReady = manifestState === "ready" && manifest !== null;
   return (
     <PermissionHintsProvider>
       <a className="skip-link" href="#main">Skip to content</a>
@@ -112,8 +125,8 @@ export function Shell() {
               Menu
             </button>
             <div className="api-indicator" role="status" aria-live="polite">
-              <span className={manifest ? "dot dot-ready" : "dot"} />
-              {manifest ? `/api/${manifest.api_version}` : "API unavailable"}
+              <span className={apiReady ? "dot dot-ready" : "dot"} />
+              {apiStatusLabel(manifestState, manifest)}
             </div>
           </header>
           <main id="main" tabIndex={-1}>{content}</main>
@@ -121,6 +134,12 @@ export function Shell() {
       </div>
     </PermissionHintsProvider>
   );
+}
+
+export function apiStatusLabel(state: ManifestState, manifest: APImanifest | null): string {
+  if (state === "ready" && manifest !== null) return `/api/${manifest.api_version}`;
+  if (state === "unavailable") return "API unavailable";
+  return "Checking API";
 }
 
 function referenceRoute(path: string): { collection: ReferenceCollection; resourceId: string } | null {

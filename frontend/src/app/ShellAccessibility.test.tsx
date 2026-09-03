@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { APImanifest } from "../api/types";
 import { LiveConnectionStatus } from "../pages/TaskDetailPage";
-import { Shell } from "./Shell";
+import { Shell, apiStatusLabel } from "./Shell";
 import { RouterProvider } from "./router";
 
 afterEach(() => {
@@ -40,11 +41,21 @@ describe("#17 shell accessibility semantics", () => {
   it("announces Control Plane and Task live status changes politely", () => {
     const shell = renderShell("/chat");
     expect(shell).toContain('class="api-indicator" role="status" aria-live="polite"');
+    expect(shell).toContain("Checking API");
+    expect(shell).not.toContain("API unavailable");
 
     const live = renderToStaticMarkup(<LiveConnectionStatus state="reconnecting" />);
     expect(live).toContain('role="status"');
     expect(live).toContain('aria-live="polite"');
     expect(live).toContain('aria-label="Live updates: reconnecting"');
     expect(live).toContain(">reconnecting</span>");
+  });
+
+  it("distinguishes API loading, ready and unavailable status text", () => {
+    const manifest = { api_version: "v1" } as APImanifest;
+
+    expect(apiStatusLabel("loading", null)).toBe("Checking API");
+    expect(apiStatusLabel("ready", manifest)).toBe("/api/v1");
+    expect(apiStatusLabel("unavailable", null)).toBe("API unavailable");
   });
 });
