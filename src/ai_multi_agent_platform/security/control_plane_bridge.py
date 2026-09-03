@@ -80,6 +80,9 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
     if not separator:
         resource_name, verb = "generic", action
 
+    if resource_name == "credential":
+        return AuthorizationAction.MANAGE_CREDENTIALS, ResourceType.SECRET_REFERENCE
+
     action_map = {
         "list": AuthorizationAction.VIEW,
         "read": AuthorizationAction.READ,
