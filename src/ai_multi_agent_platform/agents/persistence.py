@@ -117,9 +117,7 @@ class JsonAgentRepository(InMemoryAgentRepository):
                 f"{version!r}; expected {AGENT_REPOSITORY_SCHEMA_VERSION!r}"
             )
 
-        definitions = tuple(
-            _agent_definition(item) for item in _required_array(document, "agents")
-        )
+        definitions = tuple(_agent_definition(item) for item in _required_array(document, "agents"))
         revisions = tuple(
             _agent_revision(item) for item in _required_array(document, "agent_revisions")
         )
@@ -193,7 +191,9 @@ class JsonAgentRepository(InMemoryAgentRepository):
             InMemoryAgentRepository.update_agent(self, replayed, revision)
 
         if self.get_agent(definition.agent_id) != definition:
-            raise ValueError("restored Agent definition differs from persisted canonical definition")
+            raise ValueError(
+                "restored Agent definition differs from persisted canonical definition"
+            )
 
     def _restore_team(
         self,
@@ -479,13 +479,9 @@ def _agent_run(value: JsonValue) -> AgentRunRecord:
         ),
         error=_optional_string(data, "error"),
         telemetry=_json_object(data.get("telemetry"), "telemetry"),
-        verification_context=_json_object(
-            data.get("verification_context"), "verification_context"
-        ),
+        verification_context=_json_object(data.get("verification_context"), "verification_context"),
         started_at=_datetime(data.get("started_at"), "started_at"),
-        finished_at=(
-            None if raw_finished is None else _datetime(raw_finished, "finished_at")
-        ),
+        finished_at=(None if raw_finished is None else _datetime(raw_finished, "finished_at")),
     )
 
 
