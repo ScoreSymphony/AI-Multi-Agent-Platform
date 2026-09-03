@@ -122,9 +122,9 @@ def test_reference_runtime_pins_exact_revision_even_after_agent_update() -> None
     assert record.agent == AgentRevisionRef(agent_id=first.agent_id, revision=1)
     assert record.orchestrator_adapter_id == "reference-orchestrator"
     assert "hermes" not in (record.orchestrator_runtime_ref or "").lower()
-    assert repository.get_agent_revision(record.agent.agent_id, record.agent.revision).profile.name == (
-        "Pinned v1"
-    )
+    assert repository.get_agent_revision(
+        record.agent.agent_id, record.agent.revision
+    ).profile.name == ("Pinned v1")
     assert service.get_agent_revision(first.agent_id).profile.name == "Current v2"
 
 
