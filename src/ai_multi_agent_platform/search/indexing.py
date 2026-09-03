@@ -45,7 +45,7 @@ def document_from_resource(
         resource_id if resource_type == "workspace" else _optional_string(resource, "workspace_id")
     )
     owner_type, owner_id = _owner(resource)
-    status = _optional_string(resource, "status")
+    status = _status(resource)
     updated_at = _optional_string(resource, "updated_at")
     version = _version(resource)
     canonical_collection = collection or _COLLECTIONS.get(resource_type)
@@ -56,23 +56,29 @@ def document_from_resource(
     )
     tags = _string_sequence(resource, "tags") or _string_sequence(resource, "labels")
 
-    keywords = tuple(
-        value
-        for value in (
-            resource_type,
-            resource_id,
-            project_id,
-            workspace_id,
-            owner_type,
-            owner_id,
-            status,
-            *_profile_keywords(resource),
+    keywords = _deduplicate_strings(
+        tuple(
+            value
+            for value in (
+                resource_type,
+                resource_id,
+                project_id,
+                workspace_id,
+                owner_type,
+                owner_id,
+                status,
+                *_resource_keywords(resource),
+                *_profile_keywords(resource),
+            )
+            if value is not None
         )
-        if value is not None
     )
     provenance: dict[str, JsonValue] = {"indexed_from": "canonical-control-plane"}
     if collection is not None:
         provenance["collection"] = collection
+    resource_provider_id = _optional_string(resource, "provider_id")
+    if resource_provider_id is not None:
+        provenance["resource_provider_id"] = resource_provider_id
     return SearchDocument(
         resource_type=resource_type,
         resource_id=resource_id,
@@ -149,6 +155,17 @@ def _owner(resource: Mapping[str, JsonValue]) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _status(resource: Mapping[str, JsonValue]) -> str | None:
+    for field in ("status", "effective_health", "health"):
+        value = _optional_string(resource, field)
+        if value is not None:
+            return value
+    available = resource.get("available")
+    if isinstance(available, bool):
+        return "available" if available else "unavailable"
+    return None
+
+
 def _version(resource: Mapping[str, JsonValue]) -> str | None:
     value = resource.get("revision")
     if isinstance(value, int | str):
@@ -173,12 +190,35 @@ def _profile_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
     profile = _revision_profile(resource)
     if profile is None:
         return ()
-    values = tuple(
+    return tuple(
         value
         for field in ("name", "role", "description")
         if (value := _optional_string(profile, field)) is not None
     )
-    return values
+
+
+def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
+    values: list[str] = []
+    for field in (
+        "provider_id",
+        "provider_type",
+        "location",
+        "health",
+        "effective_health",
+    ):
+        value = _optional_string(resource, field)
+        if value is not None:
+            values.append(value)
+    for field in ("aliases", "supported_operations", "modalities", "reasoning"):
+        values.extend(_string_sequence(resource, field))
+    for field, positive, negative in (
+        ("enabled", "enabled", "disabled"),
+        ("available", "available", "unavailable"),
+    ):
+        value = resource.get(field)
+        if isinstance(value, bool):
+            values.append(positive if value else negative)
+    return _deduplicate_strings(tuple(values))
 
 
 def _string_sequence(resource: Mapping[str, JsonValue], field: str) -> tuple[str, ...]:
@@ -186,6 +226,10 @@ def _string_sequence(resource: Mapping[str, JsonValue], field: str) -> tuple[str
     if not isinstance(value, Sequence) or isinstance(value, str | bytes | bytearray):
         return ()
     return tuple(item.strip() for item in value if isinstance(item, str) and item.strip())
+
+
+def _deduplicate_strings(values: tuple[str, ...]) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(values))
 
 
 def _required_string(resource: Mapping[str, JsonValue], field: str) -> str:
