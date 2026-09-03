@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import cast
 
 from ai_multi_agent_platform.contracts.authorization import (
     AuthorizationOutcome,
@@ -351,6 +352,14 @@ class ConnectorService:
                 ErrorCode.INVALID_REQUEST,
                 "connector event subscription requires non-blank event types",
             )
+        if redact_sensitive(configuration) != configuration:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                (
+                    "connector event subscription configuration must not contain embedded "
+                    "credentials; use Connection secret references"
+                ),
+            )
         connection, provider = await self._usable_connection(
             connection_id,
             actor=actor,
@@ -370,7 +379,7 @@ class ConnectorService:
                 ErrorCode.UNSUPPORTED_CAPABILITY,
                 "connector subscription requests undeclared event types",
                 provider_id=provider.descriptor.provider_id,
-                details={"event_types": unsupported},
+                details={"event_types": cast(JsonValue, unsupported)},
             )
         return await provider.subscribe_events(
             connection,
