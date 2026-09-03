@@ -1,0 +1,37 @@
+# Reference systemd unit for the #39 single-server profile.
+# systemd is a deployment implementation choice, not a canonical platform dependency.
+
+[Unit]
+Description=AI Multi-Agent Platform Control Plane
+After=network.target
+
+[Service]
+Type=simple
+User=ai-map
+Group=ai-map
+WorkingDirectory=/opt/ai-multi-agent-platform
+EnvironmentFile=/etc/ai-multi-agent-platform/single-server.env
+ExecStart=/opt/ai-multi-agent-platform/.venv/bin/platform-server serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+
+# Least-privilege baseline from docs/SECURE_DEPLOYMENT.md.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/ai-multi-agent-platform
+
+# Resource limits are deployment policy, not canonical platform capacity declarations.
+# Tune these after measuring the enabled workload on the target host.
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import cast
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
-from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
+from jsonschema.exceptions import SchemaError, ValidationError  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -86,13 +86,7 @@ class PluginRegistry:
         record = self._record(plugin_id)
         if record.state is PluginState.ENABLED:
             raise ContractError(ErrorCode.CONFLICT, "disable plugin before changing configuration")
-        try:
-            Draft202012Validator(record.manifest.configuration_schema).validate(configuration)
-        except ValidationError as exc:
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                f"invalid configuration for plugin {plugin_id!r}: {exc.message}",
-            ) from exc
+        self._validate_configuration(record.manifest, configuration)
         record.configuration = deepcopy(configuration)
         record.configured = True
         record.state = PluginState.CONFIGURED
@@ -108,8 +102,28 @@ class PluginRegistry:
         record = self._record(plugin_id)
         if record.state is PluginState.ENABLED:
             return self.get(plugin_id)
+        if record.runtime is not None or record.extensions:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"plugin {plugin_id!r} has residual runtime state; disable it before re-enabling",
+            )
         self._validate_compatibility(record.manifest)
+        self._validate_configuration(record.manifest, record.configuration)
         self._validate_dependencies(record.manifest)
+
+        unexpected_permissions = granted_permissions - record.manifest.requested_permissions
+        if unexpected_permissions:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                f"plugin {plugin_id!r} was granted undeclared permissions",
+                details={
+                    "unexpected_permissions": cast(
+                        JsonValue,
+                        sorted(permission.value for permission in unexpected_permissions),
+                    )
+                },
+            )
+
         missing_permissions = record.manifest.requested_permissions - granted_permissions
         if missing_permissions:
             raise ContractError(
@@ -145,21 +159,31 @@ class PluginRegistry:
                 binder = self._binders.get(extension.spec.extension_type)
                 if binder is not None:
                     await binder.register(extension)
-                registered.append(extension)
+                    registered.append(extension)
+            report = await runtime.health()
         except Exception:
+            rollback_failed = False
             for extension in reversed(registered):
                 binder = self._binders.get(extension.spec.extension_type)
                 if binder is not None:
                     try:
                         await binder.unregister(extension)
                     except Exception:
-                        pass
+                        rollback_failed = True
             try:
                 await runtime.shutdown()
             except Exception:
-                pass
+                rollback_failed = True
+            record.runtime = None
+            record.extensions = ()
+            record.granted_permissions = frozenset()
             record.state = PluginState.FAILED
             record.health = PluginHealth.UNAVAILABLE
+            record.health_detail = (
+                "plugin enable failed and rollback was incomplete"
+                if rollback_failed
+                else "plugin enable failed and was rolled back"
+            )
             raise
 
         for extension in extensions:
@@ -168,24 +192,51 @@ class PluginRegistry:
         record.extensions = extensions
         record.granted_permissions = granted_permissions
         record.state = PluginState.ENABLED
-        report = await runtime.health()
         record.health = report.health
         record.health_detail = report.detail
         return self.get(plugin_id)
 
     async def disable(self, plugin_id: str) -> PluginSnapshot:
         record = self._record(plugin_id)
-        if record.state is not PluginState.ENABLED:
+        if record.runtime is None and not record.extensions:
             record.state = PluginState.DISABLED
+            record.health = PluginHealth.UNKNOWN
+            record.health_detail = None
             return self.get(plugin_id)
+
         runtime = record.runtime
-        for extension in reversed(record.extensions):
-            binder = self._binders.get(extension.spec.extension_type)
-            if binder is not None:
-                await binder.unregister(extension)
+        unregistered: list[ExtensionRegistration] = []
+        shutdown_started = False
+        try:
+            for extension in reversed(record.extensions):
+                binder = self._binders.get(extension.spec.extension_type)
+                if binder is not None:
+                    await binder.unregister(extension)
+                    unregistered.append(extension)
+            if runtime is not None:
+                shutdown_started = True
+                await runtime.shutdown()
+        except Exception:
+            rollback_failed = False
+            for extension in reversed(unregistered):
+                binder = self._binders.get(extension.spec.extension_type)
+                if binder is not None:
+                    try:
+                        await binder.register(extension)
+                    except Exception:
+                        rollback_failed = True
+            if shutdown_started or rollback_failed:
+                record.state = PluginState.FAILED
+                record.health = PluginHealth.UNAVAILABLE
+                record.health_detail = (
+                    "plugin disable failed after shutdown began"
+                    if shutdown_started and not rollback_failed
+                    else "plugin disable failed and rollback was incomplete"
+                )
+            raise
+
+        for extension in record.extensions:
             self._extension_owners.pop(extension.spec.extension_id, None)
-        if runtime is not None:
-            await runtime.shutdown()
         record.runtime = None
         record.extensions = ()
         record.state = PluginState.DISABLED
@@ -197,7 +248,12 @@ class PluginRegistry:
         record = self._record(plugin_id)
         if record.runtime is None or record.state is not PluginState.ENABLED:
             return self.get(plugin_id)
-        report = await record.runtime.health()
+        try:
+            report = await record.runtime.health()
+        except Exception:
+            record.health = PluginHealth.UNAVAILABLE
+            record.health_detail = "plugin health check failed"
+            raise
         record.health = report.health
         record.health_detail = report.detail
         return self.get(plugin_id)
@@ -207,6 +263,37 @@ class PluginRegistry:
         if manifest.plugin_id != record.manifest.plugin_id:
             raise ContractError(ErrorCode.CONFLICT, "plugin update cannot change plugin_id")
         self._validate_compatibility(manifest)
+
+        if (
+            manifest.configuration_schema != record.manifest.configuration_schema
+            and manifest.configuration_version == record.manifest.configuration_version
+        ):
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                (
+                    f"plugin {plugin_id!r} changes configuration schema without changing "
+                    "configuration_version"
+                ),
+            )
+
+        try:
+            self._validate_configuration(manifest, record.configuration)
+        except ContractError as exc:
+            if manifest.configuration_version != record.manifest.configuration_version:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    (
+                        f"plugin {plugin_id!r} configuration version "
+                        f"{manifest.configuration_version!r} requires reconfiguration before update"
+                    ),
+                    details={
+                        "current_configuration_version": record.manifest.configuration_version,
+                        "candidate_configuration_version": manifest.configuration_version,
+                        "requires_reconfiguration": True,
+                    },
+                ) from exc
+            raise
+
         if manifest.state_version != record.manifest.state_version:
             self._validate_state_migration_path(
                 manifest,
@@ -216,7 +303,7 @@ class PluginRegistry:
 
     def remove(self, plugin_id: str) -> None:
         record = self._record(plugin_id)
-        if record.state is PluginState.ENABLED:
+        if record.runtime is not None or record.extensions or record.state is PluginState.ENABLED:
             raise ContractError(ErrorCode.CONFLICT, "disable plugin before removal")
         if self._reference_guard is not None and self._reference_guard(plugin_id):
             raise ContractError(
@@ -279,6 +366,13 @@ class PluginRegistry:
                 ErrorCode.INVALID_CONFIGURATION,
                 f"unsupported plugin manifest version {manifest.manifest_version!r}",
             )
+        try:
+            Draft202012Validator.check_schema(manifest.configuration_schema)
+        except SchemaError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"plugin {manifest.plugin_id!r} contains an invalid configuration schema",
+            ) from exc
         if not manifest.supported_platform.contains(self._platform_version):
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
@@ -297,6 +391,19 @@ class PluginRegistry:
                         f"{extension.interface_version!r}"
                     ),
                 )
+
+    @staticmethod
+    def _validate_configuration(
+        manifest: PluginManifest,
+        configuration: dict[str, JsonValue],
+    ) -> None:
+        try:
+            Draft202012Validator(manifest.configuration_schema).validate(configuration)
+        except ValidationError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"invalid configuration for plugin {manifest.plugin_id!r}: {exc.message}",
+            ) from exc
 
     def _validate_dependencies(self, manifest: PluginManifest) -> None:
         for dependency in manifest.dependencies:

@@ -1,0 +1,27 @@
+# Reference Caddy configuration for the #39 single-server profile.
+# Replace platform.example.com with an operator-controlled hostname.
+# Caddy is optional deployment tooling; the platform does not depend on it.
+
+platform.example.com {
+    encode zstd gzip
+
+    # Keep the canonical Control Plane on loopback. Do not use handle_path here:
+    # the /api prefix is part of the canonical northbound route and must be preserved.
+    handle /api/* {
+        reverse_proxy 127.0.0.1:8000
+    }
+
+    # The Vite frontend is a static, replaceable northbound client. Unknown browser routes
+    # fall back to index.html so client-side routing remains functional.
+    handle {
+        root * /srv/ai-multi-agent-platform/frontend
+        try_files {path} /index.html
+        file_server
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        -Server
+    }
+}

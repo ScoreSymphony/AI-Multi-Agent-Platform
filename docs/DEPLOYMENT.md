@@ -28,7 +28,7 @@ Authenticated Control Plane
 ```
 
 Hermes, Forge, LiteLLM, MCP, remote Workers, Kubernetes, cloud services and paid external
-AI/API services are not required for this profile. Later profiles add replaceable services
+AI/API services are not required for this profile. Advanced profiles add replaceable services
 without changing canonical Task/Run contracts.
 
 ## Prerequisites
@@ -151,13 +151,19 @@ Public liveness/readiness surfaces remain available through the canonical Contro
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
-curl http://127.0.0.1:8000/api/v1/ready
+curl http://127.0.0.1:8000/api/v1/readiness
+platform --endpoint http://127.0.0.1:8000 doctor
 ```
+
+`platform doctor` is the canonical operator diagnostic path from #38. It consumes only the
+Control Plane manifest, health and readiness endpoints; deployment profiles must not add a
+second backend-probing diagnostic authority.
 
 Required persistence/configuration failures block composition/startup and are reported as
 configuration failures. Optional external adapters are not required by this profile and
-therefore cannot make the baseline unready merely by being absent. Later profiles that enable
-optional adapters may report their degradation through the progressive #16 health model.
+therefore cannot make the baseline unready merely by being absent. Advanced profiles that
+enable optional adapters may report their degradation through the progressive #16 health
+model.
 
 ## Persistent layout
 
@@ -179,8 +185,8 @@ The default data root is `.data/single-node`. Its current implementation layout 
 ```
 
 These paths are implementation configuration, not canonical resource IDs. Moving the data
-through the future #40 backup/restore flow must not require preserving a hostname, machine ID
-or filesystem path as canonical identity.
+through #40 backup/restore must not require preserving a hostname, machine ID or filesystem
+path as canonical identity.
 
 Authentication SQLite stores password/token verifiers and safe metadata only. Raw passwords,
 browser-session secrets and bearer-token secrets are not persisted.
@@ -203,6 +209,12 @@ The Stage-1 regression suite verifies restart persistence for:
 - local administrator authorization policy;
 - the retry-safe canonical deployment smoke.
 
+The `single-node-install-smoke` CI job additionally installs only `.[server]` into a fresh
+virtual environment, starts the real `platform-server` HTTP process, verifies canonical
+readiness, performs a graceful foreground shutdown, restarts against the same data root and
+verifies the retry-safe canonical smoke again. This is the installation/process-lifecycle
+proof required by #39.
+
 The ReferenceExecutor itself remains replaceable and does not become canonical lifecycle
 storage.
 
@@ -216,7 +228,7 @@ platform persistence boundaries rather than being owned by the web-server proces
 
 #40 owns the tested backup/restore and hardware-relocation contract, while #41 owns platform
 and schema upgrade/migration rules. Until those issues are complete, do not claim a live
-snapshot or cross-version migration guarantee from this Stage-1 profile.
+snapshot or cross-version migration guarantee from this profile.
 
 For a conservative same-version operator copy today:
 
@@ -225,11 +237,11 @@ For a conservative same-version operator copy today:
 3. copy the complete `AI_MAP_DATA_DIR` as one unit, including every SQLite database and the
    `files/`, `workspaces/` and `executor/` directories;
 4. retain that copy before changing package/version state;
-5. restart with the original data root and verify `/api/v1/health`, `/api/v1/ready` and
+5. restart with the original data root and verify `/api/v1/health`, `/api/v1/readiness` and
    `platform-server smoke`.
 
-This is an operational hook, not a substitute for the future #40 relocation/restore tests or
-#41 migration guarantees.
+This is an operational hook, not a substitute for #40 relocation/restore tests or #41
+migration guarantees.
 
 ## Uninstall and data retention
 
@@ -251,9 +263,111 @@ Stage 1 needs only the client/frontend-to-Control-Plane flow. SQLite and local f
 storage have no network listener. The reference orchestrator and executor are in-process and
 expose no private admin port.
 
-Later profiles may add explicit internal flows for remote Workers, model endpoints, message
+Advanced profiles may add explicit internal flows for remote Workers, model endpoints, message
 transport, tools, browser services and connectors. Those services must not be made public by
-default simply because deployment tooling can expose a port.
+default simply because deployment tooling can expose a port. #240 owns that advanced
+packaging and its heterogeneous-device networking examples.
+
+## Stage 2 — single-server operational hardening
+
+Stage 2 extends the same single-machine architecture with optional process and network
+boundaries suitable for a longer-running server. It does **not** replace the Stage-1 profile
+and does not introduce a second Task/Run/Worker architecture.
+
+The recommended same-origin web composition is:
+
+```text
+browser
+  |
+  | HTTPS
+  v
+reverse proxy / static frontend server
+  |-- /api/* --------------------------> 127.0.0.1:8000
+  |                                      authenticated Control Plane
+  `-- all other routes ----------------> static frontend + index.html fallback
+```
+
+Important properties:
+
+- the Control Plane remains loopback-bound by default;
+- only the reverse-proxy/TLS endpoint is public in this composition;
+- `/api` is preserved when proxying because it is part of the canonical northbound route;
+- SQLite, FileProvider and WorkspaceProvider stay local and expose no network ports;
+- the frontend is a static replaceable client and may be omitted completely;
+- the frontend uses its empty/default `VITE_CONTROL_PLANE_URL` for same-origin requests;
+- browser `/api` traffic and SPA route fallback satisfy the accepted frontend deployment ADR;
+- no proxy, service manager or static-file implementation becomes a canonical dependency.
+
+A concrete Caddy + systemd reference implementation is under `deploy/single-server/`. It is
+an operator example, not a requirement: an equivalent reverse proxy, service manager or
+container/process composition may preserve the same boundaries.
+
+### Frontend build
+
+The optional frontend uses the Node/npm requirements declared by `frontend/package.json`:
+
+```bash
+cd frontend
+npm ci
+npm run build
+```
+
+Publish `frontend/dist/` through the selected static server. Do not point the browser directly
+at a backend-private service or provider endpoint; every canonical operation continues to use
+the Control Plane.
+
+### Least privilege and filesystem ownership
+
+Consume `docs/SECURE_DEPLOYMENT.md` as the baseline. For a typical service-manager deployment:
+
+- run `platform-server` as a dedicated non-root/non-administrator service identity;
+- make the application source/virtual environment and static frontend read-only to that
+  identity where practical;
+- grant write access only to the configured `AI_MAP_DATA_DIR` and required temporary paths;
+- keep deployment configuration outside untrusted writable Workspaces;
+- use a restrictive process umask for newly created state;
+- do not expose the SQLite databases or local storage roots through the web server;
+- keep optional model/tool/browser/connector services private unless their explicit contract
+  requires a network boundary.
+
+The reference systemd unit demonstrates these controls with `UMask=0077`,
+`NoNewPrivileges=true`, filesystem protection and one explicit writable data root.
+
+### TLS and proxy trust
+
+TLS termination belongs to the deployment boundary. The included proxy example terminates
+HTTPS before forwarding canonical `/api/*` traffic to the loopback Control Plane. The current
+`platform-server` deliberately does not blindly trust forwarded proxy headers
+(`proxy_headers=False`); deployment topology must not turn client-supplied forwarding headers
+into an authentication/security authority.
+
+If a future feature requires trusted proxy-derived scheme/client information, it needs an
+explicit trusted-proxy configuration contract rather than enabling arbitrary forwarded-header
+trust by default.
+
+### Logs, retention and resource limits
+
+`platform-server` emits normal process logs to stdout/stderr. A service manager/container
+runtime may collect and rotate them, but deployment logs are not canonical Event history.
+Apply the platform redaction rules before exporting diagnostics and keep debug verbosity off by
+default.
+
+Choose log retention and CPU/memory/open-file/process/storage limits from measured workloads,
+operator recovery needs and incident-response policy. Do not encode one VPS class or hardware
+SKU as the platform requirement. Resource-manager limits are operational constraints, not
+canonical Node/Task capacity metadata.
+
+### Optionality/failure behavior
+
+Frontend, static-file server and reverse proxy are optional components. Their absence must not
+prevent the Stage-1 Control Plane from starting, becoming ready or executing
+`platform-server smoke`. When they are enabled, failures in the public edge may make the web
+surface unreachable without changing canonical Task/Run state.
+
+Multiple schedulable local Worker processes are intentionally not defined by this Stage-2
+slice. #14 owns the shared local/remote Node/Worker registration, capability declaration,
+reservation and scheduling contracts; #240 packages those contracts into advanced distributed
+and heterogeneous deployment profiles after they are stable.
 
 ## Resource guidance
 
@@ -268,14 +382,16 @@ needed by the chosen local workloads and measure:
 
 The reference path itself is CPU-only and requires no accelerator.
 
-## Current Stage-1 boundary
+## Follow-up deployment integrations
 
-This baseline intentionally does not package distributed Worker topology or Control Plane HA.
+The repository has a production-shaped Stage-1 single-node baseline plus the Stage-2
+single-server process/network hardening reference. Advanced deployment concerns are tracked as
+follow-up integrations rather than remaining completion blockers for #39:
 
-- #14 + #35 extend the same installation model with remote Workers and capability-based
-  placement.
-- #40 adds tested backup/restore and relocation.
-- #41 adds schema/platform upgrade lifecycle.
-- #89 may later add an optional HA profile.
+- #240 packages multiple-local-Worker, distributed-Worker and heterogeneous multi-device
+  profiles after #14's canonical Worker/scheduler contracts are available;
+- #40 adds tested backup/restore and hardware relocation;
+- #41 adds schema/platform upgrade lifecycle;
+- #89 may later add optional Control Plane HA/failover.
 
-Single-node production remains a valid topology after those additions.
+Single-node/single-server production remains a valid topology after those additions.
