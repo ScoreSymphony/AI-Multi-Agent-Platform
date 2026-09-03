@@ -16,6 +16,7 @@ import {
   ModelProviderDetailPage,
   ModelsPage,
 } from "../pages/ModelPages";
+import { ProjectDetailPage, ProjectsPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
 import { UsagePage } from "../pages/UsagePage";
 
@@ -33,6 +34,8 @@ export function Shell() {
   }, [client]);
   useEffect(() => setMenuOpen(false), [path]);
 
+  const projectMatch = matchPath("/projects/:projectId", path);
+  const workspaceMatch = matchPath("/workspaces/:workspaceId", path);
   const taskManagementMatch = matchPath("/tasks/:taskId/manage", path);
   const taskMatch = matchPath("/tasks/:taskId", path);
   const runMatch = matchPath("/runs/:runId", path);
@@ -41,6 +44,9 @@ export function Shell() {
   const navItem = navigation.find((item) => item.path === path);
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
+  else if (path === "/projects") content = <ProjectsPage client={client} />;
+  else if (projectMatch) content = <ProjectDetailPage client={client} projectId={projectMatch.projectId} />;
+  else if (workspaceMatch) content = <WorkspaceDetailPage client={client} workspaceId={workspaceMatch.workspaceId} />;
   else if (path === "/tasks") content = <ManagedTasksPage client={client} />;
   else if (taskManagementMatch) content = <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;
   else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;

@@ -4,12 +4,16 @@ import type {
   BulkTaskManagementResult,
   CanonicalModel,
   CanonicalModelProvider,
+  CanonicalProject,
   CanonicalRun,
   CanonicalTask,
   CanonicalUsageAggregate,
   CanonicalUsageBudget,
   CanonicalUsageRecord,
+  CanonicalWorkspaceIdentity,
+  CreateProjectInput,
   CreateTaskInput,
+  CreateWorkspaceInput,
   HealthStatus,
   JsonValue,
   ListQuery,
@@ -61,6 +65,30 @@ export class ControlPlaneClient {
 
   readiness(): Promise<HealthStatus> {
     return this.request<HealthStatus>("/readiness");
+  }
+
+  listProjects(query: ListQuery = {}): Promise<Page<CanonicalProject>> {
+    return this.request<Page<CanonicalProject>>(`/projects${toQuery(query)}`);
+  }
+
+  getProject(projectId: string): Promise<CanonicalProject> {
+    return this.request<CanonicalProject>(`/projects/${encodeURIComponent(projectId)}`);
+  }
+
+  createProject(input: CreateProjectInput): Promise<CanonicalProject> {
+    return this.command<CanonicalProject>("/projects", { method: "POST", body: input });
+  }
+
+  listWorkspaces(query: ListQuery = {}): Promise<Page<CanonicalWorkspaceIdentity>> {
+    return this.request<Page<CanonicalWorkspaceIdentity>>(`/workspaces${toQuery(query)}`);
+  }
+
+  getWorkspace(workspaceId: string): Promise<CanonicalWorkspaceIdentity> {
+    return this.request<CanonicalWorkspaceIdentity>(`/workspaces/${encodeURIComponent(workspaceId)}`);
+  }
+
+  createWorkspace(input: CreateWorkspaceInput): Promise<CanonicalWorkspaceIdentity> {
+    return this.command<CanonicalWorkspaceIdentity>("/workspaces", { method: "POST", body: input });
   }
 
   listTasks(query: ListQuery = {}): Promise<Page<CanonicalTask>> {
