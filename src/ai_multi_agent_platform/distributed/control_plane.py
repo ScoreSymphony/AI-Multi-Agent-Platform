@@ -354,8 +354,10 @@ def _timestamp(value: datetime) -> str:
 
 def _require_empty_payload(payload: dict[str, JsonValue]) -> None:
     if payload:
+        fields: list[JsonValue] = []
+        fields.extend(sorted(payload))
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "distributed administrative command does not accept a payload",
-            details={"fields": sorted(payload)},
+            details={"fields": fields},
         )
