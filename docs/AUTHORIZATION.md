@@ -21,7 +21,8 @@ framework, or one policy engine.
 7. Provider-private identity is not canonical platform authority.
 8. Project/workspace and other scope checks are evaluated server-side.
 9. Every security decision preserves correlation context for audit/observability.
-10. Multi-user/multi-tenant policy is supported by the contract, but authentication and
+10. Approval/rejection itself is a privileged action and must pass authorization.
+11. Multi-user/multi-tenant policy is supported by the contract, but authentication and
     advanced policy backends remain replaceable extensions.
 
 ## 2. Canonical actor model
@@ -80,6 +81,7 @@ where appropriate.
 - capability reference and side-effect classification;
 - security labels;
 - node/trust context;
+- optional SHA-256 digest of the original northbound request payload;
 - immutable proposed-action digest;
 - optional approval ID;
 - canonical `OperationContext` for correlation/causation/ownership.
@@ -121,30 +123,39 @@ same `AuthorizationProvider`.
 
 ## 7. Approval lifecycle and exact-action binding
 
-`ApprovalService` stores `ApprovalRecord` objects containing:
+The canonical domain `Approval` owns approval identity and lifecycle status. The security
+layer adds `ApprovalRecord` binding metadata around that same entity rather than owning a
+second approval ID/status model.
 
-- canonical `approval_<uuid>` ID;
+The binding record adds:
+
 - requester;
 - action/resource/capability;
-- project/task/run context;
+- task/run context;
 - immutable SHA-256 proposed-action digest;
 - optional safe payload reference;
-- reason and risk classification;
-- policy source;
-- creation and expiry timestamps;
-- status;
-- approver, decision timestamp, and comment.
+- risk classification and policy source;
+- expiry timestamp;
+- decision timestamp/comment.
 
 Reference states reuse the canonical domain vocabulary:
 `pending`, `approved`, `rejected`, `expired`, `cancelled`.
 `rejected` is the canonical spelling of a denied approval request.
 
 The digest includes actor, scope, action, resource, security labels/trust context and the
-proposed payload. The payload itself is not stored in the approval record. If any of those
-inputs change, `valid_for()` returns false.
+proposed payload. The payload itself is not stored in the approval record. File/knowledge
+content is bound by cryptographic content digest. Secret create/rotate uses a process-local
+HMAC binding so changing secret material changes the requested action without exposing the
+plaintext or a reusable unsalted password hash.
 
 An approved action is reusable only for the same digest and only until its expiry
 timestamp. Pending requests expire deterministically when read after expiry.
+
+`ApprovalService` is a lifecycle/storage primitive. Public direct calls to `decide()` or
+`cancel()` are rejected. Application code must use `AuthorizationGate.decide_approval()`
+or `AuthorizationGate.cancel_approval()` so the actor performing the approval decision is
+itself authorized. Approval decisions never recursively create another approval: policy
+must explicitly return `allow` for the canonical `approve` action.
 
 ## 8. AuthorizationGate
 
@@ -157,7 +168,8 @@ timestamp. Pending requests expire deterministically when read after expiry.
 5. on `require_approval`, resolve a still-valid exact-action approval or create/reuse a
    pending request;
 6. emit a structured value-free audit record;
-7. continue only after the exact approved action is presented/retried.
+7. continue only after the exact approved action is presented/retried;
+8. authorize approvers before mutating approval state.
 
 The gate does not perform authentication and does not own a user database.
 
@@ -175,15 +187,32 @@ The current repository exposes explicit server-side wrappers in
 | Knowledge provider | `AuthorizedKnowledgeProvider` | index/query/get |
 | Secret provider | `AuthorizedSecretProvider` | create/resolve/rotate/revoke/delete/metadata |
 
-These wrappers protect the original core provider contracts. Issue #13's richer
-`DataAccessContext` remains the scope carrier for refined file/memory/knowledge APIs;
-those APIs must call the same `AuthorizationGate` at their application/service boundary.
-The refined provider is not permission to bypass policy.
+Issue #13's refined storage contracts are protected separately in
+`security/data_enforcement.py`:
+
+| Boundary | Wrapper | Protected refined operations |
+| --- | --- | --- |
+| File/artifact | `AuthorizedDataFileProvider` | create/get/list/stream/delete/checksum/link/orphan detection plus inherited read/write |
+| Memory | `AuthorizedDataMemoryProvider` | write/get/query/search/supersede/delete/expire plus inherited get/put |
+| Knowledge | `AuthorizedDataKnowledgeProvider` | register/ingest/status/search/reindex/remove plus inherited index/query/get |
+
+The refined wrappers deliberately protect their inherited core methods too. A caller
+cannot bypass policy by switching from a refined API method to the older provider method.
 
 The issue-#12 capability registry keeps its canonical governance hooks.
-`CapabilityAuthorizationBridge` maps the richer capability metadata and invocation
-arguments to the same #15 policy/approval gate. Restricted/sensitive, external,
-destructive, or credential-bearing capabilities are mapped to the sensitive action.
+`CapabilityAuthorizationBridge` maps capability metadata and invocation arguments to the
+same #15 policy/approval gate. Restricted/sensitive, external, destructive, or
+credential-bearing capabilities are mapped to the sensitive action.
+
+The existing versioned v1 Control Plane predates the #15 action vocabulary and exposes
+stable commands such as `task:start` and `project:create`. `ControlPlaneAuthorizationBridge`
+is the migration boundary: it maps those northbound strings into canonical
+`AuthorizationAction`/`ResourceType` values before policy evaluation, while keeping the
+published v1 API stable. Mutating create commands hash the canonical JSON of the original
+northbound request with SHA-256 and carry only that digest into authorization. Internal
+enrichment, such as a platform-generated `task_id`, does not alter that binding. Retrying
+the same approved request therefore resumes through the same gate, while any changed
+northbound payload produces a different proposed-action digest and requires a new approval.
 
 Future node/worker dispatch, connectors, automation, plugin management, and admin APIs
 must use this same gate rather than inventing a second permission model.
@@ -191,11 +220,14 @@ must use this same gate rather than inventing a second permission model.
 ## 10. Secret handling
 
 Authorization for a secret uses only its safe canonical reference plus access metadata
-(consumer, purpose, requested lifetime, task/run/capability scope). `AuthorizedSecretProvider`
-never places plaintext secret material into `ProposedAction`.
+(consumer, purpose, requested lifetime, task/run/capability scope). Plaintext secret
+material never appears in `AuthorizationRequest`, `ApprovalRecord`, or
+`AuthorizationAuditRecord`.
 
-The plaintext value is passed to the underlying secret backend only *after* authorization.
-Audit records contain action digest/reference metadata, never the value.
+For create/rotate, a process-local HMAC fingerprint participates only in the proposed
+action digest. It is not persisted as secret material and cannot be reused as a raw
+password hash across process restarts. The plaintext value is passed to the underlying
+secret backend only after authorization.
 
 ## 11. Audit model
 

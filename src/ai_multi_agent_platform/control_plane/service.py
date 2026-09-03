@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import AsyncIterator
 from typing import Literal, cast
 
+from ai_multi_agent_platform.contracts.authorization import AuthorizationRequest
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
     AuthorizationProvider,
@@ -14,7 +17,6 @@ from ai_multi_agent_platform.contracts.interfaces import (
 )
 from ai_multi_agent_platform.contracts.types import (
     AuthorizationDecision,
-    AuthorizationRequest,
     JsonValue,
     OperationContext,
     OperationControl,
@@ -178,6 +180,7 @@ class ControlPlane:
             "projects",
             owner_type=owner_type,
             owner_id=owner_id,
+            request_payload_digest=_payload_digest(payload),
         )
         project = self._scopes.create_project(
             key=_require_key(context),
@@ -237,6 +240,7 @@ class ControlPlane:
             owner_type=project.owner_ref.type,
             owner_id=project.owner_ref.id,
             project_id=project.id,
+            request_payload_digest=_payload_digest(payload),
         )
         workspace = self._scopes.create_workspace(
             key=_require_key(context),
@@ -285,6 +289,21 @@ class ControlPlane:
         context: RequestContext,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        return await self._create_task_with_authorization_payload(
+            context,
+            payload,
+            authorization_payload=payload,
+        )
+
+    async def _create_task_with_authorization_payload(
+        self,
+        context: RequestContext,
+        payload: dict[str, JsonValue],
+        *,
+        authorization_payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        """Create a task while binding approval to the original northbound payload."""
+
         owner_type, owner_id = _resolve_owner(context.actor, payload)
         project_id = _optional_string(payload, "project_id")
         if project_id is not None:
@@ -296,6 +315,7 @@ class ControlPlane:
             owner_type=owner_type,
             owner_id=owner_id,
             project_id=project_id,
+            request_payload_digest=_payload_digest(authorization_payload),
         )
         task = await self._kernel.create_task(
             idempotency_key=_require_key(context),
@@ -681,6 +701,7 @@ class ControlPlane:
         owner_type: str | None = None,
         owner_id: str | None = None,
         project_id: str | None = None,
+        request_payload_digest: str | None = None,
     ) -> None:
         decision = await self._authorization_decision(
             context,
@@ -689,6 +710,7 @@ class ControlPlane:
             owner_type=owner_type,
             owner_id=owner_id,
             project_id=project_id,
+            request_payload_digest=request_payload_digest,
         )
         if decision is not None and not decision.allowed:
             raise ContractError(
@@ -705,6 +727,7 @@ class ControlPlane:
         owner_type: str | None = None,
         owner_id: str | None = None,
         project_id: str | None = None,
+        request_payload_digest: str | None = None,
     ) -> bool:
         decision = await self._authorization_decision(
             context,
@@ -713,6 +736,7 @@ class ControlPlane:
             owner_type=owner_type,
             owner_id=owner_id,
             project_id=project_id,
+            request_payload_digest=request_payload_digest,
         )
         return decision is None or decision.allowed
 
@@ -725,6 +749,7 @@ class ControlPlane:
         owner_type: str | None = None,
         owner_id: str | None = None,
         project_id: str | None = None,
+        request_payload_digest: str | None = None,
     ) -> AuthorizationDecision | None:
         if self._authorization is None:
             return None
@@ -742,8 +767,20 @@ class ControlPlane:
                     project_id=project_id,
                     control=OperationControl(idempotency_key=context.idempotency_key),
                 ),
+                request_payload_digest=request_payload_digest,
             )
         )
+
+
+def _payload_digest(payload: dict[str, JsonValue]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _resolve_owner(

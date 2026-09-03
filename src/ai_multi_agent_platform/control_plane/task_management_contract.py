@@ -114,7 +114,11 @@ class ControlPlane(_ObservabilityControlPlane):
 
         create_payload = dict(payload)
         create_payload["task_id"] = task_id
-        resource = await super().create_task(context, create_payload)
+        resource = await self._create_task_with_authorization_payload(
+            context,
+            create_payload,
+            authorization_payload=payload,
+        )
         canonical_task_id = resource.get("id")
         if not isinstance(canonical_task_id, str):
             return resource
