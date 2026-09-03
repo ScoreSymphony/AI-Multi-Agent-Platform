@@ -267,7 +267,9 @@ def _worker_record(
         existing,
         capability_refs=capability_refs,
         status=status,
-        adapter_metadata=_merge_adapter_metadata(existing.adapter_metadata, worker.adapter_metadata),
+        adapter_metadata=_merge_adapter_metadata(
+            existing.adapter_metadata, worker.adapter_metadata
+        ),
     )
 
 
@@ -277,7 +279,8 @@ def _node_descriptor(
 ) -> NodeDescriptor:
     return NodeDescriptor(
         node_id=node.node_id,
-        capabilities=capabilities or _reported_capabilities(node.capability_refs, CapabilityKind.NODE),
+        capabilities=capabilities
+        or _reported_capabilities(node.capability_refs, CapabilityKind.NODE),
         metadata={
             "display_name": node.display_name,
             "status": node.status.value,
