@@ -221,7 +221,9 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
         user_id = actor.identity.actor_id
 
         if request.method == "GET" and relative == "/auth/sessions":
-            sessions = [safe_session(item) for item in self._authentication.list_sessions(user_id)]
+            sessions: list[JsonValue] = [
+                safe_session(item) for item in self._authentication.list_sessions(user_id)
+            ]
             return self._response(200, {"items": sessions}, request_id, correlation_id)
 
         if request.method == "POST" and relative.startswith("/auth/sessions/"):
@@ -251,7 +253,7 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
             return response
 
         if request.method == "GET" and relative == "/auth/credentials":
-            credentials = [
+            credentials: list[JsonValue] = [
                 safe_credential(item) for item in self._authentication.list_credentials(user_id)
             ]
             return self._response(200, {"items": credentials}, request_id, correlation_id)
