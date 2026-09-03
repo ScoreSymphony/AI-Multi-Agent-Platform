@@ -106,12 +106,7 @@ class ForgeHttpClientConfig:
 
 
 class ForgeHttpClient:
-    """Concrete ``ForgeClient`` for the execution-only Rust sidecar.
-
-    The sidecar owns only backend-private execution state. Canonical Task/Run
-    lifecycle remains in the platform kernel. ``request_ref`` is the canonical
-    Run ID and therefore also the idempotency/recovery lookup key.
-    """
+    """Concrete ``ForgeClient`` for the execution-only Rust sidecar."""
 
     def __init__(
         self,
@@ -128,16 +123,7 @@ class ForgeHttpClient:
         self._raise_for_status(response, operation="health")
         payload = self._object(response.payload, "health response")
         allowed = self._strings(payload.get("allowed_executor_types"))
-        executors = payload.get("executors")
-        configured_status: str | None = None
-        if isinstance(executors, list):
-            for item in executors:
-                if not isinstance(item, dict):
-                    continue
-                if item.get("executor_type") == self.config.executor_type:
-                    status = item.get("status")
-                    configured_status = status if isinstance(status, str) else None
-                    break
+        configured_status = self._configured_executor_status(payload.get("executors"))
         healthy = payload.get("healthy") is True and self.config.executor_type in allowed
         if configured_status == "not_found":
             healthy = False
@@ -213,6 +199,16 @@ class ForgeHttpClient:
             timeout_seconds=self.config.request_timeout_seconds,
         )
 
+    def _configured_executor_status(self, value: JsonValue | None) -> str | None:
+        if not isinstance(value, list):
+            return None
+        for item in value:
+            if not isinstance(item, dict) or item.get("executor_type") != self.config.executor_type:
+                continue
+            status = item.get("status")
+            return status if isinstance(status, str) else None
+        return None
+
     @staticmethod
     def _raise_for_status(response: ForgeHttpResponse, *, operation: str) -> None:
         if 200 <= response.status_code < 300:
@@ -281,45 +277,16 @@ class ForgeHttpClient:
         except KeyError as exc:
             raise RuntimeError(f"unsupported Forge sidecar status: {status_value}") from exc
 
-        if self._required_string(snapshot, "request_ref") != request_data.request_ref:
-            raise RuntimeError("Forge sidecar returned the wrong request_ref")
-        if self._required_string(snapshot, "task_id") != request_data.task_id:
-            raise RuntimeError("Forge sidecar returned the wrong task_id")
-        if self._required_string(snapshot, "run_id") != request_data.run_id:
-            raise RuntimeError("Forge sidecar returned the wrong run_id")
-        returned_step = snapshot.get("step_id")
-        if returned_step != request_data.step_id:
-            raise RuntimeError("Forge sidecar returned the wrong step_id")
-
-        artifacts: list[ForgeArtifact] = []
-        raw_artifacts = snapshot.get("artifacts")
-        if isinstance(raw_artifacts, list):
-            for item in raw_artifacts:
-                if not isinstance(item, dict):
-                    continue
-                relative_path = item.get("relative_path")
-                if not isinstance(relative_path, str) or not relative_path:
-                    continue
-                media_type = item.get("media_type")
-                size_bytes = item.get("size_bytes")
-                artifacts.append(
-                    ForgeArtifact(
-                        relative_path=relative_path,
-                        media_type=(
-                            media_type if isinstance(media_type, str) else "application/octet-stream"
-                        ),
-                        size_bytes=(
-                            size_bytes
-                            if isinstance(size_bytes, int) and not isinstance(size_bytes, bool)
-                            else None
-                        ),
-                    )
-                )
-
+        self._verify_identity(snapshot, request_data)
+        artifacts = self._artifacts(snapshot.get("artifacts"))
         output = snapshot.get("output")
         metadata = snapshot.get("metadata")
         result_code = snapshot.get("result_code")
         retry_after = snapshot.get("retry_after_seconds")
+        stdout = snapshot.get("stdout")
+        stderr = snapshot.get("stderr")
+        error_code = snapshot.get("error_code")
+        error_message = snapshot.get("error_message")
         return ForgeClientResult(
             status=status,
             execution_id=self._required_string(snapshot, "execution_id"),
@@ -328,23 +295,61 @@ class ForgeHttpClient:
                 if isinstance(result_code, int) and not isinstance(result_code, bool)
                 else None
             ),
-            output=(cast(dict[str, JsonValue], output) if isinstance(output, dict) else {}),
-            stdout=snapshot.get("stdout") if isinstance(snapshot.get("stdout"), str) else "",
-            stderr=snapshot.get("stderr") if isinstance(snapshot.get("stderr"), str) else "",
-            artifacts=tuple(artifacts),
-            error_code=(
-                snapshot.get("error_code") if isinstance(snapshot.get("error_code"), str) else None
-            ),
-            error_message=(
-                snapshot.get("error_message")
-                if isinstance(snapshot.get("error_message"), str)
-                else None
-            ),
+            output=cast(dict[str, JsonValue], output) if isinstance(output, dict) else {},
+            stdout=stdout if isinstance(stdout, str) else "",
+            stderr=stderr if isinstance(stderr, str) else "",
+            artifacts=artifacts,
+            error_code=error_code if isinstance(error_code, str) else None,
+            error_message=error_message if isinstance(error_message, str) else None,
             retryable=snapshot.get("retryable") is True,
             retry_after_seconds=(
                 float(retry_after)
                 if isinstance(retry_after, (int, float)) and not isinstance(retry_after, bool)
                 else None
             ),
-            metadata=(cast(dict[str, JsonValue], metadata) if isinstance(metadata, dict) else {}),
+            metadata=cast(dict[str, JsonValue], metadata) if isinstance(metadata, dict) else {},
         )
+
+    def _verify_identity(
+        self,
+        snapshot: Mapping[str, JsonValue],
+        request_data: ForgeClientRequest,
+    ) -> None:
+        if self._required_string(snapshot, "request_ref") != request_data.request_ref:
+            raise RuntimeError("Forge sidecar returned the wrong request_ref")
+        if self._required_string(snapshot, "task_id") != request_data.task_id:
+            raise RuntimeError("Forge sidecar returned the wrong task_id")
+        if self._required_string(snapshot, "run_id") != request_data.run_id:
+            raise RuntimeError("Forge sidecar returned the wrong run_id")
+        if snapshot.get("step_id") != request_data.step_id:
+            raise RuntimeError("Forge sidecar returned the wrong step_id")
+
+    @staticmethod
+    def _artifacts(value: JsonValue | None) -> tuple[ForgeArtifact, ...]:
+        if not isinstance(value, list):
+            return ()
+        artifacts: list[ForgeArtifact] = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            relative_path = item.get("relative_path")
+            if not isinstance(relative_path, str) or not relative_path:
+                continue
+            media_type = item.get("media_type")
+            size_bytes = item.get("size_bytes")
+            artifacts.append(
+                ForgeArtifact(
+                    relative_path=relative_path,
+                    media_type=(
+                        media_type
+                        if isinstance(media_type, str)
+                        else "application/octet-stream"
+                    ),
+                    size_bytes=(
+                        size_bytes
+                        if isinstance(size_bytes, int) and not isinstance(size_bytes, bool)
+                        else None
+                    ),
+                )
+            )
+        return tuple(artifacts)
