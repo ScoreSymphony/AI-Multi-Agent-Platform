@@ -24,6 +24,7 @@ from .client import (
 from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
 from .task_management import parse_changes, parse_updates
+from .workspace import parse_json_array
 
 
 @dataclass(frozen=True, slots=True)
@@ -156,6 +157,32 @@ def _build_parser() -> argparse.ArgumentParser:
     workspace_show.add_argument("workspace_id")
     workspace_create = workspace_commands.add_parser("create", help="create workspace")
     workspace_create.add_argument("--project-id", required=True)
+    workspace_create.add_argument(
+        "--workspace-type",
+        choices=[
+            "persistent_project",
+            "ephemeral_task",
+            "isolated_run",
+            "read_only_source",
+            "cloned",
+            "remote",
+        ],
+    )
+    workspace_create.add_argument("--access-mode", choices=["read_write", "read_only"])
+    workspace_create.add_argument(
+        "--retention",
+        choices=["persistent", "ephemeral"],
+        help="workspace retention; expiry-based 'until' is not creatable by the current API",
+    )
+    workspace_create.add_argument("--workspace-id")
+    workspace_create.add_argument(
+        "--source-refs-json",
+        help="JSON array of canonical workspace source-reference objects",
+    )
+    workspace_create.add_argument(
+        "--files-json",
+        help="JSON array of canonical workspace file manifest objects",
+    )
     workspace_create.add_argument("--idempotency-key")
 
     task = areas.add_parser("task", help="task lifecycle")
@@ -573,10 +600,22 @@ def _workspace_command(args: argparse.Namespace, client: ControlPlaneClient) -> 
     if args.command == "show":
         return CommandResult(client.get(f"/workspaces/{_segment(args.workspace_id)}"))
     if args.command == "create":
+        workspace_body: dict[str, JsonValue] = {"project_id": args.project_id}
+        for field in ("workspace_type", "access_mode", "retention", "workspace_id"):
+            value = getattr(args, field)
+            if value is not None:
+                workspace_body[field] = value
+        if args.source_refs_json is not None:
+            workspace_body["source_refs"] = parse_json_array(
+                args.source_refs_json,
+                "--source-refs-json",
+            )
+        if args.files_json is not None:
+            workspace_body["files"] = parse_json_array(args.files_json, "--files-json")
         return CommandResult(
             client.post(
                 "/workspaces",
-                body={"project_id": args.project_id},
+                body=workspace_body,
                 idempotency_key=args.idempotency_key,
             )
         )
