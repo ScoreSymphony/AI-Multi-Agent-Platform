@@ -153,7 +153,9 @@ class HermesAdapterConfig:
             raise ValueError("Hermes profile must not be blank")
         if any(not key.strip() or not value.strip() for key, value in self.model_bridge.items()):
             raise ValueError("Hermes model_bridge keys and values must not be blank")
-        if any(not key.strip() or not value.strip() for key, value in self.capability_bridge.items()):
+        if any(
+            not key.strip() or not value.strip() for key, value in self.capability_bridge.items()
+        ):
             raise ValueError("Hermes capability_bridge keys and values must not be blank")
 
 
