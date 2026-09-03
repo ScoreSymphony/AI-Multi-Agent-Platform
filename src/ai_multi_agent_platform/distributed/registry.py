@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from .models import (
+    AcceleratorResource,
     Heartbeat,
     JobRequirements,
     NodeRecord,
@@ -64,22 +65,14 @@ class DistributedRegistry:
             request.node,
             registered_at=timestamp,
             last_heartbeat_at=timestamp,
-            status=NodeStatus.MAINTENANCE
-            if request.node.maintenance
-            else NodeStatus.ONLINE,
+            status=NodeStatus.MAINTENANCE if request.node.maintenance else NodeStatus.ONLINE,
             worker_refs=tuple(sorted(worker.worker_id for worker in request.workers)),
         )
-        existing = self._nodes.get(node.node_id)
-        if existing is not None and existing.display_name != node.display_name:
-            # Display names are descriptive, not identity. Re-registration may update them.
-            pass
         self._nodes[node.node_id] = node
         self._heartbeat_sequence[node.node_id] = 0
 
         known_for_node = {
-            worker_id
-            for worker_id, worker in self._workers.items()
-            if worker.node_id == node.node_id
+            worker_id for worker_id, worker in self._workers.items() if worker.node_id == node.node_id
         }
         incoming = {worker.worker_id for worker in request.workers}
         for stale_worker_id in known_for_node - incoming:
@@ -113,7 +106,7 @@ class DistributedRegistry:
         if heartbeat.sequence == previous_sequence and previous_sequence != 0:
             return node
 
-        status = heartbeat.node_status or node.status
+        status = heartbeat.node_status or NodeStatus.ONLINE
         if node.maintenance:
             status = NodeStatus.MAINTENANCE
         updated = replace(
@@ -128,9 +121,14 @@ class DistributedRegistry:
             existing = self._workers.get(worker.worker_id)
             if existing is not None and existing.node_id != node.node_id:
                 raise RegistryError("worker cannot move between nodes during heartbeat")
-            self._workers[worker.worker_id] = replace(
+            refreshed = replace(
                 worker,
                 last_heartbeat_at=heartbeat.observed_at,
+            )
+            self._workers[worker.worker_id] = refreshed
+            self._renew_active_reservations_for_worker(
+                worker.worker_id,
+                now=heartbeat.observed_at,
             )
         return updated
 
@@ -176,9 +174,9 @@ class DistributedRegistry:
 
     def deregister_worker(self, worker_id: str) -> None:
         self.get_worker(worker_id)
-        self._workers.pop(worker_id)
         for reservation in tuple(self.active_reservations(worker_id=worker_id)):
             self.release_reservation(reservation.reservation_id)
+        self._workers.pop(worker_id)
 
     def deregister_node(self, node_id: str) -> None:
         self.get_node(node_id)
@@ -189,36 +187,45 @@ class DistributedRegistry:
         self._heartbeat_sequence.pop(node_id, None)
 
     def expire_heartbeats(self, *, now: datetime | None = None) -> tuple[str, ...]:
-        """Mark nodes/workers offline after deterministic heartbeat expiry."""
+        """Expire node and worker liveness independently after missed heartbeats."""
 
         timestamp = now or utc_now()
-        expired: list[str] = []
+        expired_nodes: list[str] = []
         for node_id, node in tuple(self._nodes.items()):
             if timestamp - node.last_heartbeat_at <= self.heartbeat_timeout:
                 continue
             if node.status is not NodeStatus.OFFLINE:
                 self._nodes[node_id] = replace(node, status=NodeStatus.OFFLINE)
-                expired.append(node_id)
-            for worker_id, worker in tuple(self._workers.items()):
-                if worker.node_id == node_id and worker.status is not WorkerStatus.OFFLINE:
+                expired_nodes.append(node_id)
+
+        for worker_id, worker in tuple(self._workers.items()):
+            node = self._nodes.get(worker.node_id)
+            worker_stale = timestamp - worker.last_heartbeat_at > self.heartbeat_timeout
+            node_offline = node is None or node.status is NodeStatus.OFFLINE
+            if worker_stale or node_offline:
+                if worker.status is not WorkerStatus.OFFLINE:
                     self._workers[worker_id] = replace(worker, status=WorkerStatus.OFFLINE)
-        return tuple(sorted(expired))
+
+        return tuple(sorted(expired_nodes))
 
     def active_reservations(
         self,
         *,
         worker_id: str | None = None,
+        node_id: str | None = None,
     ) -> tuple[Reservation, ...]:
+        claiming_statuses = {ReservationStatus.RESERVED, ReservationStatus.ACTIVE}
         reservations = (
             reservation
             for reservation in self._reservations.values()
-            if reservation.status is ReservationStatus.ACTIVE
+            if reservation.status in claiming_statuses
             and (worker_id is None or reservation.worker_id == worker_id)
+            and (node_id is None or reservation.node_id == node_id)
         )
         return tuple(sorted(reservations, key=lambda item: item.reservation_id))
 
-    def reserved_resources(self, worker_id: str) -> ResourceSnapshot:
-        reservations = self.active_reservations(worker_id=worker_id)
+    def reserved_node_resources(self, node_id: str) -> ResourceSnapshot:
+        reservations = self.active_reservations(node_id=node_id)
         return ResourceSnapshot(
             cpu_cores_total=sum(item.cpu_cores for item in reservations),
             cpu_cores_available=sum(item.cpu_cores for item in reservations),
@@ -228,11 +235,66 @@ class DistributedRegistry:
             storage_available_bytes=sum(item.storage_bytes for item in reservations),
         )
 
+    def reserved_accelerator_memory(self, node_id: str, accelerator_id: str) -> int:
+        return sum(
+            reservation.vram_bytes
+            for reservation in self.active_reservations(node_id=node_id)
+            if reservation.accelerator_id == accelerator_id
+        )
+
+    def available_node_resources(self, node_id: str) -> ResourceSnapshot:
+        """Combine reported availability with scheduler-owned node-wide claims."""
+
+        node = self.get_node(node_id)
+        reserved = self.reserved_node_resources(node_id)
+        cpu_available = max(
+            0.0,
+            min(
+                node.resources.cpu_cores_available,
+                node.resources.cpu_cores_total - reserved.cpu_cores_total,
+            ),
+        )
+        ram_available = max(
+            0,
+            min(
+                node.resources.ram_available_bytes,
+                node.resources.ram_total_bytes - reserved.ram_total_bytes,
+            ),
+        )
+        storage_available = max(
+            0,
+            min(
+                node.resources.storage_available_bytes,
+                node.resources.storage_total_bytes - reserved.storage_total_bytes,
+            ),
+        )
+        accelerators = tuple(
+            self._available_accelerator(node.node_id, accelerator)
+            for accelerator in node.resources.accelerators
+        )
+        return ResourceSnapshot(
+            cpu_cores_total=node.resources.cpu_cores_total,
+            cpu_cores_available=cpu_available,
+            ram_total_bytes=node.resources.ram_total_bytes,
+            ram_available_bytes=ram_available,
+            storage_total_bytes=node.resources.storage_total_bytes,
+            storage_available_bytes=storage_available,
+            accelerators=accelerators,
+        )
+
     def reserved_concurrency(self, worker_id: str) -> int:
         return sum(
             reservation.concurrency_units
             for reservation in self.active_reservations(worker_id=worker_id)
         )
+
+    def available_concurrency(self, worker_id: str) -> int:
+        """Avoid double-counting active load already represented by reservations."""
+
+        worker = self.get_worker(worker_id)
+        reported_available = worker.concurrency_limit - worker.active_jobs
+        reserved_available = worker.concurrency_limit - self.reserved_concurrency(worker_id)
+        return max(0, min(reported_available, reserved_available))
 
     def reserve(
         self,
@@ -242,43 +304,58 @@ class DistributedRegistry:
         requirements: JobRequirements,
         now: datetime | None = None,
     ) -> Reservation:
-        """Claim capacity idempotently for one worker job."""
+        """Claim node resources and worker concurrency idempotently for one worker job."""
 
         timestamp = now or utc_now()
         self.expire_reservations(now=timestamp)
         existing_id = self._job_reservation.get(worker_job_id)
         if existing_id is not None:
             existing = self._reservations[existing_id]
-            if existing.status is ReservationStatus.ACTIVE:
+            if existing.status in {ReservationStatus.RESERVED, ReservationStatus.ACTIVE}:
                 if existing.worker_id != worker_id:
                     raise RegistryError("worker job already has an active reservation elsewhere")
                 return existing
 
         worker = self.get_worker(worker_id)
         node = self.get_node(worker.node_id)
-        reserved = self.reserved_resources(worker_id)
-        available_cpu = node.resources.cpu_cores_available - reserved.cpu_cores_total
-        available_ram = node.resources.ram_available_bytes - reserved.ram_total_bytes
-        available_storage = node.resources.storage_available_bytes - reserved.storage_total_bytes
-        available_slots = (
-            worker.concurrency_limit - worker.active_jobs - self.reserved_concurrency(worker_id)
-        )
-        if requirements.cpu_cores_min > available_cpu:
+        available = self.available_node_resources(node.node_id)
+        if requirements.cpu_cores_min > available.cpu_cores_available:
             raise RegistryError("insufficient CPU capacity for reservation")
-        if requirements.ram_min_bytes > available_ram:
+        if requirements.ram_min_bytes > available.ram_available_bytes:
             raise RegistryError("insufficient RAM capacity for reservation")
-        if requirements.storage_min_bytes > available_storage:
+        if requirements.storage_min_bytes > available.storage_available_bytes:
             raise RegistryError("insufficient storage capacity for reservation")
-        if requirements.concurrency_units > available_slots:
+        if requirements.concurrency_units > self.available_concurrency(worker_id):
             raise RegistryError("insufficient worker concurrency for reservation")
+        if requirements.gpu == "forbidden" and available.accelerators:
+            raise RegistryError("CPU-only placement required")
+
+        accelerator_id: str | None = None
+        if requirements.gpu == "required" or requirements.vram_min_bytes > 0:
+            eligible_accelerators = tuple(
+                accelerator
+                for accelerator in available.accelerators
+                if accelerator.memory_available_bytes >= requirements.vram_min_bytes
+            )
+            if not eligible_accelerators:
+                if requirements.gpu == "required" and not available.accelerators:
+                    raise RegistryError("accelerator required for reservation")
+                raise RegistryError("insufficient VRAM capacity for reservation")
+            accelerator_id = min(
+                eligible_accelerators,
+                key=lambda accelerator: accelerator.accelerator_id,
+            ).accelerator_id
 
         reservation = Reservation(
             worker_job_id=worker_job_id,
             worker_id=worker_id,
+            node_id=node.node_id,
             cpu_cores=requirements.cpu_cores_min,
             ram_bytes=requirements.ram_min_bytes,
             storage_bytes=requirements.storage_min_bytes,
             concurrency_units=requirements.concurrency_units,
+            accelerator_id=accelerator_id,
+            vram_bytes=requirements.vram_min_bytes,
             created_at=timestamp,
             expires_at=timestamp + self.reservation_ttl,
         )
@@ -286,12 +363,50 @@ class DistributedRegistry:
         self._job_reservation[worker_job_id] = reservation.reservation_id
         return reservation
 
-    def release_reservation(self, reservation_id: str) -> Reservation:
-        try:
-            reservation = self._reservations[reservation_id]
-        except KeyError as exc:
-            raise RegistryError(f"unknown reservation: {reservation_id}") from exc
+    def commit_reservation(
+        self,
+        reservation_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> Reservation:
+        """Mark a dispatch-acknowledged claim active and renew its lease."""
+
+        timestamp = now or utc_now()
+        reservation = self._reservation(reservation_id)
+        if reservation.status is ReservationStatus.ACTIVE:
+            return self.renew_reservation(reservation_id, now=timestamp)
+        if reservation.status is not ReservationStatus.RESERVED:
+            raise RegistryError("only reserved capacity can be committed")
+        committed = replace(
+            reservation,
+            status=ReservationStatus.ACTIVE,
+            expires_at=timestamp + self.reservation_ttl,
+        )
+        self._reservations[reservation_id] = committed
+        return committed
+
+    def renew_reservation(
+        self,
+        reservation_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> Reservation:
+        """Renew a live accepted job lease using fresh worker/reconciliation evidence."""
+
+        timestamp = now or utc_now()
+        reservation = self._reservation(reservation_id)
         if reservation.status is not ReservationStatus.ACTIVE:
+            raise RegistryError("only active reservations can be renewed")
+        renewed = replace(
+            reservation,
+            expires_at=timestamp + self.reservation_ttl,
+        )
+        self._reservations[reservation_id] = renewed
+        return renewed
+
+    def release_reservation(self, reservation_id: str) -> Reservation:
+        reservation = self._reservation(reservation_id)
+        if reservation.status in {ReservationStatus.RELEASED, ReservationStatus.EXPIRED}:
             return reservation
         released = replace(reservation, status=ReservationStatus.RELEASED)
         self._reservations[reservation_id] = released
@@ -301,7 +416,7 @@ class DistributedRegistry:
         timestamp = now or utc_now()
         expired: list[str] = []
         for reservation_id, reservation in tuple(self._reservations.items()):
-            if reservation.status is not ReservationStatus.ACTIVE:
+            if reservation.status not in {ReservationStatus.RESERVED, ReservationStatus.ACTIVE}:
                 continue
             if reservation.expires_at is None or timestamp < reservation.expires_at:
                 continue
@@ -311,3 +426,29 @@ class DistributedRegistry:
             )
             expired.append(reservation_id)
         return tuple(sorted(expired))
+
+    def _available_accelerator(
+        self,
+        node_id: str,
+        accelerator: AcceleratorResource,
+    ) -> AcceleratorResource:
+        reserved = self.reserved_accelerator_memory(node_id, accelerator.accelerator_id)
+        available = max(
+            0,
+            min(
+                accelerator.memory_available_bytes,
+                accelerator.memory_total_bytes - reserved,
+            ),
+        )
+        return replace(accelerator, memory_available_bytes=available)
+
+    def _renew_active_reservations_for_worker(self, worker_id: str, *, now: datetime) -> None:
+        for reservation in self.active_reservations(worker_id=worker_id):
+            if reservation.status is ReservationStatus.ACTIVE:
+                self.renew_reservation(reservation.reservation_id, now=now)
+
+    def _reservation(self, reservation_id: str) -> Reservation:
+        try:
+            return self._reservations[reservation_id]
+        except KeyError as exc:
+            raise RegistryError(f"unknown reservation: {reservation_id}") from exc
