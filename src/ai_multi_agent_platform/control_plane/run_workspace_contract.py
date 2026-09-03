@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, cast
 
@@ -23,6 +24,7 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceSnapshot,
 )
 
+from .extensions import CommandHandler, ResourceService
 from .http import HTTPRequest, HTTPResponse
 from .models import API_VERSION, PageQuery, RequestContext
 from .service import ScopeStore, _optional_string, _require_key, _required_string
@@ -46,6 +48,8 @@ class ControlPlane(_WorkspaceControlPlane):
         live_events: EventProvider | None = None,
         health_providers: tuple[ProviderContract, ...] = (),
         model_registry: ModelRegistry | None = None,
+        resource_services: Mapping[str, ResourceService] | None = None,
+        command_handlers: Mapping[str, CommandHandler] | None = None,
         workspace_provider: WorkspaceProvider | None = None,
         run_workspace_bindings: RunWorkspaceBindingRepository | None = None,
     ) -> None:
@@ -57,6 +61,8 @@ class ControlPlane(_WorkspaceControlPlane):
             live_events=live_events,
             health_providers=health_providers,
             model_registry=model_registry,
+            resource_services=resource_services,
+            command_handlers=command_handlers,
             workspace_provider=workspace_provider,
         )
         self._run_workspace_bindings = run_workspace_bindings
