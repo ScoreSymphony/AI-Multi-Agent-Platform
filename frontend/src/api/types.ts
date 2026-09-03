@@ -27,6 +27,24 @@ export interface Page<T> {
   limit: number;
 }
 
+export interface CanonicalProject {
+  id: string;
+  type: "project";
+  name: string;
+  owner: { type: OwnerType; id: string };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CanonicalWorkspaceIdentity {
+  id: string;
+  type: "workspace";
+  project_id: string;
+  owner: { type: OwnerType; id: string };
+  created_at: string | null;
+  lifecycle: string;
+}
+
 export interface CanonicalTask {
   id: string;
   type: "task";
@@ -235,6 +253,16 @@ export interface CanonicalUsageBudget {
   remaining: number | null;
   fraction: number | null;
   threshold_level: "warning" | "exceeded" | null;
+}
+
+export interface CreateProjectInput {
+  name: string;
+  owner_type: OwnerType;
+  owner_id: string;
+}
+
+export interface CreateWorkspaceInput {
+  project_id: string;
 }
 
 export interface CreateTaskInput {
