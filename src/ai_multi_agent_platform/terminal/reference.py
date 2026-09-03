@@ -92,7 +92,10 @@ class ReferenceTerminalAdapter(TerminalSessionAdapter):
                 f"reference terminal does not support {request.session_type.value!r} sessions",
                 provider_id=self.descriptor.adapter_id,
             )
-        if request.mode is SessionMode.INTERACTIVE and request.session_type is SessionType.LOG_STREAM:
+        if (
+            request.mode is SessionMode.INTERACTIVE
+            and request.session_type is SessionType.LOG_STREAM
+        ):
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "log-stream sessions are read-only in the reference adapter",
