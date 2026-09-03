@@ -107,6 +107,8 @@ Eligible candidates are scored only by explicit preferences such as preferred Wo
 
 Every rejected candidate carries structured `RejectionReason` entries. The scheduler does not silently hide why a Worker was excluded.
 
+When an upstream contract explicitly supplies a Worker ID, `schedule_to_worker(...)` evaluates exactly that Worker against the same hard filters and never falls back to another eligible Worker. Explicit placement therefore remains an identity constraint rather than being weakened into a scheduling preference.
+
 ## Capacity leases
 
 Scheduling creates a `Reservation` before dispatch. Node CPU/RAM/storage capacity is accounted node-wide even when multiple Workers share the same host. Accelerator reservations bind a concrete accelerator ID and account VRAM so concurrent jobs cannot independently consume the same reported accelerator memory.
@@ -176,6 +178,16 @@ Worker-job projections intentionally omit `secret_refs`. Secret values never bel
 
 Remote Worker registration and heartbeat are not implemented as ordinary human/admin Control Plane commands. They use `WorkerProtocolService`, because they require #36 Worker-token authentication, replay protection, reporter binding and protocol-specific authorization before any runtime mutation.
 
+## #5 provider contract integration
+
+`DistributedNodeProvider` and `DistributedWorkerProvider` adapt the same distributed runtime to the existing replaceable `NodeProvider` and `WorkerProvider` contracts from #5. They do not create a second registry or scheduler.
+
+`NodeDescriptor` and `WorkerDescriptor` remain discovery views. Registration preserves canonical Node/Worker IDs and passes the current complete sibling Worker snapshot back through the runtime so a provider-level upsert cannot accidentally mark unrelated Workers offline.
+
+`DistributedWorkerProvider.dispatch(worker_id, request)` uses the exact-worker dispatch path. It either executes on the requested eligible Worker or returns a canonical `ContractError`; it never silently reroutes work to another Worker. The adapter derives a deterministic canonical Worker Job ID from `(worker_id, run_id)`, so an identical repeated provider dispatch reuses the same runtime record while a changed payload for the same Worker/Run identity is rejected as a conflict.
+
+Registry/scheduler failures are translated to backend-neutral `ContractError` categories before crossing the provider boundary. Adapter-private metadata remains namespaced and is not exposed through the public Control Plane resource projections.
+
 ## Workspace integration
 
 Issue #37 already defines remote workspace materialization requests, receipts, results and cleanup acknowledgements. Remote Worker adapters should consume those contracts rather than transfer host-local paths.
@@ -184,14 +196,13 @@ The distributed job contract therefore carries canonical workspace/snapshot refe
 
 ## Remaining #14 integration work
 
-The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration and an authenticated/authorized Worker registration-heartbeat boundary.
+The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration, authenticated/authorized Worker registration-heartbeat, and #5 Node/Worker provider adapters.
 
 Full issue completion still requires the remaining composition work, especially:
 
 - scoped secret-resolution/delivery at the Worker execution boundary without putting plaintext secrets into `WorkerJobRequest` persistence or diagnostics;
 - concrete #37 remote workspace materialization, artifact/result return and cleanup flow;
 - distributed trace/resource telemetry integration using the existing #16 observability seams;
-- `NodeProvider`/`WorkerProvider` adapters over the distributed runtime where existing #5 discovery contracts are required;
 - a real replaceable remote transport fixture while keeping local/single-node operation on the same abstractions;
 - explicit remote result/evidence return and terminal reconciliation semantics;
 - controlled failover/re-dispatch policy for work proven safe to retry after Worker loss;
