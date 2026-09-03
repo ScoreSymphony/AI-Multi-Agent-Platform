@@ -9,9 +9,15 @@ import {
   RunDetailPage,
   RunsPage,
   TaskDetailPage,
-  TasksPage,
   UnavailablePage,
 } from "../pages/Pages";
+import {
+  ModelDetailPage,
+  ModelProviderDetailPage,
+  ModelsPage,
+} from "../pages/ModelPages";
+import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
+import { UsagePage } from "../pages/UsagePage";
 
 export function Shell() {
   const { path } = useRouter();
@@ -27,15 +33,23 @@ export function Shell() {
   }, [client]);
   useEffect(() => setMenuOpen(false), [path]);
 
+  const taskManagementMatch = matchPath("/tasks/:taskId/manage", path);
   const taskMatch = matchPath("/tasks/:taskId", path);
   const runMatch = matchPath("/runs/:runId", path);
+  const providerMatch = matchPath("/models/providers/:providerId", path);
+  const modelMatch = matchPath("/models/:modelId", path);
   const navItem = navigation.find((item) => item.path === path);
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
-  else if (path === "/tasks") content = <TasksPage client={client} />;
+  else if (path === "/tasks") content = <ManagedTasksPage client={client} />;
+  else if (taskManagementMatch) content = <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;
   else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;
   else if (path === "/runs") content = <RunsPage client={client} />;
   else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;
+  else if (path === "/models") content = <ModelsPage client={client} />;
+  else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
+  else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
+  else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
   else if (navItem) content = <UnavailablePage item={navItem} manifest={manifest} />;
   else content = <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
 

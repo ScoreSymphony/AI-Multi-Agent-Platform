@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from hashlib import sha256
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -9,14 +10,14 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .models import (
-    MeasurementQuality,
     UsageAggregate,
     UsageBudget,
     UsageQuery,
     UsageRecord,
     UsageScope,
+    utc_now,
 )
-from .service import AccountingService
+from .service import AccountingService, aggregate_usage_records, trend_usage_records
 
 
 class UsageRecordResourceService:
@@ -48,8 +49,18 @@ class UsageRecordResourceService:
 class UsageAggregateResourceService:
     """Current aggregate view grouped by metric/unit for the visible accounting scope."""
 
-    def __init__(self, accounting: AccountingService) -> None:
+    def __init__(
+        self,
+        accounting: AccountingService,
+        *,
+        trend_window_seconds: int = 24 * 60 * 60,
+        trend_bucket_seconds: int = 60 * 60,
+    ) -> None:
+        if trend_window_seconds <= 0 or trend_bucket_seconds <= 0:
+            raise ValueError("trend window and bucket must be greater than zero")
         self._accounting = accounting
+        self._trend_window_seconds = trend_window_seconds
+        self._trend_bucket_seconds = trend_bucket_seconds
 
     async def list_resources(
         self,
@@ -65,9 +76,31 @@ class UsageAggregateResourceService:
         pairs = sorted({(record.metric_type, record.unit) for record in records})
         resources: list[dict[str, JsonValue]] = []
         scope_key = _scope_key(context)
+        trend_end = utc_now()
+        trend_start = trend_end - timedelta(seconds=self._trend_window_seconds)
         for metric_type, unit in pairs:
-            aggregate = _aggregate_visible(records, metric_type, unit)
-            resources.append(_aggregate_resource(metric_type, unit, aggregate, scope_key))
+            selected = _metric_records(records, metric_type, unit)
+            aggregate = aggregate_usage_records(selected, metric_type=metric_type, unit=unit)
+            trend = trend_usage_records(
+                selected,
+                metric_type=metric_type,
+                unit=unit,
+                start=trend_start,
+                end=trend_end,
+                bucket_seconds=self._trend_bucket_seconds,
+            )
+            resources.append(
+                _aggregate_resource(
+                    metric_type,
+                    unit,
+                    aggregate,
+                    scope_key,
+                    trend=trend,
+                    trend_start=trend_start,
+                    trend_end=trend_end,
+                    trend_bucket_seconds=self._trend_bucket_seconds,
+                )
+            )
         return tuple(resources)
 
     async def get_resource(
@@ -153,24 +186,19 @@ def _scope_key(context: RequestContext) -> str:
     return f"{actor.owner_type}:{actor.owner_id}"
 
 
+def _metric_records(
+    records: tuple[UsageRecord, ...], metric_type: str, unit: str
+) -> tuple[UsageRecord, ...]:
+    return tuple(
+        record for record in records if record.metric_type == metric_type and record.unit == unit
+    )
+
+
 def _aggregate_visible(
     records: tuple[UsageRecord, ...], metric_type: str, unit: str
 ) -> UsageAggregate:
-    selected = tuple(
-        record for record in records if record.metric_type == metric_type and record.unit == unit
-    )
-    values = [record.quantity for record in selected if record.quantity is not None]
-    quality_counts = {quality: 0 for quality in MeasurementQuality}
-    for record in selected:
-        quality_counts[record.quality] += 1
-    return UsageAggregate(
-        metric_type=metric_type,
-        unit=unit,
-        total=sum(values) if values else None,
-        record_count=len(selected),
-        unavailable_count=quality_counts[MeasurementQuality.UNAVAILABLE],
-        quality_counts=quality_counts,
-    )
+    selected = _metric_records(records, metric_type, unit)
+    return aggregate_usage_records(selected, metric_type=metric_type, unit=unit)
 
 
 def _record_resource(record: UsageRecord) -> dict[str, JsonValue]:
@@ -183,6 +211,7 @@ def _record_resource(record: UsageRecord) -> dict[str, JsonValue]:
         "quantity": record.quantity,
         "unit": record.unit,
         "quality": record.quality.value,
+        "aggregation_mode": record.aggregation_mode.value,
         "source": record.source,
         "provider": record.provider,
         "timestamp": record.timestamp.isoformat(),
@@ -204,11 +233,31 @@ def _aggregate_resource(
     unit: str,
     aggregate: UsageAggregate,
     scope_key: str,
+    *,
+    trend: tuple[UsageAggregate, ...] = (),
+    trend_start: datetime | None = None,
+    trend_end: datetime | None = None,
+    trend_bucket_seconds: int | None = None,
 ) -> dict[str, JsonValue]:
     digest = sha256(f"{scope_key}\0{metric_type}\0{unit}".encode()).hexdigest()[:24]
     quality_counts: dict[str, JsonValue] = {
         quality.value: count for quality, count in aggregate.quality_counts.items()
     }
+    trend_points: list[JsonValue] = []
+    for point in trend:
+        point_quality: dict[str, JsonValue] = {
+            quality.value: count for quality, count in point.quality_counts.items()
+        }
+        trend_points.append(
+            {
+                "start": None if point.start is None else point.start.isoformat(),
+                "end": None if point.end is None else point.end.isoformat(),
+                "value": point.total,
+                "record_count": point.record_count,
+                "unavailable_count": point.unavailable_count,
+                "quality_counts": point_quality,
+            }
+        )
     return {
         "id": f"usage_aggregate_{digest}",
         "metric_type": metric_type,
@@ -217,6 +266,11 @@ def _aggregate_resource(
         "record_count": aggregate.record_count,
         "unavailable_count": aggregate.unavailable_count,
         "quality_counts": quality_counts,
+        "aggregation_mode": aggregate.aggregation_mode.value,
+        "trend_window_start": None if trend_start is None else trend_start.isoformat(),
+        "trend_window_end": None if trend_end is None else trend_end.isoformat(),
+        "trend_bucket_seconds": trend_bucket_seconds,
+        "trend": trend_points,
     }
 
 

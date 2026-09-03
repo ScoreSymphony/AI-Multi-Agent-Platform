@@ -1,13 +1,20 @@
 import type {
   APIErrorBody,
   APImanifest,
+  BulkTaskManagementResult,
+  CanonicalModel,
+  CanonicalModelProvider,
   CanonicalRun,
   CanonicalTask,
+  CanonicalUsageAggregate,
+  CanonicalUsageBudget,
+  CanonicalUsageRecord,
   CreateTaskInput,
   HealthStatus,
   JsonValue,
   ListQuery,
   Page,
+  TaskManagementChanges,
   TimelineItem,
 } from "./types";
 
@@ -68,6 +75,23 @@ export class ControlPlaneClient {
     return this.command<CanonicalTask>("/tasks", { method: "POST", body: input });
   }
 
+  updateTaskManagement(
+    taskId: string,
+    changes: TaskManagementChanges,
+  ): Promise<CanonicalTask> {
+    return this.command<CanonicalTask>("/commands/task-management.update", {
+      body: { resource_ref: taskId, ...changes },
+    });
+  }
+
+  bulkUpdateTaskManagement(
+    updates: Array<{ task_id: string; changes: TaskManagementChanges }>,
+  ): Promise<BulkTaskManagementResult> {
+    return this.command<BulkTaskManagementResult>("/commands/task-management.bulk-update", {
+      body: { resource_ref: "tasks", updates },
+    });
+  }
+
   queueTask(taskId: string): Promise<CanonicalTask> {
     return this.command<CanonicalTask>(`/tasks/${encodeURIComponent(taskId)}:queue`);
   }
@@ -108,6 +132,62 @@ export class ControlPlaneClient {
     return this.request<Page<TimelineItem>>(
       `/tasks/${encodeURIComponent(taskId)}/timeline${toQuery(query)}`,
     );
+  }
+
+  listModels(query: ListQuery = {}): Promise<Page<CanonicalModel>> {
+    return this.request<Page<CanonicalModel>>(`/models${toQuery(query)}`);
+  }
+
+  getModel(modelIdOrAlias: string): Promise<CanonicalModel> {
+    return this.request<CanonicalModel>(`/models/${encodeURIComponent(modelIdOrAlias)}`);
+  }
+
+  enableModel(modelIdOrAlias: string): Promise<CanonicalModel> {
+    return this.command<CanonicalModel>(`/models/${encodeURIComponent(modelIdOrAlias)}:enable`);
+  }
+
+  disableModel(modelIdOrAlias: string): Promise<CanonicalModel> {
+    return this.command<CanonicalModel>(`/models/${encodeURIComponent(modelIdOrAlias)}:disable`);
+  }
+
+  listModelProviders(query: ListQuery = {}): Promise<Page<CanonicalModelProvider>> {
+    return this.request<Page<CanonicalModelProvider>>(`/model-providers${toQuery(query)}`);
+  }
+
+  getModelProvider(providerId: string): Promise<CanonicalModelProvider> {
+    return this.request<CanonicalModelProvider>(
+      `/model-providers/${encodeURIComponent(providerId)}`,
+    );
+  }
+
+  enableModelProvider(providerId: string): Promise<CanonicalModelProvider> {
+    return this.command<CanonicalModelProvider>(
+      `/model-providers/${encodeURIComponent(providerId)}:enable`,
+    );
+  }
+
+  disableModelProvider(providerId: string): Promise<CanonicalModelProvider> {
+    return this.command<CanonicalModelProvider>(
+      `/model-providers/${encodeURIComponent(providerId)}:disable`,
+    );
+  }
+
+  refreshModelProviderHealth(providerId: string): Promise<CanonicalModelProvider> {
+    return this.command<CanonicalModelProvider>(
+      `/model-providers/${encodeURIComponent(providerId)}:refresh-health`,
+    );
+  }
+
+  listUsageRecords(query: ListQuery = {}): Promise<Page<CanonicalUsageRecord>> {
+    return this.request<Page<CanonicalUsageRecord>>(`/usage-records${toQuery(query)}`);
+  }
+
+  listUsageAggregates(query: ListQuery = {}): Promise<Page<CanonicalUsageAggregate>> {
+    return this.request<Page<CanonicalUsageAggregate>>(`/usage-aggregates${toQuery(query)}`);
+  }
+
+  listUsageBudgets(query: ListQuery = {}): Promise<Page<CanonicalUsageBudget>> {
+    return this.request<Page<CanonicalUsageBudget>>(`/usage-budgets${toQuery(query)}`);
   }
 
   private command<T>(

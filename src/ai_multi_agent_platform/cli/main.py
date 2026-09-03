@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -103,6 +104,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retries", type=int, default=2, help="safe GET retry count")
     parser.add_argument("--json", action="store_true", help="stable machine-readable JSON output")
     parser.add_argument("--verbose", action="store_true", help="show diagnostic metadata")
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="confirm commands with meaningful side effects",
+    )
     parser.add_argument("--client-version", action="version", version=__version__)
 
     areas = parser.add_subparsers(dest="root_command", required=True)
@@ -183,6 +189,62 @@ def _build_parser() -> argparse.ArgumentParser:
     run_cancel.add_argument("run_id")
     run_cancel.add_argument("--task-id", required=True)
     run_cancel.add_argument("--idempotency-key")
+
+    provider = areas.add_parser("model-provider", help="model provider administration")
+    provider.set_defaults(area="model-provider")
+    provider_commands = provider.add_subparsers(dest="command", required=True)
+    _add_list_parser(provider_commands, "list", "list model providers")
+    provider_show = provider_commands.add_parser("show", help="show model provider")
+    provider_show.add_argument("provider_id")
+    for command in ("enable", "disable", "refresh-health"):
+        action = provider_commands.add_parser(command, help=f"{command} model provider")
+        action.add_argument("provider_id")
+        action.add_argument("--idempotency-key")
+
+    model = areas.add_parser("model", help="model registry inspection and administration")
+    model.set_defaults(area="model")
+    model_commands = model.add_subparsers(dest="command", required=True)
+    _add_list_parser(model_commands, "list", "list model configurations")
+    model_show = model_commands.add_parser("show", help="show model configuration")
+    model_show.add_argument("model_id")
+    for command in ("enable", "disable"):
+        action = model_commands.add_parser(command, help=f"{command} model configuration")
+        action.add_argument("model_id")
+        action.add_argument("--idempotency-key")
+
+    for area_name, collection in (
+        ("plan", "plans"),
+        ("step", "steps"),
+        ("artifact", "artifacts"),
+        ("result", "results"),
+    ):
+        reference = areas.add_parser(area_name, help=f"inspect canonical {collection}")
+        reference.set_defaults(area="reference", collection=collection)
+        commands = reference.add_subparsers(dest="command", required=True)
+        _add_list_parser(commands, "list", f"list {collection}")
+        show = commands.add_parser("show", help=f"show {area_name} reference")
+        show.add_argument("resource_id")
+
+    extension = areas.add_parser(
+        "extension",
+        help="inspect explicitly registered canonical extension surfaces",
+    )
+    extension.set_defaults(area="extension")
+    extension_commands = extension.add_subparsers(dest="command", required=True)
+    extension_commands.add_parser("collections", help="list registered extension collections")
+    extension_commands.add_parser("commands", help="list registered extension command names")
+    extension_list = extension_commands.add_parser(
+        "list",
+        help="list resources from one registered extension collection",
+    )
+    extension_list.add_argument("collection")
+    _add_pagination_arguments(extension_list)
+    extension_show = extension_commands.add_parser(
+        "show",
+        help="show one resource from a registered extension collection",
+    )
+    extension_show.add_argument("collection")
+    extension_show.add_argument("resource_id")
 
     return parser
 
@@ -270,6 +332,14 @@ def _execute(
         return _task_command(args, client, profile)
     if args.area == "run":
         return _run_command(args, client)
+    if args.area == "model-provider":
+        return _model_provider_command(args, client)
+    if args.area == "model":
+        return _model_command(args, client)
+    if args.area == "reference":
+        return _reference_command(args, client)
+    if args.area == "extension":
+        return _extension_command(args, client)
     raise ProfileError(f"unsupported command area: {args.area}")
 
 
@@ -319,15 +389,36 @@ def _doctor(client: ControlPlaneClient) -> CommandResult:
                         "http_status": response.status,
                     }
                 )
-            elif (
-                name == "health"
+                continue
+            if name == "health":
+                health_status, provider_checks = _doctor_health(response.body)
+                blocking = blocking or health_status == "blocking"
+                degraded = degraded or health_status == "degraded"
+                checks.append(
+                    {
+                        "name": name,
+                        "status": health_status,
+                        "http_status": response.status,
+                    }
+                )
+                checks.extend(provider_checks)
+                continue
+            if (
+                name == "readiness"
                 and isinstance(response.body, dict)
-                and response.body.get("readiness") == "degraded"
+                and response.body.get("ready") is not True
             ):
-                degraded = True
-                checks.append({"name": name, "status": "degraded", "http_status": response.status})
-            else:
-                checks.append({"name": name, "status": "healthy", "http_status": response.status})
+                blocking = True
+                checks.append(
+                    {
+                        "name": name,
+                        "status": "blocking",
+                        "http_status": response.status,
+                        "message": "readiness payload did not report ready=true",
+                    }
+                )
+                continue
+            checks.append({"name": name, "status": "healthy", "http_status": response.status})
         except TransportError as exc:
             blocking = True
             checks.append({"name": name, "status": "blocking", "message": str(exc)})
@@ -352,6 +443,84 @@ def _doctor(client: ControlPlaneClient) -> CommandResult:
         ),
         exit_code=4 if blocking else 1 if degraded else 0,
     )
+
+
+def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
+    if not isinstance(body, dict):
+        return "blocking", [
+            {
+                "name": "health_schema",
+                "status": "blocking",
+                "message": "health payload must be a JSON object",
+            }
+        ]
+
+    ready = body.get("ready")
+    providers = body.get("providers")
+    if not isinstance(ready, bool) or not isinstance(providers, list):
+        return "blocking", [
+            {
+                "name": "health_schema",
+                "status": "blocking",
+                "message": "health payload must contain boolean ready and provider list",
+            }
+        ]
+
+    overall = "healthy" if ready else "blocking"
+    checks: list[JsonValue] = []
+    for provider in providers:
+        if not isinstance(provider, dict):
+            overall = "blocking"
+            checks.append(
+                {
+                    "name": "provider_health",
+                    "status": "blocking",
+                    "message": "provider health entry must be a JSON object",
+                }
+            )
+            continue
+
+        provider_id = provider.get("id")
+        provider_type = provider.get("type")
+        status = provider.get("status")
+        available = provider.get("available")
+        if (
+            not isinstance(provider_id, str)
+            or not isinstance(provider_type, str)
+            or not isinstance(status, str)
+            or not isinstance(available, bool)
+            or status not in {"healthy", "degraded", "unknown", "unavailable"}
+        ):
+            overall = "blocking"
+            checks.append(
+                {
+                    "name": "provider_health",
+                    "status": "blocking",
+                    "message": "provider health entry does not match the canonical schema",
+                }
+            )
+            continue
+
+        if not available or status == "unavailable":
+            check_status = "blocking"
+            overall = "blocking"
+        elif status in {"degraded", "unknown"}:
+            check_status = "degraded"
+            if overall == "healthy":
+                overall = "degraded"
+        else:
+            check_status = "healthy"
+        checks.append(
+            {
+                "name": "provider_health",
+                "status": check_status,
+                "provider_id": provider_id,
+                "provider_type": provider_type,
+                "provider_status": status,
+                "available": available,
+            }
+        )
+    return overall, checks
 
 
 def _project_command(
@@ -413,6 +582,8 @@ def _task_command(
     if args.command == "show":
         return CommandResult(client.get(f"/tasks/{_segment(args.task_id)}"))
     if args.command in {"queue", "start", "cancel", "retry"}:
+        if args.command == "cancel":
+            _require_confirmation(args, "cancel task", args.task_id)
         return CommandResult(
             client.post(
                 f"/tasks/{_segment(args.task_id)}:{args.command}",
@@ -441,6 +612,7 @@ def _run_command(args: argparse.Namespace, client: ControlPlaneClient) -> Comman
         )
         return CommandResult(client.get(path))
     if args.command == "cancel":
+        _require_confirmation(args, "cancel run", args.run_id)
         return CommandResult(
             client.post(
                 f"/tasks/{_segment(args.task_id)}/runs/{_segment(args.run_id)}:cancel",
@@ -448,6 +620,101 @@ def _run_command(args: argparse.Namespace, client: ControlPlaneClient) -> Comman
             )
         )
     raise ProfileError(f"unsupported run command: {args.command}")
+
+
+def _model_provider_command(
+    args: argparse.Namespace,
+    client: ControlPlaneClient,
+) -> CommandResult:
+    if args.command == "list":
+        return CommandResult(client.get("/model-providers", query=_page_query(args)))
+    if args.command == "show":
+        return CommandResult(client.get(f"/model-providers/{_segment(args.provider_id)}"))
+    if args.command in {"enable", "disable", "refresh-health"}:
+        if args.command in {"enable", "disable"}:
+            _require_confirmation(args, f"{args.command} model provider", args.provider_id)
+        return CommandResult(
+            client.post(
+                f"/model-providers/{_segment(args.provider_id)}:{args.command}",
+                idempotency_key=args.idempotency_key,
+            )
+        )
+    raise ProfileError(f"unsupported model-provider command: {args.command}")
+
+
+def _model_command(args: argparse.Namespace, client: ControlPlaneClient) -> CommandResult:
+    if args.command == "list":
+        return CommandResult(client.get("/models", query=_page_query(args)))
+    if args.command == "show":
+        return CommandResult(client.get(f"/models/{_segment(args.model_id)}"))
+    if args.command in {"enable", "disable"}:
+        _require_confirmation(args, f"{args.command} model", args.model_id)
+        return CommandResult(
+            client.post(
+                f"/models/{_segment(args.model_id)}:{args.command}",
+                idempotency_key=args.idempotency_key,
+            )
+        )
+    raise ProfileError(f"unsupported model command: {args.command}")
+
+
+def _reference_command(args: argparse.Namespace, client: ControlPlaneClient) -> CommandResult:
+    collection = str(args.collection)
+    if args.command == "list":
+        return CommandResult(client.get(f"/{collection}", query=_page_query(args)))
+    if args.command == "show":
+        return CommandResult(client.get(f"/{collection}/{_segment(args.resource_id)}"))
+    raise ProfileError(f"unsupported {collection} command: {args.command}")
+
+
+def _extension_command(args: argparse.Namespace, client: ControlPlaneClient) -> CommandResult:
+    specification = client.get("/openapi.json")
+    collections = _extension_names(specification, "x-registered-extension-collections")
+    commands = _extension_names(specification, "x-registered-extension-commands")
+    if args.command == "collections":
+        return CommandResult(_name_page(specification, collections))
+    if args.command == "commands":
+        return CommandResult(_name_page(specification, commands))
+
+    collection = str(args.collection)
+    if collection not in collections:
+        raise ProfileError(f"canonical extension collection is not registered: {collection}")
+    if args.command == "list":
+        return CommandResult(client.get(f"/{_segment(collection)}", query=_page_query(args)))
+    if args.command == "show":
+        return CommandResult(client.get(f"/{_segment(collection)}/{_segment(args.resource_id)}"))
+    raise ProfileError(f"unsupported extension command: {args.command}")
+
+
+def _extension_names(response: ClientResponse, field: str) -> tuple[str, ...]:
+    body = response.body
+    if not isinstance(body, dict):
+        raise TransportError("Control Plane OpenAPI response must be a JSON object")
+    raw_names = body.get(field)
+    if not isinstance(raw_names, list) or not all(isinstance(item, str) for item in raw_names):
+        raise TransportError(f"Control Plane OpenAPI is missing canonical field: {field}")
+    return tuple(cast(str, item) for item in raw_names)
+
+
+def _name_page(response: ClientResponse, names: tuple[str, ...]) -> ClientResponse:
+    items: list[JsonValue] = [{"name": name} for name in names]
+    return ClientResponse(
+        status=response.status,
+        body={"items": items, "total": len(items)},
+        request_id=response.request_id,
+        correlation_id=response.correlation_id,
+        api_version=response.api_version,
+    )
+
+
+def _require_confirmation(args: argparse.Namespace, action: str, resource_ref: str) -> None:
+    if bool(args.yes):
+        return
+    if not sys.stdin.isatty():
+        raise ProfileError(f"{action} {resource_ref} requires confirmation; re-run with --yes")
+    answer = input(f"Confirm {action} {resource_ref}? [y/N] ")
+    if answer.strip().casefold() not in {"y", "yes"}:
+        raise ProfileError("operation cancelled")
 
 
 def _page_query(args: argparse.Namespace) -> dict[str, str]:
