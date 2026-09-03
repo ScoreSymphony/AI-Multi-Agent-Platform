@@ -73,7 +73,11 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
                 "additionalProperties": False,
             },
         },
-        "requested_permissions": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
+        "requested_permissions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "uniqueItems": True,
+        },
         "configuration_schema": {"type": "object"},
         "dependencies": {"type": "array"},
         "optional_external_services": {"type": "array", "items": {"type": "string"}},
