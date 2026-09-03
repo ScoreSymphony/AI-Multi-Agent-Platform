@@ -258,7 +258,7 @@ def _api_error(response: ClientResponse) -> APIClientError:
             correlation_id=(
                 correlation_value if isinstance(correlation_value, str) else response.correlation_id
             ),
-            details=cast(JsonValue, details),
+            details=details,
         )
     return APIClientError(
         status=response.status,
