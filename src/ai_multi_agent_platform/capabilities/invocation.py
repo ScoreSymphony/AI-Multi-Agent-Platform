@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
-from typing import Protocol
+from time import perf_counter
+from typing import Protocol, runtime_checkable
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from jsonschema.exceptions import SchemaError, ValidationError  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.contracts.domain_mapping import validate_tool_invocation_binding
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue, ToolInvocation
+from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue, ToolInvocation
 from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocation
 
 from .registry import CapabilityRegistry
@@ -37,6 +38,19 @@ type ApprovalHook = Callable[
 
 class InvocationObserver(Protocol):
     async def record(self, record: InvocationRecord) -> None: ...
+
+
+@runtime_checkable
+class InvocationFailureMetadataProvider(Protocol):
+    """Optional provider seam for metadata created when the invoker owns failure timing."""
+
+    def invocation_failure_metadata(
+        self,
+        invocation: ToolInvocation,
+        *,
+        error_code: str,
+        duration_ms: float,
+    ) -> tuple[AdapterMetadata, ...]: ...
 
 
 class NullInvocationObserver:
@@ -182,6 +196,7 @@ class CapabilityInvoker:
             approval_decision=approval_decision,
         )
         timeout = capability.timeout_seconds or request.context.control.timeout_seconds
+        provider_started = perf_counter()
 
         try:
             if canonical_invocation is not None:
@@ -191,6 +206,12 @@ class CapabilityInvoker:
             else:
                 tool_result = await asyncio.wait_for(provider.invoke(provider_invocation), timeout)
         except TimeoutError as exc:
+            adapter_metadata = self._provider_failure_metadata(
+                provider,
+                provider_invocation,
+                error_code=ErrorCode.TIMEOUT.value,
+                started=provider_started,
+            )
             await self._record(
                 request,
                 registration,
@@ -198,14 +219,22 @@ class CapabilityInvoker:
                 ErrorCode.TIMEOUT.value,
                 canonical_invocation=canonical_invocation,
                 approval_decision=approval_decision,
+                adapter_metadata=adapter_metadata,
             )
             raise ContractError(
                 ErrorCode.TIMEOUT,
                 f"capability {capability.capability_id!r} timed out",
                 provider_id=registration.provider_id,
                 retryable=True,
+                adapter_metadata=adapter_metadata,
             ) from exc
         except asyncio.CancelledError as exc:
+            adapter_metadata = self._provider_failure_metadata(
+                provider,
+                provider_invocation,
+                error_code=ErrorCode.CANCELLED.value,
+                started=provider_started,
+            )
             await self._record(
                 request,
                 registration,
@@ -213,12 +242,14 @@ class CapabilityInvoker:
                 ErrorCode.CANCELLED.value,
                 canonical_invocation=canonical_invocation,
                 approval_decision=approval_decision,
+                adapter_metadata=adapter_metadata,
             )
             raise ContractError(
                 ErrorCode.CANCELLED,
                 f"capability {capability.capability_id!r} was cancelled",
                 provider_id=registration.provider_id,
                 retryable=True,
+                adapter_metadata=adapter_metadata,
             ) from exc
         except ValueError as exc:
             await self._record(
@@ -242,6 +273,7 @@ class CapabilityInvoker:
                 exc.code.value,
                 canonical_invocation=canonical_invocation,
                 approval_decision=approval_decision,
+                adapter_metadata=exc.adapter_metadata,
             )
             raise
         except Exception as exc:
@@ -290,6 +322,7 @@ class CapabilityInvoker:
                     exc.code.value,
                     canonical_invocation=canonical_invocation,
                     approval_decision=approval_decision,
+                    adapter_metadata=tool_result.adapter_metadata,
                 )
                 raise
 
@@ -314,8 +347,25 @@ class CapabilityInvoker:
             InvocationStatus.SUCCEEDED,
             canonical_invocation=canonical_invocation,
             approval_decision=approval_decision,
+            adapter_metadata=tool_result.adapter_metadata,
         )
         return result
+
+    @staticmethod
+    def _provider_failure_metadata(
+        provider: object,
+        invocation: ToolInvocation,
+        *,
+        error_code: str,
+        started: float,
+    ) -> tuple[AdapterMetadata, ...]:
+        if not isinstance(provider, InvocationFailureMetadataProvider):
+            return ()
+        return provider.invocation_failure_metadata(
+            invocation,
+            error_code=error_code,
+            duration_ms=(perf_counter() - started) * 1000,
+        )
 
     async def _record(
         self,
@@ -326,6 +376,7 @@ class CapabilityInvoker:
         *,
         canonical_invocation: DomainToolInvocation | None = None,
         approval_decision: str | None = None,
+        adapter_metadata: tuple[AdapterMetadata, ...] = (),
     ) -> None:
         await self._observer.record(
             InvocationRecord(
@@ -343,7 +394,7 @@ class CapabilityInvoker:
                 worker_id=registration.worker_id,
                 approval_decision=approval_decision,
                 error_code=error_code,
-                adapter_metadata=registration.adapter_metadata,
+                adapter_metadata=(*registration.adapter_metadata, *adapter_metadata),
             )
         )
 
