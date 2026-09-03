@@ -2,13 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from ai_multi_agent_platform.agents import (
-    AgentRevisionRef,
-    AgentService,
-    AgentTeamMember,
-    AgentTeamProfile,
-    InMemoryAgentRepository,
-)
+from ai_multi_agent_platform.agents import AgentService, InMemoryAgentRepository
 from ai_multi_agent_platform.agents.control_plane import AgentCommandHandlers
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.domain import OwnerRef, new_id
@@ -31,6 +25,19 @@ def _profile(name: str) -> dict[str, object]:
         "name": name,
         "role": "worker",
         "instructions": {"role": {"content": "Do the work."}},
+    }
+
+
+def _team_profile(name: str, agent_id: str) -> dict[str, object]:
+    return {
+        "name": name,
+        "leader_agent_id": agent_id,
+        "members": [
+            {
+                "agent": {"agent_id": agent_id, "revision": 1},
+                "role": "worker",
+            }
+        ],
     }
 
 
@@ -124,16 +131,85 @@ def test_team_control_plane_mutations_preserve_scopes_and_record_provenance() ->
         service = AgentService(repository)
         handlers = AgentCommandHandlers(service)
         context = _context()
-        project_id = new_id("project")
-        workspace_id = new_id("workspace")
+        first_project = new_id("project")
+        first_workspace = new_id("workspace")
+        second_workspace = new_id("workspace")
 
-        agent = service.create_agent(
-            profile=service.create_agent.__annotations__["profile"](
-                name="placeholder",
-                role="placeholder",
-                instructions=None,
-            ),
-            owner_ref=OwnerRef(type="user", id="unused"),
+        member = await handlers.create_agent(
+            context,
+            "agents",
+            {"profile": _profile("Team member")},
         )
+        agent_id = member["id"]
+        assert isinstance(agent_id, str)
+
+        created = await handlers.create_team(
+            context,
+            "agent-teams",
+            {
+                "profile": _team_profile("Team v1", agent_id),
+                "project_id": first_project,
+                "workspace_id": first_workspace,
+            },
+        )
+        team_id = created["id"]
+        assert isinstance(team_id, str)
+        first = repository.get_team_revision(team_id, 1)
+        assert first.project_id == first_project
+        assert first.workspace_id == first_workspace
+        assert first.provenance is not None
+        assert first.provenance.actor_ref == "user:issue-33-actor"
+        assert first.provenance.details["operation"] == "agent-team.create"
+
+        await handlers.update_team(
+            context,
+            team_id,
+            {
+                "expected_revision": 1,
+                "profile": _team_profile("Team v2", agent_id),
+                "project_id": None,
+                "workspace_id": second_workspace,
+                "owner_ref": {"type": "team", "id": "issue-33-sharing-team"},
+            },
+        )
+        second = repository.get_team_revision(team_id, 2)
+        assert second.team_id == first.team_id
+        assert second.project_id is None
+        assert second.workspace_id == second_workspace
+        assert second.owner_ref == OwnerRef(type="team", id="issue-33-sharing-team")
+        assert repository.get_team_revision(team_id, 1) == first
+        assert second.provenance is not None
+        assert second.provenance.details["operation"] == "agent-team.update"
+
+        cloned = await handlers.clone_team(
+            context,
+            team_id,
+            {
+                "revision": 2,
+                "name": "Team clone",
+                "project_id": first_project,
+                "workspace_id": None,
+            },
+        )
+        clone_id = cloned["id"]
+        assert isinstance(clone_id, str)
+        clone = repository.get_team_revision(clone_id, 1)
+        assert clone.team_id != team_id
+        assert clone.project_id == first_project
+        assert clone.workspace_id is None
+        assert clone.provenance is not None
+        assert clone.provenance.details["operation"] == "agent-team.clone"
+
+        await handlers.rollback_team(
+            context,
+            team_id,
+            {"target_revision": 1, "expected_revision": 2},
+        )
+        rollback = repository.get_team_revision(team_id, 3)
+        assert rollback.project_id == first.project_id
+        assert rollback.workspace_id == first.workspace_id
+        assert rollback.owner_ref == first.owner_ref
+        assert rollback.provenance is not None
+        assert rollback.provenance.details["operation"] == "agent-team.rollback"
 
     asyncio.run(scenario())
