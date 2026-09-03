@@ -97,6 +97,12 @@ class EvaluationRunner:
                 "stochastic aggregation is a separate regression policy concern"
             )
 
+        baseline = self._validate_baseline(
+            suite=suite,
+            baseline_run_id=baseline_run_id,
+            regression_policy=regression_policy,
+        )
+
         run = EvaluationRun(
             suite_id=suite.suite_id,
             suite_version=suite.version,
@@ -130,22 +136,39 @@ class EvaluationRunner:
         results = self._repository.list_results(completed.run_id)
 
         comparison: ComparisonReport | None = None
-        if baseline_run_id is not None and regression_policy is not None:
-            baseline = self._repository.get_run(baseline_run_id)
-            if baseline is None:
-                raise ValueError(f"evaluation baseline run not found: {baseline_run_id}")
-            if baseline.suite_id != suite.suite_id or baseline.suite_version != suite.version:
-                raise ValueError("baseline suite identity/version does not match current suite")
+        if baseline is not None and regression_policy is not None:
             comparison = self._regression_engine.compare(
-                baseline_run_id=baseline_run_id,
+                baseline_run_id=baseline.run_id,
                 current_run_id=completed.run_id,
-                baseline_results=self._repository.list_results(baseline_run_id),
+                baseline_results=self._repository.list_results(baseline.run_id),
                 current_results=results,
                 policy=regression_policy,
             )
             self._repository.save_comparison(comparison)
 
         return EvaluationRunSummary(run=completed, results=results, comparison=comparison)
+
+    def _validate_baseline(
+        self,
+        *,
+        suite: EvaluationSuite,
+        baseline_run_id: str | None,
+        regression_policy: RegressionPolicy | None,
+    ) -> EvaluationRun | None:
+        if baseline_run_id is None or regression_policy is None:
+            return None
+        baseline = self._repository.get_run(baseline_run_id)
+        if baseline is None:
+            raise ValueError(f"evaluation baseline run not found: {baseline_run_id}")
+        if baseline.status is not EvaluationRunStatus.COMPLETED:
+            raise ValueError("evaluation baseline run must be completed")
+        if baseline.suite_id != suite.suite_id or baseline.suite_version != suite.version:
+            raise ValueError("baseline suite identity/version does not match current suite")
+        if baseline.repetitions != 1:
+            raise ValueError(
+                "automatic baseline comparison currently requires a single-repetition baseline"
+            )
+        return baseline
 
     async def _run_attempt(
         self,
