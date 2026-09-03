@@ -114,6 +114,7 @@ export interface AgentTeamProfile {
   coordination_policy_ref: string | null;
   leader_agent_id: string | null;
   shared_capability_ids: string[];
+  shared_resource_refs: string[];
   max_parallel_agents: number | null;
   max_steps: number | null;
   unavailable_member_policy: string;
@@ -163,6 +164,7 @@ export interface CanonicalAgentRun {
   selected_model_config_id: string | null;
   selected_provider_id: string | null;
   capability_ids: string[];
+  capability_versions: Record<string, string>;
   orchestrator_adapter_id: string | null;
   orchestrator_runtime_ref: string | null;
   artifact_ids: string[];
