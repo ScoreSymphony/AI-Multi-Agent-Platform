@@ -1,0 +1,73 @@
+.....................F.................................................. [ 23%]
+........................................................................ [ 47%]
+........................................................................ [ 71%]
+........................................................................ [ 95%]
+...............                                                          [100%]
+=================================== FAILURES ===================================
+_____ test_cli_status_doctor_project_workspace_and_canonical_error_output ______
+
+tmp_path = PosixPath('/tmp/pytest-of-runner/pytest-0/test_cli_status_doctor_project0')
+
+    def test_cli_status_doctor_project_workspace_and_canonical_error_output(tmp_path: Path) -> None:
+        config = tmp_path / "cli.json"
+        _, transport = _stack()
+    
+        code, status, _ = _invoke(config, transport, "status")
+        assert code == 0
+        assert status["data"]["api_version"] == "v1"
+    
+        code, doctor, _ = _invoke(config, transport, "doctor")
+        assert code == 0
+        assert doctor["data"]["summary"] == "healthy"
+    
+        code, project, _ = _invoke(
+            config,
+            transport,
+            "project",
+            "create",
+            "--name",
+            "CLI project",
+            "--owner-type",
+            "user",
+            "--owner-id",
+            "test",
+        )
+        assert code == 0
+        project_id = project["data"]["id"]
+        assert isinstance(project_id, str)
+    
+        code, workspace, _ = _invoke(
+            config,
+            transport,
+            "workspace",
+            "create",
+            "--project-id",
+            project_id,
+        )
+        assert code == 0
+        assert workspace["data"]["project_id"] == project_id
+    
+        stdout = StringIO()
+        stderr = StringIO()
+        code = run_cli(
+            ["--config", str(config), "--json", "task", "show", "task_missing"],
+            transport=transport,
+            stdout=stdout,
+            stderr=stderr,
+        )
+        assert code == 3
+        assert not stdout.getvalue()
+        error = json.loads(stderr.getvalue())
+>       assert error["code"] == "not_found"
+E       AssertionError: assert 'invalid_request' == 'not_found'
+E         
+E         - not_found
+E         + invalid_request
+
+tests/test_cli.py:311: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_cli.py::test_cli_status_doctor_project_workspace_and_canonical_error_output - AssertionError: assert 'invalid_request' == 'not_found'
+  
+  - not_found
+  + invalid_request
+1 failed, 302 passed in 6.25s
