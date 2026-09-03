@@ -4,6 +4,7 @@ from .indexing import document_from_resource
 from .local import LocalSearchProvider
 from .models import SearchDocument, SearchMode, SearchPage, SearchQuery, SearchResult
 from .provider import SearchProvider
+from .service import SearchService
 
 __all__ = [
     "LocalSearchProvider",
@@ -13,5 +14,6 @@ __all__ = [
     "SearchProvider",
     "SearchQuery",
     "SearchResult",
+    "SearchService",
     "document_from_resource",
 ]
