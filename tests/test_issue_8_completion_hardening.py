@@ -144,11 +144,7 @@ def test_descriptor_advertises_explicit_runtime_retry_bridge_and_compatibility_m
 
 def test_hermes_adapter_source_has_no_hermes_runtime_import() -> None:
     adapter_path = (
-        Path(__file__).parents[1]
-        / "src"
-        / "ai_multi_agent_platform"
-        / "adapters"
-        / "hermes.py"
+        Path(__file__).parents[1] / "src" / "ai_multi_agent_platform" / "adapters" / "hermes.py"
     )
     tree = ast.parse(adapter_path.read_text())
     imported_roots: list[str] = []
