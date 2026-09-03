@@ -208,6 +208,7 @@ class PluginSnapshot:
     dependencies: tuple[str, ...]
     provenance_source: str
     provenance_license: str
+    install_source: str
     configuration_version: str
     state_version: str
     configured: bool
