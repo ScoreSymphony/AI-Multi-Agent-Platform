@@ -48,7 +48,7 @@ Task
 
 ### Retry metric
 
-The exported `ObservabilityEventProvider` now emits `platform.run.retries` when a Task receives its second or later deduplicated `run.created` event. The event stream remains authoritative; observability only derives a count from attempts it actually sees and does not create retry lifecycle state.
+The exported `ObservabilityEventProvider` emits `platform.run.retries` when a Task receives its second or later deduplicated `run.created` event. The event stream remains authoritative; observability only derives a count from attempts it actually sees and does not create retry lifecycle state.
 
 ### Models
 
@@ -59,6 +59,20 @@ Prompts and responses are not added to telemetry attributes by these wrappers.
 ### Capabilities / tools / approvals
 
 `ObservedToolProvider` instruments provider execution. `ObservabilityInvocationObserver` consumes canonical capability invocation records and exposes denied, approval-required, approved, failed/timed-out and completed-duration telemetry without copying tool input/output bodies.
+
+### Authorization progress (#15)
+
+`ObservedAuthorizationProvider` instruments the authorization contract that exists today. It attaches authorization calls to the current Task/Run trace where canonical identifiers are available and emits:
+
+- authorization call/failure/duration telemetry;
+- `platform.authorization.decisions` for allow/deny outcomes;
+- `platform.authorization.denied` for denied policy decisions;
+- canonical `authorization.allowed` / `authorization.denied` log and timeline entries;
+- `authorization_approval` failure-component classification for denied decisions and provider failures.
+
+The wrapper does not copy provider `reason` free text or exception details into telemetry. Principal/resource references are kept in structured log/timeline audit attributes, not metric dimensions.
+
+The current `AuthorizationDecision` only models `allowed: bool`; therefore this is partial #15 integration. `require approval`, Approval IDs/lifecycle and final #15 audit records must be integrated when #15 supplies those canonical concepts.
 
 ### Worker / node seams and trace transport
 
@@ -98,15 +112,22 @@ This is the #16-side handoff contract. Final integration with a real #76 account
 - detached asynchronous span links without false parentage;
 - redaction of span-link attributes.
 
+`tests/test_issue_16_authorization_telemetry.py` covers:
+
+- allow/deny decisions under the canonical Task trace;
+- denial metrics and canonical authorization-layer failure classification;
+- safe audit attributes without copying provider reason text;
+- technical authorization-provider failure classification without exporting exception details.
+
 ## Remaining work before #16 may close
 
-The following items are intentionally still open because their owning runtime domains are not complete:
+The following items remain open because their owning runtime domains are not complete:
 
 - [ ] Attach the real #33 Agent/Team runtime to `TraceHierarchy` and prove a real Agent Run inherits the canonical Task/Run trace.
 - [ ] Attach the real #14 scheduler/Worker/Node runtime to the existing wrappers.
 - [ ] Prove scheduler dispatch -> transport -> remote Worker job -> Node execution end-to-end with the real #14 runtime, not only the in-process transport fixture.
 - [ ] Emit #14-owned heartbeat age, active-job and canonical health/load/resource measurements when the runtime exposes them.
-- [ ] Consume #15 authorization/approval audit output through the canonical telemetry hierarchy once #15 supplies the final enforcement/audit model.
+- [ ] Extend the now-instrumented #15 allow/deny provider path with require-approval, Approval IDs/lifecycle and final canonical security audit records once #15 defines them.
 - [ ] Consume #86 verification telemetry once the canonical verification runtime exists.
 - [ ] Connect the `MeasurementSink` handoff to the real #76 accounting ingestion path and verify the ownership boundary in integration tests.
 - [ ] Add final completion-level integration coverage over the real `Task -> Run -> Agent/Orchestration -> Model/Tool -> Worker/Node` execution path.
