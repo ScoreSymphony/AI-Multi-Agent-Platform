@@ -1,0 +1,37 @@
+name: Issue 38 format
+
+on:
+  push:
+    branches: [feat/issue-38-cli-foundation]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-38-cli-foundation
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Ruff
+        run: python -m pip install "ruff>=0.12,<1"
+      - name: Format and fix safe lint issues
+        run: |
+          ruff format src/ai_multi_agent_platform/cli tests/test_cli.py
+          ruff check --fix src/ai_multi_agent_platform/cli tests/test_cli.py
+          ruff format src/ai_multi_agent_platform/cli tests/test_cli.py
+      - name: Commit formatting
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ai_multi_agent_platform/cli tests/test_cli.py
+          git commit -m "Format #38 CLI foundation"
+          git push origin HEAD:feat/issue-38-cli-foundation
