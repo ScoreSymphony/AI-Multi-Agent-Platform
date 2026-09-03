@@ -9,6 +9,7 @@ and authenticated requests expose a replaceable rate-limit hook.
 from __future__ import annotations
 
 from collections import defaultdict, deque
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -69,9 +70,11 @@ class CredentialScope:
 
     def to_json(self) -> dict[str, JsonValue]:
         return {
-            "actions": sorted(action.value for action in self.actions),
-            "resource_types": sorted(resource_type.value for resource_type in self.resource_types),
-            "resource_ids": sorted(self.resource_ids),
+            "actions": _json_string_list(sorted(action.value for action in self.actions)),
+            "resource_types": _json_string_list(
+                sorted(resource_type.value for resource_type in self.resource_types)
+            ),
+            "resource_ids": _json_string_list(sorted(self.resource_ids)),
         }
 
     @classmethod
@@ -84,22 +87,12 @@ class CredentialScope:
         if unknown:
             raise ValueError(f"credential scope contains unsupported fields: {sorted(unknown)!r}")
 
-        actions_value = value.get("actions", [])
-        resource_types_value = value.get("resource_types", [])
-        resource_ids_value = value.get("resource_ids", [])
-        if not isinstance(actions_value, list) or any(
-            not isinstance(item, str) for item in actions_value
-        ):
-            raise ValueError("credential scope actions must be a list of strings")
-        if not isinstance(resource_types_value, list) or any(
-            not isinstance(item, str) for item in resource_types_value
-        ):
-            raise ValueError("credential scope resource_types must be a list of strings")
-        if not isinstance(resource_ids_value, list) or any(
-            not isinstance(item, str) for item in resource_ids_value
-        ):
-            raise ValueError("credential scope resource_ids must be a list of strings")
-
+        actions_value = _string_items(value.get("actions"), "actions")
+        resource_types_value = _string_items(
+            value.get("resource_types"),
+            "resource_types",
+        )
+        resource_ids_value = _string_items(value.get("resource_ids"), "resource_ids")
         try:
             actions = frozenset(AuthorizationAction(item) for item in actions_value)
             resource_types = frozenset(ResourceType(item) for item in resource_types_value)
@@ -409,6 +402,25 @@ def safe_credential_with_scope(
     payload = safe_credential(credential)
     payload["scope"] = authentication.credential_scope(credential.credential_id).to_json()
     return payload
+
+
+def _json_string_list(values: Iterable[str]) -> list[JsonValue]:
+    result: list[JsonValue] = []
+    result.extend(values)
+    return result
+
+
+def _string_items(value: JsonValue | None, field_name: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"credential scope {field_name} must be a list of strings")
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str):
+            raise ValueError(f"credential scope {field_name} must be a list of strings")
+        result.append(item)
+    return result
 
 
 def _current(value: datetime | None) -> datetime:
