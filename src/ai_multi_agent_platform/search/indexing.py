@@ -133,6 +133,14 @@ def _display_title(
         subject_id = _optional_string(resource, "subject_id")
         if subject_type is not None and subject_id is not None:
             return f"Run for {subject_type} {subject_id}"
+    if resource_type == "event":
+        event_type = _optional_string(resource, "event_type")
+        subject_type = _optional_string(resource, "subject_type")
+        subject_id = _optional_string(resource, "subject_id")
+        if event_type is not None and subject_type is not None and subject_id is not None:
+            return f"{event_type} for {subject_type} {subject_id}"
+        if event_type is not None:
+            return f"Event {event_type}"
     if resource_type == "approval":
         subject_type = _optional_string(resource, "subject_type")
         subject_id = _optional_string(resource, "subject_id")
@@ -296,6 +304,7 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "automation_id",
         "trigger_type",
         "source",
+        "event_type",
         "subject_type",
         "subject_id",
         "action",
