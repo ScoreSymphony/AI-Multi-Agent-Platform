@@ -1,5 +1,6 @@
 """Replaceable browser/web capability boundary and self-hosted reference adapter."""
 
+from .binding import BoundBrowserProvider, BrowserPlacement
 from .contracts import BrowserProvider
 from .models import (
     BrowserNetworkPolicy,
@@ -29,9 +30,11 @@ __all__ = [
     "BROWSER_FOLLOW_LINK_CAPABILITY_ID",
     "BROWSER_NAVIGATE_CAPABILITY_ID",
     "BROWSER_SUBMIT_FORM_CAPABILITY_ID",
+    "BoundBrowserProvider",
     "BrowserNetworkPolicy",
     "BrowserNetworkPolicyHook",
     "BrowserOperation",
+    "BrowserPlacement",
     "BrowserPrivacyClassification",
     "BrowserProvider",
     "BrowserProviderFeatures",
