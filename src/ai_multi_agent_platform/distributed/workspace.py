@@ -38,9 +38,7 @@ class WorkspaceJobMaterializationResolver:
         if job.workspace_ref is None and job.snapshot_ref is None:
             return None
         if job.workspace_ref is None or job.snapshot_ref is None:
-            raise RegistryError(
-                "remote workspace jobs require both workspace_ref and snapshot_ref"
-            )
+            raise RegistryError("remote workspace jobs require both workspace_ref and snapshot_ref")
         workspace = await self.provider.get_workspace(job.workspace_ref)
         snapshot = await self.provider.get_snapshot(job.snapshot_ref)
         if snapshot.workspace_id != workspace.id:
@@ -122,7 +120,7 @@ class MaterializingWorkerDispatcher:
         return handle
 
     async def get(self, worker_job_id: str) -> ExecutionSnapshot:
-        state = self._state(worker_job_id)
+        self._state(worker_job_id)
         snapshot = await self._dispatcher.get(worker_job_id)
         if _terminal_status(snapshot.status) is not None:
             await self._finalize(worker_job_id, snapshot.status)
@@ -184,7 +182,9 @@ class MaterializingWorkerDispatcher:
         try:
             return self._jobs[worker_job_id]
         except KeyError as exc:
-            raise RegistryError(f"worker job is unknown to workspace dispatcher: {worker_job_id}") from exc
+            raise RegistryError(
+                f"worker job is unknown to workspace dispatcher: {worker_job_id}"
+            ) from exc
 
     def _validate_receipt(
         self,
@@ -193,7 +193,10 @@ class MaterializingWorkerDispatcher:
     ) -> None:
         if receipt.worker_ref != self.worker_id:
             raise RegistryError("remote materialization receipt belongs to a different Worker")
-        if receipt.workspace_id != request.workspace_id or receipt.snapshot_id != request.snapshot_id:
+        if (
+            receipt.workspace_id != request.workspace_id
+            or receipt.snapshot_id != request.snapshot_id
+        ):
             raise RegistryError("remote materialization receipt identity mismatch")
         if receipt.expected_checksum != request.expected_checksum:
             raise RegistryError("remote materialization receipt checksum identity mismatch")
@@ -215,7 +218,10 @@ class MaterializingWorkerDispatcher:
         receipt: RemoteMaterializationReceipt,
         cleanup: RemoteCleanupAcknowledgement,
     ) -> None:
-        if cleanup.workspace_id != receipt.workspace_id or cleanup.snapshot_id != receipt.snapshot_id:
+        if (
+            cleanup.workspace_id != receipt.workspace_id
+            or cleanup.snapshot_id != receipt.snapshot_id
+        ):
             raise RegistryError("remote cleanup acknowledgement identity mismatch")
         if cleanup.materialization_ref != receipt.materialization_ref:
             raise RegistryError("remote cleanup acknowledgement reference mismatch")
