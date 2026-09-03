@@ -75,6 +75,19 @@ class ControlPlaneAuthorizationBridge(AuthorizationProvider):
 def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction, ResourceType]:
     if action.startswith("task-management."):
         return AuthorizationAction.MODIFY, ResourceType.TASK
+    if action.startswith("plugin."):
+        plugin_verb = action.removeprefix("plugin.")
+        plugin_actions = {
+            "discover": AuthorizationAction.ADMINISTER,
+            "install": AuthorizationAction.CREATE,
+            "configure": AuthorizationAction.MODIFY,
+            "enable": AuthorizationAction.ADMINISTER,
+            "disable": AuthorizationAction.ADMINISTER,
+            "refresh-health": AuthorizationAction.ADMINISTER,
+            "validate-update": AuthorizationAction.ADMINISTER,
+            "remove": AuthorizationAction.DELETE,
+        }
+        return plugin_actions.get(plugin_verb, AuthorizationAction.MODIFY), ResourceType.PLUGIN
 
     resource_name, separator, verb = action.partition(":")
     if not separator:
@@ -102,6 +115,8 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "artifacts": ResourceType.ARTIFACT,
         "model-provider": ResourceType.PROVIDER_CONFIGURATION,
         "model": ResourceType.MODEL_CONFIGURATION,
+        "plugin": ResourceType.PLUGIN,
+        "plugin-candidate": ResourceType.PLUGIN,
     }
     return (
         action_map.get(verb, AuthorizationAction.MODIFY),
