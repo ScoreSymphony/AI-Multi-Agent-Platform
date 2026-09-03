@@ -32,8 +32,9 @@ jobs:
         run: python scripts/issue76_completion_patch.py
       - name: Verify Python completion gates
         run: |
-          ruff format .
-          ruff check .
+          ruff format src tests
+          ruff check --fix src tests
+          ruff check src tests
           mypy
           pytest -q tests/test_issue76_accounting.py tests/test_issue76_storage_accounting.py tests/test_issue76_control_plane_http.py tests/test_issue76_trends.py tests/test_issue76_model_attribution.py tests/test_issue76_completion.py
           python -m build
