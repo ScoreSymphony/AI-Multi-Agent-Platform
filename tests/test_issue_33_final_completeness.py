@@ -9,6 +9,7 @@ from ai_multi_agent_platform.agents import (
     AgentCommandHandlers,
     AgentDataAccess,
     AgentExecutionEnvironment,
+    AgentExecutionSpec,
     AgentInstructions,
     AgentModelPolicy,
     AgentPolicyHooks,
@@ -33,7 +34,6 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode, HealthSt
 from ai_multi_agent_platform.contracts.types import (
     Capability,
     CapabilityKind,
-    JsonValue,
     ProviderDescriptor,
     ToolInvocation,
     ToolResult,
@@ -106,9 +106,9 @@ class RecordingMapper:
     adapter_id = "recording-orchestrator"
 
     def __init__(self) -> None:
-        self.specs = []
+        self.specs: list[AgentExecutionSpec] = []
 
-    async def map_agent(self, spec):  # type: ignore[no-untyped-def]
+    async def map_agent(self, spec: AgentExecutionSpec) -> OrchestratorMapping:
         self.specs.append(spec)
         return OrchestratorMapping(
             adapter_id=self.adapter_id,
