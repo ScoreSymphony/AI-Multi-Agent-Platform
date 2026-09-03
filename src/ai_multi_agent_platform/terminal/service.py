@@ -673,7 +673,10 @@ class TerminalSessionService:
                     ErrorCode.INVALID_PROVIDER_RESPONSE,
                     "terminal adapter changed an already-observed stream sequence",
                 )
-            if session.retain_transcript and frame.sequence not in self._retained_sequences[session_id]:
+            if (
+                session.retain_transcript
+                and frame.sequence not in self._retained_sequences[session_id]
+            ):
                 self._retain_frame(session, existing)
             return existing
         canonical = TerminalFrame(
