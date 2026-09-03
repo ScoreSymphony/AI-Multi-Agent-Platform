@@ -463,19 +463,13 @@ async def _terminate_session(
     approval_id: str | None,
     idempotency_key: str,
 ) -> TerminalSession:
-    operation = _operation(context)
-    session = await sessions.terminate(
-        session_id,
-        actor_ref=context.actor.principal_ref,
-        operation=operation,
-        reason=reason,
-        approval_id=approval_id,
-    )
-    if (
-        session.session_type in _EXECUTION_OWNING_SESSION_TYPES
-        and session.context.run_id is not None
-        and session.context.task_id is not None
-    ):
+    async def before_terminate(session: TerminalSession) -> None:
+        if (
+            session.session_type not in _EXECUTION_OWNING_SESSION_TYPES
+            or session.context.run_id is None
+            or session.context.task_id is None
+        ):
+            return
         if run_canceller is None:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
@@ -487,7 +481,15 @@ async def _terminate_session(
             session.context.run_id,
             idempotency_key,
         )
-    return session
+
+    return await sessions.terminate(
+        session_id,
+        actor_ref=context.actor.principal_ref,
+        operation=_operation(context),
+        reason=reason,
+        approval_id=approval_id,
+        before_terminate=before_terminate,
+    )
 
 
 async def _validate_workspace_project(
