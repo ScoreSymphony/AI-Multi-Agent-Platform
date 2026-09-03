@@ -4,22 +4,15 @@ Issue: #16
 
 ## Purpose
 
-Observability is a platform-owned, cross-cutting capability for explaining what happened across canonical tasks, runs and replaceable provider boundaries without making one monitoring vendor part of the platform architecture.
+Observability is a platform-owned, cross-cutting capability for explaining what happened across canonical Tasks, Runs and replaceable provider boundaries without making one monitoring vendor part of the platform architecture.
 
-The Stage 1 foundation is intentionally usable with only the canonical domain/kernel and reference execution path from issues #4-#7. Model, tool, worker, messaging, authorization and distributed-runtime integrations may add richer child telemetry later without redefining this contract.
+The Stage 1 foundation is usable with only the canonical domain/kernel and reference execution path from #4-#7. Later Model, Tool, Agent, Worker, authorization, verification and accounting domains attach to the same contracts progressively.
 
 ## Ownership and source-of-truth rule
 
-Canonical lifecycle state remains owned by the platform kernel. Observability is a derived operational view; it must never become a second lifecycle authority.
+Canonical lifecycle state remains owned by the platform kernel. Observability is a derived operational view and must never become a second lifecycle authority.
 
-The kernel's canonical `Event` history is mirrored through `ObservabilityEventProvider`. That provider derives:
-
-- structured logs;
-- counters and timing metrics;
-- task/run lifecycle spans;
-- an API-ready task/run timeline view.
-
-Dropping, replacing or disabling an observability exporter must not change task/run behavior or canonical state.
+Dropping, replacing or disabling an observability exporter must not change Task/Run behavior or canonical state.
 
 ## Trace hierarchy
 
@@ -31,43 +24,46 @@ Task
     └── Orchestration / Agent Run
         ├── Model Call
         ├── Tool Call
-        ├── Worker Job
-        └── Node Execution
+        └── Worker Dispatch
+            └── Worker Job / Node Execution
 ```
 
-Stage 1 implements Task -> Run -> Executor and defines model/tool child wrappers plus transport-neutral trace propagation for later worker/message boundaries.
+Stage 1 implements Task -> Run -> Executor. Progressive instrumentation provides Orchestrator, Model, Tool, Agent-hook, Node and Worker provider seams. Real Agent and distributed Worker runtime integration remains dependent on #33 and #14 respectively.
 
 A trace is an operational identifier. It supplements canonical identifiers; it does not replace them.
 
 ## Canonical telemetry context
 
-`TelemetryContext` carries identifiers when they are available:
+`TelemetryContext` carries identifiers when available:
 
-- project ID;
-- workspace ID;
-- task ID;
-- run ID;
-- step ID;
-- agent ID;
-- team ID;
-- model call/config/provider IDs;
-- tool invocation/capability IDs;
-- worker job/node/worker IDs;
-- automation/trigger IDs;
-- approval/verification IDs;
-- correlation ID;
-- causation ID;
-- adapter/provider IDs.
+- project/workspace;
+- Task/Run/Step;
+- Agent/Team;
+- model call/config/provider;
+- tool invocation/capability;
+- Worker job/Node/Worker;
+- automation/trigger;
+- approval/verification;
+- correlation/causation;
+- adapter/provider.
 
-Not every component has every identifier. Instrumentation must propagate existing identifiers rather than manufacture unrelated canonical identities.
+Instrumentation propagates existing identifiers rather than manufacturing unrelated canonical identities.
+
+## Parent/child spans, remote propagation and async links
+
+Normal synchronous nesting uses parent/child spans through `TraceHierarchy`.
+
+Remote propagation uses `TraceCarrier`, which preserves trace parentage plus Task/Run/Step/Project and correlation/causation identifiers. `inject_trace_carrier()` and `extract_trace_carrier()` bridge that carrier to the replaceable #35 `TransportEnvelope.trace_context`. `observe_remote()` creates the remote child span.
+
+Detached asynchronous or fan-in work where direct parentage would be false uses `SpanLink` and `TraceHierarchy.observe_linked()`. Linked work starts independently and references one or more prior spans without pretending one of them is the sole parent.
 
 ## Structured logs
 
-Structured logs use `StructuredLog` and include:
+`StructuredLog` records:
 
 - timestamp;
 - severity;
-- canonical component category;
+- canonical component/layer;
 - event name;
 - telemetry context;
 - normalized outcome;
@@ -75,11 +71,11 @@ Structured logs use `StructuredLog` and include:
 - optional duration;
 - explicitly selected, redacted attributes.
 
-Kernel event payloads are not copied wholesale into logs. Reference executor instrumentation records capability/action identity, IDs, result code, duration and outcome, but not arguments, stdout or stderr.
+Kernel event payloads, prompts, model responses, tool input/output, file contents and auth/session values are not copied wholesale into telemetry.
 
 ## Failure taxonomy
 
-Every failure may be assigned to one canonical component/layer:
+Failures may be classified by canonical component:
 
 - `domain_kernel`;
 - `orchestration`;
@@ -96,13 +92,11 @@ Every failure may be assigned to one canonical component/layer:
 - `plugin_adapter`;
 - `infrastructure_unknown`.
 
-The layer classification is separate from the more specific failure code. For example an executor can report component `execution` with code `timeout`, while a model adapter may report component `model_provider_router` with code `rate_limited`.
-
-Provider SDK exceptions must continue to follow the canonical error contracts; observability does not authorize raw backend exceptions to become public API semantics.
+Provider-specific exceptions remain behind canonical contracts.
 
 ## Metrics
 
-The Stage 1 reference instrumentation emits backend-neutral records including:
+Foundation metrics include:
 
 - `platform.lifecycle.events`;
 - `platform.tasks.created`;
@@ -110,111 +104,74 @@ The Stage 1 reference instrumentation emits backend-neutral records including:
 - `platform.task.duration_seconds`;
 - `platform.runs.created`;
 - `platform.runs.terminal`;
+- `platform.run.retries`;
 - `platform.run.queue_wait_seconds`;
 - `platform.run.duration_seconds`;
 - `platform.executor.calls`;
 - `platform.executor.failures`;
 - `platform.executor.duration_seconds`.
 
-Model/tool wrappers additionally define `platform.model.*` and `platform.tool.*` child metrics. Later worker/node and automation integrations should extend the same naming approach instead of introducing a separate metrics vocabulary.
+`platform.run.retries` is derived from a second or later deduplicated `run.created` event for the same canonical Task. Observability counts attempts it sees but does not own retry lifecycle state.
 
-Metrics must prefer stable canonical dimensions. High-cardinality IDs remain available in trace/log/timeline records and should not automatically become production metrics labels in an external backend.
+Progressive Model instrumentation adds calls, latency/failures, provider-reported numeric usage and route/fallback counts. Tool instrumentation adds calls, latency/failures and canonical capability permission/approval outcomes. Worker/Node wrappers emit only measurements their current provider contracts actually expose; #14 remains responsible for the final heartbeat/job/resource runtime data.
 
 ## Timeline semantics
 
-`TimelineEntry` is a derived operator/user-facing view for answering questions such as:
+`TimelineEntry` is a derived operator/user-facing view. The Control Plane can bind a backend-neutral `TimelineReader` and merge non-kernel telemetry with canonical kernel Event history.
 
-- when a task was created, started and completed;
-- which run attempt executed;
-- which executor/model/tool child operations occurred;
-- where a failure was classified;
-- how long lifecycle and execution stages took.
-
-`InMemoryExporter.query_timeline()` provides the Stage 1 API-ready query contract by task ID, run ID or correlation ID. A later Control Plane endpoint may expose this view without changing the telemetry model.
-
-The timeline is not an event-sourcing store and must not be used to reconstruct canonical state when the kernel event history is available.
+Clients therefore query the canonical Control Plane surface instead of Hermes, Forge, model providers, workers or exporter-private stores. The timeline is not an event-sourcing store and must not be used to reconstruct canonical lifecycle state.
 
 ## Exporter boundary
 
-`ObservabilityExporter` is the only Stage 1 sink boundary. It accepts normalized log, metric, span and timeline records.
+`ObservabilityExporter` is the backend-neutral sink boundary for normalized logs, metrics, spans and timeline entries.
 
 Reference implementations:
 
-- `NoOpExporter`: default/local mode with no external telemetry backend;
+- `NoOpExporter`: default/local mode with no external backend;
 - `InMemoryExporter`: deterministic local/test mode and timeline query reference.
 
-Future Prometheus/OpenTelemetry/OTLP/logging/tracing adapters belong behind this boundary. No exporter technology is mandatory for the platform to run.
+No Prometheus, Grafana, Jaeger, Loki, OTLP collector or commercial SaaS is required by the canonical platform.
 
 ## Redaction and sensitive data
 
-`CapturePolicy` is default-deny for content-bearing telemetry.
-
-By default the platform does **not** capture:
+`CapturePolicy` is default-deny for content-bearing telemetry. By default the platform does not capture:
 
 - prompts;
 - model responses;
-- tool inputs;
-- tool outputs;
+- tool inputs/outputs;
 - file contents;
 - authentication/session values.
 
-Common secret fields such as API keys, passwords, credentials, authorization values, cookies and access/refresh/ID tokens are recursively redacted even when generic attributes are otherwise permitted.
-
-Instrumentation should select safe attributes instead of relying on redaction as permission to log arbitrary payloads. Secrets must never intentionally be logged.
+Common secret fields are recursively redacted. Span-link attributes pass through the same generic redaction policy before export.
 
 ## Health semantics
 
 Liveness and readiness are distinct:
 
-- `alive`: the process/component is running;
-- `ready`: it can accept the intended class of work;
-- `degraded`: it can operate, but one or more dependencies/capabilities are impaired;
-- `unavailable`: a required dependency or the component itself prevents work;
-- `draining`: it is alive but intentionally not accepting new work.
+- `alive`: process/component is running;
+- `ready`: it can accept intended work;
+- `degraded`: usable with impaired optional dependency/capability;
+- `unavailable`: a required dependency prevents intended work;
+- `draining`: alive but intentionally not accepting new work.
 
-`aggregate_health()` treats an unavailable optional adapter as degraded rather than fatal. An unavailable required dependency makes readiness unavailable. This preserves useful partial operation when optional components are absent.
+`AggregatedHealthProvider` maps required-vs-optional provider health into the Control Plane seam so an optional adapter failure does not automatically make the entire platform unavailable.
 
-## Trace propagation
+## Usage/accounting boundary
 
-`TraceCarrier` serializes a transport-neutral trace parent plus correlation/causation and canonical task/run/step/project IDs. It intentionally has no dependency on HTTP, a message broker or the future worker scheduler.
+`AccountingBridgeExporter` forwards `MetricRecord` measurements to a `MeasurementSink` while observability retains ownership of telemetry and #76 retains ownership of durable UsageRecords, normalization, aggregation, budgets, thresholds and costs.
 
-Later remote-worker or messaging adapters should:
+Missing measurements are not fabricated.
 
-1. create a carrier from the current span;
-2. attach the carrier mapping to their transport envelope;
-3. reconstruct the carrier remotely;
-4. create the child span using the propagated trace ID and parent span ID;
-5. preserve canonical correlation/causation IDs.
+## Current completion boundary
 
-## Progressive integrations
+The observability foundation and progressive contracts are implemented, including async links, retry metrics, Model/Tool instrumentation, health aggregation, Control Plane timeline enrichment, #35 trace propagation and the #76 measurement handoff seam.
 
-Later issues extend this foundation rather than replacing it:
+#16 nevertheless remains open until the real completion-input runtimes are available and integrated, especially:
 
-- model routing/provider work: model latency, usage, route/failure dimensions;
-- tool/capability work: tool latency, approval/failure dimensions;
-- node/worker scheduling: queue, dispatch, worker/node health and resource dimensions;
-- authorization/approval: denied/approval/verification events without secret/session leakage;
-- messaging: cross-process propagation and event-transport telemetry;
-- automation: trigger-to-task traces;
-- Agent Runtime: agent/team/orchestration child spans.
+- #33 real Agent/Team runtime;
+- #14 real scheduler/Worker/Node runtime and heartbeat/job/resource telemetry;
+- #15 authorization/approval audit integration;
+- #86 verification telemetry;
+- #76 real accounting consumer integration.
 
-These integrations are intentionally not hard dependencies of the Stage 1 package.
-
-## Reference integration
-
-A fully observable reference path is composed without changing kernel ownership:
-
-```python
-exporter = InMemoryExporter()
-telemetry = Telemetry(exporter)
-event_sink = ObservabilityEventProvider(telemetry)
-executor = ObservedExecutor(ReferenceExecutor(workspace_root), telemetry)
-lifecycle = ExecutorLifecycleBackend(executor, workspace=workspace, action="echo")
-kernel = PlatformKernel(
-    orchestrator=FakeOrchestrator(),
-    lifecycle=lifecycle,
-    event_sink=event_sink,
-)
-```
-
-The kernel emits canonical events, `ObservabilityEventProvider` derives lifecycle telemetry, and `ObservedExecutor` contributes execution child telemetry under the same task/run trace.
+See `docs/ISSUE_16_COMPLETION.md` for the current acceptance mapping and remaining closure checklist.
