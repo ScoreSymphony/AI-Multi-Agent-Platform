@@ -389,15 +389,36 @@ def _doctor(client: ControlPlaneClient) -> CommandResult:
                         "http_status": response.status,
                     }
                 )
-            elif (
-                name == "health"
+                continue
+            if name == "health":
+                health_status, provider_checks = _doctor_health(response.body)
+                blocking = blocking or health_status == "blocking"
+                degraded = degraded or health_status == "degraded"
+                checks.append(
+                    {
+                        "name": name,
+                        "status": health_status,
+                        "http_status": response.status,
+                    }
+                )
+                checks.extend(provider_checks)
+                continue
+            if (
+                name == "readiness"
                 and isinstance(response.body, dict)
-                and response.body.get("readiness") == "degraded"
+                and response.body.get("ready") is not True
             ):
-                degraded = True
-                checks.append({"name": name, "status": "degraded", "http_status": response.status})
-            else:
-                checks.append({"name": name, "status": "healthy", "http_status": response.status})
+                blocking = True
+                checks.append(
+                    {
+                        "name": name,
+                        "status": "blocking",
+                        "http_status": response.status,
+                        "message": "readiness payload did not report ready=true",
+                    }
+                )
+                continue
+            checks.append({"name": name, "status": "healthy", "http_status": response.status})
         except TransportError as exc:
             blocking = True
             checks.append({"name": name, "status": "blocking", "message": str(exc)})
@@ -422,6 +443,84 @@ def _doctor(client: ControlPlaneClient) -> CommandResult:
         ),
         exit_code=4 if blocking else 1 if degraded else 0,
     )
+
+
+def _doctor_health(body: JsonValue) -> tuple[str, list[JsonValue]]:
+    if not isinstance(body, dict):
+        return "blocking", [
+            {
+                "name": "health_schema",
+                "status": "blocking",
+                "message": "health payload must be a JSON object",
+            }
+        ]
+
+    ready = body.get("ready")
+    providers = body.get("providers")
+    if not isinstance(ready, bool) or not isinstance(providers, list):
+        return "blocking", [
+            {
+                "name": "health_schema",
+                "status": "blocking",
+                "message": "health payload must contain boolean ready and provider list",
+            }
+        ]
+
+    overall = "healthy" if ready else "blocking"
+    checks: list[JsonValue] = []
+    for provider in providers:
+        if not isinstance(provider, dict):
+            overall = "blocking"
+            checks.append(
+                {
+                    "name": "provider_health",
+                    "status": "blocking",
+                    "message": "provider health entry must be a JSON object",
+                }
+            )
+            continue
+
+        provider_id = provider.get("id")
+        provider_type = provider.get("type")
+        status = provider.get("status")
+        available = provider.get("available")
+        if (
+            not isinstance(provider_id, str)
+            or not isinstance(provider_type, str)
+            or not isinstance(status, str)
+            or not isinstance(available, bool)
+            or status not in {"healthy", "degraded", "unknown", "unavailable"}
+        ):
+            overall = "blocking"
+            checks.append(
+                {
+                    "name": "provider_health",
+                    "status": "blocking",
+                    "message": "provider health entry does not match the canonical schema",
+                }
+            )
+            continue
+
+        if not available or status == "unavailable":
+            check_status = "blocking"
+            overall = "blocking"
+        elif status in {"degraded", "unknown"}:
+            check_status = "degraded"
+            if overall == "healthy":
+                overall = "degraded"
+        else:
+            check_status = "healthy"
+        checks.append(
+            {
+                "name": "provider_health",
+                "status": check_status,
+                "provider_id": provider_id,
+                "provider_type": provider_type,
+                "provider_status": status,
+                "available": available,
+            }
+        )
+    return overall, checks
 
 
 def _project_command(

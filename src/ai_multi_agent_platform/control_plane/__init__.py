@@ -21,12 +21,12 @@ from .models import (
     WorkspaceIdentity,
 )
 from .service import ScopeStore
-from .task_management_api import ControlPlane, ControlPlaneHTTP, build_openapi
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
+from .workspace_task_management_api import ControlPlane, ControlPlaneHTTP, build_openapi
 
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS
 

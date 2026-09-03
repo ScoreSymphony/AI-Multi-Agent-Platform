@@ -78,6 +78,25 @@ Sensitive fields such as passwords, API keys, tokens, credentials, client secret
 
 This CLI-side protection does not make secret-bearing backend responses acceptable. Canonical APIs remain responsible for returning only safe/redacted data in the first place.
 
+## Doctor health semantics
+
+`platform doctor` consumes the canonical Control Plane manifest, `/health`, and `/readiness` endpoints. It does not probe providers or adapters directly.
+
+The current provider health vocabulary is:
+
+- `healthy` — provider is available and healthy;
+- `degraded` — provider remains available but reports degraded health;
+- `unknown` — provider remains available but its health is not established;
+- `unavailable` — provider is unavailable and canonical readiness fails.
+
+Doctor classifies the aggregate result as:
+
+- `healthy` with exit code `0` when the Control Plane is reachable, API-compatible, ready, and all reported providers are healthy;
+- `degraded` with exit code `1` when canonical readiness remains true but at least one provider reports `degraded` or `unknown`;
+- `blocking` with exit code `4` when the Control Plane is unreachable, readiness fails, a provider is unavailable/not available, the API version is incompatible, or the canonical health payload is structurally invalid.
+
+`/readiness` remains authoritative for whether the composed Control Plane can accept work. Provider checks add diagnostic detail; the CLI does not invent its own required-versus-optional dependency topology.
+
 ## Cancellation safety
 
 Task and Run cancellation are also meaningful side effects. They now use the same confirmation boundary:
