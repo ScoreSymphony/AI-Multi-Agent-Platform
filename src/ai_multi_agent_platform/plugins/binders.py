@@ -18,7 +18,9 @@ class CapabilityRegistryBinder:
 
     async def register(self, registration: ExtensionRegistration) -> None:
         if registration.spec.extension_type is not ExtensionType.CAPABILITY_PROVIDER:
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "capability binder received wrong extension type")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "capability binder received wrong extension type"
+            )
         if not isinstance(registration.instance, CapabilityToolProvider):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
