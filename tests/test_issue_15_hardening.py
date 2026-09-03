@@ -136,7 +136,9 @@ def test_control_plane_bridge_uses_canonical_vocabulary_and_resumes_after_approv
             LocalPrincipalPolicy(
                 principal_ref="user:test",
                 actor_types=frozenset({ActorType.HUMAN}),
-                allowed_actions=frozenset({AuthorizationAction.CREATE}),
+                allowed_actions=frozenset(
+                    {AuthorizationAction.CREATE, AuthorizationAction.READ}
+                ),
                 approval_actions=frozenset({AuthorizationAction.EXECUTE}),
                 resource_types=frozenset({ResourceType.TASK}),
             ),
@@ -208,8 +210,9 @@ def test_control_plane_bridge_uses_canonical_vocabulary_and_resumes_after_approv
     assert queued["status"] == TaskStatus.READY.value
 
     decision_records = [record for record in gate.audit_records if record.actor_ref == "user:test"]
-    assert decision_records[-1].action is AuthorizationAction.EXECUTE
+    assert decision_records[-1].action is AuthorizationAction.READ
     assert decision_records[-1].resource_type is ResourceType.TASK
+    assert any(record.action is AuthorizationAction.EXECUTE for record in decision_records)
 
 
 def test_control_plane_create_approval_cannot_be_reused_for_changed_payload() -> None:
@@ -224,6 +227,7 @@ def test_control_plane_create_approval_cannot_be_reused_for_changed_payload() ->
             LocalPrincipalPolicy(
                 principal_ref="user:test",
                 actor_types=frozenset({ActorType.HUMAN}),
+                allowed_actions=frozenset({AuthorizationAction.READ}),
                 approval_actions=frozenset({AuthorizationAction.CREATE}),
                 resource_types=frozenset({ResourceType.TASK}),
             ),
