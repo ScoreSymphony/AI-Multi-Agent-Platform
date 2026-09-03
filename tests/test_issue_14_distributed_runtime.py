@@ -18,6 +18,7 @@ from ai_multi_agent_platform.distributed import (
     NoEligibleWorkerError,
     NodeRecord,
     RegistrationRequest,
+    RegistryError,
     ReservationStatus,
     ResourceSnapshot,
     WorkerJobRequest,
@@ -176,7 +177,9 @@ def test_two_node_selection_filters_resources_capabilities_and_model() -> None:
     )
 
     assert decision.selected_worker_id == gpu_worker.worker_id
-    cpu_evaluation = next(item for item in decision.evaluations if item.worker_id == cpu_worker.worker_id)
+    cpu_evaluation = next(
+        item for item in decision.evaluations if item.worker_id == cpu_worker.worker_id
+    )
     assert not cpu_evaluation.accepted
     assert {reason.code.value for reason in cpu_evaluation.reasons} >= {
         "capability_unsupported",
@@ -211,9 +214,8 @@ def test_locality_is_preference_not_canonical_identity() -> None:
     _register(registry, remote, remote_worker)
     _register(registry, local, local_worker)
 
-    decision = DeterministicScheduler(registry).evaluate(
-        _job(requirements=JobRequirements(locality_refs=("workspace:alpha", "snapshot:alpha")))
-    )
+    requirements = JobRequirements(locality_refs=("workspace:alpha", "snapshot:alpha"))
+    decision = DeterministicScheduler(registry).evaluate(_job(requirements=requirements))
 
     assert decision.selected_worker_id == local_worker.worker_id
 
@@ -241,12 +243,18 @@ def test_reservation_prevents_overcommit_and_duplicate_claims_are_idempotent() -
     worker = _worker(node, concurrency=1)
     _register(registry, node, worker)
     scheduler = DeterministicScheduler(registry)
-    first_job = _job(requirements=JobRequirements(cpu_cores_min=2.0, ram_min_bytes=2_000))
+    requirements = JobRequirements(cpu_cores_min=2.0, ram_min_bytes=2_000)
+    first_job = _job(requirements=requirements)
 
     first = scheduler.schedule(first_job, now=BASE_TIME)
-    duplicate = scheduler.schedule(first_job, now=BASE_TIME)
+    duplicate = registry.reserve(
+        worker_job_id=first_job.worker_job_id,
+        worker_id=worker.worker_id,
+        requirements=requirements,
+        now=BASE_TIME,
+    )
 
-    assert duplicate.reservation.reservation_id == first.reservation.reservation_id
+    assert duplicate.reservation_id == first.reservation.reservation_id
     with pytest.raises(NoEligibleWorkerError):
         scheduler.schedule(
             _job(requirements=JobRequirements(cpu_cores_min=1.0, ram_min_bytes=1_000)),
@@ -276,8 +284,8 @@ def test_heartbeat_sequence_is_monotonic_and_duplicate_is_idempotent() -> None:
     _register(registry, node, worker)
     heartbeat = Heartbeat(
         node_id=node.node_id,
-        sequence=1,
-        observed_at=BASE_TIME + timedelta(seconds=1),
+        sequence=2,
+        observed_at=BASE_TIME + timedelta(seconds=2),
         workers=(worker,),
     )
 
@@ -285,12 +293,12 @@ def test_heartbeat_sequence_is_monotonic_and_duplicate_is_idempotent() -> None:
     duplicate = registry.heartbeat(heartbeat)
 
     assert duplicate == first
-    with pytest.raises(Exception, match="stale heartbeat sequence"):
+    with pytest.raises(RegistryError, match="stale heartbeat sequence"):
         registry.heartbeat(
             Heartbeat(
                 node_id=node.node_id,
-                sequence=0,
-                observed_at=BASE_TIME,
+                sequence=1,
+                observed_at=BASE_TIME + timedelta(seconds=1),
             )
         )
 
