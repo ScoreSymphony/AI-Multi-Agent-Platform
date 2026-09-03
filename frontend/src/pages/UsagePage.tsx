@@ -268,7 +268,7 @@ function UsageAggregateTable({ aggregates }: { aggregates: CanonicalUsageAggrega
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr><th>Metric</th><th>Value</th><th>Mode</th><th>Records</th><th>Quality mix</th></tr></thead>
+        <thead><tr><th>Metric</th><th>Value</th><th>Mode</th><th>Records</th><th>Quality mix</th><th>Recent history</th></tr></thead>
         <tbody>
           {aggregates.map((aggregate) => (
             <tr key={aggregate.id}>
@@ -277,6 +277,7 @@ function UsageAggregateTable({ aggregates }: { aggregates: CanonicalUsageAggrega
               <td>{aggregate.aggregation_mode}</td>
               <td>{aggregate.record_count}</td>
               <td>{qualitySummary(aggregate.quality_counts)}</td>
+              <td><TrendSummary aggregate={aggregate} /></td>
             </tr>
           ))}
         </tbody>
@@ -313,6 +314,31 @@ function UsageBudgetTable({ budgets }: { budgets: CanonicalUsageBudget[] }) {
       </table>
     </div>
   );
+}
+
+function TrendSummary({ aggregate }: { aggregate: CanonicalUsageAggregate }) {
+  const sampled = aggregate.trend.filter((point) => point.value !== null).slice(-6);
+  if (!sampled.length) return <span>No samples in window</span>;
+  return (
+    <div>
+      <small>
+        {aggregate.trend_bucket_seconds === null
+          ? "Historical window"
+          : `${formatNumber(aggregate.trend_bucket_seconds / 60)} min buckets`}
+      </small>
+      {sampled.map((point) => (
+        <div key={point.start}>
+          <time dateTime={point.start}>{formatTrendTime(point.start)}</time>{" "}
+          {formatQuantity(point.value, aggregate.unit)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatTrendTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString();
 }
 
 function qualitySummary(counts: Record<MeasurementQuality, number>): string {

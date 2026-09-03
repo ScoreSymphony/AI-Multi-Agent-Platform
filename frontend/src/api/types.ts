@@ -208,6 +208,15 @@ export interface CanonicalUsageRecord {
   provenance: Record<string, JsonValue>;
 }
 
+export interface CanonicalUsageTrendPoint {
+  start: string;
+  end: string;
+  value: number | null;
+  record_count: number;
+  unavailable_count: number;
+  quality_counts: Record<MeasurementQuality, number>;
+}
+
 export interface CanonicalUsageAggregate {
   id: string;
   metric_type: string;
@@ -217,6 +226,10 @@ export interface CanonicalUsageAggregate {
   unavailable_count: number;
   quality_counts: Record<MeasurementQuality, number>;
   aggregation_mode: AggregationMode;
+  trend_window_start: string | null;
+  trend_window_end: string | null;
+  trend_bucket_seconds: number | null;
+  trend: CanonicalUsageTrendPoint[];
 }
 
 export interface CanonicalUsageBudget {
