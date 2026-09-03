@@ -20,8 +20,8 @@ from .models import (
     RequestContext,
     WorkspaceIdentity,
 )
-from .observability_contract import ControlPlane, ControlPlaneHTTP, build_openapi
 from .service import ScopeStore
+from .workspace_contract import ControlPlane, ControlPlaneHTTP, build_openapi
 
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS
 
