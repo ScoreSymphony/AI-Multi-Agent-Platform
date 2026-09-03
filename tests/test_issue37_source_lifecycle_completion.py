@@ -275,9 +275,7 @@ def test_source_resolution_rejects_explicit_file_overlap_and_unregistered_connec
                 body={
                     "project_id": project_id,
                     "workspace_type": "isolated_run",
-                    "source_refs": [
-                        {"kind": "repository", "ref": "repo:example/project"}
-                    ],
+                    "source_refs": [{"kind": "repository", "ref": "repo:example/project"}],
                 },
             )
         )
