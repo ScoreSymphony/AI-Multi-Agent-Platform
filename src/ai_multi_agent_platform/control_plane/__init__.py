@@ -26,15 +26,28 @@ from .models import (
     RequestContext,
     WorkspaceIdentity,
 )
+from .notifications_composition import (
+    NOTIFICATION_COLLECTION,
+    NOTIFICATION_COMMANDS,
+    NOTIFICATION_PREFERENCE_COLLECTION,
+    ControlPlane,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
+)
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
-from .terminal_composition import ControlPlane, ControlPlaneASGI, ControlPlaneHTTP, build_openapi
 
-CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (AUTOMATION_COLLECTION, DELIVERY_COLLECTION)
+CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (
+    AUTOMATION_COLLECTION,
+    DELIVERY_COLLECTION,
+    NOTIFICATION_COLLECTION,
+    NOTIFICATION_PREFERENCE_COLLECTION,
+)
 
 __all__ = [
     "APIError",
@@ -55,6 +68,9 @@ __all__ = [
     "HTTPResponse",
     "IMPLEMENTED_DOMAIN_COLLECTIONS",
     "InMemoryResourceService",
+    "NOTIFICATION_COLLECTION",
+    "NOTIFICATION_COMMANDS",
+    "NOTIFICATION_PREFERENCE_COLLECTION",
     "PLATFORM_COLLECTIONS",
     "PageQuery",
     "REQUIRED_COMMANDS",
