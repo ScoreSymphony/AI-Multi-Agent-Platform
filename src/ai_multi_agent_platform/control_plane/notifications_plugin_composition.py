@@ -18,7 +18,13 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from .authentication_hardening import (
     AuthenticatedControlPlaneHTTP as _BaseAuthenticatedControlPlaneHTTP,
 )
-from .extensions import _command_operation, _list_operation, _read_operation
+from .extensions import (
+    CommandHandler,
+    ResourceService,
+    _command_operation,
+    _list_operation,
+    _read_operation,
+)
 from .http import HTTPRequest, HTTPResponse, _header, _page_query, _request_context, _require_json
 from .models import API_VERSION, APIException, api_exception_from_contract
 from .notifications_composition import (
@@ -38,6 +44,11 @@ _NOTIFICATION_COMMAND_SET = frozenset(NOTIFICATION_COMMANDS)
 class ControlPlane(_NotificationControlPlane):
     """Public Control Plane with private notifications hidden from generic extensions."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._notification_routes_locked = False
+        super().__init__(*args, **kwargs)
+        self._notification_routes_locked = True
+
     @property
     def registered_collections(self) -> tuple[str, ...]:
         return tuple(
@@ -53,6 +64,16 @@ class ControlPlane(_NotificationControlPlane):
             for command in super().registered_commands
             if command not in _NOTIFICATION_COMMAND_SET
         )
+
+    def register_resource_service(self, collection: str, service: ResourceService) -> None:
+        if self._notification_routes_locked and collection in _NOTIFICATION_COLLECTIONS:
+            raise ValueError(f"cannot override canonical notification collection: {collection}")
+        super().register_resource_service(collection, service)
+
+    def register_command(self, command: str, handler: CommandHandler) -> None:
+        if self._notification_routes_locked and command in _NOTIFICATION_COMMAND_SET:
+            raise ValueError(f"cannot override canonical notification command: {command}")
+        super().register_command(command, handler)
 
 
 class ControlPlaneHTTP(_NotificationControlPlaneHTTP):
