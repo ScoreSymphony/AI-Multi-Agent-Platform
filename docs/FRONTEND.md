@@ -22,7 +22,7 @@ The current implementation uses React + TypeScript with Vite as build/dev toolin
 
 The client code is split into:
 
-- `src/api/` — typed Control Plane models, centralized HTTP client, browser-session/CSRF boundary, error presentation, pagination contracts and SSE stream client;
+- `src/api/` — typed Control Plane models, centralized/domain collection clients, browser-session/CSRF boundary, error presentation, pagination contracts and SSE stream client;
 - `src/platform/` — canonical identifier helpers;
 - `src/security/` — presentation-only permission hints; the server is authoritative;
 - `src/app/` — routing, navigation, shell and reusable cursor-pagination state;
@@ -50,11 +50,14 @@ The initial shell has progressed beyond the first Task/Run vertical slice. The c
 - Tools/Capabilities — canonical Capability inventory plus public Capability Provider descriptors, including versioned health, safety, side effects, permissions, approval requirements and schema summaries; no provider-private invocation path is invented;
 - Models/Providers — canonical model inventory, provider inventory, health/capabilities and supported model/provider commands;
 - Terminal/Sessions — canonical Terminal session UI and Control Plane streaming gateway from #73, without exposing backend process/session handles as frontend identity;
+- Approvals — read-only canonical exact-action approval queue and detail views with risk, policy, digest, Task/Run/Capability references and decision metadata; proposed payload values are not exposed and no approve/deny command is invented;
 - Settings/Authentication — #36 browser login, current canonical identity, browser-session inventory, renewal, targeted session revocation and logout; the HttpOnly session secret remains opaque to frontend code;
 - Events/Observability — Task-scoped timeline and available backend-neutral observability information;
 - Usage & Limits — canonical usage records, aggregates and budgets exposed by the Control Plane.
 
 Paginated list surfaces use opaque server cursors. The frontend stores only cursor history required for local Previous navigation; it never decodes a cursor or derives an offset from it. Combined inventory pages such as Projects/Workspaces, Models/Providers, Agents/AgentRuns and Capabilities/Capability Providers keep independent pagination state for each canonical collection.
+
+Read-only extension collections such as `approvals` use the same versioned Control Plane and session-aware browser transport through a constrained collection reader. Collection names are validated before URL construction, opaque cursor/filter values are forwarded without decoding, and there is no provider/private-backend fallback.
 
 ## Task / Run vertical slice
 
@@ -79,6 +82,8 @@ The shell composes the #36 browser-session boundary in front of the shared `Cont
 The Settings surface consumes only canonical #36 routes for login, `auth/me`, session enumeration, renewal, targeted session revocation and logout. First-user bootstrap, password recovery and credential/PAT administration are intentionally not inferred as ordinary browser workflows merely because backend hooks exist; they retain their separate operator/authorization semantics.
 
 Authentication establishes identity only. Permission hooks remain advisory presentation hints, and buttons are never proof of authorization: the Control Plane and #15 remain authoritative. Canonical unauthenticated and authorization-denied responses are presented separately. Approval-required authorization outcomes are surfaced with their canonical approval reference when the Control Plane returns one; the frontend does not manufacture or bypass approval state.
+
+The Approval surface is deliberately inspection-only. It consumes the canonical `approvals` ResourceService projection and shows exact-action binding metadata without proposed payload values. Decision authority remains inside #15. Until a northbound decision route exists that preserves exact digest, actor, expiry, policy and authorization semantics, the web client exposes no Approve/Deny buttons.
 
 SSE relies on browser credential handling because native `EventSource` does not allow arbitrary Authorization headers. #36 authenticates the stream request server-side before the canonical event transport constructs its request context.
 
@@ -128,6 +133,8 @@ The frontend test suite now includes focused contract coverage for:
 - canonical Agent, Agent Team, AgentRun, Capability and Capability Provider route forwarding;
 - global Search query/result navigation through the canonical Search endpoint;
 - canonical Terminal session/gateway client behavior;
+- constrained read-only extension collection URL/filter/cursor forwarding and path-injection rejection;
+- manifest-gated read-only Approval queue routing;
 - canonical SSE URL, credential handling, event/error delivery and reconnect/close state;
 - explicit unavailable/degraded navigation behavior and manifest-gated optional routes;
 - shell accessibility status semantics, including loading versus actual API outage and the real Settings/session route.
@@ -164,7 +171,6 @@ At the current repository state, the remaining browser work is split between API
 - Organizations / Memberships still waits for #87;
 - Notifications still lacks its dedicated canonical browser surface;
 - Memory/Knowledge content management remains beyond the currently available reference/provider-level data;
-- canonical read-only `approvals` now exists and can be integrated as an inspection queue, but approve/deny must not be invented before the exact #15 decision route exists;
 - canonical `automations` and `automation-deliveries` now exist and can be integrated through their #18 Control Plane contracts;
 - Plugins waits for the #20 Control Plane/CLI lifecycle work to merge and stabilize;
 - other later product surfaces such as Evaluations, Templates and Import/Export remain progressive according to their owning canonical contracts.
