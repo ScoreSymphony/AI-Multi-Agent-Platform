@@ -80,7 +80,10 @@ class WorkspaceSourceResolverRegistry:
         source_refs: tuple[WorkspaceSourceRef, ...],
         context: DataAccessContext,
     ) -> tuple[ResolvedWorkspaceSource, ...]:
-        resolved = tuple([await self.resolve(source_ref, context) for source_ref in source_refs])
+        resolved_items: list[ResolvedWorkspaceSource] = []
+        for source_ref in source_refs:
+            resolved_items.append(await self.resolve(source_ref, context))
+        resolved = tuple(resolved_items)
         paths: set[str] = set()
         for source in resolved:
             for entry in source.files:
@@ -105,7 +108,10 @@ class EmptyWorkspaceSourceResolver(WorkspaceSourceResolver):
     ) -> ResolvedWorkspaceSource:
         del context
         if source_ref.kind is not self.kind:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "empty resolver received another source kind")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "empty resolver received another source kind",
+            )
         return ResolvedWorkspaceSource(source_ref=source_ref)
 
 
