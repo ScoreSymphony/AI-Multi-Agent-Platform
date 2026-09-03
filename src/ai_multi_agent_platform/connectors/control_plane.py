@@ -10,7 +10,13 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.security import ActorIdentity, ActorType, SecretReference, infer_actor_identity
+from ai_multi_agent_platform.security import (
+    ActorIdentity,
+    ActorType,
+    SecretReference,
+    infer_actor_identity,
+    redact_sensitive,
+)
 
 from .models import Connection, ConnectorDefinition
 from .service import ConnectorService
@@ -263,6 +269,12 @@ def _definition_resource(definition: ConnectorDefinition) -> dict[str, JsonValue
 
 
 def _connection_resource(connection: Connection) -> dict[str, JsonValue]:
+    endpoint_metadata = redact_sensitive(dict(connection.endpoint_metadata))
+    if not isinstance(endpoint_metadata, dict):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "connection endpoint metadata cannot be serialized safely",
+        )
     return {
         "id": connection.id,
         "connector_type_id": connection.connector_type_id,
@@ -272,7 +284,7 @@ def _connection_resource(connection: Connection) -> dict[str, JsonValue]:
         "display_name": connection.display_name,
         "project_id": connection.project_id,
         "organization_id": connection.organization_id,
-        "endpoint_metadata": dict(connection.endpoint_metadata),
+        "endpoint_metadata": endpoint_metadata,
         "secret_references": [reference.to_dict() for reference in connection.secret_references],
         "requested_scopes": list(connection.requested_scopes),
         "granted_scopes": list(connection.granted_scopes),
@@ -314,6 +326,12 @@ def _connection_from_payload(connection_id: str, payload: dict[str, JsonValue]) 
     raw_endpoint = payload.get("endpoint_metadata", {})
     if not isinstance(raw_endpoint, dict):
         raise ContractError(ErrorCode.INVALID_REQUEST, "endpoint_metadata must be an object")
+    endpoint_metadata = cast(dict[str, JsonValue], raw_endpoint)
+    if redact_sensitive(endpoint_metadata) != endpoint_metadata:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "endpoint_metadata must not contain embedded credentials; use secret_references",
+        )
     raw_refs = payload.get("secret_references", [])
     if not isinstance(raw_refs, list):
         raise ContractError(ErrorCode.INVALID_REQUEST, "secret_references must be an array")
@@ -330,7 +348,7 @@ def _connection_from_payload(connection_id: str, payload: dict[str, JsonValue]) 
         display_name=_required_string(payload, "display_name"),
         project_id=_optional_string(payload.get("project_id"), "project_id"),
         organization_id=_optional_string(payload.get("organization_id"), "organization_id"),
-        endpoint_metadata=cast(dict[str, JsonValue], raw_endpoint),
+        endpoint_metadata=endpoint_metadata,
         secret_references=references,
         requested_scopes=tuple(cast(list[str], raw_scopes)),
     )
