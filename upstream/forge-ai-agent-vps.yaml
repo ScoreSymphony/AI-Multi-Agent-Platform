@@ -1,37 +1,38 @@
 name: "ScoreSymphony AI-Agent-VPS Forge subsystem"
 purpose: "Source/reference for proven execution, recovery, domain-event, workspace and executor behavior evaluated for optional reuse behind the platform-owned Executor boundary."
-status: candidate
+status: approved
 integration_categories:
   - "adapter integration"
   - "reference-only influence"
-  - "selective code port"
 canonical_upstream: "https://github.com/ScoreSymphony/AI-Agent-VPS"
 pinned_revision: "5a9f317e3bab056a4cebe214b03912a9b7ad3824"
 verified_license: "MIT"
 license_verification_date: "2026-09-03"
 last_review_date: "2026-09-03"
-platform_adapter_or_boundary: "ai_multi_agent_platform.execution.Executor; future ForgeExecutor/ForgeClient adapter boundary"
-local_source_path: ""
-source_origin_path: "core/forge/"
+platform_adapter_or_boundary: "src/ai_multi_agent_platform/adapters/forge.py implementing ai_multi_agent_platform.execution.Executor through a platform-owned ForgeClient protocol"
+local_source_path: "src/ai_multi_agent_platform/adapters/forge.py"
+source_origin_path: "core/forge/ (behavior/specification reference only; no source copied)"
 modified_locally: false
-modification_summary: "No Forge source code has been copied by the initial issue #9 audit. Later selective ports must record file-level provenance before merge."
+modification_summary: "The ForgeExecutor/ForgeClient boundary is platform-owned Python code written against canonical Executor contracts. No Forge source code is copied."
 required_notices:
-  - "Preserve the MIT copyright and permission notice when copying substantial source portions."
+  - "No upstream source notice is required for the current adapter implementation because no Forge source is copied; preserve MIT notices if substantial source is selectively copied later."
 compatibility_constraints:
   - "Legacy Forge implementation is primarily Rust while the new platform core is Python."
   - "Forge Task/Execution/Event/API/DB types are not canonical platform types."
   - "Canonical Task/Run lifecycle ownership must remain in the platform kernel."
+  - "A concrete Forge transport must implement the platform-owned ForgeClient protocol rather than leaking Forge-private types into core contracts."
 security_constraints:
   - "Any shell/process execution path requires explicit policy, environment filtering, workspace isolation and sandbox/resource controls."
   - "Forge authentication/authorization may protect the backend connection but may not replace platform authorization."
+  - "ForgeExecutor validates the configured workspace root and rejects traversal before dispatch; backend artifact paths are validated again before becoming canonical evidence."
 deployment_constraints:
-  - "Forge must remain optional and independently disableable."
+  - "Forge remains optional and is not imported by the execution core or required for reference executor startup/tests."
   - "Legacy SQLite, daemon and local worktree assumptions may not become platform-wide requirements."
 resource_constraints:
   - "Depends on the selected Forge deployment and executor backend; no baseline resource requirement is imposed on platform core."
 required_for_baseline: false
 recurring_paid_service_required: false
-update_review_method: "Before implementation/update, compare the pinned AI-Agent-VPS revision with the proposed source revision, review license/security/behavior changes, update docs/FORGE_REUSE_AUDIT.md and this record, then run executor contract and Forge regression/integration tests."
-exit_replacement_strategy: "Remove the Forge adapter/client and its private state. Platform Task/Run/Event/Workspace contracts and the reference executor must continue without migration of canonical state."
+update_review_method: "Before a concrete Forge transport or reuse update, compare the pinned AI-Agent-VPS revision with the proposed source revision, review license/security/behavior changes, update docs/FORGE_REUSE_AUDIT.md and this record, then run executor contract and Forge regression/integration tests."
+exit_replacement_strategy: "Remove src/ai_multi_agent_platform/adapters/forge.py and any concrete Forge client/transport plus adapter-private state. Platform Task/Run/Event/Workspace contracts and the reference executor continue without canonical-state migration."
 adr: ""
-notes: "Initial Phase 1–3 audit for issue #9. Selective code port is listed as a possible category, not yet an approved copy operation. The preferred first implementation is a platform-owned adapter around a minimal Forge client/transport, with behavior/spec reimplementation where legacy code is tightly coupled."
+notes: "Phase 4 now has a platform-owned ForgeExecutor and minimal ForgeClient protocol with contract/regression tests using a fake backend. This record is approved rather than integrated because no concrete AI-Agent-VPS transport is connected yet. Recovery/historical-event reuse remains a later issue #9 step."

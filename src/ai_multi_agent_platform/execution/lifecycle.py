@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ai_multi_agent_platform.contracts import (
+    AdapterMetadata,
     ContractError,
     ErrorCode,
     ExecutionSnapshot,
@@ -56,8 +57,9 @@ class ExecutorLifecycleBackend(LifecycleBackend):
         if existing is None:
             result = await self._executor.execute(
                 ExecutionRequest(
-                    task_id=request.subject_id,
+                    task_id=request.context.correlation_id,
                     run_id=request.run_id,
+                    step_id=request.subject_id if request.subject_type == "step" else None,
                     correlation_id=request.context.correlation_id,
                     action=self._action,
                     workspace=self._workspace,
@@ -66,9 +68,12 @@ class ExecutorLifecycleBackend(LifecycleBackend):
                 )
             )
             self._results[request.run_id] = result
+        else:
+            result = existing
         return KernelExecutionHandle(
             run_id=request.run_id,
             backend_ref=f"{self._executor.descriptor.executor_id}:{request.run_id}",
+            adapter_metadata=self._adapter_metadata(result),
         )
 
     async def get(
@@ -93,6 +98,7 @@ class ExecutorLifecycleBackend(LifecycleBackend):
                 "output": result.output,
                 "artifacts": [artifact.relative_path for artifact in result.artifacts],
             },
+            adapter_metadata=self._adapter_metadata(result),
         )
 
     async def cancel(
@@ -126,6 +132,13 @@ class ExecutorLifecycleBackend(LifecycleBackend):
         path = Path(root) / workspace
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    @staticmethod
+    def _adapter_metadata(result: ExecutionResult) -> tuple[AdapterMetadata, ...]:
+        return tuple(
+            AdapterMetadata(namespace=namespace, values=dict(values))
+            for namespace, values in sorted(result.adapter_metadata.items())
+        )
 
     @staticmethod
     def _map_status(status: ExecutionStatus) -> KernelExecutionStatus:
