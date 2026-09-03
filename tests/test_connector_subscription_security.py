@@ -20,6 +20,38 @@ from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.security import ActorIdentity, ActorType, SecretReference
 
 
+def test_connection_service_rejects_embedded_endpoint_credentials() -> None:
+    project_id = new_id("project")
+    actor = ActorIdentity(new_id("user"), ActorType.HUMAN)
+    context = OperationContext(
+        correlation_id="connector-endpoint-security",
+        owner_type=actor.actor_type.value,
+        owner_id=actor.actor_id,
+        project_id=project_id,
+    )
+    service = ConnectorService(InMemoryConnectorRepository(), ConnectorRegistry())
+    asyncio.run(service.register_provider(ReferenceConnectorProvider()))
+
+    with pytest.raises(ContractError) as exc_info:
+        asyncio.run(
+            service.create_connection(
+                Connection(
+                    id=new_id("connection"),
+                    connector_type_id=REFERENCE_CONNECTOR_TYPE,
+                    connector_version=REFERENCE_CONNECTOR_VERSION,
+                    owner_type=actor.actor_type.value,
+                    owner_id=actor.actor_id,
+                    display_name="Unsafe direct-service fixture",
+                    project_id=project_id,
+                    endpoint_metadata={"api_token": "plaintext-must-not-be-stored"},
+                ),
+                actor=actor,
+                context=context,
+            )
+        )
+    assert exc_info.value.code is ErrorCode.INVALID_CONFIGURATION
+
+
 def test_event_subscription_rejects_embedded_credentials_before_provider_dispatch() -> None:
     project_id = new_id("project")
     actor = ActorIdentity(new_id("user"), ActorType.HUMAN)
