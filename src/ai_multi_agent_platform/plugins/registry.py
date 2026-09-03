@@ -235,7 +235,9 @@ class PluginRegistry:
             compatibility=record.compatibility,
             health=record.health,
             extension_ids=tuple(extension.extension_id for extension in manifest.extensions),
-            extension_types=tuple(extension.extension_type.value for extension in manifest.extensions),
+            extension_types=tuple(
+                extension.extension_type.value for extension in manifest.extensions
+            ),
             requested_permissions=tuple(
                 sorted(permission.value for permission in manifest.requested_permissions)
             ),
