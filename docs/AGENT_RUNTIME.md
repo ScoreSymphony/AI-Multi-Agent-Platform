@@ -111,10 +111,13 @@ runtime can be given an explicit set of available capability IDs for determinist
 tests and bootstrap execution. Missing, denied or incompatible capabilities fail before
 execution.
 
-Approval references are retained as Agent capability policy metadata. Actual approval
-requirements and decisions remain enforced by the canonical capability invocation and
-authorization/approval pipeline; the Agent runtime does not create a second approval
-authority or bypass that pipeline.
+An Agent-specific `approval_ref` is a hard requirement, not descriptive metadata. A
+capability constrained by an Agent approval reference can only be prepared when a
+canonical `CapabilityRegistry` is attached and the resolved `CapabilitySpec` declares
+that same reference in `required_approvals`. This binds the Agent policy to the existing
+canonical capability invocation approval path instead of introducing a second approval
+authority. If the canonical capability would not enforce the Agent's approval reference,
+preflight fails before orchestrator mapping.
 
 ## Memory and knowledge
 
@@ -126,14 +129,18 @@ Agent revisions carry only provider-neutral access declarations:
 - explicit opt-in for user-scoped memory.
 
 `AgentService.ensure_memory_scope` and `ensure_knowledge_source` are the direct policy
-hooks used by data integrations. Backend collection names or vector indexes are not
-part of the Agent contract.
+hooks used by data integrations. Both allowed and denied access paths are covered by
+Agent contract tests. Backend collection names or vector indexes are not part of the
+Agent contract.
 
 ## Agent Teams
 
 An `AgentTeamRevision` contains exact `AgentRevisionRef` members, member roles,
-delegation targets, shared capabilities, coordination-policy references, optional
-leader assignment, limits and unavailable-member behavior.
+delegation targets, shared capabilities, provider-neutral `shared_resource_refs`,
+coordination-policy references, optional leader assignment, limits and unavailable-member
+behavior. Shared resource references remain opaque canonical/integration references; the
+Team contract does not embed host paths, provider object handles or orchestrator-private
+resource schemas.
 
 A reviewer is an ordinary Agent member role. The Agent subsystem gives a reviewer no
 special completion authority, no policy bypass, and no ability to redefine canonical
@@ -142,7 +149,9 @@ respective lifecycle/governance layers.
 
 The reference runtime preflights every required team member before persisting team
 AgentRun records. Optional members can be skipped only when the Team revision explicitly
-uses `skip_optional`.
+uses `skip_optional`. `max_parallel_agents` is enforced by the reference start path;
+`max_steps` remains a canonical coordination limit visible to orchestrator adapters
+through the pinned Team revision.
 
 ## Runtime records
 
@@ -192,7 +201,11 @@ When an `AgentRuntime` is supplied to the composition, the extension also regist
 - `agent-team.start`
 
 All mutations use the existing Control Plane idempotency and authorization command seam.
-Updates require `expected_revision` to prevent lost updates.
+Updates require `expected_revision` to prevent lost updates. Agent and Team create,
+update, clone and rollback operations write `Provenance(source="control-plane")` with
+the calling principal and request/correlation identifiers. Update and clone commands
+also preserve or explicitly change owner, project and workspace scope without replacing
+the canonical Agent/Team identity.
 
 ## Deliberate boundaries
 
