@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
@@ -239,7 +239,6 @@ def _node_resource(node: NodeRecord) -> dict[str, JsonValue]:
         "maintenance": node.maintenance,
         "network_available": node.network_available,
         "locality_refs": list(node.locality_refs),
-        "adapter_metadata": _adapter_metadata(node.adapter_metadata),
     }
 
 
@@ -261,7 +260,6 @@ def _worker_resource(worker: WorkerRecord) -> dict[str, JsonValue]:
         "last_heartbeat_at": _timestamp(worker.last_heartbeat_at),
         "draining": worker.draining,
         "locality_refs": list(worker.locality_refs),
-        "adapter_metadata": _adapter_metadata(worker.adapter_metadata),
     }
 
 
@@ -336,16 +334,6 @@ def _accelerator(accelerator: AcceleratorResource) -> dict[str, JsonValue]:
         "memory_total_bytes": accelerator.memory_total_bytes,
         "memory_available_bytes": accelerator.memory_available_bytes,
     }
-
-
-def _adapter_metadata(items: tuple[AdapterMetadata, ...]) -> list[JsonValue]:
-    return [
-        {
-            "namespace": item.namespace,
-            "values": dict(item.values),
-        }
-        for item in items
-    ]
 
 
 def _timestamp(value: datetime) -> str:
