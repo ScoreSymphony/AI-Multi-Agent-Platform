@@ -55,10 +55,34 @@ pip install '.[server]'
 
 On Windows PowerShell, activate the environment with `.venv\Scripts\Activate.ps1`.
 
-## Configuration
+The `server` extra installs the HTTP server needed by `platform-server serve`. Hermes, Forge,
+LiteLLM, MCP and model-provider extras remain optional and are not required by this baseline.
 
-`config/single-node.env.example` lists the supported Stage-1 environment settings. They are
-ordinary configuration only; credentials do not belong in that file.
+## Generate and load configuration
+
+Start from the checked-in credential-free example rather than editing a source-controlled
+secret file:
+
+```bash
+cp config/single-node.env.example .env.single-node
+```
+
+Review `.env.single-node`, especially `AI_MAP_DATA_DIR`, host and port. The platform does not
+silently load dotenv files: supported values enter through the process environment and then
+go through the #34 configuration resolver.
+
+For a POSIX shell:
+
+```bash
+set -a
+. ./.env.single-node
+set +a
+```
+
+For PowerShell, set the corresponding `AI_MAP_*` environment variables in the current
+process before invoking `platform-server`.
+
+The supported Stage-1 settings are:
 
 ```bash
 export AI_MAP_DATA_DIR="$PWD/.data/single-node"
@@ -68,9 +92,9 @@ export AI_MAP_SECURE_COOKIE="true"
 export AI_MAP_LOG_LEVEL="info"
 ```
 
-The deployment loader imports only explicitly supported environment variables through the
-#34 configuration boundary. It does not forward the complete process environment to the
-platform.
+The deployment loader imports only explicitly supported environment variables. It does not
+forward the complete process environment to the platform, and the example contains no
+credentials.
 
 `AI_MAP_SECURE_COOKIE=false` is accepted only for a loopback-only deployment. External
 exposure should keep secure cookies enabled and terminate TLS at an explicitly configured
@@ -95,6 +119,22 @@ The operation is retry-safe for the same first username/password. If a process i
 occurs after identity creation but before policy creation, re-running the command repairs the
 missing policy instead of creating another user.
 
+## Canonical Task/Run smoke test
+
+After the first administrator exists, run the built-in baseline smoke:
+
+```bash
+platform-server smoke
+```
+
+This creates a small Project and executes one canonical Task/Run through the in-process
+`ReferenceOrchestrator` and `ReferenceExecutor`. It requires no paid API, model endpoint,
+remote Worker, MCP server, LiteLLM, Hermes or Forge.
+
+The smoke uses stable idempotency keys. Re-running it, including after a process restart,
+reuses the same canonical smoke Task/Run instead of duplicating work. Success prints the
+canonical Task/Run IDs and terminal statuses.
+
 ## Start
 
 ```bash
@@ -114,9 +154,10 @@ curl http://127.0.0.1:8000/api/v1/health
 curl http://127.0.0.1:8000/api/v1/ready
 ```
 
-Required SQLite/file configuration failures fail during composition/startup. Optional
-external adapters are not required by this profile and therefore cannot make the baseline
-unready merely by being absent.
+Required persistence/configuration failures block composition/startup and are reported as
+configuration failures. Optional external adapters are not required by this profile and
+therefore cannot make the baseline unready merely by being absent. Later profiles that enable
+optional adapters may report their degradation through the progressive #16 health model.
 
 ## Persistent layout
 
@@ -159,7 +200,8 @@ The Stage-1 regression suite verifies restart persistence for:
 - local user accounts;
 - browser sessions;
 - API credentials including credential-local scope metadata;
-- local administrator authorization policy.
+- local administrator authorization policy;
+- the retry-safe canonical deployment smoke.
 
 The ReferenceExecutor itself remains replaceable and does not become canonical lifecycle
 storage.
@@ -169,6 +211,39 @@ storage.
 Use the service manager's normal graceful stop or `Ctrl+C` for a foreground process. Uvicorn
 handles ASGI process shutdown; canonical durable state has already been committed through the
 platform persistence boundaries rather than being owned by the web-server process.
+
+## Update and backup hooks
+
+#40 owns the tested backup/restore and hardware-relocation contract, while #41 owns platform
+and schema upgrade/migration rules. Until those issues are complete, do not claim a live
+snapshot or cross-version migration guarantee from this Stage-1 profile.
+
+For a conservative same-version operator copy today:
+
+1. stop `platform-server` cleanly;
+2. preserve the deployment configuration separately;
+3. copy the complete `AI_MAP_DATA_DIR` as one unit, including every SQLite database and the
+   `files/`, `workspaces/` and `executor/` directories;
+4. retain that copy before changing package/version state;
+5. restart with the original data root and verify `/api/v1/health`, `/api/v1/ready` and
+   `platform-server smoke`.
+
+This is an operational hook, not a substitute for the future #40 relocation/restore tests or
+#41 migration guarantees.
+
+## Uninstall and data retention
+
+Application removal and data deletion are intentionally separate operations.
+
+To remove the installed process/package while retaining platform data, stop the service and
+remove the virtual environment or installed package plus any local launch/service definition.
+Do **not** delete `AI_MAP_DATA_DIR`; it remains the retained local state for a later compatible
+reinstallation.
+
+To intentionally erase the single-node installation's persisted local state, first stop the
+process and then remove the configured `AI_MAP_DATA_DIR`. That deletes the local canonical
+state, authentication/authorization stores, files and workspaces contained there. Keep an
+operator copy first when retention is required.
 
 ## Networking baseline
 
