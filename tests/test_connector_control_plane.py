@@ -4,10 +4,10 @@ import asyncio
 
 from ai_multi_agent_platform.configuration.secrets import LocalSecretProvider
 from ai_multi_agent_platform.connectors import (
-    ReferenceConnectorProvider,
     ConnectorRegistry,
     ConnectorService,
     InMemoryConnectorRepository,
+    ReferenceConnectorProvider,
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
 from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
