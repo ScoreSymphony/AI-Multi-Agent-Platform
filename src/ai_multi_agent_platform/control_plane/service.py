@@ -289,6 +289,21 @@ class ControlPlane:
         context: RequestContext,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        return await self._create_task_with_authorization_payload(
+            context,
+            payload,
+            authorization_payload=payload,
+        )
+
+    async def _create_task_with_authorization_payload(
+        self,
+        context: RequestContext,
+        payload: dict[str, JsonValue],
+        *,
+        authorization_payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        """Create a task while binding approval to the original northbound payload."""
+
         owner_type, owner_id = _resolve_owner(context.actor, payload)
         project_id = _optional_string(payload, "project_id")
         if project_id is not None:
@@ -300,7 +315,7 @@ class ControlPlane:
             owner_type=owner_type,
             owner_id=owner_id,
             project_id=project_id,
-            request_payload_digest=_payload_digest(payload),
+            request_payload_digest=_payload_digest(authorization_payload),
         )
         task = await self._kernel.create_task(
             idempotency_key=_require_key(context),
