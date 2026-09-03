@@ -5,7 +5,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from control_plane_contract_helpers import api_headers
 
 from ai_multi_agent_platform.contracts import ContractError
