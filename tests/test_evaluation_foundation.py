@@ -112,9 +112,7 @@ def test_deterministic_assertions_pass_and_fail_without_model_evaluator() -> Non
     failing = evaluator.evaluate(
         evaluation_run_id="evaluation_run_fail",
         case=case,
-        observation=EvaluationObservation(
-            data={"result": {"status": "failed", "artifacts": []}}
-        ),
+        observation=EvaluationObservation(data={"result": {"status": "failed", "artifacts": []}}),
     )
 
     assert passing.outcome is EvaluationOutcome.PASSED
@@ -153,9 +151,7 @@ def test_metric_threshold_evaluator_is_deterministic() -> None:
     result = evaluator.evaluate(
         evaluation_run_id="evaluation_run_metrics",
         case=case,
-        observation=EvaluationObservation(
-            metrics={"latency_ms": 450.0, "retry_count": 0.0}
-        ),
+        observation=EvaluationObservation(metrics={"latency_ms": 450.0, "retry_count": 0.0}),
     )
 
     assert result.outcome is EvaluationOutcome.PASSED
@@ -212,12 +208,8 @@ def test_score_drop_threshold_is_versioned_policy_data() -> None:
     report = RegressionEngine().compare(
         baseline_run_id="evaluation_run_baseline",
         current_run_id="evaluation_run_current",
-        baseline_results=(
-            _result(evaluation_run_id="evaluation_run_baseline", score=0.90),
-        ),
-        current_results=(
-            _result(evaluation_run_id="evaluation_run_current", score=0.80),
-        ),
+        baseline_results=(_result(evaluation_run_id="evaluation_run_baseline", score=0.90),),
+        current_results=(_result(evaluation_run_id="evaluation_run_current", score=0.80),),
         policy=policy,
     )
 
