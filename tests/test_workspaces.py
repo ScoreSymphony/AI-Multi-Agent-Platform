@@ -105,7 +105,9 @@ def test_local_executor_uses_bounded_materialization_and_returns_canonical_chang
         assert result.status is ExecutionStatus.SUCCEEDED
 
         changes = await provider.capture_changes(materialization.id, context)
-        returned = next(change for change in changes.changes if change.relative_path == "out/result.txt")
+        returned = next(
+            change for change in changes.changes if change.relative_path == "out/result.txt"
+        )
         assert returned.kind is WorkspaceChangeKind.CREATED
         assert returned.file_id is not None
         assert await files.read(returned.file_id, context.operation) == b"ok"
