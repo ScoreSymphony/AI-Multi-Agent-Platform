@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from pathlib import Path
 
 from ai_multi_agent_platform.adapters.forge import (
@@ -91,9 +92,9 @@ def test_forge_external_identity_survives_canonical_sqlite_replay(tmp_path: Path
         succeeded = next(event for event in history if event.event_type == "run.succeeded")
         for event in (running, succeeded):
             metadata = event.payload["adapter_metadata"]
-            assert isinstance(metadata, dict)
+            assert isinstance(metadata, Mapping)
             forge = metadata["forge"]
-            assert isinstance(forge, dict)
+            assert isinstance(forge, Mapping)
             assert forge["execution_id"] == "forge-job-1"
             assert forge["route"] == "primary"
         assert running.payload["backend_ref"] == f"forge:{run.run_id}"
