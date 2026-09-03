@@ -129,6 +129,8 @@ This is logical contract isolation. Process/container sandboxing for untrusted c
 
 `ReferenceCapabilityPlugin` is deterministic and bundled with the repository only to exercise the lifecycle. It requests `capability_registration`, accepts an optional string `prefix`, registers `plugin.echo`, reports normalized health, disables cleanly and can be removed without leaving Capability Registry state behind.
 
+Because registration goes through the canonical Capability Registry, enabled plugin capabilities/providers also appear through its administrative capability/provider inventory surfaces; plugins do not maintain a parallel inventory.
+
 ## Remaining #20 work
 
 The remaining issue work should compose on this foundation rather than create another plugin model:
