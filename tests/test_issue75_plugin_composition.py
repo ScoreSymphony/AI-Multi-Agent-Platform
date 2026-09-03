@@ -1,3 +1,5 @@
+import asyncio
+
 from ai_multi_agent_platform.control_plane import (
     NOTIFICATION_COLLECTION,
     NOTIFICATION_COMMANDS,
@@ -33,14 +35,14 @@ def test_public_control_plane_composes_notifications_above_current_plugin_termin
     # Notifications are built-in private resources, not generic Search-indexed extensions.
     assert NOTIFICATION_COLLECTION not in control_plane.registered_collections
     assert NOTIFICATION_PREFERENCE_COLLECTION not in control_plane.registered_collections
-    assert all(command not in control_plane.registered_commands for command in NOTIFICATION_COMMANDS)
+    assert all(
+        command not in control_plane.registered_commands for command in NOTIFICATION_COMMANDS
+    )
     assert hasattr(control_plane, "plugin_registry")
     assert control_plane.plugin_registry is None
 
 
 def test_public_manifest_and_openapi_publish_notifications_as_canonical_resources() -> None:
-    import asyncio
-
     async def scenario() -> None:
         repository = InMemoryKernelRepository()
         control_plane = ControlPlane(
