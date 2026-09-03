@@ -172,6 +172,21 @@ class AgentService:
             provenance=provenance,
         )
 
+    def delete_agent(
+        self,
+        agent_id: str,
+        *,
+        expected_owner_ref: OwnerRef | None = None,
+    ) -> None:
+        current = self.repository.get_agent(agent_id)
+        if expected_owner_ref is not None and current.owner_ref != expected_owner_ref:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "agent deletion owner check failed",
+                details={"agent_id": agent_id},
+            )
+        self.repository.delete_agent(agent_id)
+
     def get_agent_revision(self, agent_id: str, revision: int | None = None) -> AgentRevision:
         definition = self.repository.get_agent(agent_id)
         return self.repository.get_agent_revision(
@@ -382,6 +397,21 @@ class AgentService:
             workspace_id=resolved_workspace,
             provenance=provenance,
         )
+
+    def delete_team(
+        self,
+        team_id: str,
+        *,
+        expected_owner_ref: OwnerRef | None = None,
+    ) -> None:
+        current = self.repository.get_team(team_id)
+        if expected_owner_ref is not None and current.owner_ref != expected_owner_ref:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "Agent Team deletion owner check failed",
+                details={"team_id": team_id},
+            )
+        self.repository.delete_team(team_id)
 
     def get_team_revision(self, team_id: str, revision: int | None = None) -> AgentTeamRevision:
         definition = self.repository.get_team(team_id)
