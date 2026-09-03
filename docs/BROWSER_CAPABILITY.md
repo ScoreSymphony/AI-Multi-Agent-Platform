@@ -34,7 +34,7 @@ agent contracts.
 library. It exists to prove the boundary without adding a mandatory browser-engine dependency.
 It supports isolated cookies, navigation, text/link extraction, link following, HTML form
 submission, one canonical file upload per form submission, downloads into `FileProvider`, a
-canonical File↔Artifact link for each completed download, and session reuse/closure.
+canonical File↔Artifact link for each completed download, and bounded reusable sessions.
 
 It is not intended to emulate a modern JavaScript browser. A production deployment that needs
 JavaScript, screenshots, DOM interaction or interactive browser control should register another
@@ -60,6 +60,13 @@ Every outbound request in the reference adapter passes through `BrowserNetworkPo
 blocks URL-embedded credentials, blocks localhost by default, and resolves targets to reject
 private, loopback, link-local, reserved, unspecified and multicast addresses unless private
 network access is explicitly enabled. Redirect targets are checked again.
+
+The reference adapter performs the synchronous network-policy/DNS resolution inside its worker
+thread rather than on the shared asyncio event loop. Slow resolver behavior therefore does not
+block unrelated agent work or prevent the event loop from processing cancellation/deadlines.
+Underlying synchronous network work is still subject to the normal limitations of thread-backed
+I/O; production browser workers should additionally enforce infrastructure-level timeouts and
+egress controls.
 
 Production deployments should additionally enforce network controls at the sandbox/container or
 worker boundary. DNS pinning/rebinding hardening and infrastructure-level egress controls belong
@@ -88,17 +95,19 @@ temporary browser paths never become canonical input. `file.read` is a required 
 permission, so a caller that only holds browser-side submission authority cannot cause arbitrary
 canonical file content to be uploaded.
 
-Downloads are assigned a new canonical `file_*` and written through `FileProvider` with source
-URL, content type, SHA-256 checksum, download timestamp, provenance and untrusted-content
-classification. The reference adapter then generates a canonical `artifact_*` identity and links
-it to the file through the refined #13 `FileProvider.link_artifact` seam. The browser does not
-create a provider-private artifact namespace or a parallel artifact store.
+Downloads are assigned a new canonical `file_*` and written through `FileProvider` with a
+redacted source URL, content type, SHA-256 checksum, download timestamp, provenance and
+untrusted-content classification. Persisted source URLs retain scheme, host, port and path but
+remove embedded credentials, query parameters and fragments so signed URL tokens do not enter
+ordinary long-lived file metadata. The reference adapter then generates a canonical `artifact_*`
+identity and links it to the file through the refined #13 `FileProvider.link_artifact` seam. The
+browser does not create a provider-private artifact namespace or a parallel artifact store.
 
-For this reason the reference adapter's download operation requires a file provider that supports
-the refined canonical artifact-linking operation. A provider that implements only the minimal
-core `FileProvider.write/read` seam can still serve browser uploads, but attempting a reference
-browser download fails with a canonical contract violation rather than silently omitting the
-required Artifact path.
+The reference adapter verifies artifact-linking support before starting download persistence. A
+provider that implements only the minimal core `FileProvider.write/read` seam can still serve
+browser uploads, but attempting a reference browser download fails with a canonical contract
+violation rather than silently omitting the required Artifact path or first leaving an orphan
+file merely because the artifact-link seam is unavailable.
 
 The canonical download result uses the `file_*` as `result_ref`, publishes the linked
 `artifact_*` through `artifact_refs`, and includes both references in `evidence_refs`. This makes
@@ -112,6 +121,12 @@ MIME set and is intentionally replaceable by malware scanning or organization po
 The reference provider keeps cookies in a private cookie jar per canonical session. Session reuse
 requires the same owner and project context. A provider cannot expose its native browser/session
 identifier through the canonical session object.
+
+Reference sessions receive a bounded expiry by default (30 minutes, configurable through
+`session_ttl_seconds`). Expired sessions are evicted when sessions are created or accessed, so
+one-shot or abandoned navigation sessions do not retain page bodies and cookie jars indefinitely.
+The canonical `BrowserSessionRef.expires_at` exposes that lifetime without exposing raw provider
+session state.
 
 The session model can additionally bind task/run/agent IDs. The current generic `ToolInvocation`
 provider seam carries operation ownership/project context while task/run/agent traceability is
@@ -131,9 +146,15 @@ Deployments may still apply stricter redaction through their observability stack
 
 The canonical `CapabilityInvoker` carries provider result metadata into successful
 `InvocationRecord` objects and provider `ContractError.adapter_metadata` into failed invocation
-records. Browser traces therefore retain task/run/agent/project/correlation IDs, provider,
-node/worker placement, status/error category and redacted browser operation metadata in one
-canonical observability path instead of a browser-specific parallel audit system.
+records. For timeout/cancellation, where the invoker owns the canonical deadline/cancellation
+state, it uses the optional generic `InvocationFailureMetadataProvider` seam. A bound browser
+provider can therefore add the same redacted `browser.operation` target/duration evidence to
+`TIMED_OUT` and `CANCELLED` records without teaching the core invocation pipeline about browser
+semantics.
+
+Browser traces therefore retain task/run/agent/project/correlation IDs, provider, node/worker
+placement, status/error category and redacted browser operation metadata in one canonical
+observability path instead of a browser-specific parallel audit system.
 
 Produced downloads are referenced through `result_ref`, `artifact_refs` and `evidence_refs`;
 future screenshot or snapshot-capable adapters can use the same evidence-reference seam without
@@ -158,7 +179,8 @@ registry instead of silently falling back to provider-specific behavior.
 
 When the provider binding observes a canonical browser failure it appends redacted operation
 metadata to the existing `ContractError`; the canonical error code and retry semantics remain
-unchanged.
+unchanged. Invoker-owned timeout/cancellation paths request equivalent provider metadata through
+the generic failure-metadata seam and attach it to both the canonical error and invocation record.
 
 ## Example bootstrap
 
@@ -170,6 +192,7 @@ reference = StdlibBrowserProvider(
         allowed_domains=("example.org",),
         allow_private_networks=False,
     ),
+    session_ttl_seconds=30 * 60,
 )
 browser = BoundBrowserProvider(
     reference,
