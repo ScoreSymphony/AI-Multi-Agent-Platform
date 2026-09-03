@@ -375,6 +375,18 @@ class AgentRuntime:
 
         constraints = {item.capability_id: item for item in policy.constraints}
         if self.capability_registry is None:
+            approval_constrained = sorted(
+                capability_id
+                for capability_id in effective
+                if (constraint := constraints.get(capability_id)) is not None
+                and constraint.approval_ref is not None
+            )
+            if approval_constrained:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "Agent approval requirements need a canonical CapabilityRegistry",
+                    details={"capability_ids": cast(JsonValue, approval_constrained)},
+                )
             missing = effective - set(available_capability_ids)
             if missing:
                 raise ContractError(
@@ -415,13 +427,31 @@ class AgentRuntime:
                 maximum_version=constraint.maximum_version,
                 required_features=constraint.required_features,
             )
-        self.capability_registry.resolve(
+        registration, _ = self.capability_registry.resolve(
             capability_id,
             version=exact_version,
             compatibility=compatibility,
             granted_permissions=granted_permissions,
             available_worker_capabilities=available_worker_capabilities,
         )
+        if constraint is not None and constraint.approval_ref is not None:
+            required_approvals = set(registration.capability.required_approvals)
+            if constraint.approval_ref not in required_approvals:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    (
+                        "Agent capability approval requirement is not enforced by the "
+                        "resolved canonical capability"
+                    ),
+                    details={
+                        "capability_id": capability_id,
+                        "approval_ref": constraint.approval_ref,
+                        "capability_required_approvals": cast(
+                            JsonValue,
+                            sorted(required_approvals),
+                        ),
+                    },
+                )
 
     @staticmethod
     def _record_from_spec(
