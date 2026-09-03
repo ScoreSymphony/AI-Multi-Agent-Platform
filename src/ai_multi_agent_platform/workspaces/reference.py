@@ -170,7 +170,9 @@ class LocalWorkspaceProvider(WorkspaceProvider):
         if snapshot.workspace_id != workspace.id:
             raise ContractError(ErrorCode.INVALID_REQUEST, "snapshot belongs to another workspace")
         if snapshot.content_checksum != self._snapshot_checksum(snapshot.files):
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "workspace snapshot checksum mismatch")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "workspace snapshot checksum mismatch"
+            )
 
         materialization = WorkspaceMaterialization(
             workspace_id=workspace.id,
@@ -233,7 +235,10 @@ class LocalWorkspaceProvider(WorkspaceProvider):
         materialization = await self._get_materialization(materialization_id)
         snapshot = await self.get_snapshot(materialization.snapshot_id)
         root = self.local_path(materialization_id)
-        if context.project_id != (await self.get_workspace(materialization.workspace_id)).project_id:
+        if (
+            context.project_id
+            != (await self.get_workspace(materialization.workspace_id)).project_id
+        ):
             raise ContractError(ErrorCode.FORBIDDEN, "workspace belongs to another project")
         current = self._scan_files(root)
         base = {entry.relative_path: entry for entry in snapshot.files}
@@ -299,12 +304,18 @@ class LocalWorkspaceProvider(WorkspaceProvider):
     ) -> WorkspaceSnapshot:
         materialization = await self._get_materialization(materialization_id)
         workspace = await self.get_workspace(materialization.workspace_id)
-        if expected_revision != workspace.revision or materialization.base_revision != workspace.revision:
+        if (
+            expected_revision != workspace.revision
+            or materialization.base_revision != workspace.revision
+        ):
             raise ContractError(ErrorCode.CONFLICT, "stale workspace revision")
         change_set = await self.capture_changes(materialization_id, context)
         async with self._lock:
             current = self._workspaces[workspace.id]
-            if expected_revision != current.revision or materialization.base_revision != current.revision:
+            if (
+                expected_revision != current.revision
+                or materialization.base_revision != current.revision
+            ):
                 raise ContractError(ErrorCode.CONFLICT, "stale workspace revision")
             base_snapshot = self._snapshots[materialization.snapshot_id]
             manifest = {entry.relative_path: entry for entry in base_snapshot.files}
