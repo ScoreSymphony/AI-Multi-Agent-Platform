@@ -38,9 +38,7 @@ _REFERENCE_SEARCH_AUTHORIZATION = {
 }
 _REFERENCE_SEARCH_TYPES = frozenset(_REFERENCE_SEARCH_AUTHORIZATION)
 _BUILTIN_SEARCH_TYPES = (
-    _FOUNDATION_SEARCH_TYPES
-    | frozenset(_MODEL_SEARCH_AUTHORIZATION)
-    | _REFERENCE_SEARCH_TYPES
+    _FOUNDATION_SEARCH_TYPES | frozenset(_MODEL_SEARCH_AUTHORIZATION) | _REFERENCE_SEARCH_TYPES
 )
 
 ReferenceKey = tuple[str, str]
@@ -208,7 +206,7 @@ class ControlPlane(_BaseSearchControlPlane):
 
         reference_authorization = _REFERENCE_SEARCH_AUTHORIZATION.get(result.resource_type)
         if reference_authorization is not None:
-            collection, action = reference_authorization
+            _, action = reference_authorization
             authorization = getattr(self, "_search_reference_authorization", {})
             scopes = authorization.get((result.resource_type, result.resource_id), ())
             for owner_type, owner_id, project_id in scopes:
