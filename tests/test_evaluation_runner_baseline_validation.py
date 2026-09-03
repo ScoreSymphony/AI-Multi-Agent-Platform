@@ -9,6 +9,7 @@ from ai_multi_agent_platform.evaluation import (
     DeterministicAssertionEvaluator,
     EvaluationAttempt,
     EvaluationCase,
+    EvaluationExecutionContext,
     EvaluationObservation,
     EvaluationRunner,
     EvaluationSuite,
@@ -26,8 +27,9 @@ class TrackingExecutor:
         *,
         case: EvaluationCase,
         attempt: EvaluationAttempt,
+        execution_context: EvaluationExecutionContext,
     ) -> EvaluationObservation:
-        del case, attempt
+        del case, attempt, execution_context
         self.called = True
         return EvaluationObservation()
 
