@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, cast
+from enum import StrEnum
+from typing import Any, TypeVar, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
@@ -13,7 +14,7 @@ from ai_multi_agent_platform.contracts.interfaces import (
 )
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext, OperationControl
 from ai_multi_agent_platform.data import DataAccessContext
-from ai_multi_agent_platform.domain import OwnerRef, Project
+from ai_multi_agent_platform.domain import Project
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.models import ModelRegistry
@@ -34,6 +35,8 @@ from .observability_contract import ControlPlane as _ObservabilityControlPlane
 from .observability_contract import ControlPlaneHTTP as _ObservabilityControlPlaneHTTP
 from .observability_contract import build_openapi as _build_observability_openapi
 from .service import ScopeStore, _optional_string, _required_string, _require_key
+
+EnumT = TypeVar("EnumT", bound=StrEnum)
 
 
 class ControlPlane(_ObservabilityControlPlane):
@@ -91,14 +94,21 @@ class ControlPlane(_ObservabilityControlPlane):
         if existing_id is not None:
             return _workspace_resource(await provider.get_workspace(existing_id))
 
-        workspace_type = _workspace_type(payload)
+        workspace_type = _enum_field(
+            payload,
+            "workspace_type",
+            WorkspaceType,
+            WorkspaceType.PERSISTENT_PROJECT,
+        )
+        access_mode = _workspace_access_mode(payload, workspace_type)
+        retention = _workspace_retention(payload, workspace_type)
         workspace = await provider.create_workspace(
             project_id=project_id,
             owner_ref=project.owner_ref,
             workspace_type=workspace_type,
             context=_data_access_context(context, project),
-            access_mode=_workspace_access_mode(payload, workspace_type),
-            retention=_workspace_retention(payload, workspace_type),
+            access_mode=access_mode,
+            retention=retention,
             source_refs=_workspace_source_refs(payload),
             files=_workspace_files(payload),
             workspace_id=_optional_string(payload, "workspace_id"),
@@ -151,7 +161,7 @@ class ControlPlane(_ObservabilityControlPlane):
 
 
 class ControlPlaneHTTP(_ObservabilityControlPlaneHTTP):
-    """HTTP mapping that exposes the richer canonical Workspace schema."""
+    """HTTP mapping that publishes the canonical Workspace schema."""
 
     async def handle(self, request: HTTPRequest) -> HTTPResponse:
         response = await super().handle(request)
@@ -161,7 +171,9 @@ class ControlPlaneHTTP(_ObservabilityControlPlaneHTTP):
             and response.status == 200
             and isinstance(response.body, dict)
         ):
-            specification = _augment_workspace_openapi(cast(dict[str, Any], deepcopy(response.body)))
+            specification = _augment_workspace_openapi(
+                cast(dict[str, Any], deepcopy(response.body))
+            )
             return HTTPResponse(
                 status=response.status,
                 body=cast(dict[str, JsonValue], specification),
@@ -175,11 +187,14 @@ def build_openapi(
     extension_collections: tuple[str, ...] = (),
     extension_commands: tuple[str, ...] = (),
 ) -> dict[str, Any]:
-    specification = _build_observability_openapi(
-        extension_collections=extension_collections,
-        extension_commands=extension_commands,
+    return _augment_workspace_openapi(
+        deepcopy(
+            _build_observability_openapi(
+                extension_collections=extension_collections,
+                extension_commands=extension_commands,
+            )
+        )
     )
-    return _augment_workspace_openapi(deepcopy(specification))
 
 
 def _data_access_context(context: RequestContext, project: Project) -> DataAccessContext:
@@ -195,23 +210,28 @@ def _data_access_context(context: RequestContext, project: Project) -> DataAcces
     )
 
 
-def _workspace_type(payload: dict[str, JsonValue]) -> WorkspaceType:
-    value = payload.get("workspace_type")
+def _enum_field(
+    payload: dict[str, JsonValue],
+    name: str,
+    enum_type: type[EnumT],
+    default: EnumT,
+) -> EnumT:
+    value = payload.get(name)
     if value is None:
-        return WorkspaceType.PERSISTENT_PROJECT
+        return default
     if not isinstance(value, str):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
-            "workspace_type must be a string",
-            details={"field": "workspace_type"},
+            f"{name} must be a string",
+            details={"field": name},
         )
     try:
-        return WorkspaceType(value)
+        return enum_type(value)
     except ValueError as exc:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
-            f"unsupported workspace_type: {value}",
-            details={"field": "workspace_type"},
+            f"unsupported {name}: {value}",
+            details={"field": name},
         ) from exc
 
 
@@ -219,128 +239,94 @@ def _workspace_access_mode(
     payload: dict[str, JsonValue],
     workspace_type: WorkspaceType,
 ) -> WorkspaceAccessMode:
-    value = payload.get("access_mode")
-    if value is None:
-        if workspace_type is WorkspaceType.READ_ONLY_SOURCE:
-            return WorkspaceAccessMode.READ_ONLY
-        return WorkspaceAccessMode.READ_WRITE
-    if not isinstance(value, str):
-        raise ContractError(
-            ErrorCode.INVALID_REQUEST,
-            "access_mode must be a string",
-            details={"field": "access_mode"},
-        )
-    try:
-        return WorkspaceAccessMode(value)
-    except ValueError as exc:
-        raise ContractError(
-            ErrorCode.INVALID_REQUEST,
-            f"unsupported access_mode: {value}",
-            details={"field": "access_mode"},
-        ) from exc
+    default = (
+        WorkspaceAccessMode.READ_ONLY
+        if workspace_type is WorkspaceType.READ_ONLY_SOURCE
+        else WorkspaceAccessMode.READ_WRITE
+    )
+    return _enum_field(payload, "access_mode", WorkspaceAccessMode, default)
 
 
 def _workspace_retention(
     payload: dict[str, JsonValue],
     workspace_type: WorkspaceType,
 ) -> WorkspaceRetention:
-    value = payload.get("retention")
-    if value is None:
-        if workspace_type in {WorkspaceType.EPHEMERAL_TASK, WorkspaceType.ISOLATED_RUN}:
-            return WorkspaceRetention.EPHEMERAL
-        return WorkspaceRetention.PERSISTENT
-    if not isinstance(value, str):
-        raise ContractError(
-            ErrorCode.INVALID_REQUEST,
-            "retention must be a string",
-            details={"field": "retention"},
-        )
-    try:
-        return WorkspaceRetention(value)
-    except ValueError as exc:
-        raise ContractError(
-            ErrorCode.INVALID_REQUEST,
-            f"unsupported retention: {value}",
-            details={"field": "retention"},
-        ) from exc
+    ephemeral = workspace_type in {
+        WorkspaceType.EPHEMERAL_TASK,
+        WorkspaceType.ISOLATED_RUN,
+    }
+    default = WorkspaceRetention.EPHEMERAL if ephemeral else WorkspaceRetention.PERSISTENT
+    return _enum_field(payload, "retention", WorkspaceRetention, default)
 
 
 def _workspace_files(payload: dict[str, JsonValue]) -> tuple[WorkspaceFile, ...]:
     value = payload.get("files")
     if value is None:
         return ()
-    if not isinstance(value, list):
-        raise ContractError(
-            ErrorCode.INVALID_REQUEST,
-            "files must be an array",
-            details={"field": "files"},
+    entries = _object_list(value, "files")
+    return tuple(
+        WorkspaceFile(
+            relative_path=_mapping_string(entry, "relative_path", f"files[{index}]"),
+            file_id=_mapping_string(entry, "file_id", f"files[{index}]"),
+            sha256=_mapping_string(entry, "sha256", f"files[{index}]"),
         )
-    files: list[WorkspaceFile] = []
-    for index, item in enumerate(value):
-        if not isinstance(item, dict):
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "workspace file entries must be objects",
-                details={"field": f"files[{index}]"},
-            )
-        entry = cast(dict[str, JsonValue], item)
-        files.append(
-            WorkspaceFile(
-                relative_path=_mapping_string(entry, "relative_path", f"files[{index}]"),
-                file_id=_mapping_string(entry, "file_id", f"files[{index}]"),
-                sha256=_mapping_string(entry, "sha256", f"files[{index}]"),
-            )
-        )
-    return tuple(files)
+        for index, entry in enumerate(entries)
+    )
 
 
 def _workspace_source_refs(payload: dict[str, JsonValue]) -> tuple[WorkspaceSourceRef, ...]:
     value = payload.get("source_refs")
     if value is None:
         return ()
-    if not isinstance(value, list):
-        raise ContractError(
-            ErrorCode.INVALID_REQUEST,
-            "source_refs must be an array",
-            details={"field": "source_refs"},
-        )
+    entries = _object_list(value, "source_refs")
     refs: list[WorkspaceSourceRef] = []
-    for index, item in enumerate(value):
-        if not isinstance(item, dict):
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "workspace source references must be objects",
-                details={"field": f"source_refs[{index}]"},
-            )
-        entry = cast(dict[str, JsonValue], item)
-        kind_value = _mapping_string(entry, "kind", f"source_refs[{index}]")
+    for index, entry in enumerate(entries):
+        parent = f"source_refs[{index}]"
+        kind_value = _mapping_string(entry, "kind", parent)
         try:
             kind = WorkspaceSourceKind(kind_value)
         except ValueError as exc:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 f"unsupported workspace source kind: {kind_value}",
-                details={"field": f"source_refs[{index}].kind"},
+                details={"field": f"{parent}.kind"},
             ) from exc
-        revision = _mapping_optional_string(entry, "revision", f"source_refs[{index}]")
-        checksum = _mapping_optional_string(entry, "checksum", f"source_refs[{index}]")
-        metadata_value = entry.get("metadata", {})
-        if not isinstance(metadata_value, dict):
+        metadata = entry.get("metadata", {})
+        if not isinstance(metadata, dict):
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "workspace source metadata must be an object",
-                details={"field": f"source_refs[{index}].metadata"},
+                details={"field": f"{parent}.metadata"},
             )
         refs.append(
             WorkspaceSourceRef(
                 kind=kind,
-                ref=_mapping_string(entry, "ref", f"source_refs[{index}]"),
-                revision=revision,
-                checksum=checksum,
-                metadata=cast(dict[str, JsonValue], metadata_value),
+                ref=_mapping_string(entry, "ref", parent),
+                revision=_mapping_optional_string(entry, "revision", parent),
+                checksum=_mapping_optional_string(entry, "checksum", parent),
+                metadata=cast(dict[str, JsonValue], metadata),
             )
         )
     return tuple(refs)
+
+
+def _object_list(value: JsonValue, name: str) -> list[dict[str, JsonValue]]:
+    if not isinstance(value, list):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{name} must be an array",
+            details={"field": name},
+        )
+    result: list[dict[str, JsonValue]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                f"{name} entries must be objects",
+                details={"field": f"{name}[{index}]"},
+            )
+        result.append(cast(dict[str, JsonValue], item))
+    return result
 
 
 def _mapping_string(value: dict[str, JsonValue], name: str, parent: str) -> str:
@@ -406,8 +392,7 @@ def _workspace_resource(workspace: Workspace) -> dict[str, JsonValue]:
 
 
 def _augment_workspace_openapi(specification: dict[str, Any]) -> dict[str, Any]:
-    components = specification.setdefault("components", {})
-    schemas = components.setdefault("schemas", {})
+    schemas = specification.setdefault("components", {}).setdefault("schemas", {})
     schemas["Workspace"] = {
         "type": "object",
         "required": [
