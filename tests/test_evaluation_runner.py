@@ -13,6 +13,7 @@ from ai_multi_agent_platform.evaluation import (
     DeterministicAssertionEvaluator,
     EvaluationAttempt,
     EvaluationCase,
+    EvaluationExecutionContext,
     EvaluationObservation,
     EvaluationOutcome,
     EvaluationRun,
@@ -38,7 +39,9 @@ class RecordingExecutor:
         *,
         case: EvaluationCase,
         attempt: EvaluationAttempt,
+        execution_context: EvaluationExecutionContext,
     ) -> EvaluationObservation:
+        assert execution_context.attempt_id == attempt.attempt_id
         self.events.append(("execute", case.case_id, attempt.repetition_index))
         return EvaluationObservation(
             data={"result": {"status": "ok"}},
@@ -52,8 +55,9 @@ class FailingExecutor:
         *,
         case: EvaluationCase,
         attempt: EvaluationAttempt,
+        execution_context: EvaluationExecutionContext,
     ) -> EvaluationObservation:
-        del case, attempt
+        del case, attempt, execution_context
         raise RuntimeError("configured execution failure")
 
 
@@ -64,10 +68,25 @@ class RecordingIsolation:
     async def reset_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None:
         self.events.append(("reset", case.case_id, attempt.repetition_index))
 
-    async def setup_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None:
+    async def setup_case(
+        self,
+        *,
+        case: EvaluationCase,
+        attempt: EvaluationAttempt,
+    ) -> EvaluationExecutionContext:
         self.events.append(("setup", case.case_id, attempt.repetition_index))
+        return EvaluationExecutionContext(attempt_id=attempt.attempt_id)
 
-    async def teardown_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None:
+    async def teardown_case(
+        self,
+        *,
+        case: EvaluationCase,
+        attempt: EvaluationAttempt,
+        execution_context: EvaluationExecutionContext,
+        succeeded: bool,
+    ) -> None:
+        assert execution_context.attempt_id == attempt.attempt_id
+        assert succeeded is True
         self.events.append(("teardown", case.case_id, attempt.repetition_index))
 
 
@@ -289,7 +308,11 @@ def test_kernel_reference_executor_uses_real_task_run_and_event_path() -> None:
             seed=7,
         )
 
-        observation = await executor.execute_case(case=case, attempt=attempt)
+        observation = await executor.execute_case(
+            case=case,
+            attempt=attempt,
+            execution_context=EvaluationExecutionContext(attempt_id=attempt.attempt_id),
+        )
 
         assert observation.task_id is not None
         assert observation.task_id.startswith("task_")
