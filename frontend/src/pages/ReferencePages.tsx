@@ -33,7 +33,7 @@ export function ReferencesPage({ client }: { client: ControlPlaneClient }) {
     });
   }, [client]);
 
-  const load = useCallback(async (nextQuery = query) => {
+  const load = useCallback(async (nextQuery: string) => {
     try {
       const next = await client.listReferences(collection, {
         limit: 100,
@@ -44,7 +44,7 @@ export function ReferencesPage({ client }: { client: ControlPlaneClient }) {
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client, collection, query]);
+  }, [client, collection]);
 
   useEffect(() => {
     setPage(null);
@@ -97,11 +97,11 @@ export function ReferencesPage({ client }: { client: ControlPlaneClient }) {
         </form>
       </Card>
 
-      {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
+      {error ? <ErrorState error={error} onRetry={() => void load(query)} /> : null}
       <Card title={labelFor(collection)}>
         {!page ? <LoadingState /> : <ReferenceTable items={page.items} />}
       </Card>
-      <div className="actions"><button onClick={() => void load()}>Refresh</button></div>
+      <div className="actions"><button onClick={() => void load(query)}>Refresh</button></div>
     </div>
   );
 }
