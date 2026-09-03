@@ -97,9 +97,7 @@ def test_refined_issue_13_data_paths_cannot_bypass_authorization(tmp_path) -> No
     assert memory_error.value.code is ErrorCode.FORBIDDEN
     assert (
         asyncio.run(
-            raw_memory.query_entries(
-                MemoryQuery(scope=MemoryScope.TASK, scope_id=task_id), context
-            )
+            raw_memory.query_entries(MemoryQuery(scope=MemoryScope.TASK, scope_id=task_id), context)
         )
         == ()
     )
