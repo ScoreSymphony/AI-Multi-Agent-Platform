@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import socket
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -83,7 +82,7 @@ class UrllibTransport:
                 else {}
             )
             return RawResponse(status=exc.code, body=exc.read(), headers=headers_map)
-        except (URLError, TimeoutError, socket.timeout, OSError) as exc:
+        except (URLError, TimeoutError, OSError) as exc:
             raise TransportError(f"Control Plane request failed: {exc}") from exc
 
 

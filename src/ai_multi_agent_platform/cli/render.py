@@ -59,9 +59,7 @@ class Renderer:
     def local_success(self, data: JsonValue) -> None:
         if self.json_mode:
             payload = {"data": data, "meta": {"local": True}}
-            self.stdout.write(
-                json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n"
-            )
+            self.stdout.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
         else:
             self._human(data)
 

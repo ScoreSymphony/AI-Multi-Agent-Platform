@@ -119,8 +119,7 @@ class ProfileStore:
             "version": _CONFIG_VERSION,
             "current_profile": self.current_profile,
             "profiles": {
-                name: profile.to_json()
-                for name, profile in sorted(self.profiles.items())
+                name: profile.to_json() for name, profile in sorted(self.profiles.items())
             },
         }
         try:
