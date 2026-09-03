@@ -10,7 +10,6 @@ from ai_multi_agent_platform.plugins import (
     reference_manifest,
     validate_manifest_document,
 )
-from ai_multi_agent_platform.plugins.reference import REFERENCE_CAPABILITY_ID
 
 
 REQUIRED_EXTENSION_TYPES = {
@@ -90,12 +89,9 @@ def test_manifest_v1_accepts_transport_and_configuration_extensions() -> None:
 def test_manifest_model_rejects_duplicate_capability_ids() -> None:
     manifest = reference_manifest()
     with pytest.raises(ValueError, match="duplicate capabilities"):
-        replace(
-            manifest,
-            capabilities=(REFERENCE_CAPABILITY_ID, REFERENCE_CAPABILITY_ID),
-        )
+        replace(manifest, capabilities=("plugin.echo", "plugin.echo"))
 
 
 def test_reference_plugin_explicitly_declares_its_capability() -> None:
     manifest = reference_manifest()
-    assert manifest.capabilities == (REFERENCE_CAPABILITY_ID,)
+    assert manifest.capabilities == ("plugin.echo",)
