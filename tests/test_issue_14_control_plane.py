@@ -139,9 +139,7 @@ def test_distributed_control_plane_exposes_runtime_state_and_admin_commands() ->
     async def scenario() -> None:
         http, runtime, lifecycle, node, worker = _stack()
 
-        manifest = await http.handle(
-            HTTPRequest(method="GET", path="/api/v1", headers=_headers())
-        )
+        manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1", headers=_headers()))
         assert manifest.status == 200
         assert isinstance(manifest.body, dict)
         resources = manifest.body["resources"]
