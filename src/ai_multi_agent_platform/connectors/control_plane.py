@@ -110,23 +110,23 @@ def register_connector_control_plane(
     )
 
     async def create_connection(
-        request: RequestContext,
+        context: RequestContext,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         _require_collection(resource_ref, CONNECTION_COLLECTION)
         connection = _connection_from_payload(new_id("connection"), payload)
-        actor = actor_resolver(request)
+        actor = actor_resolver(context)
         created = await connectors.create_connection(
             connection,
             actor=actor,
-            context=_operation_context(request, connection.project_id),
+            context=_operation_context(context, connection.project_id),
             approval_id=_optional_string(payload.get("approval_id"), "approval_id"),
         )
         return _connection_resource(created)
 
     async def enable_connection(
-        request: RequestContext,
+        context: RequestContext,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
@@ -134,14 +134,14 @@ def register_connector_control_plane(
         updated = await connectors.set_enabled(
             resource_ref,
             True,
-            actor=actor_resolver(request),
-            context=_operation_context(request, existing.project_id),
+            actor=actor_resolver(context),
+            context=_operation_context(context, existing.project_id),
             approval_id=_optional_string(payload.get("approval_id"), "approval_id"),
         )
         return _connection_resource(updated)
 
     async def disable_connection(
-        request: RequestContext,
+        context: RequestContext,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
@@ -149,28 +149,28 @@ def register_connector_control_plane(
         updated = await connectors.set_enabled(
             resource_ref,
             False,
-            actor=actor_resolver(request),
-            context=_operation_context(request, existing.project_id),
+            actor=actor_resolver(context),
+            context=_operation_context(context, existing.project_id),
             approval_id=_optional_string(payload.get("approval_id"), "approval_id"),
         )
         return _connection_resource(updated)
 
     async def remove_connection(
-        request: RequestContext,
+        context: RequestContext,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         existing = await connectors.repository.get_connection(resource_ref)
         await connectors.remove_connection(
             resource_ref,
-            actor=actor_resolver(request),
-            context=_operation_context(request, existing.project_id),
+            actor=actor_resolver(context),
+            context=_operation_context(context, existing.project_id),
             approval_id=_optional_string(payload.get("approval_id"), "approval_id"),
         )
         return {"id": resource_ref, "removed": True}
 
     async def check_health(
-        request: RequestContext,
+        context: RequestContext,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
@@ -178,13 +178,13 @@ def register_connector_control_plane(
         existing = await connectors.repository.get_connection(resource_ref)
         checked = await connectors.check_health(
             resource_ref,
-            actor=actor_resolver(request),
-            context=_operation_context(request, existing.project_id),
+            actor=actor_resolver(context),
+            context=_operation_context(context, existing.project_id),
         )
         return _connection_resource(checked)
 
     async def synchronize(
-        request: RequestContext,
+        context: RequestContext,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
@@ -193,8 +193,8 @@ def register_connector_control_plane(
         result = await connectors.synchronize(
             resource_ref,
             stream,
-            actor=actor_resolver(request),
-            context=_operation_context(request, existing.project_id),
+            actor=actor_resolver(context),
+            context=_operation_context(context, existing.project_id),
         )
         return {
             "connection_id": result.checkpoint.connection_id,
@@ -322,7 +322,7 @@ def _connection_from_payload(connection_id: str, payload: dict[str, JsonValue]) 
     raw_endpoint = payload.get("endpoint_metadata", {})
     if not isinstance(raw_endpoint, dict):
         raise ContractError(ErrorCode.INVALID_REQUEST, "endpoint_metadata must be an object")
-    endpoint_metadata = cast(dict[str, JsonValue], raw_endpoint)
+    endpoint_metadata = raw_endpoint
     if redact_sensitive(endpoint_metadata) != endpoint_metadata:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
@@ -371,7 +371,7 @@ def _secret_reference(value: JsonValue) -> SecretReference:
         secret_id=_required_string(value, "secret_id"),
         scope=_required_string(value, "scope"),
         version=_optional_string(value.get("version"), "version"),
-        metadata=cast(dict[str, JsonValue], raw_metadata),
+        metadata=raw_metadata,
     )
 
 
