@@ -128,8 +128,10 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
             )
 
 
-def _enum_json(values: frozenset[object]) -> str:
-    return json.dumps(sorted(str(getattr(value, "value")) for value in values))
+def _enum_json(
+    values: frozenset[ActorType | AuthorizationAction | ResourceType],
+) -> str:
+    return json.dumps(sorted(value.value for value in values))
 
 
 def _strings_json(values: frozenset[str]) -> str:
