@@ -20,12 +20,52 @@ export type RunStatus =
   | "timed_out";
 export type MeasurementQuality = "measured" | "reported" | "estimated" | "unavailable";
 export type AggregationMode = "additive" | "latest";
+export type TaskPriority = "low" | "normal" | "high" | "urgent";
+export type TaskResponsibilityKind = "user" | "team" | "organization";
+export type AgentAssignmentKind = "agent" | "agent_team";
+export type TaskDependencyKind = "depends_on" | "related_to";
 
 export interface Page<T> {
   items: T[];
   next_cursor: string | null;
   total: number;
   limit: number;
+}
+
+export interface TaskResponsibility {
+  kind: TaskResponsibilityKind;
+  id: string;
+}
+
+export interface AgentAssignment {
+  kind: AgentAssignmentKind;
+  id: string;
+  revision: number | null;
+  required: boolean;
+  policy_ref: string | null;
+}
+
+export interface TaskDependency {
+  task_id: string;
+  kind: TaskDependencyKind;
+}
+
+export interface TaskManagementChanges {
+  priority?: TaskPriority;
+  due_at?: string | null;
+  deadline_timezone?: string | null;
+  not_before?: string | null;
+  responsibility?: TaskResponsibility | null;
+  agent_assignment?: AgentAssignment | null;
+  labels?: string[];
+  workspace_id?: string | null;
+  parent_task_id?: string | null;
+  dependencies?: TaskDependency[];
+  blocking_reason?: string | null;
+  effort_hint?: number | null;
+  resource_hints?: Record<string, JsonValue>;
+  archived?: boolean;
+  hidden?: boolean;
 }
 
 export interface CanonicalTask {
@@ -48,6 +88,42 @@ export interface CanonicalTask {
   causation_id: string | null;
   created_at: string;
   updated_at: string;
+  priority: TaskPriority;
+  priority_rank: number;
+  due_at: string | null;
+  deadline_timezone: string | null;
+  not_before: string | null;
+  responsibility: TaskResponsibility | null;
+  responsible_type: TaskResponsibilityKind | null;
+  responsible_id: string | null;
+  agent_assignment: AgentAssignment | null;
+  agent_assignment_type: AgentAssignmentKind | null;
+  agent_assignment_id: string | null;
+  labels: string[];
+  workspace_id: string | null;
+  parent_task_id: string | null;
+  dependencies: TaskDependency[];
+  blocking_reason: string | null;
+  effort_hint: number | null;
+  resource_hints: Record<string, JsonValue>;
+  archived: boolean;
+  hidden: boolean;
+  blocking_task_ids: string[];
+  failed_dependency_ids: string[];
+  overdue: boolean;
+  not_before_blocked: boolean;
+  management_blocked: boolean;
+  eligible: boolean;
+  effective_blocking_reason: string | null;
+}
+
+export interface BulkTaskManagementResult {
+  id: string;
+  type: "task-management-bulk-result";
+  atomic: boolean;
+  authorization_preflighted: boolean;
+  count: number;
+  items: Array<{ task_id: string; eligible: boolean }>;
 }
 
 export interface RunError {
@@ -240,7 +316,7 @@ export interface CanonicalUsageBudget {
   threshold_level: "warning" | "exceeded" | null;
 }
 
-export interface CreateTaskInput {
+export interface CreateTaskInput extends TaskManagementChanges {
   title: string;
   objective: string;
   owner_type: OwnerType;
