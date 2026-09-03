@@ -197,12 +197,10 @@ class SqliteWorkspaceProvider(LocalWorkspaceProvider):
                 for row in workspace_rows
             }
             snapshots = {
-                cast(str, row["snapshot_id"]): self._snapshot_from_row(row)
-                for row in snapshot_rows
+                cast(str, row["snapshot_id"]): self._snapshot_from_row(row) for row in snapshot_rows
             }
             heads = {
-                cast(str, row["workspace_id"]): cast(str, row["snapshot_id"])
-                for row in head_rows
+                cast(str, row["workspace_id"]): cast(str, row["snapshot_id"]) for row in head_rows
             }
             for workspace_id, snapshot_id in heads.items():
                 workspace = workspaces.get(workspace_id)
@@ -445,9 +443,7 @@ class SqliteWorkspaceProvider(LocalWorkspaceProvider):
             revision=cast(int, row["revision"]),
             files=tuple(
                 _file_from_json(item)
-                for item in _load_list(
-                    cast(str, row["files_json"]), "workspace snapshot files"
-                )
+                for item in _load_list(cast(str, row["files_json"]), "workspace snapshot files")
             ),
             content_checksum=cast(str, row["content_checksum"]),
             source_refs=tuple(
