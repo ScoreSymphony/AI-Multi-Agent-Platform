@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import AsyncIterator, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
-from ai_multi_agent_platform.domain import new_id, validate_id
+from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.security.authorization import (
     AuthorizationAction,
     AuthorizationContext,
@@ -19,13 +20,18 @@ from ai_multi_agent_platform.security.authorization import (
 )
 from ai_multi_agent_platform.security.enforcement import AuthorizationGate
 
-from .contracts import AdapterFrame, AdapterSessionHandle, SessionCreateRequest, TerminalSessionAdapter
+from .contracts import (
+    AdapterFrame,
+    AdapterSessionHandle,
+    SessionCreateRequest,
+    TerminalSessionAdapter,
+)
 from .models import (
     TERMINAL_SESSION_STATUSES,
-    AttachmentStatus,
     SessionAttachment,
     SessionMode,
     SessionStatus,
+    SessionType,
     TerminalDimensions,
     TerminalFrame,
     TerminalSession,
@@ -94,40 +100,58 @@ class TerminalSessionService:
                 ErrorCode.NOT_FOUND,
                 f"terminal adapter is not registered: {request.adapter_id}",
             )
-        session_id = new_id("terminal_session")
+        if request.session_id in self._sessions:
+            return self._sessions[request.session_id]
+
         risk = (
             RiskClassification.HIGH
-            if request.session_type.value == "manual" and request.mode is SessionMode.INTERACTIVE
+            if request.session_type is SessionType.MANUAL
+            and request.mode is SessionMode.INTERACTIVE
             else RiskClassification.ELEVATED
         )
-        await self._enforce(
-            actor_ref=request.actor_ref,
-            operation=request.operation,
-            action=AuthorizationAction.CREATE,
-            resource_id=session_id,
-            workspace_id=request.context.workspace_id,
-            task_id=request.context.task_id,
-            run_id=request.context.run_id,
-            node_id=request.context.node_id,
-            side_effect=(
-                "manual_terminal_session"
-                if request.session_type.value == "manual"
-                else "execution_session_create"
-            ),
-            security_labels=("terminal_session", *request.policy_classification),
-            payload={
-                "session_type": request.session_type.value,
-                "mode": request.mode.value,
-                "project_id": request.context.project_id,
-                "workspace_id": request.context.workspace_id,
-                "adapter_id": request.adapter_id,
-            },
-            approval_id=approval_id,
-            risk=risk,
-        )
+        try:
+            await self._enforce(
+                actor_ref=request.actor_ref,
+                operation=request.operation,
+                action=AuthorizationAction.CREATE,
+                resource_id=request.session_id,
+                workspace_id=request.context.workspace_id,
+                task_id=request.context.task_id,
+                run_id=request.context.run_id,
+                node_id=request.context.node_id,
+                side_effect=(
+                    "manual_terminal_session"
+                    if request.session_type is SessionType.MANUAL
+                    else "execution_session_create"
+                ),
+                security_labels=("terminal_session", *request.policy_classification),
+                payload={
+                    "session_type": request.session_type.value,
+                    "mode": request.mode.value,
+                    "project_id": request.context.project_id,
+                    "workspace_id": request.context.workspace_id,
+                    "adapter_id": request.adapter_id,
+                },
+                approval_id=approval_id,
+                risk=risk,
+            )
+        except ContractError as exc:
+            if exc.code is ErrorCode.FORBIDDEN:
+                details = dict(exc.details)
+                details.setdefault("session_id", request.session_id)
+                raise ContractError(
+                    exc.code,
+                    exc.message,
+                    retryable=exc.retryable,
+                    provider_id=exc.provider_id,
+                    details=details,
+                    adapter_metadata=exc.adapter_metadata,
+                ) from exc
+            raise
+
         started = await adapter.start(request)
         session = TerminalSession(
-            id=session_id,
+            id=request.session_id,
             session_type=request.session_type,
             context=request.context,
             mode=request.mode,
@@ -169,7 +193,10 @@ class TerminalSessionService:
         sessions: list[TerminalSession] = []
         for session_id in tuple(self._sessions):
             session = await self._refresh(session_id)
-            if operation.project_id is not None and session.context.project_id != operation.project_id:
+            if (
+                operation.project_id is not None
+                and session.context.project_id != operation.project_id
+            ):
                 continue
             if workspace_id is not None and session.context.workspace_id != workspace_id:
                 continue
@@ -284,7 +311,9 @@ class TerminalSessionService:
             risk=RiskClassification.STANDARD,
         )
         adapter = self._adapter(session)
-        frames = await adapter.read_frames(self._handles[session_id], after_sequence=after_sequence)
+        frames = await adapter.read_frames(
+            self._handles[session_id], after_sequence=after_sequence
+        )
         return tuple(self._canonical_frame(session_id, frame) for frame in frames)
 
     async def stream_frames(
@@ -323,7 +352,10 @@ class TerminalSessionService:
         approval_id: str | None = None,
     ) -> None:
         session = self._session(session_id)
-        if session.mode is not SessionMode.INTERACTIVE or not session.capabilities.interactive_input:
+        if (
+            session.mode is not SessionMode.INTERACTIVE
+            or not session.capabilities.interactive_input
+        ):
             raise ContractError(ErrorCode.FORBIDDEN, "terminal session does not accept input")
         await self._authorize_session(
             session,
@@ -331,7 +363,10 @@ class TerminalSessionService:
             operation=operation,
             action=AuthorizationAction.EXECUTE,
             side_effect="terminal_input",
-            payload={"data_sha256": _text_digest(data), "size_bytes": len(data.encode(session.encoding))},
+            payload={
+                "data_sha256": _text_digest(data),
+                "size_bytes": len(data.encode(session.encoding)),
+            },
             approval_id=approval_id,
             risk=RiskClassification.ELEVATED,
         )
@@ -354,7 +389,9 @@ class TerminalSessionService:
     ) -> TerminalSession:
         session = self._session(session_id)
         if not session.capabilities.resize:
-            raise ContractError(ErrorCode.UNSUPPORTED_CAPABILITY, "terminal session does not resize")
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY, "terminal session does not resize"
+            )
         await self._authorize_session(
             session,
             actor_ref=actor_ref,
@@ -413,7 +450,9 @@ class TerminalSessionService:
         try:
             return self._adapters[session.adapter_id]
         except KeyError as exc:
-            raise ContractError(ErrorCode.UNAVAILABLE, "terminal session adapter is unavailable") from exc
+            raise ContractError(
+                ErrorCode.UNAVAILABLE, "terminal session adapter is unavailable"
+            ) from exc
 
     async def _refresh(self, session_id: str) -> TerminalSession:
         session = self._session(session_id)
@@ -448,7 +487,7 @@ class TerminalSessionService:
     ) -> None:
         await self._enforce(
             actor_ref=actor_ref,
-            operation=operation,
+            operation=replace(operation, project_id=session.context.project_id),
             action=action,
             resource_id=session.id,
             workspace_id=session.context.workspace_id,
@@ -542,6 +581,4 @@ class TerminalSessionService:
 
 
 def _text_digest(value: str) -> str:
-    import hashlib
-
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
