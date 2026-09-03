@@ -70,9 +70,7 @@ class CredentialScope:
     def to_json(self) -> dict[str, JsonValue]:
         return {
             "actions": sorted(action.value for action in self.actions),
-            "resource_types": sorted(
-                resource_type.value for resource_type in self.resource_types
-            ),
+            "resource_types": sorted(resource_type.value for resource_type in self.resource_types),
             "resource_ids": sorted(self.resource_ids),
         }
 
