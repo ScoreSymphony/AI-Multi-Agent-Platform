@@ -64,6 +64,25 @@ describe("BrowserSessionClient", () => {
     expect(session.hasCsrfToken()).toBe(true);
   });
 
+  it("reads the current shared browser CSRF token before each unsafe request", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem("ai-agent-platform.csrf-token", "csrf_initial");
+    const seen: Array<string | null> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(new Headers(init?.headers).get("x-csrf-token"));
+      return jsonResponse({ ok: true });
+    });
+    const firstTab = new BrowserSessionClient({ fetchImpl, storage });
+    const secondTab = new BrowserSessionClient({ fetchImpl, storage });
+
+    await firstTab.fetch("/api/v1/tasks/task_1:cancel", { method: "POST" });
+    storage.setItem("ai-agent-platform.csrf-token", "csrf_rotated");
+    await secondTab.fetch("/api/v1/tasks/task_2:cancel", { method: "POST" });
+    await firstTab.fetch("/api/v1/tasks/task_3:cancel", { method: "POST" });
+
+    expect(seen).toEqual(["csrf_initial", "csrf_rotated", "csrf_rotated"]);
+  });
+
   it("applies the stored CSRF token to existing ControlPlaneClient commands", async () => {
     const storage = new MemoryStorage();
     storage.setItem("ai-agent-platform.csrf-token", "csrf_stored");
