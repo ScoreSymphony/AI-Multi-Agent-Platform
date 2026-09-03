@@ -57,6 +57,8 @@ _DEFAULTS = ConfigLayer(
     ConfigSource("single-node-defaults", "built-in"),
 )
 
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
 
 @dataclass(frozen=True, slots=True)
 class SingleNodeConfig:
@@ -135,11 +137,16 @@ def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleN
     host = str(deployment["host"]).strip()
     if not host:
         raise ConfigurationError("deployment host must not be blank")
+    secure_cookie = bool(deployment["secure_cookie"])
+    if not secure_cookie and host.casefold() not in _LOOPBACK_HOSTS:
+        raise ConfigurationError(
+            "AI_MAP_SECURE_COOKIE may be disabled only for an explicit loopback-only deployment"
+        )
     return SingleNodeConfig(
         data_dir=data_dir,
         host=host,
         port=int(deployment["port"]),
-        secure_cookie=bool(deployment["secure_cookie"]),
+        secure_cookie=secure_cookie,
         log_level=str(deployment["log_level"]),
     )
 
