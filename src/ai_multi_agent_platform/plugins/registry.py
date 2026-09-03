@@ -29,11 +29,13 @@ from .runtime import ExtensionBinder, ExtensionRegistration, PluginContext, Plug
 @dataclass(slots=True)
 class _PluginRecord:
     manifest: PluginManifest
+    install_source: str
     state: PluginState = PluginState.INSTALLED
     compatibility: CompatibilityState = CompatibilityState.COMPATIBLE
     health: PluginHealth = PluginHealth.UNKNOWN
     health_detail: str | None = None
     configuration: dict[str, JsonValue] = field(default_factory=dict)
+    configured: bool = False
     granted_permissions: frozenset[PluginPermission] = frozenset()
     runtime: PluginRuntime | None = None
     extensions: tuple[ExtensionRegistration, ...] = ()
@@ -57,13 +59,27 @@ class PluginRegistry:
         self._plugins: dict[str, _PluginRecord] = {}
         self._extension_owners: dict[str, str] = {}
 
-    def install(self, manifest: PluginManifest) -> PluginSnapshot:
+    def install(
+        self,
+        manifest: PluginManifest,
+        *,
+        install_source: str | None = None,
+    ) -> PluginSnapshot:
         if manifest.plugin_id in self._plugins:
             raise ContractError(
                 ErrorCode.CONFLICT, f"plugin {manifest.plugin_id!r} is already installed"
             )
         self._validate_compatibility(manifest)
-        self._plugins[manifest.plugin_id] = _PluginRecord(manifest=manifest)
+        resolved_install_source = install_source or manifest.provenance.source
+        if not resolved_install_source.strip():
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "plugin install source must be non-blank",
+            )
+        self._plugins[manifest.plugin_id] = _PluginRecord(
+            manifest=deepcopy(manifest),
+            install_source=resolved_install_source,
+        )
         return self.get(manifest.plugin_id)
 
     def configure(self, plugin_id: str, configuration: dict[str, JsonValue]) -> PluginSnapshot:
@@ -78,6 +94,7 @@ class PluginRegistry:
                 f"invalid configuration for plugin {plugin_id!r}: {exc.message}",
             ) from exc
         record.configuration = deepcopy(configuration)
+        record.configured = True
         record.state = PluginState.CONFIGURED
         return self.get(plugin_id)
 
@@ -190,6 +207,12 @@ class PluginRegistry:
         if manifest.plugin_id != record.manifest.plugin_id:
             raise ContractError(ErrorCode.CONFLICT, "plugin update cannot change plugin_id")
         self._validate_compatibility(manifest)
+        if manifest.state_version != record.manifest.state_version:
+            self._validate_state_migration_path(
+                manifest,
+                from_version=record.manifest.state_version,
+                to_version=manifest.state_version,
+            )
 
     def remove(self, plugin_id: str) -> None:
         record = self._record(plugin_id)
@@ -204,23 +227,37 @@ class PluginRegistry:
 
     def get(self, plugin_id: str) -> PluginSnapshot:
         record = self._record(plugin_id)
+        manifest = record.manifest
         return PluginSnapshot(
-            plugin_id=record.manifest.plugin_id,
-            plugin_version=record.manifest.plugin_version,
+            plugin_id=manifest.plugin_id,
+            plugin_version=manifest.plugin_version,
             state=record.state,
             compatibility=record.compatibility,
             health=record.health,
-            extension_ids=tuple(extension.extension_id for extension in record.manifest.extensions),
+            extension_ids=tuple(extension.extension_id for extension in manifest.extensions),
+            extension_types=tuple(
+                extension.extension_type.value for extension in manifest.extensions
+            ),
             requested_permissions=tuple(
-                sorted(permission.value for permission in record.manifest.requested_permissions)
+                sorted(permission.value for permission in manifest.requested_permissions)
             ),
             granted_permissions=tuple(
                 sorted(permission.value for permission in record.granted_permissions)
             ),
-            configured=record.state
-            in {PluginState.CONFIGURED, PluginState.ENABLED, PluginState.DISABLED},
+            dependencies=tuple(dependency.plugin_id for dependency in manifest.dependencies),
+            provenance_source=manifest.provenance.source,
+            provenance_license=manifest.provenance.license,
+            install_source=record.install_source,
+            configuration_version=manifest.configuration_version,
+            state_version=manifest.state_version,
+            configured=record.configured,
             health_detail=record.health_detail,
         )
+
+    def manifest(self, plugin_id: str) -> PluginManifest:
+        """Return an isolated manifest copy for inspection surfaces."""
+
+        return deepcopy(self._record(plugin_id).manifest)
 
     def list_plugins(self) -> tuple[PluginSnapshot, ...]:
         return tuple(self.get(plugin_id) for plugin_id in sorted(self._plugins))
@@ -307,3 +344,34 @@ class PluginRegistry:
                         "manifest declaration"
                     ),
                 )
+
+    @staticmethod
+    def _validate_state_migration_path(
+        manifest: PluginManifest,
+        *,
+        from_version: str,
+        to_version: str,
+    ) -> None:
+        current = from_version
+        visited = {current}
+        while current != to_version:
+            candidates = [
+                migration
+                for migration in manifest.state_migrations
+                if migration.from_version == current
+            ]
+            if len(candidates) != 1:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    (
+                        f"plugin {manifest.plugin_id!r} requires one deterministic state migration "
+                        f"from {current!r} toward {to_version!r}"
+                    ),
+                )
+            current = candidates[0].to_version
+            if current in visited:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    f"plugin {manifest.plugin_id!r} contains a cyclic state migration path",
+                )
+            visited.add(current)

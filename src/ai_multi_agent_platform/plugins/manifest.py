@@ -9,7 +9,20 @@ from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
-from .models import PLUGIN_MANIFEST_VERSION
+from .models import PLUGIN_MANIFEST_VERSION, ExtensionType, PluginPermission
+
+_VERSION_SCHEMA: dict[str, Any] = {
+    "type": "string",
+    "pattern": r"^\d+(?:\.\d+){0,2}$",
+}
+_VERSION_RANGE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "minimum": {"type": ["string", "null"], "pattern": r"^\d+(?:\.\d+){0,2}$"},
+        "maximum": {"type": ["string", "null"], "pattern": r"^\d+(?:\.\d+){0,2}$"},
+    },
+    "additionalProperties": False,
+}
 
 PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -26,14 +39,17 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
         "supported_platform",
         "extensions",
         "requested_permissions",
+        "configuration_version",
         "configuration_schema",
         "dependencies",
+        "state_version",
+        "state_migrations",
     ],
     "properties": {
         "plugin_id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"},
         "name": {"type": "string", "minLength": 1},
         "description": {"type": "string", "minLength": 1},
-        "plugin_version": {"type": "string", "minLength": 1},
+        "plugin_version": _VERSION_SCHEMA,
         "manifest_version": {"const": PLUGIN_MANIFEST_VERSION},
         "author": {"type": "string", "minLength": 1},
         "provenance": {
@@ -50,23 +66,19 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
             },
             "additionalProperties": False,
         },
-        "supported_platform": {
-            "type": "object",
-            "properties": {
-                "minimum": {"type": ["string", "null"], "pattern": "^\\d+(?:\\.\\d+){0,2}$"},
-                "maximum": {"type": ["string", "null"], "pattern": "^\\d+(?:\\.\\d+){0,2}$"},
-            },
-            "additionalProperties": False,
-        },
+        "supported_platform": _VERSION_RANGE_SCHEMA,
         "extensions": {
             "type": "array",
             "items": {
                 "type": "object",
                 "required": ["extension_id", "extension_type", "interface_version", "entrypoint"],
                 "properties": {
-                    "extension_id": {"type": "string", "minLength": 1},
-                    "extension_type": {"type": "string", "minLength": 1},
-                    "interface_version": {"type": "string", "pattern": "^\\d+(?:\\.\\d+){0,2}$"},
+                    "extension_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    },
+                    "extension_type": {"enum": [item.value for item in ExtensionType]},
+                    "interface_version": _VERSION_SCHEMA,
                     "entrypoint": {"type": "string", "minLength": 1},
                     "metadata": {"type": "object"},
                 },
@@ -75,13 +87,45 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
         },
         "requested_permissions": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {"enum": [item.value for item in PluginPermission]},
             "uniqueItems": True,
         },
+        "configuration_version": _VERSION_SCHEMA,
         "configuration_schema": {"type": "object"},
-        "dependencies": {"type": "array"},
+        "dependencies": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["plugin_id", "version_range", "optional"],
+                "properties": {
+                    "plugin_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    },
+                    "version_range": _VERSION_RANGE_SCHEMA,
+                    "optional": {"type": "boolean"},
+                },
+                "additionalProperties": False,
+            },
+        },
         "optional_external_services": {"type": "array", "items": {"type": "string"}},
-        "state_migrations": {"type": "array", "items": {"type": "string"}},
+        "state_version": _VERSION_SCHEMA,
+        "state_migrations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["migration_id", "from_version", "to_version"],
+                "properties": {
+                    "migration_id": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+                    },
+                    "from_version": _VERSION_SCHEMA,
+                    "to_version": _VERSION_SCHEMA,
+                },
+                "additionalProperties": False,
+            },
+        },
         "ui_metadata": {"type": "object"},
     },
     "additionalProperties": False,

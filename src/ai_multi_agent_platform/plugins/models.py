@@ -111,6 +111,20 @@ class PluginDependency:
 
 
 @dataclass(frozen=True, slots=True)
+class PluginStateMigrationSpec:
+    migration_id: str
+    from_version: str
+    to_version: str
+
+    def __post_init__(self) -> None:
+        _require_id(self.migration_id, "migration_id")
+        _require_numeric_version(self.from_version, "migration from_version")
+        _require_numeric_version(self.to_version, "migration to_version")
+        if self.from_version == self.to_version:
+            raise ValueError("plugin state migration must change the state version")
+
+
+@dataclass(frozen=True, slots=True)
 class PluginProvenance:
     source: str
     license: str
@@ -137,12 +151,14 @@ class PluginManifest:
     supported_platform: VersionRange = field(default_factory=VersionRange)
     manifest_version: str = PLUGIN_MANIFEST_VERSION
     requested_permissions: frozenset[PluginPermission] = frozenset()
+    configuration_version: str = "1.0"
     configuration_schema: dict[str, JsonValue] = field(
         default_factory=lambda: {"type": "object", "additionalProperties": False}
     )
     dependencies: tuple[PluginDependency, ...] = ()
     optional_external_services: tuple[str, ...] = ()
-    state_migrations: tuple[str, ...] = ()
+    state_version: str = "1.0"
+    state_migrations: tuple[PluginStateMigrationSpec, ...] = ()
     ui_metadata: dict[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -152,6 +168,8 @@ class PluginManifest:
         _require_numeric_version(self.plugin_version, "plugin_version")
         _require_non_blank(self.author, "author")
         _require_non_blank(self.manifest_version, "manifest_version")
+        _require_numeric_version(self.configuration_version, "configuration_version")
+        _require_numeric_version(self.state_version, "state_version")
         extension_ids = [extension.extension_id for extension in self.extensions]
         if len(set(extension_ids)) != len(extension_ids):
             raise ValueError("plugin manifest contains duplicate extension IDs")
@@ -160,6 +178,14 @@ class PluginManifest:
             raise ValueError("plugin cannot depend on itself")
         if len(set(dependency_ids)) != len(dependency_ids):
             raise ValueError("plugin manifest contains duplicate dependencies")
+        migration_ids = [migration.migration_id for migration in self.state_migrations]
+        if len(set(migration_ids)) != len(migration_ids):
+            raise ValueError("plugin manifest contains duplicate state migration IDs")
+        migration_edges = [
+            (migration.from_version, migration.to_version) for migration in self.state_migrations
+        ]
+        if len(set(migration_edges)) != len(migration_edges):
+            raise ValueError("plugin manifest contains duplicate state migration edges")
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,8 +202,15 @@ class PluginSnapshot:
     compatibility: CompatibilityState
     health: PluginHealth
     extension_ids: tuple[str, ...]
+    extension_types: tuple[str, ...]
     requested_permissions: tuple[str, ...]
     granted_permissions: tuple[str, ...]
+    dependencies: tuple[str, ...]
+    provenance_source: str
+    provenance_license: str
+    install_source: str
+    configuration_version: str
+    state_version: str
     configured: bool
     health_detail: str | None = None
 
