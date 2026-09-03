@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
 from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue, OperationContext
+from ai_multi_agent_platform.domain import new_id, validate_id
 
 from .models import (
     SessionContext,
@@ -44,19 +45,21 @@ class SessionCreateRequest:
     mode: SessionMode
     actor_ref: str
     operation: OperationContext
+    session_id: str = field(default_factory=lambda: new_id("terminal_session"))
     adapter_id: str = "reference-terminal"
     dimensions: TerminalDimensions | None = None
     encoding: str = "utf-8"
     policy_classification: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        validate_id(self.session_id, "terminal_session")
         if not self.actor_ref.strip():
             raise ValueError("session actor_ref must not be blank")
         if not self.adapter_id.strip():
             raise ValueError("session adapter_id must not be blank")
         if not self.encoding.strip():
             raise ValueError("session encoding must not be blank")
-        if self.operation.project_id is not None and self.operation.project_id != self.context.project_id:
+        if self.operation.project_id != self.context.project_id:
             raise ValueError("operation project_id must match session context")
         if any(not label.strip() for label in self.policy_classification):
             raise ValueError("policy classifications must not contain blank values")
@@ -130,7 +133,9 @@ class TerminalSessionAdapter(ABC):
     ) -> None: ...
 
     @abstractmethod
-    async def terminate(self, handle: AdapterSessionHandle, *, reason: str | None = None) -> None: ...
+    async def terminate(
+        self, handle: AdapterSessionHandle, *, reason: str | None = None
+    ) -> None: ...
 
     @abstractmethod
     async def status(self, handle: AdapterSessionHandle) -> SessionStatus: ...
