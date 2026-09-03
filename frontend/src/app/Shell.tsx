@@ -8,7 +8,6 @@ import { AppLink, matchPath, useRouter } from "./router";
 import {
   OverviewPage,
   RunDetailPage,
-  TaskDetailPage,
   UnavailablePage,
 } from "../pages/Pages";
 import { RunsPage } from "../pages/RunListPage";
@@ -18,6 +17,7 @@ import { ObservabilityPage } from "../pages/ObservabilityPage";
 import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ProjectsPage } from "../pages/ProjectListPage";
 import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
+import { TaskDetailPage } from "../pages/TaskDetailPage";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
 import { UsagePage } from "../pages/UsagePage";
 
