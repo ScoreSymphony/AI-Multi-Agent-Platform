@@ -6,8 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ExecutionHandle, ExecutionRequest, ExecutionSnapshot
-from ai_multi_agent_platform.contracts import OperationContext
+from ai_multi_agent_platform.contracts import (
+    ExecutionHandle,
+    ExecutionRequest,
+    ExecutionSnapshot,
+    OperationContext,
+)
 from ai_multi_agent_platform.distributed import (
     DispatchState,
     DistributedRegistry,
