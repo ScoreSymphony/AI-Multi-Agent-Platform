@@ -57,7 +57,9 @@ class _PluginResources(ResourceService):
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(_plugin_resource(self._registry, item) for item in self._registry.list_plugins())
+        return tuple(
+            _plugin_resource(self._registry, item) for item in self._registry.list_plugins()
+        )
 
     async def get_resource(
         self,
@@ -135,12 +137,16 @@ class ControlPlane(_CurrentControlPlane):
 
     def register_resource_service(self, collection: str, service: ResourceService) -> None:
         if collection in PLUGIN_COLLECTIONS:
-            raise ValueError(f"extension collection conflicts with canonical plugin route: {collection}")
+            raise ValueError(
+                f"extension collection conflicts with canonical plugin route: {collection}"
+            )
         super().register_resource_service(collection, service)
 
     def register_command(self, command: str, handler: CommandHandler) -> None:
         if command in PLUGIN_COMMANDS:
-            raise ValueError(f"extension command conflicts with canonical plugin command: {command}")
+            raise ValueError(
+                f"extension command conflicts with canonical plugin command: {command}"
+            )
         super().register_command(command, handler)
 
     async def _plugin_install_command(
