@@ -197,7 +197,7 @@ export function TaskDetailPage({ client, taskId }: { client: ControlPlaneClient;
   return (
     <div className="stack">
       <header className="page-header detail-header"><div><p className="eyebrow">Task</p><h1>{task.title}</h1><CanonicalId value={task.id} /></div><div className="detail-status"><StatusBadge value={task.status} /><span className={`live live-${liveState}`}>{liveState}</span></div></header>
-      {error && <ErrorState error={error} onRetry={() => void load()} />}
+      {error != null && <ErrorState error={error} onRetry={() => void load()} />}
       {permission === "denied" && <DegradedState title="Permission hint" detail="The current client hint marks Task commands as denied. The server remains authoritative." />}
       <div className="actions" aria-label="Task lifecycle commands">{canQueue && <button disabled={busy} onClick={() => void command("queue")}>Queue</button>}{canStart && <button className="primary" disabled={busy} onClick={() => void command("start")}>Start</button>}{canCancel && <button disabled={busy} onClick={() => void command("cancel")}>Cancel</button>}{canRetry && <button className="primary" disabled={busy} onClick={() => void command("retry")}>Retry</button>}<button disabled={busy} onClick={() => void load()}>Refresh</button></div>
       <div className="grid-two">
