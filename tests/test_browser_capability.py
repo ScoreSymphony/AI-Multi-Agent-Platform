@@ -90,9 +90,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.server.last_post_body = self.rfile.read(length)
         self.server.last_post_content_type = self.headers.get("Content-Type", "")
         self.server.post_count += 1
-        self._write_html(
-            "<html><head><title>Submitted</title></head><body>submitted</body></html>"
-        )
+        self._write_html("<html><head><title>Submitted</title></head><body>submitted</body></html>")
 
     def _write_html(self, html: str) -> None:
         payload = html.encode()
