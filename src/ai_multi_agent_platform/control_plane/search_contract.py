@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
+from datetime import datetime
 from typing import Any, Literal, cast
 from uuid import uuid4
 
@@ -309,6 +310,8 @@ def _search_query(request: HTTPRequest) -> SearchQuery:
         tags=_csv_query(params, "tag"),
         source_filters=_csv_query(params, "source"),
         provider_filters=_csv_query(params, "provider"),
+        updated_after=_timestamp_query(params, "updated_after"),
+        updated_before=_timestamp_query(params, "updated_before"),
         mode=mode,
         limit=limit,
         cursor=_optional_query(params, "cursor"),
@@ -335,6 +338,19 @@ def _csv_query(params: Mapping[str, str], name: str) -> tuple[str, ...]:
     if not values:
         raise ValueError(f"{name} must contain at least one value")
     return values
+
+
+def _timestamp_query(params: Mapping[str, str], name: str) -> datetime | None:
+    value = _optional_query(params, name)
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware")
+    return parsed
 
 
 def _augment_search_openapi(specification: dict[str, Any]) -> dict[str, Any]:
@@ -384,6 +400,16 @@ def _augment_search_openapi(specification: dict[str, Any]) -> dict[str, Any]:
                 {"name": "workspace_id", "in": "query", "schema": {"type": "string"}},
                 {"name": "status", "in": "query", "schema": {"type": "string"}},
                 {"name": "tag", "in": "query", "schema": {"type": "string"}},
+                {
+                    "name": "updated_after",
+                    "in": "query",
+                    "schema": {"type": "string", "format": "date-time"},
+                },
+                {
+                    "name": "updated_before",
+                    "in": "query",
+                    "schema": {"type": "string", "format": "date-time"},
+                },
                 {
                     "name": "mode",
                     "in": "query",
