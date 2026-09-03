@@ -193,6 +193,24 @@ class AgentService:
                 details={"agent_id": agent_id, "revision": revision, "scope": scope.value},
             )
 
+    def ensure_memory_config(
+        self,
+        agent_id: str,
+        revision: int,
+        config_ref: str,
+    ) -> None:
+        profile = self.repository.get_agent_revision(agent_id, revision).profile
+        if config_ref not in profile.data_access.memory_config_refs:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "agent revision is not permitted to use the memory configuration",
+                details={
+                    "agent_id": agent_id,
+                    "revision": revision,
+                    "memory_config_ref": config_ref,
+                },
+            )
+
     def ensure_knowledge_source(
         self,
         agent_id: str,
@@ -205,6 +223,25 @@ class AgentService:
                 ErrorCode.FORBIDDEN,
                 "agent revision is not permitted to access the knowledge source",
                 details={"agent_id": agent_id, "revision": revision, "source_id": source_id},
+            )
+
+    def ensure_authorization_profile(
+        self,
+        agent_id: str,
+        revision: int,
+        profile_ref: str,
+    ) -> None:
+        profile = self.repository.get_agent_revision(agent_id, revision).profile
+        configured = profile.policy_hooks.authorization_profile_ref
+        if configured != profile_ref:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "agent revision is not assigned to the authorization profile",
+                details={
+                    "agent_id": agent_id,
+                    "revision": revision,
+                    "authorization_profile_ref": profile_ref,
+                },
             )
 
     def create_team(
@@ -352,6 +389,24 @@ class AgentService:
             team_id,
             revision or definition.current_revision,
         )
+
+    def ensure_team_shared_resource(
+        self,
+        team_id: str,
+        revision: int,
+        resource_ref: str,
+    ) -> None:
+        profile = self.repository.get_team_revision(team_id, revision).profile
+        if resource_ref not in profile.shared_resource_refs:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "agent team revision is not permitted to use the shared resource",
+                details={
+                    "team_id": team_id,
+                    "revision": revision,
+                    "resource_ref": resource_ref,
+                },
+            )
 
     def _validate_team_members(self, profile: AgentTeamProfile) -> None:
         member_ids = {member.agent.agent_id for member in profile.members}
