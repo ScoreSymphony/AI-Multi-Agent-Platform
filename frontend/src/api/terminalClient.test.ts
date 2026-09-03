@@ -54,8 +54,8 @@ describe("terminal Control Plane client", () => {
   });
 
   it("creates and terminates sessions through idempotent canonical commands", async () => {
-    const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(session), { status: 200 }),
+    const fetchSpy = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify(session), { status: 200 })),
     );
     const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
 
