@@ -6,6 +6,17 @@ import { PermissionHintsProvider } from "../security/permissions";
 import { navigation } from "./navigation";
 import { AppLink, matchPath, useRouter } from "./router";
 import {
+  AgentDetailPage,
+  AgentsPage,
+  AgentTeamDetailPage,
+  AgentTeamsPage,
+} from "../pages/AgentsPage";
+import {
+  CapabilitiesPage,
+  CapabilityDetailPage,
+  CapabilityProviderDetailPage,
+} from "../pages/CapabilitiesPage";
+import {
   OverviewPage,
   RunDetailPage,
   UnavailablePage,
@@ -54,6 +65,10 @@ export function Shell() {
   const taskManagementMatch = matchPath("/tasks/:taskId/manage", path);
   const taskMatch = matchPath("/tasks/:taskId", path);
   const runMatch = matchPath("/runs/:runId", path);
+  const agentMatch = matchPath("/agents/:agentId", path);
+  const agentTeamMatch = matchPath("/agent-teams/:teamId", path);
+  const capabilityProviderMatch = matchPath("/tools/providers/:providerId", path);
+  const capabilityMatch = matchPath("/tools/:capabilityId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
   const referenceMatch = referenceRoute(path);
@@ -68,9 +83,16 @@ export function Shell() {
   else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;
   else if (path === "/runs") content = <RunsPage client={client} />;
   else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;
+  else if (path === "/agents") content = <AgentsPage client={client} />;
+  else if (agentMatch) content = <AgentDetailPage client={client} agentId={agentMatch.agentId} />;
+  else if (path === "/agent-teams") content = <AgentTeamsPage client={client} />;
+  else if (agentTeamMatch) content = <AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} />;
   else if (path === "/files") content = <ReferencesPage client={client} />;
   else if (referenceMatch) content = <ReferenceDetailPage client={client} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
   else if (path === "/search") content = <SearchPage client={client} />;
+  else if (path === "/tools") content = <CapabilitiesPage client={client} />;
+  else if (capabilityProviderMatch) content = <CapabilityProviderDetailPage client={client} providerId={capabilityProviderMatch.providerId} />;
+  else if (capabilityMatch) content = <CapabilityDetailPage client={client} capabilityId={capabilityMatch.capabilityId} />;
   else if (path === "/models") content = <ModelsPage client={client} />;
   else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
   else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
