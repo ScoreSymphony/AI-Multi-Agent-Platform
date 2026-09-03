@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
@@ -95,8 +94,8 @@ class WorkerProtocolReceipt:
 class WorkerProtocolService:
     """Security boundary for remote Node reporters using #36 identity and #15 policy.
 
-    Registration is an authoritative Node snapshot. The reporter is one Worker contained
-    in that snapshot and is bound through ``RegistrationRequest.service_identity_ref``.
+    Registration and heartbeat are authoritative Node Worker snapshots. The reporter is
+    one Worker contained in the snapshot and is bound through ``service_identity_ref``.
     Runtime capability/resource reports may change, while Control-Plane-owned trust,
     maintenance and drain state cannot be overwritten by a remote reporter.
     """
@@ -127,6 +126,14 @@ class WorkerProtocolService:
         actor = self._authenticate(credentials, now=timestamp)
         reporter_id = self._registration_reporter(request, actor)
         existing_node = self._optional_node(request.node.node_id)
+        incoming_ids = {worker.worker_id for worker in request.workers}
+        known_ids = self._known_worker_ids(request.node.node_id)
+        missing = known_ids - incoming_ids
+        if missing:
+            raise WorkerProtocolError(
+                "remote registration must include every known Worker; "
+                "use explicit deregistration before removing Workers"
+            )
         existing_workers = {
             worker.worker_id: self._optional_worker(worker.worker_id)
             for worker in request.workers
@@ -187,6 +194,15 @@ class WorkerProtocolService:
         reporter = self._required_worker(reporter_id)
         if reporter.node_id != node.node_id:
             raise WorkerProtocolError("authenticated reporter is not attached to heartbeat node")
+
+        reported_ids = {worker.worker_id for worker in request.heartbeat.workers}
+        known_ids = self._known_worker_ids(node.node_id)
+        if reporter_id not in reported_ids:
+            raise WorkerProtocolError("heartbeat must include the authenticated reporter Worker")
+        if known_ids != reported_ids:
+            raise WorkerProtocolError(
+                "authenticated heartbeat must report the complete registered Worker snapshot"
+            )
 
         await self._authorize(
             actor,
@@ -377,6 +393,13 @@ class WorkerProtocolService:
             raise WorkerProtocolError("registration cannot move a Worker between Nodes")
         return replace(reported, draining=existing.draining)
 
+    def _known_worker_ids(self, node_id: str) -> set[str]:
+        return {
+            worker.worker_id
+            for worker in self.runtime.registry.list_workers()
+            if worker.node_id == node_id
+        }
+
     def _required_node(self, node_id: str) -> NodeRecord:
         try:
             return self.runtime.registry.get_node(node_id)
@@ -400,19 +423,3 @@ class WorkerProtocolService:
             return self.runtime.registry.get_worker(worker_id)
         except RegistryError:
             return None
-
-
-def credential_scope_from_actor(actor: AuthenticatedActor) -> Mapping[str, JsonValue] | None:
-    """Return redaction-safe scope metadata for diagnostics without exposing the token."""
-
-    credential = actor.provider_metadata.get("credential")
-    if not isinstance(credential, Mapping):
-        return None
-    scope = credential.get("scope")
-    if not isinstance(scope, Mapping):
-        return None
-    result: dict[str, JsonValue] = {}
-    for key, value in scope.items():
-        if isinstance(key, str):
-            result[key] = value
-    return result
