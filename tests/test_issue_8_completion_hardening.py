@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 from collections.abc import Mapping
@@ -139,6 +140,25 @@ def test_descriptor_advertises_explicit_runtime_retry_bridge_and_compatibility_m
     assert metadata["diagnostics_mode"] == "platform_only"
     assert metadata["compatibility_status"] == "verified_pin"
     assert set(descriptor.supported_operations) == {"plan", "cancel", "reconcile"}
+
+
+def test_hermes_adapter_source_has_no_hermes_runtime_import() -> None:
+    adapter_path = (
+        Path(__file__).parents[1]
+        / "src"
+        / "ai_multi_agent_platform"
+        / "adapters"
+        / "hermes.py"
+    )
+    tree = ast.parse(adapter_path.read_text())
+    imported_roots: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_roots.extend(alias.name.split(".", maxsplit=1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module is not None:
+            imported_roots.append(node.module.split(".", maxsplit=1)[0])
+
+    assert not any(name.startswith("hermes") for name in imported_roots)
 
 
 def test_canonical_timeout_bounds_hermes_run_admission() -> None:
