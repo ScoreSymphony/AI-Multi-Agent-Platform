@@ -17,8 +17,15 @@ from ai_multi_agent_platform.capabilities import (
     CapabilityRegistry,
     NativeEchoProvider,
 )
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, HealthStatus
 from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.models import (
+    ModelCapabilities,
+    ModelConfiguration,
+    ModelLocation,
+    ModelRegistry,
+)
+from ai_multi_agent_platform.testing import FakeModelProvider
 
 FILE_READ_CAPABILITY_ID = "tool.file.read"
 SHELL_CAPABILITY_ID = "tool.shell.execute"
@@ -56,6 +63,26 @@ class _UnprotectedStandardDeveloperCapabilityProvider(_StandardDeveloperCapabili
     protect_shell = False
 
 
+def _model_registry() -> ModelRegistry:
+    registry = ModelRegistry()
+    provider = FakeModelProvider()
+    registry.register_provider(provider)
+    registry.register_model(
+        ModelConfiguration(
+            config_id="model-standard-agent-test",
+            display_name="Standard Agent Test Model",
+            provider_id=provider.descriptor.provider_id,
+            capabilities=ModelCapabilities(
+                context_window=32_768,
+                modalities=("text",),
+            ),
+            location=ModelLocation.LOCAL,
+            health=HealthStatus.HEALTHY,
+        )
+    )
+    return registry
+
+
 def test_standard_developer_rejects_shell_capability_without_matching_approval_contract() -> None:
     async def scenario() -> None:
         service = AgentService(InMemoryAgentRepository())
@@ -63,7 +90,11 @@ def test_standard_developer_rejects_shell_capability_without_matching_approval_c
         developer = get_standard_agent_template("developer")
         registry = CapabilityRegistry()
         await registry.register_provider(_UnprotectedStandardDeveloperCapabilityProvider())
-        runtime = AgentRuntime(service, capability_registry=registry)
+        runtime = AgentRuntime(
+            service,
+            model_registry=_model_registry(),
+            capability_registry=registry,
+        )
 
         with pytest.raises(ContractError) as exc_info:
             runtime.prepare_agent(
@@ -87,7 +118,11 @@ def test_standard_developer_shell_action_preserves_canonical_approval_binding_in
         developer = get_standard_agent_template("developer")
         registry = CapabilityRegistry()
         await registry.register_provider(_StandardDeveloperCapabilityProvider())
-        runtime = AgentRuntime(service, capability_registry=registry)
+        runtime = AgentRuntime(
+            service,
+            model_registry=_model_registry(),
+            capability_registry=registry,
+        )
 
         record = await runtime.start_agent(
             task_id=new_id("task"),
@@ -96,8 +131,13 @@ def test_standard_developer_shell_action_preserves_canonical_approval_binding_in
             requested_capability_ids=(SHELL_CAPABILITY_ID,),
         )
 
+        shell_constraint = next(
+            constraint
+            for constraint in developer.profile.capabilities.constraints
+            if constraint.capability_id == SHELL_CAPABILITY_ID
+        )
         assert FILE_READ_CAPABILITY_ID in record.capability_ids
         assert SHELL_CAPABILITY_ID in record.capability_ids
-        assert developer.profile.capabilities.constraints[2].approval_ref == SHELL_APPROVAL_REF
+        assert shell_constraint.approval_ref == SHELL_APPROVAL_REF
 
     asyncio.run(scenario())
