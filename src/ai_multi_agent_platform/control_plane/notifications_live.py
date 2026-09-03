@@ -17,6 +17,7 @@ from ai_multi_agent_platform.notifications import (
     fanout_notification_event_sinks,
 )
 
+from .automation_runtime_composition import ControlPlaneASGI as _RuntimeControlPlaneASGI
 from .http import (
     ASGISend,
     HTTPRequest,
@@ -40,7 +41,6 @@ from .notifications_composition import (
 from .notifications_composition import (
     build_openapi as _build_base_openapi,
 )
-from .terminal_composition import ControlPlaneASGI as _TerminalControlPlaneASGI
 
 
 class ControlPlane(_BaseControlPlane):
@@ -122,11 +122,11 @@ class ControlPlaneHTTP(_BaseControlPlaneHTTP):
 
 
 class ControlPlaneASGI:
-    """Standard ASGI composition plus recipient-scoped Notification SSE routing."""
+    """Runtime-complete ASGI composition plus recipient-scoped Notification SSE routing."""
 
     def __init__(self, http: Any) -> None:
         self._http = http
-        self._inner = _TerminalControlPlaneASGI(http)
+        self._inner = _RuntimeControlPlaneASGI(http)
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         path = str(scope.get("path", "/"))
