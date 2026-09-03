@@ -27,6 +27,7 @@ from .models import (
     ConnectionStatus,
     ConnectorActionInvocation,
     ConnectorActionResult,
+    ConnectorEvent,
     ConnectorResourceQuery,
     ConnectorSyncRequest,
     ConnectorSyncResult,
@@ -420,6 +421,28 @@ class ConnectorService:
         )
         await provider.unsubscribe_events(connection, subscription, context=context)
 
+    async def normalize_external_event(
+        self,
+        connection_id: str,
+        native_event: dict[str, JsonValue],
+        *,
+        actor: ActorIdentity,
+        context: OperationContext,
+    ) -> ConnectorEvent:
+        """Normalize inbound provider material behind the canonical Connection boundary."""
+
+        connection, provider = await self._usable_connection(
+            connection_id,
+            actor=actor,
+            context=context,
+            action=AuthorizationAction.READ,
+            side_effect="external_event_normalize",
+            payload={"connection_id": connection_id, "operation": "event.normalize"},
+        )
+        event = await provider.normalize_external_event(connection, native_event, context)
+        self._validate_event_binding(event, connection, provider)
+        return event
+
     async def synchronize(
         self,
         connection_id: str,
@@ -461,18 +484,7 @@ class ConnectorService:
         for resource in result.resources:
             self._validate_resource_binding(resource, connection, provider)
         for event in result.events:
-            if event.connection_id != connection.id:
-                raise ContractError(
-                    ErrorCode.CONTRACT_VIOLATION,
-                    "connector event is bound to another connection",
-                    provider_id=provider.descriptor.provider_id,
-                )
-            if event.connector_type_id != connection.connector_type_id:
-                raise ContractError(
-                    ErrorCode.CONTRACT_VIOLATION,
-                    "connector event type provenance does not match connection",
-                    provider_id=provider.descriptor.provider_id,
-                )
+            self._validate_event_binding(event, connection, provider)
         await self.repository.save_checkpoint(result.checkpoint)
         return result
 
@@ -614,11 +626,25 @@ class ConnectorService:
             "project_id",
             "organization_id",
             "secret_references",
+            "requested_scopes",
         )
         if any(getattr(original, field) != getattr(normalized, field) for field in immutable):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "connector provider changed canonical connection identity/scope",
+                provider_id=provider.descriptor.provider_id,
+            )
+        endpoint_metadata = dict(normalized.endpoint_metadata)
+        if redact_sensitive(endpoint_metadata) != endpoint_metadata:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector provider returned credential-bearing endpoint metadata",
+                provider_id=provider.descriptor.provider_id,
+            )
+        if not set(normalized.granted_scopes).issubset(set(normalized.requested_scopes)):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector provider granted scopes that were not requested",
                 provider_id=provider.descriptor.provider_id,
             )
         ConnectorService._validate_safe_adapter_metadata(normalized, provider)
@@ -654,6 +680,38 @@ class ConnectorService:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "external resource type is not declared by connector",
+                provider_id=provider.descriptor.provider_id,
+            )
+
+    @staticmethod
+    def _validate_event_binding(
+        event: ConnectorEvent,
+        connection: Connection,
+        provider: ConnectorProvider,
+    ) -> None:
+        if event.connection_id != connection.id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector event is bound to another connection",
+                provider_id=provider.descriptor.provider_id,
+            )
+        if event.connector_type_id != connection.connector_type_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector event type provenance does not match connection",
+                provider_id=provider.descriptor.provider_id,
+            )
+        if event.event_type not in provider.definition.event_types:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector returned an undeclared event type",
+                provider_id=provider.descriptor.provider_id,
+                details={"event_type": event.event_type},
+            )
+        if connection.project_id is not None and event.project_id != connection.project_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector event project context does not match the Connection",
                 provider_id=provider.descriptor.provider_id,
             )
 
