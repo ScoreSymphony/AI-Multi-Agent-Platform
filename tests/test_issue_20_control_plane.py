@@ -135,7 +135,9 @@ def test_reference_plugin_lifecycle_runs_through_control_plane_only() -> None:
         candidate = _item(candidates)
         manifest_digest = candidate["manifest_digest"]
         assert isinstance(manifest_digest, str)
-        assert candidate["requested_permissions"] == [PluginPermission.CAPABILITY_REGISTRATION.value]
+        assert candidate["requested_permissions"] == [
+            PluginPermission.CAPABILITY_REGISTRATION.value
+        ]
 
         installed = await http.handle(
             HTTPRequest(
@@ -186,7 +188,9 @@ def test_reference_plugin_lifecycle_runs_through_control_plane_only() -> None:
         assert enabled.body["granted_permissions"] == [
             PluginPermission.CAPABILITY_REGISTRATION.value
         ]
-        assert registry.extension_owner(reference_manifest().extensions[0].extension_id) == plugin_id
+        assert (
+            registry.extension_owner(reference_manifest().extensions[0].extension_id) == plugin_id
+        )
         assert [item.capability_id for item in capabilities.list_capabilities()] == [
             REFERENCE_CAPABILITY_ID
         ]
