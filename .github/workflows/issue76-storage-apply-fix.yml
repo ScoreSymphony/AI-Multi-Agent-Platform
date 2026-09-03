@@ -1,0 +1,49 @@
+name: Issue 76 storage apply fix
+
+on:
+  push:
+    branches: [feat/issue-76-storage-accounting]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-76-storage-accounting
+      - name: Fix strict typing in one-shot apply workflow
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/workflows/issue76-storage-apply.yml")
+          text = path.read_text()
+          anchor = '          service = "src/ai_multi_agent_platform/accounting/service.py"\n'
+          addition = (
+              anchor
+              + "          replace_once(\n"
+              + "              service,\n"
+              + "              'from datetime import timedelta\\n',\n"
+              + "              'from datetime import datetime, timedelta\\n',\n"
+              + "          )\n"
+          )
+          if text.count(anchor) != 1:
+              raise RuntimeError("service patch anchor changed")
+          text = text.replace(anchor, addition, 1)
+          old = "    start=None,\\n    end=None,\\n"
+          new = "    start: datetime | None = None,\\n    end: datetime | None = None,\\n"
+          if text.count(old) != 1:
+              raise RuntimeError("aggregate helper annotation anchor changed")
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+          rm .github/workflows/issue76-storage-apply-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: fix #76 storage apply strict typing"
+          git push origin HEAD:feat/issue-76-storage-accounting
