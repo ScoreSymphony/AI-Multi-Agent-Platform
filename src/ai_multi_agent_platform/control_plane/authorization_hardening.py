@@ -16,12 +16,7 @@ from .extensions import _reject_private_payload, _validate_command_name
 from .models import RequestContext
 from .run_workspace_contract import _has_binding_fields
 from .service import _optional_string, _payload_digest, _require_key, _required_string
-from .task_management_contract import (
-    TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
-    TASK_MANAGEMENT_COMMANDS,
-    TASK_MANAGEMENT_UPDATE_COMMAND,
-    _require_idempotency_key,
-)
+from .task_management_contract import TASK_MANAGEMENT_COMMANDS, _require_idempotency_key
 from .workspace_contract import (
     _data_access_context,
     _workspace_access_mode,
