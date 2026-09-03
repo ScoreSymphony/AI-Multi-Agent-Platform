@@ -75,7 +75,10 @@ class InMemoryAgentRepository:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "agent revision must increase exactly by one",
-                details={"current_revision": current.current_revision, "new_revision": revision.revision},
+                details={
+                    "current_revision": current.current_revision,
+                    "new_revision": revision.revision,
+                },
             )
         self._validate_agent_pair(definition, revision)
         key = (revision.agent_id, revision.revision)
@@ -113,7 +116,9 @@ class InMemoryAgentRepository:
 
     def create_team(self, definition: AgentTeamDefinition, revision: AgentTeamRevision) -> None:
         if definition.team_id in self._teams:
-            raise ContractError(ErrorCode.CONFLICT, f"agent team already exists: {definition.team_id}")
+            raise ContractError(
+                ErrorCode.CONFLICT, f"agent team already exists: {definition.team_id}"
+            )
         if definition.current_revision != 1 or revision.revision != 1:
             raise ContractError(ErrorCode.CONFLICT, "new agent team must start at revision 1")
         self._validate_team_pair(definition, revision)
@@ -127,7 +132,10 @@ class InMemoryAgentRepository:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "agent team revision must increase exactly by one",
-                details={"current_revision": current.current_revision, "new_revision": revision.revision},
+                details={
+                    "current_revision": current.current_revision,
+                    "new_revision": revision.revision,
+                },
             )
         self._validate_team_pair(definition, revision)
         key = (revision.team_id, revision.revision)
@@ -192,7 +200,9 @@ class InMemoryAgentRepository:
         try:
             return self._agent_runs[agent_run_id]
         except KeyError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, f"agent run not found: {agent_run_id}") from exc
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"agent run not found: {agent_run_id}"
+            ) from exc
 
     def list_agent_runs(self, run_id: str | None = None) -> tuple[AgentRunRecord, ...]:
         records = list(self._agent_runs.values())
@@ -203,7 +213,9 @@ class InMemoryAgentRepository:
     @staticmethod
     def _validate_agent_pair(definition: AgentDefinition, revision: AgentRevision) -> None:
         if definition.agent_id != revision.agent_id:
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "agent definition/revision ID mismatch")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "agent definition/revision ID mismatch"
+            )
         if definition.current_revision != revision.revision:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
@@ -225,7 +237,9 @@ class InMemoryAgentRepository:
         revision: AgentTeamRevision,
     ) -> None:
         if definition.team_id != revision.team_id:
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "team definition/revision ID mismatch")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION, "team definition/revision ID mismatch"
+            )
         if definition.current_revision != revision.revision:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
