@@ -11,8 +11,8 @@ from ai_multi_agent_platform.contracts import (
     JsonValue,
     ProviderDescriptor,
 )
+from ai_multi_agent_platform.contracts.authorization import AuthorizationOutcome
 from ai_multi_agent_platform.contracts.authorization import (
-    AuthorizationOutcome,
     AuthorizationRequest as CanonicalAuthorizationRequest,
 )
 from ai_multi_agent_platform.contracts.types import AuthorizationRequest as BaseAuthorizationRequest
