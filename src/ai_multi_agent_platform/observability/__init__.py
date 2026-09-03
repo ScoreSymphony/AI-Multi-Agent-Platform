@@ -1,5 +1,6 @@
 """Platform-owned observability contracts and reference instrumentation."""
 
+from .authorization import ObservedAuthorizationProvider
 from .event_provider import ObservabilityEventProvider
 from .exporters import (
     InMemoryExporter,
@@ -68,6 +69,7 @@ __all__ = [
     "ObservabilityEventProvider",
     "ObservabilityExporter",
     "ObservabilityInvocationObserver",
+    "ObservedAuthorizationProvider",
     "ObservedExecutor",
     "ObservedModelProvider",
     "ObservedModelRouter",
