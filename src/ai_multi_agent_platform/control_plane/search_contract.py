@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import replace
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.errors import ContractError
@@ -218,9 +218,6 @@ class ControlPlaneHTTP(_BaseControlPlaneHTTP):
             version, relative = _split_version(request.path)
             _require_supported_version(version)
 
-            if request.method == "GET" and relative == "/openapi.json":
-                return self._response(200, build_openapi(), request_id, correlation_id)
-
             if relative == "/search":
                 if request.method != "GET":
                     raise APIException(
@@ -249,7 +246,22 @@ class ControlPlaneHTTP(_BaseControlPlaneHTTP):
                 correlation_id,
             )
 
-        return await super().handle(request)
+        response = await super().handle(request)
+        if (
+            request.method == "GET"
+            and relative == "/openapi.json"
+            and response.status == 200
+            and isinstance(response.body, dict)
+        ):
+            specification = _augment_search_openapi(
+                cast(dict[str, Any], deepcopy(response.body))
+            )
+            return HTTPResponse(
+                status=response.status,
+                body=cast(dict[str, JsonValue], specification),
+                headers=dict(response.headers),
+            )
+        return response
 
 
 def build_openapi(
@@ -298,8 +310,8 @@ def _search_query(request: HTTPRequest) -> SearchQuery:
         mode=mode,
         limit=limit,
         cursor=_optional_query(params, "cursor"),
-        sort=cast(Any, sort_value),
-        direction=cast(Any, direction_value),
+        sort=cast(Literal["relevance", "id", "updated_at"], sort_value),
+        direction=cast(Literal["asc", "desc"], direction_value),
     )
 
 
