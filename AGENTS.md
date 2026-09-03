@@ -71,7 +71,7 @@ A public or open-source repository is not automatically safe to copy. Prefer the
 
 ## Current implementation status
 
-As of 2026-09-03, the completed substantive baseline includes #1–#7, #9–#13, #15–#17, #32, #34, #35, #37, #43, #76 and #88.
+As of 2026-09-03, the completed substantive baseline includes #1–#7, #9–#13, #15–#17, #32, #34, #35, #37, #43, #73, #76 and #88.
 
 The highest-leverage current parallel lanes are:
 
@@ -81,7 +81,7 @@ The highest-leverage current parallel lanes are:
 - #18 Automations and trigger-driven Task creation;
 - #20 Plugin/extension runtime.
 
-Additional ready work includes #19 Evaluation/Regression, #45 Search, #73 Terminal and #74 Browser. #38 CLI remains a progressive open client lane and should consume canonical Authentication/Agent/Worker APIs as they land rather than invent temporary private equivalents.
+Additional ready work includes #19 Evaluation/Regression, #45 Search and #74 Browser. #38 CLI remains a progressive open client lane and should consume canonical Authentication/Agent/Worker APIs as they land rather than invent temporary private equivalents.
 
 Always re-check [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) and the target issue immediately before assigning an agent, because newly merged work can move the execution frontier without any change in issue numbering.
 

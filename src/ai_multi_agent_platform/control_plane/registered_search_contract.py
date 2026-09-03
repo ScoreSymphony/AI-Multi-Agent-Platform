@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -48,6 +49,13 @@ _BUILTIN_SEARCH_TYPES = (
 
 ReferenceKey = tuple[str, str]
 ReferenceScope = tuple[str, str, str | None]
+
+
+@runtime_checkable
+class _SearchResourceEnumerator(Protocol):
+    """Optional internal rebuild seam for actor-filtered canonical collections."""
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]: ...
 
 
 class ControlPlane(_BaseSearchControlPlane):
@@ -169,7 +177,12 @@ class ControlPlane(_BaseSearchControlPlane):
 
         for collection in self.registered_collections:
             service = self._registered_resource_service(collection)
-            resources = list(await service.list_resources(context, query))
+            if getattr(service, "search_indexable", True) is False:
+                continue
+            if isinstance(service, _SearchResourceEnumerator):
+                resources = list(await service.list_search_resources())
+            else:
+                resources = list(await service.list_resources(context, query))
             _validate_resources(collection, resources)
             action = f"{_singular(collection)}:list"
 
