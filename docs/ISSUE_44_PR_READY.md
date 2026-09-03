@@ -1,1 +1,0 @@
-Connector framework implementation is ready for draft pull-request CI validation.
