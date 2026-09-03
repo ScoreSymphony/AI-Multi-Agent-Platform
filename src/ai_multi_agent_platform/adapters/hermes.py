@@ -334,9 +334,7 @@ class HermesAdapterConfig:
             for index, raw_entry in enumerate(raw):
                 if not isinstance(raw_entry, Mapping):
                     raise ValueError(f"{name}[{index}] must be an object")
-                unknown_entry_fields = sorted(
-                    set(raw_entry) - {"canonical_id", "hermes_target"}
-                )
+                unknown_entry_fields = sorted(set(raw_entry) - {"canonical_id", "hermes_target"})
                 if unknown_entry_fields:
                     raise ValueError(
                         f"{name}[{index}] has unknown fields: {unknown_entry_fields!r}"
