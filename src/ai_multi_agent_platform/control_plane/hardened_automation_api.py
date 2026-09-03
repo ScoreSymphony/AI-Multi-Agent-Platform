@@ -15,9 +15,11 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from .automation_api import (
     AUTOMATION_COLLECTION,
     DELIVERY_COLLECTION,
-    ControlPlane as _AutomationControlPlane,
     _automation_resource,
     _delivery_resource,
+)
+from .automation_api import (
+    ControlPlane as _AutomationControlPlane,
 )
 from .extensions import ResourceService
 from .models import PageQuery, RequestContext, paginate
