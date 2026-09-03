@@ -1,0 +1,671 @@
+name: Apply issue 11 completion hardening
+
+on:
+  push:
+    branches: [fix/issue-11-completion-hardening]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/issue-11-completion-hardening
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Apply hardening patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected patch anchor missing in {path}: {old[:80]!r}")
+              target.write_text(text.replace(old, new, 1))
+
+          adapter = "src/ai_multi_agent_platform/adapters/litellm.py"
+
+          replace_once(
+              adapter,
+              '''class LiteLLMMode(StrEnum):
+    """Supported first-class LiteLLM integration modes."""
+
+    LIBRARY = "library"
+    PROXY = "proxy"
+
+
+@dataclass(frozen=True, slots=True)
+class LiteLLMProviderConfig:''',
+              '''class LiteLLMMode(StrEnum):
+    """Supported first-class LiteLLM integration modes."""
+
+    LIBRARY = "library"
+    PROXY = "proxy"
+
+
+class LiteLLMTelemetryMode(StrEnum):
+    """Adapter-owned telemetry/logging metadata policy."""
+
+    PLATFORM_ONLY = "platform_only"
+    DISABLED = "disabled"
+
+
+@dataclass(frozen=True, slots=True)
+class LiteLLMProviderConfig:''',
+          )
+
+          replace_once(
+              adapter,
+              '''    timeout_seconds: float = 120.0
+    extra_headers: Mapping[str, str] = field(default_factory=dict)
+''',
+              '''    timeout_seconds: float = 120.0
+    max_retries: int = 0
+    telemetry_mode: LiteLLMTelemetryMode = LiteLLMTelemetryMode.PLATFORM_ONLY
+    extra_headers: Mapping[str, str] = field(default_factory=dict)
+''',
+          )
+
+          replace_once(
+              adapter,
+              '''        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be greater than zero")
+''',
+              '''        if self.timeout_seconds <= 0:
+            raise ValueError("timeout_seconds must be greater than zero")
+        if isinstance(self.max_retries, bool) or self.max_retries < 0:
+            raise ValueError("max_retries must be a non-negative integer")
+        if not isinstance(self.telemetry_mode, LiteLLMTelemetryMode):
+            raise ValueError("telemetry_mode must be a LiteLLMTelemetryMode")
+''',
+          )
+
+          replace_once(
+              adapter,
+              '''        object.__setattr__(self, "models", MappingProxyType(dict(self.models)))
+        object.__setattr__(self, "extra_headers", MappingProxyType(dict(self.extra_headers)))
+
+
+class LiteLLMModelProvider''',
+              '''        object.__setattr__(self, "models", MappingProxyType(dict(self.models)))
+        object.__setattr__(self, "extra_headers", MappingProxyType(dict(self.extra_headers)))
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, object]) -> LiteLLMProviderConfig:
+        """Build validated adapter configuration from resolved JSON-like values."""
+
+        allowed = {
+            "provider_id",
+            "mode",
+            "models",
+            "enabled",
+            "base_url",
+            "api_key_env",
+            "timeout_seconds",
+            "max_retries",
+            "telemetry_mode",
+            "extra_headers",
+        }
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise ValueError(f"unknown LiteLLM configuration fields: {unknown!r}")
+
+        def string_field(name: str, *, required: bool = False) -> str | None:
+            raw = values.get(name)
+            if raw is None:
+                if required:
+                    raise ValueError(f"{name} is required")
+                return None
+            if not isinstance(raw, str) or not raw.strip():
+                raise ValueError(f"{name} must be a non-blank string")
+            return raw
+
+        provider_id = string_field("provider_id", required=True)
+        mode_value = string_field("mode", required=True)
+        assert provider_id is not None
+        assert mode_value is not None
+        try:
+            mode = LiteLLMMode(mode_value)
+        except ValueError as exc:
+            raise ValueError(f"unsupported LiteLLM mode: {mode_value}") from exc
+
+        models_raw = values.get("models")
+        if not isinstance(models_raw, Mapping):
+            raise ValueError("models must be an object mapping canonical IDs to provider model names")
+        models: dict[str, str] = {}
+        for raw_key, raw_value in models_raw.items():
+            if not isinstance(raw_key, str) or not isinstance(raw_value, str):
+                raise ValueError("models must contain string keys and values")
+            models[raw_key] = raw_value
+
+        enabled = values.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be a boolean")
+
+        timeout_raw = values.get("timeout_seconds", 120.0)
+        if isinstance(timeout_raw, bool) or not isinstance(timeout_raw, int | float):
+            raise ValueError("timeout_seconds must be numeric")
+
+        retries_raw = values.get("max_retries", 0)
+        if isinstance(retries_raw, bool) or not isinstance(retries_raw, int):
+            raise ValueError("max_retries must be an integer")
+
+        telemetry_raw = values.get(
+            "telemetry_mode",
+            LiteLLMTelemetryMode.PLATFORM_ONLY.value,
+        )
+        if not isinstance(telemetry_raw, str):
+            raise ValueError("telemetry_mode must be a string")
+        try:
+            telemetry_mode = LiteLLMTelemetryMode(telemetry_raw)
+        except ValueError as exc:
+            raise ValueError(f"unsupported LiteLLM telemetry_mode: {telemetry_raw}") from exc
+
+        headers_raw = values.get("extra_headers", {})
+        if not isinstance(headers_raw, Mapping):
+            raise ValueError("extra_headers must be an object")
+        extra_headers: dict[str, str] = {}
+        for raw_key, raw_value in headers_raw.items():
+            if not isinstance(raw_key, str) or not isinstance(raw_value, str):
+                raise ValueError("extra_headers must contain string keys and values")
+            extra_headers[raw_key] = raw_value
+
+        return cls(
+            provider_id=provider_id,
+            mode=mode,
+            models=models,
+            enabled=enabled,
+            base_url=string_field("base_url"),
+            api_key_env=string_field("api_key_env"),
+            timeout_seconds=float(timeout_raw),
+            max_retries=retries_raw,
+            telemetry_mode=telemetry_mode,
+            extra_headers=extra_headers,
+        )
+
+
+class LiteLLMModelProvider''',
+          )
+
+          replace_once(
+              adapter,
+              '''                transport=proxy_transport,
+            )
+
+    @property
+''',
+              '''                transport=proxy_transport,
+            )
+        elif config.enabled and completion is None:
+            # Importing the platform remains dependency-free, but an enabled
+            # library provider must be executable before it can be registered.
+            self._completion = self._resolve_completion()
+
+    @property
+''',
+          )
+
+          replace_once(
+              adapter,
+              '''            "enabled": self.config.enabled,
+            "dependency": "optional",
+''',
+              '''            "enabled": self.config.enabled,
+            "dependency": "optional",
+            "max_retries": self.config.max_retries,
+            "telemetry_mode": self.config.telemetry_mode.value,
+''',
+          )
+
+          replace_once(
+              adapter,
+              '''        payload: dict[str, object] = {
+            "model": native_model,
+            "messages": self._messages(request_data),
+            "stream": False,
+        }
+''',
+              '''        payload: dict[str, object] = {
+            "model": native_model,
+            "messages": self._messages(request_data),
+            "stream": False,
+            "num_retries": self.config.max_retries,
+        }
+''',
+          )
+
+          replace_once(
+              adapter,
+              '''        return ModelResponse(
+            request_id=request_data.request_id,
+            text=content,
+            model_ref=canonical_model_id,
+            usage=usage,
+            adapter_metadata=(
+                AdapterMetadata(namespace="litellm", values=adapter_values),
+                AdapterMetadata(namespace="model-protocol", values=protocol_values),
+            ),
+        )
+''',
+              '''        adapter_metadata: list[AdapterMetadata] = [
+            AdapterMetadata(namespace="model-protocol", values=protocol_values)
+        ]
+        if self.config.telemetry_mode is LiteLLMTelemetryMode.PLATFORM_ONLY:
+            adapter_metadata.insert(0, AdapterMetadata(namespace="litellm", values=adapter_values))
+
+        return ModelResponse(
+            request_id=request_data.request_id,
+            text=content,
+            model_ref=canonical_model_id,
+            usage=usage,
+            adapter_metadata=tuple(adapter_metadata),
+        )
+''',
+          )
+
+          replace_once(
+              adapter,
+              '''    ) -> ModelResponse:
+        values: dict[str, JsonValue] = {
+            "mode": LiteLLMMode.PROXY.value,
+''',
+              '''    ) -> ModelResponse:
+        if self.config.telemetry_mode is LiteLLMTelemetryMode.DISABLED:
+            return response
+
+        values: dict[str, JsonValue] = {
+            "mode": LiteLLMMode.PROXY.value,
+''',
+          )
+
+          replace_once(
+              adapter,
+              '''        return ContractError(
+            code,
+            f"LiteLLM request failed: {name}",
+            retryable=retryable,
+            provider_id=self.config.provider_id,
+            details={"exception_type": name},
+            adapter_metadata=(
+                AdapterMetadata(
+                    namespace="litellm",
+                    values={"exception_type": name, "mode": self.config.mode.value},
+                ),
+            ),
+        )
+''',
+              '''        adapter_metadata: tuple[AdapterMetadata, ...] = ()
+        if self.config.telemetry_mode is LiteLLMTelemetryMode.PLATFORM_ONLY:
+            adapter_metadata = (
+                AdapterMetadata(
+                    namespace="litellm",
+                    values={"exception_type": name, "mode": self.config.mode.value},
+                ),
+            )
+
+        return ContractError(
+            code,
+            f"LiteLLM request failed: {name}",
+            retryable=retryable,
+            provider_id=self.config.provider_id,
+            details={"exception_type": name},
+            adapter_metadata=adapter_metadata,
+        )
+''',
+          )
+
+          init_file = "src/ai_multi_agent_platform/adapters/__init__.py"
+          replace_once(
+              init_file,
+              'from .litellm import LiteLLMMode, LiteLLMModelProvider, LiteLLMProviderConfig\n',
+              '''from .litellm import (
+    LiteLLMMode,
+    LiteLLMModelProvider,
+    LiteLLMProviderConfig,
+    LiteLLMTelemetryMode,
+)
+''',
+          )
+          replace_once(
+              init_file,
+              '    "LiteLLMProviderConfig",\n',
+              '    "LiteLLMProviderConfig",\n    "LiteLLMTelemetryMode",\n',
+          )
+
+          config_path = Path("config/litellm.example.json")
+          config_data = json.loads(config_path.read_text())
+          for example in config_data.values():
+              example["max_retries"] = 0
+              example["telemetry_mode"] = "platform_only"
+          config_path.write_text(json.dumps(config_data, indent=2) + "\n")
+
+          tests = "tests/test_issue_11_litellm_adapter.py"
+          replace_once(tests, "import asyncio\nimport threading\n", "import asyncio\nimport json\nimport threading\n")
+          replace_once(
+              tests,
+              "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\n",
+              "from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer\nfrom pathlib import Path\n",
+          )
+          replace_once(
+              tests,
+              '''    LiteLLMProviderConfig,
+)
+''',
+              '''    LiteLLMProviderConfig,
+    LiteLLMTelemetryMode,
+)
+''',
+          )
+          replace_once(
+              tests,
+              '''    enabled: bool = True,
+    timeout_seconds: float = 120.0,
+) -> LiteLLMModelProvider:
+''',
+              '''    enabled: bool = True,
+    timeout_seconds: float = 120.0,
+    max_retries: int = 0,
+    telemetry_mode: LiteLLMTelemetryMode = LiteLLMTelemetryMode.PLATFORM_ONLY,
+) -> LiteLLMModelProvider:
+''',
+          )
+          replace_once(
+              tests,
+              '''            timeout_seconds=timeout_seconds,
+        ),
+''',
+              '''            timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
+            telemetry_mode=telemetry_mode,
+        ),
+''',
+          )
+          replace_once(
+              tests,
+              '''    assert captured["max_tokens"] == 128
+    assert captured["response_format"] == {"type": "json_object"}
+''',
+              '''    assert captured["max_tokens"] == 128
+    assert captured["num_retries"] == 0
+    assert captured["response_format"] == {"type": "json_object"}
+''',
+          )
+
+          old_missing = '''def test_library_mode_fails_clearly_when_optional_dependency_is_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = LiteLLMModelProvider(
+        LiteLLMProviderConfig(
+            provider_id="litellm-library",
+            mode=LiteLLMMode.LIBRARY,
+            models={"model-local-coder": "ollama/qwen3-coder"},
+        )
+    )
+
+    def missing_dependency(name: str) -> object:
+        assert name == "litellm"
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setattr(litellm_adapter.importlib, "import_module", missing_dependency)
+
+    with pytest.raises(ContractError) as captured:
+        asyncio.run(
+            provider.generate(
+                ModelRequest(
+                    request_id="req-litellm-missing",
+                    messages=("hello",),
+                    context=CTX,
+                    requirements={"model_config_id": "model-local-coder"},
+                )
+            )
+        )
+
+    assert captured.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert captured.value.details["install_extra"] == "ai-multi-agent-platform[litellm]"
+'''
+          new_missing = '''def test_enabled_library_provider_fails_before_registration_when_dependency_is_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_dependency(name: str) -> object:
+        assert name == "litellm"
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setattr(litellm_adapter.importlib, "import_module", missing_dependency)
+
+    with pytest.raises(ContractError) as captured:
+        LiteLLMModelProvider(
+            LiteLLMProviderConfig(
+                provider_id="litellm-library",
+                mode=LiteLLMMode.LIBRARY,
+                models={"model-local-coder": "ollama/qwen3-coder"},
+            )
+        )
+
+    assert captured.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert captured.value.details["install_extra"] == "ai-multi-agent-platform[litellm]"
+'''
+          replace_once(tests, old_missing, new_missing)
+
+          test_path = Path(tests)
+          test_text = test_path.read_text()
+          additions = r'''
+
+
+def test_committed_examples_parse_through_runtime_config_contract() -> None:
+    config_file = Path(__file__).parents[1] / "config" / "litellm.example.json"
+    examples = json.loads(config_file.read_text())
+
+    library = LiteLLMProviderConfig.from_mapping(examples["library_local_example"])
+    proxy = LiteLLMProviderConfig.from_mapping(examples["proxy_local_example"])
+
+    assert library.mode is LiteLLMMode.LIBRARY
+    assert library.max_retries == 0
+    assert library.telemetry_mode is LiteLLMTelemetryMode.PLATFORM_ONLY
+    assert proxy.mode is LiteLLMMode.PROXY
+    assert proxy.base_url == "http://127.0.0.1:4000/v1"
+
+
+def test_library_retry_configuration_is_forwarded_explicitly() -> None:
+    captured: dict[str, object] = {}
+
+    async def completion(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return {
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+
+    provider = make_library_provider(completion=completion, max_retries=3)
+    asyncio.run(
+        provider.generate(
+            ModelRequest(
+                request_id="req-litellm-retries",
+                messages=("hello",),
+                context=CTX,
+                requirements={"model_config_id": "model-local-coder"},
+            )
+        )
+    )
+
+    assert captured["num_retries"] == 3
+
+
+def test_telemetry_disabled_suppresses_litellm_request_metadata() -> None:
+    async def completion(**kwargs: object) -> object:
+        del kwargs
+        return {
+            "choices": [
+                {
+                    "message": {"role": "assistant", "content": "ok"},
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+
+    provider = make_library_provider(
+        completion=completion,
+        telemetry_mode=LiteLLMTelemetryMode.DISABLED,
+    )
+    response = asyncio.run(
+        provider.generate(
+            ModelRequest(
+                request_id="req-litellm-no-telemetry",
+                messages=("hello",),
+                context=CTX,
+                requirements={"model_config_id": "model-local-coder"},
+            )
+        )
+    )
+
+    assert {item.namespace for item in response.adapter_metadata} == {"model-protocol"}
+    descriptor_values = provider.descriptor.adapter_metadata[0].values
+    assert descriptor_values["telemetry_mode"] == "disabled"
+
+
+def test_disabled_library_provider_does_not_import_optional_dependency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def missing_dependency(name: str) -> object:
+        calls.append(name)
+        raise ModuleNotFoundError(name)
+
+    monkeypatch.setattr(litellm_adapter.importlib, "import_module", missing_dependency)
+    provider = LiteLLMModelProvider(
+        LiteLLMProviderConfig(
+            provider_id="litellm-disabled-no-dependency",
+            mode=LiteLLMMode.LIBRARY,
+            models={"model-local-coder": "ollama/qwen3-coder"},
+            enabled=False,
+        )
+    )
+
+    assert asyncio.run(provider.health()) is HealthStatus.UNAVAILABLE
+    assert calls == []
+'''
+          if "test_committed_examples_parse_through_runtime_config_contract" not in test_text:
+              test_path.write_text(test_text + additions)
+
+          routing_path = Path("tests/test_issue_11_litellm_routing.py")
+          routing_text = routing_path.read_text()
+          routing_addition = r'''
+
+
+def test_platform_router_preserves_self_hosted_only_policy() -> None:
+    registry = ModelRegistry()
+    self_hosted_provider = make_provider("litellm-self-hosted", "model-self-hosted")
+    remote_provider = make_provider("litellm-remote-self-hosted-test", "model-remote-policy")
+    registry.register_provider(self_hosted_provider)
+    registry.register_provider(remote_provider)
+    asyncio.run(registry.refresh_health())
+
+    registry.register_model(
+        ModelConfiguration(
+            config_id="model-self-hosted",
+            display_name="Self-hosted model",
+            provider_id="litellm-self-hosted",
+            location=ModelLocation.SELF_HOSTED,
+            health=HealthStatus.HEALTHY,
+            priority=10,
+        )
+    )
+    registry.register_model(
+        ModelConfiguration(
+            config_id="model-remote-policy",
+            display_name="Remote policy model",
+            provider_id="litellm-remote-self-hosted-test",
+            location=ModelLocation.REMOTE,
+            health=HealthStatus.HEALTHY,
+            priority=100,
+        )
+    )
+
+    router = DeterministicModelRouter(registry)
+    selection = asyncio.run(
+        router.select_provider(
+            ModelRequest(
+                request_id="req-self-hosted-policy",
+                messages=("hello",),
+                context=CTX,
+                requirements={"self_hosted_only": True},
+            )
+        )
+    )
+
+    assert selection.model_ref == "model-self-hosted"
+    assert selection.provider_id == "litellm-self-hosted"
+'''
+          if "test_platform_router_preserves_self_hosted_only_policy" not in routing_text:
+              routing_path.write_text(routing_text + routing_addition)
+
+          docs = "docs/LITELLM_ADAPTER.md"
+          replace_once(
+              docs,
+              "`LiteLLMModelProvider` lazily loads the optional `litellm` Python package and calls `acompletion` with translated canonical request data.\n",
+              "`LiteLLMModelProvider` keeps module imports dependency-free, but an enabled library provider resolves the optional `litellm` package when the provider instance is created so a missing dependency fails before registry attachment. It then calls `acompletion` with translated canonical request data.\n",
+          )
+          replace_once(
+              docs,
+              '''- credential environment-variable reference;
+- timeout;
+- additional non-secret HTTP headers.
+''',
+              '''- credential environment-variable reference;
+- timeout;
+- library-mode retry count (`max_retries` -> LiteLLM `num_retries`);
+- adapter telemetry/logging metadata mode (`platform_only` or `disabled`);
+- additional non-secret HTTP headers.
+
+`LiteLLMProviderConfig.from_mapping(...)` is the JSON/resolved-configuration boundary used to turn provider-scope configuration into the validated runtime config object. Unknown keys are rejected. The committed examples are parsed through this same boundary in tests.
+''',
+          )
+          marker = "## Local-first examples\n"
+          docs_path = Path(docs)
+          docs_text = docs_path.read_text()
+          policy = '''## Retry, fallback, telemetry and locality policy
+
+- Library mode forwards the configured non-negative `max_retries` as LiteLLM `num_retries`; `0` is the local-first default. Request/control-plane timeouts still override the provider default timeout.
+- Proxy mode does not add a second retry engine. Retry/load-balancing behavior inside a separately deployed LiteLLM Proxy is deployment-owned and must not bypass the platform's canonical route selection.
+- LiteLLM Router fallbacks remain intentionally disabled in this baseline. Provider fallbacks are therefore not silently enabled by adapter configuration.
+- `telemetry_mode=platform_only` emits only the platform-owned namespaced adapter metadata already subject to platform redaction. `disabled` suppresses LiteLLM-specific per-request/error metadata. The adapter does not enable LiteLLM global callbacks or provider-native logging/telemetry.
+- Local/self-hosted restrictions remain canonical `ModelConfiguration.location` plus `local_only` / `self_hosted_only` routing requirements. They are intentionally not duplicated as LiteLLM-native routing policy; tests prove remote LiteLLM-backed models cannot bypass those restrictions.
+
+'''
+          if "## Retry, fallback, telemetry and locality policy" not in docs_text:
+              if marker not in docs_text:
+                  raise SystemExit("docs locality marker missing")
+              docs_path.write_text(docs_text.replace(marker, policy + marker, 1))
+
+          # The temporary workflow removes itself in the same commit as the hardening.
+          Path(".github/workflows/issue11-hardening-apply.yml").unlink()
+          PY
+      - name: Verify issue 11 hardening
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          ruff format src/ai_multi_agent_platform/adapters/litellm.py src/ai_multi_agent_platform/adapters/__init__.py tests/test_issue_11_litellm_adapter.py tests/test_issue_11_litellm_routing.py
+          ruff check src/ai_multi_agent_platform/adapters/litellm.py src/ai_multi_agent_platform/adapters/__init__.py tests/test_issue_11_litellm_adapter.py tests/test_issue_11_litellm_routing.py
+          mypy
+          pytest tests/test_issue_11_litellm_adapter.py tests/test_issue_11_litellm_routing.py
+      - name: Commit hardening
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: complete issue 11 configuration and dependency semantics"
+          git push origin HEAD:fix/issue-11-completion-hardening
