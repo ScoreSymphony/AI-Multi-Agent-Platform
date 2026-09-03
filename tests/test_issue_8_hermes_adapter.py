@@ -69,9 +69,7 @@ class FakeHermesTransport:
         headers: Mapping[str, str],
         timeout_seconds: float,
     ) -> HermesHttpResponse:
-        self.calls.append(
-            RecordedRequest(method, url, payload, dict(headers), timeout_seconds)
-        )
+        self.calls.append(RecordedRequest(method, url, payload, dict(headers), timeout_seconds))
         if not self.responses:
             raise AssertionError("unexpected Hermes HTTP request")
         return self.responses.pop(0)
@@ -348,9 +346,7 @@ def test_hermes_agent_mapper_pins_agent_team_model_and_capability_contracts() ->
         mapping = await mapper.map_agent(spec)
 
         assert mapping.adapter_id == HERMES_ADAPTER_ID
-        assert mapping.runtime_ref.startswith(
-            f"hermes:mapping:{agent.agent_id}:r{agent.revision}:"
-        )
+        assert mapping.runtime_ref.startswith(f"hermes:mapping:{agent.agent_id}:r{agent.revision}:")
         mapped_agent = mapping.metadata["agent"]
         assert isinstance(mapped_agent, dict)
         assert mapped_agent["canonical_agent_id"] == agent.agent_id
@@ -487,10 +483,7 @@ def test_hermes_health_and_profile_prefix_are_configuration_driven() -> None:
         )
 
         assert await orchestrator.health() is HealthStatus.HEALTHY
-        assert (
-            transport.calls[0].url
-            == "http://hermes:8642/p/research%20profile/health"
-        )
+        assert transport.calls[0].url == "http://hermes:8642/p/research%20profile/health"
         assert orchestrator.descriptor.available is True
         assert HermesOrchestrator(HermesAdapterConfig()).descriptor.available is False
 
