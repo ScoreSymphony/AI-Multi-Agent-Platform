@@ -31,7 +31,19 @@ from .notifications_composition import (
     NOTIFICATION_COMMANDS,
     NOTIFICATION_PREFERENCE_COLLECTION,
 )
-from .notifications_live import ControlPlane, ControlPlaneASGI, ControlPlaneHTTP, build_openapi
+from .notifications_plugin_composition import (
+    ControlPlane,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
+)
+from .plugin_api import (
+    PLUGIN_CANDIDATE_COLLECTION,
+    PLUGIN_COLLECTION,
+    PLUGIN_COLLECTIONS,
+    PLUGIN_COMMANDS,
+    PluginPermissionResolver,
+)
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
@@ -69,7 +81,12 @@ __all__ = [
     "NOTIFICATION_COMMANDS",
     "NOTIFICATION_PREFERENCE_COLLECTION",
     "PLATFORM_COLLECTIONS",
+    "PLUGIN_CANDIDATE_COLLECTION",
+    "PLUGIN_COLLECTION",
+    "PLUGIN_COLLECTIONS",
+    "PLUGIN_COMMANDS",
     "PageQuery",
+    "PluginPermissionResolver",
     "REQUIRED_COMMANDS",
     "RequestContext",
     "ResourceService",

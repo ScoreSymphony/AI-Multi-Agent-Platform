@@ -20,6 +20,8 @@ class AgentRepository(Protocol):
 
     def update_agent(self, definition: AgentDefinition, revision: AgentRevision) -> None: ...
 
+    def delete_agent(self, agent_id: str) -> None: ...
+
     def get_agent(self, agent_id: str) -> AgentDefinition: ...
 
     def list_agents(self) -> tuple[AgentDefinition, ...]: ...
@@ -31,6 +33,8 @@ class AgentRepository(Protocol):
     def create_team(self, definition: AgentTeamDefinition, revision: AgentTeamRevision) -> None: ...
 
     def update_team(self, definition: AgentTeamDefinition, revision: AgentTeamRevision) -> None: ...
+
+    def delete_team(self, team_id: str) -> None: ...
 
     def get_team(self, team_id: str) -> AgentTeamDefinition: ...
 
@@ -86,6 +90,28 @@ class InMemoryAgentRepository:
             raise ContractError(ErrorCode.CONFLICT, "agent revision already exists")
         self._agent_revisions[key] = revision
         self._agents[definition.agent_id] = definition
+
+    def delete_agent(self, agent_id: str) -> None:
+        self.get_agent(agent_id)
+        for team in self._teams.values():
+            for revision in self.list_team_revisions(team.team_id):
+                if any(member.agent.agent_id == agent_id for member in revision.profile.members):
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "agent cannot be deleted while an Agent Team revision references it",
+                        details={"agent_id": agent_id, "team_id": team.team_id},
+                    )
+        for record in self._agent_runs.values():
+            if record.agent.agent_id == agent_id:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "agent cannot be deleted while an Agent run references it",
+                    details={"agent_id": agent_id, "agent_run_id": record.agent_run_id},
+                )
+        del self._agents[agent_id]
+        for key in tuple(self._agent_revisions):
+            if key[0] == agent_id:
+                del self._agent_revisions[key]
 
     def get_agent(self, agent_id: str) -> AgentDefinition:
         try:
@@ -143,6 +169,20 @@ class InMemoryAgentRepository:
             raise ContractError(ErrorCode.CONFLICT, "agent team revision already exists")
         self._team_revisions[key] = revision
         self._teams[definition.team_id] = definition
+
+    def delete_team(self, team_id: str) -> None:
+        self.get_team(team_id)
+        for record in self._agent_runs.values():
+            if record.team is not None and record.team.team_id == team_id:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "Agent Team cannot be deleted while an Agent run references it",
+                    details={"team_id": team_id, "agent_run_id": record.agent_run_id},
+                )
+        del self._teams[team_id]
+        for key in tuple(self._team_revisions):
+            if key[0] == team_id:
+                del self._team_revisions[key]
 
     def get_team(self, team_id: str) -> AgentTeamDefinition:
         try:
