@@ -21,6 +21,9 @@ platform = "ai_multi_agent_platform.cli.main:main"
 mcp = [
   "mcp==2.1.1",
 ]
+litellm = [
+  "litellm==1.99.0",
+]
 dev = [
   "build>=1.2,<2",
   "pytest>=8.3,<9",
