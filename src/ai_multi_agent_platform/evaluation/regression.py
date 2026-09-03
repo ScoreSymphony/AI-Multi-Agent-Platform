@@ -38,6 +38,30 @@ def _metric_value(result: EvaluationResult, metric_name: str) -> float | None:
     return None
 
 
+def _result_key(result: EvaluationResult) -> tuple[str, str]:
+    """Match baselines by canonical case and evaluator identity."""
+
+    return result.case_id, result.evaluator.evaluator_id
+
+
+def _index_results(
+    results: tuple[EvaluationResult, ...],
+    *,
+    label: str,
+) -> dict[tuple[str, str], EvaluationResult]:
+    indexed: dict[tuple[str, str], EvaluationResult] = {}
+    for result in results:
+        key = _result_key(result)
+        if key in indexed:
+            case_id, evaluator_id = key
+            raise ValueError(
+                f"{label} contains multiple unaggregated results for "
+                f"case {case_id!r} and evaluator {evaluator_id!r}"
+            )
+        indexed[key] = result
+    return indexed
+
+
 class RegressionEngine:
     """Compare current results to an accepted baseline under explicit policy."""
 
@@ -50,11 +74,12 @@ class RegressionEngine:
         current_results: tuple[EvaluationResult, ...],
         policy: RegressionPolicy,
     ) -> ComparisonReport:
-        baseline = {item.case_id: item for item in baseline_results}
+        baseline = _index_results(baseline_results, label="baseline")
+        _index_results(current_results, label="current")
         findings: list[ComparisonFinding] = []
 
         for current in current_results:
-            previous = baseline.get(current.case_id)
+            previous = baseline.get(_result_key(current))
             for rule in policy.rules:
                 finding = self._apply_rule(rule, previous, current)
                 if finding is not None:
