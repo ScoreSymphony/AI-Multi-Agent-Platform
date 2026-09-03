@@ -18,6 +18,7 @@ from ai_multi_agent_platform.evaluation import (
     EvaluationCase,
     EvaluationExecutionContext,
     EvaluationObservation,
+    EvaluationRun,
     EvaluationRunner,
     EvaluationSuite,
     InMemoryEvaluationRepository,
@@ -49,7 +50,11 @@ class MutableExecutor:
         return EvaluationObservation(data={"status": self.status})
 
 
-def _evaluation_stack() -> tuple[EvaluationService, MutableExecutor]:
+def _evaluation_stack() -> tuple[
+    EvaluationService,
+    MutableExecutor,
+    InMemoryEvaluationRepository,
+]:
     repository = InMemoryEvaluationRepository()
     executor = MutableExecutor()
     runner = EvaluationRunner(
@@ -94,7 +99,7 @@ def _evaluation_stack() -> tuple[EvaluationService, MutableExecutor]:
         suites=(suite,),
         policies=(policy,),
     )
-    return service, executor
+    return service, executor, repository
 
 
 def _control_plane(service: EvaluationService) -> tuple[ControlPlane, ControlPlaneHTTP]:
@@ -144,7 +149,7 @@ def _snapshot_payload(commit: str) -> dict[str, object]:
 
 def test_evaluation_service_runs_and_compares_configured_suite() -> None:
     async def scenario() -> None:
-        service, executor = _evaluation_stack()
+        service, executor, _ = _evaluation_stack()
         suite_ref = evaluation_suite_ref(service.list_suites()[0])
         policy = service.get_policy("reference.pr@1.0")
 
@@ -174,7 +179,7 @@ def test_evaluation_service_runs_and_compares_configured_suite() -> None:
 
 def test_control_plane_exposes_evaluation_resources_run_and_compare_commands() -> None:
     async def scenario() -> None:
-        service, executor = _evaluation_stack()
+        service, executor, _ = _evaluation_stack()
         control_plane, http = _control_plane(service)
         suite_ref = evaluation_suite_ref(service.list_suites()[0])
 
@@ -273,5 +278,55 @@ def test_control_plane_exposes_evaluation_resources_run_and_compare_commands() -
         assert loaded.status == 200
         assert isinstance(loaded.body, dict)
         assert loaded.body["comparison"] == comparison.body
+
+    asyncio.run(scenario())
+
+
+def test_control_plane_run_history_paginates_beyond_repository_default_limit() -> None:
+    async def scenario() -> None:
+        service, _, repository = _evaluation_stack()
+        _, http = _control_plane(service)
+        snapshot = ConfigurationSnapshot(platform_version="0.1.0")
+        for _ in range(105):
+            repository.save_run(
+                EvaluationRun(
+                    suite_id="history.pagination",
+                    suite_version="1",
+                    snapshot=snapshot,
+                )
+            )
+
+        first = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/{EVALUATION_RUN_COLLECTION}",
+                headers=_headers(),
+                query={"limit": "100"},
+            )
+        )
+        assert first.status == 200
+        assert isinstance(first.body, dict)
+        assert first.body["total"] == 105
+        first_items = first.body["items"]
+        assert isinstance(first_items, list)
+        assert len(first_items) == 100
+        cursor = first.body["next_cursor"]
+        assert isinstance(cursor, str)
+
+        second = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/{EVALUATION_RUN_COLLECTION}",
+                headers=_headers(),
+                query={"limit": "100", "cursor": cursor},
+            )
+        )
+        assert second.status == 200
+        assert isinstance(second.body, dict)
+        assert second.body["total"] == 105
+        second_items = second.body["items"]
+        assert isinstance(second_items, list)
+        assert len(second_items) == 5
+        assert second.body["next_cursor"] is None
 
     asyncio.run(scenario())
