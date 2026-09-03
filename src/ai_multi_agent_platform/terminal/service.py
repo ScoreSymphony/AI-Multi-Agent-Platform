@@ -85,6 +85,7 @@ class TerminalSessionService:
         self._sessions: dict[str, TerminalSession] = {}
         self._handles: dict[str, AdapterSessionHandle] = {}
         self._frames: dict[str, dict[int, TerminalFrame]] = {}
+        self._retained_sequences: dict[str, set[int]] = {}
         self._attachments: dict[str, SessionAttachment] = {}
         self._activity: list[TerminalActivityRecord] = []
         self._last_activity: dict[str, datetime] = {}
@@ -169,6 +170,8 @@ class TerminalSessionService:
                 and existing.inactivity_timeout_seconds == request.inactivity_timeout_seconds
                 and existing.retain_transcript is request.retain_transcript
             ):
+                if existing.retain_transcript:
+                    await self._capture_pending_frames(existing.id)
                 return existing
             raise ContractError(
                 ErrorCode.CONFLICT,
@@ -205,6 +208,7 @@ class TerminalSessionService:
         self._sessions[session.id] = session
         self._handles[session.id] = started.handle
         self._frames[session.id] = {}
+        self._retained_sequences[session.id] = set()
         self._last_activity[session.id] = now
         self._operations[session.id] = request.operation
         self._record(
@@ -217,6 +221,8 @@ class TerminalSessionService:
                 "retain_transcript": request.retain_transcript,
             },
         )
+        if session.retain_transcript:
+            await self._capture_pending_frames(session.id)
         return session
 
     async def list_sessions(
@@ -357,6 +363,8 @@ class TerminalSessionService:
             payload={"after_sequence": after_sequence},
             risk=RiskClassification.STANDARD,
         )
+        if session.retain_transcript:
+            await self._capture_pending_frames(session_id)
         adapter = self._adapter(session)
         frames = await adapter.read_frames(self._handles[session_id], after_sequence=after_sequence)
         return tuple(self._canonical_frame(session_id, frame) for frame in frames)
@@ -379,6 +387,8 @@ class TerminalSessionService:
             payload={"after_sequence": after_sequence},
             risk=RiskClassification.STANDARD,
         )
+        if session.retain_transcript:
+            await self._capture_pending_frames(session_id)
         adapter = self._adapter(session)
         async for frame in adapter.stream_frames(
             self._handles[session_id],
@@ -424,6 +434,8 @@ class TerminalSessionService:
             operation,
             {"size_bytes": len(data.encode(session.encoding))},
         )
+        if session.retain_transcript:
+            await self._capture_pending_frames(session_id)
 
     async def resize(
         self,
@@ -503,6 +515,9 @@ class TerminalSessionService:
 
     async def _refresh(self, session_id: str) -> TerminalSession:
         session = self._session(session_id)
+        if session.retain_transcript:
+            await self._capture_pending_frames(session_id)
+            session = self._session(session_id)
         if session.status in TERMINAL_SESSION_STATUSES:
             return session
 
@@ -519,6 +534,8 @@ class TerminalSessionService:
                 self._handles[session_id],
                 reason="terminal session inactivity timeout",
             )
+            if session.retain_transcript:
+                await self._capture_pending_frames(session_id)
             backend_status = await adapter.status(self._handles[session_id])
             if backend_status not in TERMINAL_SESSION_STATUSES:
                 raise ContractError(
@@ -627,9 +644,25 @@ class TerminalSessionService:
         )
         await self._authorization.enforce(proposed, approval_id=approval_id, risk=risk)
 
+    async def _capture_pending_frames(self, session_id: str) -> None:
+        session = self._session(session_id)
+        if not session.retain_transcript:
+            return
+        for sequence in sorted(self._frames[session_id]):
+            if sequence not in self._retained_sequences[session_id]:
+                self._retain_frame(session, self._frames[session_id][sequence])
+        after_sequence = max(self._frames[session_id], default=0)
+        frames = await self._adapter(session).read_frames(
+            self._handles[session_id],
+            after_sequence=after_sequence,
+        )
+        for frame in frames:
+            self._canonical_frame(session_id, frame)
+
     def _canonical_frame(self, session_id: str, frame: AdapterFrame) -> TerminalFrame:
         existing = self._frames[session_id].get(frame.sequence)
         redacted = self._redact(frame.data)
+        session = self._sessions[session_id]
         if existing is not None:
             if (
                 existing.channel is not frame.channel
@@ -640,6 +673,11 @@ class TerminalSessionService:
                     ErrorCode.INVALID_PROVIDER_RESPONSE,
                     "terminal adapter changed an already-observed stream sequence",
                 )
+            if (
+                session.retain_transcript
+                and frame.sequence not in self._retained_sequences[session_id]
+            ):
+                self._retain_frame(session, existing)
             return existing
         canonical = TerminalFrame(
             session_id=session_id,
@@ -651,22 +689,25 @@ class TerminalSessionService:
         )
         self._frames[session_id][frame.sequence] = canonical
         self._touch(session_id)
-        session = self._sessions[session_id]
         if session.retain_transcript:
-            sink = self._transcript_sink
-            if sink is None:
-                raise ContractError(
-                    ErrorCode.UNAVAILABLE,
-                    "terminal transcript evidence sink is unavailable",
-                )
-            try:
-                sink(canonical)
-            except Exception as exc:
-                raise ContractError(
-                    ErrorCode.UNAVAILABLE,
-                    "terminal transcript evidence sink failed",
-                ) from exc
+            self._retain_frame(session, canonical)
         return canonical
+
+    def _retain_frame(self, session: TerminalSession, frame: TerminalFrame) -> None:
+        sink = self._transcript_sink
+        if sink is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "terminal transcript evidence sink is unavailable",
+            )
+        try:
+            sink(frame)
+        except Exception as exc:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "terminal transcript evidence sink failed",
+            ) from exc
+        self._retained_sequences[session.id].add(frame.sequence)
 
     def _record(
         self,
