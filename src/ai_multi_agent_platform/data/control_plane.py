@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
@@ -125,6 +125,34 @@ class FileResourceService:
                 raise
             return _file_resource(record)
         raise ContractError(ErrorCode.NOT_FOUND, f"file not found: {resource_id}")
+
+    def authorization_scope(
+        self,
+        resource: Mapping[str, JsonValue],
+    ) -> tuple[str | None, str | None, str | None]:
+        """Return canonical owner/Project scope for northbound per-resource authorization."""
+
+        project_value = resource.get("project_id")
+        if project_value is not None and not isinstance(project_value, str):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical file project_id must be a string or null",
+            )
+        project_id = project_value if isinstance(project_value, str) else None
+
+        owner_ref = resource.get("owner_ref")
+        if not isinstance(owner_ref, str) or ":" not in owner_ref:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical file owner_ref must use type:id form",
+            )
+        owner_type, owner_id = owner_ref.split(":", 1)
+        if not owner_type.strip() or not owner_id.strip():
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical file owner_ref must use non-blank type:id values",
+            )
+        return owner_type, owner_id, project_id
 
 
 def data_resource_services(
