@@ -6,6 +6,7 @@ from .automation_api import (
     AUTOMATION_COMMANDS,
     DELIVERY_COLLECTION,
 )
+from .automation_runtime_composition import AUTOMATION_STATE_ENV
 from .extensions import (
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
@@ -64,6 +65,7 @@ __all__ = [
     "API_VERSION",
     "AUTOMATION_COLLECTION",
     "AUTOMATION_COMMANDS",
+    "AUTOMATION_STATE_ENV",
     "ActorContext",
     "AuthenticatedControlPlaneHTTP",
     "CURRENT_COLLECTIONS",
