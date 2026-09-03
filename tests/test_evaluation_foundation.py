@@ -30,7 +30,11 @@ from ai_multi_agent_platform.evaluation import (
 )
 
 
-def _snapshot(*, model_version: str = "qwen-v1", provider_version: str = "1.0") -> ConfigurationSnapshot:
+def _snapshot(
+    *,
+    model_version: str = "qwen-v1",
+    provider_version: str = "1.0",
+) -> ConfigurationSnapshot:
     return ConfigurationSnapshot(
         platform_version="0.0.1",
         platform_commit="abc123",
