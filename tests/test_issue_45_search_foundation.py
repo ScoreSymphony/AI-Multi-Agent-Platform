@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 
 import pytest
 
@@ -99,6 +100,58 @@ def test_keyword_and_metadata_filters_span_multiple_resource_types() -> None:
         assert page.total == 1
         assert page.items[0].resource_id == task_a
         assert "title" in page.items[0].matched_fields
+
+    asyncio.run(scenario())
+
+
+def test_updated_at_range_filter_is_timezone_aware_and_inclusive() -> None:
+    async def scenario() -> None:
+        provider = LocalSearchProvider()
+        context = _context()
+        old_task = new_id("task")
+        current_task = new_id("task")
+        future_task = new_id("task")
+        await provider.rebuild(
+            (
+                SearchDocument(
+                    resource_type="task",
+                    resource_id=old_task,
+                    title="Old task",
+                    updated_at="2026-09-01T09:00:00+00:00",
+                ),
+                SearchDocument(
+                    resource_type="task",
+                    resource_id=current_task,
+                    title="Current task",
+                    updated_at="2026-09-03T10:00:00+00:00",
+                ),
+                SearchDocument(
+                    resource_type="task",
+                    resource_id=future_task,
+                    title="Future task",
+                    updated_at="2026-09-05T12:00:00+00:00",
+                ),
+            ),
+            context,
+        )
+
+        page = await provider.search(
+            SearchQuery(
+                mode=SearchMode.METADATA,
+                updated_after=datetime(2026, 9, 3, 10, tzinfo=UTC),
+                updated_before=datetime(2026, 9, 4, tzinfo=UTC),
+            ),
+            context,
+        )
+
+        assert page.total == 1
+        assert page.items[0].resource_id == current_task
+
+        with pytest.raises(ValueError, match="timezone-aware"):
+            SearchQuery(
+                mode=SearchMode.METADATA,
+                updated_after=datetime(2026, 9, 3, 10),
+            )
 
     asyncio.run(scenario())
 
