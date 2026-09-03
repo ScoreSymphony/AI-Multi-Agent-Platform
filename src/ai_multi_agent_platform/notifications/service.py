@@ -169,7 +169,9 @@ class NotificationService:
     ) -> DeliveryAttempt:
         notification = await self.get(notification_id, recipient=recipient)
         if self._delivery is None:
-            raise ContractError(ErrorCode.UNAVAILABLE, "external notification delivery is not configured")
+            raise ContractError(
+                ErrorCode.UNAVAILABLE, "external notification delivery is not configured"
+            )
         attempt = await self._delivery.deliver(notification, channel_id=channel_id)
         await self._emit(
             "notification.delivery_attempt",
