@@ -96,10 +96,14 @@ class DistributedRegistry:
         job_reservations: dict[str, str] = {}
         for reservation in reservations.values():
             if reservation.status not in {ReservationStatus.RESERVED, ReservationStatus.ACTIVE}:
-                raise RegistryError("registry snapshot must contain only capacity-claiming reservations")
+                raise RegistryError(
+                    "registry snapshot must contain only capacity-claiming reservations"
+                )
             worker = workers.get(reservation.worker_id)
             if worker is None or reservation.node_id not in nodes:
-                raise RegistryError("registry snapshot reservation references unknown runtime identity")
+                raise RegistryError(
+                    "registry snapshot reservation references unknown runtime identity"
+                )
             if worker.node_id != reservation.node_id:
                 raise RegistryError("registry snapshot reservation node/worker mismatch")
             if reservation.worker_job_id in job_reservations:
@@ -108,16 +112,13 @@ class DistributedRegistry:
 
         # Persisted health is not fresh liveness evidence after a process restart.
         self._nodes = {
-            node_id: replace(node, status=NodeStatus.OFFLINE)
-            for node_id, node in nodes.items()
+            node_id: replace(node, status=NodeStatus.OFFLINE) for node_id, node in nodes.items()
         }
         self._workers = {
             worker_id: replace(worker, status=WorkerStatus.OFFLINE)
             for worker_id, worker in workers.items()
         }
-        self._heartbeat_sequence = {
-            node_id: sequence_map.get(node_id, 0) for node_id in nodes
-        }
+        self._heartbeat_sequence = {node_id: sequence_map.get(node_id, 0) for node_id in nodes}
         self._reservations = reservations
         self._job_reservation = job_reservations
 
