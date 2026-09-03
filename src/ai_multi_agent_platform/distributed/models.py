@@ -36,6 +36,7 @@ class WorkerStatus(StrEnum):
 
 
 class ReservationStatus(StrEnum):
+    RESERVED = "reserved"
     ACTIVE = "active"
     RELEASED = "released"
     EXPIRED = "expired"
@@ -315,21 +316,31 @@ class Heartbeat:
 class Reservation:
     worker_job_id: str
     worker_id: str
+    node_id: str
     cpu_cores: float
     ram_bytes: int
     storage_bytes: int
     concurrency_units: int
+    accelerator_id: str | None = None
+    vram_bytes: int = 0
     reservation_id: str = field(default_factory=lambda: new_id("reservation"))
     created_at: datetime = field(default_factory=utc_now)
     expires_at: datetime | None = None
-    status: ReservationStatus = ReservationStatus.ACTIVE
+    status: ReservationStatus = ReservationStatus.RESERVED
 
     def __post_init__(self) -> None:
         validate_id(self.reservation_id, "reservation")
         validate_id(self.worker_job_id, "worker_job")
         validate_id(self.worker_id, "worker")
+        validate_id(self.node_id, "node")
         if self.cpu_cores < 0 or self.ram_bytes < 0 or self.storage_bytes < 0:
             raise ValueError("reserved resources must be non-negative")
+        if self.vram_bytes < 0:
+            raise ValueError("reserved VRAM must be non-negative")
+        if self.vram_bytes > 0 and self.accelerator_id is None:
+            raise ValueError("VRAM reservation requires an accelerator_id")
+        if self.accelerator_id is not None and not self.accelerator_id.strip():
+            raise ValueError("accelerator_id must not be blank")
         if self.concurrency_units < 1:
             raise ValueError("reserved concurrency_units must be >= 1")
 
