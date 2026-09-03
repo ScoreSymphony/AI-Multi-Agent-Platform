@@ -23,6 +23,15 @@ import type {
   TaskManagementChanges,
   TimelineItem,
 } from "./types";
+import type {
+  CanonicalAgent,
+  CanonicalAgentRun,
+  CanonicalAgentTeam,
+} from "./agents";
+import type {
+  CanonicalCapability,
+  CanonicalCapabilityProvider,
+} from "./capabilities";
 import type { CanonicalReference, ReferenceCollection } from "./references";
 import {
   buildTerminalStreamUrl,
@@ -97,11 +106,16 @@ export class ControlPlaneClient {
   }
 
   getWorkspace(workspaceId: string): Promise<CanonicalWorkspaceIdentity> {
-    return this.request<CanonicalWorkspaceIdentity>(`/workspaces/${encodeURIComponent(workspaceId)}`);
+    return this.request<CanonicalWorkspaceIdentity>(
+      `/workspaces/${encodeURIComponent(workspaceId)}`,
+    );
   }
 
   createWorkspace(input: CreateWorkspaceInput): Promise<CanonicalWorkspaceIdentity> {
-    return this.command<CanonicalWorkspaceIdentity>("/workspaces", { method: "POST", body: input });
+    return this.command<CanonicalWorkspaceIdentity>("/workspaces", {
+      method: "POST",
+      body: input,
+    });
   }
 
   listTasks(query: ListQuery = {}): Promise<Page<CanonicalTask>> {
@@ -188,6 +202,56 @@ export class ControlPlaneClient {
   ): Promise<CanonicalReference> {
     return this.request<CanonicalReference>(
       `/${collection}/${encodeURIComponent(resourceId)}`,
+    );
+  }
+
+  listAgents(query: ListQuery = {}): Promise<Page<CanonicalAgent>> {
+    return this.request<Page<CanonicalAgent>>(`/agents${toQuery(query)}`);
+  }
+
+  getAgent(agentId: string): Promise<CanonicalAgent> {
+    return this.request<CanonicalAgent>(`/agents/${encodeURIComponent(agentId)}`);
+  }
+
+  listAgentTeams(query: ListQuery = {}): Promise<Page<CanonicalAgentTeam>> {
+    return this.request<Page<CanonicalAgentTeam>>(`/agent-teams${toQuery(query)}`);
+  }
+
+  getAgentTeam(teamId: string): Promise<CanonicalAgentTeam> {
+    return this.request<CanonicalAgentTeam>(`/agent-teams/${encodeURIComponent(teamId)}`);
+  }
+
+  listAgentRuns(query: ListQuery = {}): Promise<Page<CanonicalAgentRun>> {
+    return this.request<Page<CanonicalAgentRun>>(`/agent-runs${toQuery(query)}`);
+  }
+
+  getAgentRun(agentRunId: string): Promise<CanonicalAgentRun> {
+    return this.request<CanonicalAgentRun>(
+      `/agent-runs/${encodeURIComponent(agentRunId)}`,
+    );
+  }
+
+  listCapabilities(query: ListQuery = {}): Promise<Page<CanonicalCapability>> {
+    return this.request<Page<CanonicalCapability>>(`/capabilities${toQuery(query)}`);
+  }
+
+  getCapability(capabilityId: string): Promise<CanonicalCapability> {
+    return this.request<CanonicalCapability>(
+      `/capabilities/${encodeURIComponent(capabilityId)}`,
+    );
+  }
+
+  listCapabilityProviders(
+    query: ListQuery = {},
+  ): Promise<Page<CanonicalCapabilityProvider>> {
+    return this.request<Page<CanonicalCapabilityProvider>>(
+      `/capability-providers${toQuery(query)}`,
+    );
+  }
+
+  getCapabilityProvider(providerId: string): Promise<CanonicalCapabilityProvider> {
+    return this.request<CanonicalCapabilityProvider>(
+      `/capability-providers/${encodeURIComponent(providerId)}`,
     );
   }
 
