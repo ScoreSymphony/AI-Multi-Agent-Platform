@@ -157,9 +157,7 @@ def _aggregate_visible(
     records: tuple[UsageRecord, ...], metric_type: str, unit: str
 ) -> UsageAggregate:
     selected = tuple(
-        record
-        for record in records
-        if record.metric_type == metric_type and record.unit == unit
+        record for record in records if record.metric_type == metric_type and record.unit == unit
     )
     values = [record.quantity for record in selected if record.quantity is not None]
     quality_counts = {quality: 0 for quality in MeasurementQuality}

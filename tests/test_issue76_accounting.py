@@ -70,9 +70,7 @@ def test_observability_bridge_ingests_without_transferring_accounting_ownership(
         context=TelemetryContext(task_id="task-a", run_id="run-a"),
     )
 
-    records = accounting.query(
-        UsageQuery(metric_type="executor.invocation.count", unit="count")
-    )
+    records = accounting.query(UsageQuery(metric_type="executor.invocation.count", unit="count"))
     assert len(records) == 1
     assert records[0].source == "observability"
 
@@ -88,9 +86,7 @@ def test_missing_measurement_is_unavailable_not_zero() -> None:
 
     assert record.quality is MeasurementQuality.UNAVAILABLE
     assert record.quantity is None
-    aggregate = service.aggregate(
-        UsageQuery(metric_type="node.gpu.utilization", unit="percent")
-    )
+    aggregate = service.aggregate(UsageQuery(metric_type="node.gpu.utilization", unit="percent"))
     assert aggregate.total is None
     assert aggregate.unavailable_count == 1
     assert aggregate.record_count == 1
