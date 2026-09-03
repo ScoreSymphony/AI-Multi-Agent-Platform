@@ -1,6 +1,8 @@
 import type {
   APIErrorBody,
   APImanifest,
+  CanonicalModel,
+  CanonicalModelProvider,
   CanonicalRun,
   CanonicalTask,
   CreateTaskInput,
@@ -107,6 +109,50 @@ export class ControlPlaneClient {
   timeline(taskId: string, query: ListQuery = {}): Promise<Page<TimelineItem>> {
     return this.request<Page<TimelineItem>>(
       `/tasks/${encodeURIComponent(taskId)}/timeline${toQuery(query)}`,
+    );
+  }
+
+  listModels(query: ListQuery = {}): Promise<Page<CanonicalModel>> {
+    return this.request<Page<CanonicalModel>>(`/models${toQuery(query)}`);
+  }
+
+  getModel(modelIdOrAlias: string): Promise<CanonicalModel> {
+    return this.request<CanonicalModel>(`/models/${encodeURIComponent(modelIdOrAlias)}`);
+  }
+
+  enableModel(modelIdOrAlias: string): Promise<CanonicalModel> {
+    return this.command<CanonicalModel>(`/models/${encodeURIComponent(modelIdOrAlias)}:enable`);
+  }
+
+  disableModel(modelIdOrAlias: string): Promise<CanonicalModel> {
+    return this.command<CanonicalModel>(`/models/${encodeURIComponent(modelIdOrAlias)}:disable`);
+  }
+
+  listModelProviders(query: ListQuery = {}): Promise<Page<CanonicalModelProvider>> {
+    return this.request<Page<CanonicalModelProvider>>(`/model-providers${toQuery(query)}`);
+  }
+
+  getModelProvider(providerId: string): Promise<CanonicalModelProvider> {
+    return this.request<CanonicalModelProvider>(
+      `/model-providers/${encodeURIComponent(providerId)}`,
+    );
+  }
+
+  enableModelProvider(providerId: string): Promise<CanonicalModelProvider> {
+    return this.command<CanonicalModelProvider>(
+      `/model-providers/${encodeURIComponent(providerId)}:enable`,
+    );
+  }
+
+  disableModelProvider(providerId: string): Promise<CanonicalModelProvider> {
+    return this.command<CanonicalModelProvider>(
+      `/model-providers/${encodeURIComponent(providerId)}:disable`,
+    );
+  }
+
+  refreshModelProviderHealth(providerId: string): Promise<CanonicalModelProvider> {
+    return this.command<CanonicalModelProvider>(
+      `/model-providers/${encodeURIComponent(providerId)}:refresh-health`,
     );
   }
 

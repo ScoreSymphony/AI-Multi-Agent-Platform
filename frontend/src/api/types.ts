@@ -139,6 +139,50 @@ export interface HealthStatus {
   }>;
 }
 
+export interface ModelCapabilities {
+  context_window: number | null;
+  tool_calling: boolean;
+  structured_output: boolean;
+  streaming: boolean;
+  modalities: string[];
+  reasoning: string[];
+}
+
+export interface CanonicalModel {
+  id: string;
+  config_id: string;
+  type: "model";
+  display_name: string;
+  provider_id: string;
+  capabilities: ModelCapabilities;
+  revision: number;
+  aliases: string[];
+  location: "local" | "self_hosted" | "remote";
+  node_ref: string | null;
+  health: string;
+  enabled: boolean;
+  priority: number;
+  resource_hints: Record<string, JsonValue>;
+  cost_metadata: Record<string, JsonValue>;
+  adapter_metadata: Array<Record<string, JsonValue>>;
+  effective_health: string;
+}
+
+export interface CanonicalModelProvider {
+  id: string;
+  type: "model-provider";
+  provider_type: string;
+  contract_version: string;
+  supported_operations: string[];
+  capabilities: Array<Record<string, JsonValue>>;
+  health: string;
+  enabled: boolean;
+  available: boolean;
+  limits: Record<string, JsonValue>;
+  resources: Record<string, JsonValue>;
+  adapter_metadata: Array<Record<string, JsonValue>>;
+}
+
 export interface CreateTaskInput {
   title: string;
   objective: string;
