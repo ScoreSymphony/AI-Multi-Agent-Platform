@@ -1,6 +1,6 @@
 # Issue #88 — Canonical Task management
 
-This document records the platform-owned Task-management contract and frontend projection introduced for issue #88.
+This document records the platform-owned Task-management contract and frontend projection introduced for issue #88, including the post-merge hardening audit.
 
 ## Ownership
 
@@ -42,7 +42,9 @@ The contract supports:
 
 Responsibility is planning metadata only. It never grants authorization.
 
-Agent assignment references canonical Agent/AgentTeam IDs. Provider process IDs, model-provider IDs or orchestrator-private IDs are rejected as Agent assignments.
+Agent assignment validates the canonical reference contract: `agent_<uuid>` for an Agent and `team_<uuid>` for an AgentTeam, plus optional revision/required/policy metadata. Provider process IDs, model-provider IDs and orchestrator-private IDs are rejected. Durable existence/revision resolution against platform-owned Agent/AgentTeam resources composes with #33 when that registry is implemented; #88 does not invent a substitute Agent registry.
+
+Likewise, responsibility references remain permission-neutral and compose with the durable organization/team/membership resources from #87.
 
 ## Deadline semantics
 
@@ -53,6 +55,17 @@ When `due_at` passes, the Task projection reports `overdue=true`. The kernel doe
 `not_before` is different: it is an admission constraint. Normal `queue`, `start` and `retry` commands are rejected until the timestamp has passed.
 
 Deadline and not-before changes are ordinary canonical Task updates and therefore remain in Task event history.
+
+### Upcoming/range queries
+
+The Control Plane supports query-only absolute range filters:
+
+- `filter[due_after]=<ISO-8601 aware timestamp>` — inclusive lower bound;
+- `filter[due_before]=<ISO-8601 aware timestamp>` — inclusive upper bound.
+
+These filters are evaluated against canonical `due_at` and removed before the generic equality-filter/pagination layer. They do not persist an `upcoming` flag or any second clock-dependent queue state. Invalid, timezone-naive or reversed ranges are rejected.
+
+The frontend maps user-facing presets such as “due in 24h”, “due in 7 days” and “due in 30 days” into those absolute bounds at query time.
 
 ## Task dependency policy
 
@@ -76,7 +89,22 @@ Priority affects ordering and planning only. It does not bypass authorization, a
 
 The Control Plane gates normal queue/start/retry progression on Task-management eligibility after authorization.
 
-Task lists use the existing canonical pagination/filter/sort conventions. `sort=priority` maps to the stable numeric priority rank and `sort=due` maps to `due_at`. Derived fields such as `overdue`, `blocked`, `responsible_id`, `agent_assignment_id`, `archived` and `hidden` are exposed on the existing Task projection and can participate in canonical filters.
+Task lists use the existing canonical pagination/filter/sort conventions. `sort=priority` maps to the stable numeric priority rank and `sort=due` maps to `due_at`.
+
+The queue can filter canonical projected fields including:
+
+- lifecycle `status`;
+- `priority`;
+- `project_id`;
+- `responsible_type` / `responsible_id` for user/team/organization responsibility queues;
+- `agent_assignment_type` / `agent_assignment_id` for Agent/AgentTeam queues;
+- derived `assignment_state=assigned|unassigned` across both responsibility and Agent assignment;
+- `blocked`;
+- `overdue`;
+- `archived` / `hidden` where requested by API clients;
+- absolute `due_after` / `due_before` ranges.
+
+These are derived/query views, not separate canonical Task stores.
 
 ## Mutations
 
@@ -95,11 +123,19 @@ Task creation may include the same planning fields. The Control Plane validates 
 
 Lifecycle-sensitive operations such as queue, start, cancel and retry continue through the existing kernel-owned lifecycle routes.
 
+### Project reassignment boundary
+
+The original #88 product-operation examples also mentioned moving Tasks between Project scopes. The hardening audit determined that this must **not** be implemented as `task_management.project_id` metadata.
+
+Canonical `Task.project_id` is a core scope field established by the Task kernel. A real move must define source/destination authorization, historical Event/Plan/Run provenance, Workspace and Task-dependency consistency, ownership/sharing semantics and the scope used by future execution.
+
+That work is explicitly extracted to **#157 — Add canonical Task project reassignment and move semantics**. #88 exposes and filters the canonical `project_id` but never creates a shadow project assignment.
+
 ## Auditability and replaceability
 
 Every accepted planning change is persisted through `PlatformKernel.update_task()`. Priority/deadline/assignment/dependency/archive changes are therefore present in the canonical Task event history and survive process restart or adapter replacement.
 
-Tests reconstruct the Control Plane with a replacement orchestrator over the same canonical repository and verify that Task-management metadata is unchanged. No scheduler, orchestrator or frontend owns the planning record.
+Tests reconstruct the Control Plane over the same canonical repository with explicit replacement Orchestrator and Lifecycle-provider implementations and verify that Task-management metadata is unchanged. No scheduler, orchestrator, lifecycle provider or frontend owns the planning record.
 
 ## Control Plane projection
 
@@ -114,9 +150,10 @@ The canonical Task resource exposes the planning metadata together with derived 
 - failed/cancelled prerequisite IDs;
 - effective blocking reason and management eligibility;
 - effort/resource hints;
-- archive/hide state.
+- archive/hide state;
+- the canonical Task `project_id` owned by the core Task domain.
 
-The Control Plane supports priority/due sorting and the existing generic Task filters for projected management fields. The Task-management commands are explicitly documented in OpenAPI without making them appear as dynamically registered extensions.
+The Task-management OpenAPI extension documents native commands, deadline range filters and the supported queue-filter dimensions without making built-in commands appear as dynamically registered extensions.
 
 ## Frontend management views
 
@@ -125,7 +162,13 @@ The React/TypeScript frontend consumes only the canonical Control Plane projecti
 `/tasks` is the Task-management queue. It provides:
 
 - priority, lifecycle, deadline, responsibility and blocker indicators;
-- filters for status, priority, responsible assignment, blocked state and overdue state;
+- filters for status and priority;
+- Project queue filtering;
+- assigned/unassigned filtering;
+- responsibility type/ID filtering, including Team queues;
+- Agent/AgentTeam type/ID filtering;
+- blocked-state filtering;
+- overdue plus upcoming 24h/7d/30d views;
 - priority/due/status/update ordering;
 - canonical Task creation with planning metadata;
 - multi-selection;
@@ -150,18 +193,22 @@ Frontend-only state is limited to transient form, filter and selection state. Ca
 
 Issue-specific tests cover:
 
-- priority create/update/order;
+- priority create, successful update and deterministic ordering;
 - deadline and overdue calculation/filtering;
+- absolute upcoming/deadline range queries and invalid range rejection;
 - not-before admission behavior;
 - human assignment and reassignment;
-- Agent/AgentTeam canonical reference validation;
+- Agent canonical-ID reference validation;
+- AgentTeam canonical-ID reference validation;
+- Project, Team, Agent/AgentTeam and assigned/unassigned queue filters;
 - dependency satisfaction and blocker projection;
-- failed/cancelled prerequisite policy;
+- failed prerequisite policy;
+- cancelled prerequisite policy;
 - dependency cycle rejection;
 - cross-project dependency rejection;
 - bulk authorization preflight;
 - canonical event-history persistence;
-- orchestrator replacement without metadata loss;
+- explicit Orchestrator and Lifecycle-provider replacement without metadata loss;
 - frontend command routing and idempotency;
 - frontend TypeScript typechecking, unit tests and production build.
 
@@ -169,6 +216,6 @@ Repository CI additionally exercises Ruff format/lint, strict MyPy, the full Pyt
 
 ## Completion boundary
 
-Issue #88 owns practical Task-management semantics and their canonical Control Plane/UI projection. It does not own notification delivery, automation schedules, worker scheduling, verification/approval policy or a Jira/Asana-style project-management suite.
+Issue #88 owns practical Task-management semantics and their canonical Control Plane/UI projection. It does not own notification delivery, automation schedules, worker scheduling, verification/approval policy, canonical Task Project reassignment (#157) or a Jira/Asana-style project-management suite.
 
-The implemented boundary now provides importance, timing, responsibility, assignment and blockers as canonical Task concerns while Task/Run execution lifecycle, authorization, orchestration and scheduling remain separate and replaceable.
+The implemented boundary provides importance, timing, responsibility, assignment, Project/Team/Agent queue visibility and blockers as canonical Task-management concerns while Task/Run execution lifecycle, authorization, orchestration, canonical Project scope and scheduling remain separate and replaceable.
