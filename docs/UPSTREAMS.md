@@ -82,6 +82,31 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **ADR:** none required for the SDK choice; the canonical architecture explicitly treats MCP as an optional adapter.
 - **Adoption review:** `docs/upstream/MCP_PYTHON_SDK_ADOPTION.md`.
 
+### LiteLLM
+
+- **Purpose:** optional model-gateway compatibility layer for in-process model calls or a separately deployed OpenAI-compatible proxy, behind the platform-owned `ModelProvider` and `ModelRouter` boundaries.
+- **Status:** approved for integration in #11; integrated once the corresponding PR is merged.
+- **Integration category/categories:** optional adapter/library dependency; optional external service.
+- **Canonical upstream repository:** `https://github.com/BerriAI/litellm`.
+- **Pinned version/tag/commit or deployed revision:** `v1.99.0` / `fa647f742d7baefe8eb1181899d9c81b41559772`.
+- **Verified license:** MIT for content outside `enterprise/`; `enterprise/` is separately licensed and is not used or copied by this integration.
+- **License verification date:** 2026-09-03.
+- **Last review date:** 2026-09-03.
+- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.litellm.LiteLLMModelProvider` implements the canonical `ModelProvider`; proxy mode reuses the existing OpenAI-compatible provider transport. The platform `ModelRouter` remains authoritative for canonical routing policy.
+- **Local source path:** `src/ai_multi_agent_platform/adapters/litellm.py` contains platform-owned adapter code only.
+- **Source origin/path:** no LiteLLM source is copied; library mode uses the pinned PyPI dependency and proxy mode targets a separately deployed service.
+- **Modified locally:** no upstream source is vendored or modified.
+- **Required notices / attribution:** installed packages retain upstream license metadata. Do not copy or vendor `enterprise/` under the MIT assumption; any future source redistribution requires a new license/notices review.
+- **Known compatibility constraints:** platform Python >=3.12; LiteLLM `1.99.0` is the explicit SDK compatibility target. Canonical model IDs remain platform-owned and map to LiteLLM/native model strings only inside adapter configuration. Baseline library mode uses direct `acompletion` and intentionally does not enable a second hidden routing/fallback layer.
+- **Security/deployment/resource constraints:** credential values are resolved from environment-variable references and are not exposed through canonical metadata. Proxy authentication does not replace platform authentication/authorization. No LiteLLM telemetry callbacks are enabled by the baseline adapter. Resource and GPU requirements depend on the selected downstream endpoint, not on platform core.
+- **Required for baseline:** no; core imports, model contracts, reference routing and baseline tests must work without the package or proxy installed.
+- **Recurring paid service required:** no; local/self-hosted endpoints are explicitly supported and covered by configuration/tests.
+- **Update/review method:** explicit pinned-version update PR; verify the tag/commit and license boundary, review release/security notes and SDK/proxy compatibility, then run baseline CI without LiteLLM, the isolated LiteLLM compatibility job, adapter contract tests and the real local OpenAI-compatible HTTP fixture.
+- **Exit/replacement strategy:** remove the optional dependency, adapter/configuration and any separately deployed proxy. Canonical Agents, Tasks, model configuration IDs and `ModelRouter` policy remain valid and can target another `ModelProvider` implementation.
+- **ADR:** none required; LiteLLM is deliberately subordinate to the canonical model architecture and is not allowed to redefine routing ownership.
+- **Provenance:** `upstream/litellm.yaml`.
+- **Adoption/mapping review:** `docs/LITELLM_ADAPTER.md`.
+
 ### ScoreSymphony AI-Agent-VPS Forge subsystem
 
 - **Purpose:** source/reference for proven executor, workspace, event/idempotency and recovery behavior reused for issue #9 without importing the legacy Forge lifecycle as platform architecture.
@@ -117,11 +142,12 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | build | development build tool | `>=1.2,<2` | `https://github.com/pypa/build` | MIT | no |
 | jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT | yes; integrated for #12 |
 | mcp | optional MCP transport + CI integration coverage | `==2.1.1` | `https://github.com/modelcontextprotocol/python-sdk` | MIT | yes; optional adapter recorded above |
+| litellm | optional model gateway SDK / proxy compatibility target | `==1.99.0` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed | yes; optional adapter recorded above |
 | pytest | test runner | `>=8.3,<9` | `https://github.com/pytest-dev/pytest` | MIT | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT | no |
 | mypy | static type checking | `>=1.17,<2` | `https://github.com/python/mypy` | MIT | no |
 
-The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Architecture-significant #12 dependencies are pinned directly; their transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
+The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Architecture-significant #11/#12 dependencies are pinned directly; their transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
 
 ## Architecture-upstream entry template
 
