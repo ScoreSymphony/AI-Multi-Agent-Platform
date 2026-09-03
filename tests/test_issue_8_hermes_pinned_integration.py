@@ -110,7 +110,9 @@ def test_adapter_against_pinned_hermes_runs_api() -> None:
             assert response.steps[0].depends_on == ()
             assert response.adapter_metadata[0].namespace == "hermes"
             assert response.adapter_metadata[0].values["canonical_task_id"] == request.task_id
-            assert response.adapter_metadata[0].values["upstream_revision"] == HERMES_PINNED_REVISION
+            assert (
+                response.adapter_metadata[0].values["upstream_revision"] == HERMES_PINNED_REVISION
+            )
             external_run_id = response.adapter_metadata[0].values["external_run_id"]
             assert isinstance(external_run_id, str)
             assert external_run_id.startswith("run_")
