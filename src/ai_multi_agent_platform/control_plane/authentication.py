@@ -24,7 +24,7 @@ from ai_multi_agent_platform.security.authentication import (
 
 from .http import HTTPRequest, HTTPResponse, _request_context
 from .models import API_VERSION, APIError, APIException, api_exception_from_contract
-from .workspace_task_management_api import ControlPlaneHTTP as _ControlPlaneHTTP
+from .search_contract import ControlPlaneHTTP as _ControlPlaneHTTP
 
 
 class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
