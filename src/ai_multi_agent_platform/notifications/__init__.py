@@ -15,6 +15,7 @@ from .integrations import (
     approval_required_candidate,
     approval_resolved_candidate,
     budget_threshold_candidate,
+    canonical_attention_candidate,
     membership_attention_candidate,
     verification_attention_candidate,
 )
@@ -97,6 +98,7 @@ __all__ = [
     "approval_required_candidate",
     "approval_resolved_candidate",
     "budget_threshold_candidate",
+    "canonical_attention_candidate",
     "fanout_notification_event_sinks",
     "membership_attention_candidate",
     "preference_allows",
