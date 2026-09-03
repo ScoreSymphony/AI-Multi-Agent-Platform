@@ -20,7 +20,7 @@ The browser is a **northbound client of the canonical Control Plane only**. It m
 
 ## Run locally
 
-Prerequisites: Node.js 22.12+ and a Control Plane available on `http://127.0.0.1:8000`.
+Prerequisites: Node.js 22.22.2+ and npm 11.6.x. npm 10.9.8 has a known Arborist `edgesOut` resolver crash with modern dependency graphs, so the frontend pins npm 11.6.0 in `packageManager` and CI.
 
 ```bash
 cd frontend
@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-The Vite dev server is `http://127.0.0.1:5173` and proxies `/api` to the local Control Plane. For another deployment, copy `.env.example` and set `VITE_CONTROL_PLANE_URL` to the browser-visible Control Plane origin.
+The Vite dev server is `http://127.0.0.1:5173` and proxies `/api` to the local Control Plane on `http://127.0.0.1:8000`. For another deployment, copy `.env.example` and set `VITE_CONTROL_PLANE_URL` to the browser-visible Control Plane origin.
 
 ## Quality gates
 

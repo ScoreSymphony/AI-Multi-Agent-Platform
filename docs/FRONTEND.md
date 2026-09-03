@@ -67,6 +67,10 @@ The timeline may contain both canonical domain events (`type=event`) and backend
 
 The shell includes a skip link, semantic navigation/main landmarks, labelled command groups, visible focusable controls, table overflow handling and a mobile sidebar. This is a baseline rather than the final accessibility audit required for full #17 completion.
 
+## Frontend toolchain reproducibility
+
+The frontend declares `packageManager: npm@11.6.0` and CI installs that exact npm release before resolving dependencies. This is deliberate: npm 10.9.8 has a current Arborist `edgesOut` crash on Node 22 dependency resolution. Node 22.22.2+ is used because npm 11's current engine range requires it. The package-manager pin is tooling only and does not alter platform runtime contracts.
+
 ## Direct frontend dependencies
 
 Reviewed 2026-09-03 under `LICENSE_POLICY.md` as normal package dependencies/build tooling. None changes canonical platform contracts, lifecycle ownership, persistence, distributed topology, or platform replaceability, so they are not classified as architecture-significant upstreams.
@@ -76,7 +80,7 @@ Reviewed 2026-09-03 under `LICENSE_POLICY.md` as normal package dependencies/bui
 | `react`, `react-dom` | 19.2.8 | web rendering runtime | MIT, `facebook/react` |
 | `vite` | 8.2.2 | dev server / production build | MIT, `vitejs/vite` |
 | `@vitejs/plugin-react` | 6.1.0 | React transform / Fast Refresh | MIT, `vitejs/vite-plugin-react` |
-| `typescript` | 7.0.2 | static type checking | Apache-2.0, Microsoft TypeScript/TypeScript-Go distribution |
+| `typescript` | 7.0.2 | static type checking | Apache-2.0, Microsoft TypeScript |
 | `vitest` | 4.1.10 | frontend unit tests | MIT; bundled license families are recorded by the package and Vite build license output |
 | `@types/react`, `@types/react-dom` | 19.2.18 / 19.2.5 | development typings | MIT, DefinitelyTyped |
 
