@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
 from ai_multi_agent_platform.agents import (
+    AGENT_REPOSITORY_SCHEMA_VERSION,
     AgentCapabilityPolicy,
     AgentDataAccess,
     AgentInstructions,
@@ -36,19 +38,27 @@ APPROVAL_REF = "approval:sensitive-tool"
 SHARED_RESOURCE_REF = "workspace-resource:shared-cache"
 
 
-class ApprovalEchoProvider(NativeEchoProvider):
+class VersionedApprovalEchoProvider(NativeEchoProvider):
     async def capability_registrations(self) -> tuple[CapabilityRegistration, ...]:
         registrations = await super().capability_registrations()
-        return tuple(
-            replace(
-                registration,
-                capability=replace(
-                    registration.capability,
-                    required_approvals=(APPROVAL_REF,),
-                ),
-            )
-            for registration in registrations
+        base = registrations[0]
+        protected_v1 = replace(
+            base,
+            capability=replace(
+                base.capability,
+                version="1.0",
+                required_approvals=(APPROVAL_REF,),
+            ),
         )
+        unprotected_v2 = replace(
+            base,
+            capability=replace(
+                base.capability,
+                version="2.0",
+                required_approvals=(),
+            ),
+        )
+        return (protected_v1, unprotected_v2)
 
 
 def _approval_agent(service: AgentService) -> str:
@@ -111,12 +121,12 @@ def test_agent_approval_requirement_must_match_resolved_capability_policy() -> N
     asyncio.run(scenario())
 
 
-def test_agent_approval_requirement_is_accepted_when_canonical_capability_enforces_it() -> None:
+def test_approval_checked_capability_version_is_pinned_through_mapping_and_run() -> None:
     async def scenario() -> None:
         service = AgentService(InMemoryAgentRepository())
         agent_id = _approval_agent(service)
         registry = CapabilityRegistry()
-        await registry.register_provider(ApprovalEchoProvider())
+        await registry.register_provider(VersionedApprovalEchoProvider())
         runtime = AgentRuntime(service, capability_registry=registry)
 
         record = await runtime.start_agent(
@@ -126,6 +136,10 @@ def test_agent_approval_requirement_is_accepted_when_canonical_capability_enforc
         )
 
         assert record.capability_ids == (ECHO_CAPABILITY_ID,)
+        assert dict(record.capability_versions) == {ECHO_CAPABILITY_ID: "1.0"}
+        mapping = record.telemetry["orchestrator_mapping"]
+        assert isinstance(mapping, dict)
+        assert mapping["capability_versions"] == {ECHO_CAPABILITY_ID: "1.0"}
 
     asyncio.run(scenario())
 
@@ -190,3 +204,60 @@ def test_shared_team_resource_refs_survive_json_repository_restart(tmp_path: Pat
     assert restored.get_team_revision(team.team_id, 1).profile.shared_resource_refs == (
         SHARED_RESOURCE_REF,
     )
+    document = json.loads(path.read_text(encoding="utf-8"))
+    assert document["schema_version"] == AGENT_REPOSITORY_SCHEMA_VERSION == "2"
+
+
+def test_v1_agent_repository_snapshot_migrates_explicitly_to_v2(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        path = tmp_path / "legacy-agents.json"
+        repository = JsonAgentRepository(path)
+        service = AgentService(repository)
+        agent = service.create_agent(
+            AgentProfile(
+                name="Legacy agent",
+                role="worker",
+                instructions=AgentInstructions(role=InstructionSource(content="Work.")),
+            ),
+            owner_ref=OWNER,
+        )
+        team = service.create_team(
+            AgentTeamProfile(
+                name="Legacy team",
+                members=(
+                    AgentTeamMember(
+                        agent=AgentRevisionRef(agent.agent_id, agent.revision),
+                        role="worker",
+                    ),
+                ),
+            ),
+            owner_ref=OWNER,
+        )
+        run = await AgentRuntime(service).start_agent(
+            task_id=new_id("task"),
+            run_id=new_id("run"),
+            agent_id=agent.agent_id,
+        )
+
+        legacy = json.loads(path.read_text(encoding="utf-8"))
+        legacy["schema_version"] = "1"
+        for revision in legacy["team_revisions"]:
+            revision["profile"].pop("shared_resource_refs", None)
+        for record in legacy["agent_runs"]:
+            record.pop("capability_versions", None)
+        path.write_text(json.dumps(legacy, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+        restored = JsonAgentRepository(path)
+        assert restored.get_team_revision(team.team_id, 1).profile.shared_resource_refs == ()
+        assert dict(restored.get_agent_run(run.agent_run_id).capability_versions) == {}
+
+        restored_service = AgentService(restored)
+        restored_service.update_agent(
+            agent.agent_id,
+            restored.get_agent_revision(agent.agent_id, 1).profile,
+            expected_revision=1,
+        )
+        rewritten = json.loads(path.read_text(encoding="utf-8"))
+        assert rewritten["schema_version"] == "2"
+
+    asyncio.run(scenario())
