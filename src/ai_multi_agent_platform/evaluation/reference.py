@@ -6,7 +6,7 @@ import asyncio
 from typing import Literal
 
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.kernel import PlatformKernel, TERMINAL_RUN_STATUSES
+from ai_multi_agent_platform.kernel import TERMINAL_RUN_STATUSES, PlatformKernel
 
 from .models import EvaluationAttempt, EvaluationCase, EvaluationObservation
 
