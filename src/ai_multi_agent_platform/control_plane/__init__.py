@@ -26,13 +26,21 @@ from .models import (
     RequestContext,
     WorkspaceIdentity,
 )
+from .plugin_api import (
+    PLUGIN_CANDIDATE_COLLECTION,
+    PLUGIN_COLLECTION,
+    PLUGIN_COLLECTIONS,
+    PLUGIN_COMMANDS,
+    PluginPermissionResolver,
+)
+from .plugin_terminal_composition import ControlPlane
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
-from .terminal_composition import ControlPlane, ControlPlaneASGI, ControlPlaneHTTP, build_openapi
+from .terminal_composition import ControlPlaneASGI, ControlPlaneHTTP, build_openapi
 
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (AUTOMATION_COLLECTION, DELIVERY_COLLECTION)
 
@@ -56,7 +64,12 @@ __all__ = [
     "IMPLEMENTED_DOMAIN_COLLECTIONS",
     "InMemoryResourceService",
     "PLATFORM_COLLECTIONS",
+    "PLUGIN_CANDIDATE_COLLECTION",
+    "PLUGIN_COLLECTION",
+    "PLUGIN_COLLECTIONS",
+    "PLUGIN_COMMANDS",
     "PageQuery",
+    "PluginPermissionResolver",
     "REQUIRED_COMMANDS",
     "RequestContext",
     "ResourceService",

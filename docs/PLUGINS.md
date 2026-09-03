@@ -74,6 +74,37 @@ Registry snapshots expose plugin/extension IDs, extension types, dependencies, p
 
 Package acquisition/distribution is intentionally not defined by this runtime layer. #81 owns a future optional Registry/Marketplace, while #79 owns portable canonical object import/export.
 
+## Canonical Control Plane lifecycle
+
+When a `PluginRegistry` is composed into the platform Control Plane, #20 exposes plugin administration only through the existing versioned northbound API. Clients do not receive a second direct path to `PluginRegistry` or `PluginCatalog`.
+
+The optional canonical collections are:
+
+- `plugins` for installed plugin inspection;
+- `plugin-candidates` for explicitly discovered candidates when a `PluginCatalog` is configured.
+
+The canonical lifecycle commands are:
+
+- `plugin.install`;
+- `plugin.configure`;
+- `plugin.enable`;
+- `plugin.disable`;
+- `plugin.refresh-health`;
+- `plugin.validate-update`;
+- `plugin.remove`.
+
+They use the existing `/api/v1/commands/{command}` command transport and therefore inherit the Control Plane's idempotency, exact-payload authorization, error normalization and OpenAPI discovery rules.
+
+Candidate and installed resources expose a deterministic `manifest_digest`. Installation, activation and update validation require the caller to submit the inspected digest. The server recomputes it from the current manifest and rejects a stale value, preventing a discovery source from silently substituting a different manifest between inspection and the lifecycle action.
+
+Plugin configuration values are intentionally absent from northbound plugin resource responses. The response exposes configuration state/version/schema metadata through the manifest, but not the configured values themselves.
+
+Plugin permission grants are also not supplied by the northbound caller. If a plugin requests permissions, activation requires an authoritative `PluginPermissionResolver` supplied by platform composition. The resolver may grant only permissions the manifest explicitly requested; an attempted over-grant fails closed. `PluginRegistry.enable()` remains the final runtime-side check that every requested permission was actually granted.
+
+The #15 Control Plane authorization bridge maps plugin lifecycle commands and plugin/plugin-candidate reads to canonical `ResourceType.PLUGIN` actions. Mutating commands still pass through the existing exact-payload Approval/Authorization boundary rather than relying on UI or CLI confirmation.
+
+If no `PluginRegistry` is composed, plugin collections and commands are not registered. Normal core startup and the existing static API surface therefore remain unchanged.
+
 ## Plugin-owned state and migrations
 
 `PluginStateStore` is the backend-neutral persistence boundary for plugin-owned JSON state. The core runtime does not prescribe SQLite, filesystem, object storage or another concrete persistence engine.
@@ -110,6 +141,8 @@ The manifest may request privileges such as network, Workspace access, capabilit
 
 `PluginRegistry.enable()` requires the caller to supply the permissions actually granted by the authoritative security/configuration composition. Requested permissions are metadata, not grants. Runtime operations remain subject to the normal #15/#34 gates after activation.
 
+The northbound Control Plane narrows this further: clients cannot self-assert `granted_permissions`; the platform composition resolves them server-side through `PluginPermissionResolver`.
+
 ## Isolation and failure containment
 
 - importing `ai_multi_agent_platform` does not import the optional plugin subsystem;
@@ -121,7 +154,8 @@ The manifest may request privileges such as network, Workspace access, capabilit
 - partial binder registration is rolled back on enable failure;
 - plugin-owned state is written only after complete migration success;
 - optional plugin absence leaves normal platform imports and reference operation unchanged;
-- removal may be blocked while canonical resources still reference the plugin.
+- removal may be blocked while canonical resources still reference the plugin;
+- northbound lifecycle mutations use the same server-side authorization boundary as other administrative commands.
 
 This is logical contract isolation. Process/container sandboxing for untrusted code is a separate future hardening layer.
 
@@ -135,9 +169,10 @@ Because registration goes through the canonical Capability Registry, enabled plu
 
 The remaining issue work should compose on this foundation rather than create another plugin model:
 
-- authorized Control Plane plugin lifecycle resources/actions;
-- CLI lifecycle commands over the same Control Plane contract;
-- integration of plugin lifecycle permission decisions with #15 authorization/Approval surfaces;
+- CLI lifecycle commands over the canonical Control Plane contract, never direct CLI -> `PluginRegistry` access;
+- focused Approval/Authorization regression coverage for require-approval and exact-action replay behavior on plugin mutations;
 - binders for additional stable extension registries as their owning domains expose them;
 - richer checksum/signature verification when install-source implementations exist;
-- upgrade/release integration with #41/#42.
+- final acceptance/Definition-of-Done review.
+
+Upgrade/release integration remains follow-up work with #41/#42 rather than a prerequisite for the #20 runtime lifecycle boundary.
