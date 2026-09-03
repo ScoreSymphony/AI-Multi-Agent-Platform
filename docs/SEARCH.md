@@ -41,6 +41,26 @@ The foundation rebuild covers:
 
 These resources use their existing canonical list/discovery authorization actions before a Search result becomes caller-visible.
 
+### Task-management projection and filters
+
+Tasks are indexed from the same managed northbound Task projection used by `/api/v1/tasks`, not from a Search-owned copy of Task planning state. Search therefore consumes the canonical #88 Task-management metadata and derived queue state directly while the platform-owned Task lifecycle remains authoritative.
+
+The Task Search projection supports:
+
+- canonical priority values `low`, `normal`, `high` and `urgent`;
+- inclusive timezone-aware `due_after` / `due_before` windows over canonical `due_at`;
+- `assigned` / `unassigned` filtering based on canonical responsibility or Agent/AgentTeam assignment;
+- exact `responsible_id` filtering;
+- exact canonical `agent_assignment_id` filtering;
+- `blocked=true|false` using the canonical effective Task-management/lifecycle projection;
+- `overdue=true|false` using the canonical #88 derived overdue state;
+- exact dependency Task discovery through `dependency_id`;
+- labels through the existing Search `tag` filter.
+
+Safe Task-management relationship metadata such as responsibility, Agent assignment, parent/dependency references and effective blocking reason can participate in keyword discovery. Arbitrary `resource_hints` and other nested planning payloads are not promoted into global Search text.
+
+These fields exist only on derived `SearchDocument` metadata used for filtering. The generic `SearchResult` contract remains resource-neutral, and Search does not create a second Task-management schema or persistence layer. Invalid priority values, malformed dependency IDs, invalid booleans, invalid assignment state and reversed/non-timezone-aware due windows are rejected by the canonical Search query boundary.
+
 ### Task reference resources
 
 The rebuild also derives the existing canonical Task reference resources exposed by the Control Plane:
@@ -151,6 +171,7 @@ The current canonical query supports:
 - Project and Workspace scoping;
 - status and tag filters;
 - inclusive timezone-aware `updated_after` / `updated_before` filters where `updated_at` exists;
+- Task priority, due-window, assignment, responsibility, Agent assignment, blocked/overdue and dependency filters;
 - source/provider filters;
 - pagination and deterministic sorting;
 - explicit unsupported-capability responses for semantic/hybrid modes on the local provider.
@@ -175,6 +196,10 @@ It supports the canonical filters directly, including:
 - repeated or comma-separated `--type`, `--status`, `--tag`, `--source` and `--provider` values;
 - `--project-id` and `--workspace-id` scopes;
 - `--updated-after` and `--updated-before`;
+- repeated or comma-separated `--priority` values;
+- `--due-after` and `--due-before`;
+- `--assignment-state`, `--responsible-id` and `--agent-assignment-id`;
+- `--blocked`, `--overdue` and `--dependency-id`;
 - `--mode`, `--limit`, `--cursor`, `--sort` and `--direction`.
 
 The CLI forwards these values to `/search` and leaves canonical validation and authorization to the Control Plane. A provider's `unsupported_capability` or canonical unavailable response is preserved rather than hidden or replaced by client-side behavior.
@@ -235,7 +260,7 @@ Exact-ID lookup follows the same rule: knowing or guessing a canonical ID does n
 
 ## Remaining #45 integrations
 
-The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support, Automation/Approval discovery and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
+The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support, Automation/Approval discovery, Task-management filtering and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
 
 - policy-permitted Events where useful for global discovery;
 - Files, scoped Memory and Knowledge;
@@ -247,7 +272,6 @@ The secure foundation, task-reference search, progressive registration bridge, M
 - Templates and Repository/Git references;
 - Verification resources;
 - Organizations/Memberships with membership-removal isolation;
-- richer Task filters such as priority, deadline, assignment, labels and dependency state once owned by the canonical Task domain;
 - durable/event-driven indexing, batching and stale-index checkpoints for larger deployments;
 - optional semantic/hybrid provider adapters without making them baseline requirements.
 

@@ -43,6 +43,36 @@ def add_search_parser(
         help="tag filter; repeat or use comma-separated values",
     )
     search.add_argument(
+        "--priority",
+        dest="priorities",
+        action="append",
+        default=[],
+        help="Task priority; repeat or use comma-separated values",
+    )
+    search.add_argument("--due-after", help="inclusive timezone-aware Task due lower bound")
+    search.add_argument("--due-before", help="inclusive timezone-aware Task due upper bound")
+    search.add_argument(
+        "--assignment-state",
+        choices=["assigned", "unassigned"],
+        help="filter Tasks by assignment state",
+    )
+    search.add_argument("--responsible-id", help="filter Tasks by responsible actor/team ID")
+    search.add_argument(
+        "--agent-assignment-id",
+        help="filter Tasks by assigned canonical Agent/AgentTeam ID",
+    )
+    search.add_argument(
+        "--blocked",
+        choices=["true", "false"],
+        help="filter Tasks by blocked/unblocked state",
+    )
+    search.add_argument(
+        "--overdue",
+        choices=["true", "false"],
+        help="filter Tasks by overdue state",
+    )
+    search.add_argument("--dependency-id", help="filter Tasks by canonical dependency Task ID")
+    search.add_argument(
         "--source",
         dest="sources",
         action="append",
@@ -84,6 +114,14 @@ def _search_query(args: argparse.Namespace) -> dict[str, str]:
         ("id", args.exact_id),
         ("project_id", args.project_id),
         ("workspace_id", args.workspace_id),
+        ("due_after", args.due_after),
+        ("due_before", args.due_before),
+        ("assignment_state", args.assignment_state),
+        ("responsible_id", args.responsible_id),
+        ("agent_assignment_id", args.agent_assignment_id),
+        ("blocked", args.blocked),
+        ("overdue", args.overdue),
+        ("dependency_id", args.dependency_id),
         ("updated_after", args.updated_after),
         ("updated_before", args.updated_before),
         ("mode", args.mode),
@@ -96,6 +134,7 @@ def _search_query(args: argparse.Namespace) -> dict[str, str]:
         ("type", args.resource_types),
         ("status", args.statuses),
         ("tag", args.tags),
+        ("priority", args.priorities),
         ("source", args.sources),
         ("provider", args.providers),
     ):

@@ -17,8 +17,12 @@ dependencies = [
 [project.scripts]
 platform = "ai_multi_agent_platform.cli.main:main"
 platform-completion = "ai_multi_agent_platform.cli.completion:main"
+platform-server = "ai_multi_agent_platform.deployment.server:main"
 
 [project.optional-dependencies]
+server = [
+  "uvicorn>=0.35,<1",
+]
 mcp = [
   "mcp==2.1.1",
 ]

@@ -21,7 +21,6 @@ from .service import (
     _project_resource,
     _references_for_task,
     _run_resource,
-    _task_resource,
     _workspace_resource,
 )
 
@@ -100,7 +99,7 @@ class ControlPlane(_BaseSearchControlPlane):
         binding_repository = self.run_workspace_bindings
         for task_id in await self._task_ids():
             task = await self._kernel.get_task(task_id)
-            documents.append(document_from_resource(_task_resource(task)))
+            documents.append(document_from_resource(await self._managed_task_resource(task)))
             _collect_reference_search_state(
                 task,
                 resources=reference_resources,
