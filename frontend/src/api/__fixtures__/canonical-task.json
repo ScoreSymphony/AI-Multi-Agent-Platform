@@ -1,0 +1,24 @@
+{
+  "id": "task_123e4567-e89b-42d3-a456-426614174000",
+  "type": "task",
+  "title": "Shared canonical task",
+  "objective": "Prove CLI and Web UI observe the same Control Plane resource state",
+  "status": "draft",
+  "owner": {
+    "type": "user",
+    "id": "test"
+  },
+  "project_id": null,
+  "revision": 1,
+  "plan_ref": null,
+  "step_ids": [],
+  "run_ids": [],
+  "artifact_ids": [],
+  "result_ids": [],
+  "wait_reason": null,
+  "blocked": false,
+  "correlation_id": "corr_shared_client_state",
+  "causation_id": null,
+  "created_at": "2026-09-03T17:00:00+00:00",
+  "updated_at": "2026-09-03T17:00:00+00:00"
+}

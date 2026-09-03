@@ -313,3 +313,83 @@ def test_cli_status_doctor_project_workspace_and_canonical_error_output(tmp_path
     assert error["category"] == "resource"
     assert error["request_id"].startswith("request_")
     assert error["correlation_id"].startswith("corr_")
+
+
+def test_cli_reads_the_same_canonical_task_snapshot_as_the_web_client(tmp_path: Path) -> None:
+    fixture_path = (
+        Path(__file__).parents[1]
+        / "frontend"
+        / "src"
+        / "api"
+        / "__fixtures__"
+        / "canonical-task.json"
+    )
+    loaded = json.loads(fixture_path.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    task = loaded
+    expected_path = f"/api/v1/tasks/{task['id']}"
+
+    class SharedTaskFixtureTransport:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def request(
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: Mapping[str, str],
+            body: bytes | None,
+            timeout: float,
+        ) -> RawResponse:
+            del headers, body, timeout
+            path = urlsplit(url).path
+            self.calls.append((method, path))
+            if method != "GET" or path != expected_path:
+                return RawResponse(
+                    status=404,
+                    body=json.dumps(
+                        {
+                            "code": "not_found",
+                            "category": "resource",
+                            "message": "fixture route not found",
+                            "request_id": "request_shared_client_state",
+                            "correlation_id": "corr_shared_client_state",
+                            "retryable": False,
+                        }
+                    ).encode("utf-8"),
+                    headers={},
+                )
+            return RawResponse(
+                status=200,
+                body=json.dumps(task).encode("utf-8"),
+                headers={
+                    "x-api-version": "v1",
+                    "x-request-id": "request_shared_client_state",
+                    "x-correlation-id": "corr_shared_client_state",
+                },
+            )
+
+    transport = SharedTaskFixtureTransport()
+    stdout = StringIO()
+    stderr = StringIO()
+
+    code = run_cli(
+        [
+            "--config",
+            str(tmp_path / "cli.json"),
+            "--json",
+            "task",
+            "show",
+            str(task["id"]),
+        ],
+        transport=transport,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert code == 0
+    assert stderr.getvalue() == ""
+    rendered = json.loads(stdout.getvalue())
+    assert rendered["data"] == task
+    assert transport.calls == [("GET", expected_path)]
