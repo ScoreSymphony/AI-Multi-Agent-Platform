@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ControlPlaneClient } from "../api/client";
+import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
 import { PermissionHintsProvider } from "../security/permissions";
 import { navigation } from "./navigation";
@@ -16,7 +17,9 @@ import {
   ModelProviderDetailPage,
   ModelsPage,
 } from "../pages/ModelPages";
+import { ObservabilityPage } from "../pages/ObservabilityPage";
 import { ProjectDetailPage, ProjectsPage, WorkspaceDetailPage } from "../pages/ProjectPages";
+import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
 import { UsagePage } from "../pages/UsagePage";
 
@@ -41,6 +44,7 @@ export function Shell() {
   const runMatch = matchPath("/runs/:runId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
+  const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
@@ -52,9 +56,13 @@ export function Shell() {
   else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;
   else if (path === "/runs") content = <RunsPage client={client} />;
   else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;
+  else if (path === "/files") content = <ReferencesPage client={client} />;
+  else if (referenceMatch) content = <ReferenceDetailPage client={client} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
   else if (path === "/models") content = <ModelsPage client={client} />;
   else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
   else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
+  else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
+  else if (path === "/observability") content = <ObservabilityPage client={client} view="observability" />;
   else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
   else if (navItem) content = <UnavailablePage item={navItem} manifest={manifest} />;
   else content = <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
@@ -80,4 +88,12 @@ export function Shell() {
       </div>
     </PermissionHintsProvider>
   );
+}
+
+function referenceRoute(path: string): { collection: ReferenceCollection; resourceId: string } | null {
+  for (const collection of ["artifacts", "results", "plans", "steps"] as const) {
+    const match = matchPath(`/${collection}/:resourceId`, path);
+    if (match) return { collection, resourceId: match.resourceId };
+  }
+  return null;
 }

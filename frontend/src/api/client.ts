@@ -21,6 +21,7 @@ import type {
   TaskManagementChanges,
   TimelineItem,
 } from "./types";
+import type { CanonicalReference, ReferenceCollection } from "./references";
 
 export interface AuthBoundary {
   getAccessToken?: () => Promise<string | null>;
@@ -159,6 +160,22 @@ export class ControlPlaneClient {
   timeline(taskId: string, query: ListQuery = {}): Promise<Page<TimelineItem>> {
     return this.request<Page<TimelineItem>>(
       `/tasks/${encodeURIComponent(taskId)}/timeline${toQuery(query)}`,
+    );
+  }
+
+  listReferences(
+    collection: ReferenceCollection,
+    query: ListQuery = {},
+  ): Promise<Page<CanonicalReference>> {
+    return this.request<Page<CanonicalReference>>(`/${collection}${toQuery(query)}`);
+  }
+
+  getReference(
+    collection: ReferenceCollection,
+    resourceId: string,
+  ): Promise<CanonicalReference> {
+    return this.request<CanonicalReference>(
+      `/${collection}/${encodeURIComponent(resourceId)}`,
     );
   }
 

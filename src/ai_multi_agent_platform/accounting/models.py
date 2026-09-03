@@ -45,6 +45,7 @@ SUPPORTED_BUDGET_SCOPE_TYPES = frozenset(
         "run",
         "agent",
         "capability",
+        "model_config",
         "model_provider",
         "worker",
         "node",
@@ -71,6 +72,13 @@ class MeasurementQuality(StrEnum):
 class BudgetKind(StrEnum):
     SOFT = "soft"
     HARD = "hard"
+
+
+class BudgetWindowMode(StrEnum):
+    """How a budget consumption window advances over time."""
+
+    LIFETIME = "lifetime"
+    ROLLING = "rolling"
 
 
 class BudgetAction(StrEnum):
@@ -261,6 +269,12 @@ class UsageBudget:
         if self.version < 1:
             raise ValueError("budget version must be >= 1")
 
+    @property
+    def window_mode(self) -> BudgetWindowMode:
+        return (
+            BudgetWindowMode.LIFETIME if self.window_seconds is None else BudgetWindowMode.ROLLING
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class BudgetState:
@@ -269,6 +283,8 @@ class BudgetState:
     remaining: float
     fraction: float
     level: ThresholdLevel | None
+    window_start: datetime | None = None
+    window_end: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

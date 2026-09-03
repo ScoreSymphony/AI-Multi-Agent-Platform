@@ -360,6 +360,7 @@ export interface CanonicalUsageAggregate {
   unavailable_count: number;
   quality_counts: Record<MeasurementQuality, number>;
   aggregation_mode: AggregationMode;
+  scope: Record<string, string>;
   trend_window_start: string | null;
   trend_window_end: string | null;
   trend_bucket_seconds: number | null;
@@ -377,6 +378,9 @@ export interface CanonicalUsageBudget {
   action: "record_only" | "warn" | "deny" | "require_approval" | "notify";
   warning_fraction: number;
   window_seconds: number | null;
+  window_mode: "lifetime" | "rolling";
+  window_start: string | null;
+  window_end: string | null;
   include_estimated: boolean;
   owner_type: string | null;
   owner_id: string | null;
