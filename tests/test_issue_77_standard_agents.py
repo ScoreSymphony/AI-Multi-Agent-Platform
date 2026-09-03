@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -12,10 +13,12 @@ from ai_multi_agent_platform.agents import (
     AgentService,
     CapabilityConstraint,
     InMemoryAgentRepository,
+    JsonAgentRepository,
     ModelFallbackPolicy,
     assess_standard_agent_capabilities,
     bootstrap_standard_agents,
     clone_standard_agent,
+    clone_standard_team,
     ensure_standard_agent_capabilities,
     get_standard_agent_template,
 )
@@ -66,12 +69,8 @@ def test_bootstrap_installs_all_standard_agents_and_teams_idempotently() -> None
 
     second = bootstrap_standard_agents(service)
 
-    assert set(second.preserved_agent_keys) == {
-        item.key for item in STANDARD_AGENT_TEMPLATES
-    }
-    assert set(second.preserved_team_keys) == {
-        item.key for item in STANDARD_TEAM_TEMPLATES
-    }
+    assert set(second.preserved_agent_keys) == {item.key for item in STANDARD_AGENT_TEMPLATES}
+    assert set(second.preserved_team_keys) == {item.key for item in STANDARD_TEAM_TEMPLATES}
     assert second.installed_agent_keys == ()
     assert second.installed_team_keys == ()
     assert {
@@ -135,9 +134,7 @@ def test_user_can_clone_and_edit_model_and_capability_policy() -> None:
     )
     replacement_capabilities = AgentCapabilityPolicy(
         allowed=("tool.file.read",),
-        constraints=(
-            CapabilityConstraint(capability_id="tool.file.read", required=True),
-        ),
+        constraints=(CapabilityConstraint(capability_id="tool.file.read", required=True),),
     )
     edited = replace(
         cloned.profile,
@@ -157,6 +154,59 @@ def test_user_can_clone_and_edit_model_and_capability_policy() -> None:
     assert updated.profile.model.requirements.explicit_model_id == "deployment-selected-model"
     assert updated.profile.capabilities.required_ids == ("tool.file.read",)
     assert updated.profile.enabled is False
+
+
+def test_user_owned_agent_copy_can_be_deleted_and_delete_persists(tmp_path: Path) -> None:
+    repository_path = tmp_path / "agents.json"
+    owner = OwnerRef(type="user", id="user-77")
+    other_owner = OwnerRef(type="user", id="different-user")
+    service = AgentService(JsonAgentRepository(repository_path))
+    bootstrap_standard_agents(service)
+    cloned = clone_standard_agent(service, "developer", owner_ref=owner)
+
+    with pytest.raises(ContractError) as wrong_owner:
+        service.delete_agent(cloned.agent_id, expected_owner_ref=other_owner)
+    assert wrong_owner.value.code is ErrorCode.FORBIDDEN
+
+    service.delete_agent(cloned.agent_id, expected_owner_ref=owner)
+
+    with pytest.raises(ContractError) as removed:
+        service.get_agent_revision(cloned.agent_id)
+    assert removed.value.code is ErrorCode.NOT_FOUND
+
+    reloaded = AgentService(JsonAgentRepository(repository_path))
+    with pytest.raises(ContractError) as still_removed:
+        reloaded.get_agent_revision(cloned.agent_id)
+    assert still_removed.value.code is ErrorCode.NOT_FOUND
+    assert reloaded.get_agent_revision(get_standard_agent_template("developer").agent_id).revision == 1
+
+
+def test_user_owned_team_copy_can_be_deleted_without_removing_bundled_team() -> None:
+    service = _service()
+    bootstrap_standard_agents(service)
+    owner = OwnerRef(type="user", id="user-77")
+    cloned = clone_standard_team(service, "research", owner_ref=owner, name="My Research Team")
+
+    service.delete_team(cloned.team_id, expected_owner_ref=owner)
+
+    with pytest.raises(ContractError) as removed:
+        service.get_team_revision(cloned.team_id)
+    assert removed.value.code is ErrorCode.NOT_FOUND
+    bundled_research_team = next(item for item in STANDARD_TEAM_TEMPLATES if item.key == "research")
+    assert service.get_team_revision(bundled_research_team.team_id).revision == 1
+
+
+def test_bundled_agent_cannot_be_deleted_as_a_user_owned_copy() -> None:
+    service = _service()
+    bootstrap_standard_agents(service)
+    owner = OwnerRef(type="user", id="user-77")
+    developer = get_standard_agent_template("developer")
+
+    with pytest.raises(ContractError) as exc_info:
+        service.delete_agent(developer.agent_id, expected_owner_ref=owner)
+
+    assert exc_info.value.code is ErrorCode.FORBIDDEN
+    assert service.get_agent_revision(developer.agent_id).revision == 1
 
 
 def test_missing_optional_capabilities_are_graceful() -> None:
