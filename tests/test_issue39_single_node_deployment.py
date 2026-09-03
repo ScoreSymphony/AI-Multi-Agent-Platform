@@ -24,6 +24,25 @@ def test_deployment_module_import_is_side_effect_free() -> None:
     assert callable(module.main)
 
 
+def test_single_node_example_config_is_secret_free_and_loadable() -> None:
+    example = Path("config/single-node.env.example").read_text(encoding="utf-8")
+    environ: dict[str, str] = {}
+    for raw_line in example.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        key, value = line.split("=", 1)
+        environ[key] = value
+
+    sensitive_markers = ("password", "secret", "token", "api_key", "apikey", "credential")
+    assert not any(marker in key.casefold() for key in environ for marker in sensitive_markers)
+
+    config = load_single_node_config(environ)
+    assert config.host == "127.0.0.1"
+    assert config.port == 8000
+    assert config.secure_cookie is True
+
+
 def test_single_node_configuration_is_explicit_and_rejects_insecure_public_cookie_mode(
     tmp_path: Path,
 ) -> None:
@@ -49,6 +68,14 @@ def test_single_node_configuration_is_explicit_and_rejects_insecure_public_cooki
                 "AI_MAP_SECURE_COOKIE": "false",
             }
         )
+
+
+def test_single_node_startup_blocks_unusable_persistence_path(tmp_path: Path) -> None:
+    blocked = tmp_path / "platform"
+    blocked.write_text("not a directory", encoding="utf-8")
+
+    with pytest.raises(ConfigurationError, match="required persistence path"):
+        build_single_node_deployment(SingleNodeConfig(data_dir=blocked))
 
 
 def test_single_node_profile_persists_auth_policy_scope_and_canonical_task_state(
