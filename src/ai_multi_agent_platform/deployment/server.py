@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import getpass
 import sys
 from collections.abc import Sequence
@@ -19,6 +20,10 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands = parser.add_subparsers(dest="command", required=True)
 
     subcommands.add_parser("serve", help="Start the authenticated single-node Control Plane")
+    subcommands.add_parser(
+        "smoke",
+        help="Run a retry-safe canonical Task/Run through the local reference execution path",
+    )
 
     bootstrap = subcommands.add_parser(
         "bootstrap-admin",
@@ -42,6 +47,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         password = _read_password(password_stdin=bool(args.password_stdin))
         account = deployment.bootstrap_admin(str(args.username), password)
         print(f"bootstrapped administrator identity: {account.user_id}")
+        return 0
+
+    if args.command == "smoke":
+        result = asyncio.run(deployment.run_reference_smoke())
+        print(
+            "single-node smoke succeeded: "
+            f"task={result.task_id} run={result.run_id} "
+            f"task_status={result.task_status.value} run_status={result.run_status.value}"
+        )
         return 0
 
     if args.command == "serve":
