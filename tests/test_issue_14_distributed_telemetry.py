@@ -110,7 +110,9 @@ def test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry() -> 
         "platform.worker.dispatch.duration_seconds",
     } <= metric_names
 
-    candidates = [metric for metric in exporter.metrics if metric.name == "platform.scheduler.candidates"]
+    candidates = [
+        metric for metric in exporter.metrics if metric.name == "platform.scheduler.candidates"
+    ]
     assert {metric.context.worker_id for metric in candidates} == {
         selected.worker_id,
         rejected.worker_id,
@@ -119,7 +121,9 @@ def test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry() -> 
     assert all(metric.context.run_id == job.execution.run_id for metric in candidates)
     assert all(metric.context.worker_job_id == job.worker_job_id for metric in candidates)
 
-    rejections = [metric for metric in exporter.metrics if metric.name == "platform.scheduler.rejections"]
+    rejections = [
+        metric for metric in exporter.metrics if metric.name == "platform.scheduler.rejections"
+    ]
     assert any(metric.attributes["reason_code"] == "worker_draining" for metric in rejections)
 
     timeline_names = {entry.event_name for entry in exporter.timeline}
