@@ -139,9 +139,7 @@ def test_external_delivery_retry_reuses_stable_idempotency_key_and_dedupes_succe
         assert retry.attempt == 2
         assert channel.calls == 2
         assert channel.idempotency_keys[0] == channel.idempotency_keys[1]
-        assert channel.idempotency_keys[0] == (
-            f"notification:{created.id}:channel:fixture"
-        )
+        assert channel.idempotency_keys[0] == (f"notification:{created.id}:channel:fixture")
 
         duplicate = await service.retry_delivery(
             created.id,
