@@ -19,6 +19,7 @@ from .models import (
     RecipientRef,
 )
 from .preferences import NotificationPreferenceRepository, preference_allows
+from .recipients import AllowAllRecipientEligibilityGuard, RecipientEligibilityGuard
 from .repository import NotificationRepository
 from .rules import NotificationRule
 
@@ -36,12 +37,14 @@ class NotificationService:
         rules: Sequence[NotificationRule] = (),
         delivery: NotificationDeliveryCoordinator | None = None,
         event_sink: NotificationEventSink | None = None,
+        recipient_eligibility: RecipientEligibilityGuard | None = None,
     ) -> None:
         self._repository = repository
         self._preferences = preferences
         self._rules = tuple(rules)
         self._delivery = delivery
         self._event_sink = event_sink
+        self._recipient_eligibility = recipient_eligibility or AllowAllRecipientEligibilityGuard()
 
     async def project_event(self, event: PlatformEvent) -> tuple[Notification, ...]:
         created: list[Notification] = []
@@ -59,6 +62,17 @@ class NotificationService:
         now: datetime | None = None,
     ) -> Notification | None:
         current = _aware(now or datetime.now(UTC), "now")
+        if not await self._recipient_eligibility.allows(candidate):
+            await self._emit(
+                "notification.filtered",
+                recipient=candidate.recipient,
+                source_type=candidate.source.resource_type,
+                source_id=candidate.source.resource_id,
+                category=candidate.category.value,
+                reason="recipient_ineligible",
+            )
+            return None
+
         preference = self._preferences.get(candidate.recipient)
         if not preference_allows(preference, candidate):
             await self._emit(
@@ -143,6 +157,17 @@ class NotificationService:
         """
 
         current = _aware(now or datetime.now(UTC), "now")
+        if not await self._recipient_eligibility.allows(candidate):
+            await self._emit(
+                "notification.filtered",
+                recipient=candidate.recipient,
+                source_type=candidate.source.resource_type,
+                source_id=candidate.source.resource_id,
+                category=candidate.category.value,
+                reason="recipient_ineligible",
+            )
+            return None
+
         preference = self._preferences.get(candidate.recipient)
         if not preference_allows(preference, candidate):
             await self._emit(
