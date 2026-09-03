@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict, deque
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from types import MappingProxyType
-from typing import Mapping
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
