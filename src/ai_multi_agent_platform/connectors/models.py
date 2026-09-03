@@ -64,8 +64,9 @@ class ConflictPolicy(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ConnectorDefinition:
-    """Backend-neutral description of one connector type/version."""
+    """Canonical backend-neutral description of one connector type/version."""
 
+    id: str
     connector_type_id: str
     name: str
     version: str
@@ -81,6 +82,7 @@ class ConnectorDefinition:
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
     def __post_init__(self) -> None:
+        validate_id(self.id, "connector_definition")
         if not self.connector_type_id.strip():
             raise ValueError("connector_type_id must not be blank")
         if not self.name.strip():
