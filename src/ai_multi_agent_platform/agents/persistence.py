@@ -500,9 +500,7 @@ def _agent_run(value: JsonValue) -> AgentRunRecord:
         selected_model_config_id=_optional_string(data, "selected_model_config_id"),
         selected_provider_id=_optional_string(data, "selected_provider_id"),
         capability_ids=_string_tuple(data.get("capability_ids"), "capability_ids"),
-        capability_versions=_string_mapping(
-            data.get("capability_versions"), "capability_versions"
-        ),
+        capability_versions=_string_mapping(data.get("capability_versions"), "capability_versions"),
         orchestrator_adapter_id=_optional_string(data, "orchestrator_adapter_id"),
         orchestrator_runtime_ref=_optional_string(data, "orchestrator_runtime_ref"),
         artifact_ids=_string_tuple(data.get("artifact_ids"), "artifact_ids"),
