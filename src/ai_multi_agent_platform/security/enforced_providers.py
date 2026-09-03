@@ -7,6 +7,9 @@ provider that can be invoked without policy evaluation.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import secrets
 from datetime import datetime
 
 from ai_multi_agent_platform.configuration.secrets import (
@@ -45,6 +48,8 @@ from .authorization import (
     infer_actor_identity,
 )
 from .enforcement import AuthorizationGate
+
+_SECRET_BINDING_KEY = secrets.token_bytes(32)
 
 
 def _actor_from_operation(context: OperationContext) -> ActorIdentity:
@@ -182,7 +187,11 @@ class AuthorizedFileProvider(FileProvider):
                 action=AuthorizationAction.MODIFY,
                 resource_type=ResourceType.FILE,
                 resource_id=object_ref,
-                payload={"size_bytes": len(data), "metadata": metadata or {}},
+                payload={
+                    "size_bytes": len(data),
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "metadata": metadata or {},
+                },
                 side_effect="local_write",
             )
         )
@@ -267,7 +276,7 @@ class AuthorizedKnowledgeProvider(KnowledgeProvider):
                 action=AuthorizationAction.MODIFY,
                 resource_type=ResourceType.KNOWLEDGE_SOURCE,
                 resource_id=source_ref,
-                payload={"content": content},
+                payload={"content_sha256": hashlib.sha256(content.encode()).hexdigest()},
                 side_effect="knowledge_write",
             )
         )
@@ -337,6 +346,7 @@ class AuthorizedSecretProvider(SecretProvider):
                     "allowed_consumers": list(allowed_consumers),
                     "allowed_purposes": list(allowed_purposes),
                     "expires_at": expires_at.isoformat() if expires_at else None,
+                    "secret_binding": _secret_binding(value),
                 },
                 side_effect="credential_create",
             )
@@ -384,7 +394,11 @@ class AuthorizedSecretProvider(SecretProvider):
         return await self._inner.resolve(reference, context)
 
     async def rotate(self, reference: SecretReference, value: str) -> SecretMetadata:
-        await self._authorize_secret_management(reference, "credential_rotate")
+        await self._authorize_secret_management(
+            reference,
+            "credential_rotate",
+            payload={"secret_binding": _secret_binding(value)},
+        )
         return await self._inner.rotate(reference, value)
 
     async def revoke(self, reference: SecretReference) -> SecretMetadata:
@@ -415,6 +429,8 @@ class AuthorizedSecretProvider(SecretProvider):
         self,
         reference: SecretReference,
         side_effect: str,
+        *,
+        payload: JsonValue = None,
     ) -> None:
         context = OperationContext(
             correlation_id=f"secret:{reference.secret_id}",
@@ -427,9 +443,16 @@ class AuthorizedSecretProvider(SecretProvider):
                 action=AuthorizationAction.MANAGE_CREDENTIALS,
                 resource_type=ResourceType.SECRET_REFERENCE,
                 resource_id=_secret_ref(reference),
+                payload=payload,
                 side_effect=side_effect,
             )
         )
+
+
+def _secret_binding(value: str) -> str:
+    """Bind approval to secret material without storing or exposing the plaintext value."""
+
+    return hmac.new(_SECRET_BINDING_KEY, value.encode(), hashlib.sha256).hexdigest()
 
 
 def _secret_ref(reference: SecretReference) -> str:

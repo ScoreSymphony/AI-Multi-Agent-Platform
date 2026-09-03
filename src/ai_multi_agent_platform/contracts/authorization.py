@@ -37,6 +37,7 @@ class AuthorizationRequest(LegacyAuthorizationRequest):
     security_labels: tuple[str, ...] = ()
     node_id: str | None = None
     trust_context: Mapping[str, JsonValue] = field(default_factory=dict)
+    request_payload_digest: str | None = None
     requested_action_digest: str | None = None
     approval_id: str | None = None
 
@@ -55,6 +56,7 @@ class AuthorizationRequest(LegacyAuthorizationRequest):
             "capability_ref",
             "side_effect",
             "node_id",
+            "request_payload_digest",
             "requested_action_digest",
             "approval_id",
         ):

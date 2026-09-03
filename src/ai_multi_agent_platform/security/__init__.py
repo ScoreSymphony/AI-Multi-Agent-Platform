@@ -14,6 +14,15 @@ from .authorization import (
     RiskClassification,
     infer_actor_identity,
 )
+from .control_plane_bridge import (
+    ControlPlaneAuthorizationBridge,
+    canonical_control_plane_vocabulary,
+)
+from .data_enforcement import (
+    AuthorizedDataFileProvider,
+    AuthorizedDataKnowledgeProvider,
+    AuthorizedDataMemoryProvider,
+)
 from .enforcement import AuthorizationAuditSink, AuthorizationGate
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
@@ -38,6 +47,10 @@ __all__ = [
     "AuthorizationAuditSink",
     "AuthorizationContext",
     "AuthorizationGate",
+    "AuthorizedDataFileProvider",
+    "AuthorizedDataKnowledgeProvider",
+    "AuthorizedDataMemoryProvider",
+    "ControlPlaneAuthorizationBridge",
     "ExternalSideEffect",
     "LocalAuthorizationProvider",
     "LocalPrincipalPolicy",
@@ -51,6 +64,7 @@ __all__ = [
     "SecurityDecision",
     "UntrustedInputError",
     "baseline_decision",
+    "canonical_control_plane_vocabulary",
     "infer_actor_identity",
     "redact_exception",
     "redact_sensitive",
