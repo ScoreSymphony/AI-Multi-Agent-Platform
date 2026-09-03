@@ -143,9 +143,12 @@ class AuthorizationGate:
 
         Approval decisions deliberately do not recurse into another approval flow. The
         configured policy must return ``allow`` for the canonical ``approve`` action.
+        Security-relevant scope is derived from the stored Approval record; callers may
+        supply correlation/owner/control metadata but cannot substitute another project.
         """
 
         record = self.approvals.get(approval_id)
+        scoped_operation = _approval_operation(record, operation)
         resource_type = _resource_type(record.resource_type)
         action = ProposedAction(
             AuthorizationContext(
@@ -153,7 +156,7 @@ class AuthorizationGate:
                 action=AuthorizationAction.APPROVE,
                 resource_type=resource_type,
                 resource_id=record.resource_id,
-                operation=operation,
+                operation=scoped_operation,
                 task_id=record.task_id,
                 run_id=record.run_id,
                 capability_ref=record.capability_ref,
@@ -199,35 +202,46 @@ class AuthorizationGate:
         """Cancel a pending request as requester or as an authorized approver."""
 
         record = self.approvals.get(approval_id)
-        if actor.actor_id != record.requester_ref:
-            resource_type = _resource_type(record.resource_type)
-            action = ProposedAction(
-                AuthorizationContext(
-                    actor=actor,
-                    action=AuthorizationAction.APPROVE,
-                    resource_type=resource_type,
-                    resource_id=record.resource_id,
-                    operation=operation,
-                    task_id=record.task_id,
-                    run_id=record.run_id,
-                    capability_ref=record.capability_ref,
-                    side_effect="approval_cancel",
-                ),
-                payload={"approval_id": approval_id, "decision": "cancel"},
+        scoped_operation = _approval_operation(record, operation)
+        resource_type = _resource_type(record.resource_type)
+        action = ProposedAction(
+            AuthorizationContext(
+                actor=actor,
+                action=AuthorizationAction.APPROVE,
+                resource_type=resource_type,
+                resource_id=record.resource_id,
+                operation=scoped_operation,
+                task_id=record.task_id,
+                run_id=record.run_id,
+                capability_ref=record.capability_ref,
+                side_effect="approval_cancel",
+            ),
+            payload={
+                "approval_id": approval_id,
+                "decision": "cancel",
+                "requested_action_digest": record.requested_action_digest,
+            },
+        )
+        if actor.actor_id == record.requester_ref:
+            decision = AuthorizationDecision(
+                AuthorizationOutcome.ALLOW,
+                reason="approval requester may cancel its own pending request",
+                policy_id="approval:requester-cancel",
             )
+        else:
             decision = normalize_authorization_decision(
                 await self.provider.authorize(
                     action.context.to_request(requested_action_digest=action.digest)
                 )
             )
-            self._audit(action, decision, approval_id)
-            if decision.outcome is not AuthorizationOutcome.ALLOW:
-                raise ContractError(
-                    ErrorCode.FORBIDDEN,
-                    decision.reason or "actor cannot cancel this approval",
-                    provider_id=self.provider.descriptor.provider_id,
-                    details={"approval_id": approval_id},
-                )
+        self._audit(action, decision, approval_id)
+        if decision.outcome is not AuthorizationOutcome.ALLOW:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                decision.reason or "actor cannot cancel this approval",
+                provider_id=self.provider.descriptor.provider_id,
+                details={"approval_id": approval_id},
+            )
         return self.approvals._cancel_authorized(approval_id, actor_ref=actor.actor_id)
 
     def ensure_pending_approval(
@@ -272,6 +286,33 @@ class AuthorizationGate:
         self._audit_records.append(record)
         if self._audit_sink is not None:
             self._audit_sink(record)
+
+
+def _approval_operation(record: ApprovalRecord, supplied: OperationContext) -> OperationContext:
+    """Preserve request metadata while forcing the Approval's stored project scope."""
+
+    if (
+        supplied.project_id is not None
+        and record.project_id is not None
+        and supplied.project_id != record.project_id
+    ):
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "approval decision scope does not match the stored approval project",
+            details={
+                "approval_id": record.approval_id,
+                "approval_project_id": record.project_id,
+                "supplied_project_id": supplied.project_id,
+            },
+        )
+    return OperationContext(
+        correlation_id=supplied.correlation_id,
+        causation_id=supplied.causation_id,
+        owner_type=supplied.owner_type,
+        owner_id=supplied.owner_id,
+        project_id=record.project_id,
+        control=supplied.control,
+    )
 
 
 def _resource_type(value: str) -> ResourceType:
