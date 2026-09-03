@@ -190,6 +190,7 @@ def test_task_management_search_rejects_invalid_filter_values() -> None:
         now = datetime.now(UTC)
 
         invalid_queries = (
+            {"priority": "critical"},
             {"assignment_state": "someone"},
             {"blocked": "maybe"},
             {"overdue": "maybe"},
