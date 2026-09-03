@@ -243,7 +243,7 @@ def test_navigation_extract_follow_and_trace_preservation(tmp_path: Path) -> Non
     asyncio.run(scenario())
 
 
-def test_download_enters_canonical_file_provider_with_provenance(tmp_path: Path) -> None:
+def test_download_enters_canonical_file_and_artifact_path_with_provenance(tmp_path: Path) -> None:
     async def scenario() -> None:
         with _FixtureServer() as fixture:
             provider, files = _provider(tmp_path)
@@ -255,22 +255,28 @@ def test_download_enters_canonical_file_provider_with_provenance(tmp_path: Path)
                     BROWSER_DOWNLOAD_CAPABILITY_ID,
                     {"url": fixture.base_url + "/file"},
                     context=context,
-                    permissions=frozenset({"browser.network.read", "file.create"}),
+                    permissions=frozenset(
+                        {"browser.network.read", "file.create", "artifact.create"}
+                    ),
                     invocation_id="browser-download",
                 )
             )
             output = result.output
             assert isinstance(output, dict)
             file_ref = output["file_ref"]
+            artifact_ref = output["artifact_ref"]
             assert isinstance(file_ref, str) and file_ref.startswith("file_")
+            assert isinstance(artifact_ref, str) and artifact_ref.startswith("artifact_")
             assert result.result_ref == file_ref
-            assert result.evidence_refs == (file_ref,)
+            assert result.artifact_refs == (artifact_ref,)
+            assert result.evidence_refs == (file_ref, artifact_ref)
             assert await files.read(file_ref, context) == b"download-me"
             record = await files.get_file(
                 file_ref,
                 DataAccessContext(operation=context, actor_ref="user:user-1"),
             )
             assert record.sha256 == hashlib.sha256(b"download-me").hexdigest()
+            assert record.artifact_ids == (artifact_ref,)
             assert record.metadata["source_url"] == fixture.base_url + "/file"
             assert record.metadata["provenance"] == "browser_download"
             assert record.metadata["content_trust"] == "untrusted_web_content"
@@ -278,7 +284,9 @@ def test_download_enters_canonical_file_provider_with_provenance(tmp_path: Path)
     asyncio.run(scenario())
 
 
-def test_form_side_effect_is_policy_gated_and_upload_reads_canonical_file(tmp_path: Path) -> None:
+def test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         with _FixtureServer() as fixture:
             provider, files = _provider(tmp_path)
@@ -301,6 +309,29 @@ def test_form_side_effect_is_policy_gated_and_upload_reads_canonical_file(tmp_pa
             assert isinstance(session_id, str)
             upload_ref = new_id("file")
             await files.write(upload_ref, b"upload-data", context)
+            upload_args: dict[str, JsonValue] = {
+                "session_id": session_id,
+                "fields": {"name": "Ada"},
+                "file_upload": {
+                    "field": "upload",
+                    "file_ref": upload_ref,
+                    "filename": "example.txt",
+                    "content_type": "text/plain",
+                },
+            }
+
+            with pytest.raises(ContractError) as missing_file_read:
+                await invoker.invoke(
+                    _request(
+                        BROWSER_SUBMIT_FORM_CAPABILITY_ID,
+                        upload_args,
+                        context=context,
+                        permissions=frozenset({"browser.external.submit"}),
+                        invocation_id="browser-form-missing-file-read",
+                    )
+                )
+            assert missing_file_read.value.code is ErrorCode.FORBIDDEN
+            assert fixture.server.post_count == 0
 
             async def deny_external(
                 request: CapabilityInvocation,
@@ -316,18 +347,9 @@ def test_form_side_effect_is_policy_gated_and_upload_reads_canonical_file(tmp_pa
                 await denied.invoke(
                     _request(
                         BROWSER_SUBMIT_FORM_CAPABILITY_ID,
-                        {
-                            "session_id": session_id,
-                            "fields": {"name": "Ada"},
-                            "file_upload": {
-                                "field": "upload",
-                                "file_ref": upload_ref,
-                                "filename": "example.txt",
-                                "content_type": "text/plain",
-                            },
-                        },
+                        upload_args,
                         context=context,
-                        permissions=frozenset({"browser.external.submit"}),
+                        permissions=frozenset({"browser.external.submit", "file.read"}),
                         invocation_id="browser-form-denied",
                     )
                 )
@@ -337,18 +359,9 @@ def test_form_side_effect_is_policy_gated_and_upload_reads_canonical_file(tmp_pa
             allowed = await invoker.invoke(
                 _request(
                     BROWSER_SUBMIT_FORM_CAPABILITY_ID,
-                    {
-                        "session_id": session_id,
-                        "fields": {"name": "Ada"},
-                        "file_upload": {
-                            "field": "upload",
-                            "file_ref": upload_ref,
-                            "filename": "example.txt",
-                            "content_type": "text/plain",
-                        },
-                    },
+                    upload_args,
                     context=context,
-                    permissions=frozenset({"browser.external.submit"}),
+                    permissions=frozenset({"browser.external.submit", "file.read"}),
                     invocation_id="browser-form-allowed",
                 )
             )
@@ -464,7 +477,7 @@ def test_timeout_and_cancellation_use_canonical_errors(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_provider_replacement_and_disabled_path(tmp_path: Path) -> None:
+def test_provider_replacement_unsupported_operation_and_disabled_path(tmp_path: Path) -> None:
     class AlternateBrowserProvider(StdlibBrowserProvider):
         @property
         def descriptor(self) -> ProviderDescriptor:
@@ -485,6 +498,11 @@ def test_provider_replacement_and_disabled_path(tmp_path: Path) -> None:
         )
         registry = CapabilityRegistry()
         await registry.register_provider(provider)
+        assert provider.browser_features.screenshots is False
+        with pytest.raises(ContractError) as unsupported:
+            registry.resolve("browser.screenshot")
+        assert unsupported.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
+
         with _FixtureServer() as fixture:
             result = await CapabilityInvoker(registry).invoke(
                 _request(
@@ -496,13 +514,10 @@ def test_provider_replacement_and_disabled_path(tmp_path: Path) -> None:
                 )
             )
             assert result.provider_id == "browser.alternate.reference"
+
         registry.unregister_provider("browser.alternate.reference")
         with pytest.raises(ContractError) as removed:
             registry.resolve(BROWSER_NAVIGATE_CAPABILITY_ID)
         assert removed.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
-        assert provider.browser_features.screenshots is False
-        with pytest.raises(ContractError) as unsupported:
-            registry.resolve("browser.screenshot")
-        assert unsupported.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
 
     asyncio.run(scenario())
