@@ -23,6 +23,7 @@ from .client import (
 )
 from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
+from .search import add_search_parser, execute_search
 from .task_management import parse_changes, parse_updates
 from .workspace import parse_json_array
 
@@ -122,6 +123,8 @@ def _build_parser() -> argparse.ArgumentParser:
     ):
         platform_command = areas.add_parser(name, help=help_text)
         platform_command.set_defaults(area="platform", command=name)
+
+    add_search_parser(areas)
 
     profile = areas.add_parser("profile", help="manage non-secret target profiles")
     profile.set_defaults(area="profile")
@@ -387,6 +390,8 @@ def _execute(
 ) -> CommandResult:
     if args.area == "platform":
         return _platform_command(args, client)
+    if args.area == "search":
+        return CommandResult(execute_search(args, client))
     if args.area == "project":
         return _project_command(args, client, profile)
     if args.area == "workspace":
