@@ -1,0 +1,120 @@
+name: Issue 76 usage UI contract apply
+
+on:
+  push:
+    branches: [feat/issue-76-usage-ui-contract]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-76-usage-ui-contract
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: |
+          python -m pip install -e ".[dev]"
+          cd frontend
+          npm ci
+      - name: Apply #76 HTTP/UI contract follow-up
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text()
+              if text.count(old) != 1:
+                  raise RuntimeError(f"expected exactly one match in {path}: {old[:100]!r}")
+              target.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/ai_multi_agent_platform/accounting/control_plane.py",
+              '        "quality": record.quality.value,\n        "source": record.source,\n',
+              '        "quality": record.quality.value,\n        "aggregation_mode": record.aggregation_mode.value,\n        "source": record.source,\n',
+          )
+
+          replace_once(
+              "frontend/src/api/types.ts",
+              'export type MeasurementQuality = "measured" | "reported" | "estimated" | "unavailable";\n',
+              'export type MeasurementQuality = "measured" | "reported" | "estimated" | "unavailable";\n'
+              'export type AggregationMode = "additive" | "latest";\n',
+          )
+          replace_once(
+              "frontend/src/api/types.ts",
+              '  quality: MeasurementQuality;\n  source: string;\n',
+              '  quality: MeasurementQuality;\n  aggregation_mode: AggregationMode;\n  source: string;\n',
+          )
+          replace_once(
+              "frontend/src/api/types.ts",
+              '  quality_counts: Record<MeasurementQuality, number>;\n}\n\nexport interface CanonicalUsageBudget',
+              '  quality_counts: Record<MeasurementQuality, number>;\n  aggregation_mode: AggregationMode;\n}\n\nexport interface CanonicalUsageBudget',
+          )
+
+          page = "frontend/src/pages/UsagePage.tsx"
+          replace_once(
+              page,
+              '            Totals remain separated by metric and unit. The UI does not combine unlike units or\n            currencies.\n',
+              '            Values remain separated by metric and unit. Additive metrics are summed; latest-mode\n            metrics show current point-in-time state. The UI does not combine unlike units or currencies.\n',
+          )
+          replace_once(
+              page,
+              '<tr><th>Metric</th><th>Quantity</th><th>Quality</th><th>Scope</th><th>Cost</th><th>Source</th><th>Time</th></tr>',
+              '<tr><th>Metric</th><th>Quantity</th><th>Mode</th><th>Quality</th><th>Scope</th><th>Cost</th><th>Source</th><th>Time</th></tr>',
+          )
+          replace_once(
+              page,
+              '              <td>{formatQuantity(record.quantity, record.unit)}</td>\n              <td><StatusBadge value={record.quality} /></td>',
+              '              <td>{formatQuantity(record.quantity, record.unit)}</td>\n              <td>{record.aggregation_mode}</td>\n              <td><StatusBadge value={record.quality} /></td>',
+          )
+          replace_once(
+              page,
+              '<thead><tr><th>Metric</th><th>Total</th><th>Records</th><th>Quality mix</th></tr></thead>',
+              '<thead><tr><th>Metric</th><th>Value</th><th>Mode</th><th>Records</th><th>Quality mix</th></tr></thead>',
+          )
+          replace_once(
+              page,
+              '              <td>{formatQuantity(aggregate.total, aggregate.unit)}</td>\n              <td>{aggregate.record_count}</td>',
+              '              <td>{formatQuantity(aggregate.total, aggregate.unit)}</td>\n              <td>{aggregate.aggregation_mode}</td>\n              <td>{aggregate.record_count}</td>',
+          )
+
+          Path("tests/test_issue76_control_plane_http.py").write_text('''from __future__ import annotations\n\nimport asyncio\n\nfrom ai_multi_agent_platform.accounting import (\n    AccountingService,\n    AggregationMode,\n    InMemoryUsageStore,\n    MeasurementQuality,\n    UsageBudget,\n    UsageRecord,\n    UsageScope,\n    accounting_resource_services,\n)\nfrom ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest\nfrom ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel\nfrom ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator\n\n\ndef _http(accounting: AccountingService) -> ControlPlaneHTTP:\n    repository = InMemoryKernelRepository()\n    kernel = PlatformKernel(\n        orchestrator=FakeOrchestrator(),\n        lifecycle=FakeLifecycleBackend(),\n        repository=repository,\n    )\n    control_plane = ControlPlane(\n        kernel=kernel,\n        events=repository,\n        resource_services=accounting_resource_services(accounting),\n    )\n    return ControlPlaneHTTP(control_plane)\n\n\ndef _headers() -> dict[str, str]:\n    return {\n        "X-Request-Id": "request-usage",\n        "X-Correlation-Id": "correlation-usage",\n        "X-Principal-Ref": "user:alice",\n        "X-Owner-Type": "user",\n        "X-Owner-Id": "alice",\n    }\n\n\ndef test_accounting_collections_are_real_versioned_control_plane_resources() -> None:\n    accounting = AccountingService(InMemoryUsageStore())\n    accounting.record(\n        UsageRecord(\n            metric_type="storage.file.bytes.current",\n            unit="bytes",\n            quality=MeasurementQuality.REPORTED,\n            source="file-provider",\n            quantity=42.0,\n            aggregation_mode=AggregationMode.LATEST,\n            scope=UsageScope(owner_type="user", owner_id="alice"),\n        )\n    )\n    accounting.put_budget(\n        UsageBudget(\n            metric_type="storage.file.bytes.current",\n            unit="bytes",\n            scope_type="user",\n            scope_id="alice",\n            limit=100.0,\n            owner_type="user",\n            owner_id="alice",\n        )\n    )\n    http = _http(accounting)\n\n    async def scenario() -> None:\n        manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1", headers=_headers()))\n        assert manifest.status == 200\n        assert isinstance(manifest.body, dict)\n        resources = manifest.body["resources"]\n        assert isinstance(resources, list)\n        for collection in ("usage-records", "usage-aggregates", "usage-budgets"):\n            assert collection in resources\n\n        records = await http.handle(\n            HTTPRequest(method="GET", path="/api/v1/usage-records", headers=_headers())\n        )\n        assert records.status == 200\n        assert isinstance(records.body, dict)\n        record_items = records.body["items"]\n        assert isinstance(record_items, list)\n        assert len(record_items) == 1\n        assert isinstance(record_items[0], dict)\n        assert record_items[0]["aggregation_mode"] == "latest"\n\n        aggregates = await http.handle(\n            HTTPRequest(method="GET", path="/api/v1/usage-aggregates", headers=_headers())\n        )\n        assert aggregates.status == 200\n        assert isinstance(aggregates.body, dict)\n        aggregate_items = aggregates.body["items"]\n        assert isinstance(aggregate_items, list)\n        assert len(aggregate_items) == 1\n        assert isinstance(aggregate_items[0], dict)\n        assert aggregate_items[0]["total"] == 42.0\n        assert aggregate_items[0]["aggregation_mode"] == "latest"\n\n        budgets = await http.handle(\n            HTTPRequest(method="GET", path="/api/v1/usage-budgets", headers=_headers())\n        )\n        assert budgets.status == 200\n        assert isinstance(budgets.body, dict)\n        budget_items = budgets.body["items"]\n        assert isinstance(budget_items, list)\n        assert len(budget_items) == 1\n        assert isinstance(budget_items[0], dict)\n        assert budget_items[0]["consumed"] == 42.0\n\n        openapi = await http.handle(\n            HTTPRequest(method="GET", path="/api/v1/openapi.json", headers=_headers())\n        )\n        assert openapi.status == 200\n        assert isinstance(openapi.body, dict)\n        paths = openapi.body["paths"]\n        assert isinstance(paths, dict)\n        assert "/api/v1/usage-records" in paths\n        assert "/api/v1/usage-aggregates" in paths\n        assert "/api/v1/usage-budgets" in paths\n\n    asyncio.run(scenario())\n''')
+
+          doc = Path("docs/ISSUE_76_STORAGE_PROGRESS.md")
+          doc.write_text(
+              doc.read_text()
+              + '''\n\n## Control Plane and UI contract follow-up\n\nThe versioned Control Plane now has explicit HTTP regression coverage proving that registered `usage-records`, `usage-aggregates` and `usage-budgets` appear in the manifest/OpenAPI and return the owner-isolated accounting resources consumed by the existing `/usage` frontend page.\n\nThe record and aggregate wire resources expose `aggregation_mode`. The frontend therefore distinguishes `additive` consumption from `latest` point-in-time gauges instead of labelling every aggregate as a total.\n'''
+          )
+          PY
+      - name: Verify repository gates
+        run: |
+          ruff format src/ai_multi_agent_platform/accounting tests/test_issue76_control_plane_http.py
+          ruff check src/ai_multi_agent_platform/accounting tests/test_issue76_control_plane_http.py
+          mypy
+          pytest tests/test_issue76_accounting.py tests/test_issue76_storage_accounting.py tests/test_issue76_control_plane_http.py
+          python -m build
+          cd frontend
+          npm run typecheck
+          npm test -- --run
+          npm run build
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ai_multi_agent_platform/accounting/control_plane.py tests/test_issue76_control_plane_http.py docs/ISSUE_76_STORAGE_PROGRESS.md frontend/src/api/types.ts frontend/src/pages/UsagePage.tsx
+          git commit -m "feat: align #76 usage UI with accounting semantics"
+          git push origin HEAD:feat/issue-76-usage-ui-contract
