@@ -19,6 +19,11 @@ export type RunStatus =
   | "cancelled"
   | "timed_out";
 export type MeasurementQuality = "measured" | "reported" | "estimated" | "unavailable";
+export type AggregationMode = "additive" | "latest";
+export type TaskPriority = "low" | "normal" | "high" | "urgent";
+export type TaskResponsibilityKind = "user" | "team" | "organization";
+export type AgentAssignmentKind = "agent" | "agent_team";
+export type TaskDependencyKind = "depends_on" | "related_to";
 
 export interface Page<T> {
   items: T[];
@@ -45,6 +50,42 @@ export interface CanonicalWorkspaceIdentity {
   lifecycle: string;
 }
 
+export interface TaskResponsibility {
+  kind: TaskResponsibilityKind;
+  id: string;
+}
+
+export interface AgentAssignment {
+  kind: AgentAssignmentKind;
+  id: string;
+  revision: number | null;
+  required: boolean;
+  policy_ref: string | null;
+}
+
+export interface TaskDependency {
+  task_id: string;
+  kind: TaskDependencyKind;
+}
+
+export interface TaskManagementChanges {
+  priority?: TaskPriority;
+  due_at?: string | null;
+  deadline_timezone?: string | null;
+  not_before?: string | null;
+  responsibility?: TaskResponsibility | null;
+  agent_assignment?: AgentAssignment | null;
+  labels?: string[];
+  workspace_id?: string | null;
+  parent_task_id?: string | null;
+  dependencies?: TaskDependency[];
+  blocking_reason?: string | null;
+  effort_hint?: number | null;
+  resource_hints?: Record<string, JsonValue>;
+  archived?: boolean;
+  hidden?: boolean;
+}
+
 export interface CanonicalTask {
   id: string;
   type: "task";
@@ -65,6 +106,42 @@ export interface CanonicalTask {
   causation_id: string | null;
   created_at: string;
   updated_at: string;
+  priority: TaskPriority;
+  priority_rank: number;
+  due_at: string | null;
+  deadline_timezone: string | null;
+  not_before: string | null;
+  responsibility: TaskResponsibility | null;
+  responsible_type: TaskResponsibilityKind | null;
+  responsible_id: string | null;
+  agent_assignment: AgentAssignment | null;
+  agent_assignment_type: AgentAssignmentKind | null;
+  agent_assignment_id: string | null;
+  labels: string[];
+  workspace_id: string | null;
+  parent_task_id: string | null;
+  dependencies: TaskDependency[];
+  blocking_reason: string | null;
+  effort_hint: number | null;
+  resource_hints: Record<string, JsonValue>;
+  archived: boolean;
+  hidden: boolean;
+  blocking_task_ids: string[];
+  failed_dependency_ids: string[];
+  overdue: boolean;
+  not_before_blocked: boolean;
+  management_blocked: boolean;
+  eligible: boolean;
+  effective_blocking_reason: string | null;
+}
+
+export interface BulkTaskManagementResult {
+  id: string;
+  type: "task-management-bulk-result";
+  atomic: boolean;
+  authorization_preflighted: boolean;
+  count: number;
+  items: Array<{ task_id: string; eligible: boolean }>;
 }
 
 export interface RunError {
@@ -209,6 +286,7 @@ export interface CanonicalUsageRecord {
   quantity: number | null;
   unit: string;
   quality: MeasurementQuality;
+  aggregation_mode: AggregationMode;
   source: string;
   provider: string | null;
   timestamp: string;
@@ -224,6 +302,15 @@ export interface CanonicalUsageRecord {
   provenance: Record<string, JsonValue>;
 }
 
+export interface CanonicalUsageTrendPoint {
+  start: string;
+  end: string;
+  value: number | null;
+  record_count: number;
+  unavailable_count: number;
+  quality_counts: Record<MeasurementQuality, number>;
+}
+
 export interface CanonicalUsageAggregate {
   id: string;
   metric_type: string;
@@ -232,6 +319,11 @@ export interface CanonicalUsageAggregate {
   record_count: number;
   unavailable_count: number;
   quality_counts: Record<MeasurementQuality, number>;
+  aggregation_mode: AggregationMode;
+  trend_window_start: string | null;
+  trend_window_end: string | null;
+  trend_bucket_seconds: number | null;
+  trend: CanonicalUsageTrendPoint[];
 }
 
 export interface CanonicalUsageBudget {
@@ -265,7 +357,7 @@ export interface CreateWorkspaceInput {
   project_id: string;
 }
 
-export interface CreateTaskInput {
+export interface CreateTaskInput extends TaskManagementChanges {
   title: string;
   objective: string;
   owner_type: OwnerType;
