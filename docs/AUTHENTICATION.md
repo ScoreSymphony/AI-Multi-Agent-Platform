@@ -13,7 +13,7 @@ The canonical path is:
 client credential / browser session
         -> authentication boundary
         -> AuthenticatedActor + ActorIdentity
-        -> trusted RequestContext principal
+        -> trusted RequestContext principal + authentication trust context
         -> #15 authorization
         -> Control Plane operation
 ```
@@ -32,7 +32,8 @@ bypass a #15 authorization policy.
 - authentication timestamp and optional expiry;
 - optional established organization/project context;
 - request/correlation metadata;
-- namespaced provider metadata for an external identity provider or worker transport.
+- namespaced provider metadata for an external identity provider, worker transport or
+  credential-local authorization ceiling.
 
 External issuer/subject identifiers remain mappings to a canonical platform user. IdP
 claims are retained as provider metadata only and do not become platform permissions.
@@ -52,11 +53,15 @@ Baseline defaults:
 - local operator password reset also invalidates browser sessions by default.
 
 `InMemoryAuthenticationStore` is the deterministic reference store used by unit and
-contract fixtures. It deliberately stores only password/token verifiers. Production
-persistence can replace this storage boundary without changing `AuthenticatedActor`,
-credential formats or Control Plane authentication semantics. The deployment issue must
-bind authentication state to the deployment's durable persistence profile before claiming
-restart-persistent account storage.
+contract fixtures. It deliberately stores only password/token verifiers and safe
+credential metadata. Production persistence can replace this storage boundary without
+changing `AuthenticatedActor`, credential formats or Control Plane authentication
+semantics. The deployment issue must bind authentication state to the deployment's durable
+persistence profile before claiming restart-persistent account storage.
+
+Credential scope is part of the authoritative `StoredCredential` record and must be
+persisted atomically with the credential. A durable implementation must never persist a
+credential while dropping or defaulting away its scope because that could widen authority.
 
 ## First-user bootstrap and recovery
 
@@ -106,9 +111,10 @@ Supported lifecycle operations include:
 - targeted revocation;
 - global session invalidation after password change, account disable or account lock.
 
-A revoked or expired session stops authenticating immediately.
+Renewal revokes the previous server-side session before issuing a replacement. A revoked
+or expired session stops authenticating immediately.
 
-## API, service and worker credentials
+## API, service, worker, automation and integration credentials
 
 Opaque credentials contain a public credential identifier plus at least 256 bits of random
 secret material. Only a SHA-256 verifier of that high-entropy random material is retained.
@@ -122,13 +128,45 @@ Credential records contain:
 - purpose;
 - creation/expiry/revocation timestamps;
 - last-use timestamp;
+- authoritative credential scope;
 - stored verifier, never retrievable secret material.
 
 Kinds cover personal access, service, worker, automation and integration identities. The
 kind must match its canonical `ActorType`; a token cannot change its actor class.
 
-Authorization scopes are not embedded as implicit privileges in authentication tokens.
-#15 evaluates permissions for the authenticated actor on every sensitive operation.
+### Credential scopes and #15
+
+`CredentialScope` is a credential-local **deny-only authorization ceiling** expressed in
+canonical #15 vocabulary:
+
+- `actions` contains `AuthorizationAction` values;
+- `resource_types` contains `ResourceType` values;
+- `resource_ids` optionally restricts the credential to exact canonical resource IDs.
+
+Empty dimensions mean that the credential adds no restriction for that dimension. An
+unrestricted credential therefore still stores an explicit scope object with all three
+fields present and empty.
+
+The authority flow is:
+
+```text
+StoredCredential.scope
+        -> validated authentication metadata
+        -> trusted RequestContext authentication context
+        -> canonical AuthorizationRequest.trust_context
+        -> ControlPlaneAuthorizationBridge / #15
+        -> credential-scope deny-only check
+        -> normal #15 policy / approval decision
+```
+
+Passing the credential-scope check **never grants** an operation. The normal #15 provider
+must still allow it or return the relevant approval outcome. Conversely, a scope denial is
+final even if the principal's normal #15 policy would otherwise allow the operation.
+Authentication credentials therefore never grant implicit administrator rights.
+
+Malformed or incomplete persisted scope data fails closed during bearer authentication.
+A credential is not silently widened to an unrestricted credential when scope data is
+missing or corrupt.
 
 ## Worker authentication contract
 
@@ -147,15 +185,24 @@ The TLS peer reference is evidence/transport metadata, not canonical worker iden
 will consume this authenticated identity for registration, heartbeat and dispatch without
 making the scheduler a dependency of #36.
 
-## Brute-force and rate-control hooks
+Worker credential rotation creates a new credential, preserves the previous scope unless
+an explicit replacement scope is supplied, and revokes the old credential. A compromised
+or lost worker credential can be revoked independently from the future scheduler.
+
+## Brute-force and request rate-control hooks
 
 `AuthenticationRateLimiter` is replaceable. The reference
 `InMemoryFailureRateLimiter` applies a bounded failure window per normalized login key.
 Unknown usernames still execute a dummy password verifier to reduce username-enumeration
 timing differences.
 
+`AuthenticationRequestRateLimiter` is a separate replaceable hook for already
+authenticated northbound requests. The self-hosted composition provides a deterministic
+sliding-window `InMemoryRequestRateLimiter`.
+
 A rate-control rejection is represented separately from invalid credentials and is mapped
-to HTTP 429 at the northbound boundary.
+to HTTP 429 at the northbound boundary. Broader distributed/resource abuse controls remain
+part of later security and deployment hardening.
 
 ## External identity-provider boundary
 
@@ -172,7 +219,10 @@ local authentication remains a valid self-hosted baseline.
 
 ## Authenticated Control Plane
 
-`AuthenticatedControlPlaneHTTP` wraps the composed Control Plane HTTP boundary.
+`AuthenticatedControlPlaneHTTP` wraps the current composed Control Plane HTTP boundary.
+It authenticates the request first and then delegates authorization and the operation to
+the current Control Plane composition rather than inheriting authority from a historical
+HTTP implementation.
 
 Public endpoints are limited to the platform root/health/readiness/OpenAPI plus local
 bootstrap/login. Protected requests authenticate using either:
@@ -183,9 +233,11 @@ Authorization: Bearer <personal/service/worker/... credential>
 
 or the browser session cookie.
 
-The boundary removes caller-provided `X-Principal-Ref`, `X-Owner-Type` and `X-Owner-Id`
-values. It then injects only the canonical actor established by authentication before
-passing the request to the existing Control Plane and #15 authorization boundary.
+The boundary removes caller-provided `X-Principal-Ref`, `X-Owner-Type`, `X-Owner-Id` and
+other caller-supplied identity projections. It then attaches an internal trusted
+`ActorContext` containing only the canonical actor established by authentication. For
+token credentials, the validated credential scope is carried in the trusted authentication
+context so #15 can apply it as a deny-only constraint.
 
 This prevents authentication from becoming a trusted-header convention at the exposed
 client boundary while preserving the existing versioned Control Plane application
@@ -208,7 +260,7 @@ POST /api/v1/auth/credentials/{credential_id}:revoke
 ```
 
 The personal-credential creation response contains the secret exactly once. List/detail
-surfaces expose only safe metadata.
+surfaces expose only safe metadata including the persisted credential scope.
 
 Service/worker/automation/integration credential issuance is available at the application
 service boundary. Administrative APIs that expose those creation operations must first
@@ -218,29 +270,50 @@ unauthenticated or role-name-based shortcut.
 ## HTTP error distinction
 
 Authentication failures return `401 unauthorized` with `WWW-Authenticate` where relevant.
-Rate limiting returns 429. Once authentication succeeds, a #15 policy denial remains
-`403 forbidden`/authorization. This distinction is part of the public Control Plane error
-contract.
+Rate limiting returns 429. Once authentication succeeds, a #15 policy or credential-scope
+denial remains `403 forbidden`/authorization. This distinction is part of the public
+Control Plane error contract.
 
 ## Audit and redaction
 
-Authentication operations can emit `AuthenticationAuditRecord` through an injected sink.
-Records contain canonical actor/subject/credential references and correlation metadata,
-never raw passwords, session cookies, bearer tokens or assertions.
+Authentication operations emit `AuthenticationAuditRecord` through an injected sink when
+one is configured. The #36 public self-hosted composition provides hooks for:
+
+- successful/failed local login, including disabled or locked accounts;
+- browser-session creation and successful/failed session authentication, including CSRF,
+  expiry and revocation failures;
+- logout and session revocation lifecycle events;
+- successful/failed bearer credential authentication, including expired/revoked or
+  malformed-scope failures;
+- successful/failed worker request authentication, including replay rejection;
+- successful/failed external identity authentication and provider verification failure;
+- password change/reset and account-state changes;
+- credential creation/revocation and worker rotation/compromise handling;
+- authenticated request-rate-limit rejection.
+
+Records contain canonical actor/subject/credential references, stable failure codes,
+provider IDs where safe and correlation metadata. They never contain raw passwords,
+session cookies, bearer tokens, CSRF values or external IdP assertions.
 
 Audit metadata is passed through the platform's standard recursive secret redaction.
 Normal session/credential serialization likewise excludes token and password verifiers.
+#16 may later enrich or export these audit hooks, but #36 does not depend on the
+observability stack for the hooks themselves to exist.
 
 ## Security invariants
 
 1. Authentication never grants authorization implicitly.
 2. Raw passwords are never stored.
-3. Raw session/API/service/worker secrets are never stored after issuance.
+3. Raw session/API/service/worker/automation/integration secrets are never stored after
+   issuance.
 4. Secret comparison uses verifier-safe constant-time comparison where applicable.
 5. Caller-supplied principal headers are untrusted at the exposed Control Plane boundary.
 6. Revoked/expired sessions and credentials fail deterministically.
 7. Browser state-changing operations require CSRF validation.
 8. External identity claims never become canonical permissions automatically.
 9. Worker request nonces can be rejected on replay before #14 exists.
-10. Security-sensitive metadata is redactable and raw credential values are excluded from
-    ordinary audit/log/resource representations.
+10. Credential scope is stored atomically with the credential and is a deny-only #15
+    constraint; malformed persisted scope fails closed.
+11. Security-sensitive authentication decisions expose redacted audit hooks without
+    requiring #16.
+12. Raw credential values are excluded from ordinary audit/log/resource representations.
