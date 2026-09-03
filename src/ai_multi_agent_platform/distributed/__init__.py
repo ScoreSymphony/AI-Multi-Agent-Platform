@@ -41,6 +41,7 @@ from .providers import DistributedNodeProvider, DistributedWorkerProvider
 from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
 from .scheduler import DeterministicScheduler, NoEligibleWorkerError, ScheduledPlacement
+from .telemetry import DistributedTelemetry
 from .worker import LocalWorker, WorkerDispatcher
 from .worker_protocol import (
     WorkerHeartbeatRequest,
@@ -69,6 +70,7 @@ __all__ = [
     "DistributedRegistry",
     "DistributedRuntime",
     "DistributedStateStore",
+    "DistributedTelemetry",
     "DistributedWorkerProvider",
     "Heartbeat",
     "JobRequirements",
