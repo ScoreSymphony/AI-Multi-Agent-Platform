@@ -146,11 +146,12 @@ class SqliteScopeStore(ScopeStore):
     def _load(self) -> None:
         with self._connect() as connection:
             project_rows = connection.execute(
-                "SELECT project_id, name, owner_type, owner_id, created_at, updated_at, schema_version "
-                "FROM scope_projects"
+                "SELECT project_id, name, owner_type, owner_id, created_at, "
+                "updated_at, schema_version FROM scope_projects"
             ).fetchall()
             workspace_rows = connection.execute(
-                "SELECT workspace_id, project_id, owner_type, owner_id, created_at FROM scope_workspaces"
+                "SELECT workspace_id, project_id, owner_type, owner_id, created_at "
+                "FROM scope_workspaces"
             ).fetchall()
             command_rows = connection.execute(
                 "SELECT command, idempotency_key, result_id FROM scope_commands"
