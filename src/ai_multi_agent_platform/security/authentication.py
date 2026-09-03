@@ -358,7 +358,7 @@ class InMemoryReplayProtector:
         key = (credential_id, nonce)
         if key in self._seen:
             return False
-        self._seen[key] = now + self._max_clock_skew
+        self._seen[key] = max(now, issued_at) + self._max_clock_skew
         return True
 
     def _prune(self, now: datetime) -> None:
