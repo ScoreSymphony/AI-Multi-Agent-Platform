@@ -224,6 +224,12 @@ the calling principal and request/correlation identifiers. Update and clone comm
 also preserve or explicitly change owner, project and workspace scope without replacing
 the canonical Agent/Team identity.
 
+Authentication and session management remain upstream Control Plane concerns. The #36
+authentication layer resolves an authenticated request into the canonical
+`RequestContext`; Agent command handlers consume that context for ownership and
+provenance but do not define credentials, sessions or identity-provider semantics.
+Authentication therefore does not become part of the canonical Agent/Team profile.
+
 ## Deliberate boundaries
 
 The #33 implementation does not:
