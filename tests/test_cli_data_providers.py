@@ -139,7 +139,7 @@ def test_data_provider_cli_reads_public_health_and_capability_metadata(tmp_path:
 
     assert providers["knowledge"]["id"] == "local-knowledge-reference"
     assert providers["knowledge"]["health"] == "healthy"
-    assert "search" in providers["knowledge"]["supported_operations"]
+    assert "keyword_search" in providers["knowledge"]["supported_operations"]
 
     code, memory, error = _invoke(
         config,
