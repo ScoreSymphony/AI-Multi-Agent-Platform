@@ -6,7 +6,7 @@ import pytest
 
 from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.contracts import ContractError, OperationContext
-from ai_multi_agent_platform.data import LocalFileProvider
+from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.security import (
     ActorIdentity,
@@ -98,7 +98,5 @@ def test_secret_create_approval_binds_changed_material_without_plaintext_leak() 
     assert "secret-B" not in combined
 
 
-def _data_context(operation: OperationContext):
-    from ai_multi_agent_platform.data import DataAccessContext
-
+def _data_context(operation: OperationContext) -> DataAccessContext:
     return DataAccessContext(operation=operation, actor_ref="user:alice")
