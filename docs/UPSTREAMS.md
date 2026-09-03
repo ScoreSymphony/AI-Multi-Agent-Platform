@@ -82,6 +82,30 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **ADR:** none required for the SDK choice; the canonical architecture explicitly treats MCP as an optional adapter.
 - **Adoption review:** `docs/upstream/MCP_PYTHON_SDK_ADOPTION.md`.
 
+### ScoreSymphony AI-Agent-VPS Forge subsystem
+
+- **Purpose:** source/reference for proven executor, workspace, event/idempotency and recovery behavior reused for issue #9 without importing the legacy Forge lifecycle as platform architecture.
+- **Status:** approved; the platform-owned adapter boundary and regression coverage are merged through PR #129, but no concrete legacy Forge runtime transport is integrated yet.
+- **Integration category/categories:** adapter integration; reference-only influence.
+- **Canonical upstream repository:** `https://github.com/ScoreSymphony/AI-Agent-VPS`.
+- **Pinned version/tag/commit or deployed revision:** `5a9f317e3bab056a4cebe214b03912a9b7ad3824`.
+- **Verified license:** MIT.
+- **License verification date:** 2026-09-03.
+- **Last review date:** 2026-09-03.
+- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.forge.ForgeExecutor` behind the canonical `Executor`, with a small platform-owned `ForgeClient` protocol. `ExecutorLifecycleBackend` carries namespaced backend metadata into canonical kernel history.
+- **Local source path:** `src/ai_multi_agent_platform/adapters/forge.py` contains new platform-owned adapter code; no upstream Forge source has been copied.
+- **Source origin/path:** behavior/specification review of `core/forge/`, especially `crates/executors`, `services/src/domain_event_service.rs`, `services/src/recovery.rs`, task-dispatch/recovery code, workspace code and the public API routes.
+- **Modified locally:** no upstream source is presently vendored or modified in this repository.
+- **Required notices / attribution:** no copied-source notice is required for the current implementation. If substantial Forge source is selectively copied later, preserve the upstream MIT copyright/license notice and add file-level provenance before merge.
+- **Known compatibility constraints:** legacy Forge is primarily Rust and owns its own Task/Project/Execution persistence. Those types and lifecycle rules are not canonical. The current legacy HTTP launch path requires a Forge Task and is intentionally rejected as the first concrete executor transport; see `docs/FORGE_TRANSPORT_ASSESSMENT.md`.
+- **Security/deployment/resource constraints:** Forge remains optional. Workspace traversal and artifact boundaries are enforced by the platform adapter; any future process/shell runtime requires explicit policy, environment filtering, sandbox/resource controls and backend authentication without replacing platform authorization.
+- **Required for baseline:** no; core startup and reference execution remain Forge-independent.
+- **Recurring paid service required:** no.
+- **Update/review method:** compare the pinned source revision before changing the adapter/reuse decisions, review license/security/behavior changes, update `docs/FORGE_REUSE_AUDIT.md`, `docs/FORGE_TRANSPORT_ASSESSMENT.md` and `upstream/forge-ai-agent-vps.yaml`, then run executor contract, Forge regression/integration and full repository CI.
+- **Exit/replacement strategy:** remove the Forge adapter/transport and adapter-private state. Canonical Task/Run/Event/Workspace state requires no migration because it remains platform-owned.
+- **ADR:** none required yet; the architecture deliberately keeps Forge subordinate to existing canonical contracts. A new optional Rust sidecar or other runtime component that materially changes deployment/build topology should receive explicit architecture review.
+- **Provenance:** `upstream/forge-ai-agent-vps.yaml`.
+
 ## Current direct build/development dependencies
 
 These packages are third-party software already declared by `pyproject.toml`. Packages promoted to required or architecture-significant production use must also appear in the registry above when required by `LICENSE_POLICY.md`.
