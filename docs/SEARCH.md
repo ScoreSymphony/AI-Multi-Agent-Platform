@@ -49,6 +49,41 @@ Supported Stage 1 query features include:
 
 Later domains are added only after their owning canonical APIs exist. Search must not invent a second schema authority for Agents, Files, Knowledge, Connectors, Conversations, Verification, Organizations or future domains.
 
+## CLI and frontend clients
+
+Both user-facing clients consume the same canonical `GET /api/v1/search` endpoint. Neither client has a private index, backend-specific search path or frontend-only authorization filter.
+
+### CLI
+
+The platform CLI exposes:
+
+```text
+platform search [QUERY]
+```
+
+It supports the canonical Stage 1 filters directly, including:
+
+- `--id` for exact canonical identity lookup;
+- repeated or comma-separated `--type`, `--status`, `--tag`, `--source` and `--provider` values;
+- `--project-id` and `--workspace-id` scopes;
+- `--updated-after` and `--updated-before`;
+- `--mode`, `--limit`, `--cursor`, `--sort` and `--direction`.
+
+The CLI forwards these values to `/search` and leaves canonical validation and authorization to the Control Plane. A provider's `unsupported_capability` or canonical unavailable response is preserved rather than hidden or replaced by client-side behavior.
+
+### Frontend
+
+The existing `/search` navigation entry is backed by a global Search page that:
+
+- calls only the typed Control Plane `search(...)` client method;
+- exposes keyword/exact-ID, scope, type, status/tag, provenance, time, mode and pagination controls;
+- renders only the authorization-filtered `SearchPage` returned by the Control Plane;
+- clearly indicates when optional semantic/hybrid modes are unsupported;
+- reuses canonical provider-unavailable error presentation;
+- links known resource types to their canonical UI routes using the result's canonical type and ID.
+
+Known Project, Workspace, Task, Run, Artifact, Result, Plan, Step, Model and Model-Provider results can navigate to their existing canonical UI route. Unknown future types are not assigned invented client routes; their canonical API reference remains visible until that domain's UI integration exists.
+
 ## Synchronization semantics
 
 The provider boundary supports:
@@ -68,7 +103,7 @@ Authorization-aware search is a Control Plane/application concern above the raw 
 The request path is:
 
 ```text
-Client / Agent
+CLI / Frontend / Agent
     -> Control Plane Search API
     -> SearchProvider candidate discovery
     -> canonical authorization checks for each candidate
@@ -82,14 +117,15 @@ The baseline `SearchService` scans provider candidates and applies canonical aut
 
 - A SearchProvider outage is returned through the canonical error contract (for example `503 unavailable` when retryable).
 - Unsupported optional query modes return `unsupported_capability` rather than silently changing semantics.
+- The CLI preserves those canonical errors.
+- The frontend distinguishes optional-mode degradation from general request/provider failures.
 - The baseline has no dependency on Registry connectivity, embeddings, vector databases or paid search services.
 
 ## Remaining #45 integrations
 
-Stage 1 establishes the secure canonical search surface. Future work in #45 can add:
+The secure Stage 1 surface plus CLI/frontend clients establish one canonical discovery path. Future work in #45 can add:
 
 - progressive indexing for Agents/Teams, Models/Capabilities, Files/Memory/Knowledge, Connectors, Conversations, Verification, Organizations, Templates and other domains after their canonical APIs are available;
 - richer domain-specific filters such as Task priority/deadline/assignment once owned by the corresponding canonical domain;
-- CLI search command and frontend global-search UI consuming `/api/v1/search`;
 - durable/event-driven indexing and stale-index checkpoints for larger deployments;
 - optional semantic/hybrid provider adapters without making them baseline requirements.
