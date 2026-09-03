@@ -144,6 +144,35 @@ def test_approval_checked_capability_version_is_pinned_through_mapping_and_run()
     asyncio.run(scenario())
 
 
+def test_agent_run_capability_version_pin_cannot_be_rewritten() -> None:
+    async def scenario() -> None:
+        repository = InMemoryAgentRepository()
+        service = AgentService(repository)
+        agent_id = _approval_agent(service)
+        registry = CapabilityRegistry()
+        await registry.register_provider(VersionedApprovalEchoProvider())
+        runtime = AgentRuntime(service, capability_registry=registry)
+        record = await runtime.start_agent(
+            task_id=new_id("task"),
+            run_id=new_id("run"),
+            agent_id=agent_id,
+        )
+
+        with pytest.raises(ContractError) as exc_info:
+            repository.update_agent_run(
+                replace(
+                    record,
+                    capability_versions={ECHO_CAPABILITY_ID: "2.0"},
+                )
+            )
+
+        assert exc_info.value.code is ErrorCode.CONTRACT_VIOLATION
+        persisted = repository.get_agent_run(record.agent_run_id)
+        assert dict(persisted.capability_versions) == {ECHO_CAPABILITY_ID: "1.0"}
+
+    asyncio.run(scenario())
+
+
 def test_memory_and_knowledge_scope_enforcement_rejects_unassigned_access() -> None:
     service = AgentService(InMemoryAgentRepository())
     allowed_source = new_id("knowledge_source")
