@@ -19,6 +19,7 @@ export type RunStatus =
   | "cancelled"
   | "timed_out";
 export type MeasurementQuality = "measured" | "reported" | "estimated" | "unavailable";
+export type AggregationMode = "additive" | "latest";
 
 export interface Page<T> {
   items: T[];
@@ -191,6 +192,7 @@ export interface CanonicalUsageRecord {
   quantity: number | null;
   unit: string;
   quality: MeasurementQuality;
+  aggregation_mode: AggregationMode;
   source: string;
   provider: string | null;
   timestamp: string;
@@ -214,6 +216,7 @@ export interface CanonicalUsageAggregate {
   record_count: number;
   unavailable_count: number;
   quality_counts: Record<MeasurementQuality, number>;
+  aggregation_mode: AggregationMode;
 }
 
 export interface CanonicalUsageBudget {

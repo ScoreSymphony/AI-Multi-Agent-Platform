@@ -19,3 +19,10 @@ This progressive slice connects the completed #13 FileProvider contract to the #
 This does not yet account for WorkspaceSnapshot logical storage, Knowledge/index storage, network transfer, remote Worker/Node storage, or physical backend allocation/replication overhead. Those quantities require their owning domains to expose reliable semantics before #76 records them.
 
 Issue #76 remains open for the other progressive measurement sources and Resources UI.
+
+
+## Control Plane and UI contract follow-up
+
+The versioned Control Plane now has explicit HTTP regression coverage proving that registered `usage-records`, `usage-aggregates` and `usage-budgets` appear in the manifest/OpenAPI and return the owner-isolated accounting resources consumed by the existing `/usage` frontend page.
+
+The record and aggregate wire resources expose `aggregation_mode`. The frontend therefore distinguishes `additive` consumption from `latest` point-in-time gauges instead of labelling every aggregate as a total.

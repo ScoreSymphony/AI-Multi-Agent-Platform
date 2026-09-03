@@ -206,8 +206,8 @@ export function UsagePage({
       {runtimeManifest.resources.includes("usage-aggregates") ? (
         <Card title="Aggregates">
           <p className="muted">
-            Totals remain separated by metric and unit. The UI does not combine unlike units or
-            currencies.
+            Values remain separated by metric and unit. Additive metrics are summed; latest-mode
+            metrics show current point-in-time state. The UI does not combine unlike units or currencies.
           </p>
           {loading && !aggregates ? (
             <LoadingState />
@@ -242,13 +242,14 @@ function UsageRecordTable({ records }: { records: CanonicalUsageRecord[] }) {
     <div className="table-wrap">
       <table>
         <thead>
-          <tr><th>Metric</th><th>Quantity</th><th>Quality</th><th>Scope</th><th>Cost</th><th>Source</th><th>Time</th></tr>
+          <tr><th>Metric</th><th>Quantity</th><th>Mode</th><th>Quality</th><th>Scope</th><th>Cost</th><th>Source</th><th>Time</th></tr>
         </thead>
         <tbody>
           {records.map((record) => (
             <tr key={record.id}>
               <td><strong>{record.metric_type}</strong><div><code>{record.id}</code></div></td>
               <td>{formatQuantity(record.quantity, record.unit)}</td>
+              <td>{record.aggregation_mode}</td>
               <td><StatusBadge value={record.quality} /></td>
               <td>{scopeSummary(record.scope)}</td>
               <td>{formatCost(record)}</td>
@@ -267,12 +268,13 @@ function UsageAggregateTable({ aggregates }: { aggregates: CanonicalUsageAggrega
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr><th>Metric</th><th>Total</th><th>Records</th><th>Quality mix</th></tr></thead>
+        <thead><tr><th>Metric</th><th>Value</th><th>Mode</th><th>Records</th><th>Quality mix</th></tr></thead>
         <tbody>
           {aggregates.map((aggregate) => (
             <tr key={aggregate.id}>
               <td>{aggregate.metric_type}</td>
               <td>{formatQuantity(aggregate.total, aggregate.unit)}</td>
+              <td>{aggregate.aggregation_mode}</td>
               <td>{aggregate.record_count}</td>
               <td>{qualitySummary(aggregate.quality_counts)}</td>
             </tr>
