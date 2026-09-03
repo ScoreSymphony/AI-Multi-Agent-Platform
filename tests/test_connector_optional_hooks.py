@@ -44,6 +44,10 @@ def test_optional_connector_hooks_fail_explicitly_when_not_supported() -> None:
             native_id="alpha",
         ),
     )
+    subscription = ExternalNativeReference(
+        namespace=REFERENCE_CONNECTOR_TYPE,
+        native_id="subscription-1",
+    )
     query = ConnectorResourceQuery(
         connection_id=connection.id,
         resource_type="record",
@@ -53,6 +57,19 @@ def test_optional_connector_hooks_fail_explicitly_when_not_supported() -> None:
 
     operations: tuple[tuple[str, Coroutine[Any, Any, object]], ...] = (
         ("resource.search", provider.search_resources(query)),
+        (
+            "event.subscribe",
+            provider.subscribe_events(
+                connection,
+                ("record.changed",),
+                configuration={},
+                context=context,
+            ),
+        ),
+        (
+            "event.unsubscribe",
+            provider.unsubscribe_events(connection, subscription, context=context),
+        ),
         (
             "event.normalize",
             provider.normalize_external_event(connection, {"event": "changed"}, context),
