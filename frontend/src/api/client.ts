@@ -24,6 +24,12 @@ import type {
   TimelineItem,
 } from "./types";
 import type { CanonicalReference, ReferenceCollection } from "./references";
+import {
+  buildTerminalStreamUrl,
+  type CanonicalTerminalSession,
+  type CreateTerminalSessionInput,
+  type TerminalDimensions,
+} from "./terminal";
 
 export interface AuthBoundary {
   getAccessToken?: () => Promise<string | null>;
@@ -239,6 +245,62 @@ export class ControlPlaneClient {
 
   listUsageBudgets(query: ListQuery = {}): Promise<Page<CanonicalUsageBudget>> {
     return this.request<Page<CanonicalUsageBudget>>(`/usage-budgets${toQuery(query)}`);
+  }
+
+  listTerminalSessions(query: ListQuery = {}): Promise<Page<CanonicalTerminalSession>> {
+    return this.request<Page<CanonicalTerminalSession>>(`/terminal-sessions${toQuery(query)}`);
+  }
+
+  getTerminalSession(sessionId: string): Promise<CanonicalTerminalSession> {
+    return this.request<CanonicalTerminalSession>(
+      `/terminal-sessions/${encodeURIComponent(sessionId)}`,
+    );
+  }
+
+  createTerminalSession(
+    projectId: string,
+    input: CreateTerminalSessionInput,
+  ): Promise<CanonicalTerminalSession> {
+    return this.command<CanonicalTerminalSession>("/commands/terminal.session.create", {
+      body: { resource_ref: projectId, ...input },
+    });
+  }
+
+  sendTerminalInput(
+    sessionId: string,
+    data: string,
+    approvalId?: string,
+  ): Promise<CanonicalTerminalSession> {
+    return this.command<CanonicalTerminalSession>("/commands/terminal.session.input", {
+      body: { resource_ref: sessionId, data, approval_id: approvalId },
+    });
+  }
+
+  resizeTerminalSession(
+    sessionId: string,
+    dimensions: TerminalDimensions,
+  ): Promise<CanonicalTerminalSession> {
+    return this.command<CanonicalTerminalSession>("/commands/terminal.session.resize", {
+      body: { resource_ref: sessionId, ...dimensions },
+    });
+  }
+
+  terminateTerminalSession(
+    sessionId: string,
+    reason?: string,
+    approvalId?: string,
+  ): Promise<CanonicalTerminalSession> {
+    return this.command<CanonicalTerminalSession>("/commands/terminal.session.terminate", {
+      body: { resource_ref: sessionId, reason, approval_id: approvalId },
+    });
+  }
+
+  terminalStreamUrl(
+    sessionId: string,
+    afterSequence = 0,
+    pageOrigin?: string,
+  ): string {
+    return buildTerminalStreamUrl(this.baseUrl, sessionId, afterSequence, pageOrigin);
   }
 
   private command<T>(
