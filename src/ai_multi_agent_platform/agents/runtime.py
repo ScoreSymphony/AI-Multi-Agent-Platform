@@ -60,6 +60,7 @@ class ReferenceOrchestratorMapper:
                 "agent_id": agent.agent_id,
                 "agent_revision": agent.revision,
                 "run_id": spec.run_id,
+                "capability_versions": dict(spec.capability_versions),
             },
         )
 
@@ -106,7 +107,7 @@ class AgentRuntime:
 
         requirements = self._effective_model_requirements(agent, task_model_override)
         model_id, provider_id = self._resolve_model(agent, requirements)
-        capability_ids = self._resolve_capabilities(
+        capability_ids, capability_versions = self._resolve_capabilities(
             agent,
             requested_capability_ids=requested_capability_ids,
             shared_capability_ids=shared_capability_ids,
@@ -119,6 +120,7 @@ class AgentRuntime:
             run_id=run_id,
             agent_revision=agent,
             capability_ids=capability_ids,
+            capability_versions=capability_versions,
             selected_model_config_id=model_id,
             selected_provider_id=provider_id,
             team_revision=team_revision,
@@ -351,7 +353,7 @@ class AgentRuntime:
         available_capability_ids: frozenset[str],
         granted_permissions: frozenset[str],
         available_worker_capabilities: frozenset[str],
-    ) -> tuple[str, ...]:
+    ) -> tuple[tuple[str, ...], Mapping[str, str]]:
         policy = agent.profile.capabilities
         effective = set(policy.required_ids)
         effective.update(requested_capability_ids)
@@ -394,17 +396,18 @@ class AgentRuntime:
                     "Agent requires capabilities that are not available in the reference runtime",
                     details={"capability_ids": cast(JsonValue, sorted(missing))},
                 )
-            return tuple(sorted(effective))
+            return tuple(sorted(effective)), {}
 
+        versions: dict[str, str] = {}
         for capability_id in sorted(effective):
             constraint = constraints.get(capability_id)
-            self._resolve_registered_capability(
+            versions[capability_id] = self._resolve_registered_capability(
                 capability_id,
                 constraint,
                 granted_permissions=granted_permissions,
                 available_worker_capabilities=available_worker_capabilities,
             )
-        return tuple(sorted(effective))
+        return tuple(sorted(effective)), versions
 
     def _resolve_registered_capability(
         self,
@@ -413,7 +416,7 @@ class AgentRuntime:
         *,
         granted_permissions: frozenset[str],
         available_worker_capabilities: frozenset[str],
-    ) -> None:
+    ) -> str:
         assert self.capability_registry is not None
         exact_version = constraint.exact_version if constraint is not None else None
         compatibility: CapabilityCompatibilityRequest | None = None
@@ -452,6 +455,7 @@ class AgentRuntime:
                         ),
                     },
                 )
+        return registration.capability.version
 
     @staticmethod
     def _record_from_spec(
@@ -477,6 +481,7 @@ class AgentRuntime:
             selected_model_config_id=spec.selected_model_config_id,
             selected_provider_id=spec.selected_provider_id,
             capability_ids=spec.capability_ids,
+            capability_versions=spec.capability_versions,
             orchestrator_adapter_id=mapping.adapter_id,
             orchestrator_runtime_ref=mapping.runtime_ref,
             telemetry={"orchestrator_mapping": dict(mapping.metadata)},
