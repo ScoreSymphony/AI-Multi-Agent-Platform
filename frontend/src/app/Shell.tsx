@@ -8,10 +8,10 @@ import { AppLink, matchPath, useRouter } from "./router";
 import {
   OverviewPage,
   RunDetailPage,
-  RunsPage,
   TaskDetailPage,
   UnavailablePage,
 } from "../pages/Pages";
+import { RunsPage } from "../pages/RunListPage";
 import {
   ModelDetailPage,
   ModelProviderDetailPage,
