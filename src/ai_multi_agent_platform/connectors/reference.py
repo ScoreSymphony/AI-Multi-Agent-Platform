@@ -56,12 +56,8 @@ class ReferenceConnectorProvider(ConnectorProvider):
             "alpha": {"value": "A"},
             "beta": {"value": "B"},
         }
-        self._resource_ids = {
-            native_id: new_id("external_resource") for native_id in self._records
-        }
-        self._event_ids = {
-            native_id: new_id("connector_event") for native_id in self._records
-        }
+        self._resource_ids = {native_id: new_id("external_resource") for native_id in self._records}
+        self._event_ids = {native_id: new_id("connector_event") for native_id in self._records}
 
     @property
     def definition(self) -> ConnectorDefinition:
@@ -206,9 +202,7 @@ class ReferenceConnectorProvider(ConnectorProvider):
             )
         return self._resource(connection.id, native_id)
 
-    async def invoke_action(
-        self, invocation: ConnectorActionInvocation
-    ) -> ConnectorActionResult:
+    async def invoke_action(self, invocation: ConnectorActionInvocation) -> ConnectorActionResult:
         self._require_connection(invocation.connection_id)
         self._require_available()
         if invocation.action != REFERENCE_ACTION:
@@ -247,7 +241,9 @@ class ReferenceConnectorProvider(ConnectorProvider):
             )
         selected = native_ids[start:]
         now = datetime.now(UTC)
-        resources = tuple(self._resource(request.connection_id, native_id) for native_id in selected)
+        resources = tuple(
+            self._resource(request.connection_id, native_id) for native_id in selected
+        )
         events = tuple(
             ConnectorEvent(
                 id=self._event_ids[native_id],
