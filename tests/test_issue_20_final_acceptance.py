@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
+import ai_multi_agent_platform.contracts.errors as contract_errors
 import ai_multi_agent_platform.plugins as plugins
-from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
 
 REQUIRED_EXTENSION_TYPES = {
@@ -72,9 +72,9 @@ def test_manifest_v1_requires_explicit_capability_declarations() -> None:
 
     missing = dict(document)
     del missing["capabilities"]
-    with pytest.raises(ContractError) as caught:
+    with pytest.raises(contract_errors.ContractError) as caught:
         plugins.validate_manifest_document(missing)
-    assert caught.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert caught.value.code is contract_errors.ErrorCode.INVALID_CONFIGURATION
 
 
 def test_manifest_v1_accepts_transport_and_configuration_extensions() -> None:
