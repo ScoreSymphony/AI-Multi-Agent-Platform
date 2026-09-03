@@ -126,8 +126,7 @@ def test_kernel_uses_hermes_for_planning_and_reference_executor_for_execution(
         assert any(event.event_type == "plan.created" for event in history)
         plan_event = next(event for event in history if event.event_type == "plan.created")
         assert any(
-            item.namespace == "hermes"
-            and item.values["external_run_id"] == "run_hermes_e2e"
+            item.namespace == "hermes" and item.values["external_run_id"] == "run_hermes_e2e"
             for item in plan_event.adapter_metadata
         )
         assert run.run.id.startswith("run_")
