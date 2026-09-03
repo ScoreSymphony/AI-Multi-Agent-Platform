@@ -52,6 +52,12 @@ from .worker_protocol import (
     WorkerRequestAuthenticator,
     WorkerRequestCredentials,
 )
+from .workspace import (
+    MaterializingWorkerDispatcher,
+    WorkerWorkspaceResolver,
+    WorkspaceDispatchEvidence,
+    WorkspaceJobMaterializationResolver,
+)
 
 __all__ = [
     "DISTRIBUTED_ADMIN_COMMANDS",
@@ -77,6 +83,7 @@ __all__ = [
     "JobResultStatus",
     "JsonDistributedStateStore",
     "LocalWorker",
+    "MaterializingWorkerDispatcher",
     "NoEligibleWorkerError",
     "NodeRecord",
     "NodeResourceService",
@@ -105,5 +112,8 @@ __all__ = [
     "WorkerRequestCredentials",
     "WorkerResourceService",
     "WorkerStatus",
+    "WorkerWorkspaceResolver",
+    "WorkspaceDispatchEvidence",
+    "WorkspaceJobMaterializationResolver",
     "register_distributed_control_plane",
 ]
