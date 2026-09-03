@@ -149,7 +149,7 @@ class PluginManifest:
         _require_id(self.plugin_id, "plugin_id")
         _require_non_blank(self.name, "name")
         _require_non_blank(self.description, "description")
-        _require_non_blank(self.plugin_version, "plugin_version")
+        _require_numeric_version(self.plugin_version, "plugin_version")
         _require_non_blank(self.author, "author")
         _require_non_blank(self.manifest_version, "manifest_version")
         extension_ids = [extension.extension_id for extension in self.extensions]
