@@ -59,6 +59,7 @@ def reference_manifest() -> PluginManifest:
                 metadata={"capability_id": REFERENCE_CAPABILITY_ID},
             ),
         ),
+        capabilities=(REFERENCE_CAPABILITY_ID,),
         requested_permissions=frozenset({PluginPermission.CAPABILITY_REGISTRATION}),
         configuration_schema={
             "$schema": "https://json-schema.org/draft/2020-12/schema",
