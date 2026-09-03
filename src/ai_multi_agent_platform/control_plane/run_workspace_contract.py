@@ -122,7 +122,9 @@ class ControlPlane(_WorkspaceControlPlane):
         workspace: Workspace | None = None
         snapshot: WorkspaceSnapshot | None = None
         if explicit_binding:
-            workspace, snapshot = await self._resolve_workspace_input(context, task_id, payload or {})
+            workspace, snapshot = await self._resolve_workspace_input(
+                context, task_id, payload or {}
+            )
 
         run = await self._kernel.retry_task(
             idempotency_key=key,
@@ -165,9 +167,7 @@ class ControlPlane(_WorkspaceControlPlane):
         *,
         task_id: str | None = None,
     ) -> dict[str, JsonValue]:
-        return await self._decorate_binding(
-            await super().get_run(context, run_id, task_id=task_id)
-        )
+        return await self._decorate_binding(await super().get_run(context, run_id, task_id=task_id))
 
     async def _resolve_workspace_input(
         self,
@@ -191,7 +191,9 @@ class ControlPlane(_WorkspaceControlPlane):
                 ErrorCode.CONFLICT,
                 "Run workspace must belong to the same project as the Task",
             )
-        snapshot_id = _optional_string(payload, "workspace_snapshot_id") or workspace.base_snapshot_id
+        snapshot_id = (
+            _optional_string(payload, "workspace_snapshot_id") or workspace.base_snapshot_id
+        )
         if snapshot_id is None:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
