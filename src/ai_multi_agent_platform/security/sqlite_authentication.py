@@ -73,7 +73,9 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
             on_set=self._persist_user,
             on_delete=lambda key: self._delete("auth_users", "user_id", key),
         )
-        self.usernames = {account.username.strip().casefold(): account.user_id for account in users.values()}
+        self.usernames = {
+            account.username.strip().casefold(): account.user_id for account in users.values()
+        }
         self.sessions = _WriteThroughDict(
             sessions,
             on_set=self._persist_session,
@@ -213,9 +215,7 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
             )
         return credentials
 
-    def _load_external_mappings(
-        self,
-    ) -> dict[tuple[str, str, str], ExternalIdentityMapping]:
+    def _load_external_mappings(self) -> dict[tuple[str, str, str], ExternalIdentityMapping]:
         with self._connect() as connection:
             rows = connection.execute(
                 "SELECT provider_id, issuer, subject, user_id, linked_at "
@@ -275,7 +275,10 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
 
     def _persist_credential(self, _key: str, credential: StoredCredential) -> None:
         scope_json = json.dumps(
-            dict(credential.scope), sort_keys=True, separators=(",", ":"), ensure_ascii=False
+            dict(credential.scope),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
         )
         with self._connect() as connection:
             connection.execute(
@@ -336,7 +339,8 @@ class SqliteAuthenticationStore(InMemoryAuthenticationStore):
     def _delete_external_mapping(self, key: tuple[str, str, str]) -> None:
         with self._connect() as connection:
             connection.execute(
-                "DELETE FROM auth_external_mappings WHERE provider_id = ? AND issuer = ? AND subject = ?",
+                "DELETE FROM auth_external_mappings "
+                "WHERE provider_id = ? AND issuer = ? AND subject = ?",
                 key,
             )
 
@@ -356,15 +360,15 @@ def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def _json_mapping(value: Mapping[str, object]) -> dict[str, JsonValue]:
-    result: dict[str, JsonValue] = {}
-    for key, item in value.items():
-        if item is None or isinstance(item, str | int | float | bool):
-            result[str(key)] = item
-        elif isinstance(item, list):
-            if not all(element is None or isinstance(element, str | int | float | bool) for element in item):
-                raise ValueError("credential scope contains unsupported JSON values")
-            result[str(key)] = list(item)
-        else:
-            raise ValueError("credential scope contains unsupported JSON values")
-    return result
+def _json_mapping(value: Mapping[object, object]) -> dict[str, JsonValue]:
+    return {str(key): _json_value(item) for key, item in value.items()}
+
+
+def _json_value(value: object) -> JsonValue:
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, list):
+        return [_json_value(item) for item in value]
+    if isinstance(value, dict):
+        return {str(key): _json_value(item) for key, item in value.items()}
+    raise ValueError("credential scope contains unsupported JSON values")
