@@ -60,7 +60,10 @@ class AgentResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(_agent_resource(self.service, item.agent_id) for item in self.service.repository.list_agents())
+        return tuple(
+            _agent_resource(self.service, item.agent_id)
+            for item in self.service.repository.list_agents()
+        )
 
     async def get_resource(
         self,
@@ -81,7 +84,10 @@ class AgentTeamResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(_team_resource(self.service, item.team_id) for item in self.service.repository.list_teams())
+        return tuple(
+            _team_resource(self.service, item.team_id)
+            for item in self.service.repository.list_teams()
+        )
 
     async def get_resource(
         self,
@@ -102,7 +108,10 @@ class AgentRunResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(_agent_run_resource(item) for item in self.service.repository.list_agent_runs())
+        return tuple(
+            _agent_run_resource(item)
+            for item in self.service.repository.list_agent_runs()
+        )
 
     async def get_resource(
         self,
@@ -141,11 +150,12 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        del context
         revision = self.service.update_agent(
             resource_ref,
             _profile_from_json(_required(payload, "profile")),
             expected_revision=_required_positive_int(payload, "expected_revision"),
-            owner_ref=_optional_owner_ref(payload.get("owner_ref"), context),
+            owner_ref=_provided_owner_ref(payload.get("owner_ref")),
         )
         return _agent_resource(self.service, revision.agent_id)
 
@@ -190,8 +200,13 @@ class AgentCommandHandlers:
             run_id=_required_string(payload, "run_id"),
             agent_id=resource_ref,
             revision=_optional_positive_int(payload, "revision"),
-            requested_capability_ids=_string_tuple(payload, "requested_capability_ids"),
-            available_capability_ids=frozenset(_string_tuple(payload, "available_capability_ids")),
+            requested_capability_ids=_string_tuple(
+                payload,
+                "requested_capability_ids",
+            ),
+            available_capability_ids=frozenset(
+                _string_tuple(payload, "available_capability_ids")
+            ),
         )
         return _agent_run_resource(record)
 
@@ -216,11 +231,12 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        del context
         revision = self.service.update_team(
             resource_ref,
             _team_profile_from_json(_required(payload, "profile")),
             expected_revision=_required_positive_int(payload, "expected_revision"),
-            owner_ref=_optional_owner_ref(payload.get("owner_ref"), context),
+            owner_ref=_provided_owner_ref(payload.get("owner_ref")),
         )
         return _team_resource(self.service, revision.team_id)
 
@@ -265,8 +281,13 @@ class AgentCommandHandlers:
             run_id=_required_string(payload, "run_id"),
             team_id=resource_ref,
             revision=_optional_positive_int(payload, "revision"),
-            requested_capability_ids=_string_tuple(payload, "requested_capability_ids"),
-            available_capability_ids=frozenset(_string_tuple(payload, "available_capability_ids")),
+            requested_capability_ids=_string_tuple(
+                payload,
+                "requested_capability_ids",
+            ),
+            available_capability_ids=frozenset(
+                _string_tuple(payload, "available_capability_ids")
+            ),
         )
         items: list[JsonValue] = [_agent_run_resource(record) for record in records]
         return {"team_id": resource_ref, "agent_runs": items}
@@ -288,12 +309,18 @@ def register_agent_control_plane(
 ) -> None:
     """Register #33 resources without making Agents part of the #32 foundation."""
 
-    control_plane.register_resource_service(AGENT_COLLECTION, AgentResourceService(service))
+    control_plane.register_resource_service(
+        AGENT_COLLECTION,
+        AgentResourceService(service),
+    )
     control_plane.register_resource_service(
         AGENT_TEAM_COLLECTION,
         AgentTeamResourceService(service),
     )
-    control_plane.register_resource_service(AGENT_RUN_COLLECTION, AgentRunResourceService(service))
+    control_plane.register_resource_service(
+        AGENT_RUN_COLLECTION,
+        AgentRunResourceService(service),
+    )
     handlers = AgentCommandHandlers(service, runtime)
     control_plane.register_command("agent.create", handlers.create_agent)
     control_plane.register_command("agent.update", handlers.update_agent)
@@ -311,8 +338,10 @@ def register_agent_control_plane(
 
 def _agent_resource(service: AgentService, agent_id: str) -> dict[str, JsonValue]:
     definition = service.repository.get_agent(agent_id)
-    revision = service.repository.get_agent_revision(agent_id, definition.current_revision)
-    payload = json_object(revision)
+    revision = service.repository.get_agent_revision(
+        agent_id,
+        definition.current_revision,
+    )
     return {
         "id": agent_id,
         "type": "agent",
@@ -322,13 +351,16 @@ def _agent_resource(service: AgentService, agent_id: str) -> dict[str, JsonValue
         "owner_ref": json_object(definition.owner_ref),
         "created_at": definition.created_at.isoformat(),
         "updated_at": definition.updated_at.isoformat(),
-        "revision": payload,
+        "revision": json_object(revision),
     }
 
 
 def _team_resource(service: AgentService, team_id: str) -> dict[str, JsonValue]:
     definition = service.repository.get_team(team_id)
-    revision = service.repository.get_team_revision(team_id, definition.current_revision)
+    revision = service.repository.get_team_revision(
+        team_id,
+        definition.current_revision,
+    )
     return {
         "id": team_id,
         "type": "agent_team",
@@ -352,23 +384,43 @@ def _agent_run_resource(record: object) -> dict[str, JsonValue]:
 
 def _profile_from_json(value: object) -> AgentProfile:
     data = _mapping(value, "profile")
-    instructions = _mapping(_required(data, "instructions"), "profile.instructions")
+    instructions = _mapping(
+        _required(data, "instructions"),
+        "profile.instructions",
+    )
     role_source = _instruction_source(_required(instructions, "role"))
 
     model_data = _mapping(data.get("model", {}), "profile.model")
-    requirements_data = _mapping(model_data.get("requirements", {}), "profile.model.requirements")
+    requirements_data = _mapping(
+        model_data.get("requirements", {}),
+        "profile.model.requirements",
+    )
     requirements = RoutingRequirements(
         explicit_model_id=_optional_string(requirements_data, "explicit_model_id"),
-        min_context_window=_optional_positive_int(requirements_data, "min_context_window"),
+        min_context_window=_optional_positive_int(
+            requirements_data,
+            "min_context_window",
+        ),
         tool_calling=_boolean(requirements_data, "tool_calling", False),
-        structured_output=_boolean(requirements_data, "structured_output", False),
+        structured_output=_boolean(
+            requirements_data,
+            "structured_output",
+            False,
+        ),
         streaming=_boolean(requirements_data, "streaming", False),
         modalities=_string_tuple(requirements_data, "modalities"),
         reasoning=_string_tuple(requirements_data, "reasoning"),
         local_only=_boolean(requirements_data, "local_only", False),
-        self_hosted_only=_boolean(requirements_data, "self_hosted_only", False),
+        self_hosted_only=_boolean(
+            requirements_data,
+            "self_hosted_only",
+            False,
+        ),
     )
-    fallback_raw = _optional_string(model_data, "fallback") or ModelFallbackPolicy.FAIL.value
+    fallback_raw = (
+        _optional_string(model_data, "fallback")
+        or ModelFallbackPolicy.FAIL.value
+    )
     model = AgentModelPolicy(
         requirements=requirements,
         routing_profile_ref=_optional_string(model_data, "routing_profile_ref"),
@@ -376,37 +428,66 @@ def _profile_from_json(value: object) -> AgentProfile:
         fallback=ModelFallbackPolicy(fallback_raw),
     )
 
-    capability_data = _mapping(data.get("capabilities", {}), "profile.capabilities")
+    capability_data = _mapping(
+        data.get("capabilities", {}),
+        "profile.capabilities",
+    )
     constraints_raw = capability_data.get("constraints", [])
     if not isinstance(constraints_raw, list | tuple):
         raise ValueError("profile.capabilities.constraints must be an array")
-    constraints = tuple(_capability_constraint(item) for item in constraints_raw)
     capabilities = AgentCapabilityPolicy(
         allowed=_string_tuple(capability_data, "allowed"),
         denied=_string_tuple(capability_data, "denied"),
-        constraints=constraints,
+        constraints=tuple(
+            _capability_constraint(item) for item in constraints_raw
+        ),
     )
 
-    data_access_raw = _mapping(data.get("data_access", {}), "profile.data_access")
-    memory_scopes = tuple(
-        MemoryScope(value) for value in _string_tuple(data_access_raw, "memory_scopes")
+    data_access_raw = _mapping(
+        data.get("data_access", {}),
+        "profile.data_access",
     )
     data_access = AgentDataAccess(
-        memory_scopes=memory_scopes,
-        memory_config_refs=_string_tuple(data_access_raw, "memory_config_refs"),
-        knowledge_source_ids=_string_tuple(data_access_raw, "knowledge_source_ids"),
-        allow_user_memory=_boolean(data_access_raw, "allow_user_memory", False),
+        memory_scopes=tuple(
+            MemoryScope(item)
+            for item in _string_tuple(data_access_raw, "memory_scopes")
+        ),
+        memory_config_refs=_string_tuple(
+            data_access_raw,
+            "memory_config_refs",
+        ),
+        knowledge_source_ids=_string_tuple(
+            data_access_raw,
+            "knowledge_source_ids",
+        ),
+        allow_user_memory=_boolean(
+            data_access_raw,
+            "allow_user_memory",
+            False,
+        ),
     )
 
-    workspace_data = _mapping(data.get("workspace_defaults", {}), "profile.workspace_defaults")
-    hooks_data = _mapping(data.get("policy_hooks", {}), "profile.policy_hooks")
+    workspace_data = _mapping(
+        data.get("workspace_defaults", {}),
+        "profile.workspace_defaults",
+    )
+    hooks_data = _mapping(
+        data.get("policy_hooks", {}),
+        "profile.policy_hooks",
+    )
     return AgentProfile(
         name=_required_string(data, "name"),
         role=_required_string(data, "role"),
         instructions=AgentInstructions(
             role=role_source,
-            platform_constraint_refs=_string_tuple(instructions, "platform_constraint_refs"),
-            project_instruction_refs=_string_tuple(instructions, "project_instruction_refs"),
+            platform_constraint_refs=_string_tuple(
+                instructions,
+                "platform_constraint_refs",
+            ),
+            project_instruction_refs=_string_tuple(
+                instructions,
+                "project_instruction_refs",
+            ),
         ),
         description=_optional_string(data, "description") or "",
         model=model,
@@ -417,10 +498,19 @@ def _profile_from_json(value: object) -> AgentProfile:
             workspace_id=_optional_string(workspace_data, "workspace_id"),
         ),
         policy_hooks=AgentPolicyHooks(
-            authorization_profile_ref=_optional_string(hooks_data, "authorization_profile_ref"),
-            verification_policy_refs=_string_tuple(hooks_data, "verification_policy_refs"),
+            authorization_profile_ref=_optional_string(
+                hooks_data,
+                "authorization_profile_ref",
+            ),
+            verification_policy_refs=_string_tuple(
+                hooks_data,
+                "verification_policy_refs",
+            ),
         ),
-        resource_hints=_json_mapping(data.get("resource_hints", {}), "profile.resource_hints"),
+        resource_hints=_json_mapping(
+            data.get("resource_hints", {}),
+            "profile.resource_hints",
+        ),
         enabled=_boolean(data, "enabled", True),
         metadata=_json_mapping(data.get("metadata", {}), "profile.metadata"),
     )
@@ -431,23 +521,31 @@ def _team_profile_from_json(value: object) -> AgentTeamProfile:
     members_raw = data.get("members")
     if not isinstance(members_raw, list | tuple) or not members_raw:
         raise ValueError("team profile.members must be a non-empty array")
-    members = tuple(_team_member(item) for item in members_raw)
     policy_raw = (
         _optional_string(data, "unavailable_member_policy")
         or UnavailableMemberPolicy.FAIL.value
     )
     return AgentTeamProfile(
         name=_required_string(data, "name"),
-        members=members,
+        members=tuple(_team_member(item) for item in members_raw),
         description=_optional_string(data, "description") or "",
-        coordination_policy_ref=_optional_string(data, "coordination_policy_ref"),
+        coordination_policy_ref=_optional_string(
+            data,
+            "coordination_policy_ref",
+        ),
         leader_agent_id=_optional_string(data, "leader_agent_id"),
         shared_capability_ids=_string_tuple(data, "shared_capability_ids"),
-        max_parallel_agents=_optional_positive_int(data, "max_parallel_agents"),
+        max_parallel_agents=_optional_positive_int(
+            data,
+            "max_parallel_agents",
+        ),
         max_steps=_optional_positive_int(data, "max_steps"),
         unavailable_member_policy=UnavailableMemberPolicy(policy_raw),
         enabled=_boolean(data, "enabled", True),
-        metadata=_json_mapping(data.get("metadata", {}), "team profile.metadata"),
+        metadata=_json_mapping(
+            data.get("metadata", {}),
+            "team profile.metadata",
+        ),
     )
 
 
@@ -475,7 +573,10 @@ def _capability_constraint(value: object) -> CapabilityConstraint:
 
 def _team_member(value: object) -> AgentTeamMember:
     data = _mapping(value, "team member")
-    agent_data = _mapping(_required(data, "agent"), "team member.agent")
+    agent_data = _mapping(
+        _required(data, "agent"),
+        "team member.agent",
+    )
     return AgentTeamMember(
         agent=AgentRevisionRef(
             agent_id=_required_string(agent_data, "agent_id"),
@@ -488,22 +589,33 @@ def _team_member(value: object) -> AgentTeamMember:
 
 
 def _owner_ref(value: object | None, context: RequestContext) -> OwnerRef:
-    parsed = _optional_owner_ref(value, context)
-    if parsed is None:
-        raise ValueError("owner_ref is required when actor owner context is unavailable")
-    return parsed
+    if value is not None:
+        parsed = _provided_owner_ref(value)
+        assert parsed is not None
+        return parsed
+    if context.actor.owner_type is None or context.actor.owner_id is None:
+        raise ValueError(
+            "owner_ref is required when actor owner context is unavailable"
+        )
+    return OwnerRef(
+        type=context.actor.owner_type,
+        id=context.actor.owner_id,
+    )
 
 
-def _optional_owner_ref(value: object | None, context: RequestContext) -> OwnerRef | None:
+def _provided_owner_ref(value: object | None) -> OwnerRef | None:
     if value is None:
-        if context.actor.owner_type is None or context.actor.owner_id is None:
-            return None
-        return OwnerRef(type=context.actor.owner_type, id=context.actor.owner_id)
+        return None
     data = _mapping(value, "owner_ref")
     raw_type = _required_string(data, "type")
     if raw_type not in {"user", "organization", "team", "service"}:
-        raise ValueError("owner_ref.type must be user, organization, team or service")
-    owner_type = cast(Literal["user", "organization", "team", "service"], raw_type)
+        raise ValueError(
+            "owner_ref.type must be user, organization, team or service"
+        )
+    owner_type = cast(
+        Literal["user", "organization", "team", "service"],
+        raw_type,
+    )
     return OwnerRef(type=owner_type, id=_required_string(data, "id"))
 
 
@@ -522,8 +634,7 @@ def _mapping(value: object, name: str) -> Mapping[str, object]:
 
 
 def _json_mapping(value: object, name: str) -> Mapping[str, JsonValue]:
-    data = _mapping(value, name)
-    return cast(Mapping[str, JsonValue], data)
+    return cast(Mapping[str, JsonValue], _mapping(value, name))
 
 
 def _required(mapping: Mapping[str, object], name: str) -> object:
@@ -539,7 +650,10 @@ def _required_string(mapping: Mapping[str, object], name: str) -> str:
     return value
 
 
-def _optional_string(mapping: Mapping[str, object], name: str) -> str | None:
+def _optional_string(
+    mapping: Mapping[str, object],
+    name: str,
+) -> str | None:
     value = mapping.get(name)
     if value is None:
         return None
@@ -548,7 +662,11 @@ def _optional_string(mapping: Mapping[str, object], name: str) -> str | None:
     return value
 
 
-def _boolean(mapping: Mapping[str, object], name: str, default: bool) -> bool:
+def _boolean(
+    mapping: Mapping[str, object],
+    name: str,
+    default: bool,
+) -> bool:
     value = mapping.get(name, default)
     if not isinstance(value, bool):
         raise ValueError(f"{name} must be boolean")
@@ -562,7 +680,10 @@ def _required_positive_int(mapping: Mapping[str, object], name: str) -> int:
     return value
 
 
-def _optional_positive_int(mapping: Mapping[str, object], name: str) -> int | None:
+def _optional_positive_int(
+    mapping: Mapping[str, object],
+    name: str,
+) -> int | None:
     value = mapping.get(name)
     if value is None:
         return None
@@ -571,9 +692,14 @@ def _optional_positive_int(mapping: Mapping[str, object], name: str) -> int | No
     return value
 
 
-def _string_tuple(mapping: Mapping[str, object], name: str) -> tuple[str, ...]:
+def _string_tuple(
+    mapping: Mapping[str, object],
+    name: str,
+) -> tuple[str, ...]:
     value = mapping.get(name, [])
-    if not isinstance(value, list | tuple) or not all(isinstance(item, str) for item in value):
+    if not isinstance(value, list | tuple):
+        raise ValueError(f"{name} must be an array of strings")
+    if not all(isinstance(item, str) for item in value):
         raise ValueError(f"{name} must be an array of strings")
     items = tuple(cast(str, item) for item in value)
     if any(not item.strip() for item in items):

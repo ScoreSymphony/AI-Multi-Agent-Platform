@@ -1,5 +1,16 @@
 """Canonical Agent definitions, versioning and runtime services."""
 
+from .control_plane import (
+    AGENT_COLLECTION,
+    AGENT_COMMANDS,
+    AGENT_RUN_COLLECTION,
+    AGENT_TEAM_COLLECTION,
+    AgentCommandHandlers,
+    AgentResourceService,
+    AgentRunResourceService,
+    AgentTeamResourceService,
+    register_agent_control_plane,
+)
 from .models import (
     AgentCapabilityPolicy,
     AgentDataAccess,
@@ -33,7 +44,12 @@ from .runtime import AgentOrchestratorMapper, AgentRuntime, ReferenceOrchestrato
 from .service import AgentService
 
 __all__ = [
+    "AGENT_COLLECTION",
+    "AGENT_COMMANDS",
+    "AGENT_RUN_COLLECTION",
+    "AGENT_TEAM_COLLECTION",
     "AgentCapabilityPolicy",
+    "AgentCommandHandlers",
     "AgentDataAccess",
     "AgentDefinition",
     "AgentExecutionSpec",
@@ -43,15 +59,18 @@ __all__ = [
     "AgentPolicyHooks",
     "AgentProfile",
     "AgentRepository",
+    "AgentResourceService",
     "AgentRevision",
     "AgentRevisionRef",
     "AgentRunRecord",
+    "AgentRunResourceService",
     "AgentRunStatus",
     "AgentRuntime",
     "AgentService",
     "AgentTeamDefinition",
     "AgentTeamMember",
     "AgentTeamProfile",
+    "AgentTeamResourceService",
     "AgentTeamRevision",
     "AgentTeamRevisionRef",
     "AgentWorkspaceDefaults",
@@ -65,4 +84,5 @@ __all__ = [
     "new_agent_id",
     "new_agent_run_id",
     "new_team_id",
+    "register_agent_control_plane",
 ]
