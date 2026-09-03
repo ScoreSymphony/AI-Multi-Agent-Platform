@@ -32,7 +32,7 @@ export const navigation: NavigationItem[] = [
   { label: "Approvals", path: "/approvals", group: "Operations", apiResource: "approvals" },
   { label: "Notifications", path: "/notifications", group: "Operations", apiResource: "notifications" },
   { label: "Events", path: "/events", group: "Operations", apiResource: "timeline" },
-  { label: "Observability", path: "/observability", group: "Operations", apiResource: "observability" },
+  { label: "Observability", path: "/observability", group: "Operations", apiResource: "timeline" },
   { label: "Usage & Limits", path: "/usage", group: "Operations", apiResource: "usage-aggregates" },
   { label: "Settings", path: "/settings", group: "Operations" },
 ];
