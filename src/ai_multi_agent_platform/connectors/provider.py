@@ -19,6 +19,7 @@ from .models import (
     ConnectorResourceQuery,
     ConnectorSyncRequest,
     ConnectorSyncResult,
+    ExternalNativeReference,
     ExternalResourceReference,
 )
 
@@ -28,8 +29,8 @@ class ConnectorProvider(ProviderContract):
 
     The baseline lifecycle/resource/action/sync methods are mandatory. Broader
     integration operations are explicit optional hooks with fail-closed defaults so
-    consumers never have to assume that every connector supports search, webhooks,
-    file transfer or knowledge ingestion.
+    consumers never have to assume that every connector supports search, subscriptions,
+    webhooks, file transfer or knowledge ingestion.
     """
 
     @property
@@ -75,6 +76,29 @@ class ConnectorProvider(ProviderContract):
     async def invoke_action(self, invocation: ConnectorActionInvocation) -> ConnectorActionResult:
         """Invoke one connector action behind canonical policy/capability paths."""
 
+    async def subscribe_events(
+        self,
+        connection: Connection,
+        event_types: tuple[str, ...],
+        *,
+        configuration: Mapping[str, JsonValue],
+        context: OperationContext,
+    ) -> ExternalNativeReference:
+        """Create a provider-native event/webhook subscription when supported."""
+
+        self._unsupported("event.subscribe")
+
+    async def unsubscribe_events(
+        self,
+        connection: Connection,
+        subscription: ExternalNativeReference,
+        *,
+        context: OperationContext,
+    ) -> None:
+        """Remove a provider-native event/webhook subscription when supported."""
+
+        self._unsupported("event.unsubscribe")
+
     async def normalize_external_event(
         self,
         connection: Connection,
@@ -87,7 +111,7 @@ class ConnectorProvider(ProviderContract):
 
     @abstractmethod
     async def synchronize(self, request: ConnectorSyncRequest) -> ConnectorSyncResult:
-        """Poll/synchronize one provider stream with explicit checkpoint state."""
+        """Poll/synchronize one provider stream with explicit checkpoint/recovery intent."""
 
     async def import_file_content(
         self,
