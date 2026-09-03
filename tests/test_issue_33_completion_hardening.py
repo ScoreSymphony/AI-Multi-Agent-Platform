@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -10,11 +11,15 @@ from ai_multi_agent_platform.agents import (
     AgentDataAccess,
     AgentInstructions,
     AgentProfile,
+    AgentRevisionRef,
     AgentRuntime,
     AgentService,
+    AgentTeamMember,
+    AgentTeamProfile,
     CapabilityConstraint,
     InMemoryAgentRepository,
     InstructionSource,
+    JsonAgentRepository,
 )
 from ai_multi_agent_platform.capabilities import (
     ECHO_CAPABILITY_ID,
@@ -28,6 +33,7 @@ from ai_multi_agent_platform.domain import OwnerRef, new_id
 
 OWNER = OwnerRef(type="user", id="issue-33-hardening")
 APPROVAL_REF = "approval:sensitive-tool"
+SHARED_RESOURCE_REF = "workspace-resource:shared-cache"
 
 
 class ApprovalEchoProvider(NativeEchoProvider):
@@ -151,3 +157,36 @@ def test_memory_and_knowledge_scope_enforcement_rejects_unassigned_access() -> N
     with pytest.raises(ContractError) as knowledge_error:
         service.ensure_knowledge_source(revision.agent_id, revision.revision, denied_source)
     assert knowledge_error.value.code is ErrorCode.FORBIDDEN
+
+
+def test_shared_team_resource_refs_survive_json_repository_restart(tmp_path: Path) -> None:
+    path = tmp_path / "agents.json"
+    repository = JsonAgentRepository(path)
+    service = AgentService(repository)
+    agent = service.create_agent(
+        AgentProfile(
+            name="Persistent team member",
+            role="worker",
+            instructions=AgentInstructions(role=InstructionSource(content="Work.")),
+        ),
+        owner_ref=OWNER,
+    )
+    team = service.create_team(
+        AgentTeamProfile(
+            name="Persistent shared-resource team",
+            members=(
+                AgentTeamMember(
+                    agent=AgentRevisionRef(agent.agent_id, agent.revision),
+                    role="worker",
+                ),
+            ),
+            shared_resource_refs=(SHARED_RESOURCE_REF,),
+        ),
+        owner_ref=OWNER,
+    )
+
+    restored = JsonAgentRepository(path)
+
+    assert restored.get_team_revision(team.team_id, 1).profile.shared_resource_refs == (
+        SHARED_RESOURCE_REF,
+    )
