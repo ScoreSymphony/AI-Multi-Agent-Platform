@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Protocol, cast
+from typing import Protocol
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
@@ -44,11 +44,7 @@ class DeliveryResult:
         safe = redact_sensitive(dict(self.metadata))
         if not isinstance(safe, dict):
             raise TypeError("delivery metadata must serialize as a JSON object")
-        object.__setattr__(
-            self,
-            "metadata",
-            MappingProxyType(cast(dict[str, JsonValue], safe)),
-        )
+        object.__setattr__(self, "metadata", MappingProxyType(safe))
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,11 +77,7 @@ class DeliveryAttempt:
         safe = redact_sensitive(dict(self.metadata))
         if not isinstance(safe, dict):
             raise TypeError("delivery attempt metadata must serialize as a JSON object")
-        object.__setattr__(
-            self,
-            "metadata",
-            MappingProxyType(cast(dict[str, JsonValue], safe)),
-        )
+        object.__setattr__(self, "metadata", MappingProxyType(safe))
 
 
 class NotificationDeliveryChannel(Protocol):
