@@ -574,7 +574,7 @@ class LiteLLMModelProvider(ModelProvider):
             raise self._invalid_response("structured LiteLLM response is not valid JSON") from exc
         if not self._is_json_value(parsed):
             raise self._invalid_response("structured LiteLLM response is not JSON-compatible")
-        return parsed
+        return cast(JsonValue, parsed)
 
     def _canonical_tool_calls(self, value: object) -> list[JsonValue]:
         if not isinstance(value, list):

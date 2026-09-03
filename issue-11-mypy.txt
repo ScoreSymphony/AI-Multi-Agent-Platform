@@ -1,2 +1,0 @@
-src/ai_multi_agent_platform/adapters/litellm.py:577: error: Returning Any from function declared to return "str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]"  [no-any-return]
-Found 1 error in 1 file (checked 83 source files)
