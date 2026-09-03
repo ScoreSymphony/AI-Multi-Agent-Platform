@@ -159,8 +159,7 @@ class ControlPlane(_BaseControlPlane):
         if notification_service is None:
             repository = notification_repository or InMemoryNotificationRepository()
             preferences = (
-                notification_preference_repository
-                or InMemoryNotificationPreferenceRepository()
+                notification_preference_repository or InMemoryNotificationPreferenceRepository()
             )
             notification_service = NotificationService(
                 repository=repository,
