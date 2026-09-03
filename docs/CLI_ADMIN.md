@@ -43,6 +43,27 @@ platform --yes model disable MODEL_ID_OR_ALIAS
 
 Model enable/disable operations use the same confirmation and idempotency rules as provider enable/disable operations.
 
+## Workspace creation
+
+The completed canonical Workspace contract now supports richer creation through the same northbound `/workspaces` endpoint:
+
+```bash
+platform workspace create \
+  --project-id PROJECT_ID \
+  --workspace-type read_only_source \
+  --access-mode read_only \
+  --retention persistent \
+  --source-refs-json '[{"kind":"empty","ref":"blank-source"}]'
+```
+
+Available workspace types are `persistent_project`, `ephemeral_task`, `isolated_run`, `read_only_source`, `cloned`, and `remote`. Access mode can be `read_write` or `read_only`. The CLI currently exposes `persistent` and `ephemeral` retention.
+
+`--workspace-id` may supply a canonical workspace ID when a caller needs deterministic identity. `--source-refs-json` and `--files-json` accept JSON arrays matching the canonical Workspace create contract. The CLI validates only that those arguments are syntactically valid JSON arrays; source kinds, references, checksums, file paths, project boundaries, source resolution, overlap detection, and snapshot construction remain authoritative in the Control Plane and Workspace service.
+
+When `--workspace-type`, `--access-mode`, or `--retention` is omitted, the CLI does not manufacture defaults. The server applies canonical defaults, including read-only access for `read_only_source` workspaces and ephemeral retention for `ephemeral_task` / `isolated_run` workspaces.
+
+`retention=until` exists in the Workspace domain model but is intentionally not exposed by the CLI yet. The current create contract does not carry an `expires_at` value through to the WorkspaceProvider, while the canonical model requires one for `until`; exposing the option would therefore advertise a creation form the server cannot currently satisfy.
+
 ## Task reference inspection
 
 The current Control Plane already exposes canonical references attached to Task state. The CLI now exposes them directly:
