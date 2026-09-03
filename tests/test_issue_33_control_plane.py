@@ -277,9 +277,7 @@ def test_agent_extension_is_reflected_in_manifest_and_openapi() -> None:
         for resource in ("agents", "agent-teams", "agent-runs"):
             assert resource in resources
 
-        openapi = await http.handle(
-            HTTPRequest(method="GET", path="/api/v1/openapi.json")
-        )
+        openapi = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
         assert openapi.status == 200
         assert isinstance(openapi.body, dict)
         paths = openapi.body["paths"]
