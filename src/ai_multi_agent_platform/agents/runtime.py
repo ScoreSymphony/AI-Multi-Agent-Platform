@@ -370,9 +370,7 @@ class AgentRuntime:
                 raise ContractError(
                     ErrorCode.FORBIDDEN,
                     "Agent capability request exceeds its allowlist",
-                    details={
-                        "capability_ids": cast(JsonValue, sorted(outside_allowlist))
-                    },
+                    details={"capability_ids": cast(JsonValue, sorted(outside_allowlist))},
                 )
 
         constraints = {item.capability_id: item for item in policy.constraints}
