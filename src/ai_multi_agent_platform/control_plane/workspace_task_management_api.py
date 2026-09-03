@@ -10,6 +10,7 @@ from ai_multi_agent_platform.contracts.interfaces import (
     EventProvider,
     ProviderContract,
 )
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.models import ModelRegistry
@@ -20,6 +21,7 @@ from ai_multi_agent_platform.workspaces import (
 )
 
 from .extensions import CommandHandler, ResourceService
+from .models import PageQuery, RequestContext
 from .run_workspace_contract import ControlPlane as _RunWorkspaceControlPlane
 from .run_workspace_contract import ControlPlaneHTTP as _RunWorkspaceControlPlaneHTTP
 from .run_workspace_contract import _augment_run_workspace_openapi
@@ -64,6 +66,39 @@ class ControlPlane(_RunWorkspaceControlPlane, _TaskManagementControlPlane):
         )
         if task_management is not None:
             self._task_management = task_management
+        elif workspace_provider is not None:
+            self._task_management = TaskManagementService(
+                kernel=kernel,
+                workspace_project_resolver=self._workspace_provider_project_id,
+            )
+
+    async def list_tasks(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> dict[str, JsonValue]:
+        """Keep archived/hidden Tasks out of the default product queue."""
+
+        filters = dict(query.filters or {})
+        filters.setdefault("archived", "false")
+        filters.setdefault("hidden", "false")
+        visible_query = PageQuery(
+            limit=query.limit,
+            cursor=query.cursor,
+            sort=query.sort,
+            direction=query.direction,
+            search=query.search,
+            filters=filters,
+            fields=query.fields,
+        )
+        return await super().list_tasks(context, visible_query)
+
+    async def _workspace_provider_project_id(self, workspace_id: str) -> str:
+        provider = self.workspace_provider
+        if provider is None:
+            return self._workspace_project_id(workspace_id)
+        workspace = await provider.get_workspace(workspace_id)
+        return workspace.project_id
 
 
 class ControlPlaneHTTP(_RunWorkspaceControlPlaneHTTP, _TaskManagementControlPlaneHTTP):

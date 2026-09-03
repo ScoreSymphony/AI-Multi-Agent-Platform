@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -17,7 +17,7 @@ from .models import (
     TaskPlanningMetadata,
 )
 
-WorkspaceProjectResolver = Callable[[str], str]
+WorkspaceProjectResolver = Callable[[str], str | Awaitable[str]]
 NowProvider = Callable[[], datetime]
 
 
@@ -99,7 +99,7 @@ class TaskManagementService:
                 parent = await self._kernel.get_task(metadata.parent_task_id)
                 self._require_same_project(task_id, project_id, parent)
             if metadata.workspace_id is not None and self._workspace_project_resolver is not None:
-                if self._workspace_project_resolver(metadata.workspace_id) != project_id:
+                if await self._resolve_workspace_project(metadata.workspace_id) != project_id:
                     raise ValueError("workspace must belong to the task project")
             for dependency in metadata.dependencies:
                 if dependency.task_id == task_id:
@@ -201,13 +201,37 @@ class TaskManagementService:
         actor_ref: str | None,
         source: str = "task-management",
     ) -> TaskManagementView:
-        await self._kernel.update_task(
-            idempotency_key=idempotency_key,
-            task_id=prepared.task.task_id,
-            metadata={TASK_MANAGEMENT_METADATA_KEY: prepared.metadata.to_json()},
-            actor_ref=actor_ref,
-            source=source,
-        )
+        metadata: dict[str, JsonValue] = {TASK_MANAGEMENT_METADATA_KEY: prepared.metadata.to_json()}
+        if prepared.task.status in {TaskStatus.SUCCEEDED, TaskStatus.CANCELLED}:
+            # Lifecycle-terminal Tasks still accept planning-only metadata such as
+            # archived/hidden state. Use the kernel's canonical command/event path
+            # directly so lifecycle state stays immutable while audit/idempotency
+            # and event mirroring remain identical to ordinary task.updated events.
+            await self._kernel._commit_task_command(
+                task=prepared.task,
+                key=idempotency_key,
+                operation="update_task",
+                event_specs=(
+                    (
+                        "task.updated",
+                        "task",
+                        prepared.task.task_id,
+                        {"metadata": metadata},
+                        (),
+                    ),
+                ),
+                result_id=prepared.task.task_id,
+                actor_ref=actor_ref,
+                source=source,
+            )
+        else:
+            await self._kernel.update_task(
+                idempotency_key=idempotency_key,
+                task_id=prepared.task.task_id,
+                metadata=metadata,
+                actor_ref=actor_ref,
+                source=source,
+            )
         return await self.get(prepared.task.task_id)
 
     async def update(
@@ -262,7 +286,7 @@ class TaskManagementService:
             parent = await self._kernel.get_task(metadata.parent_task_id)
             self._require_same_project(task_id, project_id, parent)
         if metadata.workspace_id is not None and self._workspace_project_resolver is not None:
-            workspace_project_id = self._workspace_project_resolver(metadata.workspace_id)
+            workspace_project_id = await self._resolve_workspace_project(metadata.workspace_id)
             if workspace_project_id != project_id:
                 raise ValueError("workspace must belong to the task project")
         seen: set[str] = set()
@@ -275,6 +299,15 @@ class TaskManagementService:
             seen.add(marker)
             prerequisite = await self._kernel.get_task(dependency.task_id)
             self._require_same_project(task_id, project_id, prerequisite)
+
+    async def _resolve_workspace_project(self, workspace_id: str) -> str:
+        resolver = self._workspace_project_resolver
+        if resolver is None:
+            raise RuntimeError("workspace resolver is not configured")
+        project = resolver(workspace_id)
+        if isinstance(project, str):
+            return project
+        return await project
 
     @staticmethod
     def _require_same_project(
