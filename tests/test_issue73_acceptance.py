@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -23,6 +24,7 @@ from ai_multi_agent_platform.terminal import (
     SessionMode,
     SessionStatus,
     SessionType,
+    TerminalFrame,
     TerminalSessionService,
 )
 
@@ -197,6 +199,135 @@ def test_backend_worker_loss_becomes_explicit_canonical_lost_session() -> None:
     assert reconciled.ended_at is not None
     assert frames[-1].final is True
     assert frames[-1].data == "worker transport lost\n"
+
+
+def test_inactivity_timeout_terminates_session_and_is_auditable() -> None:
+    project_id = new_id("project")
+    workspace_id = new_id("workspace")
+    principal = "user:timeout-test"
+    now = [datetime(2026, 9, 3, 12, 0, tzinfo=UTC)]
+    gate = AuthorizationGate(
+        LocalAuthorizationProvider((_policy(principal, project_id, workspace_id),))
+    )
+    adapter = TrackingReferenceTerminalAdapter()
+    service = TerminalSessionService(gate, (adapter,), clock=lambda: now[0])
+    operation = OperationContext(correlation_id="corr-timeout", project_id=project_id)
+    session = asyncio.run(
+        service.create_session(
+            SessionCreateRequest(
+                session_type=SessionType.PROCESS,
+                context=SessionContext(project_id=project_id, workspace_id=workspace_id),
+                mode=SessionMode.READ_ONLY,
+                actor_ref=principal,
+                operation=operation,
+                inactivity_timeout_seconds=60,
+            )
+        )
+    )
+
+    now[0] += timedelta(seconds=61)
+    reconciled = asyncio.run(service.reconcile_session(session.id))
+    frames = asyncio.run(
+        service.read_frames(session.id, actor_ref=principal, operation=operation)
+    )
+
+    assert reconciled.status is SessionStatus.CANCELLED
+    assert reconciled.ended_at == now[0]
+    assert frames[-1].final is True
+    assert "inactivity timeout" in frames[-1].data
+    timeout_records = [
+        record for record in service.activity_records if record.action == "session.inactivity_timeout"
+    ]
+    assert len(timeout_records) == 1
+    assert timeout_records[0].actor_ref == "service:terminal-policy"
+    assert timeout_records[0].metadata == {"timeout_seconds": 60}
+
+
+def test_transcript_retention_uses_redacted_canonical_frames_once_per_sequence() -> None:
+    project_id = new_id("project")
+    workspace_id = new_id("workspace")
+    principal = "user:retention-test"
+    retained: list[TerminalFrame] = []
+    gate = AuthorizationGate(
+        LocalAuthorizationProvider((_policy(principal, project_id, workspace_id),))
+    )
+    service = TerminalSessionService(
+        gate,
+        (ReferenceTerminalAdapter(poll_interval_seconds=0.001),),
+        redactor=lambda text: text.replace("secret-token", "[REDACTED]"),
+        transcript_sink=retained.append,
+    )
+    operation = OperationContext(correlation_id="corr-retention", project_id=project_id)
+    session = asyncio.run(
+        service.create_session(
+            SessionCreateRequest(
+                session_type=SessionType.DEBUG,
+                context=SessionContext(project_id=project_id, workspace_id=workspace_id),
+                mode=SessionMode.INTERACTIVE,
+                actor_ref=principal,
+                operation=operation,
+                retain_transcript=True,
+            )
+        )
+    )
+
+    initial = asyncio.run(
+        service.read_frames(session.id, actor_ref=principal, operation=operation)
+    )
+    asyncio.run(
+        service.send_input(
+            session.id,
+            "secret-token",
+            actor_ref=principal,
+            operation=operation,
+        )
+    )
+    after_input = asyncio.run(
+        service.read_frames(
+            session.id,
+            actor_ref=principal,
+            operation=operation,
+            after_sequence=initial[-1].sequence,
+        )
+    )
+    replay = asyncio.run(
+        service.read_frames(session.id, actor_ref=principal, operation=operation)
+    )
+
+    assert after_input[-1].data == "[REDACTED]"
+    assert "secret-token" not in repr(retained)
+    assert [frame.sequence for frame in retained] == [frame.sequence for frame in replay]
+    assert len({frame.id for frame in retained}) == len(retained)
+
+
+def test_transcript_retention_fails_closed_without_evidence_sink() -> None:
+    project_id = new_id("project")
+    workspace_id = new_id("workspace")
+    principal = "user:no-retention-sink"
+    gate = AuthorizationGate(
+        LocalAuthorizationProvider((_policy(principal, project_id, workspace_id),))
+    )
+    service = TerminalSessionService(
+        gate,
+        (ReferenceTerminalAdapter(poll_interval_seconds=0.001),),
+    )
+    operation = OperationContext(correlation_id="corr-no-retention-sink", project_id=project_id)
+
+    with pytest.raises(ContractError) as captured:
+        asyncio.run(
+            service.create_session(
+                SessionCreateRequest(
+                    session_type=SessionType.LOG_STREAM,
+                    context=SessionContext(project_id=project_id, workspace_id=workspace_id),
+                    mode=SessionMode.READ_ONLY,
+                    actor_ref=principal,
+                    operation=operation,
+                    retain_transcript=True,
+                )
+            )
+        )
+
+    assert captured.value.code is ErrorCode.UNAVAILABLE
 
 
 def test_canonical_session_and_stream_payloads_do_not_leak_backend_private_handle_types() -> None:
