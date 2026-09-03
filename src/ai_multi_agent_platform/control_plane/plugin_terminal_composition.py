@@ -90,7 +90,7 @@ class ControlPlane(_PluginControlPlane, _TerminalControlPlane):
             owner_id=owner_id,
             project_id=project_id,
         ):
-            raise ContractError(ErrorCode.NOT_FOUND, f"resource not found: {resource_id}")
+            raise ContractError(ErrorCode.NOT_FOUND, "resource not found")
         return resource
 
 
