@@ -549,9 +549,7 @@ def _require_confirmation(args: argparse.Namespace, action: str, resource_ref: s
     if bool(args.yes):
         return
     if not sys.stdin.isatty():
-        raise ProfileError(
-            f"{action} {resource_ref} requires confirmation; re-run with --yes"
-        )
+        raise ProfileError(f"{action} {resource_ref} requires confirmation; re-run with --yes")
     answer = input(f"Confirm {action} {resource_ref}? [y/N] ")
     if answer.strip().casefold() not in {"y", "yes"}:
         raise ProfileError("operation cancelled")
