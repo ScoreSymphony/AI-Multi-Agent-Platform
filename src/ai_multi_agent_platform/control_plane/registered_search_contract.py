@@ -80,9 +80,10 @@ class ControlPlane(_BaseSearchControlPlane):
                     )
                 )
 
-        extension_documents, extension_authorization = (
-            await self._registered_extension_search_documents(correlation_id)
-        )
+        (
+            extension_documents,
+            extension_authorization,
+        ) = await self._registered_extension_search_documents(correlation_id)
         documents.extend(extension_documents)
 
         await self._search_provider.rebuild(
