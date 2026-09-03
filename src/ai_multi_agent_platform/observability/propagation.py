@@ -97,10 +97,7 @@ class TraceCarrier:
             "correlation-id": self.correlation_id,
         }
         values.update(
-            {
-                name.replace("_", "-"): getattr(self, name)
-                for name in _OPTIONAL_CONTEXT_FIELDS
-            }
+            {name.replace("_", "-"): getattr(self, name) for name in _OPTIONAL_CONTEXT_FIELDS}
         )
         return {f"{_PREFIX}{key}": value for key, value in values.items() if value is not None}
 
@@ -120,10 +117,7 @@ class TraceCarrier:
                 raise ValueError(f"trace propagation field must not be blank: {name}")
             return value
 
-        kwargs = {
-            name: optional(name.replace("_", "-"))
-            for name in _OPTIONAL_CONTEXT_FIELDS
-        }
+        kwargs = {name: optional(name.replace("_", "-")) for name in _OPTIONAL_CONTEXT_FIELDS}
         return cls(
             trace_id=required("trace-id"),
             parent_span_id=required("parent-span-id"),
