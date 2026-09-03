@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrowserSessionClient } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
+import { ControlPlaneCollectionClient } from "../api/collections";
 import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
 import { LoadingState } from "../components/States";
@@ -13,6 +14,7 @@ import {
   AgentTeamDetailPage,
   AgentTeamsPage,
 } from "../pages/AgentsPage";
+import { ApprovalDetailPage, ApprovalsPage } from "../pages/ApprovalsPage";
 import {
   CapabilitiesPage,
   CapabilityDetailPage,
@@ -48,6 +50,10 @@ export function Shell() {
     () => new ControlPlaneClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
+  const collections = useMemo(
+    () => new ControlPlaneCollectionClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
   const [manifest, setManifest] = useState<APImanifest | null>(null);
   const [manifestState, setManifestState] = useState<ManifestState>("loading");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -77,6 +83,7 @@ export function Shell() {
   const capabilityMatch = matchPath("/tools/:capabilityId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
+  const approvalMatch = matchPath("/approvals/:approvalId", path);
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   let content;
@@ -181,6 +188,28 @@ export function Shell() {
         resource="terminal-sessions"
       >
         <TerminalPage client={client} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/approvals") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Approvals"
+        resource="approvals"
+      >
+        <ApprovalsPage client={collections} />
+      </ManifestResourcePage>
+    );
+  } else if (approvalMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Approvals"
+        resource="approvals"
+      >
+        <ApprovalDetailPage client={collections} approvalId={approvalMatch.approvalId} />
       </ManifestResourcePage>
     );
   } else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
