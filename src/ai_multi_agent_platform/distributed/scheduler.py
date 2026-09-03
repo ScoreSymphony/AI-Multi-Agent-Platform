@@ -124,31 +124,29 @@ class DeterministicScheduler:
         if requirements.os_name is not None and requirements.os_name != node.os_name:
             reasons.append(self._reason(RejectionCode.OS_UNSUPPORTED, "OS constraint mismatch"))
 
-        reserved = self.registry.reserved_resources(worker.worker_id)
-        available_cpu = node.resources.cpu_cores_available - reserved.cpu_cores_total
-        available_ram = node.resources.ram_available_bytes - reserved.ram_total_bytes
-        available_storage = node.resources.storage_available_bytes - reserved.storage_total_bytes
-        if requirements.cpu_cores_min > available_cpu:
+        available = self.registry.available_node_resources(node.node_id)
+        if requirements.cpu_cores_min > available.cpu_cores_available:
             reasons.append(self._reason(RejectionCode.CPU_INSUFFICIENT, "insufficient CPU"))
-        if requirements.ram_min_bytes > available_ram:
+        if requirements.ram_min_bytes > available.ram_available_bytes:
             reasons.append(self._reason(RejectionCode.RAM_INSUFFICIENT, "insufficient RAM"))
-        if requirements.storage_min_bytes > available_storage:
+        if requirements.storage_min_bytes > available.storage_available_bytes:
             reasons.append(self._reason(RejectionCode.STORAGE_INSUFFICIENT, "insufficient storage"))
 
-        accelerators = node.resources.accelerators
-        if requirements.gpu == "required" and not accelerators:
+        if requirements.gpu == "required" and not available.accelerators:
             reasons.append(self._reason(RejectionCode.GPU_REQUIRED, "accelerator required"))
-        if requirements.gpu == "forbidden" and accelerators:
+        if requirements.gpu == "forbidden" and node.resources.accelerators:
             reasons.append(self._reason(RejectionCode.GPU_REQUIRED, "CPU-only placement required"))
         if (
             requirements.vram_min_bytes > 0
-            and node.resources.max_available_accelerator_memory_bytes < requirements.vram_min_bytes
+            and available.max_available_accelerator_memory_bytes < requirements.vram_min_bytes
         ):
             reasons.append(self._reason(RejectionCode.VRAM_INSUFFICIENT, "insufficient VRAM"))
 
         models = set(node.model_refs) | set(worker.model_refs)
         if requirements.model_ref is not None and requirements.model_ref not in models:
-            reasons.append(self._reason(RejectionCode.MODEL_UNAVAILABLE, "required model unavailable"))
+            reasons.append(
+                self._reason(RejectionCode.MODEL_UNAVAILABLE, "required model unavailable")
+            )
         if (
             requirements.allowed_trust_levels
             and node.trust_level not in requirements.allowed_trust_levels
@@ -161,16 +159,13 @@ class DeterministicScheduler:
         if set(requirements.required_labels) - labels:
             reasons.append(self._reason(RejectionCode.LABEL_MISMATCH, "required label missing"))
         if node.node_id in requirements.anti_affinity_node_ids:
-            reasons.append(self._reason(RejectionCode.ANTI_AFFINITY, "node excluded by anti-affinity"))
+            reasons.append(
+                self._reason(RejectionCode.ANTI_AFFINITY, "node excluded by anti-affinity")
+            )
         if requirements.network_required and not node.network_available:
             reasons.append(self._reason(RejectionCode.NETWORK_UNAVAILABLE, "network unavailable"))
 
-        available_slots = (
-            worker.concurrency_limit
-            - worker.active_jobs
-            - self.registry.reserved_concurrency(worker.worker_id)
-        )
-        if requirements.concurrency_units > available_slots:
+        if requirements.concurrency_units > self.registry.available_concurrency(worker.worker_id):
             reasons.append(
                 self._reason(RejectionCode.CONCURRENCY_EXHAUSTED, "worker concurrency exhausted")
             )
