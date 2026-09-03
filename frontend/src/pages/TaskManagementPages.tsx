@@ -22,6 +22,14 @@ import { isCanonicalId } from "../platform/id";
 
 const PRIORITIES: TaskPriority[] = ["low", "normal", "high", "urgent"];
 const STATUSES = ["draft", "ready", "running", "waiting", "succeeded", "failed", "cancelled"];
+type DeadlineView = "" | "overdue" | "24h" | "7d" | "30d";
+type AssignmentState = "" | "assigned" | "unassigned";
+type AgentKindFilter = "" | "agent" | "agent_team";
+const DEADLINE_WINDOW_HOURS: Record<Exclude<DeadlineView, "" | "overdue">, number> = {
+  "24h": 24,
+  "7d": 24 * 7,
+  "30d": 24 * 30,
+};
 
 export function ManagedTasksPage({ client }: { client: ControlPlaneClient }) {
   const [page, setPage] = useState<Page<CanonicalTask> | null>(null);
@@ -30,9 +38,14 @@ export function ManagedTasksPage({ client }: { client: ControlPlaneClient }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [assignmentState, setAssignmentState] = useState<AssignmentState>("");
+  const [responsibleKind, setResponsibleKind] = useState<"" | TaskResponsibilityKind>("");
   const [responsibleId, setResponsibleId] = useState("");
+  const [agentKind, setAgentKind] = useState<AgentKindFilter>("");
+  const [agentId, setAgentId] = useState("");
   const [blocked, setBlocked] = useState(false);
-  const [overdue, setOverdue] = useState(false);
+  const [deadlineView, setDeadlineView] = useState<DeadlineView>("");
   const [sort, setSort] = useState("priority");
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -43,11 +56,34 @@ export function ManagedTasksPage({ client }: { client: ControlPlaneClient }) {
     const next: Record<string, string> = {};
     if (status) next.status = status;
     if (priority) next.priority = priority;
+    if (projectId.trim()) next.project_id = projectId.trim();
+    if (assignmentState) next.assignment_state = assignmentState;
+    if (responsibleKind) next.responsible_type = responsibleKind;
     if (responsibleId.trim()) next.responsible_id = responsibleId.trim();
+    if (agentKind) next.agent_assignment_type = agentKind;
+    if (agentId.trim()) next.agent_assignment_id = agentId.trim();
     if (blocked) next.blocked = "true";
-    if (overdue) next.overdue = "true";
+    if (deadlineView === "overdue") {
+      next.overdue = "true";
+    } else if (deadlineView) {
+      const now = new Date();
+      const until = new Date(now.getTime() + DEADLINE_WINDOW_HOURS[deadlineView] * 60 * 60 * 1000);
+      next.due_after = now.toISOString();
+      next.due_before = until.toISOString();
+    }
     return next;
-  }, [blocked, overdue, priority, responsibleId, status]);
+  }, [
+    agentId,
+    agentKind,
+    assignmentState,
+    blocked,
+    deadlineView,
+    priority,
+    projectId,
+    responsibleId,
+    responsibleKind,
+    status,
+  ]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -152,9 +188,14 @@ export function ManagedTasksPage({ client }: { client: ControlPlaneClient }) {
         <div className="toolbar">
           <label>Status<select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">all</option>{STATUSES.map((value) => <option key={value}>{value}</option>)}</select></label>
           <label>Priority<select value={priority} onChange={(event) => setPriority(event.target.value)}><option value="">all</option>{PRIORITIES.map((value) => <option key={value}>{value}</option>)}</select></label>
-          <label>Responsible<input value={responsibleId} onChange={(event) => setResponsibleId(event.target.value)} placeholder="ID" /></label>
+          <label>Project<input value={projectId} onChange={(event) => setProjectId(event.target.value)} placeholder="project_…" /></label>
+          <label>Assignment<select value={assignmentState} onChange={(event) => setAssignmentState(event.target.value as AssignmentState)}><option value="">all</option><option value="assigned">assigned</option><option value="unassigned">unassigned</option></select></label>
+          <label>Responsible type<select value={responsibleKind} onChange={(event) => setResponsibleKind(event.target.value as "" | TaskResponsibilityKind)}><option value="">all</option><option value="user">user</option><option value="team">team</option><option value="organization">organization</option></select></label>
+          <label>Responsible ID<input value={responsibleId} onChange={(event) => setResponsibleId(event.target.value)} placeholder="ID" /></label>
+          <label>Agent kind<select value={agentKind} onChange={(event) => setAgentKind(event.target.value as AgentKindFilter)}><option value="">all</option><option value="agent">agent</option><option value="agent_team">agent team</option></select></label>
+          <label>Agent / team ID<input value={agentId} onChange={(event) => setAgentId(event.target.value)} placeholder="agent_… / team_…" /></label>
+          <label>Deadline<select value={deadlineView} onChange={(event) => setDeadlineView(event.target.value as DeadlineView)}><option value="">all</option><option value="overdue">overdue</option><option value="24h">due in 24h</option><option value="7d">due in 7 days</option><option value="30d">due in 30 days</option></select></label>
           <label><input type="checkbox" checked={blocked} onChange={(event) => setBlocked(event.target.checked)} /> blocked</label>
-          <label><input type="checkbox" checked={overdue} onChange={(event) => setOverdue(event.target.checked)} /> overdue</label>
           <label>Sort<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="priority">priority</option><option value="due">due</option><option value="updated_at">updated</option><option value="status">status</option></select></label>
           <label>Direction<select value={direction} onChange={(event) => setDirection(event.target.value as "asc" | "desc")}><option value="desc">descending</option><option value="asc">ascending</option></select></label>
           <button onClick={() => void load()}>Refresh</button>
