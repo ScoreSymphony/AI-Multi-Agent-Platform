@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data.models import MemoryScope
 from ai_multi_agent_platform.domain import OwnerRef, Provenance
 
@@ -360,5 +362,7 @@ class AgentService:
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
                     "team delegation target is not a member of the same team revision",
-                    details={"unknown_agent_ids": sorted(unknown_delegates)},
+                    details={
+                        "unknown_agent_ids": cast(JsonValue, sorted(unknown_delegates))
+                    },
                 )
