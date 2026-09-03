@@ -50,8 +50,10 @@ from .enforcement import AuthorizationGate
 def _actor_from_operation(context: OperationContext) -> ActorIdentity:
     if context.owner_id is not None:
         actor_ref = context.owner_id
-        if context.owner_type is not None and ":" not in actor_ref and not actor_ref.startswith(
-            (f"{context.owner_type}_",)
+        if (
+            context.owner_type is not None
+            and ":" not in actor_ref
+            and not actor_ref.startswith((f"{context.owner_type}_",))
         ):
             actor_ref = f"{context.owner_type}:{actor_ref}"
         return infer_actor_identity(actor_ref)
