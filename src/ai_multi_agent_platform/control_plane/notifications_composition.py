@@ -8,11 +8,13 @@ from typing import Any
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.notifications import (
+    DeliveryAttempt,
     EventOwnerRecipientResolver,
     InMemoryNotificationPreferenceRepository,
     InMemoryNotificationRepository,
     Notification,
     NotificationCategory,
+    NotificationDeliveryCoordinator,
     NotificationEventSink,
     NotificationPreference,
     NotificationPreferenceRepository,
@@ -26,7 +28,7 @@ from ai_multi_agent_platform.notifications import (
     TaskTerminalNotificationRule,
 )
 
-from .extensions import CommandHandler, ResourceService
+from .extensions import ResourceService
 from .models import PageQuery, RequestContext
 from .terminal_composition import ControlPlane as _BaseControlPlane
 from .terminal_composition import ControlPlaneASGI, ControlPlaneHTTP, build_openapi
@@ -40,6 +42,7 @@ NOTIFICATION_COMMANDS = (
     "notification.dismiss",
     "notification.archive",
     "notification.preference.update",
+    "notification.delivery.retry",
 )
 
 
@@ -70,7 +73,11 @@ class _NotificationResources(ResourceService):
         )
         if state is not None:
             items = tuple(item for item in items if item.state is state)
-        return tuple(_notification_resource(item) for item in items)
+        resources: list[dict[str, JsonValue]] = []
+        for item in items:
+            attempts = await self._service.delivery_attempts(item.id, recipient=recipient)
+            resources.append(_notification_resource(item, attempts=attempts))
+        return tuple(resources)
 
     async def get_resource(
         self,
@@ -78,7 +85,9 @@ class _NotificationResources(ResourceService):
         resource_id: str,
     ) -> dict[str, JsonValue]:
         recipient = _recipient_from_context(context)
-        return _notification_resource(await self._service.get(resource_id, recipient=recipient))
+        notification = await self._service.get(resource_id, recipient=recipient)
+        attempts = await self._service.delivery_attempts(resource_id, recipient=recipient)
+        return _notification_resource(notification, attempts=attempts)
 
 
 class _PreferenceResources(ResourceService):
@@ -122,6 +131,7 @@ class ControlPlane(_BaseControlPlane):
         *args: Any,
         notification_repository: NotificationRepository | None = None,
         notification_preference_repository: NotificationPreferenceRepository | None = None,
+        notification_delivery: NotificationDeliveryCoordinator | None = None,
         notification_service: NotificationService | None = None,
         notification_event_sink: NotificationEventSink | None = None,
         **kwargs: Any,
@@ -156,6 +166,7 @@ class ControlPlane(_BaseControlPlane):
                 repository=repository,
                 preferences=preferences,
                 rules=(TaskTerminalNotificationRule(EventOwnerRecipientResolver()),),
+                delivery=notification_delivery,
                 event_sink=notification_event_sink,
             )
         self._notification_service = notification_service
@@ -173,6 +184,7 @@ class ControlPlane(_BaseControlPlane):
         self.register_command("notification.dismiss", self._dismiss)
         self.register_command("notification.archive", self._archive)
         self.register_command("notification.preference.update", self._update_preference)
+        self.register_command("notification.delivery.retry", self._retry_delivery)
 
     @property
     def notification_service(self) -> NotificationService:
@@ -186,9 +198,12 @@ class ControlPlane(_BaseControlPlane):
     ) -> dict[str, JsonValue]:
         del payload
         recipient = _recipient_from_context(context)
-        return _notification_resource(
-            await self._notification_service.mark_read(resource_ref, recipient=recipient)
+        notification = await self._notification_service.mark_read(resource_ref, recipient=recipient)
+        attempts = await self._notification_service.delivery_attempts(
+            notification.id,
+            recipient=recipient,
         )
+        return _notification_resource(notification, attempts=attempts)
 
     async def _mark_all_read(
         self,
@@ -219,8 +234,16 @@ class ControlPlane(_BaseControlPlane):
     ) -> dict[str, JsonValue]:
         del payload
         recipient = _recipient_from_context(context)
+        notification = await self._notification_service.acknowledge(
+            resource_ref,
+            recipient=recipient,
+        )
         return _notification_resource(
-            await self._notification_service.acknowledge(resource_ref, recipient=recipient)
+            notification,
+            attempts=await self._notification_service.delivery_attempts(
+                notification.id,
+                recipient=recipient,
+            ),
         )
 
     async def _dismiss(
@@ -231,8 +254,13 @@ class ControlPlane(_BaseControlPlane):
     ) -> dict[str, JsonValue]:
         del payload
         recipient = _recipient_from_context(context)
+        notification = await self._notification_service.dismiss(resource_ref, recipient=recipient)
         return _notification_resource(
-            await self._notification_service.dismiss(resource_ref, recipient=recipient)
+            notification,
+            attempts=await self._notification_service.delivery_attempts(
+                notification.id,
+                recipient=recipient,
+            ),
         )
 
     async def _archive(
@@ -243,8 +271,13 @@ class ControlPlane(_BaseControlPlane):
     ) -> dict[str, JsonValue]:
         del payload
         recipient = _recipient_from_context(context)
+        notification = await self._notification_service.archive(resource_ref, recipient=recipient)
         return _notification_resource(
-            await self._notification_service.archive(resource_ref, recipient=recipient)
+            notification,
+            attempts=await self._notification_service.delivery_attempts(
+                notification.id,
+                recipient=recipient,
+            ),
         )
 
     async def _update_preference(
@@ -281,6 +314,26 @@ class ControlPlane(_BaseControlPlane):
             unread_count=await self._notification_service.unread_count(recipient),
         )
 
+    async def _retry_delivery(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        recipient = _recipient_from_context(context)
+        channel_id = payload.get("channel_id")
+        if not isinstance(channel_id, str) or not channel_id.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "notification.delivery.retry requires a non-blank channel_id",
+            )
+        attempt = await self._notification_service.retry_delivery(
+            resource_ref,
+            recipient=recipient,
+            channel_id=channel_id,
+        )
+        return _delivery_attempt_resource(attempt)
+
 
 def _recipient_from_context(context: RequestContext) -> RecipientRef:
     owner_type = context.actor.owner_type
@@ -306,7 +359,11 @@ def _recipient_from_context(context: RequestContext) -> RecipientRef:
         ) from exc
 
 
-def _notification_resource(notification: Notification) -> dict[str, JsonValue]:
+def _notification_resource(
+    notification: Notification,
+    *,
+    attempts: tuple[DeliveryAttempt, ...] = (),
+) -> dict[str, JsonValue]:
     actions: list[JsonValue] = [
         {
             "action_id": action.action_id,
@@ -324,6 +381,9 @@ def _notification_resource(notification: Notification) -> dict[str, JsonValue]:
             "resource_type": notification.resource_ref.resource_type,
             "resource_id": notification.resource_ref.resource_id,
         }
+    delivery_attempts: list[JsonValue] = [
+        _delivery_attempt_resource(attempt) for attempt in attempts
+    ]
     return {
         "id": notification.id,
         "type": "notification",
@@ -372,7 +432,29 @@ def _notification_resource(notification: Notification) -> dict[str, JsonValue]:
         ),
         "correlation_id": notification.correlation_id,
         "causation_id": notification.causation_id,
-        "delivery": dict(notification.delivery_metadata),
+        "delivery": {
+            "metadata": dict(notification.delivery_metadata),
+            "attempts": delivery_attempts,
+        },
+    }
+
+
+def _delivery_attempt_resource(attempt: DeliveryAttempt) -> dict[str, JsonValue]:
+    return {
+        "id": attempt.id,
+        "type": "notification-delivery-attempt",
+        "notification_id": attempt.notification_id,
+        "recipient": {
+            "type": attempt.recipient.type.value,
+            "id": attempt.recipient.id,
+        },
+        "channel": attempt.channel,
+        "status": attempt.status.value,
+        "attempt": attempt.attempt,
+        "attempted_at": attempt.attempted_at.isoformat(),
+        "provider_reference": attempt.provider_reference,
+        "retry_after_seconds": attempt.retry_after_seconds,
+        "metadata": dict(attempt.metadata),
     }
 
 
@@ -418,7 +500,9 @@ def _category_set(
     if not isinstance(raw, list):
         raise ContractError(ErrorCode.INVALID_REQUEST, "enabled_categories must be an array")
     try:
-        return frozenset(NotificationCategory(item) for item in _string_items(raw, "enabled_categories"))
+        return frozenset(
+            NotificationCategory(item) for item in _string_items(raw, "enabled_categories")
+        )
     except ValueError as exc:
         raise ContractError(ErrorCode.INVALID_REQUEST, "unknown notification category") from exc
 
