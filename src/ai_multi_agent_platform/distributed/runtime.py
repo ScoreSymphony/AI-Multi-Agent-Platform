@@ -5,14 +5,27 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from ai_multi_agent_platform.contracts import ExecutionHandle, ExecutionSnapshot
 from ai_multi_agent_platform.domain import RunStatus
 
-from .models import ReservationStatus, WorkerJobRequest, WorkerStatus, utc_now
+from .models import (
+    Heartbeat,
+    NodeRecord,
+    RegistrationRequest,
+    ReservationStatus,
+    WorkerJobRequest,
+    WorkerRecord,
+    WorkerStatus,
+    utc_now,
+)
 from .registry import DistributedRegistry, RegistryError
 from .scheduler import DeterministicScheduler
 from .worker import WorkerDispatcher
+
+if TYPE_CHECKING:
+    from .persistence import DistributedStateStore
 
 
 class DispatchState(StrEnum):
@@ -43,11 +56,72 @@ class DistributedRuntime:
         registry: DistributedRegistry,
         *,
         scheduler: DeterministicScheduler | None = None,
+        state_store: DistributedStateStore | None = None,
     ) -> None:
         self.registry = registry
         self.scheduler = scheduler or DeterministicScheduler(registry)
         self._dispatchers: dict[str, WorkerDispatcher] = {}
         self._records: dict[str, DispatchRecord] = {}
+        self._state_store = state_store
+        if self._state_store is not None:
+            self._state_store.restore(self.registry, self)
+
+    def records(self) -> tuple[DispatchRecord, ...]:
+        return tuple(self._records[worker_job_id] for worker_job_id in sorted(self._records))
+
+    def restore_records(self, records: tuple[DispatchRecord, ...]) -> None:
+        """Restore persisted dispatch ownership before workers re-establish liveness."""
+
+        if self._records:
+            raise RegistryError("dispatch record restore requires an empty runtime")
+        restored = {record.job.worker_job_id: record for record in records}
+        if len(restored) != len(records):
+            raise RegistryError("distributed state contains duplicate worker job records")
+        self._records = restored
+
+    def register(
+        self,
+        request: RegistrationRequest,
+        *,
+        now: datetime | None = None,
+    ) -> NodeRecord:
+        node = self.registry.register(request, now=now)
+        self._persist()
+        return node
+
+    def heartbeat(self, heartbeat: Heartbeat) -> NodeRecord:
+        node = self.registry.heartbeat(heartbeat)
+        self._persist()
+        return node
+
+    def set_node_draining(self, node_id: str, *, draining: bool) -> NodeRecord:
+        node = self.registry.set_node_draining(node_id, draining=draining)
+        self._persist()
+        return node
+
+    def set_node_maintenance(self, node_id: str, *, maintenance: bool) -> NodeRecord:
+        node = self.registry.set_node_maintenance(node_id, maintenance=maintenance)
+        self._persist()
+        return node
+
+    def set_worker_draining(self, worker_id: str, *, draining: bool) -> WorkerRecord:
+        worker = self.registry.set_worker_draining(worker_id, draining=draining)
+        self._persist()
+        return worker
+
+    def deregister_worker(self, worker_id: str) -> None:
+        self.registry.deregister_worker(worker_id)
+        self._dispatchers.pop(worker_id, None)
+        self._persist()
+
+    def deregister_node(self, node_id: str) -> None:
+        worker_ids = tuple(
+            worker.worker_id for worker in self.registry.list_workers() if worker.node_id == node_id
+        )
+        self.registry.deregister_node(node_id)
+        for worker_id in worker_ids:
+            self._dispatchers.pop(worker_id, None)
+        self._persist()
 
     def attach_worker(self, dispatcher: WorkerDispatcher) -> None:
         worker = self.registry.get_worker(dispatcher.worker_id)
@@ -90,9 +164,14 @@ class DistributedRuntime:
         dispatcher = self._dispatchers.get(worker_id)
         if dispatcher is None:
             self.registry.release_reservation(placement.reservation.reservation_id)
+            self._persist()
             raise RegistryError(f"selected worker has no attached dispatcher: {worker_id}")
 
+        # Persist ownership before the external dispatch boundary. If acknowledgement is lost or
+        # the control process restarts after the worker accepted the job, recovery must reconcile
+        # this exact worker before another worker can claim the same canonical worker job.
         self._records[job.worker_job_id] = reserved
+        self._persist()
         try:
             handle = await dispatcher.dispatch(job)
         except Exception:
@@ -102,6 +181,7 @@ class DistributedRuntime:
                 last_error="dispatch_outcome_unknown",
             )
             self._records[job.worker_job_id] = lost
+            self._persist()
             raise
 
         self.registry.commit_reservation(placement.reservation.reservation_id, now=timestamp)
@@ -112,6 +192,7 @@ class DistributedRuntime:
             last_error=None,
         )
         self._records[job.worker_job_id] = dispatched
+        self._persist()
         return dispatched
 
     async def cancel(self, worker_job_id: str) -> DispatchRecord:
@@ -123,9 +204,12 @@ class DistributedRuntime:
         if worker.status is WorkerStatus.OFFLINE or dispatcher is None:
             pending = replace(record, state=DispatchState.CANCEL_PENDING)
             self._records[worker_job_id] = pending
+            self._persist()
             return pending
         snapshot = await dispatcher.cancel(worker_job_id)
-        return self._apply_snapshot(record, snapshot, now=utc_now())
+        updated = self._apply_snapshot(record, snapshot, now=utc_now())
+        self._persist()
+        return updated
 
     async def reconcile(self, *, now: datetime | None = None) -> tuple[DispatchRecord, ...]:
         """Reconcile liveness and job state; remote running is never trusted indefinitely."""
@@ -181,6 +265,7 @@ class DistributedRuntime:
             reconciled.append(updated)
 
         self.registry.expire_reservations(now=timestamp)
+        self._persist()
         return tuple(reconciled)
 
     def _apply_snapshot(
@@ -228,3 +313,7 @@ class DistributedRuntime:
         )
         self._records[record.job.worker_job_id] = updated
         return updated
+
+    def _persist(self) -> None:
+        if self._state_store is not None:
+            self._state_store.save(self.registry, self)
