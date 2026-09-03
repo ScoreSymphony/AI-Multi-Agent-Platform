@@ -84,26 +84,26 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 
 ### ScoreSymphony AI-Agent-VPS Forge subsystem
 
-- **Purpose:** source/reference for proven executor, workspace, event/idempotency and recovery behavior reused for issue #9 without importing the legacy Forge lifecycle as platform architecture.
-- **Status:** approved; the platform-owned adapter boundary and regression coverage are merged through PR #129, but no concrete legacy Forge runtime transport is integrated yet.
-- **Integration category/categories:** adapter integration; reference-only influence.
+- **Purpose:** optional execution-only runtime reusing the mature Forge executor/CLI-adapter layer, plus source/reference material for workspace, idempotency, recovery and event behavior harvested for issue #9.
+- **Status:** integrated through the execution-only sidecar at pinned revision `00b821bc94767865457814bf282982ca242a2e10`; the legacy full Forge Task/Project application is explicitly not integrated.
+- **Integration category/categories:** adapter integration; external optional runtime; reference-only influence.
 - **Canonical upstream repository:** `https://github.com/ScoreSymphony/AI-Agent-VPS`.
-- **Pinned version/tag/commit or deployed revision:** `5a9f317e3bab056a4cebe214b03912a9b7ad3824`.
+- **Pinned version/tag/commit or deployed revision:** `00b821bc94767865457814bf282982ca242a2e10`.
 - **Verified license:** MIT.
 - **License verification date:** 2026-09-03.
 - **Last review date:** 2026-09-03.
-- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.forge.ForgeExecutor` behind the canonical `Executor`, with a small platform-owned `ForgeClient` protocol. `ExecutorLifecycleBackend` carries namespaced backend metadata into canonical kernel history.
-- **Local source path:** `src/ai_multi_agent_platform/adapters/forge.py` contains new platform-owned adapter code; no upstream Forge source has been copied.
-- **Source origin/path:** behavior/specification review of `core/forge/`, especially `crates/executors`, `services/src/domain_event_service.rs`, `services/src/recovery.rs`, task-dispatch/recovery code, workspace code and the public API routes.
-- **Modified locally:** no upstream source is presently vendored or modified in this repository.
-- **Required notices / attribution:** no copied-source notice is required for the current implementation. If substantial Forge source is selectively copied later, preserve the upstream MIT copyright/license notice and add file-level provenance before merge.
-- **Known compatibility constraints:** legacy Forge is primarily Rust and owns its own Task/Project/Execution persistence. Those types and lifecycle rules are not canonical. The current legacy HTTP launch path requires a Forge Task and is intentionally rejected as the first concrete executor transport; see `docs/FORGE_TRANSPORT_ASSESSMENT.md`.
-- **Security/deployment/resource constraints:** Forge remains optional. Workspace traversal and artifact boundaries are enforced by the platform adapter; any future process/shell runtime requires explicit policy, environment filtering, sandbox/resource controls and backend authentication without replacing platform authorization.
+- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.forge.ForgeExecutor` implements the canonical `Executor`; `ai_multi_agent_platform.adapters.forge_http.ForgeHttpClient` implements the platform-owned `ForgeClient` protocol against `forge-executor-sidecar/v1`. `ExecutorLifecycleBackend` carries namespaced backend metadata into canonical kernel history.
+- **Local source path:** `src/ai_multi_agent_platform/adapters/forge.py` and `src/ai_multi_agent_platform/adapters/forge_http.py` are new platform-owned code; no upstream Forge source is copied into this repository.
+- **Source origin/path:** runtime at `core/forge/crates/executor-sidecar`, reusing `core/forge/crates/executors`, `cli-adapters`, `git` and `api-types`; behavior/specification review also covered domain-event, recovery, task-dispatch, workspace and legacy API code.
+- **Modified locally:** no upstream source is vendored or modified in this repository; the sidecar is maintained at the canonical upstream repository.
+- **Required notices / attribution:** no copied-source notice is required because no upstream source is vendored here. The upstream repository retains its MIT license metadata; preserve MIT notices if substantial source is copied locally in the future.
+- **Known compatibility constraints:** concrete runtime target is `forge-executor-sidecar/v1` at the pinned revision. Canonical Task/Run/Step/correlation identity and lifecycle remain platform-owned. The legacy Forge task-launch API remains rejected because it requires Forge Task/Project lifecycle ownership. The default validated sidecar executor is `null`; other CLI families require explicit allowlisting and compatibility/security validation.
+- **Security/deployment/resource constraints:** Forge remains optional. The integrated sidecar binds to loopback in its current entrypoint, enforces an executor allowlist, independently validates workspace containment and requires no Forge DB/TaskService/Project/Event services. Shell/process or coding-CLI families require explicit policy, environment filtering, sandbox/resource controls and any required backend authentication before enablement.
 - **Required for baseline:** no; core startup and reference execution remain Forge-independent.
 - **Recurring paid service required:** no.
-- **Update/review method:** compare the pinned source revision before changing the adapter/reuse decisions, review license/security/behavior changes, update `docs/FORGE_REUSE_AUDIT.md`, `docs/FORGE_TRANSPORT_ASSESSMENT.md` and `upstream/forge-ai-agent-vps.yaml`, then run executor contract, Forge regression/integration and full repository CI.
-- **Exit/replacement strategy:** remove the Forge adapter/transport and adapter-private state. Canonical Task/Run/Event/Workspace state requires no migration because it remains platform-owned.
-- **ADR:** none required yet; the architecture deliberately keeps Forge subordinate to existing canonical contracts. A new optional Rust sidecar or other runtime component that materially changes deployment/build topology should receive explicit architecture review.
+- **Update/review method:** compare the pinned runtime revision, review sidecar protocol/license/security and reused executor/CLI-adapter changes, update Forge audit/provenance records, then run executor contracts, kernel/recovery regressions, the real pinned-sidecar integration and full repository CI.
+- **Exit/replacement strategy:** remove the Forge adapter/HTTP transport and sidecar-specific configuration. Canonical Task/Run/Event/Workspace state requires no migration because it remains platform-owned.
+- **ADR:** none required for canonical architecture; the runtime remains an optional subordinate adapter. Any future change that makes the sidecar remote/shared or materially changes deployment/security topology requires explicit architecture review.
 - **Provenance:** `upstream/forge-ai-agent-vps.yaml`.
 
 ## Current direct build/development dependencies
@@ -143,7 +143,7 @@ The manifest currently uses version constraints rather than a repository lockfil
 - Known compatibility constraints:
 - Security/deployment/resource constraints:
 - Required for baseline: yes/no
-- Recurring paid service required: yes/no
+- Recurring paid service required:
 - Update/review method:
 - Exit/replacement strategy:
 - ADR:
