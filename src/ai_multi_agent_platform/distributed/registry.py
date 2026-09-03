@@ -72,7 +72,9 @@ class DistributedRegistry:
         self._heartbeat_sequence[node.node_id] = 0
 
         known_for_node = {
-            worker_id for worker_id, worker in self._workers.items() if worker.node_id == node.node_id
+            worker_id
+            for worker_id, worker in self._workers.items()
+            if worker.node_id == node.node_id
         }
         incoming = {worker.worker_id for worker in request.workers}
         for stale_worker_id in known_for_node - incoming:
