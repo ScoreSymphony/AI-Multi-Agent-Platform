@@ -17,6 +17,7 @@ import {
   ModelProviderDetailPage,
   ModelsPage,
 } from "../pages/ModelPages";
+import { ObservabilityPage } from "../pages/ObservabilityPage";
 import { ProjectDetailPage, ProjectsPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
@@ -60,6 +61,8 @@ export function Shell() {
   else if (path === "/models") content = <ModelsPage client={client} />;
   else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
   else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
+  else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
+  else if (path === "/observability") content = <ObservabilityPage client={client} view="observability" />;
   else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
   else if (navItem) content = <UnavailablePage item={navItem} manifest={manifest} />;
   else content = <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
