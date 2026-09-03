@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from enum import StrEnum
-from typing import Any, TypeVar, cast
+from typing import Any, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
@@ -34,9 +34,7 @@ from .models import API_VERSION, PageQuery, RequestContext, paginate
 from .observability_contract import ControlPlane as _ObservabilityControlPlane
 from .observability_contract import ControlPlaneHTTP as _ObservabilityControlPlaneHTTP
 from .observability_contract import build_openapi as _build_observability_openapi
-from .service import ScopeStore, _optional_string, _required_string, _require_key
-
-EnumT = TypeVar("EnumT", bound=StrEnum)
+from .service import ScopeStore, _optional_string, _require_key, _required_string
 
 
 class ControlPlane(_ObservabilityControlPlane):
@@ -210,7 +208,7 @@ def _data_access_context(context: RequestContext, project: Project) -> DataAcces
     )
 
 
-def _enum_field(
+def _enum_field[EnumT: StrEnum](
     payload: dict[str, JsonValue],
     name: str,
     enum_type: type[EnumT],
