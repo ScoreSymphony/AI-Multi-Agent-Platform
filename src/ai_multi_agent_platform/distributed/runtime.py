@@ -21,7 +21,7 @@ from .models import (
     utc_now,
 )
 from .registry import DistributedRegistry, RegistryError
-from .scheduler import DeterministicScheduler
+from .scheduler import DeterministicScheduler, ScheduledPlacement
 from .worker import WorkerDispatcher
 
 if TYPE_CHECKING:
@@ -144,56 +144,32 @@ class DistributedRuntime:
         *,
         now: datetime | None = None,
     ) -> DispatchRecord:
-        existing = self._records.get(job.worker_job_id)
+        existing = self._existing_record(job)
         if existing is not None:
-            if existing.job != job:
-                raise RegistryError("duplicate worker_job_id carries a different request")
             return existing
-
         timestamp = now or utc_now()
         placement = self.scheduler.schedule(job, now=timestamp)
-        worker_id = placement.decision.selected_worker_id
-        if worker_id is None:
-            raise AssertionError("scheduler returned placement without selected worker")
-        reserved = DispatchRecord(
-            job=job,
-            worker_id=worker_id,
-            reservation_id=placement.reservation.reservation_id,
-            state=DispatchState.RESERVED,
-        )
-        dispatcher = self._dispatchers.get(worker_id)
-        if dispatcher is None:
-            self.registry.release_reservation(placement.reservation.reservation_id)
-            self._persist()
-            raise RegistryError(f"selected worker has no attached dispatcher: {worker_id}")
+        return await self._dispatch_placement(job, placement, timestamp=timestamp)
 
-        # Persist ownership before the external dispatch boundary. If acknowledgement is lost or
-        # the control process restarts after the worker accepted the job, recovery must reconcile
-        # this exact worker before another worker can claim the same canonical worker job.
-        self._records[job.worker_job_id] = reserved
-        self._persist()
-        try:
-            handle = await dispatcher.dispatch(job)
-        except Exception:
-            lost = replace(
-                reserved,
-                state=DispatchState.LOST,
-                last_error="dispatch_outcome_unknown",
-            )
-            self._records[job.worker_job_id] = lost
-            self._persist()
-            raise
+    async def dispatch_to_worker(
+        self,
+        job: WorkerJobRequest,
+        worker_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> DispatchRecord:
+        """Dispatch to exactly one requested eligible Worker without scheduler fallback."""
 
-        self.registry.commit_reservation(placement.reservation.reservation_id, now=timestamp)
-        dispatched = replace(
-            reserved,
-            state=DispatchState.DISPATCHED,
-            handle=handle,
-            last_error=None,
-        )
-        self._records[job.worker_job_id] = dispatched
-        self._persist()
-        return dispatched
+        existing = self._existing_record(job)
+        if existing is not None:
+            if existing.worker_id != worker_id:
+                raise RegistryError(
+                    "existing worker job ownership cannot move to another Worker implicitly"
+                )
+            return existing
+        timestamp = now or utc_now()
+        placement = self.scheduler.schedule_to_worker(job, worker_id, now=timestamp)
+        return await self._dispatch_placement(job, placement, timestamp=timestamp)
 
     async def cancel(self, worker_job_id: str) -> DispatchRecord:
         record = self.get_record(worker_job_id)
@@ -267,6 +243,62 @@ class DistributedRuntime:
         self.registry.expire_reservations(now=timestamp)
         self._persist()
         return tuple(reconciled)
+
+    def _existing_record(self, job: WorkerJobRequest) -> DispatchRecord | None:
+        existing = self._records.get(job.worker_job_id)
+        if existing is not None and existing.job != job:
+            raise RegistryError("duplicate worker_job_id carries a different request")
+        return existing
+
+    async def _dispatch_placement(
+        self,
+        job: WorkerJobRequest,
+        placement: ScheduledPlacement,
+        *,
+        timestamp: datetime,
+    ) -> DispatchRecord:
+        worker_id = placement.decision.selected_worker_id
+        if worker_id is None:
+            raise AssertionError("scheduler returned placement without selected worker")
+        reserved = DispatchRecord(
+            job=job,
+            worker_id=worker_id,
+            reservation_id=placement.reservation.reservation_id,
+            state=DispatchState.RESERVED,
+        )
+        dispatcher = self._dispatchers.get(worker_id)
+        if dispatcher is None:
+            self.registry.release_reservation(placement.reservation.reservation_id)
+            self._persist()
+            raise RegistryError(f"selected worker has no attached dispatcher: {worker_id}")
+
+        # Persist ownership before the external dispatch boundary. If acknowledgement is lost or
+        # the control process restarts after the worker accepted the job, recovery must reconcile
+        # this exact worker before another worker can claim the same canonical worker job.
+        self._records[job.worker_job_id] = reserved
+        self._persist()
+        try:
+            handle = await dispatcher.dispatch(job)
+        except Exception:
+            lost = replace(
+                reserved,
+                state=DispatchState.LOST,
+                last_error="dispatch_outcome_unknown",
+            )
+            self._records[job.worker_job_id] = lost
+            self._persist()
+            raise
+
+        self.registry.commit_reservation(placement.reservation.reservation_id, now=timestamp)
+        dispatched = replace(
+            reserved,
+            state=DispatchState.DISPATCHED,
+            handle=handle,
+            last_error=None,
+        )
+        self._records[job.worker_job_id] = dispatched
+        self._persist()
+        return dispatched
 
     def _apply_snapshot(
         self,
