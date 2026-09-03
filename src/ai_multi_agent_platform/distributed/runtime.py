@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
+from time import perf_counter
 from typing import TYPE_CHECKING
 
 from ai_multi_agent_platform.contracts import ExecutionHandle, ExecutionSnapshot
@@ -26,6 +27,7 @@ from .worker import WorkerDispatcher
 
 if TYPE_CHECKING:
     from .persistence import DistributedStateStore
+    from .telemetry import DistributedTelemetry
 
 
 class DispatchState(StrEnum):
@@ -57,9 +59,11 @@ class DistributedRuntime:
         *,
         scheduler: DeterministicScheduler | None = None,
         state_store: DistributedStateStore | None = None,
+        telemetry: DistributedTelemetry | None = None,
     ) -> None:
         self.registry = registry
-        self.scheduler = scheduler or DeterministicScheduler(registry)
+        self.telemetry = telemetry
+        self.scheduler = scheduler or DeterministicScheduler(registry, telemetry=telemetry)
         self._dispatchers: dict[str, WorkerDispatcher] = {}
         self._records: dict[str, DispatchRecord] = {}
         self._state_store = state_store
@@ -91,6 +95,13 @@ class DistributedRuntime:
 
     def heartbeat(self, heartbeat: Heartbeat) -> NodeRecord:
         node = self.registry.heartbeat(heartbeat)
+        if self.telemetry is not None:
+            workers = tuple(
+                worker
+                for worker in self.registry.list_workers()
+                if worker.node_id == heartbeat.node_id
+            )
+            self.telemetry.heartbeat(node, workers, observed_at=heartbeat.observed_at)
         self._persist()
         return node
 
@@ -192,6 +203,12 @@ class DistributedRuntime:
 
         timestamp = now or utc_now()
         self.registry.expire_heartbeats(now=timestamp)
+        if self.telemetry is not None:
+            self.telemetry.liveness(
+                self.registry.list_nodes(),
+                self.registry.list_workers(),
+                observed_at=timestamp,
+            )
         reconciled: list[DispatchRecord] = []
         for worker_job_id in sorted(self._records):
             record = self._records[worker_job_id]
@@ -208,6 +225,7 @@ class DistributedRuntime:
                     last_error="worker_unreachable",
                 )
                 self._records[worker_job_id] = updated
+                self._observe_reconciliation(record, updated, timestamp=timestamp, node_id=None)
                 reconciled.append(updated)
                 continue
 
@@ -220,6 +238,12 @@ class DistributedRuntime:
                 )
                 updated = replace(record, state=state, last_error="worker_unreachable")
                 self._records[worker_job_id] = updated
+                self._observe_reconciliation(
+                    record,
+                    updated,
+                    timestamp=timestamp,
+                    node_id=worker.node_id,
+                )
                 reconciled.append(updated)
                 continue
 
@@ -235,9 +259,21 @@ class DistributedRuntime:
                     last_error="worker_state_unavailable",
                 )
                 self._records[worker_job_id] = updated
+                self._observe_reconciliation(
+                    record,
+                    updated,
+                    timestamp=timestamp,
+                    node_id=worker.node_id,
+                )
                 reconciled.append(updated)
                 continue
             updated = self._apply_snapshot(record, snapshot, now=timestamp)
+            self._observe_reconciliation(
+                record,
+                updated,
+                timestamp=timestamp,
+                node_id=worker.node_id,
+            )
             reconciled.append(updated)
 
         self.registry.expire_reservations(now=timestamp)
@@ -269,6 +305,8 @@ class DistributedRuntime:
         dispatcher = self._dispatchers.get(worker_id)
         if dispatcher is None:
             self.registry.release_reservation(placement.reservation.reservation_id)
+            if self.telemetry is not None:
+                self.telemetry.reservation(job, placement.reservation, event="released_unreachable")
             self._persist()
             raise RegistryError(f"selected worker has no attached dispatcher: {worker_id}")
 
@@ -277,19 +315,43 @@ class DistributedRuntime:
         # this exact worker before another worker can claim the same canonical worker job.
         self._records[job.worker_job_id] = reserved
         self._persist()
+        started = perf_counter()
         try:
             handle = await dispatcher.dispatch(job)
         except Exception:
+            duration = max(0.0, perf_counter() - started)
             lost = replace(
                 reserved,
                 state=DispatchState.LOST,
                 last_error="dispatch_outcome_unknown",
             )
             self._records[job.worker_job_id] = lost
+            if self.telemetry is not None:
+                self.telemetry.dispatch(
+                    job,
+                    node_id=placement.reservation.node_id,
+                    worker_id=worker_id,
+                    duration_seconds=duration,
+                    succeeded=False,
+                    failure_code="dispatch_outcome_unknown",
+                )
             self._persist()
             raise
 
-        self.registry.commit_reservation(placement.reservation.reservation_id, now=timestamp)
+        duration = max(0.0, perf_counter() - started)
+        committed = self.registry.commit_reservation(
+            placement.reservation.reservation_id,
+            now=timestamp,
+        )
+        if self.telemetry is not None:
+            self.telemetry.reservation(job, committed, event="committed")
+            self.telemetry.dispatch(
+                job,
+                node_id=placement.reservation.node_id,
+                worker_id=worker_id,
+                duration_seconds=duration,
+                succeeded=True,
+            )
         dispatched = replace(
             reserved,
             state=DispatchState.DISPATCHED,
@@ -324,6 +386,8 @@ class DistributedRuntime:
         if terminal:
             if reservation is not None:
                 self.registry.release_reservation(record.reservation_id)
+                if self.telemetry is not None:
+                    self.telemetry.reservation(record.job, reservation, event="released_terminal")
             state = DispatchState.TERMINAL
             last_error = None
         elif reservation is None:
@@ -331,9 +395,17 @@ class DistributedRuntime:
             last_error = "reservation_missing"
         else:
             if reservation.status is ReservationStatus.RESERVED:
-                self.registry.commit_reservation(record.reservation_id, now=now)
+                updated_reservation = self.registry.commit_reservation(record.reservation_id, now=now)
+                reservation_event = "committed"
             else:
-                self.registry.renew_reservation(record.reservation_id, now=now)
+                updated_reservation = self.registry.renew_reservation(record.reservation_id, now=now)
+                reservation_event = "renewed"
+            if self.telemetry is not None:
+                self.telemetry.reservation(
+                    record.job,
+                    updated_reservation,
+                    event=reservation_event,
+                )
             state = DispatchState.RUNNING
             last_error = None
 
@@ -345,6 +417,26 @@ class DistributedRuntime:
         )
         self._records[record.job.worker_job_id] = updated
         return updated
+
+    def _observe_reconciliation(
+        self,
+        previous: DispatchRecord,
+        current: DispatchRecord,
+        *,
+        timestamp: datetime,
+        node_id: str | None,
+    ) -> None:
+        if self.telemetry is None:
+            return
+        self.telemetry.reconciliation(
+            current.job,
+            node_id=node_id,
+            worker_id=current.worker_id,
+            previous_state=previous.state.value,
+            current_state=current.state.value,
+            error_code=current.last_error,
+            observed_at=timestamp,
+        )
 
     def _persist(self) -> None:
         if self._state_store is not None:
