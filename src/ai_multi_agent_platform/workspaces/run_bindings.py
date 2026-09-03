@@ -151,14 +151,14 @@ class SqliteRunWorkspaceBindingRepository(RunWorkspaceBindingRepository):
                         binding.created_at.isoformat(),
                     ),
                 )
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as exc:
             raced = await self.get(binding.run_id)
             if raced is not None and raced.same_target(binding):
                 return raced
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"run already has a different workspace binding: {binding.run_id}",
-            )
+            ) from exc
         except sqlite3.Error as exc:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
