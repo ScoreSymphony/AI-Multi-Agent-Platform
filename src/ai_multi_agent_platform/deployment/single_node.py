@@ -57,12 +57,13 @@ class SingleNodeDeployment:
         if not self.authentication.store.users:
             account = self.authentication.bootstrap_first_admin(username, password)
         else:
-            account = self.authentication.store.user_by_username(username)
-            if account is None or len(self.authentication.store.users) != 1:
+            existing_account = self.authentication.store.user_by_username(username)
+            if existing_account is None or len(self.authentication.store.users) != 1:
                 raise ValueError(
                     "deployment bootstrap is available only for the first existing local user"
                 )
             self.authentication.authenticate_password(username, password)
+            account = existing_account
 
         if not self.authorization.has_policy(account.user_id):
             self.authorization.register(
