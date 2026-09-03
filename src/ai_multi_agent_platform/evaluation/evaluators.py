@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -128,7 +129,7 @@ class DeterministicAssertionEvaluator:
                     message=assertion.message
                     or f"{assertion.path} {assertion.operator.value} assertion",
                     expected=assertion.expected,
-                    actual=None if actual is _MISSING else actual,
+                    actual=None if actual is _MISSING else cast(JsonValue, actual),
                 )
             )
         passed = all(item.passed for item in results)
