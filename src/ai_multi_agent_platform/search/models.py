@@ -11,6 +11,8 @@ from typing import Literal
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 
+_TASK_PRIORITIES = frozenset({"low", "normal", "high", "urgent"})
+
 
 class SearchMode(StrEnum):
     """Search modes understood by the canonical query contract."""
@@ -82,6 +84,8 @@ class SearchQuery:
         ):
             if any(not value.strip() for value in values):
                 raise ValueError(f"{name} must not contain blank values")
+        if any(priority not in _TASK_PRIORITIES for priority in self.priorities):
+            raise ValueError("priorities must contain only low, normal, high or urgent")
         for value, name in (
             (self.responsible_id, "responsible_id"),
             (self.agent_assignment_id, "agent_assignment_id"),
@@ -102,7 +106,11 @@ class SearchQuery:
             and self.updated_after > self.updated_before
         ):
             raise ValueError("updated_after must not be later than updated_before")
-        if self.due_after is not None and self.due_before is not None and self.due_after > self.due_before:
+        if (
+            self.due_after is not None
+            and self.due_before is not None
+            and self.due_after > self.due_before
+        ):
             raise ValueError("due_after must not be later than due_before")
         if self.assignment_state not in {None, "assigned", "unassigned"}:
             raise ValueError("assignment_state must be assigned or unassigned")
