@@ -6,6 +6,11 @@ import os
 from collections.abc import Mapping
 from typing import Any
 
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    normalize_authorization_decision,
+)
 from ai_multi_agent_platform.contracts.interfaces import (
     AuthorizationProvider,
     EventProvider,
@@ -88,6 +93,46 @@ class ControlPlane(
                 kernel=kernel,
                 workspace_project_resolver=self._workspace_provider_project_id,
             )
+
+    async def _authorize(
+        self,
+        context: RequestContext,
+        action: str,
+        resource_ref: str,
+        *,
+        owner_type: str | None = None,
+        owner_id: str | None = None,
+        project_id: str | None = None,
+        request_payload_digest: str | None = None,
+    ) -> None:
+        """Preserve canonical #15 decision metadata in northbound forbidden errors."""
+
+        decision = await self._authorization_decision(
+            context,
+            action,
+            resource_ref,
+            owner_type=owner_type,
+            owner_id=owner_id,
+            project_id=project_id,
+            request_payload_digest=request_payload_digest,
+        )
+        if decision is None:
+            return
+        canonical = normalize_authorization_decision(decision)
+        if canonical.allowed:
+            return
+
+        details: dict[str, JsonValue] = {
+            "authorization_outcome": canonical.outcome.value,
+        }
+        if canonical.policy_id is not None:
+            details["policy_id"] = canonical.policy_id
+        details.update(dict(canonical.constraints))
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            canonical.reason or "operation is forbidden",
+            details=details,
+        )
 
     async def list_tasks(
         self,
