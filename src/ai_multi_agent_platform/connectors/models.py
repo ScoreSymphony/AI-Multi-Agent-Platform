@@ -104,9 +104,7 @@ class ConnectorDefinition:
             self, "resource_types", _nonblank_tuple(self.resource_types, "resource_types")
         )
         object.__setattr__(self, "actions", _nonblank_tuple(self.actions, "actions"))
-        object.__setattr__(
-            self, "event_types", _nonblank_tuple(self.event_types, "event_types")
-        )
+        object.__setattr__(self, "event_types", _nonblank_tuple(self.event_types, "event_types"))
         object.__setattr__(self, "configuration_schema", _freeze_mapping(self.configuration_schema))
         object.__setattr__(self, "health_semantics", _freeze_mapping(self.health_semantics))
 
