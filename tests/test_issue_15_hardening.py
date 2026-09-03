@@ -212,6 +212,86 @@ def test_control_plane_bridge_uses_canonical_vocabulary_and_resumes_after_approv
     assert decision_records[-1].resource_type is ResourceType.TASK
 
 
+def test_control_plane_create_approval_cannot_be_reused_for_changed_payload() -> None:
+    repository = InMemoryKernelRepository()
+    kernel = PlatformKernel(
+        orchestrator=FakeOrchestrator(),
+        lifecycle=FakeLifecycleBackend(),
+        repository=repository,
+    )
+    provider = LocalAuthorizationProvider(
+        (
+            LocalPrincipalPolicy(
+                principal_ref="user:test",
+                actor_types=frozenset({ActorType.HUMAN}),
+                approval_actions=frozenset({AuthorizationAction.CREATE}),
+                resource_types=frozenset({ResourceType.TASK}),
+            ),
+            LocalPrincipalPolicy(
+                principal_ref="user:reviewer",
+                actor_types=frozenset({ActorType.HUMAN}),
+                allowed_actions=frozenset({AuthorizationAction.APPROVE}),
+                resource_types=frozenset({ResourceType.TASK}),
+            ),
+        )
+    )
+    gate = AuthorizationGate(provider)
+    control_plane = ControlPlane(
+        kernel=kernel,
+        events=repository,
+        authorization=ControlPlaneAuthorizationBridge(gate),
+    )
+    context = RequestContext(
+        request_id="request-create-bound",
+        correlation_id="corr-create-bound",
+        actor=ActorContext(
+            principal_ref="user:test",
+            owner_type="user",
+            owner_id="test",
+        ),
+        idempotency_key="create-task-payload-bound",
+    )
+    payload_a = {
+        "title": "Approved title",
+        "objective": "Approved objective",
+        "owner_type": "user",
+        "owner_id": "test",
+    }
+    payload_b = {
+        "title": "Changed title",
+        "objective": "Changed objective",
+        "owner_type": "user",
+        "owner_id": "test",
+    }
+
+    with pytest.raises(ContractError) as first_pending:
+        asyncio.run(control_plane.create_task(context, payload_a))
+    assert first_pending.value.code is ErrorCode.FORBIDDEN
+    first = gate.approvals.all()[0]
+
+    asyncio.run(
+        gate.decide_approval(
+            first.approval_id,
+            approver=ActorIdentity("user:reviewer", ActorType.HUMAN),
+            approve=True,
+            operation=OperationContext(
+                correlation_id="corr-create-bound-review",
+                owner_type="user",
+                owner_id="reviewer",
+            ),
+        )
+    )
+    created = asyncio.run(control_plane.create_task(context, payload_a))
+    assert created["title"] == "Approved title"
+
+    with pytest.raises(ContractError) as changed_pending:
+        asyncio.run(control_plane.create_task(context, payload_b))
+    assert changed_pending.value.code is ErrorCode.FORBIDDEN
+    approvals = gate.approvals.all()
+    assert len(approvals) == 2
+    assert approvals[0].requested_action_digest != approvals[1].requested_action_digest
+
+
 def test_control_plane_vocabulary_mapping_is_platform_owned() -> None:
     assert canonical_control_plane_vocabulary("project:create") == (
         AuthorizationAction.CREATE,
