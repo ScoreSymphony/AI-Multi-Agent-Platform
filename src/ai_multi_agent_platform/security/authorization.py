@@ -252,6 +252,7 @@ class LocalPrincipalPolicy:
     resource_types: frozenset[ResourceType] = frozenset()
     project_ids: frozenset[str] = frozenset()
     organization_ids: frozenset[str] = frozenset()
+    team_ids: frozenset[str] = frozenset()
     workspace_ids: frozenset[str] = frozenset()
     administrator: bool = False
 
@@ -345,6 +346,13 @@ class LocalAuthorizationProvider(AuthorizationProvider):
                 reason="organization scope is outside principal policy",
                 policy_id=f"local:{policy.principal_ref}",
             )
+        if not _scope_allowed(getattr(request, "team_id", None), policy.team_ids):
+            return self._decision(
+                AuthorizationOutcome.DENY,
+                request,
+                reason="team scope is outside principal policy",
+                policy_id=f"local:{policy.principal_ref}",
+            )
         if not _scope_allowed(getattr(request, "workspace_id", None), policy.workspace_ids):
             return self._decision(
                 AuthorizationOutcome.DENY,
@@ -391,6 +399,7 @@ class LocalAuthorizationProvider(AuthorizationProvider):
                 "actor_type": getattr(request, "actor_type", "service"),
                 "resource_type": getattr(request, "resource_type", "generic"),
                 "project_id": request.context.project_id,
+                "team_id": getattr(request, "team_id", None),
             },
         )
 
