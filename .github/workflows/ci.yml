@@ -33,3 +33,75 @@ jobs:
         run: pytest
       - name: Build package
         run: python -m build
+
+  forge-sidecar-integration:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install platform test environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Checkout pinned Forge runtime source
+        uses: actions/checkout@v4
+        with:
+          repository: ScoreSymphony/AI-Agent-VPS
+          ref: 00b821bc94767865457814bf282982ca242a2e10
+          path: .upstream/forge
+          persist-credentials: false
+      - name: Build execution-only Forge sidecar
+        working-directory: .upstream/forge/core/forge
+        run: cargo build -p executor-sidecar --bin forge-executor-sidecar
+      - name: Start execution-only Forge sidecar
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.forge-sidecar-workspaces"
+          mkdir -p "$GITHUB_WORKSPACE/.forge-sidecar-logs"
+          FORGE_EXECUTOR_WORKSPACE_ROOT="$GITHUB_WORKSPACE/.forge-sidecar-workspaces" \
+          FORGE_EXECUTOR_LOGS_ROOT="$GITHUB_WORKSPACE/.forge-sidecar-logs" \
+          FORGE_EXECUTOR_ALLOWED_TYPES="null" \
+          FORGE_EXECUTOR_SIDECAR_ADDR="127.0.0.1:8787" \
+          "$GITHUB_WORKSPACE/.upstream/forge/core/forge/target/debug/forge-executor-sidecar" \
+            > "$GITHUB_WORKSPACE/.forge-sidecar.log" 2>&1 &
+          echo $! > "$GITHUB_WORKSPACE/.forge-sidecar.pid"
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          for _ in range(80):
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:8787/healthz", timeout=1) as response:
+                      payload = json.load(response)
+                  if payload.get("healthy") is True:
+                      break
+              except Exception:
+                  time.sleep(0.25)
+          else:
+              raise SystemExit("Forge executor sidecar did not become healthy")
+          PY
+      - name: Run real Forge sidecar integration tests
+        env:
+          FORGE_SIDECAR_BASE_URL: http://127.0.0.1:8787
+          FORGE_SIDECAR_WORKSPACE_ROOT: ${{ github.workspace }}/.forge-sidecar-workspaces
+        run: pytest -q tests/test_forge_sidecar_integration.py
+      - name: Show Forge sidecar log
+        if: always()
+        run: cat "$GITHUB_WORKSPACE/.forge-sidecar.log" || true
+      - name: Stop Forge sidecar
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$GITHUB_WORKSPACE/.forge-sidecar.pid" ]; then
+            kill "$(cat "$GITHUB_WORKSPACE/.forge-sidecar.pid")" 2>/dev/null || true
+          fi
