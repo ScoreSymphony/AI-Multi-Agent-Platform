@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .types import SecretReference
@@ -22,6 +24,11 @@ _DEFAULT_SENSITIVE_KEYS = frozenset(
         "set_cookie",
         "token",
     }
+)
+_ENVIRONMENT_ASSIGNMENT = re.compile(
+    r"(?P<prefix>\b(?P<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*)"
+    r"(?P<value>\"[^\"\r\n]*\"|'[^'\r\n]*'|Bearer[ \t]+[^\s;\r\n]+|[^\s;\r\n]+)",
+    re.IGNORECASE,
 )
 
 
@@ -56,12 +63,18 @@ def redact_sensitive(
 
 
 def redact_text(text: str, sensitive_values: tuple[str, ...] = ()) -> str:
-    """Redact known sensitive substrings from free-text operational surfaces."""
+    """Redact known secrets and obvious sensitive environment assignments from free text."""
 
     redacted = text
     for value in sorted((item for item in sensitive_values if item), key=len, reverse=True):
         redacted = redacted.replace(value, REDACTED)
-    return redacted
+
+    def redact_assignment(match: re.Match[str]) -> str:
+        if not _is_sensitive_key(match.group("key"), frozenset()):
+            return match.group(0)
+        return f"{match.group('prefix')}{REDACTED}"
+
+    return _ENVIRONMENT_ASSIGNMENT.sub(redact_assignment, redacted)
 
 
 def redact_exception(error: BaseException, sensitive_values: tuple[str, ...] = ()) -> str:

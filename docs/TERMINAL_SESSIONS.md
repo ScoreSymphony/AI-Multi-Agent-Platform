@@ -39,7 +39,7 @@ A session records:
 
 A terminal context may carry a `task_id` without a `run_id`, but a `run_id` always requires its owning `task_id`. This keeps run-linked terminal actions resolvable through the canonical Task/Run lifecycle rather than relying on a backend-private lookup.
 
-When a canonical `WorkspaceProvider` is configured, terminal creation verifies that the supplied `workspace_id` belongs to the requested `project_id` before the adapter is invoked. Local/reference deployments without a workspace provider retain the earlier contract-only path; they do not pretend to have performed a workspace relationship check.
+When a canonical `WorkspaceProvider` is configured, terminal creation verifies that the supplied `workspace_id` belongs to the requested `project_id` before the adapter is invoked. Local/reference deployments without a workspace provider retain the contract-only path; they do not pretend to have performed a workspace relationship check.
 
 ## Private adapter metadata and public diagnostics
 
@@ -71,13 +71,26 @@ Manual interactive creation is classified as high risk. A policy can require app
 
 The terminal UI preserves this approval-bound identity. When the Control Plane returns `require_approval`, the UI retains the reserved session reference and approval reference and can resume the exact request after the canonical approval workflow grants it. Approval-gated input and termination similarly retain the exact pending action rather than silently issuing a different privileged action.
 
-Input audit records keep metadata such as byte size, not the raw submitted terminal content. Output passes through the configured redaction hook before it is exposed as canonical frames or passed to a transcript evidence sink.
+Input audit records keep metadata such as byte size, not the raw submitted terminal content.
+
+## Central redaction boundary
+
+Canonical terminal frames use the platform-wide #34 free-text redaction helper by default. Terminal therefore does not silently fall back to an identity/no-op redactor in the normal service constructor.
+
+The central redaction path provides two layers:
+
+1. explicitly known sensitive values can still be supplied to `redact_text(...)` and are removed wherever they occur;
+2. obvious environment-style assignments whose keys are classified as sensitive are redacted structurally, including common forms such as `*_TOKEN=...`, `*_API_KEY=...`, `*_PASSWORD=...`, `*_SECRET=...` and `*_PRIVATE_KEY=...`.
+
+This covers a common terminal failure mode where a command prints environment/configuration lines without requiring the terminal subsystem to own a second secret registry. Non-sensitive assignments remain visible. Hosts may still inject a stricter replaceable redactor when they have additional deployment-specific sensitive values.
+
+Redaction happens before adapter output becomes a canonical `TerminalFrame` and before retained transcript/evidence is delivered to its sink. Components must still avoid putting raw secret material into execution output where possible; redaction is defense in depth rather than permission to expose secrets deliberately.
 
 ## Standard Control Plane composition
 
 Terminal is part of the exported platform composition instead of a test-only side stack.
 
-The terminal composition extends the current hardened Automation/Search Control Plane. It does not replace or fork newer registered platform domains. Authentication, Automation, Search, Task/Run lifecycle, Workspace handling, and other current Control Plane behavior remain the upstream composition that Terminal augments.
+The terminal composition extends the current Control Plane stack and composes with later plugin/authentication/search/task-management layers rather than replacing them. Authentication, Automation, Search, Task/Run lifecycle, Workspace handling, plugins and other current Control Plane behavior remain the upstream composition that Terminal augments.
 
 A host configures the normal Control Plane with the optional terminal service:
 
@@ -92,9 +105,7 @@ http = ControlPlaneHTTP(control_plane)
 app = ControlPlaneASGI(http)
 ```
 
-When `terminal_sessions` is present, the composed `ControlPlane` registers the canonical terminal resource collection and commands, and the exported `ControlPlaneASGI` automatically brokers the terminal WebSocket route. When Terminal is absent, the same Control Plane/HTTP/ASGI classes retain the ordinary non-terminal behavior.
-
-This prevents production callers from having to reproduce the special manual registration/wrapper sequence that was originally present only in the #73 E2E fixture, while also preventing Terminal integration from rolling the platform back to an older Control Plane composition.
+When `terminal_sessions` is present, the composed `ControlPlane` registers the canonical terminal resource collection and commands, and the exported `ControlPlaneASGI` automatically brokers the terminal WebSocket route. When Terminal is absent, the same Control Plane/HTTP/ASGI classes retain ordinary non-terminal behavior.
 
 ## HTTP Control Plane surface
 
@@ -122,7 +133,7 @@ An explicit `session_id` remains supported for exact approval resumption and con
 
 Creation can also include `inactivity_timeout_seconds` and `retain_transcript`. These values are part of the authorization payload and exact create-request identity, so changing them requires a newly authorized action rather than reusing an approval for a different lifecycle policy.
 
-The terminal resource payload is validated by the same extension private-payload guard as every other Control Plane extension. Backend-private fields such as `adapter_metadata`, provider SDK objects, private API handles, raw exceptions, or backend references are never valid northbound terminal fields.
+The terminal resource payload is validated by the same extension private-payload guard as other Control Plane extensions. Backend-private fields such as `adapter_metadata`, provider SDK objects, private API handles, raw exceptions, or backend references are never valid northbound terminal fields.
 
 ## Execution-linked termination
 
@@ -131,13 +142,17 @@ Detaching a browser connection never changes Task or Run ownership.
 Explicit termination has two deliberately different meanings:
 
 - manual/debug/log-stream sessions terminate only their terminal/session adapter;
-- execution-owning `agent`, `worker`, or `process` sessions that carry canonical `task_id` + `run_id` additionally request cancellation through the normal `ControlPlane.cancel_run(...)` boundary.
+- execution-owning `agent`, `worker`, or `process` sessions that carry canonical `task_id` + `run_id` require cancellation through the normal `ControlPlane.cancel_run(...)` boundary before the adapter is mutated.
 
-The terminal authorization/approval check happens before the canonical Run cancellation is requested. The second step deliberately passes through the existing `run:cancel` authorization and the platform's normal Run lifecycle semantics instead of calling the kernel directly. A caller therefore needs both the authority to terminate the terminal session and the authority required to cancel the linked Run.
+The required sequence for a run-linked execution-owning session is:
 
-The same terminal termination idempotency key is projected into the canonical Run cancellation. If the terminal adapter has already terminated but `run:cancel` is denied or transiently unavailable, the Run remains canonical truth; a later exact retry can complete the Run cancellation without creating a second terminal session or inventing a new Run state.
+1. authorize/approve the terminal termination action;
+2. request canonical `run:cancel` through the Control Plane with the same trusted actor/context and idempotency key;
+3. only after canonical Run cancellation succeeds, terminate/reconcile the terminal adapter.
 
-A run-linked execution-owning terminal session therefore cannot claim successful canonical execution cancellation when the canonical cancellation integration is unavailable or forbidden; that condition fails canonically instead of silently mutating Run status behind the Control Plane.
+A caller therefore needs both terminal-termination authority and the authority required to cancel the linked Run. If `run:cancel` is denied or unavailable, the terminal adapter/session remains unchanged. Returning a `403` or canonical cancellation error after already killing the underlying execution is explicitly forbidden.
+
+If canonical Run cancellation succeeds but adapter cleanup subsequently fails, the Run remains canonical lifecycle truth and the adapter cleanup can be retried/reconciled idempotently. Terminal state never substitutes for Run state.
 
 ## WebSocket stream protocol
 
@@ -151,7 +166,7 @@ Browser clients must offer the `platform.terminal.v1` WebSocket subprotocol. The
 
 Terminal WebSocket identity uses the same `prepare_stream_request` boundary that protects authenticated Control Plane streams. When the #36 authenticated transport is configured, the WebSocket handshake is authenticated before `TerminalSessionASGI` constructs its actor context.
 
-Caller-supplied `X-Principal-Ref`, `X-Owner-Type`, or `X-Owner-Id` values are therefore not an authentication mechanism. The authenticated transport strips/replaces those fields with the canonical identity established by the configured credential or browser session. An anonymous client cannot gain terminal access by spoofing actor headers; a rejected authentication is translated into the corresponding WebSocket close before a terminal attachment is created.
+Caller-supplied `X-Principal-Ref`, `X-Owner-Type`, or `X-Owner-Id` values are not an authentication mechanism. The authenticated transport strips/replaces those fields with the canonical identity established by the configured credential or browser session. An anonymous client cannot gain terminal access by spoofing actor headers; rejected authentication is translated into the corresponding WebSocket close before a terminal attachment is created.
 
 The same composition remains usable without an authentication wrapper for local/reference stacks, where the base `prepare_stream_request` hook is intentionally a no-op. This preserves replaceability without weakening deployments that enable canonical authentication.
 
@@ -171,7 +186,7 @@ Client messages:
 - `detach` — close the attachment without cancelling task/run ownership;
 - `ping` — liveness check.
 
-Approval-bound input may include `approval_id`; WebSocket termination may include `approval_id` and an optional idempotency key. The browser still never connects to worker-private terminal ports.
+Approval-bound input may include `approval_id`; WebSocket termination may include `approval_id` and an optional idempotency key. The browser never connects to worker-private terminal ports.
 
 Disconnecting the browser detaches the attachment. It does not implicitly cancel the underlying Task or Run.
 
@@ -187,8 +202,6 @@ There is no hidden universal terminal timeout. A session can instead carry an ex
 
 The service tracks canonical activity and evaluates timeout policy during reconciliation. New canonical output, interactive input and resize operations refresh the activity timestamp. Once inactivity reaches the configured threshold, the service terminates the adapter through its canonical boundary, verifies that the backend reaches a terminal status, maps that status back to the `TerminalSession`, and records a `session.inactivity_timeout` activity entry. Failure of the adapter to terminate is treated as an invalid provider response rather than silently pretending the session ended.
 
-Because timeout is represented in the canonical contract and authorization payload, adapters do not get to introduce undisclosed UI-only or provider-private timeout semantics.
-
 The foundation intentionally makes reconciliation host-driven rather than starting hidden background tasks inside every `TerminalSessionService`. A long-running deployment is responsible for driving normal service reconciliation; future remote/push worker adapters may provide stronger continuous liveness without changing the canonical timeout contract.
 
 ## Transcript and evidence retention
@@ -198,8 +211,6 @@ Transcript retention is opt-in through `retain_transcript=true`; it is not impli
 When retention is enabled, `TerminalSessionService` requires an explicitly configured transcript/evidence sink. Creation fails closed with a canonical unavailable error when policy requests retention but no sink exists. The service sends only already-redacted canonical `TerminalFrame` objects to the sink.
 
 Retention is sequence-stable and retryable. A canonical frame receives its stable frame ID before evidence delivery. A sequence is marked retained only after the sink accepts it. If the sink temporarily fails, the canonical frame remains stable but the sequence remains pending; a later exact create retry, read/stream, input flow, or lifecycle reconciliation retries that same frame rather than silently treating it as persisted or creating a duplicate evidence record.
-
-When retention is enabled the service also captures pending adapter output on creation and during canonical read/stream and lifecycle reconciliation paths. This means retention does not depend solely on one particular browser attachment. Future remote/push adapters may drive reconciliation continuously, but they must preserve the same sequence-stable evidence semantics.
 
 The foundation deliberately does not prescribe one database, filesystem or evidence product. Durable storage, retention duration, deletion and export policy belong to the platform persistence/policy layer behind the sink.
 
@@ -211,7 +222,7 @@ Adapters can report `lost`. Reconciliation converts that backend state into cano
 
 The `/terminal` area provides:
 
-- session list and workspace/status filters;
+- an explicit project-scoped session list, plus optional workspace/status filters;
 - canonical project/workspace/task/run context links;
 - links to the canonical artifact and timeline surfaces;
 - connection state;
@@ -223,7 +234,9 @@ The `/terminal` area provides:
 - approval-aware exact-request resume for creation, input and termination;
 - creation of the deterministic reference session for development/testing.
 
-The frontend contract also understands the canonical timeout, retention and diagnostics fields. The frontend derives the WebSocket URL from the configured Control Plane URL and never connects to worker-private terminal ports.
+The list does not issue an unscoped terminal query before a project is selected. This keeps the UI aligned with project-scoped #15 policies instead of requiring the backend to weaken its authorization semantics for convenience.
+
+When a session is created from the page, its canonical project becomes the active list scope automatically. The frontend derives the WebSocket URL from the configured Control Plane URL and never connects to worker-private terminal ports.
 
 ## Integration rules for future adapters
 
@@ -237,7 +250,7 @@ A new adapter must:
 6. enforce backend-side read/write isolation in addition to platform authorization;
 7. report terminal completion/loss through canonical status mapping;
 8. keep browser access behind the Control Plane gateway;
-9. avoid leaking secrets, environment values, private PTY paths, provider-private IDs, or backend handles through public diagnostics;
+9. avoid leaking secrets, environment values, private PTY paths, provider-private IDs, or backend handles through public diagnostics/output;
 10. honor service-driven termination for canonical inactivity policy;
 11. leave transcript persistence to the platform evidence sink rather than writing provider-private transcripts behind the service boundary;
-12. preserve canonical task/run identity so execution-owning termination can map through the authorized Control Plane Run lifecycle rather than a provider-private cancellation path.
+12. preserve canonical task/run identity so execution-owning termination can use authorized Control Plane Run lifecycle before adapter mutation.
