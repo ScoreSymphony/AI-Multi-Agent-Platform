@@ -25,6 +25,7 @@ from .models import (
     SessionType,
     StreamChannel,
     TerminalCapabilities,
+    TerminalDiagnostic,
     TerminalDimensions,
 )
 
@@ -121,6 +122,12 @@ class ReferenceTerminalAdapter(TerminalSessionAdapter):
             capabilities=capabilities,
             metadata=(
                 AdapterMetadata(
+                    namespace="reference-terminal.private",
+                    values={"backend_handle_kind": "in-memory-reference"},
+                ),
+            ),
+            public_diagnostics=(
+                TerminalDiagnostic(
                     namespace="reference-terminal",
                     values={"arbitrary_host_shell": False, "deterministic": True},
                 ),

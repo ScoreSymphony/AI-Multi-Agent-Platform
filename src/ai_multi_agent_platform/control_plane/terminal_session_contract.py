@@ -4,22 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, cast
 from urllib.parse import parse_qsl
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
-from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext, OperationControl
+from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.terminal import (
     SessionContext,
     SessionCreateRequest,
     SessionMode,
     SessionType,
     TerminalDimensions,
+    TerminalSession,
     TerminalSessionService,
 )
+from ai_multi_agent_platform.workspaces import WorkspaceProvider
 
 from .extensions import CommandHandler, ResourceService
 from .http import ControlPlaneASGI
@@ -31,6 +33,12 @@ from .models import (
     RequestContext,
     api_exception_from_contract,
 )
+
+TERMINAL_WS_SUBPROTOCOL = "platform.terminal.v1"
+_EXECUTION_OWNING_SESSION_TYPES = frozenset(
+    {SessionType.AGENT, SessionType.WORKER, SessionType.PROCESS}
+)
+RunCanceller = Callable[[RequestContext, str, str, str], Awaitable[None]]
 
 
 class TerminalSessionResourceService(ResourceService):
@@ -75,6 +83,10 @@ def terminal_resource_services(
 
 def terminal_command_handlers(
     sessions: TerminalSessionService,
+    *,
+    kernel: PlatformKernel | None = None,
+    workspace_provider: WorkspaceProvider | None = None,
+    run_canceller: RunCanceller | None = None,
 ) -> dict[str, CommandHandler]:
     async def create(
         context: RequestContext,
@@ -83,6 +95,7 @@ def terminal_command_handlers(
     ) -> dict[str, JsonValue]:
         project_id = resource_ref
         workspace_id = _required_string(payload, "workspace_id")
+        await _validate_workspace_project(workspace_provider, workspace_id, project_id)
         try:
             session_type = SessionType(_required_string(payload, "session_type"))
             mode = SessionMode(_required_string(payload, "mode"))
@@ -91,17 +104,19 @@ def terminal_command_handlers(
                 ErrorCode.INVALID_REQUEST,
                 str(exc),
             ) from exc
+        session_context = SessionContext(
+            project_id=project_id,
+            workspace_id=workspace_id,
+            task_id=_optional_string(payload, "task_id"),
+            run_id=_optional_string(payload, "run_id"),
+            worker_id=_optional_string(payload, "worker_id"),
+            node_id=_optional_string(payload, "node_id"),
+        )
+        await _validate_task_run_context(kernel, session_context)
         request = SessionCreateRequest(
-            session_id=_optional_string(payload, "session_id") or new_id("terminal_session"),
+            session_id=_create_session_id(context, project_id, payload),
             session_type=session_type,
-            context=SessionContext(
-                project_id=project_id,
-                workspace_id=workspace_id,
-                task_id=_optional_string(payload, "task_id"),
-                run_id=_optional_string(payload, "run_id"),
-                worker_id=_optional_string(payload, "worker_id"),
-                node_id=_optional_string(payload, "node_id"),
-            ),
+            context=session_context,
             mode=mode,
             actor_ref=context.actor.principal_ref,
             operation=_operation(context, project_id=project_id),
@@ -145,12 +160,14 @@ def terminal_command_handlers(
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        session = await sessions.terminate(
+        session = await _terminate_session(
+            sessions,
+            run_canceller,
             resource_ref,
-            actor_ref=context.actor.principal_ref,
-            operation=_operation(context),
+            context=context,
             reason=_optional_string(payload, "reason"),
             approval_id=_optional_string(payload, "approval_id"),
+            idempotency_key=_required_idempotency_key(context),
         )
         return session.to_json()
 
@@ -184,9 +201,16 @@ def terminal_command_handlers(
 class TerminalSessionASGI:
     """Add a canonical WebSocket stream while delegating HTTP/SSE to the base ASGI app."""
 
-    def __init__(self, base: ControlPlaneASGI, sessions: TerminalSessionService) -> None:
+    def __init__(
+        self,
+        base: ControlPlaneASGI,
+        sessions: TerminalSessionService,
+        *,
+        run_canceller: RunCanceller | None = None,
+    ) -> None:
         self._base = base
         self._sessions = sessions
+        self._run_canceller = run_canceller
 
     async def __call__(
         self,
@@ -204,6 +228,16 @@ class TerminalSessionASGI:
         if session_id is None:
             await send({"type": "websocket.close", "code": 4404, "reason": "route not found"})
             return
+        subprotocols = scope.get("subprotocols", [])
+        if TERMINAL_WS_SUBPROTOCOL not in subprotocols:
+            await send(
+                {
+                    "type": "websocket.close",
+                    "code": 4406,
+                    "reason": "terminal subprotocol required",
+                }
+            )
+            return
 
         headers = _decode_headers(scope.get("headers", []))
         query = dict(
@@ -218,6 +252,7 @@ class TerminalSessionASGI:
             request_id=request_id,
             correlation_id=correlation_id,
             actor=_actor_context(headers),
+            idempotency_key=headers.get("idempotency-key"),
         )
         try:
             after_sequence = int(query.get("after_sequence", "0"))
@@ -253,7 +288,15 @@ class TerminalSessionASGI:
             )
         except ContractError as exc:
             error = api_exception_from_contract(exc)
-            close_code = 4403 if error.status == 403 else 4404 if error.status == 404 else 4400
+            close_code = (
+                4401
+                if error.status == 401
+                else 4403
+                if error.status == 403
+                else 4404
+                if error.status == 404
+                else 4400
+            )
             await send(
                 {
                     "type": "websocket.close",
@@ -263,7 +306,7 @@ class TerminalSessionASGI:
             )
             return
 
-        await send({"type": "websocket.accept", "subprotocol": "platform.terminal.v1"})
+        await send({"type": "websocket.accept", "subprotocol": TERMINAL_WS_SUBPROTOCOL})
         await _send_json(
             send,
             {
@@ -373,12 +416,18 @@ class TerminalSessionASGI:
                         operation=operation,
                     )
                 elif command == "terminate":
-                    await self._sessions.terminate(
+                    await _terminate_session(
+                        self._sessions,
+                        self._run_canceller,
                         session_id,
-                        actor_ref=context.actor.principal_ref,
-                        operation=operation,
+                        context=context,
                         reason=_json_optional_string(payload, "reason"),
                         approval_id=_json_optional_string(payload, "approval_id"),
+                        idempotency_key=(
+                            _json_optional_string(payload, "idempotency_key")
+                            or context.idempotency_key
+                            or f"{context.request_id}:terminal-terminate"
+                        ),
                     )
                 elif command == "detach":
                     return
@@ -404,12 +453,113 @@ class TerminalSessionASGI:
                 )
 
 
+async def _terminate_session(
+    sessions: TerminalSessionService,
+    run_canceller: RunCanceller | None,
+    session_id: str,
+    *,
+    context: RequestContext,
+    reason: str | None,
+    approval_id: str | None,
+    idempotency_key: str,
+) -> TerminalSession:
+    operation = _operation(context)
+    session = await sessions.terminate(
+        session_id,
+        actor_ref=context.actor.principal_ref,
+        operation=operation,
+        reason=reason,
+        approval_id=approval_id,
+    )
+    if (
+        session.session_type in _EXECUTION_OWNING_SESSION_TYPES
+        and session.context.run_id is not None
+        and session.context.task_id is not None
+    ):
+        if run_canceller is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "run-linked terminal termination requires canonical Control Plane integration",
+            )
+        await run_canceller(
+            context,
+            session.context.task_id,
+            session.context.run_id,
+            idempotency_key,
+        )
+    return session
+
+
+async def _validate_workspace_project(
+    workspace_provider: WorkspaceProvider | None,
+    workspace_id: str,
+    project_id: str,
+) -> None:
+    if workspace_provider is None:
+        return
+    workspace = await workspace_provider.get_workspace(workspace_id)
+    if workspace.project_id != project_id:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "terminal workspace does not belong to the requested project",
+            details={"workspace_id": workspace_id, "project_id": project_id},
+        )
+
+
+async def _validate_task_run_context(
+    kernel: PlatformKernel | None,
+    session_context: SessionContext,
+) -> None:
+    if kernel is None or session_context.task_id is None:
+        return
+    task = await kernel.get_task(session_context.task_id)
+    if task.task.project_id != session_context.project_id:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "terminal task does not belong to the requested project",
+            details={
+                "task_id": session_context.task_id,
+                "project_id": session_context.project_id,
+            },
+        )
+    if session_context.run_id is not None:
+        await kernel.get_run(session_context.task_id, session_context.run_id)
+
+
+def _create_session_id(
+    context: RequestContext,
+    project_id: str,
+    payload: Mapping[str, JsonValue],
+) -> str:
+    explicit = _optional_string(payload, "session_id")
+    if explicit is not None:
+        return explicit
+    key = _required_idempotency_key(context)
+    stable = uuid5(
+        NAMESPACE_URL,
+        f"ai-multi-agent-platform:terminal:create:{context.actor.principal_ref}:{project_id}:{key}",
+    )
+    return f"terminal_session_{stable}"
+
+
+def _required_idempotency_key(context: RequestContext) -> str:
+    key = context.idempotency_key
+    if key is None:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "Idempotency-Key is required for terminal mutation",
+            details={"header": "Idempotency-Key"},
+        )
+    return key
+
+
 def _operation(context: RequestContext, *, project_id: str | None = None) -> OperationContext:
     return OperationContext(
         correlation_id=context.correlation_id,
         owner_type=context.actor.owner_type,
         owner_id=context.actor.owner_id,
         project_id=project_id,
+        control=OperationControl(idempotency_key=context.idempotency_key),
     )
 
 

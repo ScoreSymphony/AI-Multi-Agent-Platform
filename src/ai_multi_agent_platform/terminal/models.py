@@ -93,6 +93,23 @@ class TerminalCapabilities:
 
 
 @dataclass(frozen=True, slots=True)
+class TerminalDiagnostic:
+    """Explicitly public, non-secret diagnostic metadata safe for northbound clients."""
+
+    namespace: str
+    values: dict[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.namespace.strip() or any(char.isspace() for char in self.namespace):
+            raise ValueError(
+                "terminal diagnostic namespace must be non-empty and contain no spaces"
+            )
+
+    def to_json(self) -> dict[str, JsonValue]:
+        return {"namespace": self.namespace, "values": dict(self.values)}
+
+
+@dataclass(frozen=True, slots=True)
 class SessionContext:
     project_id: str
     workspace_id: str
@@ -108,6 +125,8 @@ class SessionContext:
             validate_id(self.task_id, "task")
         if self.run_id is not None:
             validate_id(self.run_id, "run")
+            if self.task_id is None:
+                raise ValueError("run-linked terminal context requires task_id")
         if self.worker_id is not None:
             validate_id(self.worker_id, "worker")
         if self.node_id is not None:
@@ -142,6 +161,7 @@ class TerminalSession:
     inactivity_timeout_seconds: int | None = None
     retain_transcript: bool = False
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
+    public_diagnostics: tuple[TerminalDiagnostic, ...] = ()
 
     def __post_init__(self) -> None:
         validate_id(self.id, "terminal_session")
@@ -175,6 +195,7 @@ class TerminalSession:
         allowed = {
             SessionStatus.STARTING: {
                 SessionStatus.RUNNING,
+                SessionStatus.COMPLETED,
                 SessionStatus.FAILED,
                 SessionStatus.CANCELLED,
                 SessionStatus.LOST,
@@ -195,10 +216,6 @@ class TerminalSession:
         return replace(self, dimensions=dimensions)
 
     def to_json(self) -> dict[str, JsonValue]:
-        diagnostics: list[JsonValue] = [
-            {"namespace": item.namespace, "values": dict(item.values)}
-            for item in self.adapter_metadata
-        ]
         return {
             "id": self.id,
             "session_type": self.session_type.value,
@@ -217,7 +234,7 @@ class TerminalSession:
             "policy_classification": list(self.policy_classification),
             "inactivity_timeout_seconds": self.inactivity_timeout_seconds,
             "retain_transcript": self.retain_transcript,
-            "diagnostics": diagnostics,
+            "diagnostics": [item.to_json() for item in self.public_diagnostics],
         }
 
 
