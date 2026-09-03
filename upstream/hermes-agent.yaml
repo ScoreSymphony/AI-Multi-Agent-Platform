@@ -1,0 +1,38 @@
+name: "Hermes Agent"
+purpose: "Optional external orchestrator runtime implementing the platform-owned Orchestrator and AgentOrchestratorMapper boundaries"
+status: approved
+integration_categories:
+  - external-self-hosted-service
+  - adapter-integration
+canonical_upstream: "https://github.com/NousResearch/hermes-agent"
+pinned_revision: "63279301bcbdc185c1b07b98a9312eb0c862f26d"
+verified_license: "MIT"
+license_verification_date: "2026-09-03"
+last_review_date: "2026-09-03"
+platform_adapter_or_boundary: "ai_multi_agent_platform.adapters.hermes.HermesOrchestrator + HermesAgentMapper over the documented Hermes API-server /v1/runs surface"
+local_source_path: "src/ai_multi_agent_platform/adapters/hermes.py"
+source_origin_path: "No Hermes source copied; protocol behavior reviewed from website/docs/developer-guide/programmatic-integration.md and gateway/platforms/api_server*.py at the pinned commit"
+modified_locally: false
+modification_summary: "Platform-owned adapter only; no upstream source vendored or patched"
+required_notices:
+  - "No upstream source is redistributed by this repository. Preserve the upstream MIT notice if substantial Hermes source is copied in a future change."
+compatibility_constraints:
+  - "Compatibility target is NousResearch/hermes-agent commit 63279301bcbdc185c1b07b98a9312eb0c862f26d."
+  - "Uses the documented HTTP API-server /v1/runs admission, status and stop endpoints plus /health."
+  - "Hermes-native model and tool selectors require explicit model_bridge/capability_bridge mappings from canonical platform IDs."
+  - "Canonical Plan/Step IDs are never allocated by Hermes; Hermes returns proposal-local step keys only."
+security_constraints:
+  - "Hermes API credentials are resolved through api_key_env at request time and are never stored in canonical metadata."
+  - "Caller/platform approval authority is not delegated to Hermes; waiting_for_approval fails closed in the baseline planner."
+  - "Canonical capability authorization remains platform-owned; Hermes tool catalogs cannot expand an Agent allowlist."
+deployment_constraints:
+  - "Hermes runs as a separately deployed optional service; no in-process Hermes import is required."
+  - "Default example targets loopback HTTP and keeps the adapter disabled until explicitly configured."
+resource_constraints:
+  - "Resource needs are determined by the independently deployed Hermes instance and its selected model/tool backends, not by platform core."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Compare proposed Hermes revision with the pinned commit; re-review license, programmatic API, /v1/runs status/cancel/approval semantics, auth/profile/security changes; update provenance/docs; run adapter, real-Hermes integration and full repository CI."
+exit_replacement_strategy: "Disable/remove the Hermes adapter and service, then select another Orchestrator/AgentOrchestratorMapper. Canonical Task/Run/Agent/Team/Plan/model/capability state requires no migration."
+adr: "None required while Hermes remains an optional subordinate adapter. Any move of canonical lifecycle/domain ownership into Hermes requires an ADR."
+notes: "Approved for issue #8 implementation; becomes integrated when the implementation PR is merged."
