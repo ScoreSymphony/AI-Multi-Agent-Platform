@@ -19,6 +19,7 @@ import { ProjectsPage } from "../pages/ProjectListPage";
 import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
 import { TaskDetailPage } from "../pages/TaskDetailPage";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
+import { TerminalPage } from "../pages/TerminalPage";
 import { UsagePage } from "../pages/UsagePage";
 
 export function Shell() {
@@ -59,6 +60,7 @@ export function Shell() {
   else if (path === "/models") content = <ModelsPage client={client} />;
   else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
   else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
+  else if (path === "/terminal") content = <TerminalPage client={client} />;
   else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
   else if (path === "/observability") content = <ObservabilityPage client={client} view="observability" />;
   else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
