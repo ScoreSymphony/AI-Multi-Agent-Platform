@@ -4,8 +4,8 @@ import { ControlPlaneClient } from "./client";
 const emptyPage = { items: [], next_cursor: null, total: 0, limit: 100 };
 
 function makeClient() {
-  const fetchSpy = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify(emptyPage), { status: 200 }),
+  const fetchSpy = vi.fn().mockImplementation(() =>
+    Promise.resolve(new Response(JSON.stringify(emptyPage), { status: 200 })),
   );
   return {
     client: new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch }),
