@@ -1,5 +1,7 @@
 """Run the deployment operator CLI with ``python -m ai_multi_agent_platform.deployment``."""
 
+from __future__ import annotations
+
 from .server import main
 
 
