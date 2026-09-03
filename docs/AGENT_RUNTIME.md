@@ -54,8 +54,11 @@ instance for the same path replays the persisted history through the normal repo
 validation rules, so restart recovery cannot bypass revision or identity invariants.
 
 The persisted format is versioned independently through
-`AGENT_REPOSITORY_SCHEMA_VERSION`. A repository with an unsupported schema version is
-rejected explicitly rather than being interpreted heuristically.
+`AGENT_REPOSITORY_SCHEMA_VERSION`. Schema v2 adds Team `shared_resource_refs` and
+AgentRun capability-version pins. Schema-v1 snapshots are migrated explicitly in memory
+to their v2 defaults before validation; unsupported versions are rejected. Writing the
+repository always emits v2, so an older binary that only understands v1 rejects the
+newer document rather than silently dropping v2 fields on a later save.
 
 ## Agent profile
 
@@ -111,10 +114,19 @@ runtime can be given an explicit set of available capability IDs for determinist
 tests and bootstrap execution. Missing, denied or incompatible capabilities fail before
 execution.
 
-Approval references are retained as Agent capability policy metadata. Actual approval
-requirements and decisions remain enforced by the canonical capability invocation and
-authorization/approval pipeline; the Agent runtime does not create a second approval
-authority or bypass that pipeline.
+An Agent-specific `approval_ref` is a hard requirement, not descriptive metadata. A
+capability constrained by an Agent approval reference can only be prepared when a
+canonical `CapabilityRegistry` is attached and the resolved `CapabilitySpec` declares
+that same reference in `required_approvals`. This binds the Agent policy to the existing
+canonical capability invocation approval path instead of introducing a second approval
+authority. If the canonical capability would not enforce the Agent's approval reference,
+preflight fails before orchestrator mapping.
+
+The exact capability version selected by the registry is pinned in
+`AgentExecutionSpec.capability_versions` and copied into `AgentRunRecord`. Orchestrator
+adapters therefore receive the same version that passed compatibility and approval
+preflight and must use that version when constructing the concrete capability invocation.
+A newer registration cannot silently replace the checked version after preparation.
 
 ## Memory and knowledge
 
@@ -126,14 +138,18 @@ Agent revisions carry only provider-neutral access declarations:
 - explicit opt-in for user-scoped memory.
 
 `AgentService.ensure_memory_scope` and `ensure_knowledge_source` are the direct policy
-hooks used by data integrations. Backend collection names or vector indexes are not
-part of the Agent contract.
+hooks used by data integrations. Both allowed and denied access paths are covered by
+Agent contract tests. Backend collection names or vector indexes are not part of the
+Agent contract.
 
 ## Agent Teams
 
 An `AgentTeamRevision` contains exact `AgentRevisionRef` members, member roles,
-delegation targets, shared capabilities, coordination-policy references, optional
-leader assignment, limits and unavailable-member behavior.
+delegation targets, shared capabilities, provider-neutral `shared_resource_refs`,
+coordination-policy references, optional leader assignment, limits and unavailable-member
+behavior. Shared resource references remain opaque canonical/integration references; the
+Team contract does not embed host paths, provider object handles or orchestrator-private
+resource schemas.
 
 A reviewer is an ordinary Agent member role. The Agent subsystem gives a reviewer no
 special completion authority, no policy bypass, and no ability to redefine canonical
@@ -142,7 +158,9 @@ respective lifecycle/governance layers.
 
 The reference runtime preflights every required team member before persisting team
 AgentRun records. Optional members can be skipped only when the Team revision explicitly
-uses `skip_optional`.
+uses `skip_optional`. `max_parallel_agents` is enforced by the reference start path;
+`max_steps` remains a canonical coordination limit visible to orchestrator adapters
+through the pinned Team revision.
 
 ## Runtime records
 
@@ -151,12 +169,18 @@ uses `skip_optional`.
 - canonical Task and Run IDs;
 - exact Agent and Team revisions;
 - selected canonical model configuration and provider;
-- actual capability IDs;
+- actual capability IDs and their registry-resolved versions;
 - orchestrator adapter/runtime references;
 - status and timing;
 - Artifact and Result IDs;
 - model-call and tool-invocation references;
 - errors, telemetry and verification context.
+
+After creation, the start-time execution identity is immutable: Task/Run IDs, pinned
+Agent/Team revisions, selected model/provider, capability IDs and versions, orchestrator
+references and `started_at` cannot be rewritten by later AgentRun updates. Lifecycle,
+evidence, telemetry, verification and terminal fields may still advance through their
+normal service paths.
 
 The orchestrator runtime reference is adapter-owned metadata, not canonical lifecycle
 truth.
@@ -168,7 +192,9 @@ This is intentionally small: it proves that a canonical Agent can be created and
 started before any external orchestrator adapter exists.
 
 `AgentOrchestratorMapper` is the replaceable seam. The same Agent revision can be mapped
-by multiple mapper implementations without changing its canonical definition.
+by multiple mapper implementations without changing its canonical definition. The
+execution spec includes pinned capability versions whenever registry resolution was
+available so adapters cannot re-resolve a different version after policy preflight.
 
 ## Control Plane
 
@@ -192,7 +218,17 @@ When an `AgentRuntime` is supplied to the composition, the extension also regist
 - `agent-team.start`
 
 All mutations use the existing Control Plane idempotency and authorization command seam.
-Updates require `expected_revision` to prevent lost updates.
+Updates require `expected_revision` to prevent lost updates. Agent and Team create,
+update, clone and rollback operations write `Provenance(source="control-plane")` with
+the calling principal and request/correlation identifiers. Update and clone commands
+also preserve or explicitly change owner, project and workspace scope without replacing
+the canonical Agent/Team identity.
+
+Authentication and session management remain upstream Control Plane concerns. The #36
+authentication layer resolves an authenticated request into the canonical
+`RequestContext`; Agent command handlers consume that context for ownership and
+provenance but do not define credentials, sessions or identity-provider semantics.
+Authentication therefore does not become part of the canonical Agent/Team profile.
 
 ## Deliberate boundaries
 

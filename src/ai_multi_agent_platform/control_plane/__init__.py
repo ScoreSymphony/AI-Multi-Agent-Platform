@@ -1,5 +1,6 @@
 """Versioned platform-owned northbound Control Plane."""
 
+from .authentication_hardening import AuthenticatedControlPlaneHTTP
 from .extensions import (
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
@@ -35,6 +36,7 @@ __all__ = [
     "APIException",
     "API_VERSION",
     "ActorContext",
+    "AuthenticatedControlPlaneHTTP",
     "CURRENT_COLLECTIONS",
     "CommandHandler",
     "ControlPlane",
