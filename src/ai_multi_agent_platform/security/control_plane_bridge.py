@@ -166,6 +166,20 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
             automation_verb, AuthorizationAction.MODIFY
         ), ResourceType.AUTOMATION
 
+    if action.startswith("plugin."):
+        plugin_verb = action.removeprefix("plugin.")
+        plugin_actions = {
+            "discover": AuthorizationAction.ADMINISTER,
+            "install": AuthorizationAction.CREATE,
+            "configure": AuthorizationAction.MODIFY,
+            "enable": AuthorizationAction.ADMINISTER,
+            "disable": AuthorizationAction.ADMINISTER,
+            "refresh-health": AuthorizationAction.ADMINISTER,
+            "validate-update": AuthorizationAction.ADMINISTER,
+            "remove": AuthorizationAction.DELETE,
+        }
+        return plugin_actions.get(plugin_verb, AuthorizationAction.MODIFY), ResourceType.PLUGIN
+
     resource_name, separator, verb = action.partition(":")
     if not separator:
         resource_name, verb = "generic", action
@@ -214,6 +228,7 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "integration": ResourceType.INTEGRATION,
         "connector": ResourceType.CONNECTOR,
         "plugin": ResourceType.PLUGIN,
+        "plugin-candidate": ResourceType.PLUGIN,
     }
     return (
         action_map.get(verb, AuthorizationAction.MODIFY),
