@@ -29,6 +29,8 @@ const session = {
   encoding: "utf-8",
   dimensions: null,
   policy_classification: [],
+  inactivity_timeout_seconds: 600,
+  retain_transcript: false,
   adapter_metadata: [],
 };
 
@@ -63,6 +65,8 @@ describe("terminal Control Plane client", () => {
       workspace_id: session.context.workspace_id,
       session_type: "manual",
       mode: "interactive",
+      inactivity_timeout_seconds: 600,
+      retain_transcript: false,
     });
     await client.terminateTerminalSession(session.id, "operator requested");
 
@@ -74,6 +78,8 @@ describe("terminal Control Plane client", () => {
       workspace_id: session.context.workspace_id,
       session_type: "manual",
       mode: "interactive",
+      inactivity_timeout_seconds: 600,
+      retain_transcript: false,
     });
     expect(terminateUrl).toBe("/api/v1/commands/terminal.session.terminate");
     expect(JSON.parse(String(terminateInit.body))).toMatchObject({
