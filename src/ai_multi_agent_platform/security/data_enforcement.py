@@ -34,11 +34,6 @@ from .authorization import (
     ResourceType,
     infer_actor_identity,
 )
-from .enforced_providers import (
-    AuthorizedFileProvider,
-    AuthorizedKnowledgeProvider,
-    AuthorizedMemoryProvider,
-)
 from .enforcement import AuthorizationGate
 
 
@@ -70,13 +65,20 @@ def _data_action(
     )
 
 
+def _compat_data_context(operation: OperationContext) -> DataAccessContext:
+    if operation.owner_type is not None and operation.owner_id is not None:
+        actor_ref = f"{operation.owner_type}:{operation.owner_id}"
+    else:
+        actor_ref = "service:platform"
+    return DataAccessContext(operation=operation, actor_ref=actor_ref)
+
+
 class AuthorizedDataFileProvider(FileProvider):
-    """Protect every refined and legacy file/artifact operation."""
+    """Protect every refined and inherited core file/artifact operation."""
 
     def __init__(self, inner: FileProvider, gate: AuthorizationGate) -> None:
         self._inner = inner
         self._gate = gate
-        self._core = AuthorizedFileProvider(inner, gate)
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -217,19 +219,40 @@ class AuthorizedDataFileProvider(FileProvider):
         *,
         metadata: dict[str, JsonValue] | None = None,
     ) -> StoredObject:
-        return await self._core.write(object_ref, data, context, metadata=metadata)
+        await self._gate.enforce(
+            _data_action(
+                _compat_data_context(context),
+                action=AuthorizationAction.MODIFY,
+                resource_type=ResourceType.FILE,
+                resource_id=object_ref,
+                payload={
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "size_bytes": len(data),
+                    "metadata": metadata or {},
+                },
+                side_effect="legacy_file_write",
+            )
+        )
+        return await self._inner.write(object_ref, data, context, metadata=metadata)
 
     async def read(self, object_ref: str, context: OperationContext) -> bytes:
-        return await self._core.read(object_ref, context)
+        await self._gate.enforce(
+            _data_action(
+                _compat_data_context(context),
+                action=AuthorizationAction.READ,
+                resource_type=ResourceType.FILE,
+                resource_id=object_ref,
+            )
+        )
+        return await self._inner.read(object_ref, context)
 
 
 class AuthorizedDataMemoryProvider(MemoryProvider):
-    """Protect every refined and legacy scoped-memory operation."""
+    """Protect every refined and inherited core scoped-memory operation."""
 
     def __init__(self, inner: MemoryProvider, gate: AuthorizationGate) -> None:
         self._inner = inner
         self._gate = gate
-        self._core = AuthorizedMemoryProvider(inner, gate)
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -359,19 +382,36 @@ class AuthorizedDataMemoryProvider(MemoryProvider):
         *,
         metadata: dict[str, JsonValue] | None = None,
     ) -> StoredObject:
-        return await self._core.put(namespace, key, value, context, metadata=metadata)
+        await self._gate.enforce(
+            _data_action(
+                _compat_data_context(context),
+                action=AuthorizationAction.MODIFY,
+                resource_type=ResourceType.MEMORY,
+                resource_id=f"{namespace}:{key}",
+                payload={"value": value, "metadata": metadata or {}},
+                side_effect="legacy_memory_write",
+            )
+        )
+        return await self._inner.put(namespace, key, value, context, metadata=metadata)
 
     async def get(self, namespace: str, key: str, context: OperationContext) -> JsonValue:
-        return await self._core.get(namespace, key, context)
+        await self._gate.enforce(
+            _data_action(
+                _compat_data_context(context),
+                action=AuthorizationAction.READ,
+                resource_type=ResourceType.MEMORY,
+                resource_id=f"{namespace}:{key}",
+            )
+        )
+        return await self._inner.get(namespace, key, context)
 
 
 class AuthorizedDataKnowledgeProvider(KnowledgeProvider):
-    """Protect every refined and legacy knowledge-source operation."""
+    """Protect every refined and inherited core knowledge-source operation."""
 
     def __init__(self, inner: KnowledgeProvider, gate: AuthorizationGate) -> None:
         self._inner = inner
         self._gate = gate
-        self._core = AuthorizedKnowledgeProvider(inner, gate)
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -498,10 +538,37 @@ class AuthorizedDataKnowledgeProvider(KnowledgeProvider):
         content: str,
         context: OperationContext,
     ) -> StoredObject:
-        return await self._core.index(source_ref, content, context)
+        await self._gate.enforce(
+            _data_action(
+                _compat_data_context(context),
+                action=AuthorizationAction.MODIFY,
+                resource_type=ResourceType.KNOWLEDGE_SOURCE,
+                resource_id=source_ref,
+                payload={"content_sha256": hashlib.sha256(content.encode()).hexdigest()},
+                side_effect="legacy_knowledge_write",
+            )
+        )
+        return await self._inner.index(source_ref, content, context)
 
     async def query(self, request: KnowledgeQuery) -> tuple[KnowledgeHit, ...]:
-        return await self._core.query(request)
+        await self._gate.enforce(
+            _data_action(
+                _compat_data_context(request.context),
+                action=AuthorizationAction.READ,
+                resource_type=ResourceType.KNOWLEDGE_SOURCE,
+                resource_id="knowledge:*",
+                payload={"query": request.query, "filters": request.filters},
+            )
+        )
+        return await self._inner.query(request)
 
     async def get(self, source_ref: str, context: OperationContext) -> KnowledgeHit:
-        return await self._core.get(source_ref, context)
+        await self._gate.enforce(
+            _data_action(
+                _compat_data_context(context),
+                action=AuthorizationAction.READ,
+                resource_type=ResourceType.KNOWLEDGE_SOURCE,
+                resource_id=source_ref,
+            )
+        )
+        return await self._inner.get(source_ref, context)
