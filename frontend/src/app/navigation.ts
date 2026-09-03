@@ -21,7 +21,7 @@ export const navigation: NavigationItem[] = [
   { label: "Knowledge", path: "/knowledge", group: "Data", apiResource: "knowledge" },
   { label: "Search", path: "/search", group: "Data", apiResource: "search" },
   { label: "Import / Export", path: "/import-export", group: "Data" },
-  { label: "Tools", path: "/tools", group: "Intelligence", apiResource: "tools" },
+  { label: "Tools", path: "/tools", group: "Intelligence", apiResource: "capabilities" },
   { label: "Integrations", path: "/integrations", group: "Intelligence", apiResource: "connectors" },
   { label: "Models", path: "/models", group: "Intelligence", apiResource: "models" },
   { label: "Evaluations", path: "/evaluations", group: "Intelligence", apiResource: "evaluations" },
