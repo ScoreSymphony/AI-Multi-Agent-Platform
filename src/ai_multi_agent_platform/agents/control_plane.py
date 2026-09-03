@@ -109,8 +109,7 @@ class AgentRunResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
         return tuple(
-            _agent_run_resource(item)
-            for item in self.service.repository.list_agent_runs()
+            _agent_run_resource(item) for item in self.service.repository.list_agent_runs()
         )
 
     async def get_resource(
@@ -204,9 +203,7 @@ class AgentCommandHandlers:
                 payload,
                 "requested_capability_ids",
             ),
-            available_capability_ids=frozenset(
-                _string_tuple(payload, "available_capability_ids")
-            ),
+            available_capability_ids=frozenset(_string_tuple(payload, "available_capability_ids")),
         )
         return _agent_run_resource(record)
 
@@ -285,9 +282,7 @@ class AgentCommandHandlers:
                 payload,
                 "requested_capability_ids",
             ),
-            available_capability_ids=frozenset(
-                _string_tuple(payload, "available_capability_ids")
-            ),
+            available_capability_ids=frozenset(_string_tuple(payload, "available_capability_ids")),
         )
         items: list[JsonValue] = [_agent_run_resource(record) for record in records]
         return {"team_id": resource_ref, "agent_runs": items}
@@ -417,10 +412,7 @@ def _profile_from_json(value: object) -> AgentProfile:
             False,
         ),
     )
-    fallback_raw = (
-        _optional_string(model_data, "fallback")
-        or ModelFallbackPolicy.FAIL.value
-    )
+    fallback_raw = _optional_string(model_data, "fallback") or ModelFallbackPolicy.FAIL.value
     model = AgentModelPolicy(
         requirements=requirements,
         routing_profile_ref=_optional_string(model_data, "routing_profile_ref"),
@@ -438,9 +430,7 @@ def _profile_from_json(value: object) -> AgentProfile:
     capabilities = AgentCapabilityPolicy(
         allowed=_string_tuple(capability_data, "allowed"),
         denied=_string_tuple(capability_data, "denied"),
-        constraints=tuple(
-            _capability_constraint(item) for item in constraints_raw
-        ),
+        constraints=tuple(_capability_constraint(item) for item in constraints_raw),
     )
 
     data_access_raw = _mapping(
@@ -449,8 +439,7 @@ def _profile_from_json(value: object) -> AgentProfile:
     )
     data_access = AgentDataAccess(
         memory_scopes=tuple(
-            MemoryScope(item)
-            for item in _string_tuple(data_access_raw, "memory_scopes")
+            MemoryScope(item) for item in _string_tuple(data_access_raw, "memory_scopes")
         ),
         memory_config_refs=_string_tuple(
             data_access_raw,
@@ -521,10 +510,7 @@ def _team_profile_from_json(value: object) -> AgentTeamProfile:
     members_raw = data.get("members")
     if not isinstance(members_raw, list | tuple) or not members_raw:
         raise ValueError("team profile.members must be a non-empty array")
-    policy_raw = (
-        _optional_string(data, "unavailable_member_policy")
-        or UnavailableMemberPolicy.FAIL.value
-    )
+    policy_raw = _optional_string(data, "unavailable_member_policy") or UnavailableMemberPolicy.FAIL.value
     return AgentTeamProfile(
         name=_required_string(data, "name"),
         members=tuple(_team_member(item) for item in members_raw),
@@ -594,9 +580,7 @@ def _owner_ref(value: object | None, context: RequestContext) -> OwnerRef:
         assert parsed is not None
         return parsed
     if context.actor.owner_type is None or context.actor.owner_id is None:
-        raise ValueError(
-            "owner_ref is required when actor owner context is unavailable"
-        )
+        raise ValueError("owner_ref is required when actor owner context is unavailable")
     return OwnerRef(
         type=context.actor.owner_type,
         id=context.actor.owner_id,
@@ -609,9 +593,7 @@ def _provided_owner_ref(value: object | None) -> OwnerRef | None:
     data = _mapping(value, "owner_ref")
     raw_type = _required_string(data, "type")
     if raw_type not in {"user", "organization", "team", "service"}:
-        raise ValueError(
-            "owner_ref.type must be user, organization, team or service"
-        )
+        raise ValueError("owner_ref.type must be user, organization, team or service")
     owner_type = cast(
         Literal["user", "organization", "team", "service"],
         raw_type,
