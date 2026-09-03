@@ -11,6 +11,8 @@ from typing import Literal
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 
+_TASK_PRIORITIES = frozenset({"low", "normal", "high", "urgent"})
+
 
 class SearchMode(StrEnum):
     """Search modes understood by the canonical query contract."""
@@ -42,6 +44,15 @@ class SearchQuery:
     provider_filters: tuple[str, ...] = ()
     updated_after: datetime | None = None
     updated_before: datetime | None = None
+    priorities: tuple[str, ...] = ()
+    due_after: datetime | None = None
+    due_before: datetime | None = None
+    assignment_state: Literal["assigned", "unassigned"] | None = None
+    responsible_id: str | None = None
+    agent_assignment_id: str | None = None
+    blocked: bool | None = None
+    overdue: bool | None = None
+    dependency_id: str | None = None
     mode: SearchMode = SearchMode.KEYWORD
     limit: int = 50
     cursor: str | None = None
@@ -61,20 +72,35 @@ class SearchQuery:
             validate_id(self.project_id, "project")
         if self.workspace_id is not None:
             validate_id(self.workspace_id, "workspace")
+        if self.dependency_id is not None:
+            validate_id(self.dependency_id, "task")
         for values, name in (
             (self.resource_types, "resource_types"),
             (self.statuses, "statuses"),
             (self.tags, "tags"),
             (self.source_filters, "source_filters"),
             (self.provider_filters, "provider_filters"),
+            (self.priorities, "priorities"),
         ):
-            if any(not value.strip() for value in values):
+            if any(not item.strip() for item in values):
                 raise ValueError(f"{name} must not contain blank values")
-        for value, name in (
+        if any(priority not in _TASK_PRIORITIES for priority in self.priorities):
+            raise ValueError("priorities must contain only low, normal, high or urgent")
+        for identifier_value, name in (
+            (self.responsible_id, "responsible_id"),
+            (self.agent_assignment_id, "agent_assignment_id"),
+        ):
+            if identifier_value is not None and not identifier_value.strip():
+                raise ValueError(f"{name} must not be blank")
+        for timestamp_value, name in (
             (self.updated_after, "updated_after"),
             (self.updated_before, "updated_before"),
+            (self.due_after, "due_after"),
+            (self.due_before, "due_before"),
         ):
-            if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            if timestamp_value is not None and (
+                timestamp_value.tzinfo is None or timestamp_value.utcoffset() is None
+            ):
                 raise ValueError(f"{name} must be timezone-aware")
         if (
             self.updated_after is not None
@@ -82,6 +108,14 @@ class SearchQuery:
             and self.updated_after > self.updated_before
         ):
             raise ValueError("updated_after must not be later than updated_before")
+        if (
+            self.due_after is not None
+            and self.due_before is not None
+            and self.due_after > self.due_before
+        ):
+            raise ValueError("due_after must not be later than due_before")
+        if self.assignment_state not in {None, "assigned", "unassigned"}:
+            raise ValueError("assignment_state must be assigned or unassigned")
         if self.mode in {SearchMode.SEMANTIC, SearchMode.HYBRID} and self.text is None:
             raise ValueError(f"{self.mode.value} search requires text")
 
@@ -107,6 +141,13 @@ class SearchDocument:
     updated_at: str | None = None
     canonical_ref: str | None = None
     provenance: dict[str, JsonValue] = field(default_factory=dict)
+    priority: str | None = None
+    due_at: str | None = None
+    responsible_id: str | None = None
+    agent_assignment_id: str | None = None
+    blocked: bool | None = None
+    overdue: bool | None = None
+    dependency_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.resource_type.strip():
@@ -125,6 +166,12 @@ class SearchDocument:
             parsed = _parse_timestamp(self.updated_at, "updated_at")
             if parsed.tzinfo is None or parsed.utcoffset() is None:
                 raise ValueError("updated_at must be timezone-aware")
+        if self.due_at is not None:
+            parsed = _parse_timestamp(self.due_at, "due_at")
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                raise ValueError("due_at must be timezone-aware")
+        for dependency_id in self.dependency_ids:
+            validate_id(dependency_id, "task")
 
     @property
     def key(self) -> tuple[str, str]:
@@ -135,6 +182,12 @@ class SearchDocument:
         if self.updated_at is None:
             return None
         return _parse_timestamp(self.updated_at, "updated_at")
+
+    @property
+    def due_at_datetime(self) -> datetime | None:
+        if self.due_at is None:
+            return None
+        return _parse_timestamp(self.due_at, "due_at")
 
 
 @dataclass(frozen=True, slots=True)

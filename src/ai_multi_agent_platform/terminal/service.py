@@ -202,6 +202,7 @@ class TerminalSessionService:
             inactivity_timeout_seconds=request.inactivity_timeout_seconds,
             retain_transcript=request.retain_transcript,
             adapter_metadata=started.metadata,
+            public_diagnostics=started.public_diagnostics,
         )
         if started.status is not SessionStatus.STARTING:
             session = session.transition(started.status, occurred_at=now)

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AutomationClient } from "../api/automations";
 import { BrowserSessionClient } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
 import { ControlPlaneCollectionClient } from "../api/collections";
@@ -15,6 +16,7 @@ import {
   AgentTeamsPage,
 } from "../pages/AgentsPage";
 import { ApprovalDetailPage, ApprovalsPage } from "../pages/ApprovalsPage";
+import { AutomationDetailPage, AutomationsPage } from "../pages/AutomationsPage";
 import {
   CapabilitiesPage,
   CapabilityDetailPage,
@@ -54,6 +56,10 @@ export function Shell() {
     () => new ControlPlaneCollectionClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
+  const automationClient = useMemo(
+    () => new AutomationClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
   const [manifest, setManifest] = useState<APImanifest | null>(null);
   const [manifestState, setManifestState] = useState<ManifestState>("loading");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -83,6 +89,7 @@ export function Shell() {
   const capabilityMatch = matchPath("/tools/:capabilityId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
+  const automationMatch = matchPath("/automations/:automationId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
@@ -188,6 +195,32 @@ export function Shell() {
         resource="terminal-sessions"
       >
         <TerminalPage client={client} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/automations") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Automations"
+        resource="automations"
+      >
+        <AutomationsPage collections={collections} automations={automationClient} />
+      </ManifestResourcePage>
+    );
+  } else if (automationMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Automations"
+        resource="automations"
+      >
+        <AutomationDetailPage
+          collections={collections}
+          automations={automationClient}
+          automationId={automationMatch.automationId}
+        />
       </ManifestResourcePage>
     );
   } else if (path === "/approvals") {

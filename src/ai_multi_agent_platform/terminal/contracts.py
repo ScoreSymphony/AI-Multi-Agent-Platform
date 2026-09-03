@@ -20,6 +20,7 @@ from .models import (
     SessionType,
     StreamChannel,
     TerminalCapabilities,
+    TerminalDiagnostic,
     TerminalDimensions,
 )
 
@@ -85,7 +86,10 @@ class AdapterStartResult:
     handle: AdapterSessionHandle
     status: SessionStatus
     capabilities: TerminalCapabilities
+    # Backend-private diagnostics retained only inside the adapter/service boundary.
     metadata: tuple[AdapterMetadata, ...] = ()
+    # Explicit opt-in public diagnostics. The service may expose only this collection.
+    public_diagnostics: tuple[TerminalDiagnostic, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

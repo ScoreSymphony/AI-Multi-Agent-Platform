@@ -49,13 +49,7 @@ from .http import (
     _split_version,
 )
 from .models import API_VERSION, APIException, RequestContext, api_exception_from_contract
-from .service import (
-    ScopeStore,
-    _project_resource,
-    _run_resource,
-    _task_resource,
-    _workspace_resource,
-)
+from .service import ScopeStore, _project_resource, _run_resource, _workspace_resource
 from .workspace_task_management_api import ControlPlane as _BaseControlPlane
 from .workspace_task_management_api import ControlPlaneHTTP as _BaseControlPlaneHTTP
 from .workspace_task_management_api import build_openapi as _build_base_openapi
@@ -138,7 +132,7 @@ class ControlPlane(_BaseControlPlane):
         binding_repository = self.run_workspace_bindings
         for task_id in await self._task_ids():
             task = await self._kernel.get_task(task_id)
-            documents.append(document_from_resource(_task_resource(task)))
+            documents.append(document_from_resource(await self._managed_task_resource(task)))
             for run_id in task.run_ids:
                 run = await self._kernel.get_run(task_id, run_id)
                 run_document = document_from_resource(_run_resource(run))
@@ -300,6 +294,7 @@ def _search_query(request: HTTPRequest) -> SearchQuery:
     sort_value = _optional_query(params, "sort") or "relevance"
     if sort_value not in {"relevance", "id", "updated_at"}:
         raise ValueError("sort must be relevance, id or updated_at")
+    assignment_state = _optional_query(params, "assignment_state")
     return SearchQuery(
         text=text,
         exact_id=exact_id,
@@ -312,6 +307,15 @@ def _search_query(request: HTTPRequest) -> SearchQuery:
         provider_filters=_csv_query(params, "provider"),
         updated_after=_timestamp_query(params, "updated_after"),
         updated_before=_timestamp_query(params, "updated_before"),
+        priorities=_csv_query(params, "priority"),
+        due_after=_timestamp_query(params, "due_after"),
+        due_before=_timestamp_query(params, "due_before"),
+        assignment_state=cast(Literal["assigned", "unassigned"] | None, assignment_state),
+        responsible_id=_optional_query(params, "responsible_id"),
+        agent_assignment_id=_optional_query(params, "agent_assignment_id"),
+        blocked=_bool_query(params, "blocked"),
+        overdue=_bool_query(params, "overdue"),
+        dependency_id=_optional_query(params, "dependency_id"),
         mode=mode,
         limit=limit,
         cursor=_optional_query(params, "cursor"),
@@ -351,6 +355,18 @@ def _timestamp_query(params: Mapping[str, str], name: str) -> datetime | None:
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"{name} must be timezone-aware")
     return parsed
+
+
+def _bool_query(params: Mapping[str, str], name: str) -> bool | None:
+    value = _optional_query(params, name)
+    if value is None:
+        return None
+    normalized = value.casefold()
+    if normalized == "true":
+        return True
+    if normalized == "false":
+        return False
+    raise ValueError(f"{name} must be true or false")
 
 
 def _augment_search_openapi(specification: dict[str, Any]) -> dict[str, Any]:
@@ -420,6 +436,31 @@ def _augment_search_openapi(specification: dict[str, Any]) -> dict[str, Any]:
                     "in": "query",
                     "schema": {"type": "string", "format": "date-time"},
                 },
+                {"name": "priority", "in": "query", "schema": {"type": "string"}},
+                {
+                    "name": "due_after",
+                    "in": "query",
+                    "schema": {"type": "string", "format": "date-time"},
+                },
+                {
+                    "name": "due_before",
+                    "in": "query",
+                    "schema": {"type": "string", "format": "date-time"},
+                },
+                {
+                    "name": "assignment_state",
+                    "in": "query",
+                    "schema": {"type": "string", "enum": ["assigned", "unassigned"]},
+                },
+                {"name": "responsible_id", "in": "query", "schema": {"type": "string"}},
+                {
+                    "name": "agent_assignment_id",
+                    "in": "query",
+                    "schema": {"type": "string"},
+                },
+                {"name": "blocked", "in": "query", "schema": {"type": "boolean"}},
+                {"name": "overdue", "in": "query", "schema": {"type": "boolean"}},
+                {"name": "dependency_id", "in": "query", "schema": {"type": "string"}},
                 {
                     "name": "mode",
                     "in": "query",

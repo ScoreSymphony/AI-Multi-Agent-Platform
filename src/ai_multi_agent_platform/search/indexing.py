@@ -55,6 +55,13 @@ def document_from_resource(
         else None
     )
     tags = _string_sequence(resource, "tags") or _string_sequence(resource, "labels")
+    priority = _optional_string(resource, "priority")
+    due_at = _optional_string(resource, "due_at")
+    responsible_id = _optional_string(resource, "responsible_id")
+    agent_assignment_id = _optional_string(resource, "agent_assignment_id")
+    blocked = _optional_bool(resource, "blocked")
+    overdue = _optional_bool(resource, "overdue")
+    dependency_ids = _dependency_ids(resource)
 
     keywords = _deduplicate_strings(
         tuple(
@@ -67,7 +74,12 @@ def document_from_resource(
                 owner_type,
                 owner_id,
                 status,
+                priority,
+                due_at,
+                responsible_id,
+                agent_assignment_id,
                 *_resource_keywords(resource),
+                *dependency_ids,
                 *_profile_keywords(resource),
             )
             if value is not None
@@ -95,6 +107,13 @@ def document_from_resource(
         updated_at=updated_at,
         canonical_ref=canonical_ref,
         provenance=provenance,
+        priority=priority,
+        due_at=due_at,
+        responsible_id=responsible_id,
+        agent_assignment_id=agent_assignment_id,
+        blocked=blocked,
+        overdue=overdue,
+        dependency_ids=dependency_ids,
     )
 
 
@@ -118,6 +137,11 @@ def _display_title(
         subject_id = _optional_string(resource, "subject_id")
         if subject_type is not None and subject_id is not None:
             return f"Run for {subject_type} {subject_id}"
+    if resource_type == "approval":
+        subject_type = _optional_string(resource, "subject_type")
+        subject_id = _optional_string(resource, "subject_id")
+        if subject_type is not None and subject_id is not None:
+            return f"Approval for {subject_type} {subject_id}"
     return f"{resource_type.replace('-', ' ').replace('_', ' ').title()} {resource_id}"
 
 
@@ -156,7 +180,7 @@ def _owner(resource: Mapping[str, JsonValue]) -> tuple[str | None, str | None]:
 
 
 def _status(resource: Mapping[str, JsonValue]) -> str | None:
-    for field in ("status", "effective_health", "health"):
+    for field in ("status", "state", "effective_health", "health"):
         value = _optional_string(resource, field)
         if value is not None:
             return value
@@ -206,7 +230,24 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "health",
         "effective_health",
         "task_id",
+        "run_id",
         "plan_id",
+        "automation_id",
+        "trigger_type",
+        "source",
+        "subject_type",
+        "subject_id",
+        "action",
+        "resource_type",
+        "resource_id",
+        "risk",
+        "capability_ref",
+        "responsible_type",
+        "responsible_id",
+        "agent_assignment_type",
+        "agent_assignment_id",
+        "parent_task_id",
+        "effective_blocking_reason",
     ):
         value = _optional_string(resource, field)
         if value is not None:
@@ -217,16 +258,39 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "modalities",
         "reasoning",
         "step_ids",
+        "blocking_task_ids",
+        "failed_dependency_ids",
     ):
         values.extend(_string_sequence(resource, field))
     for field, positive, negative in (
         ("enabled", "enabled", "disabled"),
         ("available", "available", "unavailable"),
+        ("blocked", "blocked", "unblocked"),
+        ("overdue", "overdue", "not-overdue"),
+        ("archived", "archived", "active"),
+        ("hidden", "hidden", "visible"),
+        ("eligible", "eligible", "ineligible"),
     ):
         boolean_value = resource.get(field)
         if isinstance(boolean_value, bool):
             values.append(positive if boolean_value else negative)
     return _deduplicate_strings(tuple(values))
+
+
+def _dependency_ids(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
+    raw_dependencies = resource.get("dependencies")
+    if not isinstance(raw_dependencies, Sequence) or isinstance(
+        raw_dependencies, str | bytes | bytearray
+    ):
+        return ()
+    dependency_ids: list[str] = []
+    for raw_dependency in raw_dependencies:
+        if not isinstance(raw_dependency, Mapping):
+            continue
+        task_id = raw_dependency.get("task_id")
+        if isinstance(task_id, str) and task_id.strip() and task_id not in dependency_ids:
+            dependency_ids.append(task_id)
+    return tuple(dependency_ids)
 
 
 def _string_sequence(resource: Mapping[str, JsonValue], field: str) -> tuple[str, ...]:
@@ -254,3 +318,8 @@ def _optional_string(resource: Mapping[str, JsonValue], field: str) -> str | Non
     if not isinstance(value, str) or not value.strip():
         return None
     return value
+
+
+def _optional_bool(resource: Mapping[str, JsonValue], field: str) -> bool | None:
+    value = resource.get(field)
+    return value if isinstance(value, bool) else None

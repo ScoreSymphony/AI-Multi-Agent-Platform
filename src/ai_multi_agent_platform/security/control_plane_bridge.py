@@ -70,13 +70,37 @@ class ControlPlaneAuthorizationBridge(AuthorizationProvider):
                 policy_id="credential-scope",
             )
 
-        task_id = request.resource_ref if request.resource_ref.startswith("task_") else None
-        run_id = request.resource_ref if request.resource_ref.startswith("run_") else None
-        request_payload_digest = (
-            request.request_payload_digest
-            if isinstance(request, CanonicalAuthorizationRequest)
-            else None
-        )
+        if isinstance(request, CanonicalAuthorizationRequest):
+            task_id = request.task_id or (
+                request.resource_ref if request.resource_ref.startswith("task_") else None
+            )
+            run_id = request.run_id or (
+                request.resource_ref if request.resource_ref.startswith("run_") else None
+            )
+            organization_id = request.organization_id
+            team_id = request.team_id
+            workspace_id = request.workspace_id
+            agent_id = request.agent_id
+            capability_ref = request.capability_ref
+            side_effect = request.side_effect or request.action
+            security_labels = request.security_labels
+            node_id = request.node_id
+            trust_context = request.trust_context
+            request_payload_digest = request.request_payload_digest
+        else:
+            task_id = request.resource_ref if request.resource_ref.startswith("task_") else None
+            run_id = request.resource_ref if request.resource_ref.startswith("run_") else None
+            organization_id = None
+            team_id = None
+            workspace_id = None
+            agent_id = None
+            capability_ref = None
+            side_effect = request.action
+            security_labels = ()
+            node_id = None
+            trust_context = {}
+            request_payload_digest = None
+
         proposed_payload: dict[str, JsonValue] = {"northbound_action": request.action}
         if request_payload_digest is not None:
             proposed_payload["request_payload_sha256"] = request_payload_digest
@@ -88,14 +112,17 @@ class ControlPlaneAuthorizationBridge(AuthorizationProvider):
                 resource_type=resource_type,
                 resource_id=request.resource_ref,
                 operation=request.context,
+                organization_id=organization_id,
+                team_id=team_id,
+                workspace_id=workspace_id,
                 task_id=task_id,
                 run_id=run_id,
-                side_effect=request.action,
-                trust_context=(
-                    request.trust_context
-                    if isinstance(request, CanonicalAuthorizationRequest)
-                    else {}
-                ),
+                agent_id=agent_id,
+                capability_ref=capability_ref,
+                side_effect=side_effect,
+                security_labels=security_labels,
+                node_id=node_id,
+                trust_context=trust_context,
             ),
             payload=proposed_payload,
         )
@@ -166,6 +193,29 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
             automation_verb, AuthorizationAction.MODIFY
         ), ResourceType.AUTOMATION
 
+    if action.startswith("terminal.session."):
+        terminal_verb = action.removeprefix("terminal.session.")
+        terminal_actions = {
+            "create": AuthorizationAction.CREATE,
+            "input": AuthorizationAction.EXECUTE,
+            "resize": AuthorizationAction.MODIFY,
+            "terminate": AuthorizationAction.EXECUTE,
+        }
+        return terminal_actions.get(terminal_verb, AuthorizationAction.MODIFY), ResourceType.GENERIC
+
+    if action.startswith("plugin."):
+        plugin_verb = action.removeprefix("plugin.")
+        plugin_actions = {
+            "install": AuthorizationAction.CREATE,
+            "configure": AuthorizationAction.MODIFY,
+            "enable": AuthorizationAction.ADMINISTER,
+            "disable": AuthorizationAction.ADMINISTER,
+            "refresh-health": AuthorizationAction.ADMINISTER,
+            "validate-update": AuthorizationAction.READ,
+            "remove": AuthorizationAction.DELETE,
+        }
+        return plugin_actions.get(plugin_verb, AuthorizationAction.MODIFY), ResourceType.PLUGIN
+
     resource_name, separator, verb = action.partition(":")
     if not separator:
         resource_name, verb = "generic", action
@@ -214,6 +264,7 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "integration": ResourceType.INTEGRATION,
         "connector": ResourceType.CONNECTOR,
         "plugin": ResourceType.PLUGIN,
+        "plugin-candidate": ResourceType.PLUGIN,
     }
     return (
         action_map.get(verb, AuthorizationAction.MODIFY),

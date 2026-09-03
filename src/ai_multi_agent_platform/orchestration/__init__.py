@@ -1,4 +1,4 @@
-"""Platform-owned orchestrator registration and configuration-driven selection."""
+"""Platform-owned orchestration implementations and provider-neutral selection."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, Orchestrator
+
+from .reference import ReferenceOrchestrator
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,4 +60,4 @@ class OrchestratorRegistry:
         return tuple(sorted(self._orchestrators))
 
 
-__all__ = ["OrchestratorRegistry", "OrchestratorSelection"]
+__all__ = ["OrchestratorRegistry", "OrchestratorSelection", "ReferenceOrchestrator"]
