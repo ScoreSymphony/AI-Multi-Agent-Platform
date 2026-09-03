@@ -33,7 +33,6 @@ from ai_multi_agent_platform.notifications.service import NotificationService
 from ai_multi_agent_platform.security.approvals import ApprovalRecord
 from ai_multi_agent_platform.security.authorization import RiskClassification
 
-
 USER = RecipientRef(RecipientType.USER, new_id("user"))
 OTHER_USER = RecipientRef(RecipientType.USER, new_id("user"))
 PROJECT_ID = new_id("project")
