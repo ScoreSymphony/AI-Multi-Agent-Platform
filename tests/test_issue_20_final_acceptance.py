@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from ai_multi_agent_platform import plugins
+import ai_multi_agent_platform.plugins as plugins
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
 
