@@ -1,0 +1,70 @@
+name: Issue 76 completion apply v2
+
+on:
+  push:
+    branches: [feat/issue-76-completion]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Apply corrected completion patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path(".github/workflows/issue76-completion-apply.yml").read_text()
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n      - name: Verify Python completion gates", start)
+          body = workflow[start:end]
+          lines = body.splitlines()
+          body = "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
+          body = body.replace("write_text(r'''", "write_text('''")
+          exec(compile(body, "issue76_completion_patch.py", "exec"))
+          PY
+      - name: Verify Python completion gates
+        run: |
+          ruff format .
+          ruff check .
+          mypy
+          pytest -q tests/test_issue76_accounting.py tests/test_issue76_storage_accounting.py tests/test_issue76_control_plane_http.py tests/test_issue76_trends.py tests/test_issue76_model_attribution.py tests/test_issue76_completion.py
+          python -m build
+      - name: Verify frontend completion gates
+        working-directory: frontend
+        run: |
+          npm install --global npm@11.6.0
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src frontend tests docs
+          if git diff --cached --quiet; then
+            echo "No implementation changes to commit"
+            exit 1
+          fi
+          git commit -m "feat: complete #76 usage and resource accounting"
+          git push
