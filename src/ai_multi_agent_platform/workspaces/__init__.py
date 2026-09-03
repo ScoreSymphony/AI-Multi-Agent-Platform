@@ -21,12 +21,14 @@ from .models import (
     validate_relative_path,
 )
 from .reference import LocalWorkspaceProvider
+from .sqlite import SqliteWorkspaceProvider
 
 __all__ = [
     "CleanupReport",
     "LocalWorkspaceProvider",
     "MaterializationOutcome",
     "RemoteMaterializationRequest",
+    "SqliteWorkspaceProvider",
     "Workspace",
     "WorkspaceAccessMode",
     "WorkspaceChange",
