@@ -82,23 +82,25 @@ class SearchQuery:
             (self.provider_filters, "provider_filters"),
             (self.priorities, "priorities"),
         ):
-            if any(not value.strip() for value in values):
+            if any(not item.strip() for item in values):
                 raise ValueError(f"{name} must not contain blank values")
         if any(priority not in _TASK_PRIORITIES for priority in self.priorities):
             raise ValueError("priorities must contain only low, normal, high or urgent")
-        for value, name in (
+        for identifier_value, name in (
             (self.responsible_id, "responsible_id"),
             (self.agent_assignment_id, "agent_assignment_id"),
         ):
-            if value is not None and not value.strip():
+            if identifier_value is not None and not identifier_value.strip():
                 raise ValueError(f"{name} must not be blank")
-        for value, name in (
+        for timestamp_value, name in (
             (self.updated_after, "updated_after"),
             (self.updated_before, "updated_before"),
             (self.due_after, "due_after"),
             (self.due_before, "due_before"),
         ):
-            if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            if timestamp_value is not None and (
+                timestamp_value.tzinfo is None or timestamp_value.utcoffset() is None
+            ):
                 raise ValueError(f"{name} must be timezone-aware")
         if (
             self.updated_after is not None
