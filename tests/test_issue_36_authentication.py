@@ -265,9 +265,7 @@ def test_control_plane_requires_authentication_and_does_not_trust_principal_head
     token = auth.create_personal_access_token(user.user_id, purpose="test", now=NOW)
     http = AuthenticatedControlPlaneHTTP(_EchoControlPlane(), auth, secure_cookie=False)
 
-    unauthenticated = _run(
-        http.handle(HTTPRequest(method="GET", path="/api/v1/tasks"))
-    )
+    unauthenticated = _run(http.handle(HTTPRequest(method="GET", path="/api/v1/tasks")))
     assert unauthenticated.status == 401
     assert unauthenticated.body["category"] == "authentication"
 

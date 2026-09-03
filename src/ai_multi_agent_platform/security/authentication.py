@@ -61,7 +61,9 @@ class AuthenticationFailure(StrEnum):
 class AuthenticationError(Exception):
     """Authentication failure carrying a stable non-secret reason code."""
 
-    def __init__(self, failure: AuthenticationFailure, message: str = "authentication failed") -> None:
+    def __init__(
+        self, failure: AuthenticationFailure, message: str = "authentication failed"
+    ) -> None:
         super().__init__(message)
         self.failure = failure
 
@@ -80,7 +82,9 @@ class AuthenticatedActor:
     provider_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "provider_metadata", MappingProxyType(dict(self.provider_metadata)))
+        object.__setattr__(
+            self, "provider_metadata", MappingProxyType(dict(self.provider_metadata))
+        )
 
     def is_expired(self, *, now: datetime | None = None) -> bool:
         current = now or datetime.now(UTC)
@@ -460,7 +464,9 @@ class LocalAuthenticationService:
             raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
 
         account = self.store.user_by_username(username)
-        verifier = account.password_verifier if account is not None else self._dummy_password_verifier
+        verifier = (
+            account.password_verifier if account is not None else self._dummy_password_verifier
+        )
         verified = self.password_hasher.verify(password, verifier)
         success = account is not None and verified
         self.rate_limiter.record(rate_key, success=success, now=current)
