@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform import plugins
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
 
 REQUIRED_EXTENSION_TYPES = {
