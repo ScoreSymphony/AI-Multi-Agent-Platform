@@ -66,7 +66,9 @@ class NotificationLiveHub:
         self._history: dict[RecipientRef, deque[NotificationLiveEvent]] = defaultdict(
             lambda: deque(maxlen=self._history_limit)
         )
-        self._subscribers: dict[RecipientRef, set[asyncio.Queue[NotificationLiveEvent]]] = defaultdict(set)
+        self._subscribers: dict[RecipientRef, set[asyncio.Queue[NotificationLiveEvent]]] = (
+            defaultdict(set)
+        )
 
     async def publish(self, payload: dict[str, JsonValue]) -> None:
         recipient = _recipient_from_payload(payload)
