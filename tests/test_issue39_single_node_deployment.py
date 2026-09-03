@@ -78,6 +78,26 @@ def test_single_node_startup_blocks_unusable_persistence_path(tmp_path: Path) ->
         build_single_node_deployment(SingleNodeConfig(data_dir=blocked))
 
 
+def test_single_node_reference_smoke_is_retry_safe_across_restart(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        config = SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
+        first_deployment = build_single_node_deployment(config)
+        first_deployment.bootstrap_admin("admin", PASSWORD)
+
+        first = await first_deployment.run_reference_smoke()
+        assert first.task_status is TaskStatus.SUCCEEDED
+        assert first.run_status is RunStatus.SUCCEEDED
+
+        restarted = build_single_node_deployment(config)
+        second = await restarted.run_reference_smoke()
+        assert second.task_id == first.task_id
+        assert second.run_id == first.run_id
+        assert second.task_status is TaskStatus.SUCCEEDED
+        assert second.run_status is RunStatus.SUCCEEDED
+
+    asyncio.run(scenario())
+
+
 def test_single_node_profile_persists_auth_policy_scope_and_canonical_task_state(
     tmp_path: Path,
 ) -> None:
