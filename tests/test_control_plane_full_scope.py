@@ -113,7 +113,7 @@ def test_issue_32_foundation_is_separate_from_later_implemented_domains() -> Non
     )
 
 
-def test_manifest_and_openapi_include_implemented_domains_without_speculative_future_domains() -> None:
+def test_manifest_and_openapi_include_current_domains_without_speculation() -> None:
     async def scenario() -> None:
         control_plane, http = _stack()
         manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1"))
