@@ -10,6 +10,8 @@ of issue #44. `docs/CONNECTORS.md` is the normative design explanation for this 
       credential linkage.
 - [x] Canonical ExternalResourceReference with namespaced provider-native identity and provenance.
 - [x] Replaceable ConnectorProvider contract.
+- [x] Explicit optional provider hooks for external search, event/webhook normalization, file
+      import/export handoff and knowledge-ingestion handoff, all fail-closed when unsupported.
 - [x] Connector registry plus repository/service lifecycle boundaries.
 - [x] #34 SecretProvider integration through per-connection SecretReference resolution.
 - [x] #15 server-side AuthorizationGate integration for lifecycle/read/sync/action operations.
@@ -31,6 +33,8 @@ of issue #44. `docs/CONNECTORS.md` is the normative design explanation for this 
   the canonical capability invocation pipeline.
 - Authorization approval digests bind the exact safe proposed connector operation/action payload.
 - External events are evidence/input and do not directly execute privileged work.
+- Unsupported optional integration operations fail with the canonical `UNSUPPORTED_CAPABILITY`
+  error rather than being assumed universal.
 - Adapter removal can make future operations unavailable without changing historical external
   references.
 - Plugin packaging remains optional and does not own connector lifecycle.
@@ -54,7 +58,8 @@ Tests cover:
 - Control Plane resource/lifecycle exposure;
 - server-side allocation of canonical Connection IDs;
 - stable canonical ConnectorDefinition identity;
-- rejection of plaintext credential fields including nested endpoint metadata.
+- rejection of plaintext credential fields including nested endpoint metadata;
+- explicit failure semantics for unsupported search/event/file/knowledge provider hooks.
 
-The branch is intentionally isolated from the authentication files being completed by #36/PR #218.
-It consumes the already-established actor/security contracts rather than redefining them.
+#36 and its audit hardening are merged on `main`. #44 consumes those established authenticated actor
+and security contracts directly and does not redefine authentication/session ownership.
