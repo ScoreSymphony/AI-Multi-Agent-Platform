@@ -369,6 +369,8 @@ function TerminalContext({
         <div><dt>Workspace</dt><dd><AppLink href={`/workspaces/${refs.workspace_id}`}><CanonicalId value={refs.workspace_id} /></AppLink></dd></div>
         {refs.task_id ? <div><dt>Task</dt><dd><AppLink href={`/tasks/${refs.task_id}`}><CanonicalId value={refs.task_id} /></AppLink></dd></div> : null}
         {refs.run_id ? <div><dt>Run</dt><dd><AppLink href={`/runs/${refs.run_id}`}><CanonicalId value={refs.run_id} /></AppLink></dd></div> : null}
+        <div><dt>Artifacts</dt><dd><AppLink href="/files">Open canonical artifact view</AppLink></dd></div>
+        <div><dt>Timeline</dt><dd><AppLink href="/events">Open canonical timeline view</AppLink></dd></div>
         {refs.worker_id ? <div><dt>Worker</dt><dd><CanonicalId value={refs.worker_id} /></dd></div> : null}
         {refs.node_id ? <div><dt>Node</dt><dd><CanonicalId value={refs.node_id} /></dd></div> : null}
         <div><dt>Adapter</dt><dd>{session.adapter_id}</dd></div>

@@ -42,6 +42,8 @@ export interface TerminalSessionContext {
 export interface CanonicalTerminalSession {
   id: string;
   session_type: TerminalSessionType;
+  project_id: string;
+  workspace_id: string;
   context: TerminalSessionContext;
   mode: TerminalSessionMode;
   owner_actor_ref: string;
@@ -55,7 +57,7 @@ export interface CanonicalTerminalSession {
   policy_classification: string[];
   inactivity_timeout_seconds: number | null;
   retain_transcript: boolean;
-  adapter_metadata: Array<{ namespace: string; values: Record<string, JsonValue> }>;
+  diagnostics: Array<{ namespace: string; values: Record<string, JsonValue> }>;
 }
 
 export interface TerminalFrame {
@@ -158,10 +160,13 @@ function isTerminalSession(value: unknown): value is CanonicalTerminalSession {
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.session_type === "string" &&
+    typeof value.project_id === "string" &&
+    typeof value.workspace_id === "string" &&
     typeof value.mode === "string" &&
     typeof value.status === "string" &&
     isRecord(value.context) &&
     isRecord(value.capabilities) &&
+    Array.isArray(value.diagnostics) &&
     (value.inactivity_timeout_seconds === null ||
       typeof value.inactivity_timeout_seconds === "number") &&
     typeof value.retain_transcript === "boolean"

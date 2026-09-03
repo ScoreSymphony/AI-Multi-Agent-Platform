@@ -5,6 +5,8 @@ import { buildTerminalStreamUrl, parseTerminalStreamMessage } from "./terminal";
 const session = {
   id: "terminal_session_123e4567-e89b-42d3-a456-426614174000",
   session_type: "manual",
+  project_id: "project_123e4567-e89b-42d3-a456-426614174001",
+  workspace_id: "workspace_123e4567-e89b-42d3-a456-426614174002",
   context: {
     project_id: "project_123e4567-e89b-42d3-a456-426614174001",
     workspace_id: "workspace_123e4567-e89b-42d3-a456-426614174002",
@@ -31,7 +33,7 @@ const session = {
   policy_classification: [],
   inactivity_timeout_seconds: 600,
   retain_transcript: false,
-  adapter_metadata: [],
+  diagnostics: [],
 };
 
 describe("terminal Control Plane client", () => {
