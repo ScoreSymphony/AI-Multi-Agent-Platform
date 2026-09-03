@@ -7,7 +7,7 @@ The CLI remains a normal northbound client of the versioned Control Plane. It do
 
 ## Canonical outcomes
 
-When #15 authorization is configured, the CLI surfaces the Control Plane's canonical error envelope unchanged apart from the existing output-redaction layer.
+When #15 authorization is configured, the CLI surfaces the Control Plane's canonical error envelope unchanged apart from the existing output-redaction layer. Authorization metadata in `details` is produced by the server-side Control Plane and is not synthesized by the CLI.
 
 A denied request is rendered with the canonical `forbidden` error and `details.authorization_outcome=deny`.
 
