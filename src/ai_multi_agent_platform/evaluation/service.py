@@ -10,6 +10,7 @@ from .contracts import EvaluationHistoryRepository
 from .models import (
     ComparisonReport,
     ConfigurationSnapshot,
+    EvaluationResult,
     EvaluationRun,
     EvaluationRunStatus,
     EvaluationSuite,
@@ -36,7 +37,7 @@ class EvaluationRunDetail:
     """One durable run with the evidence currently addressable through the repository."""
 
     run: EvaluationRun
-    results: tuple
+    results: tuple[EvaluationResult, ...]
     comparison: ComparisonReport | None
 
 
