@@ -174,6 +174,9 @@ def _aggregate_visible(
 
 
 def _record_resource(record: UsageRecord) -> dict[str, JsonValue]:
+    scope: dict[str, JsonValue] = {}
+    for key, value in record.scope.fields().items():
+        scope[key] = value
     return {
         "id": record.id,
         "metric_type": record.metric_type,
@@ -185,7 +188,7 @@ def _record_resource(record: UsageRecord) -> dict[str, JsonValue]:
         "timestamp": record.timestamp.isoformat(),
         "started_at": None if record.started_at is None else record.started_at.isoformat(),
         "ended_at": None if record.ended_at is None else record.ended_at.isoformat(),
-        "scope": record.scope.fields(),
+        "scope": scope,
         "correlation_id": record.correlation_id,
         "causation_id": record.causation_id,
         "cost_amount": record.cost_amount,

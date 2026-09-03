@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from uuid import NAMESPACE_URL, uuid5
 
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.observability.models import MetricRecord
 
 from .models import (
@@ -179,7 +180,7 @@ def usage_from_metric(metric: MetricRecord) -> UsageRecord | None:
     metric_type, unit, quality = mapping
     attributes = dict(metric.attributes)
     provider = metric.context.provider_id or metric.context.model_provider_id
-    provenance = {
+    provenance: dict[str, JsonValue] = {
         "telemetry_metric": metric.name,
         "telemetry_unit": metric.unit,
         "attributes": attributes,
