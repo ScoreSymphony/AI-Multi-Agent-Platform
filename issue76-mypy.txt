@@ -1,0 +1,4 @@
+src/ai_multi_agent_platform/accounting/service.py:223: error: Argument "provenance" to "UsageRecord" has incompatible type "dict[str, Collection[str]]"; expected "dict[str, JsonValue]"  [arg-type]
+src/ai_multi_agent_platform/accounting/control_plane.py:188: error: Dict entry 10 has incompatible type "str": "dict[str, str]"; expected "str": "str | int | float | list[JsonValue] | dict[str, JsonValue] | None"  [dict-item]
+Found 2 errors in 2 files (checked 87 source files)
+exit_code=1
