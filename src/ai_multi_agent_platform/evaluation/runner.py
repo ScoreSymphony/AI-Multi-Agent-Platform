@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, replace
 
+from .context import EvaluationExecutionContext
 from .contracts import (
     EvaluationCaseExecutor,
     EvaluationIsolation,
@@ -43,11 +44,24 @@ class NoopEvaluationIsolation:
     async def reset_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None:
         del case, attempt
 
-    async def setup_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None:
-        del case, attempt
+    async def setup_case(
+        self,
+        *,
+        case: EvaluationCase,
+        attempt: EvaluationAttempt,
+    ) -> EvaluationExecutionContext:
+        del case
+        return EvaluationExecutionContext(attempt_id=attempt.attempt_id)
 
-    async def teardown_case(self, *, case: EvaluationCase, attempt: EvaluationAttempt) -> None:
-        del case, attempt
+    async def teardown_case(
+        self,
+        *,
+        case: EvaluationCase,
+        attempt: EvaluationAttempt,
+        execution_context: EvaluationExecutionContext,
+        succeeded: bool,
+    ) -> None:
+        del case, attempt, execution_context, succeeded
 
 
 class EvaluationRunner:
@@ -177,29 +191,48 @@ class EvaluationRunner:
         attempt: EvaluationAttempt,
     ) -> None:
         observation = None
+        execution_context: EvaluationExecutionContext | None = None
+        setup_complete = False
         execution_error: Exception | None = None
         error_category = "case_execution_failure"
 
         try:
             await self._isolation.reset_case(case=case, attempt=attempt)
-            await self._isolation.setup_case(case=case, attempt=attempt)
+            execution_context = await self._isolation.setup_case(case=case, attempt=attempt)
+            setup_complete = True
+            if execution_context.attempt_id != attempt.attempt_id:
+                raise ValueError("evaluation isolation returned context for another attempt")
             if case.timeout_seconds is None:
-                observation = await self._executor.execute_case(case=case, attempt=attempt)
+                observation = await self._executor.execute_case(
+                    case=case,
+                    attempt=attempt,
+                    execution_context=execution_context,
+                )
             else:
                 async with asyncio.timeout(case.timeout_seconds):
-                    observation = await self._executor.execute_case(case=case, attempt=attempt)
+                    observation = await self._executor.execute_case(
+                        case=case,
+                        attempt=attempt,
+                        execution_context=execution_context,
+                    )
         except TimeoutError as exc:
             execution_error = exc
             error_category = "case_execution_timeout"
         except Exception as exc:
             execution_error = exc
         finally:
-            try:
-                await self._isolation.teardown_case(case=case, attempt=attempt)
-            except Exception as exc:
-                if execution_error is None:
-                    execution_error = exc
-                    error_category = "case_teardown_failure"
+            if setup_complete and execution_context is not None:
+                try:
+                    await self._isolation.teardown_case(
+                        case=case,
+                        attempt=attempt,
+                        execution_context=execution_context,
+                        succeeded=execution_error is None,
+                    )
+                except Exception as exc:
+                    if execution_error is None:
+                        execution_error = exc
+                        error_category = "case_teardown_failure"
 
         if execution_error is not None:
             self._save_execution_errors(run, case, attempt, execution_error, error_category)
