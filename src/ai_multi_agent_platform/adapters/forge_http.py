@@ -340,7 +340,9 @@ class ForgeHttpClient:
             artifacts.append(
                 ForgeArtifact(
                     relative_path=relative_path,
-                    media_type=media_type if isinstance(media_type, str) else "application/octet-stream",
+                    media_type=media_type
+                    if isinstance(media_type, str)
+                    else "application/octet-stream",
                     size_bytes=(
                         size_bytes
                         if isinstance(size_bytes, int) and not isinstance(size_bytes, bool)
