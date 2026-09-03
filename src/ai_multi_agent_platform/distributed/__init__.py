@@ -21,12 +21,18 @@ from .models import (
     WorkerRecord,
     WorkerStatus,
 )
-from .registry import DistributedRegistry, RegistryError
+from .persistence import (
+    DISTRIBUTED_STATE_SCHEMA_VERSION,
+    DistributedStateStore,
+    JsonDistributedStateStore,
+)
+from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
 from .scheduler import DeterministicScheduler, NoEligibleWorkerError, ScheduledPlacement
 from .worker import LocalWorker, WorkerDispatcher
 
 __all__ = [
+    "DISTRIBUTED_STATE_SCHEMA_VERSION",
     "WORKER_PROTOCOL_VERSION",
     "AcceleratorResource",
     "CandidateEvaluation",
@@ -35,15 +41,18 @@ __all__ = [
     "DispatchState",
     "DistributedRegistry",
     "DistributedRuntime",
+    "DistributedStateStore",
     "Heartbeat",
     "JobRequirements",
     "JobResultStatus",
+    "JsonDistributedStateStore",
     "LocalWorker",
     "NoEligibleWorkerError",
     "NodeRecord",
     "NodeStatus",
     "RegistrationRequest",
     "RegistryError",
+    "RegistrySnapshot",
     "RejectionCode",
     "RejectionReason",
     "Reservation",
