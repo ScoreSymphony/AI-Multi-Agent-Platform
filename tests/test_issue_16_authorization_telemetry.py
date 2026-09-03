@@ -99,7 +99,9 @@ def test_allow_and_deny_decisions_attach_to_task_trace_and_emit_safe_audit_event
     ]
     assert len(denied_metrics) == 1
 
-    denied_event = next(entry for entry in exporter.timeline if entry.event_name == "authorization.denied")
+    denied_event = next(
+        entry for entry in exporter.timeline if entry.event_name == "authorization.denied"
+    )
     assert denied_event.outcome is TelemetryOutcome.FAILED
     assert denied_event.failure is not None
     assert denied_event.failure.component is FailureComponent.AUTHORIZATION_APPROVAL
@@ -115,7 +117,9 @@ def test_authorization_provider_failure_is_classified_at_authorization_layer() -
     task_id = new_id("task")
     exporter = InMemoryExporter()
     telemetry = Telemetry(exporter)
-    observed = ObservedAuthorizationProvider(_AuthorizationProvider(allowed=False, fail=True), telemetry)
+    observed = ObservedAuthorizationProvider(
+        _AuthorizationProvider(allowed=False, fail=True), telemetry
+    )
 
     async def scenario() -> None:
         with pytest.raises(RuntimeError, match="private provider detail"):
