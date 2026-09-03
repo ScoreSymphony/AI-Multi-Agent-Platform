@@ -65,3 +65,14 @@ The services apply owner isolation before returning records, aggregates or budge
 ## Deferred progressive work
 
 The foundation deliberately does not claim completion of all #76 follow-ups. Rich Worker/Node hardware measurements, complete storage/workspace accounting, Team/Organization attribution, browser/connector/repository usage, Resources UI, notification integration, and enforcement hooks depend on their owning domains and remain progressive additions.
+
+
+## Point-in-time resources and storage
+
+Repeated accounting records now declare an aggregation mode. `additive` is used for counters and consumptive quantities such as calls, tokens and durations. `latest` is used for point-in-time state such as current storage bytes and, later, RAM/VRAM/utilization gauges. A canonical metric/unit query may not mix both modes.
+
+`FileStorageAccounting` consumes the completed #13 `FileProvider` boundary and records `storage.file.bytes.current` in bytes. It sums only READY canonical `FileRecord.size_bytes` values visible through the provider's scoped `list_files()` call. Tombstoned or pending files are not counted. The measurement is provider-reported by default because a replaceable FileProvider may obtain size metadata differently; callers may mark it measured only when their provider contract justifies that classification.
+
+Storage reconciliation does not infer usage ownership from `DataAccessContext.actor_ref`: the actor performing a measurement is not necessarily the owner of the measured resources. Project scope is inherited from the FileProvider request; user/team/organization ownership must be supplied explicitly when the caller actually knows it.
+
+Provider errors may record an unavailable latest measurement but are re-raised. An unavailable gauge therefore never becomes a fabricated zero. Budget evaluation retains its last available value until a new available gauge is reported, while aggregate/current-state queries expose a latest unavailable sample as unavailable.

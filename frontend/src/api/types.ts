@@ -18,6 +18,7 @@ export type RunStatus =
   | "failed"
   | "cancelled"
   | "timed_out";
+export type MeasurementQuality = "measured" | "reported" | "estimated" | "unavailable";
 
 export interface Page<T> {
   items: T[];
@@ -123,6 +124,7 @@ export interface APIErrorBody {
 export interface APImanifest {
   api_version: string;
   resources: string[];
+  commands?: string[];
   openapi: string;
   live_updates: string;
 }
@@ -181,6 +183,58 @@ export interface CanonicalModelProvider {
   limits: Record<string, JsonValue>;
   resources: Record<string, JsonValue>;
   adapter_metadata: Array<Record<string, JsonValue>>;
+}
+
+export interface CanonicalUsageRecord {
+  id: string;
+  metric_type: string;
+  quantity: number | null;
+  unit: string;
+  quality: MeasurementQuality;
+  source: string;
+  provider: string | null;
+  timestamp: string;
+  started_at: string | null;
+  ended_at: string | null;
+  scope: Record<string, string>;
+  correlation_id: string | null;
+  causation_id: string | null;
+  cost_amount: number | null;
+  currency: string | null;
+  precision: number | null;
+  confidence: number | null;
+  provenance: Record<string, JsonValue>;
+}
+
+export interface CanonicalUsageAggregate {
+  id: string;
+  metric_type: string;
+  unit: string;
+  total: number | null;
+  record_count: number;
+  unavailable_count: number;
+  quality_counts: Record<MeasurementQuality, number>;
+}
+
+export interface CanonicalUsageBudget {
+  id: string;
+  metric_type: string;
+  unit: string;
+  scope_type: string;
+  scope_id: string;
+  limit: number;
+  kind: "soft" | "hard";
+  action: "record_only" | "warn" | "deny" | "require_approval" | "notify";
+  warning_fraction: number;
+  window_seconds: number | null;
+  include_estimated: boolean;
+  owner_type: string | null;
+  owner_id: string | null;
+  version: number;
+  consumed: number | null;
+  remaining: number | null;
+  fraction: number | null;
+  threshold_level: "warning" | "exceeded" | null;
 }
 
 export interface CreateTaskInput {

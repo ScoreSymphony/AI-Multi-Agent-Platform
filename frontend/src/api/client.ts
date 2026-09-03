@@ -5,6 +5,9 @@ import type {
   CanonicalModelProvider,
   CanonicalRun,
   CanonicalTask,
+  CanonicalUsageAggregate,
+  CanonicalUsageBudget,
+  CanonicalUsageRecord,
   CreateTaskInput,
   HealthStatus,
   JsonValue,
@@ -154,6 +157,18 @@ export class ControlPlaneClient {
     return this.command<CanonicalModelProvider>(
       `/model-providers/${encodeURIComponent(providerId)}:refresh-health`,
     );
+  }
+
+  listUsageRecords(query: ListQuery = {}): Promise<Page<CanonicalUsageRecord>> {
+    return this.request<Page<CanonicalUsageRecord>>(`/usage-records${toQuery(query)}`);
+  }
+
+  listUsageAggregates(query: ListQuery = {}): Promise<Page<CanonicalUsageAggregate>> {
+    return this.request<Page<CanonicalUsageAggregate>>(`/usage-aggregates${toQuery(query)}`);
+  }
+
+  listUsageBudgets(query: ListQuery = {}): Promise<Page<CanonicalUsageBudget>> {
+    return this.request<Page<CanonicalUsageBudget>>(`/usage-budgets${toQuery(query)}`);
   }
 
   private command<T>(

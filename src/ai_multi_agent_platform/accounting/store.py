@@ -11,6 +11,7 @@ from pathlib import Path
 from threading import Lock
 
 from .models import (
+    AggregationMode,
     BudgetAction,
     BudgetKind,
     MeasurementQuality,
@@ -259,6 +260,7 @@ def _matches(record: UsageRecord, query: UsageQuery) -> bool:
 def _record_to_json(record: UsageRecord) -> dict[str, object]:
     payload = asdict(record)
     payload["quality"] = record.quality.value
+    payload["aggregation_mode"] = record.aggregation_mode.value
     payload["timestamp"] = record.timestamp.isoformat()
     payload["started_at"] = None if record.started_at is None else record.started_at.isoformat()
     payload["ended_at"] = None if record.ended_at is None else record.ended_at.isoformat()
@@ -273,6 +275,9 @@ def _record_from_json(raw: str) -> UsageRecord:
     if not isinstance(scope_raw, dict):
         raise ValueError("invalid usage scope payload")
     quality = MeasurementQuality(str(payload.pop("quality")))
+    aggregation_mode = AggregationMode(
+        str(payload.pop("aggregation_mode", AggregationMode.ADDITIVE.value))
+    )
     timestamp = datetime.fromisoformat(str(payload.pop("timestamp")))
     started_raw = payload.pop("started_at")
     ended_raw = payload.pop("ended_at")
@@ -280,6 +285,7 @@ def _record_from_json(raw: str) -> UsageRecord:
         **payload,
         scope=UsageScope(**scope_raw),
         quality=quality,
+        aggregation_mode=aggregation_mode,
         timestamp=timestamp,
         started_at=None if started_raw is None else datetime.fromisoformat(str(started_raw)),
         ended_at=None if ended_raw is None else datetime.fromisoformat(str(ended_raw)),
