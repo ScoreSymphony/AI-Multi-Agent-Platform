@@ -22,6 +22,7 @@ from ai_multi_agent_platform.connectors import (
     ConnectorService,
     InMemoryConnectorRepository,
     ReferenceConnectorProvider,
+    SyncMode,
 )
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import HealthStatus, OperationContext
@@ -112,6 +113,9 @@ def test_create_configure_disable_and_reenable_connection() -> None:
     assert created.status is ConnectionStatus.READY
     assert created.health is HealthStatus.HEALTHY
     assert created.granted_scopes == ("read", "write")
+    assert len(created.adapter_metadata) == 1
+    assert created.adapter_metadata[0].namespace == REFERENCE_CONNECTOR_TYPE
+    assert created.adapter_metadata[0].values["account_id"] == "local-fixture"
 
     disabled = asyncio.run(service.set_enabled(created.id, False, actor=actor, context=context))
     assert disabled.status is ConnectionStatus.DISABLED
@@ -130,6 +134,7 @@ def test_create_configure_disable_and_reenable_connection() -> None:
 
     enabled = asyncio.run(service.set_enabled(created.id, True, actor=actor, context=context))
     assert enabled.status is ConnectionStatus.READY
+    assert len(enabled.adapter_metadata) == 1
 
 
 def test_missing_and_invalid_credentials_fail_canonically() -> None:
@@ -322,7 +327,7 @@ def test_permission_denial_blocks_connector_action() -> None:
     assert exc_info.value.code is ErrorCode.FORBIDDEN
 
 
-def test_external_event_dedupe_metadata_and_sync_checkpoint_resume() -> None:
+def test_external_event_dedupe_and_sync_resume_resync_rebuild() -> None:
     service, _, _, actor, context, secret_ref = _runtime()
     connection = asyncio.run(
         service.create_connection(
@@ -344,6 +349,7 @@ def test_external_event_dedupe_metadata_and_sync_checkpoint_resume() -> None:
     assert len({event.dedupe_key for event in first.events}) == 2
     assert all(event.verified for event in first.events)
     assert all(event.provenance["source"] == "reference-local" for event in first.events)
+    assert all(event.provenance["sync_mode"] == "incremental" for event in first.events)
     assert first.checkpoint.cursor == "2"
 
     resumed = asyncio.run(
@@ -357,6 +363,43 @@ def test_external_event_dedupe_metadata_and_sync_checkpoint_resume() -> None:
     assert resumed.resources == ()
     assert resumed.events == ()
     assert resumed.checkpoint.cursor == "2"
+
+    resynced = asyncio.run(
+        service.synchronize(
+            connection.id,
+            "records",
+            actor=actor,
+            context=context,
+            mode=SyncMode.RESYNC,
+        )
+    )
+    assert len(resynced.resources) == 2
+    assert len(resynced.events) == 2
+    assert all(event.provenance["sync_mode"] == "resync" for event in resynced.events)
+
+    rebuilt = asyncio.run(
+        service.synchronize(
+            connection.id,
+            "records",
+            actor=actor,
+            context=context,
+            mode=SyncMode.REBUILD,
+        )
+    )
+    assert len(rebuilt.resources) == 2
+    assert len(rebuilt.events) == 2
+    assert all(event.provenance["sync_mode"] == "rebuild" for event in rebuilt.events)
+
+    resumed_after_rebuild = asyncio.run(
+        service.synchronize(
+            connection.id,
+            "records",
+            actor=actor,
+            context=context,
+        )
+    )
+    assert resumed_after_rebuild.resources == ()
+    assert resumed_after_rebuild.events == ()
 
 
 def test_adapter_removal_does_not_redefine_historical_external_reference() -> None:
