@@ -491,7 +491,8 @@ class LiteLLMModelProvider(ModelProvider):
         except ModuleNotFoundError as exc:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "LiteLLM library mode is enabled but the optional 'litellm' dependency is not installed",
+                "LiteLLM library mode is enabled but the optional "
+                "'litellm' dependency is not installed",
                 provider_id=self.config.provider_id,
                 details={"install_extra": "ai-multi-agent-platform[litellm]"},
             ) from exc
@@ -511,7 +512,8 @@ class LiteLLMModelProvider(ModelProvider):
         if value is None or not value:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                f"configured LiteLLM credential environment variable is missing: {self.config.api_key_env}",
+                "configured LiteLLM credential environment variable is missing: "
+                f"{self.config.api_key_env}",
                 provider_id=self.config.provider_id,
                 details={"credential_source": f"env:{self.config.api_key_env}"},
             )
