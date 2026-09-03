@@ -156,7 +156,7 @@ def _owner(resource: Mapping[str, JsonValue]) -> tuple[str | None, str | None]:
 
 
 def _status(resource: Mapping[str, JsonValue]) -> str | None:
-    for field in ("status", "effective_health", "health"):
+    for field in ("status", "state", "effective_health", "health"):
         value = _optional_string(resource, field)
         if value is not None:
             return value
@@ -207,6 +207,9 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "effective_health",
         "task_id",
         "plan_id",
+        "automation_id",
+        "trigger_type",
+        "source",
     ):
         value = _optional_string(resource, field)
         if value is not None:
