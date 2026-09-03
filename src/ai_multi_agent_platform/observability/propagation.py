@@ -76,13 +76,14 @@ class TraceCarrier:
 
     @classmethod
     def from_span(cls, span: SpanHandle) -> TraceCarrier:
-        if span.context.correlation_id is None:
+        correlation_id = span.context.correlation_id
+        if correlation_id is None:
             raise ValueError("span context must include correlation_id for propagation")
         context = span.context
         return cls(
             trace_id=span.trace_id,
             parent_span_id=span.span_id,
-            correlation_id=context.correlation_id,
+            correlation_id=correlation_id,
             **{
                 name: getattr(context, name)
                 for name in _OPTIONAL_CONTEXT_FIELDS
