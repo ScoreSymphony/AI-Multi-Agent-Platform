@@ -28,10 +28,7 @@ class ExtensionFilteringAuthorization(FakeAuthorizationProvider):
         self.calls.append(request)
         if request.action == "agent-team:list":
             return AuthorizationDecision(allowed=False, reason="team-hidden")
-        if (
-            request.action == "agent:list"
-            and request.context.project_id == self.denied_project_id
-        ):
+        if request.action == "agent:list" and request.context.project_id == self.denied_project_id:
             return AuthorizationDecision(allowed=False, reason="project-hidden")
         return AuthorizationDecision(allowed=True, reason="visible")
 
