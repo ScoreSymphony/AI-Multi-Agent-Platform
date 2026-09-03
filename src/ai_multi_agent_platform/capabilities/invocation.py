@@ -11,7 +11,7 @@ from jsonschema.exceptions import SchemaError, ValidationError  # type: ignore[i
 
 from ai_multi_agent_platform.contracts.domain_mapping import validate_tool_invocation_binding
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue, ToolInvocation
+from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue, ToolInvocation
 from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocation
 
 from .registry import CapabilityRegistry
@@ -242,6 +242,7 @@ class CapabilityInvoker:
                 exc.code.value,
                 canonical_invocation=canonical_invocation,
                 approval_decision=approval_decision,
+                adapter_metadata=exc.adapter_metadata,
             )
             raise
         except Exception as exc:
@@ -290,6 +291,7 @@ class CapabilityInvoker:
                     exc.code.value,
                     canonical_invocation=canonical_invocation,
                     approval_decision=approval_decision,
+                    adapter_metadata=tool_result.adapter_metadata,
                 )
                 raise
 
@@ -314,6 +316,7 @@ class CapabilityInvoker:
             InvocationStatus.SUCCEEDED,
             canonical_invocation=canonical_invocation,
             approval_decision=approval_decision,
+            adapter_metadata=tool_result.adapter_metadata,
         )
         return result
 
@@ -326,6 +329,7 @@ class CapabilityInvoker:
         *,
         canonical_invocation: DomainToolInvocation | None = None,
         approval_decision: str | None = None,
+        adapter_metadata: tuple[AdapterMetadata, ...] = (),
     ) -> None:
         await self._observer.record(
             InvocationRecord(
@@ -343,7 +347,7 @@ class CapabilityInvoker:
                 worker_id=registration.worker_id,
                 approval_decision=approval_decision,
                 error_code=error_code,
-                adapter_metadata=registration.adapter_metadata,
+                adapter_metadata=(*registration.adapter_metadata, *adapter_metadata),
             )
         )
 
