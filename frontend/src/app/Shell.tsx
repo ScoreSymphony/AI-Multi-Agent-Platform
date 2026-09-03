@@ -74,18 +74,49 @@ export function Shell() {
     <PermissionHintsProvider>
       <a className="skip-link" href="#main">Skip to content</a>
       <div className="app-shell">
-        <aside className={menuOpen ? "sidebar sidebar-open" : "sidebar"}>
+        <aside
+          id="platform-navigation"
+          className={menuOpen ? "sidebar sidebar-open" : "sidebar"}
+        >
           <div className="brand"><span className="brand-mark">A</span><div><strong>Agent Platform</strong><small>Control Plane UI</small></div></div>
           <nav aria-label="Platform navigation">
-            {groups.map((group) => <div className="nav-group" key={group}><span>{group}</span>{navigation.filter((item) => item.group === group).map((item) => <AppLink className={item.path === path ? "active" : undefined} href={item.path} key={item.path}>{item.label}</AppLink>)}</div>)}
+            {groups.map((group) => (
+              <div className="nav-group" key={group}>
+                <span>{group}</span>
+                {navigation.filter((item) => item.group === group).map((item) => {
+                  const active = item.path === path;
+                  return (
+                    <AppLink
+                      aria-current={active ? "page" : undefined}
+                      className={active ? "active" : undefined}
+                      href={item.path}
+                      key={item.path}
+                    >
+                      {item.label}
+                    </AppLink>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
         </aside>
         <div className="workspace">
           <header className="topbar">
-            <button className="menu-button" aria-expanded={menuOpen} aria-label="Toggle navigation" onClick={() => setMenuOpen((value) => !value)}>Menu</button>
-            <div className="api-indicator"><span className={manifest ? "dot dot-ready" : "dot"} />{manifest ? `/api/${manifest.api_version}` : "API unavailable"}</div>
+            <button
+              className="menu-button"
+              aria-controls="platform-navigation"
+              aria-expanded={menuOpen}
+              aria-label="Toggle navigation"
+              onClick={() => setMenuOpen((value) => !value)}
+            >
+              Menu
+            </button>
+            <div className="api-indicator" role="status" aria-live="polite">
+              <span className={manifest ? "dot dot-ready" : "dot"} />
+              {manifest ? `/api/${manifest.api_version}` : "API unavailable"}
+            </div>
           </header>
-          <main id="main">{content}</main>
+          <main id="main" tabIndex={-1}>{content}</main>
         </div>
       </div>
     </PermissionHintsProvider>
