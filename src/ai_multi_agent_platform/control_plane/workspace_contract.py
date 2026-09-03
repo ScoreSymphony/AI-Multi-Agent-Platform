@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from enum import StrEnum
 from typing import Any, cast
@@ -29,6 +30,7 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceType,
 )
 
+from .extensions import CommandHandler, ResourceService
 from .http import HTTPRequest, HTTPResponse
 from .models import API_VERSION, PageQuery, RequestContext, paginate
 from .observability_contract import ControlPlane as _ObservabilityControlPlane
@@ -50,6 +52,8 @@ class ControlPlane(_ObservabilityControlPlane):
         live_events: EventProvider | None = None,
         health_providers: tuple[ProviderContract, ...] = (),
         model_registry: ModelRegistry | None = None,
+        resource_services: Mapping[str, ResourceService] | None = None,
+        command_handlers: Mapping[str, CommandHandler] | None = None,
         workspace_provider: WorkspaceProvider | None = None,
     ) -> None:
         super().__init__(
@@ -60,6 +64,8 @@ class ControlPlane(_ObservabilityControlPlane):
             live_events=live_events,
             health_providers=health_providers,
             model_registry=model_registry,
+            resource_services=resource_services,
+            command_handlers=command_handlers,
         )
         self._workspace_provider = workspace_provider
         self._workspace_command_results: dict[str, str] = {}
