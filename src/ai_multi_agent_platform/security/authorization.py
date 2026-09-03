@@ -67,6 +67,7 @@ class ResourceType(StrEnum):
     NODE = "node"
     WORKER = "worker"
     AUTOMATION = "automation"
+    NOTIFICATION = "notification"
     CONNECTOR = "connector"
     INTEGRATION = "integration"
     SECRET_REFERENCE = "secret_reference"
