@@ -95,15 +95,18 @@ Implemented projections/seams include:
 - #88 assignment, dependency, approaching-deadline, and overdue attention;
 - an opaque #86 Verification seam keyed by canonical `verification_*` ID plus an attention label;
 - an opaque #87 membership/invitation seam keyed by canonical `membership_*` ID plus an attention
-  label and canonical recipient scope.
+  label and canonical recipient scope;
+- `canonical_attention_candidate(...)` for provider-neutral agent-input, Node/Worker, Automation,
+  security, Connector, and similar canonical source-domain attention signals.
 
 The #86/#87 seams intentionally do not define Verification or membership status enums. Those
 issues remain the owners of their domain vocabularies and lifecycles; their future adapters can
 pass canonical signals into #75.
 
-Other event sources (agent input, worker/node health, Automation failures, security events,
-Connector failures) should follow the same projection rule: source state remains authoritative in
-the owning domain, while #75 owns only the attention record.
+The generic canonical attention hook follows the same authority rule: the source domain supplies
+its canonical resource reference, recipient, attention label and optional canonical refs. #75
+owns only the resulting attention projection and deterministic aggregation identity; it does not
+invent Worker, Automation, security, Connector, or agent-input lifecycle state.
 
 ## Control Plane
 
@@ -189,7 +192,8 @@ Issue #75 coverage includes:
 - Task completed/failed projection;
 - Approval required/resolved projection without sensitive payload leakage;
 - Verification required/changes-requested seam;
-- organization/membership recipient scope;
+- organization/membership recipient scope and explicit Organization/Project isolation;
+- provider-neutral agent-input, Worker, Automation, security and Connector attention hooks;
 - removed/suspended recipient eligibility fixture;
 - #88 assignment/dependency/deadline projections and reminder idempotence;
 - preference filtering;
