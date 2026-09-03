@@ -571,49 +571,52 @@ def bootstrap_standard_agents(
     preserved_agents: list[str] = []
     base_agents: dict[str, AgentRevision] = {}
 
-    for template in STANDARD_AGENT_TEMPLATES:
-        if template.agent_id in existing_agent_ids:
-            _validate_existing_agent_identity(service, template)
-            preserved_agents.append(template.key)
+    for agent_template in STANDARD_AGENT_TEMPLATES:
+        if agent_template.agent_id in existing_agent_ids:
+            _validate_existing_agent_identity(service, agent_template)
+            preserved_agents.append(agent_template.key)
         else:
             service.create_agent(
-                template.profile,
+                agent_template.profile,
                 owner_ref=owner_ref,
                 provenance=_provenance(
-                    key=template.key,
+                    key=agent_template.key,
                     kind="agent",
                     action="bootstrap",
                 ),
-                agent_id=template.agent_id,
+                agent_id=agent_template.agent_id,
             )
-            installed_agents.append(template.key)
-        base_agents[template.key] = service.repository.get_agent_revision(template.agent_id, 1)
+            installed_agents.append(agent_template.key)
+        base_agents[agent_template.key] = service.repository.get_agent_revision(
+            agent_template.agent_id,
+            1,
+        )
 
     existing_team_ids = {team.team_id for team in service.repository.list_teams()}
     installed_teams: list[str] = []
     preserved_teams: list[str] = []
-    for template in STANDARD_TEAM_TEMPLATES:
-        if template.team_id in existing_team_ids:
-            _validate_existing_team_identity(service, template)
-            preserved_teams.append(template.key)
+    for team_template in STANDARD_TEAM_TEMPLATES:
+        if team_template.team_id in existing_team_ids:
+            _validate_existing_team_identity(service, team_template)
+            preserved_teams.append(team_template.key)
         else:
             service.create_team(
-                _materialize_team_profile(template, base_agents),
+                _materialize_team_profile(team_template, base_agents),
                 owner_ref=owner_ref,
                 provenance=_provenance(
-                    key=template.key,
+                    key=team_template.key,
                     kind="team",
                     action="bootstrap",
                 ),
-                team_id=template.team_id,
+                team_id=team_template.team_id,
             )
-            installed_teams.append(template.key)
+            installed_teams.append(team_template.key)
 
     readiness: tuple[StandardAgentReadiness, ...] = ()
     if capability_inventory is not None:
         readiness = tuple(
-            assess_standard_agent_capabilities(template, capability_inventory)
-            for template in STANDARD_AGENT_TEMPLATES
+            assess_standard_agent_capabilities(agent_template, capability_inventory)
+            for agent_template in STANDARD_AGENT_TEMPLATES
         )
 
     return StarterBootstrapResult(
