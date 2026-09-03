@@ -53,6 +53,8 @@ export interface CanonicalTerminalSession {
   encoding: string;
   dimensions: TerminalDimensions | null;
   policy_classification: string[];
+  inactivity_timeout_seconds: number | null;
+  retain_transcript: boolean;
   adapter_metadata: Array<{ namespace: string; values: Record<string, JsonValue> }>;
 }
 
@@ -89,6 +91,8 @@ export interface CreateTerminalSessionInput {
   encoding?: string;
   dimensions?: TerminalDimensions;
   policy_classification?: string[];
+  inactivity_timeout_seconds?: number;
+  retain_transcript?: boolean;
   approval_id?: string;
 }
 
@@ -157,7 +161,10 @@ function isTerminalSession(value: unknown): value is CanonicalTerminalSession {
     typeof value.mode === "string" &&
     typeof value.status === "string" &&
     isRecord(value.context) &&
-    isRecord(value.capabilities)
+    isRecord(value.capabilities) &&
+    (value.inactivity_timeout_seconds === null ||
+      typeof value.inactivity_timeout_seconds === "number") &&
+    typeof value.retain_transcript === "boolean"
   );
 }
 
