@@ -100,8 +100,6 @@ class TerminalSessionService:
                 ErrorCode.NOT_FOUND,
                 f"terminal adapter is not registered: {request.adapter_id}",
             )
-        if request.session_id in self._sessions:
-            return self._sessions[request.session_id]
 
         risk = (
             RiskClassification.HIGH
@@ -148,6 +146,24 @@ class TerminalSessionService:
                     adapter_metadata=exc.adapter_metadata,
                 ) from exc
             raise
+
+        existing = self._sessions.get(request.session_id)
+        if existing is not None:
+            if (
+                existing.owner_actor_ref == request.actor_ref
+                and existing.context == request.context
+                and existing.session_type is request.session_type
+                and existing.mode is request.mode
+                and existing.adapter_id == request.adapter_id
+                and existing.dimensions == request.dimensions
+                and existing.encoding == request.encoding
+                and existing.policy_classification == request.policy_classification
+            ):
+                return existing
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "terminal session id is already bound to a different create request",
+            )
 
         started = await adapter.start(request)
         session = TerminalSession(
