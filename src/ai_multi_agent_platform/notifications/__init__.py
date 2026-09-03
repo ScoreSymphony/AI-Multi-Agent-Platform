@@ -30,6 +30,7 @@ from .recipients import EventOwnerRecipientResolver, RecipientResolver, StaticRe
 from .repository import InMemoryNotificationRepository, NotificationRepository
 from .rules import NotificationRule, TaskTerminalNotificationRule
 from .service import NotificationEventSink, NotificationService
+from .sqlite import SqliteNotificationPreferenceRepository, SqliteNotificationRepository
 
 __all__ = [
     "DeliveryResult",
@@ -57,6 +58,8 @@ __all__ = [
     "RecipientResolver",
     "RecipientType",
     "SourceRef",
+    "SqliteNotificationPreferenceRepository",
+    "SqliteNotificationRepository",
     "StaticRecipientResolver",
     "TaskTerminalNotificationRule",
     "UnavailableDeliveryChannel",
