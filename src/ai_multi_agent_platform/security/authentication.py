@@ -21,7 +21,7 @@ from typing import Protocol
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id
 
-from .authorization import ActorIdentity, ActorType
+from .authorization import ActorIdentity, ActorType, infer_actor_identity
 from .redaction import redact_sensitive
 
 
@@ -748,6 +748,7 @@ class LocalAuthenticationService:
         if not owner_id.strip() or not purpose.strip():
             raise ValueError("credential owner and purpose must not be blank")
         _validate_credential_kind(actor_type, kind)
+        _validate_actor_reference(owner_id, actor_type)
         if actor_type is ActorType.HUMAN:
             self._require_account_active(self._user(owner_id))
         if expires_at is not None and expires_at <= current:
@@ -1144,6 +1145,14 @@ def _parse_parameters(value: str) -> dict[str, int]:
 def _decode_base64(value: str) -> bytes:
     padding = "=" * (-len(value) % 4)
     return base64.urlsafe_b64decode((value + padding).encode("ascii"))
+
+
+def _validate_actor_reference(owner_id: str, actor_type: ActorType) -> None:
+    inferred = infer_actor_identity(owner_id).actor_type
+    if inferred is not actor_type:
+        raise ValueError(
+            f"credential owner {owner_id!r} does not encode actor type {actor_type.value!r}"
+        )
 
 
 def _validate_credential_kind(actor_type: ActorType, kind: CredentialKind) -> None:

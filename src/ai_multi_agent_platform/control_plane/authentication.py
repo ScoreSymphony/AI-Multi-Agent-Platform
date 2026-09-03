@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
-from typing import cast
+from typing import Any
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.security.authentication import (
@@ -32,13 +33,13 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
 
     def __init__(
         self,
-        control_plane: object,
+        control_plane: Any,
         authentication: LocalAuthenticationService,
         *,
         cookie_name: str = "amp_session",
         secure_cookie: bool = True,
     ) -> None:
-        super().__init__(cast(object, control_plane))
+        super().__init__(control_plane)
         if not cookie_name.strip():
             raise ValueError("cookie_name must not be blank")
         self._authentication = authentication
@@ -77,6 +78,8 @@ class AuthenticatedControlPlaneHTTP(_ControlPlaneHTTP):
 
             trusted = _with_authenticated_actor(request, actor)
             return await super().handle(trusted)
+        except APIException as exc:
+            return self._error_response(exc, request_id, correlation_id)
         except AuthenticationError as exc:
             return self._authentication_error(exc, request_id, correlation_id)
         except KeyError:
@@ -446,10 +449,8 @@ def _relative_path(path: str) -> str:
     return path[len(prefix) :]
 
 
-def _header(headers: object, name: str) -> str | None:
-    if not hasattr(headers, "items"):
-        return None
-    for key, value in cast(dict[str, str], headers).items():
+def _header(headers: Mapping[str, str], name: str) -> str | None:
+    for key, value in headers.items():
         if key.casefold() == name.casefold():
             return value
     return None
