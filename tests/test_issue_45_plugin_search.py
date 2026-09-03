@@ -172,9 +172,7 @@ def test_plugin_candidates_and_installed_plugins_use_registered_global_search() 
             "Deterministic capability provider used to prove plugin lifecycle semantics."
         )
         assert candidate["version"] == "1.0.0"
-        assert candidate["canonical_ref"] == (
-            f"/api/v1/plugin-candidates/{REFERENCE_PLUGIN_ID}"
-        )
+        assert candidate["canonical_ref"] == (f"/api/v1/plugin-candidates/{REFERENCE_PLUGIN_ID}")
         assert candidate["provenance"] == {
             "indexed_from": "canonical-control-plane",
             "collection": "plugin-candidates",
