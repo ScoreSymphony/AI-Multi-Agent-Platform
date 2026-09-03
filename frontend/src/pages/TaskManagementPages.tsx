@@ -8,7 +8,9 @@ import type {
   TaskPriority,
   TaskResponsibilityKind,
 } from "../api/types";
+import { useCursorPagination } from "../app/pagination";
 import { AppLink, useRouter } from "../app/router";
+import { PaginationControls } from "../components/Pagination";
 import {
   CanonicalId,
   Card,
@@ -85,12 +87,19 @@ export function ManagedTasksPage({ client }: { client: ControlPlaneClient }) {
     status,
   ]);
 
+  const queryKey = useMemo(
+    () => JSON.stringify({ filters, sort, direction }),
+    [direction, filters, sort],
+  );
+  const pagination = useCursorPagination(queryKey);
+
   const load = useCallback(async () => {
     setError(null);
     try {
       setPage(
         await client.listTasks({
           limit: 100,
+          cursor: pagination.cursor,
           sort,
           direction,
           filters: Object.keys(filters).length > 0 ? filters : undefined,
@@ -99,11 +108,15 @@ export function ManagedTasksPage({ client }: { client: ControlPlaneClient }) {
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client, direction, filters, sort]);
+  }, [client, direction, filters, pagination.cursor, sort]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setSelected(new Set());
+  }, [queryKey]);
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -198,7 +211,6 @@ export function ManagedTasksPage({ client }: { client: ControlPlaneClient }) {
           <label><input type="checkbox" checked={blocked} onChange={(event) => setBlocked(event.target.checked)} /> blocked</label>
           <label>Sort<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="priority">priority</option><option value="due">due</option><option value="updated_at">updated</option><option value="status">status</option></select></label>
           <label>Direction<select value={direction} onChange={(event) => setDirection(event.target.value as "asc" | "desc")}><option value="desc">descending</option><option value="asc">ascending</option></select></label>
-          <button onClick={() => void load()}>Refresh</button>
         </div>
       </Card>
       <Card title={`Bulk operations · ${selected.size} selected`}>
@@ -209,7 +221,19 @@ export function ManagedTasksPage({ client }: { client: ControlPlaneClient }) {
           <button disabled={busy || selected.size === 0} onClick={() => void applyBulk({ archived: false })}>Unarchive</button>
         </div>
       </Card>
-      {!page ? <LoadingState /> : <ManagedTaskTable tasks={page.items} selected={selected} onToggle={toggleSelected} />}
+      {!page ? <LoadingState /> : (
+        <>
+          <ManagedTaskTable tasks={page.items} selected={selected} onToggle={toggleSelected} />
+          <PaginationControls
+            page={page}
+            pageNumber={pagination.pageNumber}
+            hasPrevious={pagination.hasPrevious}
+            onPrevious={pagination.previous}
+            onRefresh={() => void load()}
+            onNext={() => pagination.next(page.next_cursor)}
+          />
+        </>
+      )}
     </div>
   );
 }
