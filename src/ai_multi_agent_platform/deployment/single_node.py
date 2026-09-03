@@ -11,6 +11,7 @@ from ai_multi_agent_platform.control_plane import (
 )
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.data import LocalFileProvider
+from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
@@ -27,6 +28,21 @@ from ai_multi_agent_platform.workspaces import SqliteWorkspaceProvider
 from .config import SingleNodeConfig
 
 _REFERENCE_EXECUTION_WORKSPACE = "reference"
+_SMOKE_PROJECT_KEY = "deployment-smoke-project-v1"
+_SMOKE_TASK_KEY = "deployment-smoke-task-v1"
+_SMOKE_READY_KEY = "deployment-smoke-ready-v1"
+_SMOKE_START_KEY = "deployment-smoke-start-v1"
+_SMOKE_REFRESH_KEY = "deployment-smoke-refresh-v1"
+
+
+@dataclass(frozen=True, slots=True)
+class SingleNodeSmokeResult:
+    """Canonical identifiers and terminal state from the built-in deployment smoke."""
+
+    task_id: str
+    run_id: str
+    task_status: TaskStatus
+    run_status: RunStatus
 
 
 @dataclass(slots=True)
@@ -74,6 +90,59 @@ class SingleNodeDeployment:
                 )
             )
         return account
+
+    async def run_reference_smoke(self) -> SingleNodeSmokeResult:
+        """Run one retry-safe canonical Task/Run through the local reference execution path."""
+
+        accounts = tuple(self.authentication.store.users.values())
+        if len(accounts) != 1:
+            raise ValueError(
+                "single-node smoke requires exactly one bootstrapped local administrator"
+            )
+        account = accounts[0]
+        if not self.authorization.has_policy(account.user_id):
+            raise ValueError("single-node smoke requires the administrator policy to be installed")
+
+        project = self.scopes.create_project(
+            key=_SMOKE_PROJECT_KEY,
+            name="Deployment smoke",
+            owner_type="user",
+            owner_id=account.user_id,
+        )
+        task = await self.kernel.create_task(
+            idempotency_key=_SMOKE_TASK_KEY,
+            title="Single-node deployment smoke",
+            objective="Verify canonical local reference execution without optional services",
+            owner_type="user",
+            owner_id=account.user_id,
+            project_id=project.id,
+        )
+        await self.kernel.ready_task(
+            idempotency_key=_SMOKE_READY_KEY,
+            task_id=task.task_id,
+        )
+        run = await self.kernel.start_task(
+            idempotency_key=_SMOKE_START_KEY,
+            task_id=task.task_id,
+        )
+        refreshed = await self.kernel.refresh_run(
+            idempotency_key=_SMOKE_REFRESH_KEY,
+            task_id=task.task_id,
+            run_id=run.run_id,
+        )
+        persisted_task = await self.kernel.get_task(task.task_id)
+        if refreshed.status is not RunStatus.SUCCEEDED:
+            raise RuntimeError(f"single-node smoke run did not succeed: {refreshed.status.value}")
+        if persisted_task.status is not TaskStatus.SUCCEEDED:
+            raise RuntimeError(
+                f"single-node smoke task did not succeed: {persisted_task.status.value}"
+            )
+        return SingleNodeSmokeResult(
+            task_id=task.task_id,
+            run_id=run.run_id,
+            task_status=persisted_task.status,
+            run_status=refreshed.status,
+        )
 
 
 def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployment:
