@@ -61,9 +61,7 @@ class ConnectorDefinitionResourceService(ResourceService):
         definitions = await self._connectors.repository.list_definitions()
         return tuple(_definition_resource(definition) for definition in definitions)
 
-    async def get_resource(
-        self, context: RequestContext, resource_id: str
-    ) -> dict[str, JsonValue]:
+    async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         del context
         for definition in await self._connectors.repository.list_definitions():
             if definition.id == resource_id:
@@ -86,9 +84,7 @@ class ConnectionResourceService(ResourceService):
         connections = await self._connectors.repository.list_connections(project_id=project_id)
         return tuple(_connection_resource(connection) for connection in connections)
 
-    async def get_resource(
-        self, context: RequestContext, resource_id: str
-    ) -> dict[str, JsonValue]:
+    async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         del context
         connection = await self._connectors.repository.get_connection(resource_id)
         return _connection_resource(connection)
@@ -367,7 +363,9 @@ def _secret_reference(value: JsonValue) -> SecretReference:
         )
     raw_metadata = value.get("metadata", {})
     if not isinstance(raw_metadata, dict):
-        raise ContractError(ErrorCode.INVALID_REQUEST, "secret reference metadata must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, "secret reference metadata must be an object"
+        )
     return SecretReference(
         provider=_required_string(value, "provider"),
         secret_id=_required_string(value, "secret_id"),
