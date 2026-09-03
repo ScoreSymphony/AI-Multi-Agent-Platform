@@ -74,6 +74,8 @@ The current progressive path supports, when those domain services are registered
 - Agent Runs;
 - Capabilities;
 - Capability Providers;
+- Automations;
+- Automation Deliveries;
 - other future registered canonical collections that satisfy the same contract.
 
 Registered Search results reuse the collection's canonical `<singular>:list` authorization action. Candidate owner and Project scope are forwarded into that authorization decision so two resources in the same collection can still have different visibility. Unauthorized registered resources are removed before caller-visible counts, snippets, cursors or exact-ID results are calculated.
@@ -102,6 +104,22 @@ Model Search supports safe inventory metadata such as:
 Model results are authorized with `model:list`; Model Provider results use `model-provider:list`. Provider-native model identifiers and `adapter_metadata` are deliberately not indexed. They therefore cannot become Search identities, keywords, snippets or caller-visible Search provenance.
 
 Capability inventory follows the registered-domain path. `capability_resource_services(...)` exposes the canonical #12 `capabilities` and `capability-providers` collections, so those resources use the same progressive rebuild and authorization flow without Search depending directly on the Capability Registry implementation.
+
+### Automations and Automation Deliveries
+
+Issue #18 registers canonical `automations` and `automation-deliveries` resources through the same progressive `ResourceService` seam. Search therefore does not need a second Automation repository, Automation-specific index provider or separate identity model.
+
+The hardened Automation Control Plane adds owner and Project/Workspace scope to the northbound resources before they enter Search. The derived Search projection supports safe Automation metadata including:
+
+- Automation name and description;
+- Automation state as Search status;
+- revision and `updated_at` where available;
+- canonical Project/Workspace and owner scope;
+- Delivery status;
+- Delivery-to-Automation relationship through canonical `automation_id`;
+- safe Delivery `trigger_type` and `source` keyword discovery.
+
+Automation Search reuses the canonical registered-domain authorization actions `automation:list` and `automation-delivery:list`. Exact-ID lookup, Project filters, keyword matches and caller-visible totals therefore pass through the same authorization boundary as the corresponding canonical resources. A caller without access to another Project cannot infer Automation or Delivery existence through IDs, names, owner metadata, counts, snippets or the Delivery-to-Automation relationship.
 
 ## Query features
 
@@ -197,12 +215,12 @@ Exact-ID lookup follows the same rule: knowing or guessing a canonical ID does n
 
 ## Remaining #45 integrations
 
-The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
+The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support, Automation discovery and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
 
 - policy-permitted Events where useful for global discovery;
 - Files, scoped Memory and Knowledge;
 - Nodes/Workers;
-- Approvals, Automations and Evaluations;
+- Approvals and Evaluations;
 - Plugins/Extensions and Connectors/external-resource references;
 - Conversations/Messages with retention/deletion propagation;
 - Notifications and usage/resource summaries where useful;
