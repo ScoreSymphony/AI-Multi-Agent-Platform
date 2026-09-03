@@ -126,7 +126,7 @@ class _FakeBrowserProvider(BrowserProvider):
         del session_id, context
 
 
-def _request(url: str, *, worker_capability: bool = True) -> CapabilityInvocation:
+def _request(url: str) -> CapabilityInvocation:
     project_id = new_id("project")
     context = OperationContext(
         correlation_id="browser-binding",
@@ -146,9 +146,6 @@ def _request(url: str, *, worker_capability: bool = True) -> CapabilityInvocatio
             agent_id=new_id("agent"),
             project_id=project_id,
         ),
-        available_worker_capabilities=(
-            frozenset({"browser-runtime"}) if worker_capability else frozenset()
-        ),
     )
 
 
@@ -156,7 +153,7 @@ def _metadata(items: tuple[AdapterMetadata, ...], namespace: str) -> AdapterMeta
     return next(item for item in items if item.namespace == namespace)
 
 
-def test_browser_binding_adds_worker_placement_without_changing_task_request() -> None:
+def test_browser_binding_adds_worker_placement_without_changing_capability_contract() -> None:
     async def scenario() -> None:
         node_id = new_id("node")
         worker_id = new_id("worker")
@@ -166,28 +163,23 @@ def test_browser_binding_adds_worker_placement_without_changing_task_request() -
                 node_id=node_id,
                 worker_id=worker_id,
                 priority=77,
-                required_worker_capabilities=("browser-runtime",),
+                worker_labels=("browser-runtime", "sandboxed"),
             ),
         )
         registry = CapabilityRegistry()
         await registry.register_provider(provider)
 
-        with pytest.raises(ContractError) as unavailable:
-            registry.resolve(BROWSER_NAVIGATE_CAPABILITY_ID)
-        assert unavailable.value.code is ErrorCode.UNAVAILABLE
-
-        registration, resolved = registry.resolve(
-            BROWSER_NAVIGATE_CAPABILITY_ID,
-            available_worker_capabilities=frozenset({"browser-runtime"}),
-        )
+        registration, resolved = registry.resolve(BROWSER_NAVIGATE_CAPABILITY_ID)
         assert resolved is provider
         assert registration.node_id == node_id
         assert registration.worker_id == worker_id
         assert registration.priority == 77
-        assert registration.capability.required_worker_capabilities == ("browser-runtime",)
+        assert registration.capability.required_worker_capabilities == ()
         placement = _metadata(registration.adapter_metadata, "browser.placement")
         assert placement.values["node_id"] == node_id
         assert placement.values["worker_id"] == worker_id
+        assert placement.values["priority"] == 77
+        assert placement.values["worker_labels"] == ["browser-runtime", "sandboxed"]
 
     asyncio.run(scenario())
 
@@ -201,7 +193,7 @@ def test_browser_operation_metadata_is_redacted_and_enters_invocation_record() -
             placement=BrowserPlacement(
                 node_id=node_id,
                 worker_id=worker_id,
-                required_worker_capabilities=("browser-runtime",),
+                worker_labels=("browser-runtime",),
             ),
         )
         registry = CapabilityRegistry()
@@ -239,10 +231,7 @@ def test_browser_operation_metadata_is_redacted_and_enters_invocation_record() -
 
 def test_browser_failure_metadata_preserves_canonical_error_and_trace() -> None:
     async def scenario() -> None:
-        provider = BoundBrowserProvider(
-            _FakeBrowserProvider(),
-            placement=BrowserPlacement(required_worker_capabilities=("browser-runtime",)),
-        )
+        provider = BoundBrowserProvider(_FakeBrowserProvider())
         registry = CapabilityRegistry()
         await registry.register_provider(provider)
         observer = _RecordingObserver()
