@@ -13,9 +13,9 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .models import (
+    PLUGIN_MANIFEST_VERSION,
     CompatibilityState,
     ExtensionType,
-    PLUGIN_MANIFEST_VERSION,
     PluginHealth,
     PluginManifest,
     PluginPermission,
@@ -117,7 +117,10 @@ class PluginRegistry:
                 if owner is not None and owner != plugin_id:
                     raise ContractError(
                         ErrorCode.CONFLICT,
-                        f"extension {extension.spec.extension_id!r} is already provided by {owner!r}",
+                        (
+                            f"extension {extension.spec.extension_id!r} is already provided "
+                            f"by {owner!r}"
+                        ),
                     )
             for extension in extensions:
                 binder = self._binders.get(extension.spec.extension_type)
@@ -240,14 +243,20 @@ class PluginRegistry:
         if not manifest.supported_platform.contains(self._platform_version):
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                f"plugin {manifest.plugin_id!r} is incompatible with platform {self._platform_version}",
+                (
+                    f"plugin {manifest.plugin_id!r} is incompatible with platform "
+                    f"{self._platform_version}"
+                ),
             )
         for extension in manifest.extensions:
             supported = self._supported_interfaces.get(extension.extension_type, frozenset())
             if extension.interface_version not in supported:
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
-                    f"unsupported {extension.extension_type.value} interface version {extension.interface_version!r}",
+                    (
+                        f"unsupported {extension.extension_type.value} interface version "
+                        f"{extension.interface_version!r}"
+                    ),
                 )
 
     def _validate_dependencies(self, manifest: PluginManifest) -> None:
@@ -291,5 +300,8 @@ class PluginRegistry:
             if registration.spec != declared[registration.spec.extension_id]:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    f"runtime extension {registration.spec.extension_id!r} differs from manifest declaration",
+                    (
+                        f"runtime extension {registration.spec.extension_id!r} differs from "
+                        "manifest declaration"
+                    ),
                 )
