@@ -128,6 +128,40 @@ class NotificationService:
         await self._deliver_external(persisted, preference)
         return persisted
 
+    async def create_once(
+        self,
+        candidate: NotificationCandidate,
+        *,
+        now: datetime | None = None,
+    ) -> Notification | None:
+        """Create one active notification per deterministic aggregation key.
+
+        This is intended for periodic reminder evaluation. Unlike ordinary duplicate
+        aggregation, an unchanged timer tick must not increment occurrence_count or redeliver
+        external channels. Dismissed/archived notifications no longer count as active, so a
+        later evaluation may surface the still-relevant canonical source state again.
+        """
+
+        current = _aware(now or datetime.now(UTC), "now")
+        preference = self._preferences.get(candidate.recipient)
+        if not preference_allows(preference, candidate):
+            await self._emit(
+                "notification.filtered",
+                recipient=candidate.recipient,
+                source_type=candidate.source.resource_type,
+                source_id=candidate.source.resource_id,
+                category=candidate.category.value,
+            )
+            return None
+        if candidate.aggregation_key is not None:
+            existing = await self._repository.find_active_aggregate(
+                recipient=candidate.recipient,
+                aggregation_key=candidate.aggregation_key,
+            )
+            if existing is not None:
+                return existing
+        return await self.create(candidate, now=current)
+
     async def get(self, notification_id: str, *, recipient: RecipientRef) -> Notification:
         notification = await self._repository.get(notification_id)
         self._require_recipient(notification, recipient)
