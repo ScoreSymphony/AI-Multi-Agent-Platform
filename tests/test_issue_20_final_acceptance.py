@@ -66,12 +66,14 @@ def test_issue_20_reserves_every_required_extension_category() -> None:
 
 
 def test_manifest_v1_requires_explicit_capability_declarations() -> None:
+    from ai_multi_agent_platform.contracts.errors import ContractError
+
     document = _manifest_document()
     plugins.validate_manifest_document(document)
 
     missing = dict(document)
     del missing["capabilities"]
-    with pytest.raises(Exception):
+    with pytest.raises(ContractError):
         plugins.validate_manifest_document(missing)
 
 
