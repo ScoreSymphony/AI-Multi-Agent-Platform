@@ -1,6 +1,6 @@
 """Versioned platform-owned northbound Control Plane."""
 
-from .authentication import AuthenticatedControlPlaneHTTP
+from .authentication_hardening import AuthenticatedControlPlaneHTTP
 from .extensions import (
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
