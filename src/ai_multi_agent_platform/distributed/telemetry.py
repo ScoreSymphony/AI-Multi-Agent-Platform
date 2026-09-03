@@ -21,7 +21,6 @@ from .models import (
     WorkerJobRequest,
     WorkerRecord,
 )
-from .runtime_types import DistributedDispatchState
 
 
 class DistributedTelemetry:
@@ -247,15 +246,15 @@ class DistributedTelemetry:
         *,
         node_id: str | None,
         worker_id: str,
-        previous_state: DistributedDispatchState,
-        current_state: DistributedDispatchState,
+        previous_state: str,
+        current_state: str,
         error_code: str | None,
         observed_at: datetime,
     ) -> None:
         context = _job_context(job, node_id=node_id, worker_id=worker_id)
         attributes: dict[str, JsonValue] = {
-            "previous_state": previous_state.value,
-            "current_state": current_state.value,
+            "previous_state": previous_state,
+            "current_state": current_state,
             "error_code": error_code,
         }
         self.telemetry.metric(
@@ -321,11 +320,7 @@ def _job_context(
     )
 
 
-def _dispatch_outcome(state: DistributedDispatchState) -> TelemetryOutcome:
-    if state is DistributedDispatchState.TERMINAL:
-        return TelemetryOutcome.SUCCEEDED
-    if state is DistributedDispatchState.CANCEL_PENDING:
-        return TelemetryOutcome.CANCELLED
-    if state is DistributedDispatchState.LOST:
+def _dispatch_outcome(state: str) -> TelemetryOutcome:
+    if state == "lost":
         return TelemetryOutcome.FAILED
     return TelemetryOutcome.UNKNOWN
