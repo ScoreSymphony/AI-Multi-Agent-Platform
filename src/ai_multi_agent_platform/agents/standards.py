@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Protocol
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.capabilities.types import CapabilitySpec
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -42,6 +43,7 @@ from .service import AgentService
 
 STARTER_CATALOG_SOURCE = "ai-multi-agent-platform.standard-agents"
 STARTER_CATALOG_VERSION = "1.0.0"
+STARTER_PLATFORM_RELEASE = __version__
 STARTER_OWNER = OwnerRef(type="service", id="platform:standard-agent-catalog")
 
 STANDARD_AGENT_IDS: Mapping[str, str] = MappingProxyType(
@@ -150,10 +152,12 @@ def _metadata(
         "starter_catalog": True,
         "starter_catalog_source": STARTER_CATALOG_SOURCE,
         "starter_catalog_version": STARTER_CATALOG_VERSION,
+        "platform_release": STARTER_PLATFORM_RELEASE,
         "starter_key": key,
         "starter_kind": kind,
         "permission_profile": permission_profile,
         "changelog": changelog,
+        "migration_notes": "Initial definition; no automatic migration is required.",
     }
 
 
@@ -166,16 +170,14 @@ def _provenance(*, key: str, kind: str, action: str) -> Provenance:
             "starter_key": key,
             "starter_kind": kind,
             "starter_catalog_version": STARTER_CATALOG_VERSION,
+            "platform_release": STARTER_PLATFORM_RELEASE,
         },
     )
 
 
-def _model_policy(*, tool_calling: bool) -> AgentModelPolicy:
+def _model_policy() -> AgentModelPolicy:
     return AgentModelPolicy(
-        requirements=RoutingRequirements(
-            tool_calling=tool_calling,
-            modalities=("text",),
-        ),
+        requirements=RoutingRequirements(modalities=("text",)),
         allow_task_override=True,
         fallback=ModelFallbackPolicy.ROUTE,
     )
@@ -220,7 +222,6 @@ def _profile(
     enabled: bool = True,
     changelog: str = "Initial standard definition for issue #77.",
 ) -> AgentProfile:
-    has_tools = bool(required_capabilities or optional_capabilities)
     return AgentProfile(
         name=name,
         role=role,
@@ -228,7 +229,7 @@ def _profile(
         instructions=AgentInstructions(
             role=InstructionSource(content=instruction, version=STARTER_CATALOG_VERSION)
         ),
-        model=_model_policy(tool_calling=has_tools),
+        model=_model_policy(),
         capabilities=_capability_policy(
             required=required_capabilities,
             optional=optional_capabilities,
@@ -304,9 +305,10 @@ STANDARD_AGENT_TEMPLATES: tuple[StandardAgentTemplate, ...] = (
             role="researcher",
             description="Research specialist with optional read-only web and file capabilities.",
             instruction=(
-                "Research claims from available sources, preserve source references and distinguish "
-                "evidence from inference. Prefer authoritative primary sources when available. "
-                "Operate read-only by default and never use destructive filesystem or shell actions."
+                "Research claims from available sources, preserve source references, "
+                "and distinguish evidence from inference. Prefer authoritative primary "
+                "sources when available. Operate read-only by default and never use "
+                "destructive filesystem or shell actions."
             ),
             permission_profile="research-read-only",
             optional_capabilities=("tool.web.read", "tool.file.read"),
@@ -326,9 +328,10 @@ STANDARD_AGENT_TEMPLATES: tuple[StandardAgentTemplate, ...] = (
             role="developer",
             description="Software-development specialist scoped to an assigned workspace.",
             instruction=(
-                "Analyze, implement, and test software changes inside the assigned project/workspace. "
-                "Use canonical capabilities and keep changes reviewable. Never assume credentials, "
-                "secrets, unrestricted host access, or permission to act outside the assigned scope."
+                "Analyze, implement, and test software changes inside the assigned "
+                "project/workspace. Use canonical capabilities and keep changes reviewable. "
+                "Never assume credentials, secrets, unrestricted host access, or permission "
+                "to act outside the assigned scope."
             ),
             permission_profile="workspace-developer",
             required_capabilities=("tool.file.read",),
@@ -349,9 +352,10 @@ STANDARD_AGENT_TEMPLATES: tuple[StandardAgentTemplate, ...] = (
             role="reviewer",
             description="Independent reviewer/tester with read-only defaults.",
             instruction=(
-                "Review plans, code, artifacts, evidence, and results independently. Identify concrete "
-                "defects, regressions, unsupported claims, missing tests, and policy violations. "
-                "Prefer verification over modification and do not silently repair the work being reviewed."
+                "Review plans, code, artifacts, evidence, and results independently. "
+                "Identify concrete defects, regressions, unsupported claims, missing tests, "
+                "and policy violations. Prefer verification over modification and do not "
+                "silently repair the work being reviewed."
             ),
             permission_profile="independent-review-read-only",
             optional_capabilities=("tool.file.read",),
@@ -371,13 +375,13 @@ STANDARD_AGENT_TEMPLATES: tuple[StandardAgentTemplate, ...] = (
             role="data_analyst",
             description="Structured-data analyst with read-oriented defaults.",
             instruction=(
-                "Inspect and analyze structured data, state assumptions, retain reproducible steps, "
-                "and separate observed values from interpretation. Do not mutate source datasets "
-                "unless an explicitly granted write capability and task require it."
+                "Inspect and analyze structured data, state assumptions, and retain "
+                "reproducible steps. Separate observed values from interpretation. "
+                "Do not mutate source datasets unless an explicitly granted write "
+                "capability and task require it."
             ),
             permission_profile="data-analysis-read-only",
-            required_capabilities=("tool.data.read",),
-            optional_capabilities=("tool.file.read",),
+            optional_capabilities=("tool.data.read", "tool.file.read"),
             denied_capabilities=("tool.file.write", "tool.shell.execute"),
             memory_scopes=(MemoryScope.TASK, MemoryScope.WORKSPACE),
         ),
@@ -394,9 +398,10 @@ STANDARD_AGENT_TEMPLATES: tuple[StandardAgentTemplate, ...] = (
             role="file_assistant",
             description="File specialist restricted to platform-assigned project/workspace scope.",
             instruction=(
-                "Inspect and organize files only through platform capabilities and only within the "
-                "assigned project/workspace scope. Treat writes as optional elevated functionality; "
-                "never infer broader filesystem access from a file path supplied by a user."
+                "Inspect and organize files only through platform capabilities and only "
+                "within the assigned project/workspace scope. Treat writes as optional "
+                "elevated functionality; never infer broader filesystem access from a "
+                "file path supplied by a user."
             ),
             permission_profile="workspace-files-scoped",
             required_capabilities=("tool.file.read",),
@@ -417,9 +422,10 @@ STANDARD_AGENT_TEMPLATES: tuple[StandardAgentTemplate, ...] = (
             role="system_administrator",
             description="Privileged operations starter; disabled by default and approval-gated.",
             instruction=(
-                "Perform system administration only inside explicitly authorized infrastructure "
-                "scope. Privileged or mutating actions require the canonical approval path. Never "
-                "bypass policy, expand credentials, or treat this profile as implicit host authority."
+                "Perform system administration only inside explicitly authorized "
+                "infrastructure scope. Privileged or mutating actions require the canonical "
+                "approval path. Never bypass policy, expand credentials, or treat this "
+                "profile as implicit host authority."
             ),
             permission_profile="restricted-admin-approval-required",
             required_capabilities=("tool.shell.execute",),
@@ -557,9 +563,13 @@ def _validate_existing_agent_identity(
         or metadata.get("starter_key") != template.key
         or metadata.get("starter_kind") != "agent"
     ):
+        message = (
+            "stable standard Agent ID is occupied by a non-catalog definition: "
+            f"{template.agent_id}"
+        )
         raise ContractError(
             ErrorCode.CONFLICT,
-            f"stable standard Agent ID is occupied by a non-catalog definition: {template.agent_id}",
+            message,
             details={"agent_key": template.key, "agent_id": template.agent_id},
         )
     return service.get_agent_revision(template.agent_id)
@@ -611,9 +621,13 @@ def _validate_existing_team_identity(
         or metadata.get("starter_key") != template.key
         or metadata.get("starter_kind") != "team"
     ):
+        message = (
+            "stable standard Agent Team ID is occupied by a non-catalog definition: "
+            f"{template.team_id}"
+        )
         raise ContractError(
             ErrorCode.CONFLICT,
-            f"stable standard Agent Team ID is occupied by a non-catalog definition: {template.team_id}",
+            message,
             details={"team_key": template.key, "team_id": template.team_id},
         )
     return service.get_team_revision(template.team_id)
