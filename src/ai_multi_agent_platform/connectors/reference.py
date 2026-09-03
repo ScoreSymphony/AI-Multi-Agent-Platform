@@ -49,6 +49,7 @@ class ReferenceConnectorProvider(ConnectorProvider):
     ) -> None:
         self._secret_provider = secret_provider
         self._provider_id = provider_id
+        self._definition_id = new_id("connector_definition")
         self._health = HealthStatus.HEALTHY
         self._validated_connections: set[str] = set()
         self._records: dict[str, dict[str, str]] = {
@@ -65,6 +66,7 @@ class ReferenceConnectorProvider(ConnectorProvider):
     @property
     def definition(self) -> ConnectorDefinition:
         return ConnectorDefinition(
+            id=self._definition_id,
             connector_type_id=REFERENCE_CONNECTOR_TYPE,
             name="Reference Local Connector",
             version=REFERENCE_CONNECTOR_VERSION,
