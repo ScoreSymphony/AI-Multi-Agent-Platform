@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Awaitable, Mapping
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, cast
 from urllib.parse import parse_qsl
 from uuid import uuid4
 
-from ai_multi_agent_platform.contracts.errors import ContractError
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.terminal import (
     SessionContext,
     SessionCreateRequest,
@@ -22,7 +23,14 @@ from ai_multi_agent_platform.terminal import (
 
 from .extensions import CommandHandler, ResourceService
 from .http import ControlPlaneASGI
-from .models import API_VERSION, PageQuery, RequestContext, api_exception_from_contract
+from .models import (
+    API_VERSION,
+    ActorContext,
+    OwnerType,
+    PageQuery,
+    RequestContext,
+    api_exception_from_contract,
+)
 
 
 class TerminalSessionResourceService(ResourceService):
@@ -36,10 +44,12 @@ class TerminalSessionResourceService(ResourceService):
         context: RequestContext,
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
-        workspace_id = query.filters.get("workspace_id") if query.filters is not None else None
+        filters = query.filters or {}
+        workspace_id = filters.get("workspace_id")
+        project_id = filters.get("project_id")
         sessions = await self._sessions.list_sessions(
             actor_ref=context.actor.principal_ref,
-            operation=_operation(context),
+            operation=_operation(context, project_id=project_id),
             workspace_id=workspace_id,
         )
         return tuple(item.to_json() for item in sessions)
@@ -73,11 +83,16 @@ def terminal_command_handlers(
     ) -> dict[str, JsonValue]:
         project_id = resource_ref
         workspace_id = _required_string(payload, "workspace_id")
-        session_type = SessionType(_required_string(payload, "session_type"))
-        mode = SessionMode(_required_string(payload, "mode"))
-        dimensions = _dimensions(payload.get("dimensions"))
-        operation = _operation(context, project_id=project_id)
+        try:
+            session_type = SessionType(_required_string(payload, "session_type"))
+            mode = SessionMode(_required_string(payload, "mode"))
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                str(exc),
+            ) from exc
         request = SessionCreateRequest(
+            session_id=_optional_string(payload, "session_id") or new_id("terminal_session"),
             session_type=session_type,
             context=SessionContext(
                 project_id=project_id,
@@ -89,9 +104,9 @@ def terminal_command_handlers(
             ),
             mode=mode,
             actor_ref=context.actor.principal_ref,
-            operation=operation,
+            operation=_operation(context, project_id=project_id),
             adapter_id=_optional_string(payload, "adapter_id") or "reference-terminal",
-            dimensions=dimensions,
+            dimensions=_dimensions(payload.get("dimensions")),
             encoding=_optional_string(payload, "encoding") or "utf-8",
             policy_classification=_string_tuple(payload.get("policy_classification")),
         )
@@ -106,10 +121,9 @@ def terminal_command_handlers(
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        data = _required_string(payload, "data", allow_empty=True)
         await sessions.send_input(
             resource_ref,
-            data,
+            _required_string(payload, "data", allow_empty=True),
             actor_ref=context.actor.principal_ref,
             operation=_operation(context),
             approval_id=_optional_string(payload, "approval_id"),
@@ -142,7 +156,10 @@ def terminal_command_handlers(
     ) -> dict[str, JsonValue]:
         dimensions = _dimensions(payload)
         if dimensions is None:
-            raise ValueError("resize requires columns and rows")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "resize requires columns and rows",
+            )
         session = await sessions.resize(
             resource_ref,
             dimensions,
@@ -178,10 +195,11 @@ class TerminalSessionASGI:
         await self._websocket(scope, receive, send)
 
     async def _websocket(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
-        path = str(scope.get("path", "/"))
-        session_id = _stream_session_id(path)
+        session_id = _stream_session_id(str(scope.get("path", "/")))
         if session_id is None:
-            await send({"type": "websocket.close", "code": 4404, "reason": "route not found"})
+            await send(
+                {"type": "websocket.close", "code": 4404, "reason": "route not found"}
+            )
             return
 
         headers = _decode_headers(scope.get("headers", []))
@@ -198,20 +216,28 @@ class TerminalSessionASGI:
             correlation_id=correlation_id,
             actor=_actor_context(headers),
         )
-        operation = _operation(context)
         try:
             after_sequence = int(query.get("after_sequence", "0"))
+            if after_sequence < 0:
+                raise ValueError
         except ValueError:
             await send(
-                {"type": "websocket.close", "code": 4400, "reason": "invalid after_sequence"}
+                {
+                    "type": "websocket.close",
+                    "code": 4400,
+                    "reason": "invalid after_sequence",
+                }
             )
             return
 
         connect = await receive()
         if connect.get("type") != "websocket.connect":
-            await send({"type": "websocket.close", "code": 4400, "reason": "connect required"})
+            await send(
+                {"type": "websocket.close", "code": 4400, "reason": "connect required"}
+            )
             return
 
+        operation = _operation(context)
         try:
             attachment = await self._sessions.attach(
                 session_id,
@@ -226,10 +252,11 @@ class TerminalSessionASGI:
             )
         except ContractError as exc:
             error = api_exception_from_contract(exc)
+            close_code = 4403 if error.status == 403 else 4404 if error.status == 404 else 4400
             await send(
                 {
                     "type": "websocket.close",
-                    "code": 4403 if error.status == 403 else 4404 if error.status == 404 else 4400,
+                    "code": close_code,
                     "reason": error.code,
                 }
             )
@@ -255,17 +282,12 @@ class TerminalSessionASGI:
                 send=send,
             )
         )
-        input_task = asyncio.create_task(
-            self._consume_client(
-                session_id,
-                context,
-                receive=receive,
-                send=send,
-            )
+        client_task = asyncio.create_task(
+            self._consume_client(session_id, context, receive=receive, send=send)
         )
         try:
             done, pending = await asyncio.wait(
-                {stream_task, input_task},
+                {stream_task, client_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for task in pending:
@@ -273,7 +295,7 @@ class TerminalSessionASGI:
             for task in done:
                 await task
         finally:
-            for task in (stream_task, input_task):
+            for task in (stream_task, client_task):
                 if not task.done():
                     task.cancel()
             try:
@@ -293,11 +315,10 @@ class TerminalSessionASGI:
         after_sequence: int,
         send: Any,
     ) -> None:
-        operation = _operation(context)
         async for frame in self._sessions.stream_frames(
             session_id,
             actor_ref=context.actor.principal_ref,
-            operation=operation,
+            operation=_operation(context),
             after_sequence=after_sequence,
         ):
             await _send_json(send, {"type": "stream.frame", "frame": frame.to_json()})
@@ -391,20 +412,18 @@ def _operation(context: RequestContext, *, project_id: str | None = None) -> Ope
     )
 
 
-def _actor_context(headers: Mapping[str, str]):
-    from .models import ActorContext
-
-    owner_type = headers.get("x-owner-type")
+def _actor_context(headers: Mapping[str, str]) -> ActorContext:
+    raw_owner_type = headers.get("x-owner-type")
     owner_id = headers.get("x-owner-id")
-    if owner_type not in {None, "user", "organization", "team", "service"}:
-        owner_type = None
+    if raw_owner_type not in {None, "user", "organization", "team", "service"}:
+        raw_owner_type = None
         owner_id = None
-    if (owner_type is None) != (owner_id is None):
-        owner_type = None
+    if (raw_owner_type is None) != (owner_id is None):
+        raw_owner_type = None
         owner_id = None
     return ActorContext(
         principal_ref=headers.get("x-principal-ref") or "local:anonymous",
-        owner_type=owner_type,  # type: ignore[arg-type]
+        owner_type=cast(OwnerType | None, raw_owner_type),
         owner_id=owner_id,
     )
 
@@ -413,7 +432,10 @@ def _stream_session_id(path: str) -> str | None:
     segments = [segment for segment in path.split("/") if segment]
     if len(segments) != 5:
         return None
-    if segments[:3] != ["api", API_VERSION, "terminal-sessions"] or segments[4] != "stream":
+    if (
+        segments[:3] != ["api", API_VERSION, "terminal-sessions"]
+        or segments[4] != "stream"
+    ):
         return None
     return segments[3]
 
@@ -442,7 +464,11 @@ def _required_string(
 ) -> str:
     value = payload.get(name)
     if not isinstance(value, str) or (not allow_empty and not value.strip()):
-        raise ValueError(f"{name} must be a string" + ("" if allow_empty else " and not blank"))
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{name} must be a string" + ("" if allow_empty else " and not blank"),
+            details={"field": name},
+        )
     return value
 
 
@@ -451,7 +477,11 @@ def _optional_string(payload: Mapping[str, JsonValue], name: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{name} must be a non-blank string when provided")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{name} must be a non-blank string when provided",
+            details={"field": name},
+        )
     return value
 
 
@@ -467,8 +497,14 @@ def _json_optional_string(payload: Mapping[str, Any], name: str) -> str | None:
 def _string_tuple(value: JsonValue) -> tuple[str, ...]:
     if value is None:
         return ()
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
-        raise ValueError("policy_classification must be a list of non-blank strings")
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "policy_classification must be a list of non-blank strings",
+            details={"field": "policy_classification"},
+        )
     return tuple(value)
 
 
@@ -476,11 +512,14 @@ def _dimensions(value: JsonValue | Mapping[str, Any]) -> TerminalDimensions | No
     if value is None:
         return None
     if not isinstance(value, Mapping):
-        raise ValueError("dimensions must be an object")
+        raise ContractError(ErrorCode.INVALID_REQUEST, "dimensions must be an object")
     columns = value.get("columns")
     rows = value.get("rows")
     if not isinstance(columns, int) or isinstance(columns, bool):
-        raise ValueError("columns must be an integer")
+        raise ContractError(ErrorCode.INVALID_REQUEST, "columns must be an integer")
     if not isinstance(rows, int) or isinstance(rows, bool):
-        raise ValueError("rows must be an integer")
-    return TerminalDimensions(columns=columns, rows=rows)
+        raise ContractError(ErrorCode.INVALID_REQUEST, "rows must be an integer")
+    try:
+        return TerminalDimensions(columns=columns, rows=rows)
+    except ValueError as exc:
+        raise ContractError(ErrorCode.INVALID_REQUEST, str(exc)) from exc
