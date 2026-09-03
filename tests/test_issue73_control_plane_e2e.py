@@ -217,7 +217,9 @@ def test_terminal_websocket_stream_and_reconnect_use_canonical_gateway() -> None
         assert first_messages[0]["type"] == "websocket.accept"
         assert first_messages[0]["subprotocol"] == "platform.terminal.v1"
         assert first_payloads[0]["type"] == "session.snapshot"
-        frames = [payload["frame"] for payload in first_payloads if payload["type"] == "stream.frame"]
+        frames = [
+            payload["frame"] for payload in first_payloads if payload["type"] == "stream.frame"
+        ]
         assert [frame["sequence"] for frame in frames] == [1, 2, 3]
         assert frames[1]["data"] == "streamed output\n"
         assert first_payloads[-1]["type"] == "session.status"
@@ -244,9 +246,7 @@ def test_transcript_sink_failure_is_retryable_without_changing_canonical_frame_i
             LocalPrincipalPolicy(
                 principal_ref=principal,
                 actor_types=frozenset({ActorType.HUMAN}),
-                allowed_actions=frozenset(
-                    {AuthorizationAction.READ, AuthorizationAction.CREATE}
-                ),
+                allowed_actions=frozenset({AuthorizationAction.READ, AuthorizationAction.CREATE}),
                 resource_types=frozenset({ResourceType.GENERIC}),
                 project_ids=frozenset({project_id}),
                 workspace_ids=frozenset({workspace_id}),
