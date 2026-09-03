@@ -225,6 +225,27 @@ def _build_parser() -> argparse.ArgumentParser:
         show = commands.add_parser("show", help=f"show {area_name} reference")
         show.add_argument("resource_id")
 
+    extension = areas.add_parser(
+        "extension",
+        help="inspect explicitly registered canonical extension surfaces",
+    )
+    extension.set_defaults(area="extension")
+    extension_commands = extension.add_subparsers(dest="command", required=True)
+    extension_commands.add_parser("collections", help="list registered extension collections")
+    extension_commands.add_parser("commands", help="list registered extension command names")
+    extension_list = extension_commands.add_parser(
+        "list",
+        help="list resources from one registered extension collection",
+    )
+    extension_list.add_argument("collection")
+    _add_pagination_arguments(extension_list)
+    extension_show = extension_commands.add_parser(
+        "show",
+        help="show one resource from a registered extension collection",
+    )
+    extension_show.add_argument("collection")
+    extension_show.add_argument("resource_id")
+
     return parser
 
 
@@ -317,6 +338,8 @@ def _execute(
         return _model_command(args, client)
     if args.area == "reference":
         return _reference_command(args, client)
+    if args.area == "extension":
+        return _extension_command(args, client)
     raise ProfileError(f"unsupported command area: {args.area}")
 
 
@@ -543,6 +566,48 @@ def _reference_command(args: argparse.Namespace, client: ControlPlaneClient) -> 
     if args.command == "show":
         return CommandResult(client.get(f"/{collection}/{_segment(args.resource_id)}"))
     raise ProfileError(f"unsupported {collection} command: {args.command}")
+
+
+def _extension_command(args: argparse.Namespace, client: ControlPlaneClient) -> CommandResult:
+    specification = client.get("/openapi.json")
+    collections = _extension_names(specification, "x-registered-extension-collections")
+    commands = _extension_names(specification, "x-registered-extension-commands")
+    if args.command == "collections":
+        return CommandResult(_name_page(specification, collections))
+    if args.command == "commands":
+        return CommandResult(_name_page(specification, commands))
+
+    collection = str(args.collection)
+    if collection not in collections:
+        raise ProfileError(f"canonical extension collection is not registered: {collection}")
+    if args.command == "list":
+        return CommandResult(client.get(f"/{_segment(collection)}", query=_page_query(args)))
+    if args.command == "show":
+        return CommandResult(
+            client.get(f"/{_segment(collection)}/{_segment(args.resource_id)}")
+        )
+    raise ProfileError(f"unsupported extension command: {args.command}")
+
+
+def _extension_names(response: ClientResponse, field: str) -> tuple[str, ...]:
+    body = response.body
+    if not isinstance(body, dict):
+        raise TransportError("Control Plane OpenAPI response must be a JSON object")
+    raw_names = body.get(field)
+    if not isinstance(raw_names, list) or not all(isinstance(item, str) for item in raw_names):
+        raise TransportError(f"Control Plane OpenAPI is missing canonical field: {field}")
+    return tuple(cast(str, item) for item in raw_names)
+
+
+def _name_page(response: ClientResponse, names: tuple[str, ...]) -> ClientResponse:
+    items: list[JsonValue] = [{"name": name} for name in names]
+    return ClientResponse(
+        status=response.status,
+        body={"items": items, "total": len(items)},
+        request_id=response.request_id,
+        correlation_id=response.correlation_id,
+        api_version=response.api_version,
+    )
 
 
 def _require_confirmation(args: argparse.Namespace, action: str, resource_ref: str) -> None:
