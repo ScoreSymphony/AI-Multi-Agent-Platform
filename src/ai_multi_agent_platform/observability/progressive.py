@@ -158,9 +158,11 @@ class ObservedModelProvider(ModelProvider):
         return self._provider.descriptor
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
+        model_config_id = _model_config_id_from_request(request)
         context = _context_from_operation(
             request.context,
             model_call_id=request.request_id,
+            model_config_id=model_config_id,
             model_provider_id=self.descriptor.provider_id,
             provider_id=self.descriptor.provider_id,
         )
@@ -548,6 +550,7 @@ def _context_from_operation(
     run_id: str | None = None,
     step_id: str | None = None,
     model_call_id: str | None = None,
+    model_config_id: str | None = None,
     model_provider_id: str | None = None,
     tool_invocation_id: str | None = None,
     node_id: str | None = None,
@@ -563,6 +566,7 @@ def _context_from_operation(
         run_id=run_id,
         step_id=step_id,
         model_call_id=model_call_id,
+        model_config_id=model_config_id,
         model_provider_id=model_provider_id,
         tool_invocation_id=tool_invocation_id,
         node_id=node_id,
@@ -571,6 +575,16 @@ def _context_from_operation(
         causation_id=context.causation_id,
         provider_id=provider_id,
     )
+
+
+def _model_config_id_from_request(request: ModelRequest) -> str | None:
+    """Read only the canonical ID injected by the platform model runtime/router path."""
+
+    value = request.requirements.get("model_config_id")
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
 
 
 def _selection_reports_fallback(selection: ModelSelection) -> bool:
