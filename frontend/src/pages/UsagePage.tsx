@@ -268,13 +268,14 @@ function UsageAggregateTable({ aggregates }: { aggregates: CanonicalUsageAggrega
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr><th>Metric</th><th>Value</th><th>Mode</th><th>Records</th><th>Quality mix</th><th>Recent history</th></tr></thead>
+        <thead><tr><th>Metric</th><th>Value</th><th>Mode</th><th>Scope</th><th>Records</th><th>Quality mix</th><th>Recent history</th></tr></thead>
         <tbody>
           {aggregates.map((aggregate) => (
             <tr key={aggregate.id}>
               <td>{aggregate.metric_type}</td>
               <td>{formatQuantity(aggregate.total, aggregate.unit)}</td>
               <td>{aggregate.aggregation_mode}</td>
+              <td>{scopeSummary(aggregate.scope)}</td>
               <td>{aggregate.record_count}</td>
               <td>{qualitySummary(aggregate.quality_counts)}</td>
               <td><TrendSummary aggregate={aggregate} /></td>
@@ -306,7 +307,7 @@ function UsageBudgetTable({ budgets }: { budgets: CanonicalUsageBudget[] }) {
                 )}
                 <small>{budget.fraction === null ? "usage unavailable" : `${Math.round(budget.fraction * 100)}% consumed`}</small>
               </td>
-              <td>{budget.kind} · {budget.action}{budget.include_estimated ? " · estimates included" : ""}</td>
+              <td>{budget.kind} · {budget.action} · {budget.window_mode}{budget.include_estimated ? " · estimates included" : ""}</td>
               <td>{budget.threshold_level ? <StatusBadge value={budget.threshold_level} /> : "within threshold"}</td>
             </tr>
           ))}
