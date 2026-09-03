@@ -95,9 +95,14 @@ def test_refined_issue_13_data_paths_cannot_bypass_authorization(tmp_path) -> No
     with pytest.raises(ContractError) as memory_error:
         asyncio.run(memory.write_entry(entry, context))
     assert memory_error.value.code is ErrorCode.FORBIDDEN
-    assert asyncio.run(
-        raw_memory.query_entries(MemoryQuery(scope=MemoryScope.TASK, scope_id=task_id), context)
-    ) == ()
+    assert (
+        asyncio.run(
+            raw_memory.query_entries(
+                MemoryQuery(scope=MemoryScope.TASK, scope_id=task_id), context
+            )
+        )
+        == ()
+    )
 
     raw_knowledge = LocalKnowledgeProvider(tmp_path / "knowledge.sqlite")
     knowledge = AuthorizedDataKnowledgeProvider(raw_knowledge, gate)
