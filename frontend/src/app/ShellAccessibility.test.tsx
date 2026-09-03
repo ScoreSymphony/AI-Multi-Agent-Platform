@@ -80,4 +80,11 @@ describe("#17 shell accessibility semantics", () => {
     expect(manifestResourceState("ready", manifest, "agent-teams")).toBe("unavailable");
     expect(manifestResourceState("unavailable", null, "agents")).toBe("unavailable");
   });
+
+  it("routes Settings to the real browser-session surface", () => {
+    const settings = renderShell("/settings");
+    expect(settings).toContain("Checking browser session");
+    expect(settings).not.toContain("Stable navigation shell");
+    expect(settings).not.toContain("Canonical subsystem unavailable");
+  });
 });
