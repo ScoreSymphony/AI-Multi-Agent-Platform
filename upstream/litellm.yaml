@@ -1,0 +1,39 @@
+name: "LiteLLM"
+purpose: "Optional model-gateway integration behind the platform-owned ModelProvider boundary, providing broad provider compatibility through an in-process Python SDK or a separately deployed OpenAI-compatible proxy."
+status: approved
+integration_categories:
+  - "optional adapter/library dependency"
+  - "optional external service"
+canonical_upstream: "https://github.com/BerriAI/litellm"
+pinned_revision: "v1.99.0 / fa647f742d7baefe8eb1181899d9c81b41559772"
+verified_license: "MIT for content outside enterprise/; enterprise/ has separate licensing and is not used or copied by this integration"
+license_verification_date: "2026-09-03"
+last_review_date: "2026-09-03"
+platform_adapter_or_boundary: "src/ai_multi_agent_platform/adapters/litellm.py implementing the platform-owned ModelProvider contract; proxy mode delegates transport to the existing OpenAI-compatible provider boundary"
+local_source_path: "src/ai_multi_agent_platform/adapters/litellm.py"
+source_origin_path: "No upstream source copied; normal PyPI dependency in library mode or separately deployed proxy/service in proxy mode"
+modified_locally: false
+modification_summary: "The adapter is platform-owned code. LiteLLM remains an external optional dependency/service and no LiteLLM source is vendored."
+required_notices:
+  - "Do not copy or vendor enterprise/ code under the MIT assumption; its license is separate."
+  - "If upstream source is ever redistributed, preserve the applicable upstream notices and re-run license review first."
+compatibility_constraints:
+  - "The supported library compatibility target is LiteLLM 1.99.0."
+  - "Canonical model configuration IDs remain platform-owned; LiteLLM/native model names are adapter mappings only."
+  - "The platform ModelRouter owns canonical routing policy. LiteLLM routing/fallbacks must not bypass local-only, self-hosted-only, capability, authorization or other platform constraints."
+  - "The first integration uses direct acompletion calls in library mode and OpenAI-compatible proxy calls; advanced LiteLLM Router features are not canonical platform behavior."
+security_constraints:
+  - "Credential values are resolved from configured environment-variable references and are never emitted through canonical provider metadata."
+  - "Proxy authentication does not replace platform authentication or authorization."
+  - "Prompt/response telemetry remains subject to platform redaction policy; LiteLLM logging callbacks are not enabled by the adapter baseline."
+deployment_constraints:
+  - "LiteLLM is optional. Core imports, tests and the local reference platform must work without the Python package or proxy service installed."
+  - "Proxy mode requires an explicitly configured base URL. Library mode lazily imports LiteLLM only when invoked or health-checked."
+resource_constraints:
+  - "No platform-wide GPU or paid-cloud requirement is introduced; resource needs depend on the selected downstream model endpoint."
+required_for_baseline: false
+recurring_paid_service_required: false
+update_review_method: "Use an explicit dependency-update PR. Compare the pinned tag/commit and license boundaries, review LiteLLM release/security notes and SDK/proxy compatibility, run core CI without the extra, LiteLLM compatibility import checks, adapter contract tests and local/proxy integration fixtures before changing the pin."
+exit_replacement_strategy: "Remove the litellm optional dependency, src/ai_multi_agent_platform/adapters/litellm.py, LiteLLM-specific configuration and proxy deployment. Canonical Agents, Tasks, ModelConfiguration IDs, ModelRegistry state and ModelRouter policy remain valid and can target another ModelProvider adapter."
+adr: ""
+notes: "Issue #11 integration. LiteLLM is a convenience gateway only and does not own canonical model inventory or routing policy. The generic OpenAI-compatible provider may also target a LiteLLM Proxy directly when no LiteLLM-specific wrapper metadata is required."
