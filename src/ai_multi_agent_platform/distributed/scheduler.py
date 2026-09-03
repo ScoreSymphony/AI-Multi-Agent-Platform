@@ -55,6 +55,13 @@ class DeterministicScheduler:
             evaluations=evaluations,
         )
 
+    def evaluate_worker(self, job: WorkerJobRequest, worker_id: str) -> CandidateEvaluation:
+        """Evaluate one explicitly requested Worker against the same hard filters."""
+
+        worker = self.registry.get_worker(worker_id)
+        node = self.registry.get_node(worker.node_id)
+        return self._evaluate_worker(worker, node, job.requirements)
+
     def schedule(
         self,
         job: WorkerJobRequest,
@@ -71,6 +78,36 @@ class DeterministicScheduler:
         reservation = self.registry.reserve(
             worker_job_id=job.worker_job_id,
             worker_id=decision.selected_worker_id,
+            requirements=job.requirements,
+            now=now,
+        )
+        return ScheduledPlacement(decision=decision, reservation=reservation)
+
+    def schedule_to_worker(
+        self,
+        job: WorkerJobRequest,
+        worker_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> ScheduledPlacement:
+        """Reserve exactly one requested Worker; never fall back to another candidate."""
+
+        self.registry.expire_heartbeats(now=now)
+        self.registry.expire_reservations(now=now)
+        evaluation = self.evaluate_worker(job, worker_id)
+        decision = SchedulingDecision(
+            worker_job_id=job.worker_job_id,
+            selected_worker_id=worker_id if evaluation.accepted else None,
+            evaluations=(evaluation,),
+        )
+        if not evaluation.accepted:
+            reason_codes = ", ".join(reason.code.value for reason in evaluation.reasons)
+            raise NoEligibleWorkerError(
+                f"requested worker {worker_id} is not eligible: {reason_codes or 'rejected'}"
+            )
+        reservation = self.registry.reserve(
+            worker_job_id=job.worker_job_id,
+            worker_id=worker_id,
             requirements=job.requirements,
             now=now,
         )
