@@ -52,7 +52,9 @@ def _worker(node: NodeDescriptor, capability: Capability) -> WorkerDescriptor:
     )
 
 
-def _request(context: OperationContext, *, run_id: str | None = None, value: str = "one") -> ExecutionRequest:
+def _request(
+    context: OperationContext, *, run_id: str | None = None, value: str = "one"
+) -> ExecutionRequest:
     return ExecutionRequest(
         run_id=run_id or new_id("run"),
         subject_type="task",
