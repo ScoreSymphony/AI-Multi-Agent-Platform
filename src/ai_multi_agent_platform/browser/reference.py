@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from email.message import Message
 from html.parser import HTMLParser
 from http.cookiejar import CookieJar
-from typing import Any, Protocol, cast
+from typing import Any, Protocol, cast, runtime_checkable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin
 from urllib.request import (
@@ -44,6 +44,7 @@ from ai_multi_agent_platform.contracts.types import (
     ToolInvocation,
     ToolResult,
 )
+from ai_multi_agent_platform.data.models import DataAccessContext, FileRecord
 from ai_multi_agent_platform.domain import new_id, validate_id
 
 from .contracts import BrowserProvider
@@ -84,6 +85,18 @@ class DownloadValidationHook(Protocol):
         data: bytes,
         context: OperationContext,
     ) -> None: ...
+
+
+@runtime_checkable
+class ArtifactLinkingFileProvider(Protocol):
+    """Refined #13 file seam needed to link a downloaded file to an artifact identity."""
+
+    async def link_artifact(
+        self,
+        file_id: str,
+        artifact_id: str,
+        context: DataAccessContext,
+    ) -> FileRecord: ...
 
 
 class DefaultDownloadValidationHook:
@@ -437,7 +450,7 @@ class StdlibBrowserProvider(BrowserProvider):
                     tags=("browser", "web", "external-side-effect", "upload"),
                     safety=SafetyClassification.RESTRICTED,
                     side_effects=SideEffectClassification.EXTERNAL,
-                    required_permissions=("browser.external.submit",),
+                    required_permissions=("browser.external.submit", "file.read"),
                     health=HealthStatus.HEALTHY,
                     features=("forms", "canonical_file_upload"),
                 ),
@@ -448,7 +461,7 @@ class StdlibBrowserProvider(BrowserProvider):
                     capability_id=BROWSER_DOWNLOAD_CAPABILITY_ID,
                     name="Download browser file",
                     description=(
-                        "Download HTTP(S) content into canonical FileProvider storage "
+                        "Download HTTP(S) content into canonical FileProvider/Artifact storage "
                         "with provenance."
                     ),
                     version="1.0",
@@ -460,12 +473,17 @@ class StdlibBrowserProvider(BrowserProvider):
                         required=("url",),
                     ),
                     output_schema={"type": "object"},
-                    tags=("browser", "web", "download", "file"),
+                    tags=("browser", "web", "download", "file", "artifact"),
                     safety=SafetyClassification.RESTRICTED,
                     side_effects=SideEffectClassification.LOCAL_WRITE,
-                    required_permissions=("browser.network.read", "file.create"),
+                    required_permissions=("browser.network.read", "file.create", "artifact.create"),
                     health=HealthStatus.HEALTHY,
-                    features=("canonical_file_download", "sha256", "provenance"),
+                    features=(
+                        "canonical_file_download",
+                        "canonical_artifact_link",
+                        "sha256",
+                        "provenance",
+                    ),
                 ),
                 _DOWNLOAD_TOOL_REF,
             ),
@@ -533,12 +551,13 @@ class StdlibBrowserProvider(BrowserProvider):
             output = await self._submit_form(arguments, invocation.context)
             return ToolResult(invocation_id=invocation.invocation_id, output=output)
         if invocation.tool_ref == _DOWNLOAD_TOOL_REF:
-            output, file_ref = await self._download(arguments, invocation.context)
+            output, file_ref, artifact_ref = await self._download(arguments, invocation.context)
             return ToolResult(
                 invocation_id=invocation.invocation_id,
                 output=output,
                 result_ref=file_ref,
-                evidence_refs=(file_ref,),
+                artifact_refs=(artifact_ref,),
+                evidence_refs=(file_ref, artifact_ref),
             )
         if invocation.tool_ref == _CLOSE_SESSION_TOOL_REF:
             session_id = _required_string(arguments, "session_id")
@@ -706,7 +725,7 @@ class StdlibBrowserProvider(BrowserProvider):
         self,
         arguments: dict[str, JsonValue],
         context: OperationContext,
-    ) -> tuple[dict[str, JsonValue], str]:
+    ) -> tuple[dict[str, JsonValue], str, str]:
         url = _required_string(arguments, "url")
         state = self._session_for(arguments.get("session_id"), context)
         resource = await self._fetch(state, url, BrowserOperation.DOWNLOAD, context)
@@ -731,10 +750,23 @@ class StdlibBrowserProvider(BrowserProvider):
                 "content_trust": CONTENT_TRUST,
             },
         )
+        if not isinstance(self._files, ArtifactLinkingFileProvider):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "browser download requires a FileProvider with canonical artifact linking",
+                provider_id=self.descriptor.provider_id,
+            )
+        artifact_ref = new_id("artifact")
+        await self._files.link_artifact(
+            stored.object_ref,
+            artifact_ref,
+            _data_access_context(context),
+        )
         return (
             {
                 "session_id": state.ref.session_id,
                 "file_ref": stored.object_ref,
+                "artifact_ref": artifact_ref,
                 "source_url": resource.final_url,
                 "content_type": resource.content_type,
                 "size_bytes": len(resource.data),
@@ -742,6 +774,7 @@ class StdlibBrowserProvider(BrowserProvider):
                 "content_trust": CONTENT_TRUST,
             },
             stored.object_ref,
+            artifact_ref,
         )
 
     async def _fetch(
@@ -910,6 +943,14 @@ class StdlibBrowserProvider(BrowserProvider):
             return data.decode(charset, errors="replace")
         except LookupError:
             return data.decode("utf-8", errors="replace")
+
+
+def _data_access_context(operation: OperationContext) -> DataAccessContext:
+    if operation.owner_type is not None and operation.owner_id is not None:
+        actor_ref = f"{operation.owner_type}:{operation.owner_id}"
+    else:
+        actor_ref = "service:platform"
+    return DataAccessContext(operation=operation, actor_ref=actor_ref)
 
 
 def _object_schema(
