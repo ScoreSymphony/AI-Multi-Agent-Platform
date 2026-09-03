@@ -42,6 +42,16 @@ Important fields:
 - `model_bridge`: canonical model-configuration ID -> Hermes model selector;
 - `capability_bridge`: canonical Capability ID -> Hermes tool selector.
 
+The baseline runtime mode is deliberately **external API server only**. `base_url` and optional `profile` select that endpoint; there is no hidden in-process Hermes mode. A future runtime mode must be added as an explicit adapter capability/configuration choice rather than inferred from imports or environment state.
+
+Retry behavior is also explicit: the adapter performs **no hidden automatic request retry loop**. HTTP 429, HTTP 5xx and connection failures are normalized as canonical retryable errors, after which platform/caller retry policy decides whether another canonical operation attempt is appropriate. `/v1/runs` admission carries the canonical idempotency key so a caller-authorized retry can reuse Hermes' idempotency boundary rather than inventing a second lifecycle.
+
+Supported behavior is advertised through `ProviderDescriptor`: the adapter publishes its canonical operations/capabilities, availability/health, transport mode and expected upstream revision. Features not listed there or in the supported-behavior section below are not implied by the presence of a Hermes deployment.
+
+Baseline diagnostics are intentionally bounded: the adapter propagates `X-Correlation-Id`, exposes health, and preserves backend identity/status details only in the `hermes` adapter-metadata namespace. Secret values are resolved only when sending a request and are not copied into canonical metadata. The baseline adapter does not log request/response payloads or credentials. Cross-layer logs, traces and metrics belong to the platform observability work in #16 rather than to a Hermes-private logging model.
+
+`pinned_revision` is the **expected compatibility target**, not a claim that an arbitrary remote service has cryptographically attested its running source revision. The repository treats a revision as verified only after the pinned compatibility fixture and full CI pass for that revision. Pointing `base_url` at another Hermes revision is therefore an explicit unverified deployment choice until the pin, provenance record and compatibility tests are updated together.
+
 The adapter never requires a paid Hermes/model service. A locally/self-hosted Hermes instance and local/self-hosted model endpoint are valid targets.
 
 ## Canonical Task -> Hermes run
