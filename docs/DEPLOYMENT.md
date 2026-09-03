@@ -151,8 +151,13 @@ Public liveness/readiness surfaces remain available through the canonical Contro
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/health
-curl http://127.0.0.1:8000/api/v1/ready
+curl http://127.0.0.1:8000/api/v1/readiness
+platform --endpoint http://127.0.0.1:8000 doctor
 ```
+
+`platform doctor` is the canonical operator diagnostic path from #38. It consumes only the
+Control Plane manifest, health and readiness endpoints; deployment profiles must not add a
+second backend-probing diagnostic authority.
 
 Required persistence/configuration failures block composition/startup and are reported as
 configuration failures. Optional external adapters are not required by this profile and
@@ -225,7 +230,7 @@ For a conservative same-version operator copy today:
 3. copy the complete `AI_MAP_DATA_DIR` as one unit, including every SQLite database and the
    `files/`, `workspaces/` and `executor/` directories;
 4. retain that copy before changing package/version state;
-5. restart with the original data root and verify `/api/v1/health`, `/api/v1/ready` and
+5. restart with the original data root and verify `/api/v1/health`, `/api/v1/readiness` and
    `platform-server smoke`.
 
 This is an operational hook, not a substitute for the future #40 relocation/restore tests or
@@ -255,6 +260,106 @@ Later profiles may add explicit internal flows for remote Workers, model endpoin
 transport, tools, browser services and connectors. Those services must not be made public by
 default simply because deployment tooling can expose a port.
 
+## Stage 2 — single-server operational hardening
+
+Stage 2 extends the same single-machine architecture with optional process and network
+boundaries suitable for a longer-running server. It does **not** replace the Stage-1 profile
+and does not introduce a second Task/Run/Worker architecture.
+
+The recommended same-origin web composition is:
+
+```text
+browser
+  |
+  | HTTPS
+  v
+reverse proxy / static frontend server
+  |-- /api/* --------------------------> 127.0.0.1:8000
+  |                                      authenticated Control Plane
+  `-- all other routes ----------------> static frontend + index.html fallback
+```
+
+Important properties:
+
+- the Control Plane remains loopback-bound by default;
+- only the reverse-proxy/TLS endpoint is public in this composition;
+- `/api` is preserved when proxying because it is part of the canonical northbound route;
+- SQLite, FileProvider and WorkspaceProvider stay local and expose no network ports;
+- the frontend is a static replaceable client and may be omitted completely;
+- the frontend uses its empty/default `VITE_CONTROL_PLANE_URL` for same-origin requests;
+- browser `/api` traffic and SPA route fallback satisfy the accepted frontend deployment ADR;
+- no proxy, service manager or static-file implementation becomes a canonical dependency.
+
+A concrete Caddy + systemd reference implementation is under `deploy/single-server/`. It is
+an operator example, not a requirement: an equivalent reverse proxy, service manager or
+container/process composition may preserve the same boundaries.
+
+### Frontend build
+
+The optional frontend uses the Node/npm requirements declared by `frontend/package.json`:
+
+```bash
+cd frontend
+npm ci
+npm run build
+```
+
+Publish `frontend/dist/` through the selected static server. Do not point the browser directly
+at a backend-private service or provider endpoint; every canonical operation continues to use
+the Control Plane.
+
+### Least privilege and filesystem ownership
+
+Consume `docs/SECURE_DEPLOYMENT.md` as the baseline. For a typical service-manager deployment:
+
+- run `platform-server` as a dedicated non-root/non-administrator service identity;
+- make the application source/virtual environment and static frontend read-only to that
+  identity where practical;
+- grant write access only to the configured `AI_MAP_DATA_DIR` and required temporary paths;
+- keep deployment configuration outside untrusted writable Workspaces;
+- use a restrictive process umask for newly created state;
+- do not expose the SQLite databases or local storage roots through the web server;
+- keep optional model/tool/browser/connector services private unless their explicit contract
+  requires a network boundary.
+
+The reference systemd unit demonstrates these controls with `UMask=0077`,
+`NoNewPrivileges=true`, filesystem protection and one explicit writable data root.
+
+### TLS and proxy trust
+
+TLS termination belongs to the deployment boundary. The included proxy example terminates
+HTTPS before forwarding canonical `/api/*` traffic to the loopback Control Plane. The current
+`platform-server` deliberately does not blindly trust forwarded proxy headers
+(`proxy_headers=False`); deployment topology must not turn client-supplied forwarding headers
+into an authentication/security authority.
+
+If a future feature requires trusted proxy-derived scheme/client information, it needs an
+explicit trusted-proxy configuration contract rather than enabling arbitrary forwarded-header
+trust by default.
+
+### Logs, retention and resource limits
+
+`platform-server` emits normal process logs to stdout/stderr. A service manager/container
+runtime may collect and rotate them, but deployment logs are not canonical Event history.
+Apply the platform redaction rules before exporting diagnostics and keep debug verbosity off by
+default.
+
+Choose log retention and CPU/memory/open-file/process/storage limits from measured workloads,
+operator recovery needs and incident-response policy. Do not encode one VPS class or hardware
+SKU as the platform requirement. Resource-manager limits are operational constraints, not
+canonical Node/Task capacity metadata.
+
+### Optionality/failure behavior
+
+Frontend, static-file server and reverse proxy are optional components. Their absence must not
+prevent the Stage-1 Control Plane from starting, becoming ready or executing
+`platform-server smoke`. When they are enabled, failures in the public edge may make the web
+surface unreachable without changing canonical Task/Run state.
+
+Multiple schedulable local Worker processes are intentionally not defined by this Stage-2
+slice. #14 owns the shared local/remote Node/Worker registration, capability declaration,
+reservation and scheduling contracts; #39 will package those contracts after they are stable.
+
 ## Resource guidance
 
 There is intentionally no VPS SKU or fixed hardware requirement. Start with the resources
@@ -268,14 +373,16 @@ needed by the chosen local workloads and measure:
 
 The reference path itself is CPU-only and requires no accelerator.
 
-## Current Stage-1 boundary
+## Current progressive boundary
 
-This baseline intentionally does not package distributed Worker topology or Control Plane HA.
+The repository now has a production-shaped Stage-1 single-node baseline plus the Stage-2
+single-server process/network hardening reference. The remaining #39 profiles consume their
+own canonical dependencies rather than being invented inside deployment tooling:
 
-- #14 + #35 extend the same installation model with remote Workers and capability-based
-  placement.
-- #40 adds tested backup/restore and relocation.
-- #41 adds schema/platform upgrade lifecycle.
+- #14 + completed #35 extend the same installation model with local/remote Workers and
+  capability-based placement;
+- #40 adds tested backup/restore and relocation;
+- #41 adds schema/platform upgrade lifecycle;
 - #89 may later add an optional HA profile.
 
 Single-node production remains a valid topology after those additions.

@@ -78,6 +78,7 @@ def _valid_manifest_document() -> dict[str, object]:
                 "metadata": {},
             }
         ],
+        "capabilities": ["plugin.echo"],
         "requested_permissions": ["capability_registration"],
         "configuration_version": "1.0",
         "configuration_schema": {"type": "object"},

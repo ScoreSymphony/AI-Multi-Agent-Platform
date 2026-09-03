@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 
@@ -19,6 +19,7 @@ from ai_multi_agent_platform.security.authorization import (
     infer_actor_identity,
 )
 from ai_multi_agent_platform.security.enforcement import AuthorizationGate
+from ai_multi_agent_platform.security.redaction import redact_text
 
 from .contracts import (
     AdapterFrame,
@@ -79,7 +80,7 @@ class TerminalSessionService:
             if adapter_id in self._adapters:
                 raise ValueError(f"duplicate terminal adapter: {adapter_id}")
             self._adapters[adapter_id] = adapter
-        self._redact = redactor or (lambda value: value)
+        self._redact = redactor or redact_text
         self._transcript_sink = transcript_sink
         self._clock = clock
         self._sessions: dict[str, TerminalSession] = {}
@@ -475,6 +476,7 @@ class TerminalSessionService:
         operation: OperationContext,
         reason: str | None = None,
         approval_id: str | None = None,
+        before_terminate: Callable[[TerminalSession], Awaitable[None]] | None = None,
     ) -> TerminalSession:
         session = self._session(session_id)
         await self._authorize_session(
@@ -487,6 +489,8 @@ class TerminalSessionService:
             approval_id=approval_id,
             risk=RiskClassification.HIGH,
         )
+        if before_terminate is not None:
+            await before_terminate(session)
         if session.status in TERMINAL_SESSION_STATUSES:
             return session
         await self._adapter(session).terminate(self._handles[session_id], reason=reason)

@@ -155,7 +155,7 @@ def test_terminal_termination_cannot_bypass_run_cancel_authorization() -> None:
                 project_id=project_id,
             ),
         )
-        assert terminal_state.status.value == "cancelled"
+        assert terminal_state.status.value == "running"
 
         northbound_policy.allow_run_cancel = True
         retried = await http.handle(
@@ -168,5 +168,14 @@ def test_terminal_termination_cannot_bypass_run_cancel_authorization() -> None:
         )
         assert retried.status == 200
         assert (await kernel.get_run(task.task.id, run.run_id)).status is RunStatus.CANCELLED
+        final_terminal_state = await terminal.get_session(
+            session_id,
+            actor_ref=principal,
+            operation=OperationContext(
+                correlation_id="terminal-final-state-check",
+                project_id=project_id,
+            ),
+        )
+        assert final_terminal_state.status.value == "cancelled"
 
     asyncio.run(scenario())

@@ -97,11 +97,63 @@ The current progressive path supports, when those domain services are registered
 - Automations;
 - Automation Deliveries;
 - Approvals;
+- Files;
+- Plugins;
+- Plugin Candidates;
 - other future registered canonical collections that satisfy the same contract.
 
 Registered Search results reuse the collection's canonical `<singular>:list` authorization action. Candidate owner and Project scope are forwarded into that authorization decision so two resources in the same collection can still have different visibility. Unauthorized registered resources are removed before caller-visible counts, snippets, cursors or exact-ID results are calculated.
 
 A registered resource type may not collide with a built-in Search resource type or ambiguously map to multiple canonical collections.
+
+### Files
+
+Issue #13 exposes a canonical `FileProvider` with project-scoped metadata enumeration. The Control Plane adds a read-only `files` ResourceService that projects `FileRecord` metadata into the same registered-domain seam used by global Search. Search does not read provider databases or filesystem paths directly and never indexes File bytes.
+
+The File projection exposes safe canonical metadata including:
+
+- canonical File ID;
+- Project scope;
+- canonical owner reference;
+- lifecycle state such as `ready`;
+- content type;
+- size and checksum metadata on the owning `/files` API surface;
+- canonical Artifact relationships.
+
+Global Search deliberately limits searchable File text to safe discovery fields such as canonical identity, Project/owner scope, lifecycle state, content type and Artifact IDs. Arbitrary `FileRecord.metadata` values are not promoted into Search keywords or snippets, so provider/application metadata does not silently become globally discoverable text.
+
+A complete rebuild enumerates the unscoped File namespace plus the canonical Project IDs supplied by the composition root. The underlying `FileProvider` remains responsible for its #13 scope semantics, while Search applies the normal per-result `file:list` authorization check with the candidate owner and Project context before a result, count or exact-ID match becomes caller-visible.
+
+The canonical `/files` read surface uses the same scope principle. The File ResourceService opts into per-resource authorization so an unscoped list is filtered by each candidate's canonical owner/Project context before pagination and counts are calculated. Direct reads re-check `file:read` with the resolved File scope; a scope-denied read is returned as neutral `not_found` rather than revealing that the File exists in another Project.
+
+Tombstoned Files are excluded by the canonical FileProvider. Because the correctness-first Search path rebuilds from canonical sources before a query, a deleted/tombstoned File disappears from Search without a Search-owned deletion state or second lifecycle.
+
+Memory and Knowledge are intentionally not derived from private provider internals. The current #13 Memory contract is query/scope-oriented rather than globally enumerable, and the canonical KnowledgeProvider does not yet expose public source/document enumeration. Global Search waits for privacy-aware northbound enumeration contracts instead of using implementation-private methods such as a local provider's `_list_sources()`.
+
+### Plugins and Plugin Candidates
+
+Issue #20 exposes canonical installed Plugin lifecycle state through the registered `plugins` ResourceService and discovery candidates through `plugin-candidates`. Global Search consumes those existing northbound resources through the progressive registration seam; it does not create another Plugin registry, catalog, persistence layer, installation source or Plugin identity.
+
+The Search projection keeps useful flat discovery metadata searchable, including:
+
+- Plugin or Candidate canonical ID, name and description;
+- Plugin version and manifest version;
+- author;
+- installed Plugin lifecycle state and compatibility where available;
+- install source;
+- declared capability IDs;
+- extension IDs and extension types;
+- requested and granted permission identifiers;
+- string dependency IDs;
+- configured/unconfigured state for installed Plugins.
+
+The generic Search result `version` uses canonical `plugin_version` when a conventional revision field is not available. Candidate results retain `/api/v1/plugin-candidates/{id}` as their canonical reference; installed Plugins retain `/api/v1/plugins/{id}`.
+
+The nested Plugin Manifest is deliberately not flattened into global Search. Runtime entrypoints, source-repository URLs, configuration schemas, extension metadata and other nested manifest structures therefore do not become Search keywords merely because they are inspectable through the richer canonical #20 Plugin API. Search indexes only the explicitly permitted flat discovery projection.
+
+Plugin Candidates reuse `plugin-candidate:list`; installed Plugins reuse `plugin:list`. Denied candidates and Plugins are removed before caller-visible counts, snippets, cursors and exact-ID results are calculated, so knowing a hidden Plugin ID or name does not make its existence observable through Search.
+
+Search remains discovery-only. Finding a Plugin or Candidate never installs, configures, enables, disables, updates or removes it; those lifecycle transitions continue to require the canonical #20 command surface and its authorization/approval rules.
 
 ### Models and Model Providers
 
@@ -176,7 +228,7 @@ The current canonical query supports:
 - pagination and deterministic sorting;
 - explicit unsupported-capability responses for semantic/hybrid modes on the local provider.
 
-Later domains are added only after their owning canonical APIs exist. Search must not invent a second schema authority for Files, Memory, Knowledge, Connectors, Conversations, Verification, Organizations or future domains.
+Later domains are added only after their owning canonical APIs exist. Search must not invent a second schema authority for Memory, Knowledge, Connectors, Conversations, Verification, Organizations or future domains.
 
 ## CLI and frontend clients
 
@@ -260,13 +312,13 @@ Exact-ID lookup follows the same rule: knowing or guessing a canonical ID does n
 
 ## Remaining #45 integrations
 
-The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support, Automation/Approval discovery, Task-management filtering and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
+The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support, Automation/Approval/File/Plugin discovery, Task-management filtering and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
 
 - policy-permitted Events where useful for global discovery;
-- Files, scoped Memory and Knowledge;
+- scoped Memory and Knowledge after canonical privacy-aware enumeration exists;
 - Nodes/Workers;
 - Evaluations;
-- Plugins/Extensions and Connectors/external-resource references;
+- Connectors/external-resource references;
 - Conversations/Messages with retention/deletion propagation;
 - Notifications and usage/resource summaries where useful;
 - Templates and Repository/Git references;

@@ -193,6 +193,44 @@ def test_stream_output_is_redacted_and_input_audit_does_not_store_content() -> N
     assert input_records[0].metadata == {"size_bytes": len("secret-token")}
 
 
+def test_default_terminal_redaction_scrubs_sensitive_environment_assignments() -> None:
+    service, _, principal, operation, context = _stack()
+    session = _create(service, principal, operation, context)
+    raw = (
+        "OPENAI_API_KEY=super-secret-value\n"
+        "GITHUB_TOKEN=ghp_private_value\n"
+        "DATABASE_PASSWORD='database-secret'\n"
+        "SAFE_SETTING=visible\n"
+    )
+
+    asyncio.run(
+        service.send_input(
+            session.id,
+            raw,
+            actor_ref=principal,
+            operation=operation,
+        )
+    )
+    frames = asyncio.run(
+        service.read_frames(
+            session.id,
+            actor_ref=principal,
+            operation=operation,
+            after_sequence=1,
+        )
+    )
+
+    assert len(frames) == 1
+    output = frames[0].data
+    assert "super-secret-value" not in output
+    assert "ghp_private_value" not in output
+    assert "database-secret" not in output
+    assert "OPENAI_API_KEY=[REDACTED]" in output
+    assert "GITHUB_TOKEN=[REDACTED]" in output
+    assert "DATABASE_PASSWORD=[REDACTED]" in output
+    assert "SAFE_SETTING=visible" in output
+
+
 def test_attach_detach_does_not_cancel_underlying_session() -> None:
     service, _, principal, operation, context = _stack()
     session = _create(service, principal, operation, context)

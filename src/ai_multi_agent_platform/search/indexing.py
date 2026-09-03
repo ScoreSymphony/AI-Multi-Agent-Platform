@@ -169,12 +169,16 @@ def _summary(resource_type: str, resource: Mapping[str, JsonValue]) -> str:
 def _owner(resource: Mapping[str, JsonValue]) -> tuple[str | None, str | None]:
     for field in ("owner", "owner_ref"):
         value = resource.get(field)
-        if not isinstance(value, Mapping):
+        if isinstance(value, Mapping):
+            owner_type = value.get("type")
+            owner_id = value.get("id")
+            if isinstance(owner_type, str) and owner_type.strip() and isinstance(owner_id, str):
+                if owner_id.strip():
+                    return owner_type, owner_id
             continue
-        owner_type = value.get("type")
-        owner_id = value.get("id")
-        if isinstance(owner_type, str) and owner_type.strip() and isinstance(owner_id, str):
-            if owner_id.strip():
+        if field == "owner_ref" and isinstance(value, str) and ":" in value:
+            owner_type, owner_id = value.split(":", 1)
+            if owner_type.strip() and owner_id.strip():
                 return owner_type, owner_id
     return None, None
 
@@ -191,12 +195,10 @@ def _status(resource: Mapping[str, JsonValue]) -> str | None:
 
 
 def _version(resource: Mapping[str, JsonValue]) -> str | None:
-    value = resource.get("revision")
-    if isinstance(value, int | str):
-        return str(value)
-    current_revision = resource.get("current_revision")
-    if isinstance(current_revision, int | str):
-        return str(current_revision)
+    for field in ("revision", "current_revision", "plugin_version"):
+        value = resource.get(field)
+        if isinstance(value, int | str):
+            return str(value)
     return None
 
 
@@ -248,6 +250,13 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "agent_assignment_id",
         "parent_task_id",
         "effective_blocking_reason",
+        "content_type",
+        "author",
+        "plugin_version",
+        "manifest_version",
+        "compatibility",
+        "install_source",
+        "provenance_license",
     ):
         value = _optional_string(resource, field)
         if value is not None:
@@ -260,6 +269,13 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "step_ids",
         "blocking_task_ids",
         "failed_dependency_ids",
+        "artifact_ids",
+        "capabilities",
+        "extension_ids",
+        "extension_types",
+        "requested_permissions",
+        "granted_permissions",
+        "dependencies",
     ):
         values.extend(_string_sequence(resource, field))
     for field, positive, negative in (
@@ -270,6 +286,7 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         ("archived", "archived", "active"),
         ("hidden", "hidden", "visible"),
         ("eligible", "eligible", "ineligible"),
+        ("configured", "configured", "unconfigured"),
     ):
         boolean_value = resource.get(field)
         if isinstance(boolean_value, bool):
