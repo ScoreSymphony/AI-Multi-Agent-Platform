@@ -81,7 +81,9 @@ def test_workspace_and_exact_snapshot_survive_restart(tmp_path: Path) -> None:
             context,
             snapshot_id=original_snapshot.id,
         )
-        assert (restarted.local_path(materialization.id) / "src/input.txt").read_bytes() == b"hello\n"
+        assert (
+            restarted.local_path(materialization.id) / "src/input.txt"
+        ).read_bytes() == b"hello\n"
         await restarted.release_materialization(
             materialization.id,
             MaterializationOutcome.SUCCEEDED,
