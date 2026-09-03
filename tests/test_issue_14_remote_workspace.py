@@ -95,7 +95,9 @@ class _RemoteMaterializer(RemoteWorkspaceMaterializer):
 
 
 class _Dispatcher:
-    def __init__(self, worker_id: str, events: list[str], *, fail_first_dispatch: bool = False) -> None:
+    def __init__(
+        self, worker_id: str, events: list[str], *, fail_first_dispatch: bool = False
+    ) -> None:
         self._worker_id = worker_id
         self.events = events
         self.fail_first_dispatch = fail_first_dispatch
@@ -157,7 +159,9 @@ def _job(workspace: Workspace, snapshot: WorkspaceSnapshot) -> WorkerJobRequest:
     )
 
 
-def _resolver(workspace: Workspace, snapshot: WorkspaceSnapshot) -> WorkspaceJobMaterializationResolver:
+def _resolver(
+    workspace: Workspace, snapshot: WorkspaceSnapshot
+) -> WorkspaceJobMaterializationResolver:
     lookup = cast(WorkspaceProvider, _WorkspaceLookup(workspace, snapshot))
     return WorkspaceJobMaterializationResolver(lookup)
 
