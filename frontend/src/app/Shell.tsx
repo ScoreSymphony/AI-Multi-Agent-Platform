@@ -93,7 +93,7 @@ export function Shell() {
         label="Agents"
         resource="agents"
       >
-        <AgentsPage client={client} manifest={manifest} />
+        <AgentsPage client={client} />
       </ManifestResourcePage>
     );
   } else if (agentMatch) {
@@ -140,7 +140,7 @@ export function Shell() {
         label="Tools"
         resource="capabilities"
       >
-        <CapabilitiesPage client={client} manifest={manifest} />
+        <CapabilitiesPage client={client} />
       </ManifestResourcePage>
     );
   } else if (capabilityProviderMatch) {
