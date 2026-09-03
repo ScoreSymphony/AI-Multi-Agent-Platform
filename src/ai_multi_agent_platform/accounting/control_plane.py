@@ -9,14 +9,13 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .models import (
-    MeasurementQuality,
     UsageAggregate,
     UsageBudget,
     UsageQuery,
     UsageRecord,
     UsageScope,
 )
-from .service import AccountingService
+from .service import AccountingService, aggregate_usage_records
 
 
 class UsageRecordResourceService:
@@ -159,18 +158,7 @@ def _aggregate_visible(
     selected = tuple(
         record for record in records if record.metric_type == metric_type and record.unit == unit
     )
-    values = [record.quantity for record in selected if record.quantity is not None]
-    quality_counts = {quality: 0 for quality in MeasurementQuality}
-    for record in selected:
-        quality_counts[record.quality] += 1
-    return UsageAggregate(
-        metric_type=metric_type,
-        unit=unit,
-        total=sum(values) if values else None,
-        record_count=len(selected),
-        unavailable_count=quality_counts[MeasurementQuality.UNAVAILABLE],
-        quality_counts=quality_counts,
-    )
+    return aggregate_usage_records(selected, metric_type=metric_type, unit=unit)
 
 
 def _record_resource(record: UsageRecord) -> dict[str, JsonValue]:
@@ -217,6 +205,7 @@ def _aggregate_resource(
         "record_count": aggregate.record_count,
         "unavailable_count": aggregate.unavailable_count,
         "quality_counts": quality_counts,
+        "aggregation_mode": aggregate.aggregation_mode.value,
     }
 
 

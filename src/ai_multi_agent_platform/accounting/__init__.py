@@ -7,6 +7,7 @@ from .control_plane import (
     accounting_resource_services,
 )
 from .models import (
+    AggregationMode,
     BudgetAction,
     BudgetKind,
     BudgetState,
@@ -19,15 +20,23 @@ from .models import (
     UsageRecord,
     UsageScope,
 )
-from .service import AccountingService, ThresholdEventSink, usage_from_metric
+from .service import (
+    AccountingService,
+    ThresholdEventSink,
+    aggregate_usage_records,
+    usage_from_metric,
+)
+from .storage import FileStorageAccounting
 from .store import InMemoryUsageStore, SQLiteUsageStore, UsageStore
 
 __all__ = [
     "AccountingService",
+    "AggregationMode",
     "BudgetAction",
     "BudgetKind",
     "BudgetState",
     "BudgetThresholdEvent",
+    "FileStorageAccounting",
     "InMemoryUsageStore",
     "MeasurementQuality",
     "SQLiteUsageStore",
@@ -43,5 +52,6 @@ __all__ = [
     "UsageScope",
     "UsageStore",
     "accounting_resource_services",
+    "aggregate_usage_records",
     "usage_from_metric",
 ]
