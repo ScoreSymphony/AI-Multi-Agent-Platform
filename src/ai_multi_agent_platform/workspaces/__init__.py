@@ -21,6 +21,12 @@ from .models import (
     validate_relative_path,
 )
 from .reference import LocalWorkspaceProvider
+from .remote import (
+    RemoteCleanupAcknowledgement,
+    RemoteMaterializationReceipt,
+    RemoteMaterializationResult,
+    RemoteWorkspaceMaterializer,
+)
 from .run_bindings import (
     InMemoryRunWorkspaceBindingRepository,
     RunWorkspaceBinding,
@@ -34,7 +40,11 @@ __all__ = [
     "InMemoryRunWorkspaceBindingRepository",
     "LocalWorkspaceProvider",
     "MaterializationOutcome",
+    "RemoteCleanupAcknowledgement",
+    "RemoteMaterializationReceipt",
     "RemoteMaterializationRequest",
+    "RemoteMaterializationResult",
+    "RemoteWorkspaceMaterializer",
     "RunWorkspaceBinding",
     "RunWorkspaceBindingRepository",
     "SqliteRunWorkspaceBindingRepository",
