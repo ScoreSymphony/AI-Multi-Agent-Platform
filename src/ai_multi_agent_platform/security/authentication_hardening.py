@@ -1,9 +1,10 @@
 """Issue #36 hardening composition for scoped credentials and request controls.
 
-The primitives in :mod:`security.authentication` remain provider-neutral.  This module
+The primitives in :mod:`security.authentication` remain provider-neutral. This module
 adds the public self-hosted composition used by the platform: credential scopes are a
-restrictive upper bound, worker credentials have an explicit rotation/compromise flow,
-and authenticated requests expose a replaceable rate-limit hook.
+restrictive upper bound persisted with each credential, worker credentials have an
+explicit rotation/compromise flow, and authenticated requests expose a replaceable
+rate-limit hook.
 """
 
 from __future__ import annotations
@@ -33,12 +34,14 @@ from .authentication import (
 from .authentication import LocalAuthenticationService as _BaseLocalAuthenticationService
 from .authorization import ActorType, AuthorizationAction, ResourceType
 
+_SCOPE_FIELDS = {"actions", "resource_types", "resource_ids"}
+
 
 @dataclass(frozen=True, slots=True)
 class CredentialScope:
     """Credential-local authorization ceiling expressed in canonical #15 vocabulary.
 
-    Empty dimensions mean "not additionally restricted".  A scope can only reduce what
+    Empty dimensions mean "not additionally restricted". A scope can only reduce what
     #15 may allow; it never grants a permission on its own.
     """
 
@@ -83,9 +86,12 @@ class CredentialScope:
             return cls()
         if not isinstance(value, dict):
             raise ValueError("credential scope must be an object")
-        unknown = set(value) - {"actions", "resource_types", "resource_ids"}
+        unknown = set(value) - _SCOPE_FIELDS
         if unknown:
             raise ValueError(f"credential scope contains unsupported fields: {sorted(unknown)!r}")
+        missing = _SCOPE_FIELDS - set(value)
+        if missing:
+            raise ValueError(f"credential scope is missing required fields: {sorted(missing)!r}")
 
         actions_value = _string_items(value.get("actions"), "actions")
         resource_types_value = _string_items(
@@ -174,7 +180,6 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
             session_ttl=session_ttl,
         )
         self.request_rate_limiter = request_rate_limiter or InMemoryRequestRateLimiter()
-        self._credential_scopes: dict[str, CredentialScope] = {}
 
     def create_credential(
         self,
@@ -187,16 +192,16 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
         now: datetime | None = None,
         scope: CredentialScope | None = None,
     ) -> IssuedCredential:
-        issued = super().create_credential(
+        effective_scope = scope or CredentialScope()
+        return super().create_credential(
             owner_id,
             actor_type,
             kind,
             purpose=purpose,
             expires_at=expires_at,
             now=now,
+            scope=effective_scope.to_json(),
         )
-        self._credential_scopes[issued.credential_id] = scope or CredentialScope()
-        return issued
 
     def create_personal_access_token(
         self,
@@ -256,7 +261,10 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
         )
 
     def credential_scope(self, credential_id: str) -> CredentialScope:
-        return self._credential_scopes.get(credential_id, CredentialScope())
+        credential = self.store.credentials.get(credential_id)
+        if credential is None:
+            raise KeyError(credential_id)
+        return CredentialScope.from_json(dict(credential.scope))
 
     def authenticate_bearer(
         self,
@@ -272,7 +280,10 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
             request_id=request_id,
             correlation_id=correlation_id,
         )
-        return self._with_scope_metadata(actor)
+        try:
+            return self._with_scope_metadata(actor)
+        except (KeyError, ValueError) as exc:
+            raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS) from exc
 
     def authenticate_worker_request(
         self,
@@ -294,7 +305,10 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
             request_id=request_id,
             correlation_id=correlation_id,
         )
-        return self._with_scope_metadata(actor)
+        try:
+            return self._with_scope_metadata(actor)
+        except (KeyError, ValueError) as exc:
+            raise AuthenticationError(AuthenticationFailure.INVALID_CREDENTIALS) from exc
 
     def check_authenticated_request(
         self,
@@ -411,8 +425,6 @@ def _json_string_list(values: Iterable[str]) -> list[JsonValue]:
 
 
 def _string_items(value: JsonValue | None, field_name: str) -> list[str]:
-    if value is None:
-        return []
     if not isinstance(value, list):
         raise ValueError(f"credential scope {field_name} must be a list of strings")
     result: list[str] = []
