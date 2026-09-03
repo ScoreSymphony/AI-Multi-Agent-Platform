@@ -2,112 +2,132 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import replace
 from datetime import UTC, datetime
-from threading import RLock
-from typing import Protocol
+
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.domain import validate_id
 
 from .models import Notification, NotificationQuery, NotificationState, RecipientRef
 
 
-class NotificationRepository(Protocol):
-    def save(self, notification: Notification) -> Notification: ...
+class NotificationRepository(ABC):
+    @abstractmethod
+    async def save(self, notification: Notification) -> Notification: ...
 
-    def get(self, notification_id: str) -> Notification | None: ...
+    @abstractmethod
+    async def get(self, notification_id: str) -> Notification: ...
 
-    def list(self, query: NotificationQuery) -> tuple[Notification, ...]: ...
+    @abstractmethod
+    async def list(self, query: NotificationQuery) -> tuple[Notification, ...]: ...
 
-    def find_active_aggregate(
+    @abstractmethod
+    async def find_active_aggregate(
         self,
         *,
         recipient: RecipientRef,
         aggregation_key: str,
     ) -> Notification | None: ...
 
-    def count_unread(self, recipient: RecipientRef) -> int: ...
+    @abstractmethod
+    async def count_unread(self, recipient: RecipientRef) -> int: ...
+
+    @abstractmethod
+    async def mark_all_read(
+        self,
+        recipient: RecipientRef,
+        *,
+        at: datetime | None = None,
+    ) -> tuple[Notification, ...]: ...
 
 
-class InMemoryNotificationRepository:
-    """Deterministic thread-safe baseline repository.
-
-    Production persistence remains replaceable; this implementation exists for the local
-    baseline and contract tests.
-    """
+class InMemoryNotificationRepository(NotificationRepository):
+    """Deterministic reference repository for local operation and contract tests."""
 
     def __init__(self) -> None:
         self._items: dict[str, Notification] = {}
-        self._lock = RLock()
 
-    def save(self, notification: Notification) -> Notification:
-        with self._lock:
-            self._items[notification.id] = notification
-            return notification
+    async def save(self, notification: Notification) -> Notification:
+        self._items[notification.id] = notification
+        return notification
 
-    def get(self, notification_id: str) -> Notification | None:
-        with self._lock:
-            return self._items.get(notification_id)
+    async def get(self, notification_id: str) -> Notification:
+        validate_id(notification_id, "notification")
+        try:
+            return self._items[notification_id]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"notification not found: {notification_id}",
+            ) from exc
 
-    def list(self, query: NotificationQuery) -> tuple[Notification, ...]:
+    async def list(self, query: NotificationQuery) -> tuple[Notification, ...]:
         now = datetime.now(UTC)
-        with self._lock:
-            items = [
-                item
-                for item in self._items.values()
-                if item.recipient == query.recipient
-                and (item.expires_at is None or item.expires_at > now)
-                and (query.category is None or item.category is query.category)
-                and (query.severity is None or item.severity is query.severity)
-                and (query.project_id is None or item.project_id == query.project_id)
-                and (not query.unread_only or item.state is NotificationState.UNREAD)
-                and (query.include_archived or item.state is not NotificationState.ARCHIVED)
-            ]
-            items.sort(key=lambda item: (item.updated_at, item.created_at, item.id), reverse=True)
-            return tuple(items[query.offset : query.offset + query.limit])
+        items = [
+            item
+            for item in self._items.values()
+            if item.recipient == query.recipient
+            and (item.expires_at is None or item.expires_at > now)
+            and (query.category is None or item.category is query.category)
+            and (query.severity is None or item.severity is query.severity)
+            and (query.project_id is None or item.project_id == query.project_id)
+            and (not query.unread_only or item.state is NotificationState.UNREAD)
+            and (query.include_archived or item.state is not NotificationState.ARCHIVED)
+        ]
+        items.sort(key=lambda item: (item.updated_at, item.created_at, item.id), reverse=True)
+        return tuple(items[query.offset : query.offset + query.limit])
 
-    def find_active_aggregate(
+    async def find_active_aggregate(
         self,
         *,
         recipient: RecipientRef,
         aggregation_key: str,
     ) -> Notification | None:
+        if not aggregation_key.strip():
+            raise ValueError("aggregation_key must not be blank")
         now = datetime.now(UTC)
-        with self._lock:
-            candidates = [
-                item
-                for item in self._items.values()
-                if item.recipient == recipient
-                and item.aggregation_key == aggregation_key
-                and item.state not in {NotificationState.DISMISSED, NotificationState.ARCHIVED}
-                and (item.expires_at is None or item.expires_at > now)
-            ]
-            if not candidates:
-                return None
-            return max(candidates, key=lambda item: (item.updated_at, item.created_at, item.id))
+        candidates = [
+            item
+            for item in self._items.values()
+            if item.recipient == recipient
+            and item.aggregation_key == aggregation_key
+            and item.state not in {NotificationState.DISMISSED, NotificationState.ARCHIVED}
+            and (item.expires_at is None or item.expires_at > now)
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: (item.updated_at, item.created_at, item.id))
 
-    def count_unread(self, recipient: RecipientRef) -> int:
+    async def count_unread(self, recipient: RecipientRef) -> int:
         now = datetime.now(UTC)
-        with self._lock:
-            return sum(
-                1
-                for item in self._items.values()
-                if item.recipient == recipient
-                and item.state is NotificationState.UNREAD
-                and (item.expires_at is None or item.expires_at > now)
-            )
+        return sum(
+            1
+            for item in self._items.values()
+            if item.recipient == recipient
+            and item.state is NotificationState.UNREAD
+            and (item.expires_at is None or item.expires_at > now)
+        )
 
-    def mark_all_read(self, recipient: RecipientRef, *, at: datetime | None = None) -> tuple[Notification, ...]:
+    async def mark_all_read(
+        self,
+        recipient: RecipientRef,
+        *,
+        at: datetime | None = None,
+    ) -> tuple[Notification, ...]:
         current = at or datetime.now(UTC)
+        if current.utcoffset() is None:
+            raise ValueError("at must be timezone-aware")
         updated: list[Notification] = []
-        with self._lock:
-            for notification_id, item in tuple(self._items.items()):
-                if item.recipient != recipient or item.state is not NotificationState.UNREAD:
-                    continue
-                next_item = replace(
-                    item,
-                    state=NotificationState.READ,
-                    read_at=current,
-                    updated_at=current,
-                )
-                self._items[notification_id] = next_item
-                updated.append(next_item)
+        for notification_id, item in tuple(self._items.items()):
+            if item.recipient != recipient or item.state is not NotificationState.UNREAD:
+                continue
+            next_item = replace(
+                item,
+                state=NotificationState.READ,
+                read_at=current,
+                updated_at=current,
+            )
+            self._items[notification_id] = next_item
+            updated.append(next_item)
         return tuple(updated)
