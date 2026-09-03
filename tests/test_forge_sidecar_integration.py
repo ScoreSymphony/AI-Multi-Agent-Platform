@@ -15,7 +15,6 @@ from ai_multi_agent_platform.adapters.forge_http import (
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.execution import CancellationToken, ExecutionRequest
 
-
 BASE_URL = os.environ.get("FORGE_SIDECAR_BASE_URL")
 WORKSPACE_ROOT = os.environ.get("FORGE_SIDECAR_WORKSPACE_ROOT")
 
