@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from .models import (
     CandidateEvaluation,
@@ -20,6 +21,9 @@ from .models import (
 )
 from .registry import DistributedRegistry, RegistryError
 
+if TYPE_CHECKING:
+    from .telemetry import DistributedTelemetry
+
 
 class NoEligibleWorkerError(RegistryError):
     """Raised when a scheduling request has no eligible worker."""
@@ -34,8 +38,14 @@ class ScheduledPlacement:
 class DeterministicScheduler:
     """Reference scheduler with explainable filtering and stable tie-breaking."""
 
-    def __init__(self, registry: DistributedRegistry) -> None:
+    def __init__(
+        self,
+        registry: DistributedRegistry,
+        *,
+        telemetry: DistributedTelemetry | None = None,
+    ) -> None:
         self.registry = registry
+        self.telemetry = telemetry
 
     def evaluate(self, job: WorkerJobRequest) -> SchedulingDecision:
         evaluations = tuple(
@@ -73,6 +83,8 @@ class DeterministicScheduler:
         self.registry.expire_heartbeats(now=now)
         self.registry.expire_reservations(now=now)
         decision = self.evaluate(job)
+        if self.telemetry is not None:
+            self.telemetry.scheduling_decision(job, decision)
         if decision.selected_worker_id is None:
             raise NoEligibleWorkerError("no eligible worker for job requirements")
         reservation = self.registry.reserve(
@@ -81,6 +93,8 @@ class DeterministicScheduler:
             requirements=job.requirements,
             now=now,
         )
+        if self.telemetry is not None:
+            self.telemetry.reservation(job, reservation, event="reserved")
         return ScheduledPlacement(decision=decision, reservation=reservation)
 
     def schedule_to_worker(
@@ -100,6 +114,8 @@ class DeterministicScheduler:
             selected_worker_id=worker_id if evaluation.accepted else None,
             evaluations=(evaluation,),
         )
+        if self.telemetry is not None:
+            self.telemetry.scheduling_decision(job, decision)
         if not evaluation.accepted:
             reason_codes = ", ".join(reason.code.value for reason in evaluation.reasons)
             raise NoEligibleWorkerError(
@@ -111,6 +127,8 @@ class DeterministicScheduler:
             requirements=job.requirements,
             now=now,
         )
+        if self.telemetry is not None:
+            self.telemetry.reservation(job, reservation, event="reserved")
         return ScheduledPlacement(decision=decision, reservation=reservation)
 
     def _evaluate_worker(
