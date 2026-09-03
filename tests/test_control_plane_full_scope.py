@@ -7,7 +7,10 @@ import pytest
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane import (
+    AUTOMATION_COLLECTION,
+    AUTOMATION_COMMANDS,
     CURRENT_COLLECTIONS,
+    DELIVERY_COLLECTION,
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
     PLATFORM_COLLECTIONS,
@@ -84,23 +87,36 @@ def test_issue_32_foundation_is_separate_from_later_implemented_domains() -> Non
     )
     assert IMPLEMENTED_DOMAIN_COLLECTIONS == ("model-providers", "models")
     assert PLATFORM_COLLECTIONS == FOUNDATION_COLLECTIONS + IMPLEMENTED_DOMAIN_COLLECTIONS
-    assert CURRENT_COLLECTIONS == PLATFORM_COLLECTIONS
+    assert CURRENT_COLLECTIONS == PLATFORM_COLLECTIONS + (
+        AUTOMATION_COLLECTION,
+        DELIVERY_COLLECTION,
+    )
 
 
-def test_manifest_and_openapi_do_not_predeclare_unimplemented_future_domains() -> None:
+def test_manifest_and_openapi_include_automation_without_speculative_future_domains() -> None:
     async def scenario() -> None:
-        _, http = _stack()
+        control_plane, http = _stack()
         manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1"))
         assert manifest.status == 200
         assert isinstance(manifest.body, dict)
-        assert manifest.body["resources"] == list(PLATFORM_COLLECTIONS) + ["timeline"]
-        assert manifest.body["commands"] == []
+        assert control_plane.registered_collections == (
+            DELIVERY_COLLECTION,
+            AUTOMATION_COLLECTION,
+        )
+        assert manifest.body["resources"] == list(PLATFORM_COLLECTIONS) + [
+            DELIVERY_COLLECTION,
+            AUTOMATION_COLLECTION,
+            "timeline",
+        ]
+        assert manifest.body["commands"] == sorted(AUTOMATION_COMMANDS)
 
         specification = build_openapi()
         paths = specification["paths"]
         assert isinstance(paths, dict)
-        for collection in PLATFORM_COLLECTIONS:
+        for collection in (*PLATFORM_COLLECTIONS, AUTOMATION_COLLECTION, DELIVERY_COLLECTION):
             assert f"/api/v1/{collection}" in paths
+        assert "/api/v1/commands/{command}" in paths
+        assert "/api/v1/search" in paths
         for speculative_collection in (
             "agents",
             "teams",
@@ -113,13 +129,11 @@ def test_manifest_and_openapi_do_not_predeclare_unimplemented_future_domains() -
             "nodes",
             "workers",
             "approvals",
-            "automations",
             "evaluations",
             "plugins",
             "adapters",
         ):
             assert f"/api/v1/{speculative_collection}" not in paths
-        assert "/api/v1/commands/{command}" not in paths
         assert specification["x-control-plane-foundation-collections"] == list(
             FOUNDATION_COLLECTIONS
         )
@@ -128,6 +142,22 @@ def test_manifest_and_openapi_do_not_predeclare_unimplemented_future_domains() -
         )
         assert specification["x-registered-extension-collections"] == []
         assert specification["x-registered-extension-commands"] == []
+        assert specification["x-automation"]["collections"] == [
+            AUTOMATION_COLLECTION,
+            DELIVERY_COLLECTION,
+        ]
+
+        composed_openapi = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
+        assert composed_openapi.status == 200
+        assert isinstance(composed_openapi.body, dict)
+        composed_paths = composed_openapi.body["paths"]
+        assert isinstance(composed_paths, dict)
+        assert f"/api/v1/{AUTOMATION_COLLECTION}" in composed_paths
+        assert f"/api/v1/{DELIVERY_COLLECTION}" in composed_paths
+        assert "/api/v1/commands/{command}" in composed_paths
+        assert "/api/v1/search" in composed_paths
+        assert composed_openapi.body["x-registered-extension-collections"] == []
+        assert composed_openapi.body["x-registered-extension-commands"] == []
 
     asyncio.run(scenario())
 
@@ -143,12 +173,18 @@ def test_registered_extension_resource_updates_manifest_openapi_and_routes() -> 
             )
         )
         control_plane, http = _stack(resource_services={"widgets": service})
-        assert control_plane.registered_collections == ("widgets",)
+        assert control_plane.registered_collections == (
+            DELIVERY_COLLECTION,
+            AUTOMATION_COLLECTION,
+            "widgets",
+        )
 
         manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1"))
         assert manifest.status == 200
         assert isinstance(manifest.body, dict)
         assert manifest.body["resources"] == list(PLATFORM_COLLECTIONS) + [
+            DELIVERY_COLLECTION,
+            AUTOMATION_COLLECTION,
             "widgets",
             "timeline",
         ]
@@ -160,6 +196,8 @@ def test_registered_extension_resource_updates_manifest_openapi_and_routes() -> 
         assert isinstance(paths, dict)
         assert "/api/v1/widgets" in paths
         assert "/api/v1/widgets/{resource_id}" in paths
+        assert "/api/v1/search" in paths
+        assert openapi_response.body["x-registered-extension-collections"] == ["widgets"]
 
         listed = await http.handle(
             HTTPRequest(
@@ -222,17 +260,20 @@ def test_registered_command_receives_actor_correlation_and_idempotency_context()
             return {"id": resource_ref, "type": "widget", "refreshed": True}
 
         control_plane, http = _stack(command_handlers={"widget.refresh": refresh_widget})
-        assert control_plane.registered_commands == ("widget.refresh",)
+        assert control_plane.registered_commands == tuple(
+            sorted((*AUTOMATION_COMMANDS, "widget.refresh"))
+        )
 
         manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1"))
         assert isinstance(manifest.body, dict)
-        assert manifest.body["commands"] == ["widget.refresh"]
+        assert manifest.body["commands"] == sorted((*AUTOMATION_COMMANDS, "widget.refresh"))
 
         openapi_response = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
         assert isinstance(openapi_response.body, dict)
         paths = openapi_response.body["paths"]
         assert isinstance(paths, dict)
         assert "/api/v1/commands/{command}" in paths
+        assert openapi_response.body["x-registered-extension-commands"] == ["widget.refresh"]
 
         response = await http.handle(
             HTTPRequest(
@@ -290,11 +331,18 @@ def test_extension_operations_are_authorized_and_private_fields_are_rejected() -
     asyncio.run(scenario())
 
 
-def test_extension_registration_rejects_existing_routes_and_invalid_names() -> None:
+def test_extension_registration_rejects_existing_and_automation_routes() -> None:
     control_plane, _ = _stack()
     service = InMemoryResourceService()
 
-    for reserved in ("tasks", "models", "model-providers", "commands"):
+    for reserved in (
+        "tasks",
+        "models",
+        "model-providers",
+        "commands",
+        AUTOMATION_COLLECTION,
+        DELIVERY_COLLECTION,
+    ):
         with pytest.raises(ValueError):
             control_plane.register_resource_service(reserved, service)
     with pytest.raises(ValueError):
@@ -310,3 +358,5 @@ def test_extension_registration_rejects_existing_routes_and_invalid_names() -> N
 
     with pytest.raises(ValueError):
         control_plane.register_command("Bad Command", handler)
+    with pytest.raises(ValueError):
+        control_plane.register_command("automation.create", handler)

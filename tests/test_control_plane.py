@@ -579,6 +579,8 @@ def test_openapi_documents_current_scope_without_speculative_future_domains() ->
         "results",
         "model-providers",
         "models",
+        "automations",
+        "automation-deliveries",
     ):
         assert f"/api/v1/{resource}" in paths
     for future_resource in (
@@ -593,7 +595,6 @@ def test_openapi_documents_current_scope_without_speculative_future_domains() ->
         "nodes",
         "workers",
         "approvals",
-        "automations",
         "evaluations",
         "plugins",
         "adapters",
@@ -601,4 +602,5 @@ def test_openapi_documents_current_scope_without_speculative_future_domains() ->
         assert f"/api/v1/{future_resource}" not in paths
     assert "/api/v1/tasks/{task_id}/timeline" in paths
     assert "/api/v1/tasks/{task_id}/events/stream" in paths
+    assert "/api/v1/search" in paths
     assert spec["x-evolution-policy"]["breaking_changes"] == "require a new major path namespace"
