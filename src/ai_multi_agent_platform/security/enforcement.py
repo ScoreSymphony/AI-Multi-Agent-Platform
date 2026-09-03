@@ -11,6 +11,7 @@ from ai_multi_agent_platform.contracts import (
     AuthorizationProvider,
     ContractError,
     ErrorCode,
+    JsonValue,
     normalize_authorization_decision,
 )
 
@@ -112,11 +113,11 @@ class AuthorizationGate:
         decision = await self.decide(action, approval_id=approval_id, risk=risk)
         if decision.outcome is AuthorizationOutcome.ALLOW:
             return decision
-        details = {
+        details: dict[str, JsonValue] = {
             "authorization_outcome": decision.outcome.value,
             "policy_id": decision.policy_id,
         }
-        details.update(dict(decision.constraints))
+        details.update(decision.constraints)
         raise ContractError(
             ErrorCode.FORBIDDEN,
             decision.reason or "authorization denied",
