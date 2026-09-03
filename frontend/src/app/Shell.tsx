@@ -3,6 +3,7 @@ import { AutomationClient } from "../api/automations";
 import { BrowserSessionClient } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
 import { ControlPlaneCollectionClient } from "../api/collections";
+import { NotificationClient } from "../api/notifications";
 import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
 import { LoadingState } from "../components/States";
@@ -22,18 +23,15 @@ import {
   CapabilityDetailPage,
   CapabilityProviderDetailPage,
 } from "../pages/CapabilitiesPage";
-import {
-  OverviewPage,
-  RunDetailPage,
-  UnavailablePage,
-} from "../pages/Pages";
-import { RunsPage } from "../pages/RunListPage";
 import { ModelDetailPage, ModelProviderDetailPage } from "../pages/ModelPages";
 import { ModelsPage } from "../pages/ModelInventoryPage";
+import { NotificationsPage } from "../pages/NotificationsPage";
 import { ObservabilityPage } from "../pages/ObservabilityPage";
+import { OverviewPage, RunDetailPage, UnavailablePage } from "../pages/Pages";
 import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ProjectsPage } from "../pages/ProjectListPage";
 import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
+import { RunsPage } from "../pages/RunListPage";
 import { SearchPage } from "../pages/SearchPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { TaskDetailPage } from "../pages/TaskDetailPage";
@@ -58,6 +56,10 @@ export function Shell() {
   );
   const automationClient = useMemo(
     () => new AutomationClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const notificationClient = useMemo(
+    () => new NotificationClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const [manifest, setManifest] = useState<APImanifest | null>(null);
@@ -96,11 +98,14 @@ export function Shell() {
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
   else if (path === "/projects") content = <ProjectsPage client={client} />;
-  else if (projectMatch) content = <ProjectDetailPage client={client} projectId={projectMatch.projectId} />;
-  else if (workspaceMatch) content = <WorkspaceDetailPage client={client} workspaceId={workspaceMatch.workspaceId} />;
-  else if (path === "/tasks") content = <ManagedTasksPage client={client} />;
-  else if (taskManagementMatch) content = <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;
-  else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;
+  else if (projectMatch) {
+    content = <ProjectDetailPage client={client} projectId={projectMatch.projectId} />;
+  } else if (workspaceMatch) {
+    content = <WorkspaceDetailPage client={client} workspaceId={workspaceMatch.workspaceId} />;
+  } else if (path === "/tasks") content = <ManagedTasksPage client={client} />;
+  else if (taskManagementMatch) {
+    content = <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;
+  } else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;
   else if (path === "/runs") content = <RunsPage client={client} />;
   else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;
   else if (path === "/agents") {
@@ -148,8 +153,15 @@ export function Shell() {
       </ManifestResourcePage>
     );
   } else if (path === "/files") content = <ReferencesPage client={client} />;
-  else if (referenceMatch) content = <ReferenceDetailPage client={client} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
-  else if (path === "/search") content = <SearchPage client={client} />;
+  else if (referenceMatch) {
+    content = (
+      <ReferenceDetailPage
+        client={client}
+        collection={referenceMatch.collection}
+        resourceId={referenceMatch.resourceId}
+      />
+    );
+  } else if (path === "/search") content = <SearchPage client={client} />;
   else if (path === "/tools") {
     content = (
       <ManifestResourcePage
@@ -184,8 +196,9 @@ export function Shell() {
       </ManifestResourcePage>
     );
   } else if (path === "/models") content = <ModelsPage client={client} />;
-  else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
-  else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
+  else if (providerMatch) {
+    content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
+  } else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
   else if (path === "/terminal") {
     content = (
       <ManifestResourcePage
@@ -245,9 +258,21 @@ export function Shell() {
         <ApprovalDetailPage client={collections} approvalId={approvalMatch.approvalId} />
       </ManifestResourcePage>
     );
+  } else if (path === "/notifications") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Notifications"
+        resource="notifications"
+      >
+        <NotificationsPage client={notificationClient} />
+      </ManifestResourcePage>
+    );
   } else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
-  else if (path === "/observability") content = <ObservabilityPage client={client} view="observability" />;
-  else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
+  else if (path === "/observability") {
+    content = <ObservabilityPage client={client} view="observability" />;
+  } else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
   else if (path === "/settings") content = <SettingsPage session={session} />;
   else if (navItem) content = <UnavailablePage item={navItem} manifest={manifest} />;
   else content = <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
