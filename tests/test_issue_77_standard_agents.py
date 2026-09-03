@@ -178,7 +178,9 @@ def test_user_owned_agent_copy_can_be_deleted_and_delete_persists(tmp_path: Path
     with pytest.raises(ContractError) as still_removed:
         reloaded.get_agent_revision(cloned.agent_id)
     assert still_removed.value.code is ErrorCode.NOT_FOUND
-    assert reloaded.get_agent_revision(get_standard_agent_template("developer").agent_id).revision == 1
+    assert (
+        reloaded.get_agent_revision(get_standard_agent_template("developer").agent_id).revision == 1
+    )
 
 
 def test_user_owned_team_copy_can_be_deleted_without_removing_bundled_team() -> None:
