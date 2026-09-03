@@ -1,5 +1,6 @@
 """Platform-owned observability contracts and reference instrumentation."""
 
+from .event_provider import ObservabilityEventProvider
 from .exporters import (
     InMemoryExporter,
     NoOpExporter,
@@ -14,7 +15,7 @@ from .health import (
     aggregate_health,
 )
 from .hierarchy import TraceHierarchy, observe_agent_run
-from .instrumentation import ObservabilityEventProvider, ObservedExecutor
+from .instrumentation import ObservedExecutor
 from .integrations import (
     AccountingBridgeExporter,
     AggregatedHealthProvider,
@@ -31,6 +32,7 @@ from .models import (
     FailureClassification,
     FailureComponent,
     MetricRecord,
+    SpanLink,
     SpanRecord,
     StructuredLog,
     TelemetryContext,
@@ -77,6 +79,7 @@ __all__ = [
     "ReadinessState",
     "ServiceHealth",
     "SpanHandle",
+    "SpanLink",
     "SpanRecord",
     "StructuredLog",
     "Telemetry",
