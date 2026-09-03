@@ -197,9 +197,7 @@ class TerminalSessionASGI:
     async def _websocket(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         session_id = _stream_session_id(str(scope.get("path", "/")))
         if session_id is None:
-            await send(
-                {"type": "websocket.close", "code": 4404, "reason": "route not found"}
-            )
+            await send({"type": "websocket.close", "code": 4404, "reason": "route not found"})
             return
 
         headers = _decode_headers(scope.get("headers", []))
@@ -232,9 +230,7 @@ class TerminalSessionASGI:
 
         connect = await receive()
         if connect.get("type") != "websocket.connect":
-            await send(
-                {"type": "websocket.close", "code": 4400, "reason": "connect required"}
-            )
+            await send({"type": "websocket.close", "code": 4400, "reason": "connect required"})
             return
 
         operation = _operation(context)
@@ -432,10 +428,7 @@ def _stream_session_id(path: str) -> str | None:
     segments = [segment for segment in path.split("/") if segment]
     if len(segments) != 5:
         return None
-    if (
-        segments[:3] != ["api", API_VERSION, "terminal-sessions"]
-        or segments[4] != "stream"
-    ):
+    if segments[:3] != ["api", API_VERSION, "terminal-sessions"] or segments[4] != "stream":
         return None
     return segments[3]
 
