@@ -33,8 +33,8 @@ agent contracts.
 `StdlibBrowserProvider` is a small self-hosted HTTP/HTML adapter built with the Python standard
 library. It exists to prove the boundary without adding a mandatory browser-engine dependency.
 It supports isolated cookies, navigation, text/link extraction, link following, HTML form
-submission, one canonical file upload per form submission, downloads into `FileProvider`, and
-session reuse/closure.
+submission, one canonical file upload per form submission, downloads into `FileProvider`, a
+canonical File↔Artifact link for each completed download, and session reuse/closure.
 
 It is not intended to emulate a modern JavaScript browser. A production deployment that needs
 JavaScript, screenshots, DOM interaction or interactive browser control should register another
@@ -70,18 +70,39 @@ orchestrators must treat page instructions as untrusted external input, not as p
 system instructions.
 
 `browser.submit_form` is classified as a restricted external side effect so the existing #15
-authorization/approval bridge can deny or gate it. Downloads are restricted local writes and
-require browser-read plus file-create permissions. File access itself still goes through the
-injected `FileProvider`; production wiring must use the authorization-enforced provider wrapper
-where policy requires it.
+authorization/approval bridge can deny or gate it. The canonical capability requires both
+`browser.external.submit` and `file.read`; this ensures any optional `file_upload` reference is
+already authorized at capability resolution before file bytes are read or a network mutation is
+attempted. Because capability permissions are static metadata, the reference contract applies
+`file.read` to form submission even when no file is attached rather than permitting an upload
+through a weaker capability variant.
+
+`browser.download` is a restricted local write and requires `browser.network.read`, `file.create`
+and `artifact.create`. File access itself still goes through the injected `FileProvider`;
+production wiring should use the authorization-enforced provider wrapper where policy requires it.
 
 ## Files, downloads and uploads
 
 Uploads accept only canonical `file_*` references and read through `FileProvider`; host paths and
-temporary browser paths never become canonical input. Downloads are assigned a new canonical
-file ID and written through `FileProvider` with source URL, content type, SHA-256 checksum,
-download timestamp, provenance and untrusted-content classification. The canonical tool result
-returns the file reference as result/evidence.
+temporary browser paths never become canonical input. `file.read` is a required capability
+permission, so a caller that only holds browser-side submission authority cannot cause arbitrary
+canonical file content to be uploaded.
+
+Downloads are assigned a new canonical `file_*` and written through `FileProvider` with source
+URL, content type, SHA-256 checksum, download timestamp, provenance and untrusted-content
+classification. The reference adapter then generates a canonical `artifact_*` identity and links
+it to the file through the refined #13 `FileProvider.link_artifact` seam. The browser does not
+create a provider-private artifact namespace or a parallel artifact store.
+
+For this reason the reference adapter's download operation requires a file provider that supports
+the refined canonical artifact-linking operation. A provider that implements only the minimal
+core `FileProvider.write/read` seam can still serve browser uploads, but attempting a reference
+browser download fails with a canonical contract violation rather than silently omitting the
+required Artifact path.
+
+The canonical download result uses the `file_*` as `result_ref`, publishes the linked
+`artifact_*` through `artifact_refs`, and includes both references in `evidence_refs`. This makes
+produced file and artifact identities visible to the normal capability result/observability path.
 
 `DownloadValidationHook` is evaluated before persistence. The baseline blocks a small executable
 MIME set and is intentionally replaceable by malware scanning or organization policy.
@@ -114,9 +135,9 @@ records. Browser traces therefore retain task/run/agent/project/correlation IDs,
 node/worker placement, status/error category and redacted browser operation metadata in one
 canonical observability path instead of a browser-specific parallel audit system.
 
-Produced downloads remain referenced through `result_ref`/`evidence_refs`; future screenshot or
-snapshot-capable adapters can use the same evidence-reference seam without changing the browser
-request contract.
+Produced downloads are referenced through `result_ref`, `artifact_refs` and `evidence_refs`;
+future screenshot or snapshot-capable adapters can use the same evidence-reference seam without
+changing the browser request contract.
 
 ## Worker and execution placement
 
