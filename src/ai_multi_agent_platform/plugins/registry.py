@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
+from typing import cast
 
-from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -98,8 +99,9 @@ class PluginRegistry:
                 ErrorCode.FORBIDDEN,
                 f"plugin {plugin_id!r} is missing granted permissions",
                 details={
-                    "missing_permissions": sorted(
-                        permission.value for permission in missing_permissions
+                    "missing_permissions": cast(
+                        JsonValue,
+                        sorted(permission.value for permission in missing_permissions),
                     )
                 },
             )
