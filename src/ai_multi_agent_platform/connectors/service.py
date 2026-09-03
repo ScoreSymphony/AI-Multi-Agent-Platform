@@ -58,9 +58,7 @@ class ConnectorService:
         approval_id: str | None = None,
     ) -> Connection:
         self._validate_scope(connection, context)
-        provider = self.registry.resolve(
-            connection.connector_type_id, connection.connector_version
-        )
+        provider = self.registry.resolve(connection.connector_type_id, connection.connector_version)
         definition = provider.definition
         if definition.authentication_requirements and not connection.secret_references:
             raise ContractError(
