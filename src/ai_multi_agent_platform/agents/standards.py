@@ -539,12 +539,8 @@ def ensure_standard_agent_capabilities(
             f"standard Agent {template.key!r} is missing required capabilities",
             details={
                 "agent_key": template.key,
-                "missing_required_capability_ids": list(
-                    readiness.missing_required_capability_ids
-                ),
-                "missing_optional_capability_ids": list(
-                    readiness.missing_optional_capability_ids
-                ),
+                "missing_required_capability_ids": list(readiness.missing_required_capability_ids),
+                "missing_optional_capability_ids": list(readiness.missing_optional_capability_ids),
             },
         )
     return readiness
@@ -573,9 +569,7 @@ def _materialize_team_profile(
     template: StandardTeamTemplate,
     base_agent_revisions: Mapping[str, AgentRevision],
 ) -> AgentTeamProfile:
-    member_ids = {
-        key: base_agent_revisions[key].agent_id for key in base_agent_revisions
-    }
+    member_ids = {key: base_agent_revisions[key].agent_id for key in base_agent_revisions}
     members = tuple(
         AgentTeamMember(
             agent=AgentRevisionRef(
@@ -675,7 +669,7 @@ def bootstrap_standard_agents(
         )
         installed_team_keys.append(template.key)
 
-    readiness = ()
+    readiness: tuple[StandardAgentReadiness, ...] = ()
     if capability_inventory is not None:
         readiness = tuple(
             assess_standard_agent_capabilities(template, capability_inventory)
