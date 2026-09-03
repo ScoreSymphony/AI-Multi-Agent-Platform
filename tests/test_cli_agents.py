@@ -158,16 +158,23 @@ def _seed_agents() -> tuple[AgentService, str, str, str]:
     return service, agent.agent_id, team.team_id, knowledge_source_id
 
 
-def test_agent_cli_reads_canonical_agent_team_and_run_resources(tmp_path: Path) -> None:
+def test_agent_cli_reads_registered_agent_team_and_run_resources(tmp_path: Path) -> None:
     service, agent_id, team_id, knowledge_source_id = _seed_agents()
     transport = RecordingTransport(_http(agents=service))
     config = tmp_path / "cli.json"
 
-    code, agents, error = _invoke(config, transport, "agent", "list")
+    code, agents, error = _invoke(config, transport, "extension", "list", "agents")
     assert code == 0 and not error
     assert [item["id"] for item in _items(agents)] == [agent_id]
 
-    code, agent, error = _invoke(config, transport, "agent", "show", agent_id)
+    code, agent, error = _invoke(
+        config,
+        transport,
+        "extension",
+        "show",
+        "agents",
+        agent_id,
+    )
     assert code == 0 and not error
     agent_data = agent["data"]
     assert agent_data["current_revision"] == 1
@@ -180,26 +187,38 @@ def test_agent_cli_reads_canonical_agent_team_and_run_resources(tmp_path: Path) 
     assert profile["data_access"]["knowledge_source_ids"] == [knowledge_source_id]
     assert profile["metadata"]["purpose"] == "cli-acceptance"
 
-    code, teams, error = _invoke(config, transport, "agent-team", "list")
+    code, teams, error = _invoke(config, transport, "extension", "list", "agent-teams")
     assert code == 0 and not error
     assert [item["id"] for item in _items(teams)] == [team_id]
 
-    code, team, error = _invoke(config, transport, "agent-team", "show", team_id)
+    code, team, error = _invoke(
+        config,
+        transport,
+        "extension",
+        "show",
+        "agent-teams",
+        team_id,
+    )
     assert code == 0 and not error
     team_profile = team["data"]["revision"]["profile"]
     assert team_profile["members"][0]["agent"] == {"agent_id": agent_id, "revision": 1}
     assert team_profile["shared_capability_ids"] == ["tool.echo"]
     assert team_profile["enabled"] is True
 
-    code, runs, error = _invoke(config, transport, "agent-run", "list")
+    code, runs, error = _invoke(config, transport, "extension", "list", "agent-runs")
     assert code == 0 and not error
     assert _items(runs) == []
 
     assert transport.calls == [
+        ("GET", "/api/v1/openapi.json"),
         ("GET", "/api/v1/agents"),
+        ("GET", "/api/v1/openapi.json"),
         ("GET", f"/api/v1/agents/{agent_id}"),
+        ("GET", "/api/v1/openapi.json"),
         ("GET", "/api/v1/agent-teams"),
+        ("GET", "/api/v1/openapi.json"),
         ("GET", f"/api/v1/agent-teams/{team_id}"),
+        ("GET", "/api/v1/openapi.json"),
         ("GET", "/api/v1/agent-runs"),
     ]
 
@@ -208,9 +227,9 @@ def test_agent_cli_has_no_backend_fallback_when_agent_api_is_absent(tmp_path: Pa
     transport = RecordingTransport(_http())
     config = tmp_path / "cli.json"
 
-    code, payload, error = _invoke(config, transport, "agent", "list")
+    code, payload, error = _invoke(config, transport, "extension", "list", "agents")
 
-    assert code == 3
+    assert code == 2
     assert payload == {}
-    assert '"code":"not_found"' in error
-    assert transport.calls == [("GET", "/api/v1/agents")]
+    assert "canonical extension collection is not registered: agents" in error
+    assert transport.calls == [("GET", "/api/v1/openapi.json")]
