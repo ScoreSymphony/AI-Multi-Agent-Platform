@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -39,6 +40,8 @@ class SearchQuery:
     tags: tuple[str, ...] = ()
     source_filters: tuple[str, ...] = ()
     provider_filters: tuple[str, ...] = ()
+    updated_after: datetime | None = None
+    updated_before: datetime | None = None
     mode: SearchMode = SearchMode.KEYWORD
     limit: int = 50
     cursor: str | None = None
@@ -67,6 +70,18 @@ class SearchQuery:
         ):
             if any(not value.strip() for value in values):
                 raise ValueError(f"{name} must not contain blank values")
+        for value, name in (
+            (self.updated_after, "updated_after"),
+            (self.updated_before, "updated_before"),
+        ):
+            if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+                raise ValueError(f"{name} must be timezone-aware")
+        if (
+            self.updated_after is not None
+            and self.updated_before is not None
+            and self.updated_after > self.updated_before
+        ):
+            raise ValueError("updated_after must not be later than updated_before")
         if self.mode in {SearchMode.SEMANTIC, SearchMode.HYBRID} and self.text is None:
             raise ValueError(f"{self.mode.value} search requires text")
 
@@ -106,10 +121,20 @@ class SearchDocument:
             validate_id(self.workspace_id, "workspace")
         if (self.owner_type is None) != (self.owner_id is None):
             raise ValueError("owner_type and owner_id must both be set or both be omitted")
+        if self.updated_at is not None:
+            parsed = _parse_timestamp(self.updated_at, "updated_at")
+            if parsed.tzinfo is None or parsed.utcoffset() is None:
+                raise ValueError("updated_at must be timezone-aware")
 
     @property
     def key(self) -> tuple[str, str]:
         return self.resource_type, self.resource_id
+
+    @property
+    def updated_at_datetime(self) -> datetime | None:
+        if self.updated_at is None:
+            return None
+        return _parse_timestamp(self.updated_at, "updated_at")
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,3 +221,10 @@ def decode_search_cursor(cursor: str | None) -> int:
     if offset < 0:
         raise ValueError("search cursor is invalid")
     return offset
+
+
+def _parse_timestamp(value: str, field: str) -> datetime:
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{field} must be an ISO-8601 timestamp") from exc
