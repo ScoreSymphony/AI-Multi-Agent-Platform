@@ -15,6 +15,10 @@ _VERSION_SCHEMA: dict[str, Any] = {
     "type": "string",
     "pattern": r"^\d+(?:\.\d+){0,2}$",
 }
+_ID_SCHEMA: dict[str, Any] = {
+    "type": "string",
+    "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+}
 _VERSION_RANGE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -38,6 +42,7 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
         "provenance",
         "supported_platform",
         "extensions",
+        "capabilities",
         "requested_permissions",
         "configuration_version",
         "configuration_schema",
@@ -46,7 +51,7 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
         "state_migrations",
     ],
     "properties": {
-        "plugin_id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"},
+        "plugin_id": _ID_SCHEMA,
         "name": {"type": "string", "minLength": 1},
         "description": {"type": "string", "minLength": 1},
         "plugin_version": _VERSION_SCHEMA,
@@ -73,10 +78,7 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "required": ["extension_id", "extension_type", "interface_version", "entrypoint"],
                 "properties": {
-                    "extension_id": {
-                        "type": "string",
-                        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
-                    },
+                    "extension_id": _ID_SCHEMA,
                     "extension_type": {"enum": [item.value for item in ExtensionType]},
                     "interface_version": _VERSION_SCHEMA,
                     "entrypoint": {"type": "string", "minLength": 1},
@@ -84,6 +86,11 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
                 },
                 "additionalProperties": False,
             },
+        },
+        "capabilities": {
+            "type": "array",
+            "items": _ID_SCHEMA,
+            "uniqueItems": True,
         },
         "requested_permissions": {
             "type": "array",
@@ -98,10 +105,7 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "required": ["plugin_id", "version_range", "optional"],
                 "properties": {
-                    "plugin_id": {
-                        "type": "string",
-                        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
-                    },
+                    "plugin_id": _ID_SCHEMA,
                     "version_range": _VERSION_RANGE_SCHEMA,
                     "optional": {"type": "boolean"},
                 },
@@ -116,10 +120,7 @@ PLUGIN_MANIFEST_SCHEMA: dict[str, Any] = {
                 "type": "object",
                 "required": ["migration_id", "from_version", "to_version"],
                 "properties": {
-                    "migration_id": {
-                        "type": "string",
-                        "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
-                    },
+                    "migration_id": _ID_SCHEMA,
                     "from_version": _VERSION_SCHEMA,
                     "to_version": _VERSION_SCHEMA,
                 },
