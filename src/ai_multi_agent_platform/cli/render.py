@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TextIO
 
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.security.redaction import redact_sensitive
 
 from .client import APIClientError, ClientResponse, TransportError
 from .profiles import ProfileError
@@ -37,9 +38,10 @@ class Renderer:
         self.stderr = stderr or sys.stderr
 
     def success(self, response: ClientResponse) -> None:
+        safe_body = _redacted(response.body)
         if self.json_mode:
             payload = {
-                "data": response.body,
+                "data": safe_body,
                 "meta": {
                     "status": response.status,
                     "request_id": response.request_id,
@@ -49,7 +51,7 @@ class Renderer:
             }
             self.stdout.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
             return
-        self._human(response.body)
+        self._human(safe_body)
         if self.verbose:
             if response.request_id:
                 self.stdout.write(f"Request ID: {response.request_id}\n")
@@ -57,14 +59,17 @@ class Renderer:
                 self.stdout.write(f"Correlation ID: {response.correlation_id}\n")
 
     def local_success(self, data: JsonValue) -> None:
+        safe_data = _redacted(data)
         if self.json_mode:
-            payload = {"data": data, "meta": {"local": True}}
+            payload = {"data": safe_data, "meta": {"local": True}}
             self.stdout.write(json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n")
         else:
-            self._human(data)
+            self._human(safe_data)
 
     def error(self, error: APIClientError | TransportError | ProfileError | LocalCLIError) -> None:
-        normalized = _normalize_error(error)
+        normalized = _redacted(_normalize_error(error))
+        if not isinstance(normalized, dict):
+            raise TypeError("redacted CLI error must remain a JSON object")
         if self.json_mode:
             self.stderr.write(json.dumps(normalized, sort_keys=True, separators=(",", ":")) + "\n")
             return
@@ -168,6 +173,10 @@ def _normalize_error(
         "message": str(error),
         "retryable": True,
     }
+
+
+def _redacted(value: JsonValue) -> JsonValue:
+    return redact_sensitive(value)
 
 
 def _display(value: object) -> str:

@@ -9,7 +9,6 @@ import {
   RunDetailPage,
   RunsPage,
   TaskDetailPage,
-  TasksPage,
   UnavailablePage,
 } from "../pages/Pages";
 import {
@@ -18,6 +17,7 @@ import {
   ModelsPage,
 } from "../pages/ModelPages";
 import { ProjectDetailPage, ProjectsPage, WorkspaceDetailPage } from "../pages/ProjectPages";
+import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
 import { UsagePage } from "../pages/UsagePage";
 
 export function Shell() {
@@ -36,6 +36,7 @@ export function Shell() {
 
   const projectMatch = matchPath("/projects/:projectId", path);
   const workspaceMatch = matchPath("/workspaces/:workspaceId", path);
+  const taskManagementMatch = matchPath("/tasks/:taskId/manage", path);
   const taskMatch = matchPath("/tasks/:taskId", path);
   const runMatch = matchPath("/runs/:runId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
@@ -46,7 +47,8 @@ export function Shell() {
   else if (path === "/projects") content = <ProjectsPage client={client} />;
   else if (projectMatch) content = <ProjectDetailPage client={client} projectId={projectMatch.projectId} />;
   else if (workspaceMatch) content = <WorkspaceDetailPage client={client} workspaceId={workspaceMatch.workspaceId} />;
-  else if (path === "/tasks") content = <TasksPage client={client} />;
+  else if (path === "/tasks") content = <ManagedTasksPage client={client} />;
+  else if (taskManagementMatch) content = <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;
   else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;
   else if (path === "/runs") content = <RunsPage client={client} />;
   else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;

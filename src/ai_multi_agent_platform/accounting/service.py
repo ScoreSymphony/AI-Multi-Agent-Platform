@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from math import ceil
 from uuid import NAMESPACE_URL, uuid5
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -25,6 +26,7 @@ from .models import (
 from .store import UsageStore
 
 ThresholdEventSink = Callable[[BudgetThresholdEvent], None]
+MAX_TREND_BUCKETS = 500
 
 
 class AccountingService:
@@ -87,6 +89,35 @@ class AccountingService:
             unit=query.unit,
             start=query.start,
             end=query.end,
+        )
+
+    def trend(
+        self,
+        query: UsageQuery,
+        *,
+        bucket_seconds: int,
+    ) -> tuple[UsageAggregate, ...]:
+        """Return bounded time buckets without fabricating samples for empty periods."""
+
+        if query.metric_type is None or query.unit is None:
+            raise ValueError("trend query requires metric_type and unit")
+        if query.start is None or query.end is None:
+            raise ValueError("trend query requires explicit start and end")
+        records = self.store.query(
+            UsageQuery(
+                metric_type=query.metric_type,
+                unit=query.unit,
+                scope=query.scope,
+                quality=query.quality,
+            )
+        )
+        return trend_usage_records(
+            records,
+            metric_type=query.metric_type,
+            unit=query.unit,
+            start=query.start,
+            end=query.end,
+            bucket_seconds=bucket_seconds,
         )
 
     def put_budget(self, budget: UsageBudget) -> BudgetState:
@@ -173,13 +204,14 @@ def aggregate_usage_records(
     unit: str,
     start: datetime | None = None,
     end: datetime | None = None,
+    default_aggregation_mode: AggregationMode = AggregationMode.ADDITIVE,
 ) -> UsageAggregate:
     """Aggregate one canonical metric without summing point-in-time gauges."""
 
     modes = {record.aggregation_mode for record in records}
     if len(modes) > 1:
         raise ValueError("one metric/unit query cannot mix aggregation modes")
-    mode = next(iter(modes), AggregationMode.ADDITIVE)
+    mode = next(iter(modes), default_aggregation_mode)
     quality_counts = {quality: 0 for quality in MeasurementQuality}
     for record in records:
         quality_counts[record.quality] += 1
@@ -202,6 +234,72 @@ def aggregate_usage_records(
         start=start,
         end=end,
     )
+
+
+def trend_usage_records(
+    records: tuple[UsageRecord, ...],
+    *,
+    metric_type: str,
+    unit: str,
+    start: datetime,
+    end: datetime,
+    bucket_seconds: int,
+) -> tuple[UsageAggregate, ...]:
+    """Bucket one metric/unit while preserving additive versus latest semantics."""
+
+    if bucket_seconds <= 0:
+        raise ValueError("bucket_seconds must be greater than zero")
+    if end <= start:
+        raise ValueError("trend end must be later than start")
+    bucket_count = ceil((end - start).total_seconds() / bucket_seconds)
+    if bucket_count > MAX_TREND_BUCKETS:
+        raise ValueError(f"trend query exceeds {MAX_TREND_BUCKETS} buckets")
+
+    metric_records = tuple(
+        sorted(
+            (
+                record
+                for record in records
+                if record.metric_type == metric_type and record.unit == unit
+            ),
+            key=lambda record: (record.timestamp, record.id),
+        )
+    )
+    modes = {record.aggregation_mode for record in metric_records}
+    if len(modes) > 1:
+        raise ValueError("one metric/unit trend cannot mix aggregation modes")
+    mode = next(iter(modes), AggregationMode.ADDITIVE)
+    window_records = tuple(record for record in metric_records if start <= record.timestamp <= end)
+
+    buckets: list[UsageAggregate] = []
+    record_index = 0
+    width = timedelta(seconds=bucket_seconds)
+    for bucket_index in range(bucket_count):
+        bucket_start = start + timedelta(seconds=bucket_index * bucket_seconds)
+        bucket_end = min(end, bucket_start + width)
+        is_last = bucket_index == bucket_count - 1
+        selected: list[UsageRecord] = []
+        while record_index < len(window_records):
+            record = window_records[record_index]
+            if record.timestamp < bucket_start:
+                record_index += 1
+                continue
+            if record.timestamp < bucket_end or (is_last and record.timestamp <= end):
+                selected.append(record)
+                record_index += 1
+                continue
+            break
+        buckets.append(
+            aggregate_usage_records(
+                tuple(selected),
+                metric_type=metric_type,
+                unit=unit,
+                start=bucket_start,
+                end=bucket_end,
+                default_aggregation_mode=mode,
+            )
+        )
+    return tuple(buckets)
 
 
 def _budget_quantity(records: tuple[UsageRecord, ...]) -> float:

@@ -6,7 +6,7 @@ Issue #11 adds LiteLLM only behind the platform-owned model contracts from #5/#1
 
 ### 1. Library mode
 
-`LiteLLMModelProvider` lazily loads the optional `litellm` Python package and calls `acompletion` with translated canonical request data.
+`LiteLLMModelProvider` keeps module imports dependency-free. When an enabled library provider instance is created without an injected test transport, it resolves the optional `litellm` package immediately so missing dependencies fail before registry attachment. It then calls `acompletion` with translated canonical request data.
 
 Install only when this mode is wanted:
 
@@ -81,9 +81,21 @@ See `config/litellm.example.json` for library and proxy examples.
 - optional base URL;
 - credential environment-variable reference;
 - timeout;
+- library-mode retry count (`max_retries` -> LiteLLM `num_retries`);
+- adapter telemetry/logging metadata mode (`platform_only` or `disabled`);
 - additional non-secret HTTP headers.
 
+`LiteLLMProviderConfig.from_mapping(...)` is the JSON/resolved-configuration boundary that turns provider-scope configuration into the validated runtime config object. Unknown keys are rejected. The committed examples are parsed through the platform configuration resolver and this boundary in tests.
+
 A raw credential value is never part of canonical configuration or provider metadata. When `api_key_env` is configured, the value is resolved only at invocation/health time. Missing credentials fail as `invalid_configuration`.
+
+## Retry, fallback, telemetry and locality policy
+
+- Library mode forwards non-negative `max_retries` as LiteLLM `num_retries`; `0` is the local-first default. Request/control-plane timeouts still override the provider default timeout.
+- Proxy mode does not add a second retry engine. Retry/load-balancing inside a separately deployed LiteLLM Proxy is deployment-owned and must not bypass the platform's canonical route selection.
+- LiteLLM Router fallbacks remain intentionally disabled in this baseline. Provider fallbacks are therefore never silently enabled by adapter configuration.
+- `telemetry_mode=platform_only` emits only platform-owned namespaced adapter metadata subject to platform redaction. `disabled` suppresses LiteLLM-specific per-request/error metadata. The adapter does not enable LiteLLM global callbacks or provider-native logging/telemetry.
+- Local/self-hosted restrictions remain canonical `ModelConfiguration.location` plus `local_only` / `self_hosted_only` routing requirements. They are intentionally not duplicated as LiteLLM-native routing policy; tests prove a higher-priority remote LiteLLM-backed model cannot bypass either restriction.
 
 ## Local-first examples
 

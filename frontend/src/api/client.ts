@@ -1,6 +1,7 @@
 import type {
   APIErrorBody,
   APImanifest,
+  BulkTaskManagementResult,
   CanonicalModel,
   CanonicalModelProvider,
   CanonicalProject,
@@ -17,6 +18,7 @@ import type {
   JsonValue,
   ListQuery,
   Page,
+  TaskManagementChanges,
   TimelineItem,
 } from "./types";
 
@@ -99,6 +101,23 @@ export class ControlPlaneClient {
 
   createTask(input: CreateTaskInput): Promise<CanonicalTask> {
     return this.command<CanonicalTask>("/tasks", { method: "POST", body: input });
+  }
+
+  updateTaskManagement(
+    taskId: string,
+    changes: TaskManagementChanges,
+  ): Promise<CanonicalTask> {
+    return this.command<CanonicalTask>("/commands/task-management.update", {
+      body: { resource_ref: taskId, ...changes },
+    });
+  }
+
+  bulkUpdateTaskManagement(
+    updates: Array<{ task_id: string; changes: TaskManagementChanges }>,
+  ): Promise<BulkTaskManagementResult> {
+    return this.command<BulkTaskManagementResult>("/commands/task-management.bulk-update", {
+      body: { resource_ref: "tasks", updates },
+    });
   }
 
   queueTask(taskId: string): Promise<CanonicalTask> {

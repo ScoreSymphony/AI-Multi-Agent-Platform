@@ -235,14 +235,6 @@ def test_library_adapter_maps_cancellation_to_canonical_error() -> None:
 def test_library_mode_fails_clearly_when_optional_dependency_is_absent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    provider = LiteLLMModelProvider(
-        LiteLLMProviderConfig(
-            provider_id="litellm-library",
-            mode=LiteLLMMode.LIBRARY,
-            models={"model-local-coder": "ollama/qwen3-coder"},
-        )
-    )
-
     def missing_dependency(name: str) -> object:
         assert name == "litellm"
         raise ModuleNotFoundError(name)
@@ -250,14 +242,11 @@ def test_library_mode_fails_clearly_when_optional_dependency_is_absent(
     monkeypatch.setattr(litellm_adapter.importlib, "import_module", missing_dependency)
 
     with pytest.raises(ContractError) as captured:
-        asyncio.run(
-            provider.generate(
-                ModelRequest(
-                    request_id="req-litellm-missing",
-                    messages=("hello",),
-                    context=CTX,
-                    requirements={"model_config_id": "model-local-coder"},
-                )
+        LiteLLMModelProvider(
+            LiteLLMProviderConfig(
+                provider_id="litellm-library",
+                mode=LiteLLMMode.LIBRARY,
+                models={"model-local-coder": "ollama/qwen3-coder"},
             )
         )
 

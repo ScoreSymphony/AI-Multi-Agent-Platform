@@ -1,6 +1,11 @@
 """Concrete adapters implementing platform-owned provider contracts."""
 
-from .litellm import LiteLLMMode, LiteLLMModelProvider, LiteLLMProviderConfig
+from .litellm import (
+    LiteLLMMode,
+    LiteLLMModelProvider,
+    LiteLLMProviderConfig,
+    LiteLLMTelemetryMode,
+)
 from .openai_compatible import (
     HttpJsonResponse,
     OpenAICompatibleModelProvider,
@@ -14,6 +19,7 @@ __all__ = [
     "LiteLLMMode",
     "LiteLLMModelProvider",
     "LiteLLMProviderConfig",
+    "LiteLLMTelemetryMode",
     "OpenAICompatibleModelProvider",
     "OpenAICompatibleProviderConfig",
     "OpenAICompatibleTransport",

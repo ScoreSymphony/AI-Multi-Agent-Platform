@@ -63,6 +63,21 @@ platform result show RESULT_ID
 
 These are read-only inspection commands. List commands support the same pagination, filtering, search, field-selection, human-output, and JSON-output conventions as the rest of the CLI.
 
+## Output redaction
+
+All CLI rendering now applies the reusable platform redaction policy from #34 before data reaches stdout or stderr. This is a defense-in-depth layer in addition to the Control Plane requirement that ordinary API responses never expose plaintext secrets.
+
+Redaction applies recursively to:
+
+- successful JSON responses;
+- successful human-readable output;
+- locally rendered profile/configuration metadata;
+- canonical error details.
+
+Sensitive fields such as passwords, API keys, tokens, credentials, client secrets, private keys and matching suffixed keys render as `[REDACTED]`. Non-sensitive metadata and secret references remain visible so operators can diagnose configuration without resolving secret material.
+
+This CLI-side protection does not make secret-bearing backend responses acceptable. Canonical APIs remain responsible for returning only safe/redacted data in the first place.
+
 ## Cancellation safety
 
 Task and Run cancellation are also meaningful side effects. They now use the same confirmation boundary:
