@@ -158,7 +158,15 @@ def test_workspace_create_forwards_rich_canonical_options(tmp_path: Path) -> Non
     assert workspace["workspace_type"] == "read_only_source"
     assert workspace["access_mode"] == "read_only"
     assert workspace["retention"] == "persistent"
-    assert workspace["source_refs"] == source_refs
+    assert workspace["source_refs"] == [
+        {
+            "kind": "empty",
+            "ref": "blank-source",
+            "revision": None,
+            "checksum": None,
+            "metadata": {"purpose": "cli-contract-test"},
+        }
+    ]
     assert isinstance(workspace["base_snapshot_id"], str)
 
     method, path, body = transport.calls[-1]
