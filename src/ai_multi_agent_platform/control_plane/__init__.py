@@ -5,8 +5,6 @@ from .automation_api import (
     AUTOMATION_COLLECTION,
     AUTOMATION_COMMANDS,
     DELIVERY_COLLECTION,
-    ControlPlaneHTTP,
-    build_openapi,
 )
 from .extensions import (
     FOUNDATION_COLLECTIONS,
@@ -17,7 +15,7 @@ from .extensions import (
     InMemoryResourceService,
     ResourceService,
 )
-from .http import ControlPlaneASGI, HTTPRequest, HTTPResponse
+from .http import HTTPRequest, HTTPResponse
 from .models import (
     API_VERSION,
     SUPPORTED_API_VERSIONS,
@@ -33,15 +31,16 @@ from .plugin_api import (
     PLUGIN_COLLECTION,
     PLUGIN_COLLECTIONS,
     PLUGIN_COMMANDS,
-    ControlPlane,
     PluginPermissionResolver,
 )
+from .plugin_terminal_composition import ControlPlane
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
+from .terminal_composition import ControlPlaneASGI, ControlPlaneHTTP, build_openapi
 
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (AUTOMATION_COLLECTION, DELIVERY_COLLECTION)
 
