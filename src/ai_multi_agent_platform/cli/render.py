@@ -6,7 +6,7 @@ import json
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TextIO, cast
+from typing import TextIO
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.security.redaction import redact_sensitive
@@ -176,7 +176,7 @@ def _normalize_error(
 
 
 def _redacted(value: JsonValue) -> JsonValue:
-    return cast(JsonValue, redact_sensitive(value))
+    return redact_sensitive(value)
 
 
 def _display(value: object) -> str:
