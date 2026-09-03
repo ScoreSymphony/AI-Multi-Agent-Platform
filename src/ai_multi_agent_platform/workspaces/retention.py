@@ -87,7 +87,12 @@ class _RetentionState:
     retention: WorkspaceRetention
     expires_at: datetime | None
     ever_materialized: bool = False
+    active_materializations: int = 0
     deleted: bool = False
+
+    def __post_init__(self) -> None:
+        if self.active_materializations < 0:
+            raise ValueError("active_materializations must be non-negative")
 
 
 class RetentionManagedWorkspaceProvider(WorkspaceProvider):
@@ -102,6 +107,7 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
         self._delegate = delegate
         self._lock = asyncio.Lock()
         self._states: dict[str, _RetentionState] = {}
+        self._materialization_workspaces: dict[str, str] = {}
         self._db_path = Path(metadata_db_path) if metadata_db_path is not None else None
         if self._db_path is not None:
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -270,7 +276,12 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
             if state is None:
                 base = await self._delegate.get_workspace(workspace_id)
                 state = self._state_from_workspace(base)
-            self._states[workspace_id] = replace(state, ever_materialized=True)
+            self._states[workspace_id] = replace(
+                state,
+                ever_materialized=True,
+                active_materializations=state.active_materializations + 1,
+            )
+            self._materialization_workspaces[materialization.id] = workspace_id
             self._persist_states()
         return materialization
 
@@ -300,9 +311,19 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
         outcome: MaterializationOutcome,
     ) -> None:
         await self._delegate.release_materialization(materialization_id, outcome)
+        async with self._lock:
+            self._finish_materialization(materialization_id)
+            self._persist_states()
 
     async def cleanup(self) -> CleanupReport:
-        return await self._delegate.cleanup()
+        report = await self._delegate.cleanup()
+        reconciled = (*report.removed_materialization_ids, *report.missing_materialization_ids)
+        if reconciled:
+            async with self._lock:
+                for materialization_id in reconciled:
+                    self._finish_materialization(materialization_id)
+                self._persist_states()
+        return report
 
     async def set_retention(
         self,
@@ -355,7 +376,11 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                 if not eligible:
                     retained.append(workspace.id)
                     continue
-                if workspace.active_task_ids or workspace.active_run_ids:
+                if (
+                    state.active_materializations > 0
+                    or workspace.active_task_ids
+                    or workspace.active_run_ids
+                ):
                     deferred.append(workspace.id)
                     continue
                 if guard is not None and not await guard.allow_cleanup(managed):
@@ -363,6 +388,9 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                     continue
                 async with self._lock:
                     latest = self._states.get(workspace.id) or state
+                    if latest.active_materializations > 0:
+                        deferred.append(workspace.id)
+                        continue
                     self._states[workspace.id] = replace(latest, deleted=True)
                     self._persist_states()
                 deleted.append(workspace.id)
@@ -384,6 +412,18 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
                 self._states[workspace.id] = state
                 self._persist_states()
             return state
+
+    def _finish_materialization(self, materialization_id: str) -> None:
+        workspace_id = self._materialization_workspaces.pop(materialization_id, None)
+        if workspace_id is None:
+            return
+        state = self._states.get(workspace_id)
+        if state is None:
+            return
+        self._states[workspace_id] = replace(
+            state,
+            active_materializations=max(0, state.active_materializations - 1),
+        )
 
     @staticmethod
     def _state_from_workspace(workspace: Workspace) -> _RetentionState:
