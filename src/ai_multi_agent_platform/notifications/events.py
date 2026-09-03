@@ -14,7 +14,7 @@ from ai_multi_agent_platform.contracts import (
 
 from .service import NotificationService
 
-ProjectionFailureSink = Callable[[PlatformEvent, BaseException], Awaitable[None]]
+ProjectionFailureSink = Callable[[PlatformEvent, Exception], Awaitable[None]]
 
 
 class NotificationProjectingEventProvider(EventProvider):
@@ -48,7 +48,7 @@ class NotificationProjectingEventProvider(EventProvider):
         await self._inner.publish(event)
         try:
             await self._notifications.project_event(event)
-        except BaseException as exc:
+        except Exception as exc:
             if self._projection_failure_sink is not None:
                 await self._projection_failure_sink(event, exc)
 
