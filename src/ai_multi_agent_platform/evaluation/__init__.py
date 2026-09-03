@@ -1,6 +1,11 @@
 """Canonical evaluation and regression framework."""
 
-from .contracts import EvaluationRepository, Evaluator
+from .contracts import (
+    EvaluationCaseExecutor,
+    EvaluationIsolation,
+    EvaluationRepository,
+    Evaluator,
+)
 from .evaluators import DeterministicAssertionEvaluator, MetricThresholdEvaluator, SafeEvaluator
 from .models import (
     EVALUATION_SCHEMA_VERSION,
@@ -11,6 +16,7 @@ from .models import (
     ComparisonReport,
     ConfigurationSnapshot,
     DeterministicAssertion,
+    EvaluationAttempt,
     EvaluationCase,
     EvaluationObservation,
     EvaluationOutcome,
@@ -29,8 +35,10 @@ from .models import (
     SnapshotValue,
     VersionReference,
 )
+from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
+from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolation
 
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
@@ -42,21 +50,28 @@ __all__ = [
     "ConfigurationSnapshot",
     "DeterministicAssertion",
     "DeterministicAssertionEvaluator",
+    "EvaluationAttempt",
     "EvaluationCase",
+    "EvaluationCaseExecutor",
+    "EvaluationIsolation",
     "EvaluationObservation",
     "EvaluationOutcome",
     "EvaluationRepository",
     "EvaluationResult",
     "EvaluationRun",
+    "EvaluationRunner",
     "EvaluationRunStatus",
+    "EvaluationRunSummary",
     "EvaluationSuite",
     "Evaluator",
     "EvaluatorDescriptor",
     "EvaluatorKind",
     "InMemoryEvaluationRepository",
+    "KernelEvaluationCaseExecutor",
     "MetricResult",
     "MetricRule",
     "MetricThresholdEvaluator",
+    "NoopEvaluationIsolation",
     "RegressionEngine",
     "RegressionPolicy",
     "RegressionRule",
