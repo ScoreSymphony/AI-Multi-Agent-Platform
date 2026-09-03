@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from .delivery import DeliveryAttempt, NotificationDeliveryCoordinator
 from .models import (
     Notification,
     NotificationCandidate,
@@ -33,11 +34,13 @@ class NotificationService:
         repository: NotificationRepository,
         preferences: NotificationPreferenceRepository,
         rules: Sequence[NotificationRule] = (),
+        delivery: NotificationDeliveryCoordinator | None = None,
         event_sink: NotificationEventSink | None = None,
     ) -> None:
         self._repository = repository
         self._preferences = preferences
         self._rules = tuple(rules)
+        self._delivery = delivery
         self._event_sink = event_sink
 
     async def project_event(self, event: PlatformEvent) -> tuple[Notification, ...]:
@@ -91,6 +94,7 @@ class NotificationService:
                     notification=persisted,
                     occurrence_count=persisted.occurrence_count,
                 )
+                await self._deliver_external(persisted, preference)
                 return persisted
 
         notification = Notification(
@@ -121,6 +125,7 @@ class NotificationService:
         )
         persisted = await self._repository.save(notification)
         await self._emit("notification.created", notification=persisted)
+        await self._deliver_external(persisted, preference)
         return persisted
 
     async def get(self, notification_id: str, *, recipient: RecipientRef) -> Notification:
@@ -129,9 +134,13 @@ class NotificationService:
         return notification
 
     async def list(self, query: NotificationQuery) -> tuple[Notification, ...]:
+        if not self._preferences.get(query.recipient).in_app_enabled:
+            return ()
         return await self._repository.list(query)
 
     async def unread_count(self, recipient: RecipientRef) -> int:
+        if not self._preferences.get(recipient).in_app_enabled:
+            return 0
         return await self._repository.count_unread(recipient)
 
     def get_preference(self, recipient: RecipientRef) -> NotificationPreference:
@@ -139,6 +148,37 @@ class NotificationService:
 
     def set_preference(self, preference: NotificationPreference) -> NotificationPreference:
         return self._preferences.save(preference)
+
+    async def delivery_attempts(
+        self,
+        notification_id: str,
+        *,
+        recipient: RecipientRef,
+    ) -> tuple[DeliveryAttempt, ...]:
+        await self.get(notification_id, recipient=recipient)
+        if self._delivery is None:
+            return ()
+        return await self._delivery.list_attempts(notification_id)
+
+    async def retry_delivery(
+        self,
+        notification_id: str,
+        *,
+        recipient: RecipientRef,
+        channel_id: str,
+    ) -> DeliveryAttempt:
+        notification = await self.get(notification_id, recipient=recipient)
+        if self._delivery is None:
+            raise ContractError(ErrorCode.UNAVAILABLE, "external notification delivery is not configured")
+        attempt = await self._delivery.deliver(notification, channel_id=channel_id)
+        await self._emit(
+            "notification.delivery_attempt",
+            notification=notification,
+            channel=attempt.channel,
+            delivery_status=attempt.status.value,
+            attempt=attempt.attempt,
+        )
+        return attempt
 
     async def mark_read(
         self,
@@ -257,6 +297,31 @@ class NotificationService:
         if notification.recipient != recipient:
             # Deliberately return not-found semantics so notification existence is not leaked.
             raise ContractError(ErrorCode.NOT_FOUND, "notification not found")
+
+    async def _deliver_external(
+        self,
+        notification: Notification,
+        preference: NotificationPreference,
+    ) -> None:
+        if self._delivery is None or not preference.external_channels:
+            return
+        try:
+            attempts = await self._delivery.deliver_configured(notification, preference)
+        except Exception as exc:
+            await self._emit(
+                "notification.delivery_failure",
+                notification=notification,
+                error_type=type(exc).__name__,
+            )
+            return
+        for attempt in attempts:
+            await self._emit(
+                "notification.delivery_attempt",
+                notification=notification,
+                channel=attempt.channel,
+                delivery_status=attempt.status.value,
+                attempt=attempt.attempt,
+            )
 
     async def _emit(
         self,
