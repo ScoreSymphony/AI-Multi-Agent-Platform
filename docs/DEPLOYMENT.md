@@ -28,7 +28,7 @@ Authenticated Control Plane
 ```
 
 Hermes, Forge, LiteLLM, MCP, remote Workers, Kubernetes, cloud services and paid external
-AI/API services are not required for this profile. Later profiles add replaceable services
+AI/API services are not required for this profile. Advanced profiles add replaceable services
 without changing canonical Task/Run contracts.
 
 ## Prerequisites
@@ -161,8 +161,9 @@ second backend-probing diagnostic authority.
 
 Required persistence/configuration failures block composition/startup and are reported as
 configuration failures. Optional external adapters are not required by this profile and
-therefore cannot make the baseline unready merely by being absent. Later profiles that enable
-optional adapters may report their degradation through the progressive #16 health model.
+therefore cannot make the baseline unready merely by being absent. Advanced profiles that
+enable optional adapters may report their degradation through the progressive #16 health
+model.
 
 ## Persistent layout
 
@@ -184,8 +185,8 @@ The default data root is `.data/single-node`. Its current implementation layout 
 ```
 
 These paths are implementation configuration, not canonical resource IDs. Moving the data
-through the future #40 backup/restore flow must not require preserving a hostname, machine ID
-or filesystem path as canonical identity.
+through #40 backup/restore must not require preserving a hostname, machine ID or filesystem
+path as canonical identity.
 
 Authentication SQLite stores password/token verifiers and safe metadata only. Raw passwords,
 browser-session secrets and bearer-token secrets are not persisted.
@@ -208,6 +209,12 @@ The Stage-1 regression suite verifies restart persistence for:
 - local administrator authorization policy;
 - the retry-safe canonical deployment smoke.
 
+The `single-node-install-smoke` CI job additionally installs only `.[server]` into a fresh
+virtual environment, starts the real `platform-server` HTTP process, verifies canonical
+readiness, performs a graceful foreground shutdown, restarts against the same data root and
+verifies the retry-safe canonical smoke again. This is the installation/process-lifecycle
+proof required by #39.
+
 The ReferenceExecutor itself remains replaceable and does not become canonical lifecycle
 storage.
 
@@ -221,7 +228,7 @@ platform persistence boundaries rather than being owned by the web-server proces
 
 #40 owns the tested backup/restore and hardware-relocation contract, while #41 owns platform
 and schema upgrade/migration rules. Until those issues are complete, do not claim a live
-snapshot or cross-version migration guarantee from this Stage-1 profile.
+snapshot or cross-version migration guarantee from this profile.
 
 For a conservative same-version operator copy today:
 
@@ -233,8 +240,8 @@ For a conservative same-version operator copy today:
 5. restart with the original data root and verify `/api/v1/health`, `/api/v1/readiness` and
    `platform-server smoke`.
 
-This is an operational hook, not a substitute for the future #40 relocation/restore tests or
-#41 migration guarantees.
+This is an operational hook, not a substitute for #40 relocation/restore tests or #41
+migration guarantees.
 
 ## Uninstall and data retention
 
@@ -256,9 +263,10 @@ Stage 1 needs only the client/frontend-to-Control-Plane flow. SQLite and local f
 storage have no network listener. The reference orchestrator and executor are in-process and
 expose no private admin port.
 
-Later profiles may add explicit internal flows for remote Workers, model endpoints, message
+Advanced profiles may add explicit internal flows for remote Workers, model endpoints, message
 transport, tools, browser services and connectors. Those services must not be made public by
-default simply because deployment tooling can expose a port.
+default simply because deployment tooling can expose a port. #240 owns that advanced
+packaging and its heterogeneous-device networking examples.
 
 ## Stage 2 — single-server operational hardening
 
@@ -358,7 +366,8 @@ surface unreachable without changing canonical Task/Run state.
 
 Multiple schedulable local Worker processes are intentionally not defined by this Stage-2
 slice. #14 owns the shared local/remote Node/Worker registration, capability declaration,
-reservation and scheduling contracts; #39 will package those contracts after they are stable.
+reservation and scheduling contracts; #240 packages those contracts into advanced distributed
+and heterogeneous deployment profiles after they are stable.
 
 ## Resource guidance
 
@@ -373,16 +382,16 @@ needed by the chosen local workloads and measure:
 
 The reference path itself is CPU-only and requires no accelerator.
 
-## Current progressive boundary
+## Follow-up deployment integrations
 
-The repository now has a production-shaped Stage-1 single-node baseline plus the Stage-2
-single-server process/network hardening reference. The remaining #39 profiles consume their
-own canonical dependencies rather than being invented inside deployment tooling:
+The repository has a production-shaped Stage-1 single-node baseline plus the Stage-2
+single-server process/network hardening reference. Advanced deployment concerns are tracked as
+follow-up integrations rather than remaining completion blockers for #39:
 
-- #14 + completed #35 extend the same installation model with local/remote Workers and
-  capability-based placement;
-- #40 adds tested backup/restore and relocation;
+- #240 packages multiple-local-Worker, distributed-Worker and heterogeneous multi-device
+  profiles after #14's canonical Worker/scheduler contracts are available;
+- #40 adds tested backup/restore and hardware relocation;
 - #41 adds schema/platform upgrade lifecycle;
-- #89 may later add an optional HA profile.
+- #89 may later add optional Control Plane HA/failover.
 
-Single-node production remains a valid topology after those additions.
+Single-node/single-server production remains a valid topology after those additions.
