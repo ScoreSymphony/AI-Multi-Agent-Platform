@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 platform = "ai_multi_agent_platform.cli.main:main"
+platform-completion = "ai_multi_agent_platform.cli.completion:main"
 
 [project.optional-dependencies]
 mcp = [

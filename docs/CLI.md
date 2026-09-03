@@ -16,7 +16,7 @@ canonical application services
 
 ## Foundation scope
 
-This first #38 slice provides the CLI foundation that can be implemented solely on top of #32:
+The CLI foundation currently provides:
 
 - installable `platform` entry point;
 - local and remote non-secret target profiles;
@@ -25,14 +25,16 @@ This first #38 slice provides the CLI foundation that can be implemented solely 
 - request/correlation ID propagation;
 - canonical API error rendering;
 - human-readable and stable JSON output;
-- `status`, `health`, `version`, and initial `doctor` diagnostics;
+- `status`, `health`, `version`, and `doctor` diagnostics;
 - project and workspace create/list/show commands supported by the current Control Plane;
 - task create/list/show/queue/start/cancel/retry/timeline commands;
-- run list/show/cancel commands.
+- run list/show/cancel commands;
+- progressive model/reference/extension administration documented in `docs/CLI_ADMIN.md`;
+- dependency-free Bash, Zsh, and Fish completion generation.
 
-The foundation intentionally does not invent commands for Agents, Approvals, Nodes, Workers, Automations, Plugins, Search, or other domains before their canonical APIs exist. Those are progressive #38 integrations.
+The CLI intentionally does not invent commands for Agents, Approvals, Nodes, Workers, Automations, Plugins, Search, or other domains before their canonical APIs exist. Those are progressive Issue 38 integrations.
 
-## Installation and entry point
+## Installation and entry points
 
 After installing the package, run:
 
@@ -49,6 +51,36 @@ The CLI client version is also available without contacting a Control Plane:
 ```bash
 platform --client-version
 ```
+
+The package also installs `platform-completion`, which generates shell completion scripts without adding a runtime dependency.
+
+### Bash
+
+For the current shell:
+
+```bash
+source <(platform-completion bash)
+```
+
+For a persistent installation, save the generated script in the completion location used by your shell/distribution.
+
+### Zsh
+
+Generate a completion file and load it from a directory in `fpath`:
+
+```bash
+platform-completion zsh > _platform
+```
+
+### Fish
+
+Install the generated completion in the user completion directory:
+
+```bash
+platform-completion fish > ~/.config/fish/completions/platform.fish
+```
+
+Completion generation is local-only: it does not read CLI profiles and does not contact the Control Plane.
 
 ## Profiles and endpoint resolution
 
@@ -78,6 +110,8 @@ platform profile set remote https://control.example.net \
 platform profile use remote
 platform status
 ```
+
+Remote profiles use exactly the same command semantics as the local profile. The client appends the canonical `/api/v1` prefix to the selected profile endpoint, so an endpoint such as `https://control.example.net/base` targets `https://control.example.net/base/api/v1/...`. Repository tests verify this request routing rather than testing profile persistence alone.
 
 Profiles are deliberately non-secret. Accepted fields are only endpoint, principal reference, owner type, and owner ID. Endpoint URLs containing username/password credentials are rejected, and unknown profile fields are rejected. Authentication credentials/tokens belong to the future #36 authentication integration and its approved credential storage path, not this file.
 
@@ -155,22 +189,28 @@ platform run cancel run_... --task-id task_...
 
 List commands support the Control Plane conventions `--limit`, `--cursor`, `--sort`, `--direction`, `--q`, repeatable `--filter FIELD=VALUE`, and `--fields`.
 
-## Initial doctor contract
+## Doctor contract
 
-`platform doctor` currently validates the foundation that exists today:
+`platform doctor` currently validates the canonical surface available today:
 
 - CLI configuration parsed successfully;
 - `/api/v1` is reachable;
 - API major is compatible (`v1`);
-- canonical health endpoint responds;
-- canonical readiness endpoint responds.
+- canonical health and readiness endpoints respond with the expected schema;
+- provider health entries use the canonical health vocabulary;
+- unavailable/not-available providers and failed readiness are blocking;
+- `degraded` or `unknown` providers are reported as degraded while canonical readiness remains true.
 
-The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. Provider/worker/auth/secret/permission checks are added only after the corresponding canonical platform domains exist.
+The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. `/readiness` remains authoritative for whether the composed Control Plane can accept work. Additional worker/auth/plugin/migration checks are added only when their owning canonical domains expose the required information.
+
+See `docs/CLI_ADMIN.md` for the detailed provider-health and exit-code contract.
 
 ## Verification
 
 CLI changes are covered by the repository's normal quality gates (`ruff format --check`, `ruff check`, strict `mypy`, `pytest`, and package build). The integration tests use an in-process HTTP transport so the exercised path is still the real versioned Control Plane boundary rather than direct kernel or repository access.
 
-## Progressive #38 work still open
+The test suite also verifies that a saved remote profile actually targets its configured remote base URL through `/api/v1`, and that the completion generator exposes the current command hierarchy for Bash, Zsh, and Fish.
 
-This slice does not close #38. Later work should extend the same client with canonical APIs from the owning issues, including Agents/Teams, Models/Tools, Nodes/Workers, approvals, observability logs/metrics, automation, plugins, evaluation, search, deployment/update operations, and secure authentication/session handling.
+## Progressive Issue 38 work still open
+
+This work does not close Issue 38. Later work should extend the same client with canonical APIs from the owning issues, including Agents/Teams, Models/Tools, Nodes/Workers, approvals, observability logs/metrics, automation, plugins, evaluation, search, deployment/update operations, and secure authentication/session handling.
