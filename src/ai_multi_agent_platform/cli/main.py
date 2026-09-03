@@ -23,6 +23,7 @@ from .client import (
 )
 from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
+from .search import add_search_parser, execute_search
 from .task_management import parse_changes, parse_updates
 from .workspace import parse_json_array
 
@@ -122,6 +123,8 @@ def _build_parser() -> argparse.ArgumentParser:
     ):
         platform_command = areas.add_parser(name, help=help_text)
         platform_command.set_defaults(area="platform", command=name)
+
+    add_search_parser(areas)
 
     profile = areas.add_parser("profile", help="manage non-secret target profiles")
     profile.set_defaults(area="profile")
@@ -266,6 +269,8 @@ def _build_parser() -> argparse.ArgumentParser:
         ("step", "steps"),
         ("artifact", "artifacts"),
         ("result", "results"),
+        ("capability", "capabilities"),
+        ("capability-provider", "capability-providers"),
     ):
         reference = areas.add_parser(area_name, help=f"inspect canonical {collection}")
         reference.set_defaults(area="reference", collection=collection)
@@ -273,6 +278,20 @@ def _build_parser() -> argparse.ArgumentParser:
         _add_list_parser(commands, "list", f"list {collection}")
         show = commands.add_parser("show", help=f"show {area_name} reference")
         show.add_argument("resource_id")
+
+    usage = areas.add_parser("usage", help="inspect canonical usage and resource accounting")
+    usage_kinds = usage.add_subparsers(dest="usage_kind", required=True)
+    for kind, collection in (
+        ("record", "usage-records"),
+        ("aggregate", "usage-aggregates"),
+        ("budget", "usage-budgets"),
+    ):
+        usage_kind = usage_kinds.add_parser(kind, help=f"inspect canonical {collection}")
+        usage_kind.set_defaults(area="reference", collection=collection)
+        usage_commands = usage_kind.add_subparsers(dest="command", required=True)
+        _add_list_parser(usage_commands, "list", f"list {collection}")
+        usage_show = usage_commands.add_parser("show", help=f"show one {kind}")
+        usage_show.add_argument("resource_id")
 
     extension = areas.add_parser(
         "extension",
@@ -373,6 +392,8 @@ def _execute(
 ) -> CommandResult:
     if args.area == "platform":
         return _platform_command(args, client)
+    if args.area == "search":
+        return CommandResult(execute_search(args, client))
     if args.area == "project":
         return _project_command(args, client, profile)
     if args.area == "workspace":

@@ -8,7 +8,7 @@ from dataclasses import replace
 from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import HealthStatus, JsonValue
+from ai_multi_agent_platform.contracts.types import HealthStatus, JsonValue, ProviderDescriptor
 
 from .provider import CapabilityToolProvider
 from .types import (
@@ -110,6 +110,42 @@ class CapabilityRegistry:
                     else:
                         refreshed.append(registration)
                 self._registrations[key] = refreshed
+
+    def inventory_capabilities(
+        self,
+        *,
+        include_unavailable: bool = True,
+    ) -> tuple[CapabilitySpec, ...]:
+        """Return complete canonical capability inventory without usability filtering.
+
+        This administrative/read surface deliberately differs from ``list_capabilities``:
+        permissions and worker placement describe whether one caller may use a capability,
+        not whether the registered capability exists. Invocation and policy discovery remain
+        authoritative for actual use.
+        """
+
+        inventory: list[CapabilitySpec] = []
+        for key in sorted(
+            self._registrations,
+            key=lambda item: (item[0], _version_display_key(item[1])),
+        ):
+            registrations = self._registrations[key]
+            if not registrations:
+                continue
+            capability = registrations[0].capability
+            if not include_unavailable and (
+                not capability.available or capability.health is HealthStatus.UNAVAILABLE
+            ):
+                continue
+            inventory.append(capability)
+        return tuple(inventory)
+
+    def inventory_providers(self) -> tuple[ProviderDescriptor, ...]:
+        """Return stable public descriptors without exposing provider implementation objects."""
+
+        return tuple(
+            self._providers[provider_id].descriptor for provider_id in sorted(self._providers)
+        )
 
     def list_capabilities(
         self,

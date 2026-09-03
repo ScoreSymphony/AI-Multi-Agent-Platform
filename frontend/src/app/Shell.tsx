@@ -8,19 +8,19 @@ import { AppLink, matchPath, useRouter } from "./router";
 import {
   OverviewPage,
   RunDetailPage,
-  TaskDetailPage,
   UnavailablePage,
 } from "../pages/Pages";
 import { RunsPage } from "../pages/RunListPage";
-import {
-  ModelDetailPage,
-  ModelProviderDetailPage,
-  ModelsPage,
-} from "../pages/ModelPages";
+import { ModelDetailPage, ModelProviderDetailPage } from "../pages/ModelPages";
+import { ModelsPage } from "../pages/ModelInventoryPage";
 import { ObservabilityPage } from "../pages/ObservabilityPage";
-import { ProjectDetailPage, ProjectsPage, WorkspaceDetailPage } from "../pages/ProjectPages";
+import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
+import { ProjectsPage } from "../pages/ProjectListPage";
 import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
+import { SearchPage } from "../pages/SearchPage";
+import { TaskDetailPage } from "../pages/TaskDetailPage";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
+import { TerminalPage } from "../pages/TerminalPage";
 import { UsagePage } from "../pages/UsagePage";
 
 export function Shell() {
@@ -58,9 +58,11 @@ export function Shell() {
   else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;
   else if (path === "/files") content = <ReferencesPage client={client} />;
   else if (referenceMatch) content = <ReferenceDetailPage client={client} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
+  else if (path === "/search") content = <SearchPage client={client} />;
   else if (path === "/models") content = <ModelsPage client={client} />;
   else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
   else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
+  else if (path === "/terminal") content = <TerminalPage client={client} />;
   else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
   else if (path === "/observability") content = <ObservabilityPage client={client} view="observability" />;
   else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
@@ -72,18 +74,49 @@ export function Shell() {
     <PermissionHintsProvider>
       <a className="skip-link" href="#main">Skip to content</a>
       <div className="app-shell">
-        <aside className={menuOpen ? "sidebar sidebar-open" : "sidebar"}>
+        <aside
+          id="platform-navigation"
+          className={menuOpen ? "sidebar sidebar-open" : "sidebar"}
+        >
           <div className="brand"><span className="brand-mark">A</span><div><strong>Agent Platform</strong><small>Control Plane UI</small></div></div>
           <nav aria-label="Platform navigation">
-            {groups.map((group) => <div className="nav-group" key={group}><span>{group}</span>{navigation.filter((item) => item.group === group).map((item) => <AppLink className={item.path === path ? "active" : undefined} href={item.path} key={item.path}>{item.label}</AppLink>)}</div>)}
+            {groups.map((group) => (
+              <div className="nav-group" key={group}>
+                <span>{group}</span>
+                {navigation.filter((item) => item.group === group).map((item) => {
+                  const active = item.path === path;
+                  return (
+                    <AppLink
+                      aria-current={active ? "page" : undefined}
+                      className={active ? "active" : undefined}
+                      href={item.path}
+                      key={item.path}
+                    >
+                      {item.label}
+                    </AppLink>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
         </aside>
         <div className="workspace">
           <header className="topbar">
-            <button className="menu-button" aria-expanded={menuOpen} aria-label="Toggle navigation" onClick={() => setMenuOpen((value) => !value)}>Menu</button>
-            <div className="api-indicator"><span className={manifest ? "dot dot-ready" : "dot"} />{manifest ? `/api/${manifest.api_version}` : "API unavailable"}</div>
+            <button
+              className="menu-button"
+              aria-controls="platform-navigation"
+              aria-expanded={menuOpen}
+              aria-label="Toggle navigation"
+              onClick={() => setMenuOpen((value) => !value)}
+            >
+              Menu
+            </button>
+            <div className="api-indicator" role="status" aria-live="polite">
+              <span className={manifest ? "dot dot-ready" : "dot"} />
+              {manifest ? `/api/${manifest.api_version}` : "API unavailable"}
+            </div>
           </header>
-          <main id="main">{content}</main>
+          <main id="main" tabIndex={-1}>{content}</main>
         </div>
       </div>
     </PermissionHintsProvider>

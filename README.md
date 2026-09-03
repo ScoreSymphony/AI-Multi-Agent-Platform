@@ -43,6 +43,8 @@ The policy is exercised against multiple integration models in [`docs/UPSTREAM_P
 
 ## Status
 
-The canonical domain model, replaceable core contracts, platform-owned Task/Run/Event kernel and reference execution path are established through the completed foundation issues #1–#7.
+As of 2026-09-03, the completed substantive platform baseline includes #1–#7, #9–#13, #15–#17, #32, #34, #35, #37, #43, #76 and #88. This means the repository has already established the canonical domain/kernel/execution foundation, models, capabilities, data boundaries, authorization/approvals, observability, the initial Web UI shell, Control Plane, configuration/secrets, messaging, Workspaces, the security baseline, usage accounting and practical Task-management metadata.
 
-Current implementation work should follow [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) and each issue's explicit hard dependencies rather than simple numeric issue order. The present execution frontier supports several parallel workstreams, including models, capabilities/tools, data boundaries, Control Plane, configuration/secrets, messaging, Forge reuse and the security baseline.
+The current highest-leverage parallel implementation frontier is #36 Authentication, #33 canonical Agents/Teams, #14 Nodes/Workers, #18 Automations and #20 Plugins. #19 Evaluation, #45 Search, #73 Terminal and #74 Browser are also ready to begin independently, while #38 CLI remains a progressive open client lane whose full completion consumes later Authentication/Agent/Worker APIs.
+
+Current implementation work should follow [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) and each issue's explicit hard dependencies rather than simple numeric issue order. GitHub issue state and current issue wording remain the point-in-time source of truth when the roadmap and an issue diverge.

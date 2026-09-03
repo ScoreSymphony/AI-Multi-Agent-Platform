@@ -88,6 +88,36 @@ dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
 .timeline { list-style: none; padding: 0; margin: 0; }
 .timeline li { display: flex; justify-content: space-between; gap: 1rem; padding: .65rem 0; border-bottom: 1px solid var(--line); }
 .timeline small { display: block; color: var(--muted); margin-top: .2rem; }
+.terminal-layout { display: grid; grid-template-columns: minmax(240px, 320px) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.terminal-session-list { padding: .75rem; position: sticky; top: 74px; }
+.terminal-session-scroll { display: grid; gap: .45rem; max-height: 70vh; overflow: auto; }
+.terminal-session-row { width: 100%; text-align: left; display: grid; gap: .35rem; background: var(--surface); }
+.terminal-session-row.selected { border-color: var(--accent-strong); background: #132334; }
+.terminal-session-row > span { display: flex; justify-content: space-between; gap: .5rem; align-items: center; }
+.terminal-session-row small { color: var(--muted); overflow-wrap: anywhere; }
+.terminal-workarea { min-width: 0; }
+.terminal-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .8rem; }
+.terminal-toolbar > div { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.terminal-mode { text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-size: .72rem; }
+.terminal-warning { border: 1px solid #6b5221; background: rgba(107,82,33,.18); color: #fde68a; border-radius: 8px; padding: .7rem .8rem; margin-bottom: .8rem; font-size: .82rem; }
+.terminal-viewport { min-height: 320px; max-height: 62vh; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; display: block; }
+.terminal-viewport span { display: inline; }
+.terminal-stderr { color: #fda4af; }
+.terminal-log { color: #cbd5e1; }
+.terminal-system { color: var(--accent); }
+.terminal-empty { display: grid; place-items: center; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; background: #090d15; }
+.terminal-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .7rem; align-items: end; margin-top: .8rem; }
+.terminal-input textarea { resize: vertical; min-height: 76px; border: 1px solid var(--line); border-radius: 8px; background: #090d15; color: var(--text); padding: .7rem; font: inherit; font-family: "SFMono-Regular", Consolas, monospace; }
+.terminal-readonly { color: var(--muted); font-size: .85rem; }
+.terminal-create { grid-template-columns: repeat(4, minmax(0, 1fr)) auto; }
+.terminal-filters input { display: block; margin-top: .3rem; min-width: 260px; }
+.terminal-context a { color: var(--accent); text-decoration: none; }
+.danger-action { border-color: #6b2634; color: #fecdd3; background: rgba(107,38,52,.25); }
+.live-idle, .live-closed { color: var(--muted); }
+.live-error { color: var(--danger); border-color: #6b2634; }
+@media (max-width: 1100px) {
+  .terminal-create { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 980px) {
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { display: none; position: fixed; z-index: 30; width: min(86vw, 300px); box-shadow: 20px 0 60px rgba(0,0,0,.45); }
@@ -95,11 +125,16 @@ dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
   .topbar { justify-content: space-between; }
   .menu-button { display: inline-flex; }
   .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .terminal-layout { grid-template-columns: 1fr; }
+  .terminal-session-list { position: static; }
+  .terminal-session-scroll { max-height: 320px; }
 }
 @media (max-width: 680px) {
   main { padding-top: 1.2rem; }
-  .grid-two, .form-grid, .metrics { grid-template-columns: 1fr; }
-  .detail-header { flex-direction: column; }
+  .grid-two, .form-grid, .metrics, .terminal-create { grid-template-columns: 1fr; }
+  .detail-header, .terminal-toolbar { flex-direction: column; align-items: stretch; }
   dl > div, .reference-group { grid-template-columns: 1fr; gap: .2rem; }
+  .terminal-input { grid-template-columns: 1fr; }
+  .terminal-filters input { min-width: 0; width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }

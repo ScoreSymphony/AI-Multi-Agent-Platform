@@ -18,10 +18,18 @@ import type {
   JsonValue,
   ListQuery,
   Page,
+  SearchPage,
+  SearchRequest,
   TaskManagementChanges,
   TimelineItem,
 } from "./types";
 import type { CanonicalReference, ReferenceCollection } from "./references";
+import {
+  buildTerminalStreamUrl,
+  type CanonicalTerminalSession,
+  type CreateTerminalSessionInput,
+  type TerminalDimensions,
+} from "./terminal";
 
 export interface AuthBoundary {
   getAccessToken?: () => Promise<string | null>;
@@ -66,6 +74,10 @@ export class ControlPlaneClient {
 
   readiness(): Promise<HealthStatus> {
     return this.request<HealthStatus>("/readiness");
+  }
+
+  search(query: SearchRequest = {}): Promise<SearchPage> {
+    return this.request<SearchPage>(`/search${toSearchQuery(query)}`);
   }
 
   listProjects(query: ListQuery = {}): Promise<Page<CanonicalProject>> {
@@ -235,6 +247,62 @@ export class ControlPlaneClient {
     return this.request<Page<CanonicalUsageBudget>>(`/usage-budgets${toQuery(query)}`);
   }
 
+  listTerminalSessions(query: ListQuery = {}): Promise<Page<CanonicalTerminalSession>> {
+    return this.request<Page<CanonicalTerminalSession>>(`/terminal-sessions${toQuery(query)}`);
+  }
+
+  getTerminalSession(sessionId: string): Promise<CanonicalTerminalSession> {
+    return this.request<CanonicalTerminalSession>(
+      `/terminal-sessions/${encodeURIComponent(sessionId)}`,
+    );
+  }
+
+  createTerminalSession(
+    projectId: string,
+    input: CreateTerminalSessionInput,
+  ): Promise<CanonicalTerminalSession> {
+    return this.command<CanonicalTerminalSession>("/commands/terminal.session.create", {
+      body: { resource_ref: projectId, ...input },
+    });
+  }
+
+  sendTerminalInput(
+    sessionId: string,
+    data: string,
+    approvalId?: string,
+  ): Promise<CanonicalTerminalSession> {
+    return this.command<CanonicalTerminalSession>("/commands/terminal.session.input", {
+      body: { resource_ref: sessionId, data, approval_id: approvalId },
+    });
+  }
+
+  resizeTerminalSession(
+    sessionId: string,
+    dimensions: TerminalDimensions,
+  ): Promise<CanonicalTerminalSession> {
+    return this.command<CanonicalTerminalSession>("/commands/terminal.session.resize", {
+      body: { resource_ref: sessionId, ...dimensions },
+    });
+  }
+
+  terminateTerminalSession(
+    sessionId: string,
+    reason?: string,
+    approvalId?: string,
+  ): Promise<CanonicalTerminalSession> {
+    return this.command<CanonicalTerminalSession>("/commands/terminal.session.terminate", {
+      body: { resource_ref: sessionId, reason, approval_id: approvalId },
+    });
+  }
+
+  terminalStreamUrl(
+    sessionId: string,
+    afterSequence = 0,
+    pageOrigin?: string,
+  ): string {
+    return buildTerminalStreamUrl(this.baseUrl, sessionId, afterSequence, pageOrigin);
+  }
+
   private command<T>(
     path: string,
     options: { method?: string; body?: unknown } = {},
@@ -332,6 +400,28 @@ function toQuery(query: ListQuery): string {
     params.set(`filter[${field}]`, value);
   }
   if (query.fields?.length) params.set("fields", query.fields.join(","));
+  const text = params.toString();
+  return text ? `?${text}` : "";
+}
+
+function toSearchQuery(query: SearchRequest): string {
+  const params = new URLSearchParams();
+  if (query.q) params.set("q", query.q);
+  if (query.id) params.set("id", query.id);
+  if (query.types?.length) params.set("type", query.types.join(","));
+  if (query.project_id) params.set("project_id", query.project_id);
+  if (query.workspace_id) params.set("workspace_id", query.workspace_id);
+  if (query.statuses?.length) params.set("status", query.statuses.join(","));
+  if (query.tags?.length) params.set("tag", query.tags.join(","));
+  if (query.sources?.length) params.set("source", query.sources.join(","));
+  if (query.providers?.length) params.set("provider", query.providers.join(","));
+  if (query.updated_after) params.set("updated_after", query.updated_after);
+  if (query.updated_before) params.set("updated_before", query.updated_before);
+  if (query.mode) params.set("mode", query.mode);
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
+  if (query.sort) params.set("sort", query.sort);
+  if (query.direction) params.set("direction", query.direction);
   const text = params.toString();
   return text ? `?${text}` : "";
 }
