@@ -58,7 +58,9 @@ def add_search_parser(
     )
     search.add_argument("--updated-after", help="inclusive timezone-aware ISO-8601 lower bound")
     search.add_argument("--updated-before", help="inclusive timezone-aware ISO-8601 upper bound")
-    search.add_argument("--mode", choices=_SEARCH_MODES, help="search mode; semantic/hybrid are optional")
+    search.add_argument(
+        "--mode", choices=_SEARCH_MODES, help="search mode; semantic/hybrid are optional"
+    )
     search.add_argument("--limit", type=int, default=50)
     search.add_argument("--cursor")
     search.add_argument("--sort", choices=_SEARCH_SORTS, default="relevance")
