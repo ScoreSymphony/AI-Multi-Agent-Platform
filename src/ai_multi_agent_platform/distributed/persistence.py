@@ -132,10 +132,7 @@ def _encode_value(value: object) -> JsonValue:
     if isinstance(value, Enum):
         return cast(str, value.value)
     if is_dataclass(value) and not isinstance(value, type):
-        return {
-            item.name: _encode_value(getattr(value, item.name))
-            for item in fields(value)
-        }
+        return {item.name: _encode_value(getattr(value, item.name)) for item in fields(value)}
     if isinstance(value, Mapping):
         encoded: dict[str, JsonValue] = {}
         for key, item in value.items():
@@ -254,8 +251,7 @@ def _resource_snapshot(value: JsonValue) -> ResourceSnapshot:
             "storage_available_bytes",
         ),
         accelerators=tuple(
-            _accelerator(item)
-            for item in _array(_required(data, "accelerators"), "accelerators")
+            _accelerator(item) for item in _array(_required(data, "accelerators"), "accelerators")
         ),
     )
 
