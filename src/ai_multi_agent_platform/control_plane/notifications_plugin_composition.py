@@ -15,6 +15,9 @@ from uuid import uuid4
 from ai_multi_agent_platform.contracts.errors import ContractError
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+from .authentication_hardening import (
+    AuthenticatedControlPlaneHTTP as _BaseAuthenticatedControlPlaneHTTP,
+)
 from .extensions import _command_operation, _list_operation, _read_operation
 from .http import HTTPRequest, HTTPResponse, _header, _page_query, _request_context, _require_json
 from .models import API_VERSION, APIException, api_exception_from_contract
@@ -174,6 +177,14 @@ class ControlPlaneHTTP(_NotificationControlPlaneHTTP):
         return None
 
 
+class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
+    """Authenticate first, then delegate to the current Notification-aware HTTP surface."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._current_http = ControlPlaneHTTP(self._control_plane)
+
+
 def build_openapi(
     *,
     extension_collections: tuple[str, ...] = (),
@@ -292,4 +303,10 @@ def _append_unique(values: tuple[str, ...], additions: tuple[str, ...]) -> tuple
     return tuple(dict.fromkeys((*values, *additions)))
 
 
-__all__ = ["ControlPlane", "ControlPlaneASGI", "ControlPlaneHTTP", "build_openapi"]
+__all__ = [
+    "AuthenticatedControlPlaneHTTP",
+    "ControlPlane",
+    "ControlPlaneASGI",
+    "ControlPlaneHTTP",
+    "build_openapi",
+]
