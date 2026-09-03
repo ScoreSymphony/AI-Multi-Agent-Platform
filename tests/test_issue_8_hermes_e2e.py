@@ -32,7 +32,7 @@ class E2ERequest:
 class E2EHermesTransport:
     def __init__(self) -> None:
         self.calls: list[E2ERequest] = []
-        self._status_reads = 0
+        self.status_reads = 0
 
     async def request_json(
         self,
@@ -51,7 +51,7 @@ class E2EHermesTransport:
                 {"run_id": "run_hermes_e2e", "status": "started"},
             )
         if method == "GET" and url.endswith("/v1/runs/run_hermes_e2e"):
-            self._status_reads += 1
+            self.status_reads += 1
             return HermesHttpResponse(
                 200,
                 {
@@ -123,8 +123,8 @@ def test_kernel_uses_hermes_for_planning_and_reference_executor_for_execution(
         assert run.status.value == "succeeded"
         assert task.status is TaskStatus.SUCCEEDED
         assert (workspace / "artifact.txt").exists()
-        assert any(event.type == "plan.created" for event in history)
-        plan_event = next(event for event in history if event.type == "plan.created")
+        assert any(event.event_type == "plan.created" for event in history)
+        plan_event = next(event for event in history if event.event_type == "plan.created")
         assert any(
             item.namespace == "hermes"
             and item.values["external_run_id"] == "run_hermes_e2e"
@@ -132,7 +132,7 @@ def test_kernel_uses_hermes_for_planning_and_reference_executor_for_execution(
         )
         assert run.run.id.startswith("run_")
         assert run.run.id != "run_hermes_e2e"
-        assert transport._status_reads == 1
+        assert transport.status_reads == 1
 
     asyncio.run(scenario())
 
