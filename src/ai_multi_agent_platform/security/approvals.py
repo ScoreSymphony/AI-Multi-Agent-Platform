@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.domain import Approval, ApprovalStatus, OwnerRef, new_id
+from ai_multi_agent_platform.domain import Approval, ApprovalStatus, OwnerRef, new_id, validate_id
 
 from .authorization import ProposedAction, RiskClassification
 
@@ -140,6 +140,7 @@ class ApprovalService:
         return record
 
     def get(self, approval_id: str) -> ApprovalRecord:
+        validate_id(approval_id, "approval")
         try:
             record = self._records[approval_id]
         except KeyError as exc:
@@ -270,8 +271,15 @@ class ApprovalService:
 
 def _owner_ref(actor_ref: str) -> OwnerRef:
     prefix, separator, raw_id = actor_ref.partition(":")
-    if separator and prefix in {"user", "organization", "team", "service"} and raw_id:
-        return OwnerRef(type=prefix, id=raw_id)  # type: ignore[arg-type]
+    if separator and raw_id:
+        if prefix == "user":
+            return OwnerRef(type="user", id=raw_id)
+        if prefix == "organization":
+            return OwnerRef(type="organization", id=raw_id)
+        if prefix == "team":
+            return OwnerRef(type="team", id=raw_id)
+        if prefix == "service":
+            return OwnerRef(type="service", id=raw_id)
     return OwnerRef(type="service", id=actor_ref)
 
 
