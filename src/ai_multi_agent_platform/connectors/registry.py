@@ -5,7 +5,7 @@ from __future__ import annotations
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import ProviderDescriptor
 
-from .models import ConnectorDefinition
+from .models import ConnectorDefinition, connector_definition_id
 from .provider import ConnectorProvider
 
 
@@ -17,6 +17,14 @@ class ConnectorRegistry:
 
     def register(self, provider: ConnectorProvider) -> ConnectorDefinition:
         definition = provider.definition
+        expected_id = connector_definition_id(definition.connector_type_id, definition.version)
+        if definition.id != expected_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector provider supplied a noncanonical ConnectorDefinition identity",
+                provider_id=provider.descriptor.provider_id,
+                details={"expected_id": expected_id, "actual_id": definition.id},
+            )
         key = (definition.connector_type_id, definition.version)
         if key in self._providers:
             raise ContractError(
