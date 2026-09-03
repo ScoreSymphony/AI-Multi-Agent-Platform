@@ -253,9 +253,7 @@ class ControlPlaneHTTP(_BaseControlPlaneHTTP):
             and response.status == 200
             and isinstance(response.body, dict)
         ):
-            specification = _augment_search_openapi(
-                cast(dict[str, Any], deepcopy(response.body))
-            )
+            specification = _augment_search_openapi(cast(dict[str, Any], deepcopy(response.body)))
             return HTTPResponse(
                 status=response.status,
                 body=cast(dict[str, JsonValue], specification),
