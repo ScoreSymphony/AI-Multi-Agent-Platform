@@ -33,9 +33,7 @@ def document_from_resource(resource: Mapping[str, JsonValue]) -> SearchDocument:
     if resource_type == "project":
         project_id = resource_id
     workspace_id = (
-        resource_id
-        if resource_type == "workspace"
-        else _optional_string(resource, "workspace_id")
+        resource_id if resource_type == "workspace" else _optional_string(resource, "workspace_id")
     )
     status = _optional_string(resource, "status")
     updated_at = _optional_string(resource, "updated_at")
