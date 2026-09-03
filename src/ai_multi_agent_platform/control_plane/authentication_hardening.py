@@ -25,7 +25,7 @@ from .authentication import (
 )
 from .authentication import _optional_datetime, _relative_path, _required_string
 from .http import HTTPRequest, HTTPResponse
-from .models import APIException
+from .models import API_VERSION, APIException
 
 _TOKEN_METHODS = {
     AuthenticationMethod.PERSONAL_ACCESS_TOKEN,
@@ -54,6 +54,21 @@ class AuthenticatedControlPlaneHTTP(_BaseAuthenticatedControlPlaneHTTP):
             secure_cookie=secure_cookie,
         )
         self._hardened_authentication = authentication
+
+    async def handle(self, request: HTTPRequest) -> HTTPResponse:
+        response = await super().handle(request)
+        if (
+            request.method == "GET"
+            and request.path == f"/api/{API_VERSION}/openapi.json"
+            and response.status == 200
+            and isinstance(response.body, dict)
+        ):
+            return HTTPResponse(
+                status=response.status,
+                body=_augment_scoped_credentials_openapi(response.body),
+                headers=response.headers,
+            )
+        return response
 
     def _authenticate_request(
         self,
@@ -254,6 +269,70 @@ def _authorization_target(
 
     action, resource_type = canonical_control_plane_vocabulary(f"{resource_name}:{verb}")
     return action, resource_type, resource_id
+
+
+def _augment_scoped_credentials_openapi(
+    specification: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    document = dict(specification)
+    raw_paths = document.get("paths")
+    if not isinstance(raw_paths, dict):
+        return document
+    paths = dict(raw_paths)
+    path_key = f"/api/{API_VERSION}/auth/credentials"
+    raw_credentials_path = paths.get(path_key)
+    if not isinstance(raw_credentials_path, dict):
+        return document
+    credentials_path = dict(raw_credentials_path)
+    raw_post = credentials_path.get("post")
+    if not isinstance(raw_post, dict):
+        return document
+    post = dict(raw_post)
+
+    scope_properties: dict[str, JsonValue] = {
+        "actions": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Canonical #15 AuthorizationAction values.",
+        },
+        "resource_types": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Canonical #15 ResourceType values.",
+        },
+        "resource_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Optional exact resource IDs allowed by this credential ceiling.",
+        },
+    }
+    properties: dict[str, JsonValue] = {
+        "purpose": {"type": "string"},
+        "expires_at": {"type": "string", "format": "date-time"},
+        "scope": {
+            "type": "object",
+            "description": (
+                "Credential-local restrictive ceiling; it never grants #15 authorization."
+            ),
+            "properties": scope_properties,
+            "additionalProperties": False,
+        },
+    }
+    required: list[JsonValue] = ["purpose"]
+    request_schema: dict[str, JsonValue] = {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": True,
+    }
+    post["requestBody"] = {
+        "required": True,
+        "content": {"application/json": {"schema": request_schema}},
+    }
+    credentials_path["post"] = post
+    paths[path_key] = credentials_path
+    document["paths"] = paths
+    return document
 
 
 def _command(segment: str) -> str | None:
