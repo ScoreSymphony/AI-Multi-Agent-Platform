@@ -9,12 +9,24 @@ from ai_multi_agent_platform.control_plane.extensions import ControlPlane, Resou
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.security import ActorIdentity, ActorType, SecretReference, infer_actor_identity
 
 from .models import Connection, ConnectorDefinition
 from .service import ConnectorService
 
 type ConnectorControlPlaneActorResolver = Callable[[RequestContext], ActorIdentity]
+
+CONNECTOR_DEFINITION_COLLECTION = "connector-definitions"
+CONNECTION_COLLECTION = "connections"
+CONNECTOR_COMMANDS = (
+    "connection.create",
+    "connection.enable",
+    "connection.disable",
+    "connection.remove",
+    "connection.health",
+    "connector.sync",
+)
 
 
 def default_actor_resolver(context: RequestContext) -> ActorIdentity:
@@ -89,16 +101,19 @@ def register_connector_control_plane(
     """
 
     control_plane.register_resource_service(
-        "connector-definitions", ConnectorDefinitionResourceService(connectors)
+        CONNECTOR_DEFINITION_COLLECTION, ConnectorDefinitionResourceService(connectors)
     )
-    control_plane.register_resource_service("connections", ConnectionResourceService(connectors))
+    control_plane.register_resource_service(
+        CONNECTION_COLLECTION, ConnectionResourceService(connectors)
+    )
 
     async def create_connection(
         request: RequestContext,
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        connection = _connection_from_payload(resource_ref, payload)
+        _require_collection(resource_ref, CONNECTION_COLLECTION)
+        connection = _connection_from_payload(new_id("connection"), payload)
         actor = actor_resolver(request)
         created = await connectors.create_connection(
             connection,
@@ -275,7 +290,7 @@ def _connection_resource(connection: Connection) -> dict[str, JsonValue]:
     }
 
 
-def _connection_from_payload(resource_ref: str, payload: dict[str, JsonValue]) -> Connection:
+def _connection_from_payload(connection_id: str, payload: dict[str, JsonValue]) -> Connection:
     allowed = {
         "connector_type_id",
         "connector_version",
@@ -307,7 +322,7 @@ def _connection_from_payload(resource_ref: str, payload: dict[str, JsonValue]) -
     if not isinstance(raw_scopes, list) or any(not isinstance(item, str) for item in raw_scopes):
         raise ContractError(ErrorCode.INVALID_REQUEST, "requested_scopes must be a string array")
     return Connection(
-        id=resource_ref,
+        id=connection_id,
         connector_type_id=_required_string(payload, "connector_type_id"),
         connector_version=_required_string(payload, "connector_version"),
         owner_type=_required_string(payload, "owner_type"),
@@ -357,3 +372,11 @@ def _optional_string(value: JsonValue, field_name: str) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be a non-blank string")
     return value
+
+
+def _require_collection(resource_ref: str, expected: str) -> None:
+    if resource_ref != expected:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"resource_ref must be {expected!r} for create command",
+        )
