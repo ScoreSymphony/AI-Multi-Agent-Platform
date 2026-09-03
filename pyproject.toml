@@ -14,9 +14,15 @@ dependencies = [
   "jsonschema==4.26.0",
 ]
 
+[project.scripts]
+platform = "ai_multi_agent_platform.cli.main:main"
+
 [project.optional-dependencies]
 mcp = [
   "mcp==2.1.1",
+]
+litellm = [
+  "litellm==1.99.0",
 ]
 dev = [
   "build>=1.2,<2",

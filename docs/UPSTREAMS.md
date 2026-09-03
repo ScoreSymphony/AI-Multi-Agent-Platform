@@ -82,29 +82,55 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 - **ADR:** none required for the SDK choice; the canonical architecture explicitly treats MCP as an optional adapter.
 - **Adoption review:** `docs/upstream/MCP_PYTHON_SDK_ADOPTION.md`.
 
+### LiteLLM
+
+- **Purpose:** optional model-gateway compatibility layer for in-process model calls or a separately deployed OpenAI-compatible proxy, behind the platform-owned `ModelProvider` and `ModelRouter` boundaries.
+- **Status:** approved for integration in #11; integrated once the corresponding PR is merged.
+- **Integration category/categories:** optional adapter/library dependency; optional external service.
+- **Canonical upstream repository:** `https://github.com/BerriAI/litellm`.
+- **Pinned version/tag/commit or deployed revision:** `v1.99.0` / `fa647f742d7baefe8eb1181899d9c81b41559772`.
+- **Verified license:** MIT for content outside `enterprise/`; `enterprise/` is separately licensed and is not used or copied by this integration.
+- **License verification date:** 2026-09-03.
+- **Last review date:** 2026-09-03.
+- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.litellm.LiteLLMModelProvider` implements the canonical `ModelProvider`; proxy mode reuses the existing OpenAI-compatible provider transport. The platform `ModelRouter` remains authoritative for canonical routing policy.
+- **Local source path:** `src/ai_multi_agent_platform/adapters/litellm.py` contains platform-owned adapter code only.
+- **Source origin/path:** no LiteLLM source is copied; library mode uses the pinned PyPI dependency and proxy mode targets a separately deployed service.
+- **Modified locally:** no upstream source is vendored or modified.
+- **Required notices / attribution:** installed packages retain upstream license metadata. Do not copy or vendor `enterprise/` under the MIT assumption; any future source redistribution requires a new license/notices review.
+- **Known compatibility constraints:** platform Python >=3.12; LiteLLM `1.99.0` is the explicit SDK compatibility target. Canonical model IDs remain platform-owned and map to LiteLLM/native model strings only inside adapter configuration. Baseline library mode uses direct `acompletion` and intentionally does not enable a second hidden routing/fallback layer.
+- **Security/deployment/resource constraints:** credential values are resolved from environment-variable references and are not exposed through canonical metadata. Proxy authentication does not replace platform authentication/authorization. No LiteLLM telemetry callbacks are enabled by the baseline adapter. Resource and GPU requirements depend on the selected downstream endpoint, not on platform core.
+- **Required for baseline:** no; core imports, model contracts, reference routing and baseline tests must work without the package or proxy installed.
+- **Recurring paid service required:** no; local/self-hosted endpoints are explicitly supported and covered by configuration/tests.
+- **Update/review method:** explicit pinned-version update PR; verify the tag/commit and license boundary, review release/security notes and SDK/proxy compatibility, then run baseline CI without LiteLLM, the isolated LiteLLM compatibility job, adapter contract tests and the real local OpenAI-compatible HTTP fixture.
+- **Exit/replacement strategy:** remove the optional dependency, adapter/configuration and any separately deployed proxy. Canonical Agents, Tasks, model configuration IDs and `ModelRouter` policy remain valid and can target another `ModelProvider` implementation.
+- **ADR:** none required; LiteLLM is deliberately subordinate to the canonical model architecture and is not allowed to redefine routing ownership.
+- **Provenance:** `upstream/litellm.yaml`.
+- **Adoption/mapping review:** `docs/LITELLM_ADAPTER.md`.
+
 ### ScoreSymphony AI-Agent-VPS Forge subsystem
 
-- **Purpose:** source/reference for proven executor, workspace, event/idempotency and recovery behavior reused for issue #9 without importing the legacy Forge lifecycle as platform architecture.
-- **Status:** approved; the platform-owned adapter boundary and regression coverage are merged through PR #129, but no concrete legacy Forge runtime transport is integrated yet.
-- **Integration category/categories:** adapter integration; reference-only influence.
+- **Purpose:** optional execution-only runtime reusing the mature Forge executor/CLI-adapter layer, plus source/reference material for workspace, idempotency, recovery and event behavior harvested for issue #9.
+- **Status:** integrated through the execution-only sidecar at pinned revision `00b821bc94767865457814bf282982ca242a2e10`; the legacy full Forge Task/Project application is explicitly not integrated.
+- **Integration category/categories:** adapter integration; external optional runtime; reference-only influence.
 - **Canonical upstream repository:** `https://github.com/ScoreSymphony/AI-Agent-VPS`.
-- **Pinned version/tag/commit or deployed revision:** `5a9f317e3bab056a4cebe214b03912a9b7ad3824`.
+- **Pinned version/tag/commit or deployed revision:** `00b821bc94767865457814bf282982ca242a2e10`.
 - **Verified license:** MIT.
 - **License verification date:** 2026-09-03.
 - **Last review date:** 2026-09-03.
-- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.forge.ForgeExecutor` behind the canonical `Executor`, with a small platform-owned `ForgeClient` protocol. `ExecutorLifecycleBackend` carries namespaced backend metadata into canonical kernel history.
-- **Local source path:** `src/ai_multi_agent_platform/adapters/forge.py` contains new platform-owned adapter code; no upstream Forge source has been copied.
-- **Source origin/path:** behavior/specification review of `core/forge/`, especially `crates/executors`, `services/src/domain_event_service.rs`, `services/src/recovery.rs`, task-dispatch/recovery code, workspace code and the public API routes.
-- **Modified locally:** no upstream source is presently vendored or modified in this repository.
-- **Required notices / attribution:** no copied-source notice is required for the current implementation. If substantial Forge source is selectively copied later, preserve the upstream MIT copyright/license notice and add file-level provenance before merge.
-- **Known compatibility constraints:** legacy Forge is primarily Rust and owns its own Task/Project/Execution persistence. Those types and lifecycle rules are not canonical. The current legacy HTTP launch path requires a Forge Task and is intentionally rejected as the first concrete executor transport; see `docs/FORGE_TRANSPORT_ASSESSMENT.md`.
-- **Security/deployment/resource constraints:** Forge remains optional. Workspace traversal and artifact boundaries are enforced by the platform adapter; any future process/shell runtime requires explicit policy, environment filtering, sandbox/resource controls and backend authentication without replacing platform authorization.
+- **Platform adapter/boundary:** `ai_multi_agent_platform.adapters.forge.ForgeExecutor` implements the canonical `Executor`; `ai_multi_agent_platform.adapters.forge_http.ForgeHttpClient` implements the platform-owned `ForgeClient` protocol against `forge-executor-sidecar/v1`. `ExecutorLifecycleBackend` carries namespaced backend metadata into canonical kernel history.
+- **Local source path:** `src/ai_multi_agent_platform/adapters/forge.py` and `src/ai_multi_agent_platform/adapters/forge_http.py` are platform-owned code; no upstream Forge source is copied into this repository.
+- **Source origin/path:** runtime at `core/forge/crates/executor-sidecar`, reusing `core/forge/crates/executors`, `cli-adapters`, `git` and `api-types`; behavior/specification review also covered domain-event, recovery, task-dispatch, workspace and legacy API code.
+- **Modified locally:** no upstream source is vendored or modified in this repository; the sidecar is maintained at the canonical upstream repository.
+- **Required notices / attribution:** no copied-source notice is required because no upstream source is vendored here. The upstream repository retains its MIT license metadata; preserve MIT notices if substantial source is copied locally in the future.
+- **Known compatibility constraints:** concrete runtime target is `forge-executor-sidecar/v1` at the pinned revision. Canonical Task/Run/Step/correlation identity and lifecycle remain platform-owned. The legacy Forge task-launch API remains rejected because it requires Forge Task/Project lifecycle ownership. The default validated sidecar executor is `null`; other CLI families require explicit allowlisting and compatibility/security validation.
+- **Security/deployment/resource constraints:** Forge remains optional. The integrated sidecar binds to loopback in its current entrypoint, enforces an executor allowlist, independently validates workspace containment and requires no Forge DB/TaskService/Project/Event services. Shell/process or coding-CLI families require explicit policy, environment filtering, sandbox/resource controls and any required backend authentication before enablement.
 - **Required for baseline:** no; core startup and reference execution remain Forge-independent.
 - **Recurring paid service required:** no.
-- **Update/review method:** compare the pinned source revision before changing the adapter/reuse decisions, review license/security/behavior changes, update `docs/FORGE_REUSE_AUDIT.md`, `docs/FORGE_TRANSPORT_ASSESSMENT.md` and `upstream/forge-ai-agent-vps.yaml`, then run executor contract, Forge regression/integration and full repository CI.
-- **Exit/replacement strategy:** remove the Forge adapter/transport and adapter-private state. Canonical Task/Run/Event/Workspace state requires no migration because it remains platform-owned.
-- **ADR:** none required yet; the architecture deliberately keeps Forge subordinate to existing canonical contracts. A new optional Rust sidecar or other runtime component that materially changes deployment/build topology should receive explicit architecture review.
+- **Update/review method:** compare the pinned runtime revision, review sidecar protocol/license/security and reused executor/CLI-adapter changes, update Forge audit/provenance records, then run executor contracts, kernel/recovery regressions, the real pinned-sidecar integration and full repository CI.
+- **Exit/replacement strategy:** remove the Forge adapter/HTTP transport and sidecar-specific configuration. Canonical Task/Run/Event/Workspace state requires no migration because it remains platform-owned.
+- **ADR:** none required for canonical architecture; the runtime remains an optional subordinate adapter. Any future change that makes the sidecar remote/shared or materially changes deployment/security topology requires explicit architecture review.
 - **Provenance:** `upstream/forge-ai-agent-vps.yaml`.
+- **Completion audit:** `docs/FORGE_REUSE_AUDIT.md`.
 
 ## Current direct build/development dependencies
 
@@ -117,11 +143,12 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | build | development build tool | `>=1.2,<2` | `https://github.com/pypa/build` | MIT | no |
 | jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT | yes; integrated for #12 |
 | mcp | optional MCP transport + CI integration coverage | `==2.1.1` | `https://github.com/modelcontextprotocol/python-sdk` | MIT | yes; optional adapter recorded above |
+| litellm | optional model gateway SDK / proxy compatibility target | `==1.99.0` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed | yes; optional adapter recorded above |
 | pytest | test runner | `>=8.3,<9` | `https://github.com/pytest-dev/pytest` | MIT | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT | no |
 | mypy | static type checking | `>=1.17,<2` | `https://github.com/python/mypy` | MIT | no |
 
-The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Architecture-significant #12 dependencies are pinned directly; their transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
+The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Architecture-significant #11/#12 dependencies are pinned directly; their transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
 
 ## Architecture-upstream entry template
 
