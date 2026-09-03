@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Mapping
+from typing import Never
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import ProviderContract
@@ -121,7 +122,7 @@ class ConnectorProvider(ProviderContract):
 
         self._unsupported("knowledge.ingest")
 
-    def _unsupported(self, operation: str) -> None:
+    def _unsupported(self, operation: str) -> Never:
         raise ContractError(
             ErrorCode.UNSUPPORTED_CAPABILITY,
             f"connector operation {operation!r} is not supported",
