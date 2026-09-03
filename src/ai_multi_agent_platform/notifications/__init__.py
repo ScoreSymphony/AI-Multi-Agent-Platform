@@ -6,6 +6,7 @@ from .delivery import (
     NotificationDeliveryChannel,
     UnavailableDeliveryChannel,
 )
+from .events import NotificationProjectingEventProvider, ProjectionFailureSink
 from .integrations import approval_required_candidate, budget_threshold_candidate
 from .models import (
     Notification,
@@ -44,12 +45,14 @@ __all__ = [
     "NotificationEventSink",
     "NotificationPreference",
     "NotificationPreferenceRepository",
+    "NotificationProjectingEventProvider",
     "NotificationQuery",
     "NotificationRepository",
     "NotificationRule",
     "NotificationService",
     "NotificationSeverity",
     "NotificationState",
+    "ProjectionFailureSink",
     "RecipientRef",
     "RecipientResolver",
     "RecipientType",
