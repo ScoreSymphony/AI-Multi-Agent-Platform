@@ -148,6 +148,22 @@ class ControlPlaneHTTP:
                 correlation_id,
             )
 
+    def prepare_stream_request(
+        self,
+        request: HTTPRequest,
+        *,
+        request_id: str,
+        correlation_id: str,
+    ) -> HTTPRequest | HTTPResponse:
+        """Prepare an SSE request before a RequestContext is constructed.
+
+        The base transport is intentionally a no-op. Authentication wrappers override this
+        hook so event streams cannot bypass the same identity boundary used by normal HTTP
+        requests.
+        """
+
+        return request
+
     async def _projects(
         self,
         request: HTTPRequest,
@@ -475,11 +491,18 @@ class ControlPlaneASGI:
             segments = [segment for segment in relative.split("/") if segment]
             if len(segments) != 4 or segments[0] != "tasks" or segments[2:] != ["events", "stream"]:
                 raise APIException(status=404, code="not_found", message="route not found")
-            context = _request_context(
-                HTTPRequest(method="GET", path=path, headers=headers, query=query),
-                request_id,
-                correlation_id,
+            stream_headers = dict(headers)
+            stream_headers["x-request-id"] = request_id
+            stream_headers["x-correlation-id"] = correlation_id
+            prepared = self._http.prepare_stream_request(
+                HTTPRequest(method="GET", path=path, headers=stream_headers, query=query),
+                request_id=request_id,
+                correlation_id=correlation_id,
             )
+            if isinstance(prepared, HTTPResponse):
+                await _send_response(prepared, send)
+                return
+            context = _request_context(prepared, request_id, correlation_id)
             stream = await self._http._control_plane.subscribe_task_events(
                 context,
                 segments[1],
