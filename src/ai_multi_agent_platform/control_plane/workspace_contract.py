@@ -302,7 +302,7 @@ def _workspace_source_refs(payload: dict[str, JsonValue]) -> tuple[WorkspaceSour
                 ref=_mapping_string(entry, "ref", parent),
                 revision=_mapping_optional_string(entry, "revision", parent),
                 checksum=_mapping_optional_string(entry, "checksum", parent),
-                metadata=cast(dict[str, JsonValue], metadata),
+                metadata=metadata,
             )
         )
     return tuple(refs)
@@ -323,7 +323,7 @@ def _object_list(value: JsonValue, name: str) -> list[dict[str, JsonValue]]:
                 f"{name} entries must be objects",
                 details={"field": f"{name}[{index}]"},
             )
-        result.append(cast(dict[str, JsonValue], item))
+        result.append(item)
     return result
 
 
