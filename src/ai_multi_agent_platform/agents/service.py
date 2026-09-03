@@ -362,7 +362,5 @@ class AgentService:
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
                     "team delegation target is not a member of the same team revision",
-                    details={
-                        "unknown_agent_ids": cast(JsonValue, sorted(unknown_delegates))
-                    },
+                    details={"unknown_agent_ids": cast(JsonValue, sorted(unknown_delegates))},
                 )
