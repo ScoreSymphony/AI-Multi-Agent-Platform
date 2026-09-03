@@ -593,12 +593,14 @@ def _preference_resource(
             "type": preference.recipient.type.value,
             "id": preference.recipient.id,
         },
-        "enabled_categories": sorted(item.value for item in preference.enabled_categories),
+        "enabled_categories": _json_string_list(
+            sorted(item.value for item in preference.enabled_categories)
+        ),
         "minimum_severity": preference.minimum_severity.value,
-        "project_ids": sorted(preference.project_ids),
+        "project_ids": _json_string_list(sorted(preference.project_ids)),
         "muted": preference.muted,
         "in_app_enabled": preference.in_app_enabled,
-        "external_channels": sorted(preference.external_channels),
+        "external_channels": _json_string_list(sorted(preference.external_channels)),
         "aggregate_duplicates": preference.aggregate_duplicates,
         "unread_count": unread_count,
     }
@@ -668,6 +670,13 @@ def _string_items(raw: list[JsonValue], name: str) -> tuple[str, ...]:
             )
         items.append(item)
     return tuple(items)
+
+
+def _json_string_list(values: list[str]) -> list[JsonValue]:
+    result: list[JsonValue] = []
+    for value in values:
+        result.append(value)
+    return result
 
 
 def _boolean(payload: dict[str, JsonValue], name: str, default: bool) -> bool:
