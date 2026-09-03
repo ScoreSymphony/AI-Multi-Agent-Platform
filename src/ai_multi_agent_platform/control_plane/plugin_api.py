@@ -182,7 +182,7 @@ class ControlPlane(_CurrentControlPlane):
                 details={"field": "configuration"},
             )
         registry = self._require_plugin_registry()
-        snapshot = registry.configure(resource_ref, cast(dict[str, JsonValue], configuration))
+        snapshot = registry.configure(resource_ref, configuration)
         return _plugin_resource(registry, snapshot)
 
     async def _plugin_enable_command(
@@ -375,8 +375,9 @@ def _candidate_resource(candidate: DiscoveredPlugin) -> dict[str, JsonValue]:
         "plugin_version": manifest.plugin_version,
         "manifest_version": manifest.manifest_version,
         "install_source": candidate.install_source,
-        "requested_permissions": sorted(
-            permission.value for permission in manifest.requested_permissions
+        "requested_permissions": cast(
+            JsonValue,
+            sorted(permission.value for permission in manifest.requested_permissions),
         ),
         "extension_ids": [extension.extension_id for extension in manifest.extensions],
         "extension_types": [extension.extension_type.value for extension in manifest.extensions],
@@ -437,8 +438,9 @@ def _manifest_document(manifest: PluginManifest) -> dict[str, JsonValue]:
             "maximum": manifest.supported_platform.maximum,
         },
         "extensions": extensions,
-        "requested_permissions": sorted(
-            permission.value for permission in manifest.requested_permissions
+        "requested_permissions": cast(
+            JsonValue,
+            sorted(permission.value for permission in manifest.requested_permissions),
         ),
         "configuration_version": manifest.configuration_version,
         "configuration_schema": deepcopy(manifest.configuration_schema),
