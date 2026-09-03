@@ -29,6 +29,9 @@ describe("SearchPage", () => {
     expect(searchResultPath({ resource_type: "run", resource_id: "run_1" })).toBe(
       "/runs/run_1",
     );
+    expect(searchResultPath({ resource_type: "approval", resource_id: "approval_1" })).toBe(
+      "/approvals/approval_1",
+    );
     expect(searchResultPath({ resource_type: "unknown", resource_id: "unknown_1" })).toBeNull();
   });
 });
