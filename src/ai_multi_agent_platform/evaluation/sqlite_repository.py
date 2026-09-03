@@ -208,7 +208,9 @@ class SqliteEvaluationRepository:
                     ),
                 )
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to persist evaluation run") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to persist evaluation run"
+            ) from exc
 
     def get_run(self, run_id: str) -> EvaluationRun | None:
         try:
@@ -289,7 +291,9 @@ class SqliteEvaluationRepository:
                     ),
                 )
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to persist evaluation result") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to persist evaluation result"
+            ) from exc
 
     def list_results(self, evaluation_run_id: str) -> tuple[EvaluationResult, ...]:
         try:
@@ -303,7 +307,9 @@ class SqliteEvaluationRepository:
                     (evaluation_run_id,),
                 ).fetchall()
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to list evaluation results") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to list evaluation results"
+            ) from exc
         return tuple(self._decode_result(str(row["result_json"])) for row in rows)
 
     def list_case_results(
