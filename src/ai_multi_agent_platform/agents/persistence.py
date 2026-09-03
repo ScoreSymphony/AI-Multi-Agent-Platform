@@ -420,6 +420,9 @@ def _team_profile(value: JsonValue | None) -> AgentTeamProfile:
         shared_capability_ids=_string_tuple(
             data.get("shared_capability_ids"), "shared_capability_ids"
         ),
+        shared_resource_refs=_string_tuple(
+            data.get("shared_resource_refs", []), "shared_resource_refs"
+        ),
         max_parallel_agents=_optional_int(data, "max_parallel_agents"),
         max_steps=_optional_int(data, "max_steps"),
         unavailable_member_policy=UnavailableMemberPolicy(
