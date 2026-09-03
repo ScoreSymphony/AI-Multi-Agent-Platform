@@ -114,7 +114,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         scopes=scopes,
         authorization=authorization,
         workspace_provider=workspaces,
-        health_providers=(orchestrator, lifecycle, files, workspaces),
+        health_providers=(orchestrator, lifecycle, files),
     )
     http = AuthenticatedControlPlaneHTTP(
         control_plane,
