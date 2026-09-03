@@ -36,7 +36,12 @@ of issue #44. `docs/CONNECTORS.md` is the normative design explanation for this 
   platform-owned.
 - Provider-native Connection/account identifiers are namespaced adapter metadata rather than
   canonical IDs; credential-looking adapter metadata is rejected.
-- Secret values are not Connection fields or northbound connector payloads.
+- Backend-private `adapter_metadata` remains forbidden as a northbound Control Plane field. Only the
+  reviewed namespaced subset is exposed publicly as `source_metadata` for ConnectorDefinitions and
+  `account_metadata` for Connections.
+- Secret values are not Connection fields or northbound connector payloads. The canonical
+  ConnectorService rejects embedded credentials in endpoint metadata even when callers bypass the
+  Control Plane, and event-subscription configuration is subject to the same boundary.
 - External connector actions are not exposed as a generic Control Plane execution command; they use
   the canonical capability invocation pipeline.
 - Authorization evaluates the actual Connection owner/project/organization scope; Control Plane
@@ -62,6 +67,7 @@ Tests cover:
 
 - connection create/configure/disable/re-enable;
 - missing/invalid credential reference handling;
+- direct ConnectorService rejection of credential-bearing endpoint metadata;
 - health failure and recovery;
 - resource list/read and safe namespaced serialization;
 - connector action through CapabilityRegistry/CapabilityInvoker;
@@ -69,14 +75,15 @@ Tests cover:
 - Connection Control Plane list/get visibility with project-scoped #15 policy;
 - event provenance and deduplication;
 - unsupported event subscription/unsubscription and webhook-normalization hooks;
+- subscription configuration credential rejection before provider dispatch;
 - synchronization checkpoint resume plus explicit resync and rebuild;
 - adapter removal with historical reference preservation;
 - local-only operation without automation/broker/plugin loader;
 - Control Plane resource/lifecycle exposure;
 - server-side allocation of canonical Connection IDs;
-- restart-stable canonical ConnectorDefinition identity;
-- serialization of safe namespaced ConnectorDefinition source metadata and Connection account
-  metadata;
+- restart-stable canonical ConnectorDefinition identity and registry rejection of adapter-private IDs;
+- serialization of safe namespaced ConnectorDefinition `source_metadata` and Connection
+  `account_metadata` without weakening the Control Plane private-payload guard;
 - rejection of plaintext credential fields including nested endpoint metadata;
 - explicit failure semantics for unsupported search/event/file/knowledge provider hooks.
 
