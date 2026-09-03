@@ -55,9 +55,7 @@ class ConnectorProvider(ProviderContract):
         """Refresh/read safe metadata for one external resource reference."""
 
     @abstractmethod
-    async def invoke_action(
-        self, invocation: ConnectorActionInvocation
-    ) -> ConnectorActionResult:
+    async def invoke_action(self, invocation: ConnectorActionInvocation) -> ConnectorActionResult:
         """Invoke one connector action behind canonical policy/capability paths."""
 
     @abstractmethod
