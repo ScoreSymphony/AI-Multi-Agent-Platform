@@ -29,6 +29,7 @@ from .runtime import ExtensionBinder, ExtensionRegistration, PluginContext, Plug
 @dataclass(slots=True)
 class _PluginRecord:
     manifest: PluginManifest
+    install_source: str
     state: PluginState = PluginState.INSTALLED
     compatibility: CompatibilityState = CompatibilityState.COMPATIBLE
     health: PluginHealth = PluginHealth.UNKNOWN
@@ -58,13 +59,27 @@ class PluginRegistry:
         self._plugins: dict[str, _PluginRecord] = {}
         self._extension_owners: dict[str, str] = {}
 
-    def install(self, manifest: PluginManifest) -> PluginSnapshot:
+    def install(
+        self,
+        manifest: PluginManifest,
+        *,
+        install_source: str | None = None,
+    ) -> PluginSnapshot:
         if manifest.plugin_id in self._plugins:
             raise ContractError(
                 ErrorCode.CONFLICT, f"plugin {manifest.plugin_id!r} is already installed"
             )
         self._validate_compatibility(manifest)
-        self._plugins[manifest.plugin_id] = _PluginRecord(manifest=deepcopy(manifest))
+        resolved_install_source = install_source or manifest.provenance.source
+        if not resolved_install_source.strip():
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "plugin install source must be non-blank",
+            )
+        self._plugins[manifest.plugin_id] = _PluginRecord(
+            manifest=deepcopy(manifest),
+            install_source=resolved_install_source,
+        )
         return self.get(manifest.plugin_id)
 
     def configure(self, plugin_id: str, configuration: dict[str, JsonValue]) -> PluginSnapshot:
@@ -230,6 +245,7 @@ class PluginRegistry:
             dependencies=tuple(dependency.plugin_id for dependency in manifest.dependencies),
             provenance_source=manifest.provenance.source,
             provenance_license=manifest.provenance.license,
+            install_source=record.install_source,
             configuration_version=manifest.configuration_version,
             state_version=manifest.state_version,
             configured=record.configured,
