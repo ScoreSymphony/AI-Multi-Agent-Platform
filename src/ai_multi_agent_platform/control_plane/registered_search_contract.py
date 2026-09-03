@@ -6,7 +6,7 @@ from dataclasses import replace
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
+from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.search import SearchDocument, SearchResult, document_from_resource
 
 from .extensions import _singular, _validate_resources
