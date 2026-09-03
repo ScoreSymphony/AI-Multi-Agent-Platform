@@ -179,6 +179,54 @@ def membership_attention_candidate(
     )
 
 
+def canonical_attention_candidate(
+    *,
+    category: NotificationCategory,
+    recipient: RecipientRef,
+    source: SourceRef,
+    attention: str,
+    title: str,
+    severity: NotificationSeverity = NotificationSeverity.WARNING,
+    project_id: str | None = None,
+    workspace_id: str | None = None,
+    task_id: str | None = None,
+    run_id: str | None = None,
+    node_id: str | None = None,
+    automation_id: str | None = None,
+    correlation_id: str | None = None,
+    causation_id: str | None = None,
+) -> NotificationCandidate:
+    """Project a canonical attention signal without taking ownership of its source lifecycle.
+
+    This is the narrow integration seam for canonical domains whose lifecycle vocabulary belongs
+    elsewhere, including agent-input, Node/Worker, Automation, security and Connector events.
+    The source domain supplies the canonical source reference, recipient and attention label.
+    """
+
+    if not attention.strip() or not title.strip():
+        raise ValueError("canonical attention/title must not be blank")
+    return NotificationCandidate(
+        category=category,
+        severity=severity,
+        title=title,
+        summary={"attention": attention},
+        recipient=recipient,
+        source=source,
+        project_id=project_id,
+        workspace_id=workspace_id,
+        task_id=task_id,
+        run_id=run_id,
+        node_id=node_id,
+        automation_id=automation_id,
+        resource_ref=source,
+        aggregation_key=(
+            f"{category.value}:{source.resource_type}:{source.resource_id}:{attention}"
+        ),
+        correlation_id=correlation_id,
+        causation_id=causation_id,
+    )
+
+
 def budget_threshold_candidate(
     event: BudgetThresholdEvent,
     *,
