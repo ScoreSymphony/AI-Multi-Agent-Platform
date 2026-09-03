@@ -13,6 +13,9 @@ from ai_multi_agent_platform.control_plane import (
     DELIVERY_COLLECTION,
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
+    NOTIFICATION_COLLECTION,
+    NOTIFICATION_COMMANDS,
+    NOTIFICATION_PREFERENCE_COLLECTION,
     PLATFORM_COLLECTIONS,
     ControlPlane,
     ControlPlaneHTTP,
@@ -74,6 +77,21 @@ def _assert_page(body: object, *, total: int) -> list[object]:
     return items
 
 
+def _manifest_resources(*extensions: str) -> list[str]:
+    return list(PLATFORM_COLLECTIONS) + [
+        DELIVERY_COLLECTION,
+        AUTOMATION_COLLECTION,
+        *extensions,
+        "timeline",
+        NOTIFICATION_COLLECTION,
+        NOTIFICATION_PREFERENCE_COLLECTION,
+    ]
+
+
+def _manifest_commands(*extensions: str) -> list[str]:
+    return [*sorted((*AUTOMATION_COMMANDS, *extensions)), *NOTIFICATION_COMMANDS]
+
+
 def test_issue_32_foundation_is_separate_from_later_implemented_domains() -> None:
     assert FOUNDATION_COLLECTIONS == (
         "projects",
@@ -90,30 +108,36 @@ def test_issue_32_foundation_is_separate_from_later_implemented_domains() -> Non
     assert CURRENT_COLLECTIONS == PLATFORM_COLLECTIONS + (
         AUTOMATION_COLLECTION,
         DELIVERY_COLLECTION,
+        NOTIFICATION_COLLECTION,
+        NOTIFICATION_PREFERENCE_COLLECTION,
     )
 
 
-def test_manifest_and_openapi_include_automation_without_speculative_future_domains() -> None:
+def test_manifest_and_openapi_include_implemented_domains_without_speculative_future_domains() -> None:
     async def scenario() -> None:
         control_plane, http = _stack()
         manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1"))
         assert manifest.status == 200
         assert isinstance(manifest.body, dict)
+        # Built-in private Notification resources deliberately stay out of generic extension
+        # discovery/Search even though they are present in the canonical manifest.
         assert control_plane.registered_collections == (
             DELIVERY_COLLECTION,
             AUTOMATION_COLLECTION,
         )
-        assert manifest.body["resources"] == list(PLATFORM_COLLECTIONS) + [
-            DELIVERY_COLLECTION,
-            AUTOMATION_COLLECTION,
-            "timeline",
-        ]
-        assert manifest.body["commands"] == sorted(AUTOMATION_COMMANDS)
+        assert manifest.body["resources"] == _manifest_resources()
+        assert manifest.body["commands"] == _manifest_commands()
 
         specification = build_openapi()
         paths = specification["paths"]
         assert isinstance(paths, dict)
-        for collection in (*PLATFORM_COLLECTIONS, AUTOMATION_COLLECTION, DELIVERY_COLLECTION):
+        for collection in (
+            *PLATFORM_COLLECTIONS,
+            AUTOMATION_COLLECTION,
+            DELIVERY_COLLECTION,
+            NOTIFICATION_COLLECTION,
+            NOTIFICATION_PREFERENCE_COLLECTION,
+        ):
             assert f"/api/v1/{collection}" in paths
         assert "/api/v1/commands/{command}" in paths
         assert "/api/v1/search" in paths
@@ -146,6 +170,13 @@ def test_manifest_and_openapi_include_automation_without_speculative_future_doma
             AUTOMATION_COLLECTION,
             DELIVERY_COLLECTION,
         ]
+        assert specification["x-notifications"] == {
+            "collections": [NOTIFICATION_COLLECTION, NOTIFICATION_PREFERENCE_COLLECTION],
+            "commands": list(NOTIFICATION_COMMANDS),
+            "visibility": "recipient-scoped",
+            "search_indexed": False,
+            "source_of_truth": False,
+        }
 
         composed_openapi = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
         assert composed_openapi.status == 200
@@ -154,10 +185,13 @@ def test_manifest_and_openapi_include_automation_without_speculative_future_doma
         assert isinstance(composed_paths, dict)
         assert f"/api/v1/{AUTOMATION_COLLECTION}" in composed_paths
         assert f"/api/v1/{DELIVERY_COLLECTION}" in composed_paths
+        assert f"/api/v1/{NOTIFICATION_COLLECTION}" in composed_paths
+        assert f"/api/v1/{NOTIFICATION_PREFERENCE_COLLECTION}" in composed_paths
         assert "/api/v1/commands/{command}" in composed_paths
         assert "/api/v1/search" in composed_paths
         assert composed_openapi.body["x-registered-extension-collections"] == []
         assert composed_openapi.body["x-registered-extension-commands"] == []
+        assert composed_openapi.body["x-notifications"]["search_indexed"] is False
 
     asyncio.run(scenario())
 
@@ -182,12 +216,7 @@ def test_registered_extension_resource_updates_manifest_openapi_and_routes() -> 
         manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1"))
         assert manifest.status == 200
         assert isinstance(manifest.body, dict)
-        assert manifest.body["resources"] == list(PLATFORM_COLLECTIONS) + [
-            DELIVERY_COLLECTION,
-            AUTOMATION_COLLECTION,
-            "widgets",
-            "timeline",
-        ]
+        assert manifest.body["resources"] == _manifest_resources("widgets")
 
         openapi_response = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
         assert openapi_response.status == 200
@@ -196,6 +225,7 @@ def test_registered_extension_resource_updates_manifest_openapi_and_routes() -> 
         assert isinstance(paths, dict)
         assert "/api/v1/widgets" in paths
         assert "/api/v1/widgets/{resource_id}" in paths
+        assert f"/api/v1/{NOTIFICATION_COLLECTION}" in paths
         assert "/api/v1/search" in paths
         assert openapi_response.body["x-registered-extension-collections"] == ["widgets"]
 
@@ -266,7 +296,7 @@ def test_registered_command_receives_actor_correlation_and_idempotency_context()
 
         manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1"))
         assert isinstance(manifest.body, dict)
-        assert manifest.body["commands"] == sorted((*AUTOMATION_COMMANDS, "widget.refresh"))
+        assert manifest.body["commands"] == _manifest_commands("widget.refresh")
 
         openapi_response = await http.handle(HTTPRequest(method="GET", path="/api/v1/openapi.json"))
         assert isinstance(openapi_response.body, dict)
@@ -331,7 +361,7 @@ def test_extension_operations_are_authorized_and_private_fields_are_rejected() -
     asyncio.run(scenario())
 
 
-def test_extension_registration_rejects_existing_and_automation_routes() -> None:
+def test_extension_registration_rejects_existing_and_builtin_routes() -> None:
     control_plane, _ = _stack()
     service = InMemoryResourceService()
 
@@ -342,6 +372,8 @@ def test_extension_registration_rejects_existing_and_automation_routes() -> None
         "commands",
         AUTOMATION_COLLECTION,
         DELIVERY_COLLECTION,
+        NOTIFICATION_COLLECTION,
+        NOTIFICATION_PREFERENCE_COLLECTION,
     ):
         with pytest.raises(ValueError):
             control_plane.register_resource_service(reserved, service)
@@ -360,3 +392,5 @@ def test_extension_registration_rejects_existing_and_automation_routes() -> None
         control_plane.register_command("Bad Command", handler)
     with pytest.raises(ValueError):
         control_plane.register_command("automation.create", handler)
+    with pytest.raises(ValueError):
+        control_plane.register_command(NOTIFICATION_COMMANDS[0], handler)
