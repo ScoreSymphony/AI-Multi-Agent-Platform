@@ -240,7 +240,7 @@ def test_install_refuses_stale_or_uninspected_manifest_digest() -> None:
         )
         assert response.status == 409
         assert isinstance(response.body, dict)
-        assert response.body["error"]["code"] == "conflict"
+        assert response.body["code"] == "conflict"
         assert registry.list_plugins() == ()
 
     asyncio.run(scenario())
@@ -272,7 +272,7 @@ def test_enable_requires_authoritative_permission_resolution() -> None:
         )
         assert response.status == 503
         assert isinstance(response.body, dict)
-        assert response.body["error"]["code"] == "unavailable"
+        assert response.body["code"] == "unavailable"
         assert registry.get(plugin_id).granted_permissions == ()
 
     asyncio.run(scenario())
