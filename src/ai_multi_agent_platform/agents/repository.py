@@ -189,10 +189,22 @@ class InMemoryAgentRepository:
                 f"agent run not found: {record.agent_run_id}",
             )
         previous = self._agent_runs[record.agent_run_id]
-        if record.agent != previous.agent or record.run_id != previous.run_id:
+        if (
+            record.run_id != previous.run_id
+            or record.task_id != previous.task_id
+            or record.agent != previous.agent
+            or record.team != previous.team
+            or record.selected_model_config_id != previous.selected_model_config_id
+            or record.selected_provider_id != previous.selected_provider_id
+            or record.capability_ids != previous.capability_ids
+            or record.capability_versions != previous.capability_versions
+            or record.orchestrator_adapter_id != previous.orchestrator_adapter_id
+            or record.orchestrator_runtime_ref != previous.orchestrator_runtime_ref
+            or record.started_at != previous.started_at
+        ):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
-                "agent run identity and pinned Agent revision are immutable",
+                "agent run execution identity and start-time pins are immutable",
             )
         self._agent_runs[record.agent_run_id] = record
 
