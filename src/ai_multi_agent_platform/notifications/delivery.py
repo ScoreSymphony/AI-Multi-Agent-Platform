@@ -145,9 +145,7 @@ class InMemoryDeliveryAttemptRepository:
         notification_id: str,
     ) -> tuple[DeliveryAttempt, ...]:
         validate_id(notification_id, "notification")
-        items = [
-            item for item in self._items.values() if item.notification_id == notification_id
-        ]
+        items = [item for item in self._items.values() if item.notification_id == notification_id]
         items.sort(key=lambda item: (item.channel, item.attempt, item.attempted_at, item.id))
         return tuple(items)
 
