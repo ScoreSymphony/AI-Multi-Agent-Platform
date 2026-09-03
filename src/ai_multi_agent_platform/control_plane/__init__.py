@@ -1,6 +1,5 @@
 """Versioned platform-owned northbound Control Plane."""
 
-from .authentication_hardening import AuthenticatedControlPlaneHTTP
 from .automation_api import (
     AUTOMATION_COLLECTION,
     AUTOMATION_COMMANDS,
@@ -33,6 +32,7 @@ from .notifications_composition import (
     NOTIFICATION_PREFERENCE_COLLECTION,
 )
 from .notifications_plugin_composition import (
+    AuthenticatedControlPlaneHTTP,
     ControlPlane,
     ControlPlaneASGI,
     ControlPlaneHTTP,
