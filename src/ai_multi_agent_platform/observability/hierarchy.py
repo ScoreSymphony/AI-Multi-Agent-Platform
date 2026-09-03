@@ -15,6 +15,7 @@ from .exporters import SpanHandle, Telemetry
 from .models import (
     FailureClassification,
     FailureComponent,
+    SpanLink,
     TelemetryContext,
     TelemetryOutcome,
     TelemetrySeverity,
@@ -26,12 +27,12 @@ T = TypeVar("T")
 
 
 class TraceHierarchy:
-    """Own parent/child span composition without owning any platform lifecycle state.
+    """Own parent/child and async-link composition without owning lifecycle state.
 
     The hierarchy prefers the currently active child span for nested operations,
     then falls back to canonical Run and Task anchors created by the foundation
-    instrumentation. This lets later Agent, Model, Tool and Worker domains attach
-    telemetry without changing Task/Run ownership.
+    instrumentation. Detached asynchronous work can instead reference one or more
+    prior spans using links without inventing a false parent/child relationship.
     """
 
     def __init__(self, telemetry: Telemetry) -> None:
@@ -86,6 +87,8 @@ class TraceHierarchy:
             operation=operation,
             attributes=attributes,
             parent_override=None,
+            resolve_parent=True,
+            links=(),
         )
 
     async def observe_remote(
@@ -118,6 +121,46 @@ class TraceHierarchy:
             operation=operation,
             attributes=attributes,
             parent_override=remote_parent,
+            resolve_parent=False,
+            links=(),
+        )
+
+    async def observe_linked(
+        self,
+        *,
+        carriers: tuple[TraceCarrier, ...],
+        span_name: str,
+        metric_prefix: str,
+        event_prefix: str,
+        component: FailureComponent,
+        context: TelemetryContext,
+        operation: Callable[[], Awaitable[T]],
+        attributes: dict[str, JsonValue] | None = None,
+    ) -> T:
+        """Observe detached/fan-in async work with links instead of false parentage."""
+
+        if not carriers:
+            raise ValueError("at least one trace carrier is required for linked async work")
+        links = tuple(
+            SpanLink(
+                trace_id=carrier.trace_id,
+                span_id=carrier.parent_span_id,
+                context=carrier.child_context(),
+                attributes={"relation": "async_link"},
+            )
+            for carrier in carriers
+        )
+        return await self._observe(
+            span_name=span_name,
+            metric_prefix=metric_prefix,
+            event_prefix=event_prefix,
+            component=component,
+            context=context,
+            operation=operation,
+            attributes=attributes,
+            parent_override=None,
+            resolve_parent=False,
+            links=links,
         )
 
     async def _observe(
@@ -131,10 +174,19 @@ class TraceHierarchy:
         operation: Callable[[], Awaitable[T]],
         attributes: dict[str, JsonValue] | None,
         parent_override: SpanHandle | None,
+        resolve_parent: bool,
+        links: tuple[SpanLink, ...],
     ) -> T:
-        parent = parent_override or self.parent_for(context)
+        parent = parent_override
+        if parent is None and resolve_parent:
+            parent = self.parent_for(context)
         effective_context = self._inherit_context(context, parent.context if parent else None)
-        span = self.telemetry.start_span(span_name, context=effective_context, parent=parent)
+        span = self.telemetry.start_span(
+            span_name,
+            context=effective_context,
+            parent=parent,
+            links=links,
+        )
         token = self._active.set(span)
         safe_attributes = dict(attributes or {})
         self.telemetry.metric(f"{metric_prefix}.calls", 1.0, context=effective_context)
