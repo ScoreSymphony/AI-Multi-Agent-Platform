@@ -165,9 +165,7 @@ def test_worker_dispatch_usage_is_additive_and_attributed() -> None:
         ).total
         == 1.0
     )
-    duration = service.query(
-        UsageQuery(metric_type="worker.dispatch.duration", unit="seconds")
-    )[0]
+    duration = service.query(UsageQuery(metric_type="worker.dispatch.duration", unit="seconds"))[0]
     assert duration.scope.worker_id == "worker-a"
     assert duration.scope.node_id == "node-a"
 
@@ -289,9 +287,7 @@ def test_latest_control_plane_aggregates_remain_separate_per_worker_scope() -> N
                 source="worker-provider",
                 quantity=value,
                 aggregation_mode=AggregationMode.LATEST,
-                scope=UsageScope(
-                    worker_id=worker_id, owner_type="user", owner_id="alice"
-                ),
+                scope=UsageScope(worker_id=worker_id, owner_type="user", owner_id="alice"),
             )
         )
     resources = asyncio.run(
