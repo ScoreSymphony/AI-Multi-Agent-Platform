@@ -275,7 +275,7 @@ def _definition_resource(definition: ConnectorDefinition) -> dict[str, JsonValue
         "event_types": list(definition.event_types),
         "configuration_schema": dict(definition.configuration_schema),
         "health_semantics": dict(definition.health_semantics),
-        "adapter_metadata": _adapter_metadata(definition.adapter_metadata),
+        "source_metadata": _adapter_metadata(definition.adapter_metadata),
     }
 
 
@@ -296,7 +296,7 @@ def _connection_resource(connection: Connection) -> dict[str, JsonValue]:
         "project_id": connection.project_id,
         "organization_id": connection.organization_id,
         "endpoint_metadata": endpoint_metadata,
-        "adapter_metadata": _adapter_metadata(connection.adapter_metadata),
+        "account_metadata": _adapter_metadata(connection.adapter_metadata),
         "secret_references": [reference.to_dict() for reference in connection.secret_references],
         "requested_scopes": list(connection.requested_scopes),
         "granted_scopes": list(connection.granted_scopes),
