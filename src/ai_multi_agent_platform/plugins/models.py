@@ -23,6 +23,7 @@ class ExtensionType(StrEnum):
     FILE_PROVIDER = "file_provider"
     KNOWLEDGE_PROVIDER = "knowledge_provider"
     EVENT_PROVIDER = "event_provider"
+    TRANSPORT_PROVIDER = "transport_provider"
     AUTHORIZATION_PROVIDER = "authorization_provider"
     OBSERVABILITY_EXPORTER = "observability_exporter"
     AUTOMATION_PROVIDER = "automation_provider"
@@ -31,6 +32,7 @@ class ExtensionType(StrEnum):
     WORKER_PROVIDER = "worker_provider"
     CONNECTOR_PROVIDER = "connector_provider"
     FRONTEND_EXTENSION = "frontend_extension"
+    CONFIGURATION_EXTENSION = "configuration_extension"
 
 
 class PluginPermission(StrEnum):
@@ -148,6 +150,7 @@ class PluginManifest:
     author: str
     provenance: PluginProvenance
     extensions: tuple[PluginExtensionSpec, ...]
+    capabilities: tuple[str, ...] = ()
     supported_platform: VersionRange = field(default_factory=VersionRange)
     manifest_version: str = PLUGIN_MANIFEST_VERSION
     requested_permissions: frozenset[PluginPermission] = frozenset()
@@ -170,6 +173,10 @@ class PluginManifest:
         _require_non_blank(self.manifest_version, "manifest_version")
         _require_numeric_version(self.configuration_version, "configuration_version")
         _require_numeric_version(self.state_version, "state_version")
+        for capability in self.capabilities:
+            _require_id(capability, "capability")
+        if len(set(self.capabilities)) != len(self.capabilities):
+            raise ValueError("plugin manifest contains duplicate capabilities")
         extension_ids = [extension.extension_id for extension in self.extensions]
         if len(set(extension_ids)) != len(extension_ids):
             raise ValueError("plugin manifest contains duplicate extension IDs")

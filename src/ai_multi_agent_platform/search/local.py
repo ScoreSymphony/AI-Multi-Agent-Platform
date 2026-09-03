@@ -111,6 +111,35 @@ def _metadata_matches(document: SearchDocument, query: SearchQuery) -> bool:
             return False
         if query.updated_before is not None and updated_at > query.updated_before:
             return False
+    if query.priorities and document.priority not in query.priorities:
+        return False
+    if query.due_after is not None or query.due_before is not None:
+        due_at = document.due_at_datetime
+        if due_at is None:
+            return False
+        if query.due_after is not None and due_at < query.due_after:
+            return False
+        if query.due_before is not None and due_at > query.due_before:
+            return False
+    if query.assignment_state is not None:
+        assigned = document.responsible_id is not None or document.agent_assignment_id is not None
+        if query.assignment_state == "assigned" and not assigned:
+            return False
+        if query.assignment_state == "unassigned" and assigned:
+            return False
+    if query.responsible_id is not None and document.responsible_id != query.responsible_id:
+        return False
+    if (
+        query.agent_assignment_id is not None
+        and document.agent_assignment_id != query.agent_assignment_id
+    ):
+        return False
+    if query.blocked is not None and document.blocked is not query.blocked:
+        return False
+    if query.overdue is not None and document.overdue is not query.overdue:
+        return False
+    if query.dependency_id is not None and query.dependency_id not in document.dependency_ids:
+        return False
     return True
 
 
