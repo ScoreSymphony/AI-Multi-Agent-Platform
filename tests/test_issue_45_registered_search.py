@@ -20,10 +20,19 @@ from ai_multi_agent_platform.testing import (
 
 
 class ExtensionFilteringAuthorization(FakeAuthorizationProvider):
+    def __init__(self, denied_project_id: str) -> None:
+        super().__init__()
+        self.denied_project_id = denied_project_id
+
     async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision:
         self.calls.append(request)
         if request.action == "agent-team:list":
             return AuthorizationDecision(allowed=False, reason="team-hidden")
+        if (
+            request.action == "agent:list"
+            and request.context.project_id == self.denied_project_id
+        ):
+            return AuthorizationDecision(allowed=False, reason="project-hidden")
         return AuthorizationDecision(allowed=True, reason="visible")
 
 
@@ -91,10 +100,12 @@ def test_registered_agent_shape_maps_to_canonical_search_document() -> None:
 
 def test_registered_resources_are_searchable_with_canonical_collection_authorization() -> None:
     async def scenario() -> None:
-        project_id = new_id("project")
+        visible_project_id = new_id("project")
+        hidden_project_id = new_id("project")
         agent_id = "agent_search_visible"
+        hidden_agent_id = "agent_search_project_hidden"
         team_id = "agent_team_search_hidden"
-        authorization = ExtensionFilteringAuthorization()
+        authorization = ExtensionFilteringAuthorization(hidden_project_id)
         control_plane, http = _control_plane(
             authorization,
             resources={
@@ -103,7 +114,7 @@ def test_registered_resources_are_searchable_with_canonical_collection_authoriza
                         {
                             "id": agent_id,
                             "type": "agent",
-                            "project_id": project_id,
+                            "project_id": visible_project_id,
                             "owner_ref": {"type": "user", "id": "owner-1"},
                             "current_revision": 3,
                             "updated_at": "2026-09-03T16:10:00+00:00",
@@ -115,6 +126,21 @@ def test_registered_resources_are_searchable_with_canonical_collection_authoriza
                                 }
                             },
                         },
+                        {
+                            "id": hidden_agent_id,
+                            "type": "agent",
+                            "project_id": hidden_project_id,
+                            "owner_ref": {"type": "user", "id": "owner-2"},
+                            "current_revision": 1,
+                            "updated_at": "2026-09-03T16:10:30+00:00",
+                            "revision": {
+                                "profile": {
+                                    "name": "Search Hidden Project Agent",
+                                    "role": "researcher",
+                                    "description": "Must not leak across project scope.",
+                                }
+                            },
+                        },
                     )
                 ),
                 "agent-teams": InMemoryResourceService(
@@ -122,7 +148,7 @@ def test_registered_resources_are_searchable_with_canonical_collection_authoriza
                         {
                             "id": team_id,
                             "type": "agent_team",
-                            "project_id": project_id,
+                            "project_id": visible_project_id,
                             "owner_ref": {"type": "team", "id": "secret-team"},
                             "current_revision": 1,
                             "updated_at": "2026-09-03T16:11:00+00:00",
@@ -155,9 +181,15 @@ def test_registered_resources_are_searchable_with_canonical_collection_authoriza
         assert result["canonical_ref"] == f"/api/v1/agents/{agent_id}"
         assert result["access"] == "authorized"
         serialized = repr(response.body)
+        assert hidden_agent_id not in serialized
+        assert "Search Hidden Project Agent" not in serialized
         assert team_id not in serialized
         assert "Search Secret Team" not in serialized
         assert any(call.action == "agent:list" for call in authorization.calls)
+        assert any(
+            call.action == "agent:list" and call.context.project_id == hidden_project_id
+            for call in authorization.calls
+        )
         assert any(call.action == "agent-team:list" for call in authorization.calls)
 
         exact = await http.handle(
@@ -171,8 +203,20 @@ def test_registered_resources_are_searchable_with_canonical_collection_authoriza
         assert isinstance(exact.body, dict)
         assert exact.body["total"] == 1
 
+        hidden_exact = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/search",
+                query={"id": hidden_agent_id, "type": "agent"},
+            )
+        )
+        assert hidden_exact.status == 200
+        assert isinstance(hidden_exact.body, dict)
+        assert hidden_exact.body["total"] == 0
+        assert hidden_agent_id not in repr(hidden_exact.body)
+
         rebuilt = await control_plane.rebuild_search_index()
-        assert rebuilt == 2
+        assert rebuilt == 3
 
     asyncio.run(scenario())
 
