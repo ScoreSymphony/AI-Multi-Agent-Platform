@@ -67,12 +67,20 @@ class JsonAgentRepository(InMemoryAgentRepository):
         super().update_agent(definition, revision)
         self._save()
 
+    def delete_agent(self, agent_id: str) -> None:
+        super().delete_agent(agent_id)
+        self._save()
+
     def create_team(self, definition: AgentTeamDefinition, revision: AgentTeamRevision) -> None:
         super().create_team(definition, revision)
         self._save()
 
     def update_team(self, definition: AgentTeamDefinition, revision: AgentTeamRevision) -> None:
         super().update_team(definition, revision)
+        self._save()
+
+    def delete_team(self, team_id: str) -> None:
+        super().delete_team(team_id)
         self._save()
 
     def create_agent_run(self, record: AgentRunRecord) -> None:
