@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -30,13 +31,19 @@ from .task_management_api import ControlPlaneHTTP as _TaskManagementControlPlane
 from .task_management_api import build_openapi as _build_task_management_openapi
 from .workspace_contract import _augment_workspace_openapi
 
+INSECURE_CONTROL_PLANE_ENV = "AI_MULTI_AGENT_PLATFORM_ALLOW_INSECURE_CONTROL_PLANE"
+
 
 class ControlPlane(
     AuthorizationBoundaryHardeningMixin,
     _RunWorkspaceControlPlane,
     _TaskManagementControlPlane,
 ):
-    """Compose #37/#88 semantics while preserving canonical #15 authorization."""
+    """Compose #37/#88 semantics while preserving canonical #15 authorization.
+
+    The public composed Control Plane is secure by default. Authorization-free embedding
+    is available only through the explicit development/test environment opt-out.
+    """
 
     def __init__(
         self,
@@ -54,6 +61,11 @@ class ControlPlane(
         workspace_provider: WorkspaceProvider | None = None,
         run_workspace_bindings: RunWorkspaceBindingRepository | None = None,
     ) -> None:
+        if authorization is None and os.environ.get(INSECURE_CONTROL_PLANE_ENV) != "1":
+            raise ValueError(
+                "authorization is required for the composed Control Plane; "
+                f"set {INSECURE_CONTROL_PLANE_ENV}=1 only for explicit development/test use"
+            )
         super().__init__(
             kernel=kernel,
             events=events,
