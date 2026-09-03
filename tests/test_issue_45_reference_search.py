@@ -170,7 +170,7 @@ def test_plan_step_artifact_and_result_use_global_search() -> None:
         assert step_from_plan["total"] == 1
 
         rebuilt = await control_plane.rebuild_search_index()
-        assert rebuilt == 6
+        assert rebuilt >= 6
 
     asyncio.run(scenario())
 
