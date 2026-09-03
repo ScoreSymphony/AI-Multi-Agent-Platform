@@ -269,6 +269,28 @@ class EvaluatorDescriptor:
 
 
 @dataclass(frozen=True, slots=True)
+class EvaluationAttempt:
+    """Stable identity and reproducibility metadata for one case repetition."""
+
+    evaluation_run_id: str
+    case_id: str
+    case_version: str
+    repetition_index: int
+    seed: int | None = None
+    attempt_id: str = field(default_factory=lambda: new_id("evaluation_attempt"))
+
+    def __post_init__(self) -> None:
+        if not self.evaluation_run_id.strip():
+            raise ValueError("evaluation attempt run ID must not be blank")
+        if not self.case_id.strip():
+            raise ValueError("evaluation attempt case ID must not be blank")
+        if not self.case_version.strip():
+            raise ValueError("evaluation attempt case version must not be blank")
+        if self.repetition_index < 0:
+            raise ValueError("evaluation repetition_index must be >= 0")
+
+
+@dataclass(frozen=True, slots=True)
 class EvaluationObservation:
     """Backend-neutral evidence presented to evaluators."""
 
@@ -319,6 +341,9 @@ class EvaluationResult:
     run_id: str | None = None
     artifact_refs: tuple[str, ...] = ()
     telemetry_refs: tuple[str, ...] = ()
+    attempt_id: str | None = None
+    repetition_index: int = 0
+    seed: int | None = None
     error_category: str | None = None
     error_message: str | None = None
     result_id: str = field(default_factory=lambda: new_id("evaluation_result"))
@@ -333,6 +358,10 @@ class EvaluationResult:
             raise ValueError("case_version must not be blank")
         if self.score is not None and not 0.0 <= self.score <= 1.0:
             raise ValueError("evaluation score must be between 0.0 and 1.0")
+        if self.attempt_id is not None and not self.attempt_id.strip():
+            raise ValueError("attempt_id must not be blank when provided")
+        if self.repetition_index < 0:
+            raise ValueError("evaluation result repetition_index must be >= 0")
         if self.outcome is EvaluationOutcome.ERROR and self.error_category is None:
             raise ValueError("error evaluation results must include error_category")
 
@@ -344,6 +373,8 @@ class EvaluationRun:
     snapshot: ConfigurationSnapshot
     status: EvaluationRunStatus = EvaluationRunStatus.PENDING
     baseline_run_id: str | None = None
+    repetitions: int = 1
+    seed: int | None = None
     run_id: str = field(default_factory=lambda: new_id("evaluation_run"))
     started_at: datetime = field(default_factory=utc_now)
     completed_at: datetime | None = None
@@ -355,6 +386,8 @@ class EvaluationRun:
             raise ValueError("evaluation run suite_version must not be blank")
         if self.baseline_run_id is not None and not self.baseline_run_id.strip():
             raise ValueError("baseline_run_id must not be blank when provided")
+        if self.repetitions <= 0:
+            raise ValueError("evaluation run repetitions must be greater than zero")
         if self.status is EvaluationRunStatus.COMPLETED and self.completed_at is None:
             raise ValueError("completed evaluation runs must include completed_at")
 
