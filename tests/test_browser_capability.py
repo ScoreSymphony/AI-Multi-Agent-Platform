@@ -77,7 +77,7 @@ class _Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(payload)
             return
-        if self.path == "/slow":
+        if self.path.startswith("/slow"):
             time.sleep(0.15)
             try:
                 self._write_html("<html><head><title>Slow</title></head><body>slow</body></html>")
