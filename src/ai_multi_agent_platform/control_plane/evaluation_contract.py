@@ -72,10 +72,8 @@ class EvaluationRunResourceService(ResourceService):
         context: RequestContext,
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
-        del context
-        return tuple(
-            _run_resource(run) for run in self._service.list_runs(limit=max(query.limit, 100))
-        )
+        del context, query
+        return tuple(_run_resource(run) for run in self._service.list_runs(limit=None))
 
     async def get_resource(
         self,
