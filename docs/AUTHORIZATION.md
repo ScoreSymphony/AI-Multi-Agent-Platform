@@ -81,6 +81,7 @@ where appropriate.
 - capability reference and side-effect classification;
 - security labels;
 - node/trust context;
+- optional SHA-256 digest of the original northbound request payload;
 - immutable proposed-action digest;
 - optional approval ID;
 - canonical `OperationContext` for correlation/causation/ownership.
@@ -207,8 +208,11 @@ The existing versioned v1 Control Plane predates the #15 action vocabulary and e
 stable commands such as `task:start` and `project:create`. `ControlPlaneAuthorizationBridge`
 is the migration boundary: it maps those northbound strings into canonical
 `AuthorizationAction`/`ResourceType` values before policy evaluation, while keeping the
-published v1 API stable. Retrying the same command after a valid exact-action approval
-resumes through the same gate.
+published v1 API stable. Mutating create commands hash the canonical JSON of the original
+northbound request with SHA-256 and carry only that digest into authorization. Internal
+enrichment, such as a platform-generated `task_id`, does not alter that binding. Retrying
+the same approved request therefore resumes through the same gate, while any changed
+northbound payload produces a different proposed-action digest and requires a new approval.
 
 Future node/worker dispatch, connectors, automation, plugin management, and admin APIs
 must use this same gate rather than inventing a second permission model.
