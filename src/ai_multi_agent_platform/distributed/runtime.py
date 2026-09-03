@@ -9,9 +9,9 @@ from enum import StrEnum
 from ai_multi_agent_platform.contracts import ExecutionHandle, ExecutionSnapshot
 from ai_multi_agent_platform.domain import RunStatus
 
-from .models import ReservationStatus, WorkerJobRequest, WorkerStatus
+from .models import ReservationStatus, WorkerJobRequest, WorkerStatus, utc_now
 from .registry import DistributedRegistry, RegistryError
-from .scheduler import DeterministicScheduler, ScheduledPlacement
+from .scheduler import DeterministicScheduler
 from .worker import WorkerDispatcher
 
 
@@ -76,7 +76,8 @@ class DistributedRuntime:
                 raise RegistryError("duplicate worker_job_id carries a different request")
             return existing
 
-        placement = self.scheduler.schedule(job, now=now)
+        timestamp = now or utc_now()
+        placement = self.scheduler.schedule(job, now=timestamp)
         worker_id = placement.decision.selected_worker_id
         if worker_id is None:
             raise AssertionError("scheduler returned placement without selected worker")
@@ -91,12 +92,25 @@ class DistributedRuntime:
             self.registry.release_reservation(placement.reservation.reservation_id)
             raise RegistryError(f"selected worker has no attached dispatcher: {worker_id}")
 
+        self._records[job.worker_job_id] = reserved
         try:
             handle = await dispatcher.dispatch(job)
         except Exception:
-            self.registry.release_reservation(placement.reservation.reservation_id)
+            lost = replace(
+                reserved,
+                state=DispatchState.LOST,
+                last_error="dispatch_outcome_unknown",
+            )
+            self._records[job.worker_job_id] = lost
             raise
-        dispatched = replace(reserved, state=DispatchState.DISPATCHED, handle=handle)
+
+        self.registry.commit_reservation(placement.reservation.reservation_id, now=timestamp)
+        dispatched = replace(
+            reserved,
+            state=DispatchState.DISPATCHED,
+            handle=handle,
+            last_error=None,
+        )
         self._records[job.worker_job_id] = dispatched
         return dispatched
 
@@ -111,13 +125,13 @@ class DistributedRuntime:
             self._records[worker_job_id] = pending
             return pending
         snapshot = await dispatcher.cancel(worker_job_id)
-        return self._apply_snapshot(record, snapshot)
+        return self._apply_snapshot(record, snapshot, now=utc_now())
 
     async def reconcile(self, *, now: datetime | None = None) -> tuple[DispatchRecord, ...]:
         """Reconcile liveness and job state; remote running is never trusted indefinitely."""
 
-        self.registry.expire_heartbeats(now=now)
-        self.registry.expire_reservations(now=now)
+        timestamp = now or utc_now()
+        self.registry.expire_heartbeats(now=timestamp)
         reconciled: list[DispatchRecord] = []
         for worker_job_id in sorted(self._records):
             record = self._records[worker_job_id]
@@ -125,7 +139,18 @@ class DistributedRuntime:
                 reconciled.append(record)
                 continue
 
-            worker = self.registry.get_worker(record.worker_id)
+            try:
+                worker = self.registry.get_worker(record.worker_id)
+            except RegistryError:
+                updated = replace(
+                    record,
+                    state=DispatchState.LOST,
+                    last_error="worker_unreachable",
+                )
+                self._records[worker_job_id] = updated
+                reconciled.append(updated)
+                continue
+
             dispatcher = self._dispatchers.get(record.worker_id)
             if worker.status is WorkerStatus.OFFLINE or dispatcher is None:
                 state = (
@@ -133,7 +158,7 @@ class DistributedRuntime:
                     if record.state is DispatchState.CANCEL_PENDING
                     else DispatchState.LOST
                 )
-                updated = replace(record, state=state, last_error="worker unreachable")
+                updated = replace(record, state=state, last_error="worker_unreachable")
                 self._records[worker_job_id] = updated
                 reconciled.append(updated)
                 continue
@@ -143,23 +168,27 @@ class DistributedRuntime:
                     snapshot = await dispatcher.cancel(worker_job_id)
                 else:
                     snapshot = await dispatcher.get(worker_job_id)
-            except Exception as exc:
+            except Exception:
                 updated = replace(
                     record,
                     state=DispatchState.LOST,
-                    last_error=type(exc).__name__,
+                    last_error="worker_state_unavailable",
                 )
                 self._records[worker_job_id] = updated
                 reconciled.append(updated)
                 continue
-            updated = self._apply_snapshot(record, snapshot)
+            updated = self._apply_snapshot(record, snapshot, now=timestamp)
             reconciled.append(updated)
+
+        self.registry.expire_reservations(now=timestamp)
         return tuple(reconciled)
 
     def _apply_snapshot(
         self,
         record: DispatchRecord,
         snapshot: ExecutionSnapshot,
+        *,
+        now: datetime,
     ) -> DispatchRecord:
         terminal = snapshot.status in {
             RunStatus.SUCCEEDED,
@@ -167,32 +196,35 @@ class DistributedRuntime:
             RunStatus.CANCELLED,
             RunStatus.TIMED_OUT,
         }
-        state = DispatchState.TERMINAL if terminal else DispatchState.RUNNING
+        reservation = next(
+            (
+                item
+                for item in self.registry.active_reservations()
+                if item.reservation_id == record.reservation_id
+            ),
+            None,
+        )
+        if terminal:
+            if reservation is not None:
+                self.registry.release_reservation(record.reservation_id)
+            state = DispatchState.TERMINAL
+            last_error = None
+        elif reservation is None:
+            state = DispatchState.LOST
+            last_error = "reservation_missing"
+        else:
+            if reservation.status is ReservationStatus.RESERVED:
+                self.registry.commit_reservation(record.reservation_id, now=now)
+            else:
+                self.registry.renew_reservation(record.reservation_id, now=now)
+            state = DispatchState.RUNNING
+            last_error = None
+
         updated = replace(
             record,
             state=state,
             snapshot=snapshot,
-            last_error=None,
+            last_error=last_error,
         )
-        if terminal:
-            reservation = next(
-                (
-                    item
-                    for item in self.registry.active_reservations()
-                    if item.reservation_id == record.reservation_id
-                ),
-                None,
-            )
-            if reservation is not None and reservation.status is ReservationStatus.ACTIVE:
-                self.registry.release_reservation(record.reservation_id)
         self._records[record.job.worker_job_id] = updated
         return updated
-
-
-def placement_worker_id(placement: ScheduledPlacement) -> str:
-    """Small helper for callers that need a non-optional selected worker after scheduling."""
-
-    selected = placement.decision.selected_worker_id
-    if selected is None:
-        raise RegistryError("placement contains no selected worker")
-    return selected
