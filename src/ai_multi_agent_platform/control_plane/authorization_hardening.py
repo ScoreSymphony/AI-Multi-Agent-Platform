@@ -80,16 +80,18 @@ class AuthorizationBoundaryHardeningMixin:
         effective_payload = payload or {}
         if command in TASK_MANAGEMENT_COMMANDS:
             if command == TASK_MANAGEMENT_UPDATE_COMMAND:
-                return await cp._update_management_command(
+                result = await cp._update_management_command(
                     context,
                     resource_ref,
                     effective_payload,
                 )
-            return await cp._bulk_update_management_command(
-                context,
-                resource_ref,
-                effective_payload,
-            )
+            else:
+                result = await cp._bulk_update_management_command(
+                    context,
+                    resource_ref,
+                    effective_payload,
+                )
+            return cast(dict[str, JsonValue], result)
 
         handler = cp._command_handlers.get(command)
         if handler is None:
