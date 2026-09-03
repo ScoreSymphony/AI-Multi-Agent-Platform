@@ -1,1 +1,0 @@
-Issue #44 is implemented on `feat/issue-44-connector-framework` and intentionally avoids authentication implementation files modified by #36/PR #218.
