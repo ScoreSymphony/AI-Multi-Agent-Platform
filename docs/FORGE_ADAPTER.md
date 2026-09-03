@@ -1,6 +1,6 @@
 # Forge execution adapter
 
-Status: **Issue #9 Phase 4 adapter boundary implemented; concrete transport and Phase 5 recovery work remain.**
+Status: **Issue #9 Phase 4 adapter boundary and the first Phase 5 kernel/recovery regressions are implemented; a concrete Forge transport remains intentionally unselected.**
 
 `ai_multi_agent_platform.adapters.forge.ForgeExecutor` is an optional execution adapter behind the platform-owned `Executor` contract.
 
@@ -26,6 +26,8 @@ Canonical identifiers always remain those from `ExecutionRequest`:
 
 A Forge execution ID is adapter-private and is returned only under `ExecutionResult.adapter_metadata["forge"]["execution_id"]`.
 
+`ExecutorLifecycleBackend` carries adapter metadata into its canonical handle/snapshot so Forge external identity can be persisted in canonical kernel events without becoming a canonical ID. For Step Runs, the bridge keeps the owning canonical Task ID as `task_id` and carries the Step ID separately as `step_id`.
+
 The canonical `run_id` is also used as the adapter request reference for best-effort backend cancellation. It is not replaced by a Forge ID.
 
 ## Lifecycle and retry ownership
@@ -35,6 +37,29 @@ Forge may report `succeeded`, `failed`, `timed_out` or `cancelled` execution out
 The adapter does **not** retry failed executions. Backend retryability and `retry_after_seconds` are normalized into canonical error/adapter metadata so the platform kernel or orchestrator can decide whether another attempt is allowed.
 
 Forge does not update canonical Task/Run state directly.
+
+## Historical events, idempotency and recovery
+
+The valuable legacy Forge event/recovery behavior is reused through the platform-owned kernel rather than by introducing a second Forge event store or lifecycle state machine.
+
+The canonical kernel already provides:
+
+- ordered historical event reads;
+- transactional SQLite event persistence;
+- durable command/idempotency records;
+- replay-based Task/Run reconstruction;
+- duplicate command/callback handling;
+- restart recovery and external-job reconciliation;
+- explicit orphaned-running detection without blind redispatch.
+
+`tests/test_forge_kernel_regressions.py` binds those mechanisms to the Forge adapter and proves that:
+
+1. a namespaced Forge execution ID survives canonical SQLite event replay and restart;
+2. retrying the original canonical create command after restart returns the existing Task rather than creating another one;
+3. Step execution preserves distinct Task and Step identities at the Forge boundary;
+4. if a canonical Run is `RUNNING` after restart but the fresh lifecycle adapter cannot find the Forge job, recovery marks reconciliation as required and does not redispatch the work.
+
+This deliberately preserves the useful mechanisms identified in the legacy Forge audit while keeping canonical state ownership in `PlatformKernel`.
 
 ## Workspace and artifact boundary
 
@@ -73,6 +98,8 @@ A health transport failure marks the Forge executor unhealthy rather than breaki
 
 `tests/test_forge_optionality.py` proves importing the execution core does not import the Forge adapter.
 
+`tests/test_forge_kernel_regressions.py` covers canonical persistence/replay, Step identity propagation and restart reconciliation with a Forge-backed executor boundary.
+
 ## Provenance
 
 The implementation was designed from the behavior audit recorded in `docs/FORGE_REUSE_AUDIT.md` and `upstream/forge-ai-agent-vps.yaml`.
@@ -81,10 +108,10 @@ No source from `ScoreSymphony/AI-Agent-VPS` is copied into this adapter. The cur
 
 ## Remaining issue #9 work
 
-Phase 4 is not the end of issue #9. Remaining work includes:
+The main unresolved part is now the concrete backend connection:
 
-1. implement and select a concrete Forge transport only after its stable API/process boundary is verified;
-2. add integration tests against a real Forge instance when that transport exists;
-3. port historical-event read, deduplication/idempotency and restart reconciliation behavior into platform-owned event/recovery abstractions;
-4. add recovery regression tests proving unfinished runs can be reconstructed without Forge becoming the canonical lifecycle kernel;
+1. verify which stable Forge HTTP/process boundary from `ScoreSymphony/AI-Agent-VPS` should be supported;
+2. implement that concrete `ForgeClient` transport without exposing Forge-private types to core code;
+3. add an integration test against a real Forge instance/fixture for execution, health and cancellation;
+4. extend historical-event/reconciliation coverage only where a real Forge transport exposes additional backend facts that the canonical kernel must reconcile;
 5. keep Forge disabled/removable without affecting reference execution or core startup.
