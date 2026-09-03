@@ -1,5 +1,17 @@
 """Concrete adapters implementing platform-owned provider contracts."""
 
+from .hermes import (
+    HERMES_ADAPTER_ID,
+    HERMES_PINNED_REVISION,
+    HERMES_UPSTREAM_REPOSITORY,
+    HermesAdapterConfig,
+    HermesAgentMapper,
+    HermesHttpResponse,
+    HermesHttpTransport,
+    HermesOrchestrator,
+    HermesRunSnapshot,
+    UrllibHermesHttpTransport,
+)
 from .litellm import (
     LiteLLMMode,
     LiteLLMModelProvider,
@@ -15,6 +27,15 @@ from .openai_compatible import (
 )
 
 __all__ = [
+    "HERMES_ADAPTER_ID",
+    "HERMES_PINNED_REVISION",
+    "HERMES_UPSTREAM_REPOSITORY",
+    "HermesAdapterConfig",
+    "HermesAgentMapper",
+    "HermesHttpResponse",
+    "HermesHttpTransport",
+    "HermesOrchestrator",
+    "HermesRunSnapshot",
     "HttpJsonResponse",
     "LiteLLMMode",
     "LiteLLMModelProvider",
@@ -23,5 +44,6 @@ __all__ = [
     "OpenAICompatibleModelProvider",
     "OpenAICompatibleProviderConfig",
     "OpenAICompatibleTransport",
+    "UrllibHermesHttpTransport",
     "UrllibOpenAICompatibleTransport",
 ]
