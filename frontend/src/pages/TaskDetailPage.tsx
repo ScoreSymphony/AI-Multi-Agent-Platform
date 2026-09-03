@@ -107,7 +107,14 @@ export function TaskDetailPage({
         </div>
         <div className="detail-status">
           <StatusBadge value={task.status} />
-          <span className={`live live-${liveState}`}>{liveState}</span>
+          <span
+            className={`live live-${liveState}`}
+            role="status"
+            aria-live="polite"
+            aria-label={`Live updates: ${liveState}`}
+          >
+            {liveState}
+          </span>
         </div>
       </header>
       {error != null ? <ErrorState error={error} onRetry={() => void load()} /> : null}
