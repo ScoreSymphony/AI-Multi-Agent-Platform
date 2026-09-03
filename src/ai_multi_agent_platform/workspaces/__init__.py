@@ -27,6 +27,12 @@ from .remote import (
     RemoteMaterializationResult,
     RemoteWorkspaceMaterializer,
 )
+from .retention import (
+    RetentionManagedWorkspaceProvider,
+    WorkspaceRetentionController,
+    WorkspaceRetentionGuard,
+    WorkspaceRetentionReport,
+)
 from .run_bindings import (
     InMemoryRunWorkspaceBindingRepository,
     RunWorkspaceBinding,
@@ -45,6 +51,7 @@ __all__ = [
     "RemoteMaterializationRequest",
     "RemoteMaterializationResult",
     "RemoteWorkspaceMaterializer",
+    "RetentionManagedWorkspaceProvider",
     "RunWorkspaceBinding",
     "RunWorkspaceBindingRepository",
     "SqliteRunWorkspaceBindingRepository",
@@ -58,6 +65,9 @@ __all__ = [
     "WorkspaceMaterialization",
     "WorkspaceProvider",
     "WorkspaceRetention",
+    "WorkspaceRetentionController",
+    "WorkspaceRetentionGuard",
+    "WorkspaceRetentionReport",
     "WorkspaceSnapshot",
     "WorkspaceSourceKind",
     "WorkspaceSourceRef",
