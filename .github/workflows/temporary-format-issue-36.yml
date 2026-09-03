@@ -20,23 +20,31 @@ jobs:
           python-version: "3.12"
       - name: Install formatter
         run: python -m pip install "ruff>=0.12,<1"
-      - name: Fix authentication files
+      - name: Fix and capture authentication lint
+        shell: bash
         run: |
+          set +e
           ruff check --fix \
             src/ai_multi_agent_platform/security/authentication.py \
             src/ai_multi_agent_platform/control_plane/authentication.py \
             src/ai_multi_agent_platform/security/__init__.py \
             src/ai_multi_agent_platform/control_plane/__init__.py \
-            tests/test_issue_36_authentication.py
+            tests/test_issue_36_authentication.py \
+            > issue36-ruff.txt 2>&1
+          status=$?
           ruff format \
             src/ai_multi_agent_platform/security/authentication.py \
             src/ai_multi_agent_platform/control_plane/authentication.py \
             src/ai_multi_agent_platform/security/__init__.py \
             src/ai_multi_agent_platform/control_plane/__init__.py \
-            tests/test_issue_36_authentication.py
-      - name: Commit fixes
+            tests/test_issue_36_authentication.py \
+            >> issue36-ruff.txt 2>&1
+          echo "ruff_status=$status" >> issue36-ruff.txt
+          cat issue36-ruff.txt
+          exit 0
+      - name: Commit fixes and diagnostic
         run: |
-          if git diff --quiet; then
+          if git diff --quiet && git ls-files --error-unmatch issue36-ruff.txt >/dev/null 2>&1; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -46,6 +54,7 @@ jobs:
             src/ai_multi_agent_platform/control_plane/authentication.py \
             src/ai_multi_agent_platform/security/__init__.py \
             src/ai_multi_agent_platform/control_plane/__init__.py \
-            tests/test_issue_36_authentication.py
-          git commit -m "style(auth): apply ruff lint fixes"
+            tests/test_issue_36_authentication.py \
+            issue36-ruff.txt
+          git commit -m "chore(auth): capture ruff diagnostics"
           git push origin HEAD:feat/issue-36-authentication
