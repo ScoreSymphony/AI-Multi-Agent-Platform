@@ -13,11 +13,7 @@ from ai_multi_agent_platform.contracts import (
     ProviderDescriptor,
     StoredObject,
 )
-from ai_multi_agent_platform.data.contracts import (
-    FileProvider,
-    KnowledgeProvider,
-    MemoryProvider,
-)
+from ai_multi_agent_platform.data.contracts import FileProvider, KnowledgeProvider, MemoryProvider
 from ai_multi_agent_platform.data.models import (
     DataAccessContext,
     FileRecord,
@@ -37,6 +33,11 @@ from .authorization import (
     ProposedAction,
     ResourceType,
     infer_actor_identity,
+)
+from .enforced_providers import (
+    AuthorizedFileProvider,
+    AuthorizedKnowledgeProvider,
+    AuthorizedMemoryProvider,
 )
 from .enforcement import AuthorizationGate
 
@@ -70,11 +71,12 @@ def _data_action(
 
 
 class AuthorizedDataFileProvider(FileProvider):
-    """Protect every refined file/artifact operation introduced by issue #13."""
+    """Protect every refined and legacy file/artifact operation."""
 
     def __init__(self, inner: FileProvider, gate: AuthorizationGate) -> None:
         self._inner = inner
         self._gate = gate
+        self._core = AuthorizedFileProvider(inner, gate)
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -215,18 +217,19 @@ class AuthorizedDataFileProvider(FileProvider):
         *,
         metadata: dict[str, JsonValue] | None = None,
     ) -> StoredObject:
-        return await self._inner.write(object_ref, data, context, metadata=metadata)
+        return await self._core.write(object_ref, data, context, metadata=metadata)
 
     async def read(self, object_ref: str, context: OperationContext) -> bytes:
-        return await self._inner.read(object_ref, context)
+        return await self._core.read(object_ref, context)
 
 
 class AuthorizedDataMemoryProvider(MemoryProvider):
-    """Protect every refined scoped-memory operation introduced by issue #13."""
+    """Protect every refined and legacy scoped-memory operation."""
 
     def __init__(self, inner: MemoryProvider, gate: AuthorizationGate) -> None:
         self._inner = inner
         self._gate = gate
+        self._core = AuthorizedMemoryProvider(inner, gate)
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -356,18 +359,19 @@ class AuthorizedDataMemoryProvider(MemoryProvider):
         *,
         metadata: dict[str, JsonValue] | None = None,
     ) -> StoredObject:
-        return await self._inner.put(namespace, key, value, context, metadata=metadata)
+        return await self._core.put(namespace, key, value, context, metadata=metadata)
 
     async def get(self, namespace: str, key: str, context: OperationContext) -> JsonValue:
-        return await self._inner.get(namespace, key, context)
+        return await self._core.get(namespace, key, context)
 
 
 class AuthorizedDataKnowledgeProvider(KnowledgeProvider):
-    """Protect every refined knowledge-source operation introduced by issue #13."""
+    """Protect every refined and legacy knowledge-source operation."""
 
     def __init__(self, inner: KnowledgeProvider, gate: AuthorizationGate) -> None:
         self._inner = inner
         self._gate = gate
+        self._core = AuthorizedKnowledgeProvider(inner, gate)
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -494,10 +498,10 @@ class AuthorizedDataKnowledgeProvider(KnowledgeProvider):
         content: str,
         context: OperationContext,
     ) -> StoredObject:
-        return await self._inner.index(source_ref, content, context)
+        return await self._core.index(source_ref, content, context)
 
     async def query(self, request: KnowledgeQuery) -> tuple[KnowledgeHit, ...]:
-        return await self._inner.query(request)
+        return await self._core.query(request)
 
     async def get(self, source_ref: str, context: OperationContext) -> KnowledgeHit:
-        return await self._inner.get(source_ref, context)
+        return await self._core.get(source_ref, context)
