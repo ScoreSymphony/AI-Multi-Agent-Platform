@@ -449,9 +449,7 @@ def test_authenticated_sse_rejects_spoofed_anonymous_stream_and_projects_canonic
     user = auth.bootstrap_first_admin("alice", PASSWORD, now=NOW)
     token = auth.create_personal_access_token(user.user_id, purpose="stream", now=NOW)
     control_plane = _StreamControlPlane()
-    app = ControlPlaneASGI(
-        AuthenticatedControlPlaneHTTP(control_plane, auth, secure_cookie=False)
-    )
+    app = ControlPlaneASGI(AuthenticatedControlPlaneHTTP(control_plane, auth, secure_cookie=False))
 
     anonymous_messages = _run(
         _asgi_request(
