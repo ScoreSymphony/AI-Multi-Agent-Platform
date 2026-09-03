@@ -16,6 +16,7 @@ from .models import (
     FailureClassification,
     FailureComponent,
     MetricRecord,
+    SpanLink,
     SpanRecord,
     StructuredLog,
     TelemetryContext,
@@ -115,6 +116,7 @@ class SpanHandle:
     context: TelemetryContext
     started_at: datetime
     parent_span_id: str | None = None
+    links: tuple[SpanLink, ...] = ()
 
 
 class Telemetry:
@@ -211,9 +213,19 @@ class Telemetry:
         context: TelemetryContext,
         parent: SpanHandle | None = None,
         trace_id: str | None = None,
+        links: tuple[SpanLink, ...] = (),
     ) -> SpanHandle:
         if parent is not None and trace_id is not None and parent.trace_id != trace_id:
             raise ValueError("explicit trace_id must match parent trace")
+        safe_links = tuple(
+            SpanLink(
+                trace_id=link.trace_id,
+                span_id=link.span_id,
+                context=link.context,
+                attributes=self.capture_policy.redact(link.attributes),
+            )
+            for link in links
+        )
         return SpanHandle(
             name=name,
             trace_id=(parent.trace_id if parent is not None else trace_id) or self.new_trace_id(),
@@ -221,6 +233,7 @@ class Telemetry:
             context=context,
             started_at=utc_now(),
             parent_span_id=parent.span_id if parent is not None else None,
+            links=safe_links,
         )
 
     def finish_span(
@@ -239,6 +252,7 @@ class Telemetry:
             trace_id=handle.trace_id,
             span_id=handle.span_id,
             parent_span_id=handle.parent_span_id,
+            links=handle.links,
             context=handle.context,
             started_at=handle.started_at,
             finished_at=finished_at,
