@@ -7,6 +7,11 @@
   "plan_timeout_seconds": 120.0,
   "poll_interval_seconds": 0.2,
   "profile": null,
+  "runtime_mode": "api_server",
+  "retry_behavior": "platform_owned",
+  "bridge_mode": "strict",
+  "diagnostics_mode": "platform_only",
+  "compatibility_status": "verified_pin",
   "model_bridge": {
     "model-local-example": "openai-compatible/local-model"
   },

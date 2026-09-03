@@ -1,6 +1,6 @@
 """Optional Hermes Agent orchestration adapter.
 
-Hermes remains an external, replaceable orchestration service.  This module maps
+Hermes remains an external, replaceable orchestration service. This module maps
 platform-owned planning and Agent/Team snapshots onto Hermes' documented HTTP API
 without importing Hermes runtime classes or promoting Hermes IDs into canonical state.
 """
@@ -13,11 +13,14 @@ import os
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
+from types import MappingProxyType
 from typing import Protocol, cast
 from urllib import error, parse, request
 
 from ai_multi_agent_platform.agents.models import AgentExecutionSpec, OrchestratorMapping
 from ai_multi_agent_platform.agents.runtime import AgentOrchestratorMapper
+from ai_multi_agent_platform.configuration import ConfigurationSchema
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import Orchestrator
 from ai_multi_agent_platform.contracts.types import (
@@ -36,6 +39,74 @@ from ai_multi_agent_platform.contracts.types import (
 HERMES_UPSTREAM_REPOSITORY = "https://github.com/NousResearch/hermes-agent"
 HERMES_PINNED_REVISION = "63279301bcbdc185c1b07b98a9312eb0c862f26d"
 HERMES_ADAPTER_ID = "hermes-api-server"
+
+
+class HermesRuntimeMode(StrEnum):
+    """Supported Hermes deployment/runtime modes."""
+
+    API_SERVER = "api_server"
+
+
+class HermesRetryBehavior(StrEnum):
+    """Retry ownership at the Hermes adapter boundary."""
+
+    PLATFORM_OWNED = "platform_owned"
+
+
+class HermesBridgeMode(StrEnum):
+    """Canonical model/capability mapping policy."""
+
+    STRICT = "strict"
+
+
+class HermesDiagnosticsMode(StrEnum):
+    """Diagnostics/logging ownership for the adapter."""
+
+    PLATFORM_ONLY = "platform_only"
+
+
+class HermesCompatibilityStatus(StrEnum):
+    """Declared compatibility status for the configured upstream revision."""
+
+    VERIFIED_PIN = "verified_pin"
+    UNVERIFIED_PIN = "unverified_pin"
+
+
+HERMES_CONFIGURATION_SCHEMA = ConfigurationSchema(
+    version="hermes-adapter-v1",
+    json_schema={
+        "type": "object",
+        "properties": {
+            "enabled": {"type": "boolean"},
+            "base_url": {"type": "string", "minLength": 1},
+            "api_key_env": {"type": "string", "minLength": 1},
+            "pinned_revision": {"type": "string", "minLength": 1},
+            "request_timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+            "plan_timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+            "poll_interval_seconds": {"type": "number", "exclusiveMinimum": 0},
+            "profile": {"type": ["string", "null"], "minLength": 1},
+            "runtime_mode": {"const": HermesRuntimeMode.API_SERVER.value},
+            "retry_behavior": {"const": HermesRetryBehavior.PLATFORM_OWNED.value},
+            "bridge_mode": {"const": HermesBridgeMode.STRICT.value},
+            "diagnostics_mode": {"const": HermesDiagnosticsMode.PLATFORM_ONLY.value},
+            "compatibility_status": {
+                "enum": [
+                    HermesCompatibilityStatus.VERIFIED_PIN.value,
+                    HermesCompatibilityStatus.UNVERIFIED_PIN.value,
+                ]
+            },
+            "model_bridge": {
+                "type": "object",
+                "additionalProperties": {"type": "string", "minLength": 1},
+            },
+            "capability_bridge": {
+                "type": "object",
+                "additionalProperties": {"type": "string", "minLength": 1},
+            },
+        },
+        "additionalProperties": False,
+    },
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +204,11 @@ class HermesAdapterConfig:
     plan_timeout_seconds: float = 120.0
     poll_interval_seconds: float = 0.2
     profile: str | None = None
+    runtime_mode: HermesRuntimeMode = HermesRuntimeMode.API_SERVER
+    retry_behavior: HermesRetryBehavior = HermesRetryBehavior.PLATFORM_OWNED
+    bridge_mode: HermesBridgeMode = HermesBridgeMode.STRICT
+    diagnostics_mode: HermesDiagnosticsMode = HermesDiagnosticsMode.PLATFORM_ONLY
+    compatibility_status: HermesCompatibilityStatus = HermesCompatibilityStatus.VERIFIED_PIN
     model_bridge: Mapping[str, str] = field(default_factory=dict)
     capability_bridge: Mapping[str, str] = field(default_factory=dict)
 
@@ -151,12 +227,151 @@ class HermesAdapterConfig:
             raise ValueError("Hermes poll_interval_seconds must be greater than zero")
         if self.profile is not None and not self.profile.strip():
             raise ValueError("Hermes profile must not be blank")
+        if not isinstance(self.runtime_mode, HermesRuntimeMode):
+            raise ValueError("Hermes runtime_mode must be a HermesRuntimeMode")
+        if not isinstance(self.retry_behavior, HermesRetryBehavior):
+            raise ValueError("Hermes retry_behavior must be a HermesRetryBehavior")
+        if not isinstance(self.bridge_mode, HermesBridgeMode):
+            raise ValueError("Hermes bridge_mode must be a HermesBridgeMode")
+        if not isinstance(self.diagnostics_mode, HermesDiagnosticsMode):
+            raise ValueError("Hermes diagnostics_mode must be a HermesDiagnosticsMode")
+        if not isinstance(self.compatibility_status, HermesCompatibilityStatus):
+            raise ValueError("Hermes compatibility_status must be a HermesCompatibilityStatus")
+        if (
+            self.compatibility_status is HermesCompatibilityStatus.VERIFIED_PIN
+            and self.pinned_revision != HERMES_PINNED_REVISION
+        ):
+            raise ValueError(
+                "Hermes compatibility_status=verified_pin requires the repository-tested pin"
+            )
+        if (
+            self.compatibility_status is HermesCompatibilityStatus.UNVERIFIED_PIN
+            and self.pinned_revision == HERMES_PINNED_REVISION
+        ):
+            raise ValueError(
+                "Hermes repository-tested pin must use compatibility_status=verified_pin"
+            )
         if any(not key.strip() or not value.strip() for key, value in self.model_bridge.items()):
             raise ValueError("Hermes model_bridge keys and values must not be blank")
         if any(
             not key.strip() or not value.strip() for key, value in self.capability_bridge.items()
         ):
             raise ValueError("Hermes capability_bridge keys and values must not be blank")
+        object.__setattr__(self, "model_bridge", MappingProxyType(dict(self.model_bridge)))
+        object.__setattr__(
+            self,
+            "capability_bridge",
+            MappingProxyType(dict(self.capability_bridge)),
+        )
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, object]) -> HermesAdapterConfig:
+        """Build strict validated Hermes configuration from resolved JSON-like values."""
+
+        allowed = {
+            "enabled",
+            "base_url",
+            "api_key_env",
+            "pinned_revision",
+            "request_timeout_seconds",
+            "plan_timeout_seconds",
+            "poll_interval_seconds",
+            "profile",
+            "runtime_mode",
+            "retry_behavior",
+            "bridge_mode",
+            "diagnostics_mode",
+            "compatibility_status",
+            "model_bridge",
+            "capability_bridge",
+        }
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise ValueError(f"unknown Hermes configuration fields: {unknown!r}")
+
+        def string_field(name: str, default: str) -> str:
+            raw = values.get(name, default)
+            if not isinstance(raw, str) or not raw.strip():
+                raise ValueError(f"{name} must be a non-blank string")
+            return raw
+
+        def number_field(name: str, default: float) -> float:
+            raw = values.get(name, default)
+            if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+                raise ValueError(f"{name} must be numeric")
+            return float(raw)
+
+        def enum_field(name: str, enum_type: type[StrEnum], default: StrEnum) -> StrEnum:
+            raw = values.get(name, default.value)
+            if not isinstance(raw, str):
+                raise ValueError(f"{name} must be a string")
+            try:
+                return enum_type(raw)
+            except ValueError as exc:
+                raise ValueError(f"unsupported Hermes {name}: {raw}") from exc
+
+        def bridge_field(name: str) -> dict[str, str]:
+            raw = values.get(name, {})
+            if not isinstance(raw, Mapping):
+                raise ValueError(f"{name} must be an object")
+            result: dict[str, str] = {}
+            for raw_key, raw_value in raw.items():
+                if not isinstance(raw_key, str) or not isinstance(raw_value, str):
+                    raise ValueError(f"{name} must contain string keys and values")
+                result[raw_key] = raw_value
+            return result
+
+        enabled = values.get("enabled", False)
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be a boolean")
+        profile_raw = values.get("profile")
+        if profile_raw is not None and not isinstance(profile_raw, str):
+            raise ValueError("profile must be a string or null")
+
+        return cls(
+            enabled=enabled,
+            base_url=string_field("base_url", "http://127.0.0.1:8642"),
+            api_key_env=string_field("api_key_env", "API_SERVER_KEY"),
+            pinned_revision=string_field("pinned_revision", HERMES_PINNED_REVISION),
+            request_timeout_seconds=number_field("request_timeout_seconds", 10.0),
+            plan_timeout_seconds=number_field("plan_timeout_seconds", 120.0),
+            poll_interval_seconds=number_field("poll_interval_seconds", 0.2),
+            profile=profile_raw,
+            runtime_mode=cast(
+                HermesRuntimeMode,
+                enum_field("runtime_mode", HermesRuntimeMode, HermesRuntimeMode.API_SERVER),
+            ),
+            retry_behavior=cast(
+                HermesRetryBehavior,
+                enum_field(
+                    "retry_behavior",
+                    HermesRetryBehavior,
+                    HermesRetryBehavior.PLATFORM_OWNED,
+                ),
+            ),
+            bridge_mode=cast(
+                HermesBridgeMode,
+                enum_field("bridge_mode", HermesBridgeMode, HermesBridgeMode.STRICT),
+            ),
+            diagnostics_mode=cast(
+                HermesDiagnosticsMode,
+                enum_field(
+                    "diagnostics_mode",
+                    HermesDiagnosticsMode,
+                    HermesDiagnosticsMode.PLATFORM_ONLY,
+                ),
+            ),
+            compatibility_status=cast(
+                HermesCompatibilityStatus,
+                enum_field(
+                    "compatibility_status",
+                    HermesCompatibilityStatus,
+                    HermesCompatibilityStatus.VERIFIED_PIN,
+                ),
+            ),
+            model_bridge=bridge_field("model_bridge"),
+            capability_bridge=bridge_field("capability_bridge"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,11 +408,20 @@ class HermesOrchestrator(Orchestrator):
         self.config = config
         self.transport = transport or UrllibHermesHttpTransport()
         self.secret_resolver = secret_resolver or os.getenv
+        self._cleanup_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def descriptor(self) -> ProviderDescriptor:
         available = self.config.enabled
         health = HealthStatus.UNKNOWN if available else HealthStatus.UNAVAILABLE
+        metadata = _adapter_metadata(
+            transport=self.config.runtime_mode.value,
+            upstream_revision=self.config.pinned_revision,
+            retry_behavior=self.config.retry_behavior.value,
+            bridge_mode=self.config.bridge_mode.value,
+            diagnostics_mode=self.config.diagnostics_mode.value,
+            compatibility_status=self.config.compatibility_status.value,
+        )
         capability = Capability(
             name="hermes.orchestration",
             kind=CapabilityKind.ORCHESTRATION,
@@ -207,15 +431,15 @@ class HermesOrchestrator(Orchestrator):
                 "idempotent-runs",
                 "pollable-status",
                 "cancellation",
+                "strict-model-capability-bridge",
+                "platform-owned-retry-policy",
             ),
             attributes={
                 "upstream_repository": HERMES_UPSTREAM_REPOSITORY,
                 "pinned_revision": self.config.pinned_revision,
+                "compatibility_status": self.config.compatibility_status.value,
             },
-            adapter_metadata=_adapter_metadata(
-                transport="api-server",
-                upstream_revision=self.config.pinned_revision,
-            ),
+            adapter_metadata=metadata,
         )
         return ProviderDescriptor(
             provider_id=HERMES_ADAPTER_ID,
@@ -224,10 +448,7 @@ class HermesOrchestrator(Orchestrator):
             capabilities=(capability,),
             health=health,
             available=available,
-            adapter_metadata=_adapter_metadata(
-                transport="api-server",
-                upstream_revision=self.config.pinned_revision,
-            ),
+            adapter_metadata=metadata,
         )
 
     async def health(self) -> HealthStatus:
@@ -243,37 +464,49 @@ class HermesOrchestrator(Orchestrator):
 
     async def plan(self, request_data: PlanRequest) -> PlanResponse:
         self._require_enabled()
-        payload: dict[str, JsonValue] = {
-            "input": self._planning_input(request_data),
-            "instructions": self._planning_instructions(),
-        }
-        headers = self._headers(
-            request_data.context,
-            idempotency_key=self._idempotency_key(request_data),
-        )
-        response = await self._request(
-            "POST",
-            "/v1/runs",
-            payload=payload,
-            headers=headers,
-            context=request_data.context,
-        )
-        self._raise_for_status(response, operation="start planning run")
-        admitted = self._object(response.payload, "run admission response")
-        external_run_id = self._required_string(admitted, "run_id")
-
         timeout_seconds = (
             request_data.context.control.timeout_seconds or self.config.plan_timeout_seconds
         )
         deadline = time.monotonic() + timeout_seconds
+        external_run_id: str | None = None
         try:
-            snapshot = await self._wait_for_terminal_run(
-                external_run_id,
-                context=request_data.context,
-                deadline=deadline,
-            )
+            async with asyncio.timeout(timeout_seconds):
+                payload: dict[str, JsonValue] = {
+                    "input": self._planning_input(request_data),
+                    "instructions": self._planning_instructions(),
+                }
+                headers = self._headers(
+                    request_data.context,
+                    idempotency_key=self._idempotency_key(request_data),
+                )
+                response = await self._request(
+                    "POST",
+                    "/v1/runs",
+                    payload=payload,
+                    headers=headers,
+                    context=request_data.context,
+                    timeout_seconds=timeout_seconds,
+                )
+                self._raise_for_status(response, operation="start planning run")
+                admitted = self._object(response.payload, "run admission response")
+                external_run_id = self._required_string(admitted, "run_id")
+                snapshot = await self._wait_for_terminal_run(
+                    external_run_id,
+                    context=request_data.context,
+                    deadline=deadline,
+                )
+        except TimeoutError as exc:
+            if external_run_id is not None:
+                self._schedule_stop_best_effort(external_run_id, request_data.context)
+            raise self._provider_error(
+                ErrorCode.TIMEOUT,
+                "Hermes planning run exceeded the canonical provider-boundary timeout",
+                retryable=True,
+                external_run_id=external_run_id,
+            ) from exc
         except asyncio.CancelledError:
-            await self._stop_best_effort(external_run_id, request_data.context)
+            if external_run_id is not None:
+                self._schedule_stop_best_effort(external_run_id, request_data.context)
             raise
 
         if snapshot.status == "completed":
@@ -312,6 +545,8 @@ class HermesOrchestrator(Orchestrator):
         self,
         external_run_id: str,
         context: OperationContext,
+        *,
+        timeout_seconds: float | None = None,
     ) -> HermesRunSnapshot:
         """Read one Hermes-native run without promoting it to canonical lifecycle state."""
 
@@ -320,6 +555,7 @@ class HermesOrchestrator(Orchestrator):
             "GET",
             f"/v1/runs/{parse.quote(external_run_id, safe='')}",
             context=context,
+            timeout_seconds=timeout_seconds,
         )
         self._raise_for_status(response, operation="reconcile run")
         return self._snapshot(self._object(response.payload, "run status response"))
@@ -349,18 +585,35 @@ class HermesOrchestrator(Orchestrator):
         deadline: float,
     ) -> HermesRunSnapshot:
         while True:
-            if time.monotonic() >= deadline:
-                await self._stop_best_effort(external_run_id, context)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._schedule_stop_best_effort(external_run_id, context)
                 raise self._provider_error(
                     ErrorCode.TIMEOUT,
                     "Hermes planning run exceeded the canonical timeout",
                     retryable=True,
                     external_run_id=external_run_id,
                 )
-            snapshot = await self.reconcile_external_run(external_run_id, context)
+            snapshot = await self.reconcile_external_run(
+                external_run_id,
+                context,
+                timeout_seconds=remaining,
+            )
             if snapshot.status not in {"started", "queued", "running"}:
                 return snapshot
-            await asyncio.sleep(self.config.poll_interval_seconds)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                continue
+            await asyncio.sleep(min(self.config.poll_interval_seconds, remaining))
+
+    def _schedule_stop_best_effort(
+        self,
+        external_run_id: str,
+        context: OperationContext,
+    ) -> None:
+        task = asyncio.create_task(self._stop_best_effort(external_run_id, context))
+        self._cleanup_tasks.add(task)
+        task.add_done_callback(self._cleanup_tasks.discard)
 
     async def _stop_best_effort(
         self,
@@ -376,7 +629,7 @@ class HermesOrchestrator(Orchestrator):
                     context=context,
                 )
             )
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             return
 
     async def _request(
@@ -387,6 +640,7 @@ class HermesOrchestrator(Orchestrator):
         payload: Mapping[str, JsonValue] | None = None,
         headers: Mapping[str, str] | None = None,
         context: OperationContext | None,
+        timeout_seconds: float | None = None,
     ) -> HermesHttpResponse:
         request_headers = self._headers(context)
         if headers:
@@ -397,7 +651,11 @@ class HermesOrchestrator(Orchestrator):
                 f"{self._base_url}{path}",
                 payload=payload,
                 headers=request_headers,
-                timeout_seconds=self.config.request_timeout_seconds,
+                timeout_seconds=(
+                    self.config.request_timeout_seconds
+                    if timeout_seconds is None
+                    else min(self.config.request_timeout_seconds, timeout_seconds)
+                ),
             )
         except TimeoutError as exc:
             raise self._provider_error(
@@ -535,6 +793,7 @@ class HermesOrchestrator(Orchestrator):
                 adapter_metadata=_adapter_metadata(
                     external_run_id=external_run_id,
                     upstream_revision=self.config.pinned_revision,
+                    compatibility_status=self.config.compatibility_status.value,
                     canonical_task_id=task_id,
                     correlation_id=correlation_id,
                 ),
@@ -577,7 +836,8 @@ class HermesOrchestrator(Orchestrator):
     ) -> ContractError:
         values: dict[str, JsonValue] = {
             "upstream_revision": self.config.pinned_revision,
-            "transport": "api-server",
+            "compatibility_status": self.config.compatibility_status.value,
+            "transport": self.config.runtime_mode.value,
         }
         if external_run_id is not None:
             values["external_run_id"] = external_run_id
@@ -706,7 +966,7 @@ class HermesAgentMapper(AgentOrchestratorMapper):
                 "allow_user_memory": agent.profile.data_access.allow_user_memory,
             },
             "policy": {
-                "authorization_profile_ref": (agent.profile.policy_hooks.authorization_profile_ref),
+                "authorization_profile_ref": agent.profile.policy_hooks.authorization_profile_ref,
                 "verification_policy_refs": list(
                     agent.profile.policy_hooks.verification_policy_refs
                 ),
@@ -717,6 +977,7 @@ class HermesAgentMapper(AgentOrchestratorMapper):
         metadata: dict[str, JsonValue] = {
             "mapping_kind": "hermes.api-server.agent/v1",
             "upstream_revision": self.config.pinned_revision,
+            "compatibility_status": self.config.compatibility_status.value,
             "agent": profile,
         }
         if spec.team_revision is not None:
@@ -741,7 +1002,7 @@ class HermesAgentMapper(AgentOrchestratorMapper):
                 "shared_resource_refs": list(team.profile.shared_resource_refs),
                 "max_parallel_agents": team.profile.max_parallel_agents,
                 "max_steps": team.profile.max_steps,
-                "unavailable_member_policy": (team.profile.unavailable_member_policy.value),
+                "unavailable_member_policy": team.profile.unavailable_member_policy.value,
             }
         runtime_ref = f"hermes:mapping:{agent.agent_id}:r{agent.revision}:{spec.run_id}"
         return OrchestratorMapping(
