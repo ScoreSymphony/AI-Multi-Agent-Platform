@@ -54,8 +54,11 @@ instance for the same path replays the persisted history through the normal repo
 validation rules, so restart recovery cannot bypass revision or identity invariants.
 
 The persisted format is versioned independently through
-`AGENT_REPOSITORY_SCHEMA_VERSION`. A repository with an unsupported schema version is
-rejected explicitly rather than being interpreted heuristically.
+`AGENT_REPOSITORY_SCHEMA_VERSION`. Schema v2 adds Team `shared_resource_refs` and
+AgentRun capability-version pins. Schema-v1 snapshots are migrated explicitly in memory
+to their v2 defaults before validation; unsupported versions are rejected. Writing the
+repository always emits v2, so an older binary that only understands v1 rejects the
+newer document rather than silently dropping v2 fields on a later save.
 
 ## Agent profile
 
@@ -119,6 +122,12 @@ canonical capability invocation approval path instead of introducing a second ap
 authority. If the canonical capability would not enforce the Agent's approval reference,
 preflight fails before orchestrator mapping.
 
+The exact capability version selected by the registry is pinned in
+`AgentExecutionSpec.capability_versions` and copied into `AgentRunRecord`. Orchestrator
+adapters therefore receive the same version that passed compatibility and approval
+preflight and must use that version when constructing the concrete capability invocation.
+A newer registration cannot silently replace the checked version after preparation.
+
 ## Memory and knowledge
 
 Agent revisions carry only provider-neutral access declarations:
@@ -160,7 +169,7 @@ through the pinned Team revision.
 - canonical Task and Run IDs;
 - exact Agent and Team revisions;
 - selected canonical model configuration and provider;
-- actual capability IDs;
+- actual capability IDs and their registry-resolved versions;
 - orchestrator adapter/runtime references;
 - status and timing;
 - Artifact and Result IDs;
@@ -177,7 +186,9 @@ This is intentionally small: it proves that a canonical Agent can be created and
 started before any external orchestrator adapter exists.
 
 `AgentOrchestratorMapper` is the replaceable seam. The same Agent revision can be mapped
-by multiple mapper implementations without changing its canonical definition.
+by multiple mapper implementations without changing its canonical definition. The
+execution spec includes pinned capability versions whenever registry resolution was
+available so adapters cannot re-resolve a different version after policy preflight.
 
 ## Control Plane
 
