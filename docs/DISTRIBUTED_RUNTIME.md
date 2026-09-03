@@ -188,22 +188,47 @@ Remote Worker registration and heartbeat are not implemented as ordinary human/a
 
 Registry/scheduler failures are translated to backend-neutral `ContractError` categories before crossing the provider boundary. Adapter-private metadata remains namespaced and is not exposed through the public Control Plane resource projections.
 
-## Workspace integration
+## #16 observability integration
 
-Issue #37 already defines remote workspace materialization requests, receipts, results and cleanup acknowledgements. Remote Worker adapters should consume those contracts rather than transfer host-local paths.
+`DistributedTelemetry` connects #14-owned scheduler, Worker, Node, reservation and reconciliation semantics to the existing #16 `Telemetry` facade. It does not own an exporter, storage backend or second tracing system.
 
-The distributed job contract therefore carries canonical workspace/snapshot references only. Actual remote materialization and artifact return remain a composition step over the #37 contracts.
+The integration emits structured, correlated data for:
+
+- scheduling candidates, acceptance scores and rejection reason codes;
+- selected scheduling decisions;
+- reservation creation, commit, renewal/release and reserved CPU/RAM/storage/VRAM;
+- Worker dispatch duration and dispatch failures;
+- Node/Worker heartbeat events and heartbeat age;
+- Node resource availability and Worker active-job/concurrency state;
+- reconciliation state transitions and liveness failure codes.
+
+Telemetry context preserves canonical Task/Step, Run, Worker Job, Node, Worker, correlation and causation references when available. Job input payloads and `secret_refs` are deliberately not copied into metrics, logs, timeline entries or spans. Tests include explicit private input/secret markers and assert that those markers never reach the in-memory telemetry exporter.
+
+## #37 remote workspace integration
+
+The distributed runtime consumes the existing #37 remote materialization contracts instead of defining a second workspace-transfer protocol.
+
+`WorkspaceJobMaterializationResolver` resolves the canonical `workspace_ref` and `snapshot_ref` carried by `WorkerJobRequest` through the existing `WorkspaceProvider`, verifies that the snapshot belongs to the workspace, and creates the existing `RemoteMaterializationRequest` with the canonical snapshot checksum and workspace access mode. The persisted Worker Job continues to carry only canonical references; host-local execution paths never become part of the distributed contract.
+
+`MaterializingWorkerDispatcher` composes a `RemoteWorkspaceMaterializer` around an ordinary `WorkerDispatcher`:
+
+1. resolve the canonical workspace/snapshot references;
+2. materialize the snapshot on the exact Worker before execution;
+3. validate receipt Worker/workspace/snapshot/checksum/access-mode identity;
+4. dispatch the unchanged canonical Worker Job;
+5. collect canonical result/artifact evidence only after terminal execution;
+6. clean up using the #37 acknowledgement/outcome contract.
+
+A lost dispatch acknowledgement does not trigger premature cleanup or a second workspace materialization. The wrapper retains the original materialization receipt and reuses it when the same idempotent Worker Job is retried/reconciled. Remote result artifact IDs are folded into `WorkerJobResult` without exposing a host path.
 
 ## Remaining #14 integration work
 
-The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration, authenticated/authorized Worker registration-heartbeat, and #5 Node/Worker provider adapters.
+The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration, authenticated/authorized Worker registration-heartbeat, #5 Node/Worker provider adapters, #16 telemetry integration and #37 remote workspace materialization/result/cleanup composition.
 
 Full issue completion still requires the remaining composition work, especially:
 
-- scoped secret-resolution/delivery at the Worker execution boundary without putting plaintext secrets into `WorkerJobRequest` persistence or diagnostics;
-- concrete #37 remote workspace materialization, artifact/result return and cleanup flow;
-- distributed trace/resource telemetry integration using the existing #16 observability seams;
+- scoped secret-resolution/delivery at the Worker execution boundary without putting plaintext secrets into `WorkerJobRequest` persistence, diagnostics or telemetry;
 - a real replaceable remote transport fixture while keeping local/single-node operation on the same abstractions;
-- explicit remote result/evidence return and terminal reconciliation semantics;
+- explicit transport-level remote result/evidence return and terminal reconciliation semantics;
 - controlled failover/re-dispatch policy for work proven safe to retry after Worker loss;
 - remaining acceptance/security/recovery tests and final cross-issue integration review.
