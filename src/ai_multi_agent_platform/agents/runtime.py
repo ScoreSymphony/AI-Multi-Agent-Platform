@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.capabilities import (
     CapabilityCompatibilityRequest,
@@ -362,7 +362,7 @@ class AgentRuntime:
             raise ContractError(
                 ErrorCode.FORBIDDEN,
                 "Agent capability policy denies one or more requested capabilities",
-                details={"capability_ids": sorted(denied)},
+                details={"capability_ids": cast(JsonValue, sorted(denied))},
             )
         if policy.allowed:
             outside_allowlist = effective - set(policy.allowed)
@@ -370,7 +370,9 @@ class AgentRuntime:
                 raise ContractError(
                     ErrorCode.FORBIDDEN,
                     "Agent capability request exceeds its allowlist",
-                    details={"capability_ids": sorted(outside_allowlist)},
+                    details={
+                        "capability_ids": cast(JsonValue, sorted(outside_allowlist))
+                    },
                 )
 
         constraints = {item.capability_id: item for item in policy.constraints}
@@ -380,7 +382,7 @@ class AgentRuntime:
                 raise ContractError(
                     ErrorCode.UNSUPPORTED_CAPABILITY,
                     "Agent requires capabilities that are not available in the reference runtime",
-                    details={"capability_ids": sorted(missing)},
+                    details={"capability_ids": cast(JsonValue, sorted(missing))},
                 )
             return tuple(sorted(effective))
 
