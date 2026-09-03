@@ -327,9 +327,7 @@ class TerminalSessionService:
             risk=RiskClassification.STANDARD,
         )
         adapter = self._adapter(session)
-        frames = await adapter.read_frames(
-            self._handles[session_id], after_sequence=after_sequence
-        )
+        frames = await adapter.read_frames(self._handles[session_id], after_sequence=after_sequence)
         return tuple(self._canonical_frame(session_id, frame) for frame in frames)
 
     async def stream_frames(
