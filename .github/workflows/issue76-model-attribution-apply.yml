@@ -1,0 +1,78 @@
+name: Issue 76 model attribution apply
+
+on:
+  push:
+    branches: [feat/issue-76-model-config-attribution]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-76-model-config-attribution
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Apply #76 model attribution follow-up
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text()
+              if text.count(old) != 1:
+                  raise RuntimeError(f"expected exactly one match in {path}: {old[:120]!r}")
+              target.write_text(text.replace(old, new, 1))
+
+          progressive = "src/ai_multi_agent_platform/observability/progressive.py"
+          replace_once(
+              progressive,
+              '''    async def generate(self, request: ModelRequest) -> ModelResponse:\n        context = _context_from_operation(\n            request.context,\n            model_call_id=request.request_id,\n            model_provider_id=self.descriptor.provider_id,\n            provider_id=self.descriptor.provider_id,\n        )\n''',
+              '''    async def generate(self, request: ModelRequest) -> ModelResponse:\n        model_config_id = _model_config_id_from_request(request)\n        context = _context_from_operation(\n            request.context,\n            model_call_id=request.request_id,\n            model_config_id=model_config_id,\n            model_provider_id=self.descriptor.provider_id,\n            provider_id=self.descriptor.provider_id,\n        )\n''',
+          )
+          replace_once(
+              progressive,
+              '''    model_call_id: str | None = None,\n    model_provider_id: str | None = None,\n''',
+              '''    model_call_id: str | None = None,\n    model_config_id: str | None = None,\n    model_provider_id: str | None = None,\n''',
+          )
+          replace_once(
+              progressive,
+              '''        model_call_id=model_call_id,\n        model_provider_id=model_provider_id,\n''',
+              '''        model_call_id=model_call_id,\n        model_config_id=model_config_id,\n        model_provider_id=model_provider_id,\n''',
+          )
+          replace_once(
+              progressive,
+              '''\ndef _selection_reports_fallback(selection: ModelSelection) -> bool:\n''',
+              '''\ndef _model_config_id_from_request(request: ModelRequest) -> str | None:\n    """Read only the canonical ID injected by the platform model runtime/router path."""\n\n    value = request.requirements.get("model_config_id")\n    if not isinstance(value, str):\n        return None\n    normalized = value.strip()\n    return normalized or None\n\n\ndef _selection_reports_fallback(selection: ModelSelection) -> bool:\n''',
+          )
+
+          Path("tests/test_issue76_model_attribution.py").write_text('''from __future__ import annotations\n\nimport asyncio\n\nfrom ai_multi_agent_platform.accounting import (\n    AccountingService,\n    InMemoryUsageStore,\n)\nfrom ai_multi_agent_platform.contracts import (\n    Capability,\n    CapabilityKind,\n    HealthStatus,\n    ModelRequest,\n    ModelResponse,\n    OperationContext,\n    ProviderDescriptor,\n)\nfrom ai_multi_agent_platform.models import (\n    ModelCapabilities,\n    ModelConfiguration,\n    ModelRegistry,\n    ModelRuntime,\n)\nfrom ai_multi_agent_platform.observability import (\n    AccountingBridgeExporter,\n    InMemoryExporter,\n    ObservedModelProvider,\n    Telemetry,\n)\nfrom ai_multi_agent_platform.testing import FakeModelProvider\n\n\nclass UsageReportingProvider(FakeModelProvider):\n    descriptor = ProviderDescriptor(\n        provider_id="usage-reporting-provider",\n        provider_type="model",\n        supported_operations=("generate",),\n        capabilities=(\n            Capability(\n                name="model.text",\n                kind=CapabilityKind.MODEL,\n                supported_operations=("generate",),\n                modalities=("text",),\n            ),\n        ),\n        health=HealthStatus.HEALTHY,\n        available=True,\n    )\n\n    async def generate(self, request: ModelRequest) -> ModelResponse:\n        self.calls.append(request)\n        return ModelResponse(\n            request_id=request.request_id,\n            text="ok",\n            model_ref="provider-native/opaque-model-name",\n            usage={\n                "prompt_tokens": 11,\n                "completion_tokens": 7,\n                "total_tokens": 18,\n            },\n        )\n\n\ndef _configuration(config_id: str, *, priority: int) -> ModelConfiguration:\n    return ModelConfiguration(\n        config_id=config_id,\n        display_name=config_id,\n        provider_id="usage-reporting-provider",\n        capabilities=ModelCapabilities(\n            context_window=32_768,\n            streaming=True,\n            modalities=("text",),\n        ),\n        health=HealthStatus.HEALTHY,\n        priority=priority,\n    )\n\n\ndef test_auto_routed_model_usage_is_attributed_to_selected_canonical_configuration() -> None:\n    accounting = AccountingService(InMemoryUsageStore())\n    exporter = InMemoryExporter()\n    telemetry = Telemetry(AccountingBridgeExporter(exporter, accounting))\n    provider = UsageReportingProvider()\n\n    registry = ModelRegistry()\n    registry.register_provider(ObservedModelProvider(provider, telemetry))\n    registry.register_model(_configuration("model-low-priority", priority=10))\n    registry.register_model(_configuration("model-auto-selected", priority=100))\n    runtime = ModelRuntime(registry)\n\n    response = asyncio.run(\n        runtime.generate(\n            ModelRequest(\n                request_id="model-call-auto-routing",\n                messages=("hello",),\n                context=OperationContext(\n                    correlation_id="correlation-model-auto-routing",\n                    owner_type="user",\n                    owner_id="alice",\n                ),\n            )\n        )\n    )\n\n    assert response.model_ref == "model-auto-selected"\n    assert len(provider.calls) == 1\n    assert provider.calls[0].requirements["model_config_id"] == "model-auto-selected"\n\n    by_metric = {record.metric_type: record for record in accounting.query()}\n    for metric_type in (\n        "model.call.count",\n        "model.call.duration",\n        "model.tokens.input",\n        "model.tokens.output",\n        "model.tokens.total",\n    ):\n        record = by_metric[metric_type]\n        assert record.scope.model_config_id == "model-auto-selected"\n        assert record.scope.model_provider_id == "usage-reporting-provider"\n        assert record.provider == "usage-reporting-provider"\n        assert record.scope.model_config_id != "provider-native/opaque-model-name"\n\n    assert by_metric["model.tokens.input"].quantity == 11.0\n    assert by_metric["model.tokens.output"].quantity == 7.0\n    assert by_metric["model.tokens.total"].quantity == 18.0\n''')
+
+          Path("docs/ISSUE_76_MODEL_ATTRIBUTION_PROGRESS.md").write_text('''# Issue #76 — Canonical model attribution progress\n\nThis follow-up closes the model-attribution gap between the canonical #10 router/runtime and #76 usage accounting.\n\n## Source of truth\n\n`ModelRuntime` resolves the actual canonical `ModelConfiguration`, validates its selected provider and injects that configuration ID into the routed `ModelRequest` before invoking the provider. The progressive observability wrapper now copies only that routed canonical ID into `TelemetryContext.model_config_id`.\n\nThis means automatic routing is attributable without guessing from provider-native response fields. A provider-reported/native `model_ref` never becomes the canonical accounting model identity.\n\n## Accounting result\n\nThe existing observability-to-accounting bridge already maps `TelemetryContext.model_config_id` and `model_provider_id` into `UsageScope`. Therefore model call count, duration and provider/token usage records now share the actually selected canonical model configuration and provider attribution.\n\n## Boundaries\n\n- Direct provider calls without a routed canonical `model_config_id` remain unattributed at the model-configuration level rather than fabricated.\n- No Agent/AgentTeam execution attribution is inferred from #88 planning assignments.\n- Provider-native model names remain non-canonical metadata.\n- External monetary cost is not inferred from arbitrary provider usage or untyped `cost_metadata`.\n\nIssue #76 remains open for dependency-bound Worker/Node, authorization/admission, organization/team, notification and external/browser/repository integrations.\n''')
+          PY
+      - name: Verify repository gates
+        run: |
+          ruff format src/ai_multi_agent_platform/observability/progressive.py tests/test_issue76_model_attribution.py
+          ruff check src/ai_multi_agent_platform/observability/progressive.py tests/test_issue76_model_attribution.py
+          mypy
+          pytest tests/test_issue76_accounting.py tests/test_issue76_model_attribution.py tests/test_issue_10_model_registry_router.py tests/test_issue_16_completion.py
+          python -m build
+      - name: Commit implementation
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ai_multi_agent_platform/observability/progressive.py tests/test_issue76_model_attribution.py docs/ISSUE_76_MODEL_ATTRIBUTION_PROGRESS.md
+          git commit -m "feat: attribute #76 model usage to canonical configs"
+          git push origin HEAD:feat/issue-76-model-config-attribution
