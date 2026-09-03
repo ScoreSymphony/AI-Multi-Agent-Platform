@@ -15,9 +15,9 @@ class RecordingTransport:
         self.urls: list[str] = []
         self.response = response or RawResponse(
             status=200,
-            body=json.dumps(
-                {"items": [], "total": 0, "limit": 50, "next_cursor": None}
-            ).encode("utf-8"),
+            body=json.dumps({"items": [], "total": 0, "limit": 50, "next_cursor": None}).encode(
+                "utf-8"
+            ),
             headers={"x-api-version": "v1"},
         )
 
