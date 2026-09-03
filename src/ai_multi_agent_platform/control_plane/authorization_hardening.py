@@ -237,9 +237,7 @@ class AuthorizationBoundaryHardeningMixin:
                     retryable=True,
                 )
             resolved_sources = await resolvers.resolve_all(source_refs, data_context)
-            source_files = tuple(
-                entry for resolved in resolved_sources for entry in resolved.files
-            )
+            source_files = tuple(entry for resolved in resolved_sources for entry in resolved.files)
             files = _merge_workspace_files(files, source_files)
 
         workspace = await provider.create_workspace(
