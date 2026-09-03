@@ -67,6 +67,8 @@ class TerminalSessionService:
         adapters: tuple[TerminalSessionAdapter, ...],
         *,
         redactor: Callable[[str], str] | None = None,
+        transcript_sink: Callable[[TerminalFrame], None] | None = None,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
         if not adapters:
             raise ValueError("terminal service requires at least one session adapter")
@@ -78,11 +80,15 @@ class TerminalSessionService:
                 raise ValueError(f"duplicate terminal adapter: {adapter_id}")
             self._adapters[adapter_id] = adapter
         self._redact = redactor or (lambda value: value)
+        self._transcript_sink = transcript_sink
+        self._clock = clock
         self._sessions: dict[str, TerminalSession] = {}
         self._handles: dict[str, AdapterSessionHandle] = {}
         self._frames: dict[str, dict[int, TerminalFrame]] = {}
         self._attachments: dict[str, SessionAttachment] = {}
         self._activity: list[TerminalActivityRecord] = []
+        self._last_activity: dict[str, datetime] = {}
+        self._operations: dict[str, OperationContext] = {}
 
     @property
     def activity_records(self) -> tuple[TerminalActivityRecord, ...]:
@@ -129,6 +135,8 @@ class TerminalSessionService:
                     "project_id": request.context.project_id,
                     "workspace_id": request.context.workspace_id,
                     "adapter_id": request.adapter_id,
+                    "inactivity_timeout_seconds": request.inactivity_timeout_seconds,
+                    "retain_transcript": request.retain_transcript,
                 },
                 approval_id=approval_id,
                 risk=risk,
@@ -158,6 +166,8 @@ class TerminalSessionService:
                 and existing.dimensions == request.dimensions
                 and existing.encoding == request.encoding
                 and existing.policy_classification == request.policy_classification
+                and existing.inactivity_timeout_seconds == request.inactivity_timeout_seconds
+                and existing.retain_transcript is request.retain_transcript
             ):
                 return existing
             raise ContractError(
@@ -165,6 +175,13 @@ class TerminalSessionService:
                 "terminal session id is already bound to a different create request",
             )
 
+        if request.retain_transcript and self._transcript_sink is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "terminal transcript retention requires a configured evidence sink",
+            )
+
+        now = self._clock()
         started = await adapter.start(request)
         session = TerminalSession(
             id=request.session_id,
@@ -175,17 +192,31 @@ class TerminalSessionService:
             adapter_id=request.adapter_id,
             capabilities=started.capabilities,
             status=SessionStatus.STARTING,
+            started_at=now,
             encoding=request.encoding,
             dimensions=request.dimensions,
             policy_classification=request.policy_classification,
+            inactivity_timeout_seconds=request.inactivity_timeout_seconds,
+            retain_transcript=request.retain_transcript,
             adapter_metadata=started.metadata,
         )
         if started.status is not SessionStatus.STARTING:
-            session = session.transition(started.status)
+            session = session.transition(started.status, occurred_at=now)
         self._sessions[session.id] = session
         self._handles[session.id] = started.handle
         self._frames[session.id] = {}
-        self._record(session.id, request.actor_ref, "session.create", request.operation)
+        self._last_activity[session.id] = now
+        self._operations[session.id] = request.operation
+        self._record(
+            session.id,
+            request.actor_ref,
+            "session.create",
+            request.operation,
+            {
+                "inactivity_timeout_seconds": request.inactivity_timeout_seconds,
+                "retain_transcript": request.retain_transcript,
+            },
+        )
         return session
 
     async def list_sessions(
@@ -385,6 +416,7 @@ class TerminalSessionService:
         ):
             raise ContractError(ErrorCode.FORBIDDEN, "terminal session does not accept input")
         await self._adapter(session).send_input(self._handles[session_id], data)
+        self._touch(session_id)
         self._record(
             session_id,
             actor_ref,
@@ -416,6 +448,7 @@ class TerminalSessionService:
                 ErrorCode.UNSUPPORTED_CAPABILITY, "terminal session does not resize"
             )
         await self._adapter(session).resize(self._handles[session_id], dimensions)
+        self._touch(session_id)
         updated = session.with_dimensions(dimensions)
         self._sessions[session_id] = updated
         self._record(session_id, actor_ref, "session.resize", operation, dimensions.to_json())
@@ -449,7 +482,7 @@ class TerminalSessionService:
         return updated
 
     async def reconcile_session(self, session_id: str) -> TerminalSession:
-        """Refresh canonical status after adapter completion or later worker/node loss."""
+        """Refresh completion, worker loss or canonical inactivity policy."""
 
         return await self._refresh(session_id)
 
@@ -470,13 +503,48 @@ class TerminalSessionService:
 
     async def _refresh(self, session_id: str) -> TerminalSession:
         session = self._session(session_id)
-        backend_status = await self._adapter(session).status(self._handles[session_id])
-        if backend_status == session.status:
-            return session
         if session.status in TERMINAL_SESSION_STATUSES:
             return session
+
+        adapter = self._adapter(session)
+        backend_status = await adapter.status(self._handles[session_id])
+        if backend_status != session.status:
+            session = self._transition_from_adapter(session, backend_status)
+            self._sessions[session_id] = session
+            if session.status in TERMINAL_SESSION_STATUSES:
+                return session
+
+        if self._inactive(session):
+            await adapter.terminate(
+                self._handles[session_id],
+                reason="terminal session inactivity timeout",
+            )
+            backend_status = await adapter.status(self._handles[session_id])
+            if backend_status not in TERMINAL_SESSION_STATUSES:
+                raise ContractError(
+                    ErrorCode.INVALID_PROVIDER_RESPONSE,
+                    "terminal adapter did not terminate after inactivity timeout",
+                    provider_id=session.adapter_id,
+                )
+            session = self._transition_from_adapter(session, backend_status)
+            self._sessions[session_id] = session
+            operation = self._operations[session_id]
+            self._record(
+                session_id,
+                "service:terminal-policy",
+                "session.inactivity_timeout",
+                operation,
+                {"timeout_seconds": session.inactivity_timeout_seconds},
+            )
+        return session
+
+    def _transition_from_adapter(
+        self,
+        session: TerminalSession,
+        backend_status: SessionStatus,
+    ) -> TerminalSession:
         try:
-            updated = session.transition(backend_status)
+            return session.transition(backend_status, occurred_at=self._clock())
         except ValueError as exc:
             raise ContractError(
                 ErrorCode.INVALID_PROVIDER_RESPONSE,
@@ -484,8 +552,16 @@ class TerminalSessionService:
                 provider_id=session.adapter_id,
                 details={"from": session.status.value, "to": backend_status.value},
             ) from exc
-        self._sessions[session_id] = updated
-        return updated
+
+    def _inactive(self, session: TerminalSession) -> bool:
+        timeout = session.inactivity_timeout_seconds
+        if timeout is None:
+            return False
+        last_activity = self._last_activity.get(session.id, session.started_at)
+        return (self._clock() - last_activity).total_seconds() >= timeout
+
+    def _touch(self, session_id: str) -> None:
+        self._last_activity[session_id] = self._clock()
 
     async def _authorize_session(
         self,
@@ -570,9 +646,26 @@ class TerminalSessionService:
             sequence=frame.sequence,
             channel=frame.channel,
             data=redacted,
+            occurred_at=self._clock(),
             final=frame.final,
         )
         self._frames[session_id][frame.sequence] = canonical
+        self._touch(session_id)
+        session = self._sessions[session_id]
+        if session.retain_transcript:
+            sink = self._transcript_sink
+            if sink is None:
+                raise ContractError(
+                    ErrorCode.UNAVAILABLE,
+                    "terminal transcript evidence sink is unavailable",
+                )
+            try:
+                sink(canonical)
+            except Exception as exc:
+                raise ContractError(
+                    ErrorCode.UNAVAILABLE,
+                    "terminal transcript evidence sink failed",
+                ) from exc
         return canonical
 
     def _record(
@@ -589,6 +682,7 @@ class TerminalSessionService:
                 actor_ref=actor_ref,
                 action=action,
                 correlation_id=operation.correlation_id,
+                occurred_at=self._clock(),
                 metadata=metadata or {},
             )
         )
