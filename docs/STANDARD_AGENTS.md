@@ -11,7 +11,9 @@ boundaries as user-created Agents.
 - The catalog is provider-neutral. No starter names or requires a particular LLM vendor,
   model server, orchestrator, executor, host, operating system or memory backend.
 - Model selection is expressed through the canonical issue #10 `RoutingRequirements` and
-  remains replaceable by the deployment or user.
+  remains replaceable by the deployment or user. The initial profiles require only text
+  modality and do not require native model tool-calling merely because optional platform
+  capabilities exist.
 - Tools are expressed only as canonical issue #12 capability IDs. A starter never calls a
   provider implementation directly.
 - Authorization and approval remain authoritative in issue #15 and the issue #33 runtime.
@@ -32,13 +34,15 @@ The initial catalog version is `1.0.0` with source
 - stable canonical Agent or Team ID;
 - starter key and kind;
 - starter catalog version and source;
+- platform package release at which the definition is bundled;
 - permission-profile description;
-- changelog text;
+- changelog text and migration note;
 - canonical creation provenance.
 
 The catalog version is the version of the starter artifact itself. It is intentionally
-separate from provider versions and model versions. Platform/package release metadata may
-be attached by the deployment/release layer without changing the Agent contract.
+separate from provider versions and model versions. `platform_release` records the package
+release that bundled the definition; catalog migrations are still governed by the catalog
+version and explicit migration policy below.
 
 ## Standard Agents
 
@@ -49,7 +53,7 @@ be attached by the deployment/release layer without changing the Agent contract.
 | Researcher | Source-based research | Optional web/file read; write/shell denied | Enabled |
 | Developer | Scoped software development | File read required; file write and shell optional; shell approval-bound | Enabled |
 | Reviewer | Independent review/testing | Optional file read; write/shell denied | Enabled |
-| Data Analyst | Structured-data analysis | Data read required; file read optional; write/shell denied | Enabled |
+| Data Analyst | Structured-data analysis | Optional data/file read; write/shell denied | Enabled |
 | File Assistant | Scoped file work | File read required; file write optional; shell denied | Enabled |
 | System Administrator | Privileged operations | Shell required; writes optional; privileged operations approval-bound | **Disabled** |
 
@@ -67,8 +71,8 @@ inventory:
 - `ensure_standard_agent_capabilities()` fails with `unsupported_capability` when a required
   capability is absent instead of silently selecting an unrelated provider tool.
 
-Runtime authorization, worker placement and provider health remain separate checks and are
-not replaced by this readiness result.
+Runtime authorization, worker placement, model suitability and provider health remain
+separate checks and are not replaced by this readiness result.
 
 ## Starter Agent Teams
 
@@ -148,8 +152,9 @@ reference the resource. `JsonAgentRepository` persists successful deletions atom
 
 A user therefore can delete an unreferenced user-owned copy without deleting the bundled
 starter. Supplying the user's owner reference for a bundled service-owned starter fails the
-owner check. Higher-level API/UI deletion still remains subject to the canonical issue #15
-authorization policy.
+owner check. A deployment administrator may still remove or replace bundled defaults through
+the same canonical repository lifecycle where policy permits; dependent Team revisions must
+be removed first. Higher-level API/UI deletion remains subject to issue #15 authorization.
 
 ## Security-sensitive profiles
 
