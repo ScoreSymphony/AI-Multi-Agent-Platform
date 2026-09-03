@@ -8,7 +8,6 @@ from .client import ClientResponse, ControlPlaneClient
 
 _SEARCH_MODES = ("exact", "keyword", "metadata", "semantic", "hybrid")
 _SEARCH_SORTS = ("relevance", "id", "updated_at")
-_TASK_PRIORITIES = ("low", "normal", "high", "urgent")
 
 
 def add_search_parser(
