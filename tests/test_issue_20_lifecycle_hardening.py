@@ -255,6 +255,7 @@ def test_update_detects_candidate_configuration_that_requires_reconfiguration() 
         registry.validate_update(manifest.plugin_id, incompatible_candidate)
 
     assert caught.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert caught.value.details is not None
     assert caught.value.details["requires_reconfiguration"] is True
 
     compatible_candidate = replace(
@@ -291,8 +292,13 @@ asyncio.run(registry.enable(
     ReferenceCapabilityPlugin(),
     granted_permissions=frozenset({PluginPermission.CAPABILITY_REGISTRATION}),
 ))
+distribution_prefixes = (
+    'ai_multi_agent_platform.templates',
+    'ai_multi_agent_platform.import_export',
+    'ai_multi_agent_platform.registry_marketplace',
+)
 assert not any(
-    name.startswith(('ai_multi_agent_platform.templates', 'ai_multi_agent_platform.import_export', 'ai_multi_agent_platform.registry_marketplace'))
+    name.startswith(distribution_prefixes)
     for name in sys.modules
 )
 """
