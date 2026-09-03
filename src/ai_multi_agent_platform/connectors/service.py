@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 
+from ai_multi_agent_platform.contracts.authorization import (
+    AuthorizationOutcome,
+    normalize_authorization_decision,
+)
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import HealthStatus, JsonValue, OperationContext
 from ai_multi_agent_platform.security import (
@@ -14,6 +18,7 @@ from ai_multi_agent_platform.security import (
     AuthorizationGate,
     ProposedAction,
     ResourceType,
+    redact_sensitive,
 )
 
 from .models import (
@@ -24,7 +29,9 @@ from .models import (
     ConnectorResourceQuery,
     ConnectorSyncRequest,
     ConnectorSyncResult,
+    ExternalNativeReference,
     ExternalResourceReference,
+    SyncMode,
 )
 from .provider import ConnectorProvider
 from .registry import ConnectorRegistry
@@ -59,6 +66,7 @@ class ConnectorService:
     ) -> Connection:
         self._validate_scope(connection, context)
         provider = self.registry.resolve(connection.connector_type_id, connection.connector_version)
+        self._validate_safe_adapter_metadata(connection, provider)
         definition = provider.definition
         if definition.authentication_requirements and not connection.secret_references:
             raise ContractError(
@@ -78,6 +86,45 @@ class ConnectorService:
         normalized = await provider.validate_connection(connection, context)
         self._validate_provider_connection(connection, normalized, provider)
         return await self.repository.save_connection(normalized)
+
+    async def get_connection(
+        self,
+        connection_id: str,
+        *,
+        actor: ActorIdentity,
+        context: OperationContext,
+    ) -> Connection:
+        connection = await self.repository.get_connection(connection_id)
+        self._validate_scope(connection, context)
+        await self._authorize(
+            connection,
+            actor=actor,
+            context=context,
+            action=AuthorizationAction.READ,
+            side_effect="connection_read",
+            payload={"connection_id": connection.id},
+        )
+        return connection
+
+    async def list_connections(
+        self,
+        *,
+        actor: ActorIdentity,
+        context: OperationContext,
+        project_id: str | None = None,
+    ) -> tuple[Connection, ...]:
+        connections = await self.repository.list_connections(project_id=project_id)
+        visible: list[Connection] = []
+        for connection in connections:
+            try:
+                self._validate_scope(connection, context)
+            except ContractError as exc:
+                if exc.code is ErrorCode.FORBIDDEN:
+                    continue
+                raise
+            if await self._can_read_connection(connection, actor=actor, context=context):
+                visible.append(connection)
+        return tuple(visible)
 
     async def set_enabled(
         self,
@@ -289,6 +336,75 @@ class ConnectorService:
             self._validate_resource_binding(resource, connection, provider)
         return result
 
+    async def subscribe_events(
+        self,
+        connection_id: str,
+        event_types: tuple[str, ...],
+        *,
+        configuration: dict[str, JsonValue],
+        actor: ActorIdentity,
+        context: OperationContext,
+        approval_id: str | None = None,
+    ) -> ExternalNativeReference:
+        if not event_types or any(not event_type.strip() for event_type in event_types):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "connector event subscription requires non-blank event types",
+            )
+        connection, provider = await self._usable_connection(
+            connection_id,
+            actor=actor,
+            context=context,
+            action=AuthorizationAction.MANAGE_INTEGRATIONS,
+            side_effect="external_event_subscription",
+            approval_id=approval_id,
+            payload={
+                "connection_id": connection_id,
+                "event_types": list(event_types),
+                "configuration": configuration,
+            },
+        )
+        unsupported = sorted(set(event_types) - set(provider.definition.event_types))
+        if unsupported:
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                "connector subscription requests undeclared event types",
+                provider_id=provider.descriptor.provider_id,
+                details={"event_types": unsupported},
+            )
+        return await provider.subscribe_events(
+            connection,
+            event_types,
+            configuration=configuration,
+            context=context,
+        )
+
+    async def unsubscribe_events(
+        self,
+        connection_id: str,
+        subscription: ExternalNativeReference,
+        *,
+        actor: ActorIdentity,
+        context: OperationContext,
+        approval_id: str | None = None,
+    ) -> None:
+        connection, provider = await self._usable_connection(
+            connection_id,
+            actor=actor,
+            context=context,
+            action=AuthorizationAction.MANAGE_INTEGRATIONS,
+            side_effect="external_event_unsubscription",
+            approval_id=approval_id,
+            payload={
+                "connection_id": connection_id,
+                "subscription": {
+                    "namespace": subscription.namespace,
+                    "native_id": subscription.native_id,
+                },
+            },
+        )
+        await provider.unsubscribe_events(connection, subscription, context=context)
+
     async def synchronize(
         self,
         connection_id: str,
@@ -296,6 +412,7 @@ class ConnectorService:
         *,
         actor: ActorIdentity,
         context: OperationContext,
+        mode: SyncMode = SyncMode.INCREMENTAL,
     ) -> ConnectorSyncResult:
         connection, provider = await self._usable_connection(
             connection_id,
@@ -303,15 +420,21 @@ class ConnectorService:
             context=context,
             action=AuthorizationAction.READ,
             side_effect="external_sync",
-            payload={"connection_id": connection_id, "stream": stream},
+            payload={
+                "connection_id": connection_id,
+                "stream": stream,
+                "mode": mode.value,
+            },
         )
-        checkpoint = await self.repository.get_checkpoint(connection.id, stream)
+        existing_checkpoint = await self.repository.get_checkpoint(connection.id, stream)
+        checkpoint = None if mode is SyncMode.REBUILD else existing_checkpoint
         result = await provider.synchronize(
             ConnectorSyncRequest(
                 connection_id=connection.id,
                 stream=stream,
                 context=context,
                 checkpoint=checkpoint,
+                mode=mode,
             )
         )
         if result.checkpoint.connection_id != connection.id or result.checkpoint.stream != stream:
@@ -367,6 +490,30 @@ class ConnectorService:
         provider = self.registry.resolve(connection.connector_type_id, connection.connector_version)
         return connection, provider
 
+    async def _can_read_connection(
+        self,
+        connection: Connection,
+        *,
+        actor: ActorIdentity,
+        context: OperationContext,
+    ) -> bool:
+        if self.authorization_gate is None:
+            return True
+        proposal = self._authorization_proposal(
+            connection,
+            actor=actor,
+            context=context,
+            action=AuthorizationAction.READ,
+            side_effect="connection_list",
+            payload={"connection_id": connection.id},
+        )
+        decision = normalize_authorization_decision(
+            await self.authorization_gate.provider.authorize(
+                proposal.context.to_request(requested_action_digest=proposal.digest)
+            )
+        )
+        return decision.outcome is AuthorizationOutcome.ALLOW
+
     async def _authorize(
         self,
         connection: Connection,
@@ -381,13 +528,41 @@ class ConnectorService:
     ) -> None:
         if self.authorization_gate is None:
             return
-        proposed = ProposedAction(
+        proposed = self._authorization_proposal(
+            connection,
+            actor=actor,
+            context=context,
+            action=action,
+            side_effect=side_effect,
+            capability_ref=capability_ref,
+            payload=payload,
+        )
+        await self.authorization_gate.enforce(proposed, approval_id=approval_id)
+
+    @staticmethod
+    def _authorization_proposal(
+        connection: Connection,
+        *,
+        actor: ActorIdentity,
+        context: OperationContext,
+        action: AuthorizationAction,
+        side_effect: str | None,
+        capability_ref: str | None = None,
+        payload: dict[str, JsonValue] | None = None,
+    ) -> ProposedAction:
+        scoped_context = replace(
+            context,
+            owner_type=connection.owner_type,
+            owner_id=connection.owner_id,
+            project_id=connection.project_id or context.project_id,
+        )
+        return ProposedAction(
             AuthorizationContext(
                 actor=actor,
                 action=action,
                 resource_type=ResourceType.CONNECTOR,
                 resource_id=connection.id,
-                operation=context,
+                operation=scoped_context,
                 organization_id=connection.organization_id,
                 workspace_id=None,
                 capability_ref=capability_ref,
@@ -396,7 +571,6 @@ class ConnectorService:
             ),
             payload=payload or _connection_security_payload(connection),
         )
-        await self.authorization_gate.enforce(proposed, approval_id=approval_id)
 
     @staticmethod
     def _validate_scope(connection: Connection, context: OperationContext) -> None:
@@ -432,6 +606,22 @@ class ConnectorService:
                 "connector provider changed canonical connection identity/scope",
                 provider_id=provider.descriptor.provider_id,
             )
+        ConnectorService._validate_safe_adapter_metadata(normalized, provider)
+
+    @staticmethod
+    def _validate_safe_adapter_metadata(
+        connection: Connection,
+        provider: ConnectorProvider,
+    ) -> None:
+        for metadata in connection.adapter_metadata:
+            values = dict(metadata.values)
+            if redact_sensitive(values) != values:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "connection adapter metadata must not contain embedded credentials",
+                    provider_id=provider.descriptor.provider_id,
+                    details={"namespace": metadata.namespace},
+                )
 
     @staticmethod
     def _validate_resource_binding(
