@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from math import ceil
-from typing import Mapping, Protocol
+from typing import Protocol
 
-from ai_multi_agent_platform.configuration import SecretAccessContext, SecretMaterial, SecretProvider
+from ai_multi_agent_platform.configuration import (
+    SecretAccessContext,
+    SecretMaterial,
+    SecretProvider,
+)
 from ai_multi_agent_platform.contracts import ExecutionHandle, ExecutionSnapshot
 from ai_multi_agent_platform.security import SecretReference
 
