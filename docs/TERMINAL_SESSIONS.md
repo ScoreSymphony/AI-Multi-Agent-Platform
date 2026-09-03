@@ -26,7 +26,7 @@ A session records:
 - optional task/run/worker/node references;
 - mode (`read_only` or `interactive`);
 - owner actor reference;
-- adapter ID and non-secret adapter metadata;
+- adapter ID plus namespaced, non-secret public diagnostics;
 - capability metadata;
 - status (`starting`, `running`, `completed`, `failed`, `cancelled`, `lost`);
 - started/ended timestamps;
@@ -35,7 +35,9 @@ A session records:
 - optional `inactivity_timeout_seconds`;
 - policy-controlled `retain_transcript`.
 
-Provider-private handles are stored only inside the service/adapter boundary and never serialized as canonical identity.
+`project_id` and `workspace_id` are also serialized as canonical top-level fields so the generic Control Plane filtering convention can filter terminal resources without understanding the nested session context. The structured `context` remains the authoritative relationship object.
+
+Backend-private adapter metadata remains internal. The public terminal resource exposes only the namespaced `diagnostics` values that the adapter explicitly returned as safe canonical diagnostics. Provider-private handles are stored only inside the service/adapter boundary and never serialized as canonical identity.
 
 ## Capabilities
 
@@ -75,6 +77,8 @@ Commands use the existing Control Plane command envelope and idempotency mechani
 
 Creation can include `inactivity_timeout_seconds` and `retain_transcript`. These values are part of the authorization payload and exact create-request identity, so changing them requires a newly authorized action rather than reusing an approval for a different lifecycle policy.
 
+The terminal resource payload is validated by the same extension private-payload guard as every other Control Plane extension. Backend-private fields such as `adapter_metadata`, provider SDK objects, private API handles, raw exceptions, or backend references are never valid northbound terminal fields.
+
 ## WebSocket stream protocol
 
 Canonical stream endpoint:
@@ -105,6 +109,8 @@ Disconnecting the browser detaches the attachment. It does not implicitly cancel
 
 Adapter frame sequence numbers are converted to stable canonical `TerminalFrame` identities. Re-reading the same adapter sequence yields the same canonical frame ID while the session service owns that session. This makes replay/reconnect deterministic and prevents the browser from treating replayed output as new output.
 
+The ASGI contract is covered end to end by tests that open the canonical WebSocket route, receive the initial snapshot and stream frames, observe terminal status, and reconnect from a later sequence without changing canonical frame identity.
+
 ## Inactivity timeout
 
 There is no hidden universal terminal timeout. A session can instead carry an explicit positive `inactivity_timeout_seconds` value supplied through the canonical create request.
@@ -119,9 +125,11 @@ Transcript retention is opt-in through `retain_transcript=true`; it is not impli
 
 When retention is enabled, `TerminalSessionService` requires an explicitly configured transcript/evidence sink. Creation fails closed with a canonical unavailable error when policy requests retention but no sink exists. The service sends only already-redacted canonical `TerminalFrame` objects to the sink.
 
-Retention is sequence-stable: the sink is invoked only when a new canonical frame is first observed. Replay or reconnect of an existing sequence reuses the same canonical frame identity and does not duplicate the evidence record.
+Retention is sequence-stable and retryable. A canonical frame receives its stable frame ID before evidence delivery. A sequence is marked retained only after the sink accepts it. If the sink temporarily fails, the canonical frame remains stable but the sequence remains pending; a later exact create retry, read/stream, input flow, or lifecycle reconciliation retries that same frame rather than silently treating it as persisted or creating a duplicate evidence record.
 
-The foundation deliberately does not prescribe one database, filesystem or evidence product. Durable storage, retention duration, deletion and export policy belong to the platform persistence/policy layer behind the sink. This keeps issue #73 implementation-neutral while making retention enforceable when policy enables it.
+When retention is enabled the service also captures pending adapter output on creation and during canonical read/stream and lifecycle reconciliation paths. This means retention does not depend solely on one particular browser attachment. Future remote/push adapters may drive reconciliation continuously, but they must preserve the same sequence-stable evidence semantics.
+
+The foundation deliberately does not prescribe one database, filesystem or evidence product. Durable storage, retention duration, deletion and export policy belong to the platform persistence/policy layer behind the sink.
 
 ## Worker and node loss
 
@@ -133,6 +141,7 @@ The `/terminal` area provides:
 
 - session list and workspace/status filters;
 - canonical project/workspace/task/run context links;
+- links to the canonical artifact and timeline surfaces;
 - connection state;
 - terminal output viewport;
 - explicit read-only vs interactive indication;
@@ -141,7 +150,7 @@ The `/terminal` area provides:
 - explicit warning and confirmation for destructive termination;
 - creation of the deterministic reference session for development/testing.
 
-The frontend contract also understands the canonical timeout and retention fields. The frontend derives the WebSocket URL from the configured Control Plane URL and never connects to worker-private terminal ports.
+The frontend contract also understands the canonical timeout, retention and diagnostics fields. The frontend derives the WebSocket URL from the configured Control Plane URL and never connects to worker-private terminal ports.
 
 ## Integration rules for future adapters
 
@@ -151,9 +160,10 @@ A new adapter must:
 2. advertise exact supported session types and capabilities;
 3. return only an opaque backend handle to the service;
 4. never serialize that backend handle as canonical session identity;
-5. enforce backend-side read/write isolation in addition to platform authorization;
-6. report terminal completion/loss through canonical status mapping;
-7. keep browser access behind the Control Plane gateway;
-8. avoid leaking secrets, environment values, private PTY paths, or provider-private IDs through adapter metadata;
-9. honor service-driven termination for canonical inactivity policy;
-10. leave transcript persistence to the platform evidence sink rather than writing provider-private transcripts behind the service boundary.
+5. expose only explicitly safe, namespaced diagnostics northbound;
+6. enforce backend-side read/write isolation in addition to platform authorization;
+7. report terminal completion/loss through canonical status mapping;
+8. keep browser access behind the Control Plane gateway;
+9. avoid leaking secrets, environment values, private PTY paths, provider-private IDs, or backend handles through diagnostics;
+10. honor service-driven termination for canonical inactivity policy;
+11. leave transcript persistence to the platform evidence sink rather than writing provider-private transcripts behind the service boundary.
