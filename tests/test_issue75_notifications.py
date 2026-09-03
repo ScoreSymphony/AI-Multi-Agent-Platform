@@ -23,7 +23,9 @@ from ai_multi_agent_platform.notifications.models import (
     RecipientType,
     SourceRef,
 )
-from ai_multi_agent_platform.notifications.preferences import InMemoryNotificationPreferenceRepository
+from ai_multi_agent_platform.notifications.preferences import (
+    InMemoryNotificationPreferenceRepository,
+)
 from ai_multi_agent_platform.notifications.recipients import EventOwnerRecipientResolver
 from ai_multi_agent_platform.notifications.repository import InMemoryNotificationRepository
 from ai_multi_agent_platform.notifications.rules import TaskTerminalNotificationRule
