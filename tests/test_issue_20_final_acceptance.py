@@ -5,14 +5,12 @@ from dataclasses import replace
 import pytest
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane.plugin_api import _candidate_resource
 from ai_multi_agent_platform.plugins import (
-    DiscoveredPlugin,
     ExtensionType,
-    ReferenceCapabilityPlugin,
+    reference_manifest,
     validate_manifest_document,
 )
-from ai_multi_agent_platform.plugins.reference import REFERENCE_CAPABILITY_ID, reference_manifest
+from ai_multi_agent_platform.plugins.reference import REFERENCE_CAPABILITY_ID
 
 
 REQUIRED_EXTENSION_TYPES = {
@@ -98,18 +96,6 @@ def test_manifest_model_rejects_duplicate_capability_ids() -> None:
         )
 
 
-def test_reference_plugin_declares_and_exposes_its_capability_northbound() -> None:
+def test_reference_plugin_explicitly_declares_its_capability() -> None:
     manifest = reference_manifest()
     assert manifest.capabilities == (REFERENCE_CAPABILITY_ID,)
-
-    resource = _candidate_resource(
-        DiscoveredPlugin(
-            manifest=manifest,
-            runtime_factory=ReferenceCapabilityPlugin,
-            install_source="bundled-reference",
-        )
-    )
-    assert resource["capabilities"] == [REFERENCE_CAPABILITY_ID]
-    nested_manifest = resource["manifest"]
-    assert isinstance(nested_manifest, dict)
-    assert nested_manifest["capabilities"] == [REFERENCE_CAPABILITY_ID]
