@@ -7,7 +7,7 @@ from time import perf_counter
 from urllib.parse import urlsplit, urlunsplit
 
 from ai_multi_agent_platform.capabilities.types import CapabilityRegistration
-from ai_multi_agent_platform.contracts.errors import ContractError
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
     AdapterMetadata,
     JsonValue,
@@ -175,6 +175,38 @@ class BoundBrowserProvider(BrowserProvider):
         return replace(
             result,
             adapter_metadata=(*result.adapter_metadata, metadata),
+        )
+
+    def invocation_failure_metadata(
+        self,
+        invocation: ToolInvocation,
+        *,
+        error_code: str,
+        duration_ms: float,
+    ) -> tuple[AdapterMetadata, ...]:
+        """Describe invoker-owned timeout/cancellation failures without browser coupling in core."""
+
+        if not self._emit_operation_metadata:
+            return ()
+        arguments = invocation.arguments_json()
+        requested_url = arguments.get("url")
+        requested_url = requested_url if isinstance(requested_url, str) else None
+        capability_id = self._tool_capabilities.get(invocation.tool_ref, invocation.tool_ref)
+        if error_code == ErrorCode.TIMEOUT.value:
+            outcome = "timed_out"
+        elif error_code == ErrorCode.CANCELLED.value:
+            outcome = "cancelled"
+        else:
+            outcome = "failed"
+        return (
+            _operation_metadata(
+                capability_id=capability_id,
+                requested_url=requested_url,
+                final_url=None,
+                duration_ms=duration_ms,
+                outcome=outcome,
+                error_code=error_code,
+            ),
         )
 
 
