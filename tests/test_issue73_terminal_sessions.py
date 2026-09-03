@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 import pytest
 
@@ -22,11 +23,20 @@ from ai_multi_agent_platform.terminal import (
     SessionStatus,
     SessionType,
     StreamChannel,
+    TerminalSession,
     TerminalSessionService,
 )
 
 
-def _stack(*, redactor=None):
+def _stack(
+    *, redactor: Callable[[str], str] | None = None
+) -> tuple[
+    TerminalSessionService,
+    ReferenceTerminalAdapter,
+    str,
+    OperationContext,
+    SessionContext,
+]:
     project_id = new_id("project")
     workspace_id = new_id("workspace")
     principal = "user:terminal-test"
@@ -65,7 +75,7 @@ def _create(
     *,
     mode: SessionMode = SessionMode.INTERACTIVE,
     session_type: SessionType = SessionType.MANUAL,
-):
+) -> TerminalSession:
     return asyncio.run(
         service.create_session(
             SessionCreateRequest(
@@ -95,9 +105,7 @@ def test_interactive_input_streams_and_reconnect_reuses_canonical_frame_identity
     service, _, principal, operation, context = _stack()
     session = _create(service, principal, operation, context)
 
-    initial = asyncio.run(
-        service.read_frames(session.id, actor_ref=principal, operation=operation)
-    )
+    initial = asyncio.run(service.read_frames(session.id, actor_ref=principal, operation=operation))
     assert len(initial) == 1
     assert initial[0].channel is StreamChannel.SYSTEM
 
@@ -179,7 +187,9 @@ def test_stream_output_is_redacted_and_input_audit_does_not_store_content() -> N
 
     assert frames[0].data == "[REDACTED]"
     assert "secret-token" not in repr(service.activity_records)
-    input_records = [record for record in service.activity_records if record.action == "session.input"]
+    input_records = [
+        record for record in service.activity_records if record.action == "session.input"
+    ]
     assert input_records[0].metadata == {"size_bytes": len("secret-token")}
 
 
@@ -201,9 +211,7 @@ def test_attach_detach_does_not_cancel_underlying_session() -> None:
             operation=operation,
         )
     )
-    current = asyncio.run(
-        service.get_session(session.id, actor_ref=principal, operation=operation)
-    )
+    current = asyncio.run(service.get_session(session.id, actor_ref=principal, operation=operation))
 
     assert detached.status.value == "detached"
     assert current.status is SessionStatus.RUNNING
