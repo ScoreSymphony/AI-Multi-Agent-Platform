@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from types import MappingProxyType
+from uuid import NAMESPACE_URL, uuid5
 
 from ai_multi_agent_platform.contracts.types import (
     AdapterMetadata,
@@ -20,6 +22,21 @@ from ai_multi_agent_platform.security import SecretReference
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def connector_definition_id(connector_type_id: str, version: str) -> str:
+    """Return the platform-owned stable identity for one connector type/version."""
+
+    if not connector_type_id.strip():
+        raise ValueError("connector_type_id must not be blank")
+    if not version.strip():
+        raise ValueError("connector version must not be blank")
+    identity_key = json.dumps(
+        [connector_type_id, version],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return f"connector_definition_{uuid5(NAMESPACE_URL, identity_key)}"
 
 
 def _require_aware(value: datetime, field_name: str) -> None:
@@ -53,6 +70,14 @@ class SyncStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+
+
+class SyncMode(StrEnum):
+    """Explicit caller intent for synchronization/recovery behavior."""
+
+    INCREMENTAL = "incremental"
+    RESYNC = "resync"
+    REBUILD = "rebuild"
 
 
 class ConflictPolicy(StrEnum):
@@ -341,6 +366,7 @@ class ConnectorSyncRequest:
     stream: str
     context: OperationContext
     checkpoint: SyncCheckpoint | None = None
+    mode: SyncMode = SyncMode.INCREMENTAL
 
     def __post_init__(self) -> None:
         validate_id(self.connection_id, "connection")
