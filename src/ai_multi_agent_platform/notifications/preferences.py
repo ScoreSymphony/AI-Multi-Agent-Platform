@@ -12,7 +12,6 @@ from .models import (
     RecipientRef,
 )
 
-
 _SEVERITY_ORDER = {
     NotificationSeverity.INFO: 0,
     NotificationSeverity.WARNING: 1,
