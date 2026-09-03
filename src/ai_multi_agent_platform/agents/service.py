@@ -91,7 +91,9 @@ class AgentService:
         next_revision = current.current_revision + 1
         now = datetime.now(UTC)
         resolved_owner = owner_ref or current.owner_ref
-        resolved_project = current.project_id if isinstance(project_id, _Unspecified) else project_id
+        resolved_project = (
+            current.project_id if isinstance(project_id, _Unspecified) else project_id
+        )
         resolved_workspace = (
             current.workspace_id if isinstance(workspace_id, _Unspecified) else workspace_id
         )
@@ -263,7 +265,9 @@ class AgentService:
         next_revision = current.current_revision + 1
         now = datetime.now(UTC)
         resolved_owner = owner_ref or current.owner_ref
-        resolved_project = current.project_id if isinstance(project_id, _Unspecified) else project_id
+        resolved_project = (
+            current.project_id if isinstance(project_id, _Unspecified) else project_id
+        )
         resolved_workspace = (
             current.workspace_id if isinstance(workspace_id, _Unspecified) else workspace_id
         )
