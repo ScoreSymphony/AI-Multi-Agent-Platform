@@ -175,10 +175,19 @@ def test_file_resource_service_and_search_use_canonical_file_metadata(tmp_path: 
             "collection": "files",
         }
 
-        assert _items(await _search(http, q="application/pdf"))[0]["resource_id"] == visible_record.file_id
-        assert _items(await _search(http, q=artifact_id))[0]["resource_id"] == visible_record.file_id
+        assert (
+            _items(await _search(http, q="application/pdf"))[0]["resource_id"]
+            == visible_record.file_id
+        )
+        assert (
+            _items(await _search(http, q=artifact_id))[0]["resource_id"]
+            == visible_record.file_id
+        )
         assert (await _search(http, q="needle-that-must-not-be-searchable"))["total"] == 0
-        assert _items(await _search(http, project_id=visible.id))[0]["resource_id"] == visible_record.file_id
+        assert (
+            _items(await _search(http, project_id=visible.id))[0]["resource_id"]
+            == visible_record.file_id
+        )
 
         all_visible = await _search(http)
         assert all_visible["total"] == 1
