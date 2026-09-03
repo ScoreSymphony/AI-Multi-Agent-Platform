@@ -1,0 +1,27 @@
+{
+  "policy_id": "policy.pr-deterministic",
+  "version": "1",
+  "rules": [
+    {
+      "rule_id": "deterministic-pass-to-fail",
+      "kind": "deterministic_pass_to_fail"
+    },
+    {
+      "rule_id": "critical-case-failure",
+      "kind": "tagged_case_failure",
+      "tag": "critical"
+    },
+    {
+      "rule_id": "security-case-failure",
+      "kind": "tagged_case_failure",
+      "tag": "security"
+    },
+    {
+      "rule_id": "latency-ceiling",
+      "kind": "metric_threshold",
+      "metric_name": "latency_ms",
+      "metric_operator": "lte",
+      "threshold": 5000.0
+    }
+  ]
+}
