@@ -356,7 +356,7 @@ class LocalWorkspaceProvider(WorkspaceProvider):
         outcome: MaterializationOutcome,
     ) -> None:
         del outcome
-        materialization = await self._get_materialization(materialization_id)
+        await self._get_materialization(materialization_id)
         path = self.local_path(materialization_id)
         try:
             self._make_writable(path)
