@@ -361,32 +361,15 @@ class LocalWorkspaceProvider(WorkspaceProvider):
         try:
             self._make_writable(path)
             shutil.rmtree(path)
+        except FileNotFoundError:
+            pass
         except OSError as exc:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
                 f"failed to clean workspace materialization: {materialization_id}",
             ) from exc
         async with self._lock:
-            self._materializations.pop(materialization_id, None)
-            self._materialization_paths.pop(materialization_id, None)
-            workspace = self._workspaces[materialization.workspace_id]
-            remaining = tuple(self._materializations.values())
-            task_ids = tuple(
-                task_id
-                for task_id in workspace.active_task_ids
-                if any(item.task_id == task_id for item in remaining)
-            )
-            run_ids = tuple(
-                run_id
-                for run_id in workspace.active_run_ids
-                if any(item.run_id == run_id for item in remaining)
-            )
-            self._workspaces[workspace.id] = replace(
-                workspace,
-                active_task_ids=task_ids,
-                active_run_ids=run_ids,
-                last_used_at=utc_now(),
-            )
+            self._forget_materialization_locked(materialization_id)
 
     async def cleanup(self) -> CleanupReport:
         async with self._lock:
@@ -416,10 +399,44 @@ class LocalWorkspaceProvider(WorkspaceProvider):
                 except ValueError:
                     continue
                 failed.append(path.name)
+        if missing:
+            async with self._lock:
+                for materialization_id in missing:
+                    self._forget_materialization_locked(materialization_id)
         return CleanupReport(
             removed_materialization_ids=tuple(sorted(removed)),
             missing_materialization_ids=tuple(sorted(missing)),
             failed_materialization_ids=tuple(sorted(failed)),
+        )
+
+    def _forget_materialization_locked(self, materialization_id: str) -> None:
+        materialization = self._materializations.pop(materialization_id, None)
+        self._materialization_paths.pop(materialization_id, None)
+        if materialization is None:
+            return
+        workspace = self._workspaces.get(materialization.workspace_id)
+        if workspace is None:
+            return
+        remaining = tuple(
+            item
+            for item in self._materializations.values()
+            if item.workspace_id == workspace.id
+        )
+        task_ids = tuple(
+            task_id
+            for task_id in workspace.active_task_ids
+            if any(item.task_id == task_id for item in remaining)
+        )
+        run_ids = tuple(
+            run_id
+            for run_id in workspace.active_run_ids
+            if any(item.run_id == run_id for item in remaining)
+        )
+        self._workspaces[workspace.id] = replace(
+            workspace,
+            active_task_ids=task_ids,
+            active_run_ids=run_ids,
+            last_used_at=utc_now(),
         )
 
     async def _get_materialization(self, materialization_id: str) -> WorkspaceMaterialization:
