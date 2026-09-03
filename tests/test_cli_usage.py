@@ -15,6 +15,7 @@ from ai_multi_agent_platform.accounting import (
     MeasurementQuality,
     UsageBudget,
     UsageRecord,
+    UsageScope,
     accounting_resource_services,
 )
 from ai_multi_agent_platform.cli.client import RawResponse
@@ -99,6 +100,7 @@ def _invoke(
 
 def _accounting() -> tuple[AccountingService, str, str]:
     accounting = AccountingService(InMemoryUsageStore())
+    project_id = "project_usage_test"
     record = accounting.record(
         UsageRecord(
             metric_type="storage.file.bytes.current",
@@ -107,14 +109,15 @@ def _accounting() -> tuple[AccountingService, str, str]:
             source="file-provider",
             quantity=42.0,
             aggregation_mode=AggregationMode.LATEST,
+            scope=UsageScope(project_id=project_id),
         )
     )
     budget = accounting.put_budget(
         UsageBudget(
             metric_type="storage.file.bytes.current",
             unit="bytes",
-            scope_type="platform",
-            scope_id="local",
+            scope_type="project",
+            scope_id=project_id,
             limit=100.0,
         )
     )
@@ -190,5 +193,6 @@ def test_usage_commands_have_no_backend_fallback_when_accounting_is_absent(tmp_p
 
     assert code == 3
     assert payload == {}
-    assert "usage-records" in error
+    assert '"code":"not_found"' in error
+    assert '"message":"route not found"' in error
     assert transport.calls == [("GET", "/api/v1/usage-records")]
