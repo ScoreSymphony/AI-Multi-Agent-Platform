@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import sqlite3
 from pathlib import Path
 
@@ -16,6 +17,11 @@ from ai_multi_agent_platform.deployment import (
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 
 PASSWORD = "correct horse battery staple"
+
+
+def test_deployment_module_import_is_side_effect_free() -> None:
+    module = importlib.import_module("ai_multi_agent_platform.deployment.__main__")
+    assert callable(module.main)
 
 
 def test_single_node_configuration_is_explicit_and_rejects_insecure_public_cookie_mode(
