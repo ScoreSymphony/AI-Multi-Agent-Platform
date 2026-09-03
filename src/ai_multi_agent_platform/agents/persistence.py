@@ -130,26 +130,26 @@ class JsonAgentRepository(InMemoryAgentRepository):
         runs = tuple(_agent_run(item) for item in _required_array(document, "agent_runs"))
 
         revisions_by_agent: dict[str, list[AgentRevision]] = {}
-        for revision in revisions:
-            revisions_by_agent.setdefault(revision.agent_id, []).append(revision)
-        for definition in definitions:
-            history = sorted(
-                revisions_by_agent.pop(definition.agent_id, []),
+        for agent_revision in revisions:
+            revisions_by_agent.setdefault(agent_revision.agent_id, []).append(agent_revision)
+        for agent_definition in definitions:
+            agent_history = sorted(
+                revisions_by_agent.pop(agent_definition.agent_id, []),
                 key=lambda item: item.revision,
             )
-            self._restore_agent(definition, history)
+            self._restore_agent(agent_definition, agent_history)
         if revisions_by_agent:
             raise ValueError("Agent repository contains revisions without Agent definitions")
 
         revisions_by_team: dict[str, list[AgentTeamRevision]] = {}
-        for revision in team_revisions:
-            revisions_by_team.setdefault(revision.team_id, []).append(revision)
-        for definition in team_definitions:
-            history = sorted(
-                revisions_by_team.pop(definition.team_id, []),
+        for team_revision in team_revisions:
+            revisions_by_team.setdefault(team_revision.team_id, []).append(team_revision)
+        for team_definition in team_definitions:
+            team_history = sorted(
+                revisions_by_team.pop(team_definition.team_id, []),
                 key=lambda item: item.revision,
             )
-            self._restore_team(definition, history)
+            self._restore_team(team_definition, team_history)
         if revisions_by_team:
             raise ValueError("Agent repository contains Team revisions without Team definitions")
 
