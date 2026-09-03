@@ -37,7 +37,7 @@ export interface SessionRenewal {
   expires_at: string;
 }
 
-interface SessionStorageLike {
+interface BrowserStorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
@@ -46,7 +46,7 @@ interface SessionStorageLike {
 export interface BrowserSessionClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
-  storage?: SessionStorageLike | null;
+  storage?: BrowserStorageLike | null;
 }
 
 const CSRF_STORAGE_KEY = "ai-agent-platform.csrf-token";
@@ -55,26 +55,27 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 export class BrowserSessionClient {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
-  private readonly storage: SessionStorageLike | null;
+  private readonly storage: BrowserStorageLike | null;
   private csrfToken: string | null;
 
   constructor(options: BrowserSessionClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.storage = options.storage === undefined ? browserSessionStorage() : options.storage;
+    this.storage = options.storage === undefined ? browserCsrfStorage() : options.storage;
     this.csrfToken = this.storage?.getItem(CSRF_STORAGE_KEY) ?? null;
   }
 
   readonly fetch: typeof fetch = async (input, init = {}) => {
     const headers = new Headers(init.headers);
     const method = (init.method ?? "GET").toUpperCase();
+    const csrfToken = this.currentCsrfToken();
     if (
       !SAFE_METHODS.has(method)
-      && this.csrfToken
+      && csrfToken
       && !headers.has("Authorization")
       && !headers.has("X-CSRF-Token")
     ) {
-      headers.set("X-CSRF-Token", this.csrfToken);
+      headers.set("X-CSRF-Token", csrfToken);
     }
     return this.fetchImpl(input, { ...init, headers });
   };
@@ -126,7 +127,14 @@ export class BrowserSessionClient {
   }
 
   hasCsrfToken(): boolean {
-    return this.csrfToken !== null;
+    return this.currentCsrfToken() !== null;
+  }
+
+  private currentCsrfToken(): string | null {
+    if (this.storage !== null) {
+      this.csrfToken = this.storage.getItem(CSRF_STORAGE_KEY);
+    }
+    return this.csrfToken;
   }
 
   private setCsrfToken(token: string): void {
@@ -159,10 +167,10 @@ export class BrowserSessionClient {
   }
 }
 
-function browserSessionStorage(): SessionStorageLike | null {
+function browserCsrfStorage(): BrowserStorageLike | null {
   if (typeof window === "undefined") return null;
   try {
-    return window.sessionStorage;
+    return window.localStorage;
   } catch {
     return null;
   }
