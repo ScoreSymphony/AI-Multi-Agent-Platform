@@ -133,6 +133,8 @@ def _result_for_document(document: SearchDocument, query: SearchQuery) -> Search
         summary=document.summary,
         project_id=document.project_id,
         workspace_id=document.workspace_id,
+        owner_type=document.owner_type,
+        owner_id=document.owner_id,
         status=document.status,
         tags=document.tags,
         relevance=relevance,
