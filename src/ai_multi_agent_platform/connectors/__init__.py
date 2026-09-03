@@ -15,7 +15,9 @@ from .models import (
     ExternalNativeReference,
     ExternalResourceReference,
     SyncCheckpoint,
+    SyncMode,
     SyncStatus,
+    connector_definition_id,
 )
 from .provider import ConnectorProvider
 from .reference import (
@@ -53,5 +55,7 @@ __all__ = [
     "REFERENCE_CONNECTOR_VERSION",
     "ReferenceConnectorProvider",
     "SyncCheckpoint",
+    "SyncMode",
     "SyncStatus",
+    "connector_definition_id",
 ]
