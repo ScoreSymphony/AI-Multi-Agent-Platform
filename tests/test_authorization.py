@@ -282,9 +282,7 @@ def test_service_identity_secret_resolution_uses_policy_without_secret_value_in_
             LocalPrincipalPolicy(
                 principal_ref=service,
                 actor_types=frozenset({ActorType.SERVICE}),
-                allowed_actions=frozenset(
-                    {AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}
-                ),
+                allowed_actions=frozenset({AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}),
                 resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
                 project_ids=frozenset({project_id}),
             ),
@@ -355,9 +353,7 @@ def test_capability_bridge_routes_agent_policy_and_approval_to_issue_15_gate() -
             LocalPrincipalPolicy(
                 principal_ref=agent_id,
                 actor_types=frozenset({ActorType.AGENT}),
-                approval_actions=frozenset(
-                    {AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}
-                ),
+                approval_actions=frozenset({AuthorizationAction.INVOKE_SENSITIVE_CAPABILITY}),
                 resource_types=frozenset({ResourceType.CAPABILITY}),
                 project_ids=frozenset({project_id}),
             ),
