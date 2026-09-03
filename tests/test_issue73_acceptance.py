@@ -196,7 +196,7 @@ def test_backend_worker_loss_becomes_explicit_canonical_lost_session() -> None:
     assert reconciled.status is SessionStatus.LOST
     assert reconciled.ended_at is not None
     assert frames[-1].final is True
-    assert frames[-1].data == "worker transport lost"
+    assert frames[-1].data == "worker transport lost\n"
 
 
 def test_canonical_session_and_stream_payloads_do_not_leak_backend_private_handle_types() -> None:
