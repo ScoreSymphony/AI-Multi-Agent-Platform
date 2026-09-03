@@ -153,10 +153,7 @@ class HermesAdapterConfig:
             raise ValueError("Hermes profile must not be blank")
         if any(not key.strip() or not value.strip() for key, value in self.model_bridge.items()):
             raise ValueError("Hermes model_bridge keys and values must not be blank")
-        if any(
-            not key.strip() or not value.strip()
-            for key, value in self.capability_bridge.items()
-        ):
+        if any(not key.strip() or not value.strip() for key, value in self.capability_bridge.items()):
             raise ValueError("Hermes capability_bridge keys and values must not be blank")
 
 
@@ -701,19 +698,13 @@ class HermesAgentMapper(AgentOrchestratorMapper):
             "model": model,
             "capabilities": capabilities,
             "data_access": {
-                "memory_scopes": [
-                    scope.value for scope in agent.profile.data_access.memory_scopes
-                ],
+                "memory_scopes": [scope.value for scope in agent.profile.data_access.memory_scopes],
                 "memory_config_refs": list(agent.profile.data_access.memory_config_refs),
-                "knowledge_source_ids": list(
-                    agent.profile.data_access.knowledge_source_ids
-                ),
+                "knowledge_source_ids": list(agent.profile.data_access.knowledge_source_ids),
                 "allow_user_memory": agent.profile.data_access.allow_user_memory,
             },
             "policy": {
-                "authorization_profile_ref": (
-                    agent.profile.policy_hooks.authorization_profile_ref
-                ),
+                "authorization_profile_ref": (agent.profile.policy_hooks.authorization_profile_ref),
                 "verification_policy_refs": list(
                     agent.profile.policy_hooks.verification_policy_refs
                 ),
@@ -748,13 +739,9 @@ class HermesAgentMapper(AgentOrchestratorMapper):
                 "shared_resource_refs": list(team.profile.shared_resource_refs),
                 "max_parallel_agents": team.profile.max_parallel_agents,
                 "max_steps": team.profile.max_steps,
-                "unavailable_member_policy": (
-                    team.profile.unavailable_member_policy.value
-                ),
+                "unavailable_member_policy": (team.profile.unavailable_member_policy.value),
             }
-        runtime_ref = (
-            f"hermes:mapping:{agent.agent_id}:r{agent.revision}:{spec.run_id}"
-        )
+        runtime_ref = f"hermes:mapping:{agent.agent_id}:r{agent.revision}:{spec.run_id}"
         return OrchestratorMapping(
             adapter_id=self.adapter_id,
             runtime_ref=runtime_ref,
