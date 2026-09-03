@@ -104,7 +104,9 @@ class WorkerJobResourceService:
         try:
             record = self.runtime.get_record(resource_id)
         except RegistryError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, f"worker job not found: {resource_id}") from exc
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"worker job not found: {resource_id}"
+            ) from exc
         return _worker_job_resource(record)
 
 
@@ -156,7 +158,9 @@ class DistributedAdminCommandHandlers:
         del context
         _require_empty_payload(payload)
         try:
-            return _node_resource(self.runtime.set_node_maintenance(resource_ref, maintenance=False))
+            return _node_resource(
+                self.runtime.set_node_maintenance(resource_ref, maintenance=False)
+            )
         except RegistryError as exc:
             raise ContractError(ErrorCode.NOT_FOUND, f"node not found: {resource_ref}") from exc
 
