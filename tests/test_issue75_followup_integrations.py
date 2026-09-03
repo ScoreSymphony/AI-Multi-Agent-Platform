@@ -15,6 +15,7 @@ from ai_multi_agent_platform.notifications import (
     RecipientRef,
     RecipientType,
     SourceRef,
+    approval_required_candidate,
     approval_resolved_candidate,
     membership_attention_candidate,
     verification_attention_candidate,
@@ -128,6 +129,48 @@ def test_recipient_eligibility_stops_new_notifications_but_preserves_history() -
         history = await service.list(NotificationQuery(recipient=recipient))
         assert tuple(item.id for item in history) == (created.id,)
         assert await service.unread_count(recipient) == 1
+
+    asyncio.run(scenario())
+
+
+def test_approval_required_projects_end_to_end_into_recipient_inbox() -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 4, tzinfo=UTC)
+        recipient = _recipient()
+        task_id = new_id("task")
+        approval = Approval(
+            subject_type="task",
+            subject_id=task_id,
+            owner_ref=OwnerRef(type="user", id=recipient.id),
+            reason="governed action",
+            created_at=now,
+            updated_at=now,
+        )
+        record = ApprovalRecord(
+            approval=approval,
+            requester_ref=recipient.id,
+            action="execute",
+            resource_type="task",
+            resource_id=task_id,
+            requested_action_digest="digest",
+            risk=RiskClassification.ELEVATED,
+            policy_id="policy-75",
+            expires_at=now + timedelta(minutes=15),
+            task_id=task_id,
+            payload_ref="private-payload-reference",
+        )
+
+        service = _service()
+        created = await service.create(approval_required_candidate(record, recipient=recipient))
+        assert created is not None
+
+        inbox = await service.list(NotificationQuery(recipient=recipient))
+        assert tuple(item.id for item in inbox) == (created.id,)
+        assert created.category is NotificationCategory.APPROVAL
+        assert created.approval_id == approval.id
+        assert created.summary["action"] == "execute"
+        assert "payload_ref" not in created.summary
+        assert "requested_action_digest" not in created.summary
 
     asyncio.run(scenario())
 
