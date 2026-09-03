@@ -101,7 +101,17 @@ def _metadata_matches(document: SearchDocument, query: SearchQuery) -> bool:
         return False
     if query.source_filters and document.source not in query.source_filters:
         return False
-    return not query.provider_filters or document.provider in query.provider_filters
+    if query.provider_filters and document.provider not in query.provider_filters:
+        return False
+    if query.updated_after is not None or query.updated_before is not None:
+        updated_at = document.updated_at_datetime
+        if updated_at is None:
+            return False
+        if query.updated_after is not None and updated_at < query.updated_after:
+            return False
+        if query.updated_before is not None and updated_at > query.updated_before:
+            return False
+    return True
 
 
 def _result_for_document(document: SearchDocument, query: SearchQuery) -> SearchResult | None:
