@@ -11,13 +11,13 @@ import asyncio
 import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.message import Message
 from html.parser import HTMLParser
 from http.cookiejar import CookieJar
 from typing import Any, Protocol, cast, runtime_checkable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urljoin
+from urllib.parse import urlencode, urljoin, urlsplit, urlunsplit
 from urllib.request import (
     HTTPCookieProcessor,
     HTTPRedirectHandler,
@@ -263,9 +263,12 @@ class StdlibBrowserProvider(BrowserProvider):
         network_policy_hook: BrowserNetworkPolicyHook | None = None,
         download_validation_hook: DownloadValidationHook | None = None,
         request_timeout_seconds: float = 30.0,
+        session_ttl_seconds: float = 30 * 60,
     ) -> None:
         if request_timeout_seconds <= 0:
             raise ValueError("request_timeout_seconds must be greater than zero")
+        if session_ttl_seconds <= 0:
+            raise ValueError("session_ttl_seconds must be greater than zero")
         self._files = file_provider
         self._network_policy = network_policy or BrowserNetworkPolicy()
         self._network_hook = network_policy_hook or DefaultBrowserNetworkPolicyHook(
@@ -273,6 +276,7 @@ class StdlibBrowserProvider(BrowserProvider):
         )
         self._download_validation = download_validation_hook or DefaultDownloadValidationHook()
         self._request_timeout_seconds = request_timeout_seconds
+        self._session_ttl_seconds = session_ttl_seconds
         self._sessions: dict[str, _SessionState] = {}
         self._features = BrowserProviderFeatures(
             operations=(
@@ -726,6 +730,12 @@ class StdlibBrowserProvider(BrowserProvider):
         arguments: dict[str, JsonValue],
         context: OperationContext,
     ) -> tuple[dict[str, JsonValue], str, str]:
+        if not isinstance(self._files, ArtifactLinkingFileProvider):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "browser download requires a FileProvider with canonical artifact linking",
+                provider_id=self.descriptor.provider_id,
+            )
         url = _required_string(arguments, "url")
         state = self._session_for(arguments.get("session_id"), context)
         resource = await self._fetch(state, url, BrowserOperation.DOWNLOAD, context)
@@ -735,6 +745,7 @@ class StdlibBrowserProvider(BrowserProvider):
             data=resource.data,
             context=context,
         )
+        provenance_url = _redacted_url(resource.final_url)
         file_ref = new_id("file")
         digest = hashlib.sha256(resource.data).hexdigest()
         stored = await self._files.write(
@@ -742,7 +753,7 @@ class StdlibBrowserProvider(BrowserProvider):
             resource.data,
             context,
             metadata={
-                "source_url": resource.final_url,
+                "source_url": provenance_url,
                 "provenance": "browser_download",
                 "content_type": resource.content_type,
                 "sha256": digest,
@@ -750,12 +761,6 @@ class StdlibBrowserProvider(BrowserProvider):
                 "content_trust": CONTENT_TRUST,
             },
         )
-        if not isinstance(self._files, ArtifactLinkingFileProvider):
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "browser download requires a FileProvider with canonical artifact linking",
-                provider_id=self.descriptor.provider_id,
-            )
         artifact_ref = new_id("artifact")
         await self._files.link_artifact(
             stored.object_ref,
@@ -767,7 +772,7 @@ class StdlibBrowserProvider(BrowserProvider):
                 "session_id": state.ref.session_id,
                 "file_ref": stored.object_ref,
                 "artifact_ref": artifact_ref,
-                "source_url": resource.final_url,
+                "source_url": provenance_url,
                 "content_type": resource.content_type,
                 "size_bytes": len(resource.data),
                 "sha256": digest,
@@ -788,7 +793,6 @@ class StdlibBrowserProvider(BrowserProvider):
         data: bytes | None = None,
         headers: dict[str, str] | None = None,
     ) -> _FetchedResource:
-        self._network_hook.check(url, operation, context)
         timeout = context.control.timeout_seconds or self._request_timeout_seconds
         return await asyncio.to_thread(
             self._fetch_sync,
@@ -813,6 +817,7 @@ class StdlibBrowserProvider(BrowserProvider):
         headers: dict[str, str],
         timeout: float,
     ) -> _FetchedResource:
+        self._network_hook.check(url, operation, context)
         opener = build_opener(
             HTTPCookieProcessor(state.cookies),
             _PolicyRedirectHandler(self._network_hook, operation, context),
@@ -880,12 +885,14 @@ class StdlibBrowserProvider(BrowserProvider):
         session_value: JsonValue | None,
         context: OperationContext,
     ) -> _SessionState:
+        self._evict_expired_sessions()
         if isinstance(session_value, str):
             return self._get_state(session_value, context)
         ref = BrowserSessionRef.create(
             context,
             privacy=BrowserPrivacyClassification.STANDARD,
             allowed_domains=self._network_policy.allowed_domains,
+            expires_at=datetime.now(UTC) + timedelta(seconds=self._session_ttl_seconds),
         )
         state = _SessionState(ref=ref)
         self._sessions[ref.session_id] = state
@@ -893,22 +900,29 @@ class StdlibBrowserProvider(BrowserProvider):
 
     def _get_state(self, session_id: str, context: OperationContext) -> _SessionState:
         validate_id(session_id, "browser_session")
+        self._evict_expired_sessions()
         try:
             state = self._sessions[session_id]
         except KeyError as exc:
             raise ContractError(
-                ErrorCode.NOT_FOUND, f"browser session not found: {session_id}"
+                ErrorCode.NOT_FOUND, f"browser session not found or expired: {session_id}"
             ) from exc
-        ref = state.ref
-        if ref.expires_at is not None and ref.expires_at <= datetime.now(UTC):
-            del self._sessions[session_id]
-            raise ContractError(ErrorCode.NOT_FOUND, f"browser session expired: {session_id}")
-        scope = ref.scope
+        scope = state.ref.scope
         if scope.owner_type != context.owner_type or scope.owner_id != context.owner_id:
             raise ContractError(ErrorCode.FORBIDDEN, "browser session belongs to another owner")
         if scope.project_id != context.project_id:
             raise ContractError(ErrorCode.FORBIDDEN, "browser session belongs to another project")
         return state
+
+    def _evict_expired_sessions(self) -> None:
+        now = datetime.now(UTC)
+        expired = [
+            session_id
+            for session_id, state in self._sessions.items()
+            if state.ref.expires_at is not None and state.ref.expires_at <= now
+        ]
+        for session_id in expired:
+            del self._sessions[session_id]
 
     def _store_page(self, state: _SessionState, resource: _FetchedResource) -> None:
         state.current_url = resource.final_url
@@ -943,6 +957,18 @@ class StdlibBrowserProvider(BrowserProvider):
             return data.decode(charset, errors="replace")
         except LookupError:
             return data.decode("utf-8", errors="replace")
+
+
+def _redacted_url(url: str) -> str:
+    """Remove credentials, query parameters and fragments from persisted browser URLs."""
+
+    parsed = urlsplit(url)
+    host = parsed.hostname
+    if host is None:
+        raise ContractError(ErrorCode.CONTRACT_VIOLATION, "browser response URL has no hostname")
+    display_host = f"[{host}]" if ":" in host else host
+    netloc = display_host if parsed.port is None else f"{display_host}:{parsed.port}"
+    return urlunsplit((parsed.scheme.lower(), netloc, parsed.path or "/", "", ""))
 
 
 def _data_access_context(operation: OperationContext) -> DataAccessContext:
