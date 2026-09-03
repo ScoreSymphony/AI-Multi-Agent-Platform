@@ -20,6 +20,8 @@ from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.models import ModelRegistry
 from ai_multi_agent_platform.workspaces import (
+    EmptyWorkspaceSourceResolver,
+    SnapshotWorkspaceSourceResolver,
     Workspace,
     WorkspaceAccessMode,
     WorkspaceFile,
@@ -27,6 +29,7 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceRetention,
     WorkspaceSourceKind,
     WorkspaceSourceRef,
+    WorkspaceSourceResolverRegistry,
     WorkspaceType,
 )
 
@@ -68,11 +71,27 @@ class ControlPlane(_ObservabilityControlPlane):
             command_handlers=command_handlers,
         )
         self._workspace_provider = workspace_provider
+        self._workspace_source_resolvers = (
+            WorkspaceSourceResolverRegistry(
+                (
+                    EmptyWorkspaceSourceResolver(),
+                    SnapshotWorkspaceSourceResolver(workspace_provider),
+                )
+            )
+            if workspace_provider is not None
+            else None
+        )
         self._workspace_command_results: dict[str, str] = {}
 
     @property
     def workspace_provider(self) -> WorkspaceProvider | None:
         return self._workspace_provider
+
+    @property
+    def workspace_source_resolvers(self) -> WorkspaceSourceResolverRegistry | None:
+        """Resolver registry used to freeze provider-neutral sources into initial snapshots."""
+
+        return self._workspace_source_resolvers
 
     async def create_workspace(
         self,
@@ -106,15 +125,32 @@ class ControlPlane(_ObservabilityControlPlane):
         )
         access_mode = _workspace_access_mode(payload, workspace_type)
         retention = _workspace_retention(payload, workspace_type)
+        data_context = _data_access_context(context, project)
+        source_refs = _workspace_source_refs(payload)
+        files = _workspace_files(payload)
+        if source_refs:
+            resolvers = self._workspace_source_resolvers
+            if resolvers is None:
+                raise ContractError(
+                    ErrorCode.UNAVAILABLE,
+                    "workspace source resolution is not configured",
+                    retryable=True,
+                )
+            resolved_sources = await resolvers.resolve_all(source_refs, data_context)
+            source_files = tuple(
+                entry for resolved in resolved_sources for entry in resolved.files
+            )
+            files = _merge_workspace_files(files, source_files)
+
         workspace = await provider.create_workspace(
             project_id=project_id,
             owner_ref=project.owner_ref,
             workspace_type=workspace_type,
-            context=_data_access_context(context, project),
+            context=data_context,
             access_mode=access_mode,
             retention=retention,
-            source_refs=_workspace_source_refs(payload),
-            files=_workspace_files(payload),
+            source_refs=source_refs,
+            files=files,
             workspace_id=_optional_string(payload, "workspace_id"),
         )
         self._workspace_command_results[key] = workspace.id
@@ -312,6 +348,28 @@ def _workspace_source_refs(payload: dict[str, JsonValue]) -> tuple[WorkspaceSour
             )
         )
     return tuple(refs)
+
+
+def _merge_workspace_files(
+    explicit_files: tuple[WorkspaceFile, ...],
+    source_files: tuple[WorkspaceFile, ...],
+) -> tuple[WorkspaceFile, ...]:
+    manifest: dict[str, WorkspaceFile] = {}
+    for entry in explicit_files:
+        if entry.relative_path in manifest:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                f"duplicate workspace file path: {entry.relative_path}",
+            )
+        manifest[entry.relative_path] = entry
+    for entry in source_files:
+        if entry.relative_path in manifest:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"workspace source overlaps explicit file at path: {entry.relative_path}",
+            )
+        manifest[entry.relative_path] = entry
+    return tuple(manifest[path] for path in sorted(manifest))
 
 
 def _object_list(value: JsonValue, name: str) -> list[dict[str, JsonValue]]:
