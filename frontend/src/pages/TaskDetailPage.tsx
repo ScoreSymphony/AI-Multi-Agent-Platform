@@ -19,6 +19,19 @@ import {
 import { isCanonicalId } from "../platform/id";
 import { usePermissionHint } from "../security/permissions";
 
+export function LiveConnectionStatus({ state }: { state: LiveConnectionState }) {
+  return (
+    <span
+      className={`live live-${state}`}
+      role="status"
+      aria-live="polite"
+      aria-label={`Live updates: ${state}`}
+    >
+      {state}
+    </span>
+  );
+}
+
 export function TaskDetailPage({
   client,
   taskId,
@@ -107,14 +120,7 @@ export function TaskDetailPage({
         </div>
         <div className="detail-status">
           <StatusBadge value={task.status} />
-          <span
-            className={`live live-${liveState}`}
-            role="status"
-            aria-live="polite"
-            aria-label={`Live updates: ${liveState}`}
-          >
-            {liveState}
-          </span>
+          <LiveConnectionStatus state={liveState} />
         </div>
       </header>
       {error != null ? <ErrorState error={error} onRetry={() => void load()} /> : null}
