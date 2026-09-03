@@ -18,19 +18,18 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from .authentication import (
     AuthenticatedActor,
     AuthenticationAuditSink,
+    AuthenticationError,
+    AuthenticationFailure,
     AuthenticationRateLimiter,
-    BrowserSession,
     CredentialKind,
-    IdentityProviderAdapter,
     InMemoryAuthenticationStore,
     IssuedCredential,
-    LocalAuthenticationService as _BaseLocalAuthenticationService,
     ReplayProtector,
     ScryptPasswordHasher,
     StoredCredential,
-    VerifiedExternalIdentity,
     safe_credential,
 )
+from .authentication import LocalAuthenticationService as _BaseLocalAuthenticationService
 from .authorization import ActorType, AuthorizationAction, ResourceType
 
 
@@ -71,7 +70,9 @@ class CredentialScope:
     def to_json(self) -> dict[str, JsonValue]:
         return {
             "actions": sorted(action.value for action in self.actions),
-            "resource_types": sorted(resource_type.value for resource_type in self.resource_types),
+            "resource_types": sorted(
+                resource_type.value for resource_type in self.resource_types
+            ),
             "resource_ids": sorted(self.resource_ids),
         }
 
@@ -322,8 +323,6 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
                 credential_id=actor.credential_id,
                 correlation_id=actor.correlation_id,
             )
-            from .authentication import AuthenticationError, AuthenticationFailure
-
             raise AuthenticationError(AuthenticationFailure.RATE_LIMITED)
         self.request_rate_limiter.record(rate_key, now=current)
 
@@ -397,9 +396,10 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
         metadata: dict[str, JsonValue] = {
             namespace: value for namespace, value in actor.provider_metadata.items()
         }
+        scope = self.credential_scope(actor.credential_id)
         metadata["credential"] = {
-            "scope": self.credential_scope(actor.credential_id).to_json(),
-            "scope_is_restrictive": self.credential_scope(actor.credential_id).restricted,
+            "scope": scope.to_json(),
+            "scope_is_restrictive": scope.restricted,
         }
         return replace(actor, provider_metadata=metadata)
 
