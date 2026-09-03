@@ -148,6 +148,22 @@ class MetricRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class SpanLink:
+    """Non-parental relationship to another span for fan-in or detached async work."""
+
+    trace_id: str
+    span_id: str
+    context: TelemetryContext = field(default_factory=TelemetryContext)
+    attributes: dict[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.trace_id.strip():
+            raise ValueError("span link trace_id must not be blank")
+        if not self.span_id.strip():
+            raise ValueError("span link span_id must not be blank")
+
+
+@dataclass(frozen=True, slots=True)
 class SpanRecord:
     name: str
     trace_id: str
@@ -157,6 +173,7 @@ class SpanRecord:
     finished_at: datetime
     duration_seconds: float
     parent_span_id: str | None = None
+    links: tuple[SpanLink, ...] = ()
     outcome: TelemetryOutcome = TelemetryOutcome.UNKNOWN
     failure: FailureClassification | None = None
     attributes: dict[str, JsonValue] = field(default_factory=dict)
