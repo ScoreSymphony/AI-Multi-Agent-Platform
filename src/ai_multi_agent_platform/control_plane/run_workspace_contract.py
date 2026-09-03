@@ -25,7 +25,7 @@ from ai_multi_agent_platform.workspaces import (
 
 from .http import HTTPRequest, HTTPResponse
 from .models import API_VERSION, PageQuery, RequestContext
-from .service import ScopeStore, _optional_string, _required_string, _require_key
+from .service import ScopeStore, _optional_string, _require_key, _required_string
 from .workspace_contract import ControlPlane as _WorkspaceControlPlane
 from .workspace_contract import ControlPlaneHTTP as _WorkspaceControlPlaneHTTP
 from .workspace_contract import build_openapi as _build_workspace_openapi
