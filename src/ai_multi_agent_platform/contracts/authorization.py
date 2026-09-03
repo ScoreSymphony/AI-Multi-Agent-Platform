@@ -71,10 +71,10 @@ class AuthorizationRequest(LegacyAuthorizationRequest):
 class AuthorizationDecision(LegacyAuthorizationDecision):
     """Portable tri-state decision compatible with the original boolean contract."""
 
-    outcome: AuthorizationOutcome
-    policy_id: str | None
-    constraints: Mapping[str, JsonValue]
-    audit_metadata: Mapping[str, JsonValue]
+    outcome: AuthorizationOutcome = AuthorizationOutcome.DENY
+    policy_id: str | None = None
+    constraints: Mapping[str, JsonValue] = field(default_factory=dict)
+    audit_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
 
     def __init__(
         self,
