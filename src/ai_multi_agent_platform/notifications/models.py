@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from types import MappingProxyType
-from typing import cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
@@ -171,16 +170,8 @@ class Notification:
         if not isinstance(safe_summary, dict) or not isinstance(safe_delivery, dict):
             raise TypeError("notification metadata must serialize as JSON objects")
         object.__setattr__(self, "actions", tuple(self.actions))
-        object.__setattr__(
-            self,
-            "summary",
-            MappingProxyType(cast(dict[str, JsonValue], safe_summary)),
-        )
-        object.__setattr__(
-            self,
-            "delivery_metadata",
-            MappingProxyType(cast(dict[str, JsonValue], safe_delivery)),
-        )
+        object.__setattr__(self, "summary", MappingProxyType(safe_summary))
+        object.__setattr__(self, "delivery_metadata", MappingProxyType(safe_delivery))
 
     @property
     def unread(self) -> bool:
@@ -270,16 +261,8 @@ class NotificationCandidate:
         if not isinstance(safe_summary, dict) or not isinstance(safe_delivery, dict):
             raise TypeError("notification candidate metadata must serialize as JSON objects")
         object.__setattr__(self, "actions", tuple(self.actions))
-        object.__setattr__(
-            self,
-            "summary",
-            MappingProxyType(cast(dict[str, JsonValue], safe_summary)),
-        )
-        object.__setattr__(
-            self,
-            "delivery_metadata",
-            MappingProxyType(cast(dict[str, JsonValue], safe_delivery)),
-        )
+        object.__setattr__(self, "summary", MappingProxyType(safe_summary))
+        object.__setattr__(self, "delivery_metadata", MappingProxyType(safe_delivery))
 
 
 def _validate_optional_id(value: str | None, prefix: str) -> None:
