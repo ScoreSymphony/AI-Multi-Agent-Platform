@@ -108,16 +108,12 @@ def test_create_configure_disable_and_reenable_connection() -> None:
     service, _, _, actor, context, secret_ref = _runtime()
     connection = _connection(actor, context, secret_ref)
 
-    created = asyncio.run(
-        service.create_connection(connection, actor=actor, context=context)
-    )
+    created = asyncio.run(service.create_connection(connection, actor=actor, context=context))
     assert created.status is ConnectionStatus.READY
     assert created.health is HealthStatus.HEALTHY
     assert created.granted_scopes == ("read", "write")
 
-    disabled = asyncio.run(
-        service.set_enabled(created.id, False, actor=actor, context=context)
-    )
+    disabled = asyncio.run(service.set_enabled(created.id, False, actor=actor, context=context))
     assert disabled.status is ConnectionStatus.DISABLED
     assert disabled.health is HealthStatus.UNAVAILABLE
 
@@ -132,9 +128,7 @@ def test_create_configure_disable_and_reenable_connection() -> None:
         )
     assert exc_info.value.code is ErrorCode.UNAVAILABLE
 
-    enabled = asyncio.run(
-        service.set_enabled(created.id, True, actor=actor, context=context)
-    )
+    enabled = asyncio.run(service.set_enabled(created.id, True, actor=actor, context=context))
     assert enabled.status is ConnectionStatus.READY
 
 
@@ -180,16 +174,12 @@ def test_health_failure_and_recovery_are_queryable() -> None:
     )
 
     provider.set_health(HealthStatus.UNAVAILABLE)
-    failed = asyncio.run(
-        service.check_health(created.id, actor=actor, context=context)
-    )
+    failed = asyncio.run(service.check_health(created.id, actor=actor, context=context))
     assert failed.health is HealthStatus.UNAVAILABLE
     assert failed.status is ConnectionStatus.ERROR
 
     provider.set_health(HealthStatus.HEALTHY)
-    recovered = asyncio.run(
-        service.check_health(created.id, actor=actor, context=context)
-    )
+    recovered = asyncio.run(service.check_health(created.id, actor=actor, context=context))
     assert recovered.health is HealthStatus.HEALTHY
     assert recovered.status is ConnectionStatus.READY
 
