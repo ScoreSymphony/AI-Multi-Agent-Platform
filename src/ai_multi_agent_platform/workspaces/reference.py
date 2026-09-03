@@ -418,9 +418,7 @@ class LocalWorkspaceProvider(WorkspaceProvider):
         if workspace is None:
             return
         remaining = tuple(
-            item
-            for item in self._materializations.values()
-            if item.workspace_id == workspace.id
+            item for item in self._materializations.values() if item.workspace_id == workspace.id
         )
         task_ids = tuple(
             task_id
