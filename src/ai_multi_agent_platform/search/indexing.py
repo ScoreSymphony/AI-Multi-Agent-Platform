@@ -118,6 +118,11 @@ def _display_title(
         subject_id = _optional_string(resource, "subject_id")
         if subject_type is not None and subject_id is not None:
             return f"Run for {subject_type} {subject_id}"
+    if resource_type == "approval":
+        subject_type = _optional_string(resource, "subject_type")
+        subject_id = _optional_string(resource, "subject_id")
+        if subject_type is not None and subject_id is not None:
+            return f"Approval for {subject_type} {subject_id}"
     return f"{resource_type.replace('-', ' ').replace('_', ' ').title()} {resource_id}"
 
 
@@ -206,10 +211,18 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "health",
         "effective_health",
         "task_id",
+        "run_id",
         "plan_id",
         "automation_id",
         "trigger_type",
         "source",
+        "subject_type",
+        "subject_id",
+        "action",
+        "resource_type",
+        "resource_id",
+        "risk",
+        "capability_ref",
     ):
         value = _optional_string(resource, field)
         if value is not None:

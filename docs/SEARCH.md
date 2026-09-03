@@ -76,6 +76,7 @@ The current progressive path supports, when those domain services are registered
 - Capability Providers;
 - Automations;
 - Automation Deliveries;
+- Approvals;
 - other future registered canonical collections that satisfy the same contract.
 
 Registered Search results reuse the collection's canonical `<singular>:list` authorization action. Candidate owner and Project scope are forwarded into that authorization decision so two resources in the same collection can still have different visibility. Unauthorized registered resources are removed before caller-visible counts, snippets, cursors or exact-ID results are calculated.
@@ -120,6 +121,25 @@ The hardened Automation Control Plane adds owner and Project/Workspace scope to 
 - safe Delivery `trigger_type` and `source` keyword discovery.
 
 Automation Search reuses the canonical registered-domain authorization actions `automation:list` and `automation-delivery:list`. Exact-ID lookup, Project filters, keyword matches and caller-visible totals therefore pass through the same authorization boundary as the corresponding canonical resources. A caller without access to another Project cannot infer Automation or Delivery existence through IDs, names, owner metadata, counts, snippets or the Delivery-to-Automation relationship.
+
+### Approvals
+
+The #15 security domain exposes canonical Approval inspection through the registered `approvals` ResourceService. Search consumes that safe northbound projection rather than reading Approval storage or proposed-action payloads directly.
+
+Approval Search includes only discovery metadata needed to locate an authorized lifecycle record:
+
+- canonical Approval ID and status;
+- safe display identity from `subject_type` and `subject_id`;
+- Project and owner scope;
+- exact subject/resource identity;
+- requested action and risk classification;
+- Task, Run and capability references where present.
+
+The global Search index deliberately does **not** include proposed payload values, requested-action digests, `payload_ref`, Approval reason text or decision comments. Those remain available only through the richer owning Approval API when the caller is authorized to inspect that resource.
+
+Approval candidates reuse the registered-domain `approval:list` authorization action with candidate owner and Project scope. Unauthorized Approvals are removed before caller-visible totals, exact-ID results, snippets or relationship matches are calculated. Knowing a hidden Approval ID, Task ID or Project ID therefore does not reveal the hidden Approval through Search.
+
+Search is discovery-only: an Approval Search result or its displayed status never authorizes, approves, rejects or otherwise mutates the canonical Approval lifecycle.
 
 ## Query features
 
@@ -170,7 +190,7 @@ The `/search` navigation entry is backed by a global Search page that:
 - reuses canonical provider-unavailable error presentation;
 - links known resource types to their canonical UI routes using the result's canonical type and ID.
 
-Known Project, Workspace, Task, Run, Artifact, Result, Plan, Step, Model and Model-Provider results can navigate to their existing canonical UI route. Unknown or newly indexed types are not assigned invented client routes; their canonical API reference remains visible until that domain's UI integration exists.
+Known Project, Workspace, Task, Run, Artifact, Result, Plan, Step, Model, Model-Provider and Approval results can navigate to their existing canonical UI route. Unknown or newly indexed types are not assigned invented client routes; their canonical API reference remains visible until that domain's UI integration exists.
 
 ## Synchronization semantics
 
@@ -215,12 +235,12 @@ Exact-ID lookup follows the same rule: knowing or guessing a canonical ID does n
 
 ## Remaining #45 integrations
 
-The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support, Automation discovery and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
+The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support, Automation/Approval discovery and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
 
 - policy-permitted Events where useful for global discovery;
 - Files, scoped Memory and Knowledge;
 - Nodes/Workers;
-- Approvals and Evaluations;
+- Evaluations;
 - Plugins/Extensions and Connectors/external-resource references;
 - Conversations/Messages with retention/deletion propagation;
 - Notifications and usage/resource summaries where useful;

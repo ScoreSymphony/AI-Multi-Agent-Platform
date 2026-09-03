@@ -266,6 +266,8 @@ export function searchResultPath(result: Pick<SearchResult, "resource_type" | "r
       return `/models/${id}`;
     case "model-provider":
       return `/models/providers/${id}`;
+    case "approval":
+      return `/approvals/${id}`;
     default:
       return null;
   }
