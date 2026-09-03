@@ -158,7 +158,11 @@ export class AutomationClient {
   }
 
   update(automationId: string, input: UpdateAutomationInput): Promise<CanonicalAutomation> {
-    return this.command<CanonicalAutomation>("automation.update", automationId, input);
+    const normalized = { ...input };
+    if (normalized.description !== undefined && !normalized.description.trim()) {
+      delete normalized.description;
+    }
+    return this.command<CanonicalAutomation>("automation.update", automationId, normalized);
   }
 
   pause(automationId: string): Promise<CanonicalAutomation> {
@@ -189,7 +193,7 @@ export class AutomationClient {
   private async command<T>(
     command: string,
     resourceRef: string,
-    payload: Record<string, unknown> = {},
+    payload: object = {},
   ): Promise<T> {
     const headers = new Headers({
       Accept: "application/json",
