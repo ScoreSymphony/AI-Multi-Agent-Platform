@@ -263,19 +263,18 @@ class RetentionManagedWorkspaceProvider(WorkspaceProvider):
         task_id: str | None = None,
         run_id: str | None = None,
     ) -> WorkspaceMaterialization:
-        await self.get_workspace(workspace_id)
-        materialization = await self._delegate.materialize(
-            workspace_id,
-            context,
-            snapshot_id=snapshot_id,
-            task_id=task_id,
-            run_id=run_id,
-        )
+        workspace = await self.get_workspace(workspace_id)
         async with self._lock:
-            state = self._states.get(workspace_id)
-            if state is None:
-                base = await self._delegate.get_workspace(workspace_id)
-                state = self._state_from_workspace(base)
+            state = self._states.get(workspace_id) or self._state_from_workspace(workspace)
+            if state.deleted:
+                raise ContractError(ErrorCode.NOT_FOUND, f"workspace not found: {workspace_id}")
+            materialization = await self._delegate.materialize(
+                workspace_id,
+                context,
+                snapshot_id=snapshot_id,
+                task_id=task_id,
+                run_id=run_id,
+            )
             self._states[workspace_id] = replace(
                 state,
                 ever_materialized=True,
