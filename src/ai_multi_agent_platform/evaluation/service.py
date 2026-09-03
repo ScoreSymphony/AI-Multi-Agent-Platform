@@ -106,7 +106,7 @@ class EvaluationService:
                 f"regression policy not found: {policy_ref}",
             ) from exc
 
-    def list_runs(self, *, limit: int = 100) -> tuple[EvaluationRun, ...]:
+    def list_runs(self, *, limit: int | None = 100) -> tuple[EvaluationRun, ...]:
         return self._repository.list_runs(limit=limit)
 
     def get_run_detail(self, run_id: str) -> EvaluationRunDetail:
