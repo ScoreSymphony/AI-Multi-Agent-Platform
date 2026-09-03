@@ -33,6 +33,8 @@ export type WorkspaceType =
   | "remote";
 export type WorkspaceAccessMode = "read_write" | "read_only";
 export type WorkspaceRetention = "persistent" | "ephemeral" | "until";
+export type SearchMode = "exact" | "keyword" | "metadata" | "semantic" | "hybrid";
+export type SearchSort = "relevance" | "id" | "updated_at";
 
 export interface Page<T> {
   items: T[];
@@ -40,6 +42,50 @@ export interface Page<T> {
   total: number;
   limit: number;
 }
+
+export interface SearchRequest {
+  q?: string;
+  id?: string;
+  types?: string[];
+  project_id?: string;
+  workspace_id?: string;
+  statuses?: string[];
+  tags?: string[];
+  sources?: string[];
+  providers?: string[];
+  updated_after?: string;
+  updated_before?: string;
+  mode?: SearchMode;
+  limit?: number;
+  cursor?: string;
+  sort?: SearchSort;
+  direction?: "asc" | "desc";
+}
+
+export interface SearchResult {
+  resource_type: string;
+  resource_id: string;
+  title: string;
+  summary: string;
+  project_id: string | null;
+  workspace_id: string | null;
+  owner_type: string | null;
+  owner_id: string | null;
+  status: string | null;
+  tags: string[];
+  relevance: number;
+  matched_fields: string[];
+  source: string;
+  provider: string;
+  version: string | null;
+  updated_at: string | null;
+  canonical_ref: string | null;
+  provenance: Record<string, JsonValue>;
+  access: "authorized";
+  redacted: boolean;
+}
+
+export type SearchPage = Page<SearchResult>;
 
 export interface CanonicalProject {
   id: string;
