@@ -11,7 +11,6 @@ import { AppLink } from "../app/router";
 import { PaginationControls } from "../components/Pagination";
 import {
   Card,
-  CanonicalId,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -72,7 +71,9 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
   if (!capabilities && !providers && !capabilityError && !providerError) return <LoadingState />;
 
   const availableOnPage = capabilities?.items.filter((item) => item.available).length ?? "—";
-  const healthyProvidersOnPage = providers?.items.filter((provider) => provider.available && provider.health === "healthy").length ?? "—";
+  const healthyProvidersOnPage =
+    providers?.items.filter((provider) => provider.available && provider.health === "healthy").length
+    ?? "—";
 
   return (
     <div className="stack">
@@ -93,8 +94,14 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
       </div>
 
       <Card title="Canonical capabilities">
-        {capabilityError ? <ErrorState error={capabilityError} onRetry={() => void loadCapabilities()} /> : null}
-        {capabilities ? <CapabilityTable capabilities={capabilities.items} /> : capabilityError ? null : <LoadingState />}
+        {capabilityError ? (
+          <ErrorState error={capabilityError} onRetry={() => void loadCapabilities()} />
+        ) : null}
+        {capabilities ? (
+          <CapabilityTable capabilities={capabilities.items} />
+        ) : capabilityError ? null : (
+          <LoadingState />
+        )}
         {capabilities ? (
           <PaginationControls
             page={capabilities}
@@ -108,8 +115,14 @@ export function CapabilitiesPage({ client }: { client: ControlPlaneClient }) {
       </Card>
 
       <Card title="Capability providers">
-        {providerError ? <ErrorState error={providerError} onRetry={() => void loadProviders()} /> : null}
-        {providers ? <ProviderTable providers={providers.items} /> : providerError ? null : <LoadingState />}
+        {providerError ? (
+          <ErrorState error={providerError} onRetry={() => void loadProviders()} />
+        ) : null}
+        {providers ? (
+          <ProviderTable providers={providers.items} />
+        ) : providerError ? null : (
+          <LoadingState />
+        )}
         {providers ? (
           <PaginationControls
             page={providers}
@@ -157,11 +170,13 @@ export function CapabilityDetailPage({
         <div>
           <p className="eyebrow">Capability</p>
           <h1>{capability.name}</h1>
-          <CanonicalId value={capability.id} />
+          <code>{capability.id}</code>
         </div>
         <div className="detail-status">
           <StatusBadge value={capability.available ? "available" : "unavailable"} />
-          <span>{capability.version_count} version{capability.version_count === 1 ? "" : "s"}</span>
+          <span>
+            {capability.version_count} version{capability.version_count === 1 ? "" : "s"}
+          </span>
         </div>
       </header>
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
@@ -210,7 +225,7 @@ export function CapabilityProviderDetailPage({
         <div>
           <p className="eyebrow">Capability provider</p>
           <h1>{provider.id}</h1>
-          <CanonicalId value={provider.id} />
+          <code>{provider.id}</code>
         </div>
         <div className="detail-status">
           <StatusBadge value={provider.health} />
@@ -239,7 +254,11 @@ export function CapabilityProviderDetailPage({
         ) : (
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Name</th><th>Kind</th><th>Version</th><th>Operations</th><th>Features</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Name</th><th>Kind</th><th>Version</th><th>Operations</th><th>Features</th>
+                </tr>
+              </thead>
               <tbody>
                 {provider.capabilities.map((capability) => (
                   <tr key={`${capability.name}:${capability.version}`}>
@@ -264,23 +283,26 @@ function CapabilityTable({ capabilities }: { capabilities: CanonicalCapability[]
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr><th>Capability</th><th>Versions</th><th>Availability</th><th>Safety</th><th>Side effects</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Capability</th><th>Versions</th><th>Availability</th><th>Safety</th><th>Side effects</th>
+          </tr>
+        </thead>
         <tbody>
-          {capabilities.map((capability) => {
-            const latest = capability.versions.at(-1);
-            return (
-              <tr key={capability.id}>
-                <td>
-                  <AppLink href={`/tools/${encodeURIComponent(capability.id)}`}>{capability.name}</AppLink>
-                  <div><code>{capability.id}</code></div>
-                </td>
-                <td>{capability.version_count}</td>
-                <td><StatusBadge value={capability.available ? "available" : "unavailable"} /></td>
-                <td>{latest?.safety ?? "—"}</td>
-                <td>{latest?.side_effects ?? "—"}</td>
-              </tr>
-            );
-          })}
+          {capabilities.map((capability) => (
+            <tr key={capability.id}>
+              <td>
+                <AppLink href={`/tools/${encodeURIComponent(capability.id)}`}>
+                  {capability.name}
+                </AppLink>
+                <div><code>{capability.id}</code></div>
+              </td>
+              <td>{capability.version_count}</td>
+              <td><StatusBadge value={capability.available ? "available" : "unavailable"} /></td>
+              <td>{commonVersionValue(capability.versions, "safety")}</td>
+              <td>{commonVersionValue(capability.versions, "side_effects")}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -292,12 +314,16 @@ function ProviderTable({ providers }: { providers: CanonicalCapabilityProvider[]
   return (
     <div className="table-wrap">
       <table>
-        <thead><tr><th>Provider</th><th>Type</th><th>Health</th><th>Available</th><th>Capabilities</th></tr></thead>
+        <thead>
+          <tr><th>Provider</th><th>Type</th><th>Health</th><th>Available</th><th>Capabilities</th></tr>
+        </thead>
         <tbody>
           {providers.map((provider) => (
             <tr key={provider.id}>
               <td>
-                <AppLink href={`/tools/providers/${encodeURIComponent(provider.id)}`}>{provider.id}</AppLink>
+                <AppLink href={`/tools/providers/${encodeURIComponent(provider.id)}`}>
+                  {provider.id}
+                </AppLink>
               </td>
               <td>{provider.provider_type}</td>
               <td><StatusBadge value={provider.health} /></td>
@@ -339,10 +365,21 @@ function CapabilityVersionTable({ versions }: { versions: CanonicalCapabilityVer
   );
 }
 
+function commonVersionValue(
+  versions: CanonicalCapabilityVersion[],
+  field: "safety" | "side_effects",
+): string {
+  const values = new Set(versions.map((version) => version[field]));
+  if (values.size === 0) return "—";
+  if (values.size > 1) return "mixed";
+  return values.values().next().value ?? "—";
+}
+
 function schemaSummary(schema: Record<string, unknown>): string {
   const rawProperties = schema.properties;
   if (typeof rawProperties === "object" && rawProperties !== null) {
-    return `${Object.keys(rawProperties).length} field${Object.keys(rawProperties).length === 1 ? "" : "s"}`;
+    const fieldCount = Object.keys(rawProperties).length;
+    return `${fieldCount} field${fieldCount === 1 ? "" : "s"}`;
   }
   return Object.keys(schema).length ? "schema declared" : "—";
 }
