@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { describeLiveStreamError, TaskEventStream } from "./live";
+import {
+  describeLiveStreamError,
+  NotificationEventStream,
+  TaskEventStream,
+} from "./live";
 
 class MockEventSource {
   static instances: MockEventSource[] = [];
@@ -113,8 +117,12 @@ describe("TaskEventStream", () => {
 
     source.emit("platform.event", "{");
     source.emit("platform.error", "{");
-    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "Malformed canonical event payload" }));
-    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: "Malformed canonical stream error" }));
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Malformed canonical event payload" }),
+    );
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Malformed canonical stream error" }),
+    );
   });
 
   it("formats canonical stream errors with their request reference", () => {
@@ -131,6 +139,61 @@ describe("TaskEventStream", () => {
 
     expect(describeLiveStreamError(new Error("Malformed canonical event payload"))).toBe(
       "Malformed canonical event payload",
+    );
+  });
+});
+
+describe("NotificationEventStream", () => {
+  it("uses the recipient-scoped notification SSE route with browser credentials", () => {
+    installBrowserStubs();
+    const states: string[] = [];
+    const stream = new NotificationEventStream({
+      baseUrl: "https://control.example/",
+      afterEventId: "notification_event_42",
+      onEvent: vi.fn(),
+      onState: (state) => states.push(state),
+    });
+
+    stream.open();
+
+    const source = MockEventSource.instances[0];
+    const url = new URL(source.url);
+    expect(url.origin).toBe("https://control.example");
+    expect(url.pathname).toBe("/api/v1/notifications/stream");
+    expect(url.searchParams.get("after_event_id")).toBe("notification_event_42");
+    expect(source.withCredentials).toBe(true);
+
+    source.onopen?.({} as Event);
+    source.onerror?.({} as Event);
+    stream.close();
+    expect(states).toEqual(["connecting", "open", "reconnecting", "closed"]);
+  });
+
+  it("delivers notification events and rejects malformed stream payloads", () => {
+    installBrowserStubs();
+    const onEvent = vi.fn();
+    const onError = vi.fn();
+    const stream = new NotificationEventStream({ onEvent, onError });
+
+    stream.open();
+    const source = MockEventSource.instances[0];
+    source.emit(
+      "notification.event",
+      JSON.stringify({
+        id: "notification_event_1",
+        event: "notification.created",
+        recipient: { type: "user", id: "user_1" },
+        occurred_at: "2026-09-03T20:00:00Z",
+        payload: { notification_id: "notification_1" },
+      }),
+    );
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "notification_event_1", event: "notification.created" }),
+    );
+
+    source.emit("notification.event", "{");
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Malformed notification event payload" }),
     );
   });
 });
