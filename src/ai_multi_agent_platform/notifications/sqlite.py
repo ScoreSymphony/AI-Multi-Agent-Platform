@@ -519,8 +519,7 @@ def _decode_preference(encoded: str) -> NotificationPreference:
             id=_required_string(recipient, "id"),
         ),
         enabled_categories=frozenset(
-            NotificationCategory(item)
-            for item in _required_string_list(raw, "enabled_categories")
+            NotificationCategory(item) for item in _required_string_list(raw, "enabled_categories")
         ),
         minimum_severity=NotificationSeverity(_required_string(raw, "minimum_severity")),
         project_ids=frozenset(_required_string_list(raw, "project_ids")),
