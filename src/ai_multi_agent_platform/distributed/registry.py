@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from .models import (
@@ -26,6 +26,16 @@ class RegistryError(RuntimeError):
     """Raised when registration, liveness or reservation invariants are violated."""
 
 
+@dataclass(frozen=True, slots=True)
+class RegistrySnapshot:
+    """Restart-safe registry state without backend- or process-specific identity."""
+
+    nodes: tuple[NodeRecord, ...] = ()
+    workers: tuple[WorkerRecord, ...] = ()
+    heartbeat_sequences: tuple[tuple[str, int], ...] = ()
+    reservations: tuple[Reservation, ...] = ()
+
+
 class DistributedRegistry:
     """Reference registry used by both single-node and multi-node scheduling."""
 
@@ -46,6 +56,70 @@ class DistributedRegistry:
         self._heartbeat_sequence: dict[str, int] = {}
         self._reservations: dict[str, Reservation] = {}
         self._job_reservation: dict[str, str] = {}
+
+    def snapshot(self) -> RegistrySnapshot:
+        """Capture only state required to preserve liveness and capacity correctness."""
+
+        return RegistrySnapshot(
+            nodes=self.list_nodes(),
+            workers=self.list_workers(),
+            heartbeat_sequences=tuple(sorted(self._heartbeat_sequence.items())),
+            reservations=self.active_reservations(),
+        )
+
+    def restore_snapshot(self, snapshot: RegistrySnapshot) -> None:
+        """Restore a clean registry conservatively after control-side restart."""
+
+        if self._nodes or self._workers or self._reservations or self._heartbeat_sequence:
+            raise RegistryError("registry restore requires an empty registry")
+
+        nodes = {node.node_id: node for node in snapshot.nodes}
+        if len(nodes) != len(snapshot.nodes):
+            raise RegistryError("registry snapshot contains duplicate node IDs")
+        workers = {worker.worker_id: worker for worker in snapshot.workers}
+        if len(workers) != len(snapshot.workers):
+            raise RegistryError("registry snapshot contains duplicate worker IDs")
+        if any(worker.node_id not in nodes for worker in workers.values()):
+            raise RegistryError("registry snapshot contains worker for unknown node")
+
+        sequence_map = dict(snapshot.heartbeat_sequences)
+        if len(sequence_map) != len(snapshot.heartbeat_sequences):
+            raise RegistryError("registry snapshot contains duplicate heartbeat sequence entries")
+        if set(sequence_map) - set(nodes):
+            raise RegistryError("registry snapshot contains heartbeat for unknown node")
+        if any(sequence < 0 for sequence in sequence_map.values()):
+            raise RegistryError("registry snapshot contains negative heartbeat sequence")
+
+        reservations = {item.reservation_id: item for item in snapshot.reservations}
+        if len(reservations) != len(snapshot.reservations):
+            raise RegistryError("registry snapshot contains duplicate reservation IDs")
+        job_reservations: dict[str, str] = {}
+        for reservation in reservations.values():
+            if reservation.status not in {ReservationStatus.RESERVED, ReservationStatus.ACTIVE}:
+                raise RegistryError("registry snapshot must contain only capacity-claiming reservations")
+            worker = workers.get(reservation.worker_id)
+            if worker is None or reservation.node_id not in nodes:
+                raise RegistryError("registry snapshot reservation references unknown runtime identity")
+            if worker.node_id != reservation.node_id:
+                raise RegistryError("registry snapshot reservation node/worker mismatch")
+            if reservation.worker_job_id in job_reservations:
+                raise RegistryError("worker job has multiple active reservations in snapshot")
+            job_reservations[reservation.worker_job_id] = reservation.reservation_id
+
+        # Persisted health is not fresh liveness evidence after a process restart.
+        self._nodes = {
+            node_id: replace(node, status=NodeStatus.OFFLINE)
+            for node_id, node in nodes.items()
+        }
+        self._workers = {
+            worker_id: replace(worker, status=WorkerStatus.OFFLINE)
+            for worker_id, worker in workers.items()
+        }
+        self._heartbeat_sequence = {
+            node_id: sequence_map.get(node_id, 0) for node_id in nodes
+        }
+        self._reservations = reservations
+        self._job_reservation = job_reservations
 
     def register(
         self,
