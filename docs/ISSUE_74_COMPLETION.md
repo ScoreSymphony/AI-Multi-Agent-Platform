@@ -13,10 +13,10 @@ engine canonical.
 | Canonical browser session/context | `BrowserSessionRef` / `BrowserSessionScope`, with owner/project/task/run/agent scope fields, timestamps, privacy classification, allowed domains and namespaced adapter metadata |
 | Reference browser adapter | `StdlibBrowserProvider`, self-hosted and Python-standard-library based |
 | Capability-registry registration | canonical browser capability registrations resolve through `CapabilityRegistry` like other tools |
-| Upload/download file bridge | uploads consume canonical `file_*` refs through `FileProvider`; downloads create canonical file refs with SHA-256, content type and provenance |
+| Upload/download file bridge | uploads consume authorized canonical `file_*` refs through `FileProvider`; downloads create canonical `file_*` refs, link a canonical `artifact_*` through the refined #13 file/artifact seam, and record SHA-256, content type and provenance |
 | Authorization/network policy | capability safety/side-effect classifications, canonical policy/approval pipeline, `BrowserNetworkPolicyHook`, SSRF/private-network and redirect checks |
 | Worker-placement hooks | `BrowserPlacement` / `BoundBrowserProvider` attach node, worker, priority and provider-private worker labels at registration level |
-| Observability/evidence | `browser.operation` adapter metadata plus canonical `InvocationRecord` propagation; downloads use `result_ref` / `evidence_refs` |
+| Observability/evidence | `browser.operation` adapter metadata plus canonical `InvocationRecord` propagation; downloads use `result_ref`, `artifact_refs` and `evidence_refs` |
 | Documentation/examples | `docs/BROWSER_CAPABILITY.md` |
 
 ## Canonical capability set
@@ -44,13 +44,14 @@ agent/task contracts.
   `StdlibBrowserProvider` supports navigation, text/link extraction, link following, forms and
   reusable isolated sessions; provider replacement is tested.
 - [x] **File downloads become canonical File/Artifact resources with provenance.** The browser
-  creates canonical `file_*` resources through `FileProvider`, records source URL, content type,
-  SHA-256, timestamp, provenance and trust classification, and returns the file as result/evidence.
-  Artifact identity remains owned by the canonical artifact lifecycle; the browser does not invent
-  a parallel artifact store or provider-private artifact ID.
-- [x] **Uploads use authorized canonical file references.** Uploads accept `file_*` references and
-  read bytes through the injected `FileProvider`; host/temp paths are not accepted as canonical
-  input.
+  creates a canonical `file_*` through `FileProvider`, generates a canonical `artifact_*`, links
+  the artifact to the file through the refined #13 `link_artifact` seam, records source URL,
+  content type, SHA-256, timestamp, provenance and trust classification, and returns the file and
+  artifact through canonical result/evidence fields. No browser-provider-private artifact ID or
+  parallel artifact store is introduced.
+- [x] **Uploads use authorized canonical file references.** `browser.submit_form` requires both
+  `browser.external.submit` and `file.read`; uploads accept only `file_*` references and read bytes
+  through the injected `FileProvider`. Host/temp paths are not accepted as canonical input.
 - [x] **Provider-private browser/session IDs do not leak into canonical APIs.** Canonical sessions
   use `browser_session_*`; cookies and native engine/session identifiers stay provider-private.
 - [x] **Browser capability can be disabled/removed without breaking core tools.** Absence/removal
@@ -72,15 +73,15 @@ agent/task contracts.
 | --- | --- |
 | open/navigate page | `test_navigation_extract_follow_and_trace_preservation` |
 | extract content | `test_navigation_extract_follow_and_trace_preservation` |
-| multi-step interaction fixture | navigation + extraction + link following in `test_navigation_extract_follow_and_trace_preservation`; form flow in `test_form_side_effect_is_policy_gated_and_upload_reads_canonical_file` |
-| file download/artifact path | `test_download_enters_canonical_file_provider_with_provenance` |
-| file upload | `test_form_side_effect_is_policy_gated_and_upload_reads_canonical_file` |
-| unsupported operation | `test_provider_replacement_and_disabled_path` verifies unsupported screenshot capability |
+| multi-step interaction fixture | navigation + extraction + link following in `test_navigation_extract_follow_and_trace_preservation`; form flow in `test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file` |
+| file download/artifact creation | `test_download_enters_canonical_file_and_artifact_path_with_provenance` verifies `file_*`, `artifact_*`, File↔Artifact linking, result/artifact/evidence refs and provenance |
+| file upload | `test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file` verifies missing `file.read` is rejected and an authorized canonical file is uploaded |
+| unsupported operation | `test_provider_replacement_unsupported_operation_and_disabled_path` verifies `browser.screenshot` is unsupported while a browser provider remains registered |
 | timeout/cancellation | `test_timeout_and_cancellation_use_canonical_errors` |
 | blocked domain/network policy | `test_network_policy_blocks_private_target` plus policy unit coverage |
-| unauthorized side effect | `test_form_side_effect_is_policy_gated_and_upload_reads_canonical_file` verifies no POST occurs before denial |
+| unauthorized side effect | `test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file` verifies no POST occurs before denial |
 | session isolation | `test_session_isolation_by_project` |
-| provider replacement/disabled path | `test_provider_replacement_and_disabled_path` |
+| provider replacement/disabled path | `test_provider_replacement_unsupported_operation_and_disabled_path` |
 | canonical error/trace preservation | browser capability tests plus `test_browser_failure_metadata_preserves_canonical_error_and_trace` |
 | node/worker placement | `test_browser_binding_adds_worker_placement_without_changing_capability_contract` |
 | URL/evidence redaction and observability | `test_browser_operation_metadata_is_redacted_and_enters_invocation_record` |
@@ -96,7 +97,11 @@ agent/task contracts.
   ordinary invocation metadata.
 - Provider errors retain canonical `ErrorCode` semantics; browser metadata is additive and
   namespaced.
-- Upload/download bytes cross only the canonical `FileProvider` seam.
+- Upload bytes require the browser external-submit permission plus canonical `file.read`.
+- Download persistence requires browser network-read, `file.create` and `artifact.create`.
+- Downloaded bytes cross the canonical `FileProvider` seam and the resulting file is linked to a
+  canonical `artifact_*` through the existing #13 file/artifact lifecycle rather than a
+  browser-private artifact path.
 - The reference adapter has no implicit access to a host browser profile.
 
 ## Deliberate non-requirements
@@ -106,7 +111,7 @@ stdlib reference adapter proves the contract without JavaScript, screenshots or 
 click execution. Those are provider features for richer adapters, not missing canonical
 platform dependencies. The implemented reference interaction surface (links, forms, file
 upload/download and reusable sessions) is sufficient to exercise the canonical web-workflow,
-security, file, placement and observability boundaries required by #74.
+security, file/artifact, placement and observability boundaries required by #74.
 
 ## Definition-of-Done assessment
 
