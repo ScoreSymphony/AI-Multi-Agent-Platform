@@ -10,10 +10,9 @@ from ai_multi_agent_platform.plugins import (
     DiscoveredPlugin,
     ExtensionType,
     ReferenceCapabilityPlugin,
-    reference_manifest,
     validate_manifest_document,
 )
-from ai_multi_agent_platform.plugins.reference import REFERENCE_CAPABILITY_ID
+from ai_multi_agent_platform.plugins.reference import REFERENCE_CAPABILITY_ID, reference_manifest
 
 
 REQUIRED_EXTENSION_TYPES = {
