@@ -21,13 +21,23 @@ from .models import (
     validate_relative_path,
 )
 from .reference import LocalWorkspaceProvider
+from .run_bindings import (
+    InMemoryRunWorkspaceBindingRepository,
+    RunWorkspaceBinding,
+    RunWorkspaceBindingRepository,
+    SqliteRunWorkspaceBindingRepository,
+)
 from .sqlite import SqliteWorkspaceProvider
 
 __all__ = [
     "CleanupReport",
+    "InMemoryRunWorkspaceBindingRepository",
     "LocalWorkspaceProvider",
     "MaterializationOutcome",
     "RemoteMaterializationRequest",
+    "RunWorkspaceBinding",
+    "RunWorkspaceBindingRepository",
+    "SqliteRunWorkspaceBindingRepository",
     "SqliteWorkspaceProvider",
     "Workspace",
     "WorkspaceAccessMode",
