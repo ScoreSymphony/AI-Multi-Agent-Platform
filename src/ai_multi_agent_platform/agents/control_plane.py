@@ -10,7 +10,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_object
 from ai_multi_agent_platform.data import MemoryScope
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, Provenance
 from ai_multi_agent_platform.models import RoutingRequirements
 
 from .models import (
@@ -140,6 +140,7 @@ class AgentCommandHandlers:
             owner_ref=_owner_ref(payload.get("owner_ref"), context),
             project_id=_optional_string(payload, "project_id"),
             workspace_id=_optional_string(payload, "workspace_id"),
+            provenance=_control_plane_provenance(context, "agent.create"),
         )
         return _agent_resource(self.service, revision.agent_id)
 
@@ -149,12 +150,25 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
+        current = self.service.repository.get_agent(resource_ref)
+        project_id = (
+            current.project_id
+            if "project_id" not in payload
+            else _optional_string(payload, "project_id")
+        )
+        workspace_id = (
+            current.workspace_id
+            if "workspace_id" not in payload
+            else _optional_string(payload, "workspace_id")
+        )
         revision = self.service.update_agent(
             resource_ref,
             _profile_from_json(_required(payload, "profile")),
             expected_revision=_required_positive_int(payload, "expected_revision"),
             owner_ref=_provided_owner_ref(payload.get("owner_ref")),
+            project_id=project_id,
+            workspace_id=workspace_id,
+            provenance=_control_plane_provenance(context, "agent.update"),
         )
         return _agent_resource(self.service, revision.agent_id)
 
@@ -164,11 +178,28 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
+        source_revision = self.service.get_agent_revision(
+            resource_ref,
+            _optional_positive_int(payload, "revision"),
+        )
+        project_id = (
+            source_revision.project_id
+            if "project_id" not in payload
+            else _optional_string(payload, "project_id")
+        )
+        workspace_id = (
+            source_revision.workspace_id
+            if "workspace_id" not in payload
+            else _optional_string(payload, "workspace_id")
+        )
         revision = self.service.clone_agent(
             resource_ref,
-            revision=_optional_positive_int(payload, "revision"),
+            revision=source_revision.revision,
+            owner_ref=_provided_owner_ref(payload.get("owner_ref")),
+            project_id=project_id,
+            workspace_id=workspace_id,
             name=_optional_string(payload, "name"),
+            provenance=_control_plane_provenance(context, "agent.clone"),
         )
         return _agent_resource(self.service, revision.agent_id)
 
@@ -178,11 +209,11 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
         revision = self.service.rollback_agent(
             resource_ref,
             _required_positive_int(payload, "target_revision"),
             expected_revision=_required_positive_int(payload, "expected_revision"),
+            provenance=_control_plane_provenance(context, "agent.rollback"),
         )
         return _agent_resource(self.service, revision.agent_id)
 
@@ -219,6 +250,7 @@ class AgentCommandHandlers:
             owner_ref=_owner_ref(payload.get("owner_ref"), context),
             project_id=_optional_string(payload, "project_id"),
             workspace_id=_optional_string(payload, "workspace_id"),
+            provenance=_control_plane_provenance(context, "agent-team.create"),
         )
         return _team_resource(self.service, revision.team_id)
 
@@ -228,12 +260,25 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
+        current = self.service.repository.get_team(resource_ref)
+        project_id = (
+            current.project_id
+            if "project_id" not in payload
+            else _optional_string(payload, "project_id")
+        )
+        workspace_id = (
+            current.workspace_id
+            if "workspace_id" not in payload
+            else _optional_string(payload, "workspace_id")
+        )
         revision = self.service.update_team(
             resource_ref,
             _team_profile_from_json(_required(payload, "profile")),
             expected_revision=_required_positive_int(payload, "expected_revision"),
             owner_ref=_provided_owner_ref(payload.get("owner_ref")),
+            project_id=project_id,
+            workspace_id=workspace_id,
+            provenance=_control_plane_provenance(context, "agent-team.update"),
         )
         return _team_resource(self.service, revision.team_id)
 
@@ -243,11 +288,28 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
+        source_revision = self.service.get_team_revision(
+            resource_ref,
+            _optional_positive_int(payload, "revision"),
+        )
+        project_id = (
+            source_revision.project_id
+            if "project_id" not in payload
+            else _optional_string(payload, "project_id")
+        )
+        workspace_id = (
+            source_revision.workspace_id
+            if "workspace_id" not in payload
+            else _optional_string(payload, "workspace_id")
+        )
         revision = self.service.clone_team(
             resource_ref,
-            revision=_optional_positive_int(payload, "revision"),
+            revision=source_revision.revision,
+            owner_ref=_provided_owner_ref(payload.get("owner_ref")),
+            project_id=project_id,
+            workspace_id=workspace_id,
             name=_optional_string(payload, "name"),
+            provenance=_control_plane_provenance(context, "agent-team.clone"),
         )
         return _team_resource(self.service, revision.team_id)
 
@@ -257,11 +319,11 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
         revision = self.service.rollback_team(
             resource_ref,
             _required_positive_int(payload, "target_revision"),
             expected_revision=_required_positive_int(payload, "expected_revision"),
+            provenance=_control_plane_provenance(context, "agent-team.rollback"),
         )
         return _team_resource(self.service, revision.team_id)
 
@@ -523,6 +585,7 @@ def _team_profile_from_json(value: object) -> AgentTeamProfile:
         ),
         leader_agent_id=_optional_string(data, "leader_agent_id"),
         shared_capability_ids=_string_tuple(data, "shared_capability_ids"),
+        shared_resource_refs=_string_tuple(data, "shared_resource_refs"),
         max_parallel_agents=_optional_positive_int(
             data,
             "max_parallel_agents",
@@ -601,6 +664,18 @@ def _provided_owner_ref(value: object | None) -> OwnerRef | None:
         raw_type,
     )
     return OwnerRef(type=owner_type, id=_required_string(data, "id"))
+
+
+def _control_plane_provenance(context: RequestContext, operation: str) -> Provenance:
+    return Provenance(
+        source="control-plane",
+        actor_ref=context.actor.principal_ref,
+        details={
+            "operation": operation,
+            "request_id": context.request_id,
+            "correlation_id": context.correlation_id,
+        },
+    )
 
 
 def _require_collection(resource_ref: str, expected: str) -> None:

@@ -40,7 +40,8 @@ from .models import (
 )
 from .repository import InMemoryAgentRepository
 
-AGENT_REPOSITORY_SCHEMA_VERSION = "1"
+AGENT_REPOSITORY_SCHEMA_VERSION = "2"
+_LEGACY_AGENT_REPOSITORY_SCHEMA_VERSION = "1"
 
 
 class JsonAgentRepository(InMemoryAgentRepository):
@@ -111,7 +112,9 @@ class JsonAgentRepository(InMemoryAgentRepository):
         raw: object = json.loads(self.path.read_text(encoding="utf-8"))
         document = _json_object(raw, "agent repository document")
         version = _required_string(document, "schema_version")
-        if version != AGENT_REPOSITORY_SCHEMA_VERSION:
+        if version == _LEGACY_AGENT_REPOSITORY_SCHEMA_VERSION:
+            document = _migrate_v1_to_v2(document)
+        elif version != AGENT_REPOSITORY_SCHEMA_VERSION:
             raise ValueError(
                 "unsupported Agent repository schema version: "
                 f"{version!r}; expected {AGENT_REPOSITORY_SCHEMA_VERSION!r}"
@@ -231,6 +234,31 @@ class JsonAgentRepository(InMemoryAgentRepository):
 
         if self.get_team(definition.team_id) != definition:
             raise ValueError("restored Agent Team differs from persisted canonical definition")
+
+
+def _migrate_v1_to_v2(document: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """Add fields introduced by schema v2 without changing v1 semantic defaults."""
+
+    migrated = dict(document)
+    migrated_team_revisions: list[JsonValue] = []
+    for raw_revision in _required_array(document, "team_revisions"):
+        revision = _json_object(raw_revision, "Agent Team revision")
+        profile = _json_object(revision.get("profile"), "Agent Team profile")
+        migrated_profile = dict(profile)
+        migrated_profile.setdefault("shared_resource_refs", [])
+        migrated_team_revisions.append({**revision, "profile": migrated_profile})
+
+    migrated_runs: list[JsonValue] = []
+    for raw_run in _required_array(document, "agent_runs"):
+        run = _json_object(raw_run, "Agent run")
+        migrated_run = dict(run)
+        migrated_run.setdefault("capability_versions", {})
+        migrated_runs.append(migrated_run)
+
+    migrated["team_revisions"] = migrated_team_revisions
+    migrated["agent_runs"] = migrated_runs
+    migrated["schema_version"] = AGENT_REPOSITORY_SCHEMA_VERSION
+    return migrated
 
 
 def _encode(value: Any) -> JsonValue:
@@ -420,6 +448,9 @@ def _team_profile(value: JsonValue | None) -> AgentTeamProfile:
         shared_capability_ids=_string_tuple(
             data.get("shared_capability_ids"), "shared_capability_ids"
         ),
+        shared_resource_refs=_string_tuple(
+            data.get("shared_resource_refs"), "shared_resource_refs"
+        ),
         max_parallel_agents=_optional_int(data, "max_parallel_agents"),
         max_steps=_optional_int(data, "max_steps"),
         unavailable_member_policy=UnavailableMemberPolicy(
@@ -469,6 +500,7 @@ def _agent_run(value: JsonValue) -> AgentRunRecord:
         selected_model_config_id=_optional_string(data, "selected_model_config_id"),
         selected_provider_id=_optional_string(data, "selected_provider_id"),
         capability_ids=_string_tuple(data.get("capability_ids"), "capability_ids"),
+        capability_versions=_string_mapping(data.get("capability_versions"), "capability_versions"),
         orchestrator_adapter_id=_optional_string(data, "orchestrator_adapter_id"),
         orchestrator_runtime_ref=_optional_string(data, "orchestrator_runtime_ref"),
         artifact_ids=_string_tuple(data.get("artifact_ids"), "artifact_ids"),
@@ -582,6 +614,13 @@ def _string_tuple(value: JsonValue | None, field_name: str) -> tuple[str, ...]:
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
         raise ValueError(f"{field_name} must be a list of strings")
     return tuple(cast(str, item) for item in value)
+
+
+def _string_mapping(value: JsonValue | None, field_name: str) -> dict[str, str]:
+    data = _json_object(value, field_name)
+    if any(not isinstance(item, str) for item in data.values()):
+        raise ValueError(f"{field_name} must map strings to strings")
+    return {key: cast(str, item) for key, item in data.items()}
 
 
 def _datetime(value: JsonValue | None, field_name: str) -> datetime:
