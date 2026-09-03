@@ -35,6 +35,7 @@ def document_from_resource(resource: Mapping[str, JsonValue]) -> SearchDocument:
     workspace_id = (
         resource_id if resource_type == "workspace" else _optional_string(resource, "workspace_id")
     )
+    owner_type, owner_id = _owner(resource)
     status = _optional_string(resource, "status")
     updated_at = _optional_string(resource, "updated_at")
     version = _version(resource)
@@ -48,6 +49,8 @@ def document_from_resource(resource: Mapping[str, JsonValue]) -> SearchDocument:
             resource_id,
             project_id,
             workspace_id,
+            owner_type,
+            owner_id,
             status,
         )
         if value is not None
@@ -59,6 +62,8 @@ def document_from_resource(resource: Mapping[str, JsonValue]) -> SearchDocument:
         summary=summary,
         project_id=project_id,
         workspace_id=workspace_id,
+        owner_type=owner_type,
+        owner_id=owner_id,
         status=status,
         keywords=keywords,
         version=version,
@@ -96,6 +101,19 @@ def _summary(resource_type: str, resource: Mapping[str, JsonValue]) -> str:
         if status is not None and isinstance(attempt, int):
             return f"Run attempt {attempt} is {status}."
     return ""
+
+
+def _owner(resource: Mapping[str, JsonValue]) -> tuple[str | None, str | None]:
+    value = resource.get("owner")
+    if not isinstance(value, Mapping):
+        return None, None
+    owner_type = value.get("type")
+    owner_id = value.get("id")
+    if not isinstance(owner_type, str) or not owner_type.strip():
+        return None, None
+    if not isinstance(owner_id, str) or not owner_id.strip():
+        return None, None
+    return owner_type, owner_id
 
 
 def _version(resource: Mapping[str, JsonValue]) -> str | None:
