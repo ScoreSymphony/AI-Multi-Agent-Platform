@@ -127,9 +127,13 @@ class StoredCredential:
     purpose: str
     secret_verifier: str
     created_at: datetime
+    scope: Mapping[str, JsonValue]
     expires_at: datetime | None = None
     revoked_at: datetime | None = None
     last_used_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "scope", MappingProxyType(dict(self.scope)))
 
     def active(self, *, now: datetime) -> bool:
         return self.revoked_at is None and (self.expires_at is None or now < self.expires_at)
@@ -743,6 +747,7 @@ class LocalAuthenticationService:
         purpose: str,
         expires_at: datetime | None = None,
         now: datetime | None = None,
+        scope: Mapping[str, JsonValue] | None = None,
     ) -> IssuedCredential:
         current = _now(now)
         if not owner_id.strip() or not purpose.strip():
@@ -755,6 +760,7 @@ class LocalAuthenticationService:
             raise ValueError("credential expiry must be in the future")
         credential_id = new_id("credential")
         secret = secrets.token_urlsafe(32)
+        stored_scope = dict(scope) if scope is not None else _unrestricted_credential_scope()
         self.store.credentials[credential_id] = StoredCredential(
             credential_id=credential_id,
             owner_id=owner_id,
@@ -763,6 +769,7 @@ class LocalAuthenticationService:
             purpose=purpose.strip(),
             secret_verifier=_secret_verifier(secret),
             created_at=current,
+            scope=stored_scope,
             expires_at=expires_at,
         )
         self._audit(
@@ -1175,3 +1182,11 @@ def _method_for_kind(kind: CredentialKind) -> AuthenticationMethod:
         CredentialKind.AUTOMATION: AuthenticationMethod.AUTOMATION_TOKEN,
         CredentialKind.INTEGRATION: AuthenticationMethod.INTEGRATION_TOKEN,
     }[kind]
+
+
+def _unrestricted_credential_scope() -> dict[str, JsonValue]:
+    return {
+        "actions": [],
+        "resource_types": [],
+        "resource_ids": [],
+    }

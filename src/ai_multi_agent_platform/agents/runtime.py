@@ -53,15 +53,28 @@ class ReferenceOrchestratorMapper:
     async def map_agent(self, spec: AgentExecutionSpec) -> OrchestratorMapping:
         agent = spec.agent_revision
         runtime_ref = f"reference:{agent.agent_id}:r{agent.revision}:{spec.run_id}"
+        metadata: dict[str, JsonValue] = {
+            "agent_id": agent.agent_id,
+            "agent_revision": agent.revision,
+            "run_id": spec.run_id,
+            "capability_versions": dict(spec.capability_versions),
+        }
+        if spec.team_revision is not None:
+            team = spec.team_revision
+            metadata.update(
+                {
+                    "team_id": team.team_id,
+                    "team_revision": team.revision,
+                    "team_limits": {
+                        "max_parallel_agents": team.profile.max_parallel_agents,
+                        "max_steps": team.profile.max_steps,
+                    },
+                }
+            )
         return OrchestratorMapping(
             adapter_id=self.adapter_id,
             runtime_ref=runtime_ref,
-            metadata={
-                "agent_id": agent.agent_id,
-                "agent_revision": agent.revision,
-                "run_id": spec.run_id,
-                "capability_versions": dict(spec.capability_versions),
-            },
+            metadata=metadata,
         )
 
 
@@ -225,19 +238,12 @@ class AgentRuntime:
 
         if not specs:
             raise ContractError(ErrorCode.UNAVAILABLE, "agent team has no executable members")
-        if (
-            team.profile.max_parallel_agents is not None
-            and len(specs) > team.profile.max_parallel_agents
-        ):
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                "team member count exceeds max_parallel_agents for one reference start",
-                details={
-                    "member_count": len(specs),
-                    "max_parallel_agents": team.profile.max_parallel_agents,
-                },
-            )
 
+        # This reference runtime only prepares and maps Agent executions; it does not own
+        # an orchestrator step scheduler. Mapping is intentionally sequential, so it never
+        # exceeds a positive max_parallel_agents limit. The exact Team revision, including
+        # max_parallel_agents and max_steps, is pinned into every execution spec for the
+        # selected orchestrator adapter to enforce while it schedules actual execution.
         selected_mapper = mapper or ReferenceOrchestratorMapper()
         mappings = [await selected_mapper.map_agent(spec) for spec in specs]
         for mapping in mappings:

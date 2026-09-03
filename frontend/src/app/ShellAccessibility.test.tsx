@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { APImanifest } from "../api/types";
 import { LiveConnectionStatus } from "../pages/TaskDetailPage";
-import { Shell, apiStatusLabel } from "./Shell";
+import { Shell, apiStatusLabel, manifestResourceState } from "./Shell";
 import { RouterProvider } from "./router";
 
 afterEach(() => {
@@ -57,5 +57,34 @@ describe("#17 shell accessibility semantics", () => {
     expect(apiStatusLabel("loading", null)).toBe("Checking API");
     expect(apiStatusLabel("ready", manifest)).toBe("/api/v1");
     expect(apiStatusLabel("unavailable", null)).toBe("API unavailable");
+  });
+
+  it("gates optional functional routes until the manifest is known", () => {
+    const agents = renderShell("/agents");
+    expect(agents).toContain("Checking Agents availability");
+    expect(agents).not.toContain("Durable Agent definitions");
+
+    const terminal = renderShell("/terminal");
+    expect(terminal).toContain("Checking Terminal availability");
+    expect(terminal).not.toContain("Execution sessions");
+  });
+
+  it("distinguishes advertised, absent and unavailable manifest resources", () => {
+    const manifest = {
+      api_version: "v1",
+      resources: ["agents", "capabilities", "terminal-sessions"],
+    } as APImanifest;
+
+    expect(manifestResourceState("loading", null, "agents")).toBe("loading");
+    expect(manifestResourceState("ready", manifest, "agents")).toBe("available");
+    expect(manifestResourceState("ready", manifest, "agent-teams")).toBe("unavailable");
+    expect(manifestResourceState("unavailable", null, "agents")).toBe("unavailable");
+  });
+
+  it("routes Settings to the real browser-session surface", () => {
+    const settings = renderShell("/settings");
+    expect(settings).toContain("Checking browser session");
+    expect(settings).not.toContain("Stable navigation shell");
+    expect(settings).not.toContain("Canonical subsystem unavailable");
   });
 });

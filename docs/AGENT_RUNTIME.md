@@ -79,9 +79,17 @@ objects do not belong in this profile.
 
 ## Prompt layers
 
-The Agent revision owns the Agent-role instruction separately from platform and project
-instruction references. A concrete orchestrator may compose these into its private
-prompt/session format, but that composition is an adapter concern.
+The Agent revision owns the Agent-role instruction separately from platform and
+Project/Workspace instruction references. `project_instruction_refs` is the canonical
+Project/Workspace instruction layer; the name is retained for compatibility but the
+references may point to instructions scoped at either canonical project or workspace
+resources. Task-specific context is supplied separately at execution time through
+`AgentExecutionSpec.task_context`, while project/workspace execution context is supplied
+through `project_context`.
+
+A concrete orchestrator may compose these layers with tool/provider-generated context
+inside its private prompt/session format. Provider-generated prompt state is intentionally
+not promoted into the canonical Agent profile.
 
 ## Model resolution
 
@@ -128,19 +136,29 @@ adapters therefore receive the same version that passed compatibility and approv
 preflight and must use that version when constructing the concrete capability invocation.
 A newer registration cannot silently replace the checked version after preparation.
 
-## Memory and knowledge
+## Memory, knowledge and authorization hooks
 
 Agent revisions carry only provider-neutral access declarations:
 
 - canonical `MemoryScope` values;
 - memory configuration references;
 - canonical knowledge-source IDs;
-- explicit opt-in for user-scoped memory.
+- explicit opt-in for user-scoped memory;
+- an optional authorization-profile reference.
 
-`AgentService.ensure_memory_scope` and `ensure_knowledge_source` are the direct policy
-hooks used by data integrations. Both allowed and denied access paths are covered by
-Agent contract tests. Backend collection names or vector indexes are not part of the
-Agent contract.
+`AgentService.ensure_memory_scope`, `ensure_memory_config`,
+`ensure_knowledge_source` and `ensure_authorization_profile` are direct enforcement
+hooks for integrations that consume these references. Allowed and denied paths are
+covered by Agent contract tests. These helpers verify the exact immutable Agent revision;
+they do not implement a second memory, knowledge or authorization engine.
+
+Shared Team memory does not introduce a backend-specific `TEAM` memory scope. A Team can
+carry a provider-neutral memory configuration or other shared object through
+`shared_resource_refs`; `AgentService.ensure_team_shared_resource` verifies the exact
+Team revision before that reference is handed to a data integration. The data subsystem's
+`MemoryAccessPolicy.team_access` remains the authority for whether the underlying memory
+entry/configuration can actually be shared by that Team. Backend collection names,
+filesystem paths and vector indexes are never part of the Agent/Team contract.
 
 ## Agent Teams
 
@@ -158,9 +176,16 @@ respective lifecycle/governance layers.
 
 The reference runtime preflights every required team member before persisting team
 AgentRun records. Optional members can be skipped only when the Team revision explicitly
-uses `skip_optional`. `max_parallel_agents` is enforced by the reference start path;
-`max_steps` remains a canonical coordination limit visible to orchestrator adapters
-through the pinned Team revision.
+uses `skip_optional`.
+
+`max_parallel_agents` is a scheduler concurrency ceiling, not a maximum Team-member
+count. The reference runtime maps members sequentially and therefore never exceeds any
+valid positive parallelism ceiling; it does not reject a Team merely because it has more
+members than the limit. `max_steps` is likewise a coordination/scheduling budget rather
+than a definition-time member-count rule. Because the reference mapper does not execute
+an orchestrator step loop, both limits are carried in the exact pinned Team revision (and
+surfaced by the reference mapping metadata) for the concrete orchestrator adapter to
+enforce while scheduling real work.
 
 ## Runtime records
 
@@ -194,7 +219,9 @@ started before any external orchestrator adapter exists.
 `AgentOrchestratorMapper` is the replaceable seam. The same Agent revision can be mapped
 by multiple mapper implementations without changing its canonical definition. The
 execution spec includes pinned capability versions whenever registry resolution was
-available so adapters cannot re-resolve a different version after policy preflight.
+available and the exact Team revision when invoked through a Team, so adapters cannot
+re-resolve a different capability version or silently replace Team scheduling policy
+after preflight.
 
 ## Control Plane
 
@@ -224,11 +251,34 @@ the calling principal and request/correlation identifiers. Update and clone comm
 also preserve or explicitly change owner, project and workspace scope without replacing
 the canonical Agent/Team identity.
 
+The start commands expose the portable execution inputs that belong northbound:
+
+- exact Agent/Team revision selection;
+- requested canonical capability IDs;
+- policy-gated task model override requirements;
+- task and project/workspace execution context;
+- selection of a server-registered orchestrator adapter by canonical adapter ID.
+
+Concrete mapper objects never cross the API boundary. A composition can register any
+number of `AgentOrchestratorMapper` implementations through `orchestrator_mappers`; the
+reference mapper remains available as `reference-orchestrator` and remains the default
+when no adapter is requested.
+
+Runtime availability and authorization facts are deliberately *not* accepted from the
+caller. `available_capability_ids`, `granted_permissions` and
+`available_worker_capabilities` are server-resolved through the optional
+`AgentExecutionEnvironmentResolver`, which receives the authenticated `RequestContext`.
+If a client tries to assert those fields directly, the command fails with
+`invalid_request`. This prevents the northbound API from turning caller-controlled JSON
+into capability or permission grants while still allowing reference/self-hosted
+compositions to derive deterministic availability from trusted platform state.
+
 Authentication and session management remain upstream Control Plane concerns. The #36
 authentication layer resolves an authenticated request into the canonical
-`RequestContext`; Agent command handlers consume that context for ownership and
-provenance but do not define credentials, sessions or identity-provider semantics.
-Authentication therefore does not become part of the canonical Agent/Team profile.
+`RequestContext`; Agent command handlers consume that context for ownership, provenance
+and trusted execution-environment resolution but do not define credentials, sessions or
+identity-provider semantics. Authentication therefore does not become part of the
+canonical Agent/Team profile.
 
 ## Deliberate boundaries
 

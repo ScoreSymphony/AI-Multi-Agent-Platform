@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Literal, cast
+from dataclasses import dataclass
+from typing import Literal, Protocol, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -29,7 +30,11 @@ from .models import (
     ModelFallbackPolicy,
     UnavailableMemberPolicy,
 )
-from .runtime import AgentRuntime
+from .runtime import (
+    AgentOrchestratorMapper,
+    AgentRuntime,
+    ReferenceOrchestratorMapper,
+)
 from .service import AgentService
 
 AGENT_COLLECTION = "agents"
@@ -48,6 +53,37 @@ AGENT_COMMANDS = (
     "agent-team.rollback",
     "agent-team.start",
 )
+
+_SERVER_RESOLVED_EXECUTION_FIELDS = frozenset(
+    {
+        "available_capability_ids",
+        "granted_permissions",
+        "available_worker_capabilities",
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentExecutionEnvironment:
+    """Trusted runtime availability/authorization derived by the server composition."""
+
+    available_capability_ids: frozenset[str] = frozenset()
+    granted_permissions: frozenset[str] = frozenset()
+    available_worker_capabilities: frozenset[str] = frozenset()
+
+
+class AgentExecutionEnvironmentResolver(Protocol):
+    """Resolve trusted execution grants from authenticated Control Plane context."""
+
+    async def resolve(
+        self,
+        context: RequestContext,
+        *,
+        resource_ref: str,
+        task_id: str,
+        run_id: str,
+        is_team: bool,
+    ) -> AgentExecutionEnvironment: ...
 
 
 class AgentResourceService:
@@ -124,9 +160,25 @@ class AgentRunResourceService:
 class AgentCommandHandlers:
     """Mutation handlers bound to the generic Control Plane command seam."""
 
-    def __init__(self, service: AgentService, runtime: AgentRuntime | None = None) -> None:
+    def __init__(
+        self,
+        service: AgentService,
+        runtime: AgentRuntime | None = None,
+        *,
+        orchestrator_mappers: Mapping[str, AgentOrchestratorMapper] | None = None,
+        execution_environment_resolver: AgentExecutionEnvironmentResolver | None = None,
+    ) -> None:
         self.service = service
         self.runtime = runtime
+        self.execution_environment_resolver = execution_environment_resolver
+        self.orchestrator_mappers = dict(orchestrator_mappers or {})
+        for adapter_id, mapper in self.orchestrator_mappers.items():
+            if not adapter_id.strip():
+                raise ValueError("orchestrator mapper registry key must not be blank")
+            if adapter_id != mapper.adapter_id:
+                raise ValueError("orchestrator mapper registry key must match mapper.adapter_id")
+            if adapter_id == ReferenceOrchestratorMapper.adapter_id:
+                raise ValueError("reference-orchestrator is reserved by the Agent runtime")
 
     async def create_agent(
         self,
@@ -223,18 +275,30 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
         runtime = self._require_runtime()
+        task_id = _required_string(payload, "task_id")
+        run_id = _required_string(payload, "run_id")
+        environment = await self._execution_environment(
+            context,
+            resource_ref=resource_ref,
+            task_id=task_id,
+            run_id=run_id,
+            is_team=False,
+            payload=payload,
+        )
         record = await runtime.start_agent(
-            task_id=_required_string(payload, "task_id"),
-            run_id=_required_string(payload, "run_id"),
+            task_id=task_id,
+            run_id=run_id,
             agent_id=resource_ref,
             revision=_optional_positive_int(payload, "revision"),
-            requested_capability_ids=_string_tuple(
-                payload,
-                "requested_capability_ids",
-            ),
-            available_capability_ids=frozenset(_string_tuple(payload, "available_capability_ids")),
+            mapper=self._select_mapper(payload),
+            task_model_override=_optional_routing_requirements(payload, "task_model_override"),
+            requested_capability_ids=_string_tuple(payload, "requested_capability_ids"),
+            available_capability_ids=environment.available_capability_ids,
+            granted_permissions=environment.granted_permissions,
+            available_worker_capabilities=environment.available_worker_capabilities,
+            task_context=_json_mapping(payload.get("task_context", {}), "task_context"),
+            project_context=_json_mapping(payload.get("project_context", {}), "project_context"),
         )
         return _agent_run_resource(record)
 
@@ -333,18 +397,30 @@ class AgentCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
         runtime = self._require_runtime()
+        task_id = _required_string(payload, "task_id")
+        run_id = _required_string(payload, "run_id")
+        environment = await self._execution_environment(
+            context,
+            resource_ref=resource_ref,
+            task_id=task_id,
+            run_id=run_id,
+            is_team=True,
+            payload=payload,
+        )
         records = await runtime.start_team(
-            task_id=_required_string(payload, "task_id"),
-            run_id=_required_string(payload, "run_id"),
+            task_id=task_id,
+            run_id=run_id,
             team_id=resource_ref,
             revision=_optional_positive_int(payload, "revision"),
-            requested_capability_ids=_string_tuple(
-                payload,
-                "requested_capability_ids",
-            ),
-            available_capability_ids=frozenset(_string_tuple(payload, "available_capability_ids")),
+            mapper=self._select_mapper(payload),
+            task_model_override=_optional_routing_requirements(payload, "task_model_override"),
+            requested_capability_ids=_string_tuple(payload, "requested_capability_ids"),
+            available_capability_ids=environment.available_capability_ids,
+            granted_permissions=environment.granted_permissions,
+            available_worker_capabilities=environment.available_worker_capabilities,
+            task_context=_json_mapping(payload.get("task_context", {}), "task_context"),
+            project_context=_json_mapping(payload.get("project_context", {}), "project_context"),
         )
         items: list[JsonValue] = [_agent_run_resource(record) for record in records]
         return {"team_id": resource_ref, "agent_runs": items}
@@ -357,19 +433,63 @@ class AgentCommandHandlers:
             )
         return self.runtime
 
+    def _select_mapper(
+        self,
+        payload: Mapping[str, object],
+    ) -> AgentOrchestratorMapper | None:
+        adapter_id = _optional_string(payload, "orchestrator_adapter_id")
+        if adapter_id is None:
+            return None
+        if adapter_id == ReferenceOrchestratorMapper.adapter_id:
+            return ReferenceOrchestratorMapper()
+        try:
+            return self.orchestrator_mappers[adapter_id]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"orchestrator adapter is not registered: {adapter_id}",
+                details={"orchestrator_adapter_id": adapter_id},
+            ) from exc
+
+    async def _execution_environment(
+        self,
+        context: RequestContext,
+        *,
+        resource_ref: str,
+        task_id: str,
+        run_id: str,
+        is_team: bool,
+        payload: Mapping[str, object],
+    ) -> AgentExecutionEnvironment:
+        caller_supplied = sorted(_SERVER_RESOLVED_EXECUTION_FIELDS.intersection(payload))
+        if caller_supplied:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "runtime availability and authorization fields are server-resolved",
+                details={"fields": cast(JsonValue, caller_supplied)},
+            )
+        if self.execution_environment_resolver is None:
+            return AgentExecutionEnvironment()
+        return await self.execution_environment_resolver.resolve(
+            context,
+            resource_ref=resource_ref,
+            task_id=task_id,
+            run_id=run_id,
+            is_team=is_team,
+        )
+
 
 def register_agent_control_plane(
     control_plane: ControlPlane,
     service: AgentService,
     *,
     runtime: AgentRuntime | None = None,
+    orchestrator_mappers: Mapping[str, AgentOrchestratorMapper] | None = None,
+    execution_environment_resolver: AgentExecutionEnvironmentResolver | None = None,
 ) -> None:
     """Register #33 resources without making Agents part of the #32 foundation."""
 
-    control_plane.register_resource_service(
-        AGENT_COLLECTION,
-        AgentResourceService(service),
-    )
+    control_plane.register_resource_service(AGENT_COLLECTION, AgentResourceService(service))
     control_plane.register_resource_service(
         AGENT_TEAM_COLLECTION,
         AgentTeamResourceService(service),
@@ -378,7 +498,12 @@ def register_agent_control_plane(
         AGENT_RUN_COLLECTION,
         AgentRunResourceService(service),
     )
-    handlers = AgentCommandHandlers(service, runtime)
+    handlers = AgentCommandHandlers(
+        service,
+        runtime,
+        orchestrator_mappers=orchestrator_mappers,
+        execution_environment_resolver=execution_environment_resolver,
+    )
     control_plane.register_command("agent.create", handlers.create_agent)
     control_plane.register_command("agent.update", handlers.update_agent)
     control_plane.register_command("agent.clone", handlers.clone_agent)
@@ -395,10 +520,7 @@ def register_agent_control_plane(
 
 def _agent_resource(service: AgentService, agent_id: str) -> dict[str, JsonValue]:
     definition = service.repository.get_agent(agent_id)
-    revision = service.repository.get_agent_revision(
-        agent_id,
-        definition.current_revision,
-    )
+    revision = service.repository.get_agent_revision(agent_id, definition.current_revision)
     return {
         "id": agent_id,
         "type": "agent",
@@ -414,10 +536,7 @@ def _agent_resource(service: AgentService, agent_id: str) -> dict[str, JsonValue
 
 def _team_resource(service: AgentService, team_id: str) -> dict[str, JsonValue]:
     definition = service.repository.get_team(team_id)
-    revision = service.repository.get_team_revision(
-        team_id,
-        definition.current_revision,
-    )
+    revision = service.repository.get_team_revision(team_id, definition.current_revision)
     return {
         "id": team_id,
         "type": "agent_team",
@@ -441,127 +560,57 @@ def _agent_run_resource(record: object) -> dict[str, JsonValue]:
 
 def _profile_from_json(value: object) -> AgentProfile:
     data = _mapping(value, "profile")
-    instructions = _mapping(
-        _required(data, "instructions"),
-        "profile.instructions",
-    )
-    role_source = _instruction_source(_required(instructions, "role"))
-
+    instructions = _mapping(_required(data, "instructions"), "profile.instructions")
     model_data = _mapping(data.get("model", {}), "profile.model")
-    requirements_data = _mapping(
-        model_data.get("requirements", {}),
-        "profile.model.requirements",
-    )
-    requirements = RoutingRequirements(
-        explicit_model_id=_optional_string(requirements_data, "explicit_model_id"),
-        min_context_window=_optional_positive_int(
-            requirements_data,
-            "min_context_window",
-        ),
-        tool_calling=_boolean(requirements_data, "tool_calling", False),
-        structured_output=_boolean(
-            requirements_data,
-            "structured_output",
-            False,
-        ),
-        streaming=_boolean(requirements_data, "streaming", False),
-        modalities=_string_tuple(requirements_data, "modalities"),
-        reasoning=_string_tuple(requirements_data, "reasoning"),
-        local_only=_boolean(requirements_data, "local_only", False),
-        self_hosted_only=_boolean(
-            requirements_data,
-            "self_hosted_only",
-            False,
-        ),
-    )
-    fallback_raw = _optional_string(model_data, "fallback") or ModelFallbackPolicy.FAIL.value
-    model = AgentModelPolicy(
-        requirements=requirements,
-        routing_profile_ref=_optional_string(model_data, "routing_profile_ref"),
-        allow_task_override=_boolean(model_data, "allow_task_override", False),
-        fallback=ModelFallbackPolicy(fallback_raw),
-    )
-
-    capability_data = _mapping(
-        data.get("capabilities", {}),
-        "profile.capabilities",
-    )
+    capability_data = _mapping(data.get("capabilities", {}), "profile.capabilities")
     constraints_raw = capability_data.get("constraints", [])
     if not isinstance(constraints_raw, list | tuple):
         raise ValueError("profile.capabilities.constraints must be an array")
-    capabilities = AgentCapabilityPolicy(
-        allowed=_string_tuple(capability_data, "allowed"),
-        denied=_string_tuple(capability_data, "denied"),
-        constraints=tuple(_capability_constraint(item) for item in constraints_raw),
-    )
+    data_access_raw = _mapping(data.get("data_access", {}), "profile.data_access")
+    workspace_data = _mapping(data.get("workspace_defaults", {}), "profile.workspace_defaults")
+    hooks_data = _mapping(data.get("policy_hooks", {}), "profile.policy_hooks")
+    fallback_raw = _optional_string(model_data, "fallback") or ModelFallbackPolicy.FAIL.value
 
-    data_access_raw = _mapping(
-        data.get("data_access", {}),
-        "profile.data_access",
-    )
-    data_access = AgentDataAccess(
-        memory_scopes=tuple(
-            MemoryScope(item) for item in _string_tuple(data_access_raw, "memory_scopes")
-        ),
-        memory_config_refs=_string_tuple(
-            data_access_raw,
-            "memory_config_refs",
-        ),
-        knowledge_source_ids=_string_tuple(
-            data_access_raw,
-            "knowledge_source_ids",
-        ),
-        allow_user_memory=_boolean(
-            data_access_raw,
-            "allow_user_memory",
-            False,
-        ),
-    )
-
-    workspace_data = _mapping(
-        data.get("workspace_defaults", {}),
-        "profile.workspace_defaults",
-    )
-    hooks_data = _mapping(
-        data.get("policy_hooks", {}),
-        "profile.policy_hooks",
-    )
     return AgentProfile(
         name=_required_string(data, "name"),
         role=_required_string(data, "role"),
         instructions=AgentInstructions(
-            role=role_source,
-            platform_constraint_refs=_string_tuple(
-                instructions,
-                "platform_constraint_refs",
-            ),
-            project_instruction_refs=_string_tuple(
-                instructions,
-                "project_instruction_refs",
-            ),
+            role=_instruction_source(_required(instructions, "role")),
+            platform_constraint_refs=_string_tuple(instructions, "platform_constraint_refs"),
+            project_instruction_refs=_string_tuple(instructions, "project_instruction_refs"),
         ),
         description=_optional_string(data, "description") or "",
-        model=model,
-        capabilities=capabilities,
-        data_access=data_access,
+        model=AgentModelPolicy(
+            requirements=_routing_requirements(
+                model_data.get("requirements", {}),
+                "profile.model.requirements",
+            ),
+            routing_profile_ref=_optional_string(model_data, "routing_profile_ref"),
+            allow_task_override=_boolean(model_data, "allow_task_override", False),
+            fallback=ModelFallbackPolicy(fallback_raw),
+        ),
+        capabilities=AgentCapabilityPolicy(
+            allowed=_string_tuple(capability_data, "allowed"),
+            denied=_string_tuple(capability_data, "denied"),
+            constraints=tuple(_capability_constraint(item) for item in constraints_raw),
+        ),
+        data_access=AgentDataAccess(
+            memory_scopes=tuple(
+                MemoryScope(item) for item in _string_tuple(data_access_raw, "memory_scopes")
+            ),
+            memory_config_refs=_string_tuple(data_access_raw, "memory_config_refs"),
+            knowledge_source_ids=_string_tuple(data_access_raw, "knowledge_source_ids"),
+            allow_user_memory=_boolean(data_access_raw, "allow_user_memory", False),
+        ),
         workspace_defaults=AgentWorkspaceDefaults(
             project_id=_optional_string(workspace_data, "project_id"),
             workspace_id=_optional_string(workspace_data, "workspace_id"),
         ),
         policy_hooks=AgentPolicyHooks(
-            authorization_profile_ref=_optional_string(
-                hooks_data,
-                "authorization_profile_ref",
-            ),
-            verification_policy_refs=_string_tuple(
-                hooks_data,
-                "verification_policy_refs",
-            ),
+            authorization_profile_ref=_optional_string(hooks_data, "authorization_profile_ref"),
+            verification_policy_refs=_string_tuple(hooks_data, "verification_policy_refs"),
         ),
-        resource_hints=_json_mapping(
-            data.get("resource_hints", {}),
-            "profile.resource_hints",
-        ),
+        resource_hints=_json_mapping(data.get("resource_hints", {}), "profile.resource_hints"),
         enabled=_boolean(data, "enabled", True),
         metadata=_json_mapping(data.get("metadata", {}), "profile.metadata"),
     )
@@ -579,25 +628,41 @@ def _team_profile_from_json(value: object) -> AgentTeamProfile:
         name=_required_string(data, "name"),
         members=tuple(_team_member(item) for item in members_raw),
         description=_optional_string(data, "description") or "",
-        coordination_policy_ref=_optional_string(
-            data,
-            "coordination_policy_ref",
-        ),
+        coordination_policy_ref=_optional_string(data, "coordination_policy_ref"),
         leader_agent_id=_optional_string(data, "leader_agent_id"),
         shared_capability_ids=_string_tuple(data, "shared_capability_ids"),
         shared_resource_refs=_string_tuple(data, "shared_resource_refs"),
-        max_parallel_agents=_optional_positive_int(
-            data,
-            "max_parallel_agents",
-        ),
+        max_parallel_agents=_optional_positive_int(data, "max_parallel_agents"),
         max_steps=_optional_positive_int(data, "max_steps"),
         unavailable_member_policy=UnavailableMemberPolicy(policy_raw),
         enabled=_boolean(data, "enabled", True),
-        metadata=_json_mapping(
-            data.get("metadata", {}),
-            "team profile.metadata",
-        ),
+        metadata=_json_mapping(data.get("metadata", {}), "team profile.metadata"),
     )
+
+
+def _routing_requirements(value: object, name: str) -> RoutingRequirements:
+    data = _mapping(value, name)
+    return RoutingRequirements(
+        explicit_model_id=_optional_string(data, "explicit_model_id"),
+        min_context_window=_optional_positive_int(data, "min_context_window"),
+        tool_calling=_boolean(data, "tool_calling", False),
+        structured_output=_boolean(data, "structured_output", False),
+        streaming=_boolean(data, "streaming", False),
+        modalities=_string_tuple(data, "modalities"),
+        reasoning=_string_tuple(data, "reasoning"),
+        local_only=_boolean(data, "local_only", False),
+        self_hosted_only=_boolean(data, "self_hosted_only", False),
+    )
+
+
+def _optional_routing_requirements(
+    mapping: Mapping[str, object],
+    name: str,
+) -> RoutingRequirements | None:
+    value = mapping.get(name)
+    if value is None:
+        return None
+    return _routing_requirements(value, name)
 
 
 def _instruction_source(value: object) -> InstructionSource:
@@ -624,10 +689,7 @@ def _capability_constraint(value: object) -> CapabilityConstraint:
 
 def _team_member(value: object) -> AgentTeamMember:
     data = _mapping(value, "team member")
-    agent_data = _mapping(
-        _required(data, "agent"),
-        "team member.agent",
-    )
+    agent_data = _mapping(_required(data, "agent"), "team member.agent")
     return AgentTeamMember(
         agent=AgentRevisionRef(
             agent_id=_required_string(agent_data, "agent_id"),
@@ -646,10 +708,7 @@ def _owner_ref(value: object | None, context: RequestContext) -> OwnerRef:
         return parsed
     if context.actor.owner_type is None or context.actor.owner_id is None:
         raise ValueError("owner_ref is required when actor owner context is unavailable")
-    return OwnerRef(
-        type=context.actor.owner_type,
-        id=context.actor.owner_id,
-    )
+    return OwnerRef(type=context.actor.owner_type, id=context.actor.owner_id)
 
 
 def _provided_owner_ref(value: object | None) -> OwnerRef | None:
@@ -659,10 +718,7 @@ def _provided_owner_ref(value: object | None) -> OwnerRef | None:
     raw_type = _required_string(data, "type")
     if raw_type not in {"user", "organization", "team", "service"}:
         raise ValueError("owner_ref.type must be user, organization, team or service")
-    owner_type = cast(
-        Literal["user", "organization", "team", "service"],
-        raw_type,
-    )
+    owner_type = cast(Literal["user", "organization", "team", "service"], raw_type)
     return OwnerRef(type=owner_type, id=_required_string(data, "id"))
 
 
@@ -709,10 +765,7 @@ def _required_string(mapping: Mapping[str, object], name: str) -> str:
     return value
 
 
-def _optional_string(
-    mapping: Mapping[str, object],
-    name: str,
-) -> str | None:
+def _optional_string(mapping: Mapping[str, object], name: str) -> str | None:
     value = mapping.get(name)
     if value is None:
         return None
@@ -721,11 +774,7 @@ def _optional_string(
     return value
 
 
-def _boolean(
-    mapping: Mapping[str, object],
-    name: str,
-    default: bool,
-) -> bool:
+def _boolean(mapping: Mapping[str, object], name: str, default: bool) -> bool:
     value = mapping.get(name, default)
     if not isinstance(value, bool):
         raise ValueError(f"{name} must be boolean")
@@ -739,10 +788,7 @@ def _required_positive_int(mapping: Mapping[str, object], name: str) -> int:
     return value
 
 
-def _optional_positive_int(
-    mapping: Mapping[str, object],
-    name: str,
-) -> int | None:
+def _optional_positive_int(mapping: Mapping[str, object], name: str) -> int | None:
     value = mapping.get(name)
     if value is None:
         return None
@@ -751,10 +797,7 @@ def _optional_positive_int(
     return value
 
 
-def _string_tuple(
-    mapping: Mapping[str, object],
-    name: str,
-) -> tuple[str, ...]:
+def _string_tuple(mapping: Mapping[str, object], name: str) -> tuple[str, ...]:
     value = mapping.get(name, [])
     if not isinstance(value, list | tuple):
         raise ValueError(f"{name} must be an array of strings")
