@@ -63,6 +63,33 @@ platform result show RESULT_ID
 
 These are read-only inspection commands. List commands support the same pagination, filtering, search, field-selection, human-output, and JSON-output conventions as the rest of the CLI.
 
+## Task planning management
+
+The composed Control Plane exposes the built-in #88 Task-management commands separately from generic extension commands. The CLI exposes those native commands explicitly:
+
+```bash
+platform --yes task update-management TASK_ID \
+  --changes-json '{"priority":"urgent","labels":["release"]}'
+
+platform --yes task bulk-update-management \
+  --updates-json '[{"task_id":"TASK_ID","changes":{"archived":true}}]'
+```
+
+Both operations are meaningful canonical Task mutations and therefore require confirmation. Headless usage must pass the global `--yes` flag. Both accept `--idempotency-key`; otherwise the CLI generates one for the canonical request.
+
+The single-update payload must be a non-empty JSON object. The CLI reserves `resource_ref` so the positional `TASK_ID` remains authoritative. The bulk payload must be a non-empty JSON array and is limited to the canonical maximum of 100 update entries.
+
+The CLI deliberately does not duplicate #88 field, dependency, cross-project, assignment or eligibility validation. Those rules remain authoritative in the Task-management application layer behind the Control Plane. The CLI only validates the local JSON shape before sending:
+
+```text
+platform task update-management
+    -> POST /api/v1/commands/task-management.update
+    -> TaskManagementService
+    -> canonical Task state/event history
+```
+
+Bulk updates use `/api/v1/commands/task-management.bulk-update`. The server preflights authorization for every targeted Task before applying mutations and currently reports `atomic=false`; the CLI surfaces that canonical result unchanged.
+
 ## Output redaction
 
 All CLI rendering now applies the reusable platform redaction policy from #34 before data reaches stdout or stderr. This is a defense-in-depth layer in addition to the Control Plane requirement that ordinary API responses never expose plaintext secrets.

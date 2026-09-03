@@ -23,6 +23,7 @@ from .client import (
 )
 from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
+from .task_management import parse_changes, parse_updates
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,6 +177,27 @@ def _build_parser() -> argparse.ArgumentParser:
     task_timeline = task_commands.add_parser("timeline", help="inspect canonical task timeline")
     task_timeline.add_argument("task_id")
     _add_pagination_arguments(task_timeline)
+    task_management_update = task_commands.add_parser(
+        "update-management",
+        help="update canonical Task planning metadata",
+    )
+    task_management_update.add_argument("task_id")
+    task_management_update.add_argument(
+        "--changes-json",
+        required=True,
+        help="non-empty JSON object of canonical Task-management changes",
+    )
+    task_management_update.add_argument("--idempotency-key")
+    task_management_bulk = task_commands.add_parser(
+        "bulk-update-management",
+        help="bulk update canonical Task planning metadata",
+    )
+    task_management_bulk.add_argument(
+        "--updates-json",
+        required=True,
+        help="JSON array of {task_id, changes} objects (maximum 100)",
+    )
+    task_management_bulk.add_argument("--idempotency-key")
 
     run = areas.add_parser("run", help="run inspection")
     run.set_defaults(area="run")
@@ -570,17 +592,41 @@ def _task_command(
         return CommandResult(client.get("/tasks", query=_page_query(args)))
     if args.command == "create":
         owner_type, owner_id = _owner(args.owner_type, args.owner_id, profile)
-        body: dict[str, JsonValue] = {
+        create_body: dict[str, JsonValue] = {
             "title": args.title,
             "objective": args.objective,
             "owner_type": owner_type,
             "owner_id": owner_id,
         }
         if args.project_id is not None:
-            body["project_id"] = args.project_id
-        return CommandResult(client.post("/tasks", body=body, idempotency_key=args.idempotency_key))
+            create_body["project_id"] = args.project_id
+        return CommandResult(
+            client.post("/tasks", body=create_body, idempotency_key=args.idempotency_key)
+        )
     if args.command == "show":
         return CommandResult(client.get(f"/tasks/{_segment(args.task_id)}"))
+    if args.command == "update-management":
+        _require_confirmation(args, "update task management", args.task_id)
+        changes = parse_changes(args.changes_json)
+        update_body: dict[str, JsonValue] = {"resource_ref": args.task_id, **changes}
+        return CommandResult(
+            client.post(
+                "/commands/task-management.update",
+                body=update_body,
+                idempotency_key=args.idempotency_key,
+            )
+        )
+    if args.command == "bulk-update-management":
+        _require_confirmation(args, "bulk update task management", "tasks")
+        updates = parse_updates(args.updates_json)
+        bulk_body: dict[str, JsonValue] = {"resource_ref": "tasks", "updates": updates}
+        return CommandResult(
+            client.post(
+                "/commands/task-management.bulk-update",
+                body=bulk_body,
+                idempotency_key=args.idempotency_key,
+            )
+        )
     if args.command in {"queue", "start", "cancel", "retry"}:
         if args.command == "cancel":
             _require_confirmation(args, "cancel task", args.task_id)
