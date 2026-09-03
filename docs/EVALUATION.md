@@ -30,6 +30,8 @@ Backend-private model names, evaluator APIs and orchestration/execution IDs are 
 
 Rubric criteria are canonical case data. A later rubric/model evaluator adapter consumes those criteria through the same `Evaluator` boundary.
 
+Missing metric observations are represented by the absence of an observed `MetricResult`, not by a synthetic `NaN` value. The metric evaluator still fails the case, while persistence remains strict JSON and the regression engine can distinguish a missing required metric from an observed threshold violation.
+
 ## Runner and execution boundary
 
 `EvaluationRunner` owns suite-level evaluation execution without owning platform Task/Run lifecycle semantics. It consumes two replaceable boundaries:
@@ -129,11 +131,29 @@ Accordingly, the current `EvaluationRunner` allows automatic baseline comparison
 
 `config/evaluation-regression.example.json` demonstrates a no-paid-service PR policy. A later configuration loader will deserialize versioned policy files rather than embedding thresholds in evaluator implementations.
 
-## Persistence
+## Persistence and historical trends
 
-`EvaluationRepository` is the replaceable storage boundary. The initial `InMemoryEvaluationRepository` stores runs, case/evaluator results and comparison reports and is suitable for unit tests and local/reference runs. Production persistence must retain run summaries, case results, configuration metadata, comparison/regression findings and artifact/log references without changing canonical models.
+`EvaluationRepository` is the minimal replaceable storage boundary consumed by the runner. `EvaluationHistoryRepository` extends it with indexed historical queries for runs and case/evaluator results.
 
-Workspace persistence remains owned by the Workspace subsystem. Evaluation persistence should reference canonical Workspace/Snapshot/Artifact evidence rather than duplicate workspace bytes or materialization paths.
+Two reference implementations exist:
+
+- `InMemoryEvaluationRepository` for deterministic unit/reference execution;
+- `SqliteEvaluationRepository` as the restart-safe stdlib-only durable baseline.
+
+The SQLite repository stores canonical Run, Result and Comparison payloads as strict JSON while retaining indexed columns for suite/version, case/evaluator, outcome, repetition and timestamps. `json.dumps(..., allow_nan=False)` is enforced; non-JSON numeric states are rejected as contract violations instead of entering historical data. A storage-schema metadata record makes incompatible future schema revisions detectable rather than silently mis-decoding them.
+
+Durable behavior includes:
+
+- upserted `EvaluationRun` state so a running record can become completed/failed without changing its public identity;
+- Result persistence attached to an existing run;
+- ComparisonReport persistence only when current and baseline runs exist;
+- `list_runs(...)` filtered by suite identity/version;
+- `list_case_results(...)` filtered by case and optional evaluator identity;
+- restart-safe baseline comparison: a new runner can reopen SQLite and compare against a baseline produced before the process restart.
+
+`EvaluationHistoryService.case_trend(...)` converts historical case/evaluator results into `EvaluationTrendPoint` records enriched with the corresponding suite and immutable ConfigurationSnapshot identity (`snapshot_id`, platform version and commit). This keeps trend interpretation tied to the configuration that produced each measurement instead of plotting scores without provenance.
+
+Workspace persistence remains owned by the Workspace subsystem. Evaluation persistence references canonical Workspace/Snapshot/Artifact evidence rather than duplicating workspace bytes or materialization paths.
 
 ## Current issue #19 implementation status
 
@@ -146,7 +166,7 @@ Implemented:
 - configuration/version snapshots;
 - replaceable evaluator contract;
 - deterministic assertion evaluator;
-- metric threshold evaluator;
+- metric threshold evaluator with no synthetic NaN state for missing observations;
 - rubric/model-evaluator boundary metadata;
 - evaluator failure containment;
 - replaceable evaluation-case executor contract;
@@ -158,18 +178,22 @@ Implemented:
 - replaceable fixture resolution and deterministic static fixture resolver;
 - explicit no-commit isolation semantics for attempt mutations;
 - Task/Run/output/Artifact/Result/Event/Workspace projection into `EvaluationObservation`;
-- replaceable result/comparison persistence contract plus in-memory reference store;
+- replaceable persistence contract plus in-memory reference store;
+- durable stdlib SQLite run/result/comparison persistence with storage schema marker;
+- historical run and case/evaluator queries;
+- ConfigurationSnapshot-enriched case trend projection;
+- restart-safe comparison against durable baselines;
 - baseline comparison/regression engine matched by case/evaluator identity;
 - explicit rejection of unaggregated repeated results in baseline comparison;
 - versioned regression policy model;
 - no-paid-service policy example;
 - tests for pass/fail, baseline comparison, thresholds, critical/security tags, snapshot integrity, model/provider version differences and evaluator failure handling;
 - tests for repetition/seed propagation, isolation ordering, execution-error containment, comparison persistence and real-kernel reference execution;
-- tests proving cross-attempt workspace contamination is prevented and Run workspace binding exists before lifecycle start.
+- tests proving cross-attempt workspace contamination is prevented and Run workspace binding exists before lifecycle start;
+- tests for strict JSON persistence, SQLite restart/history/trend queries and baseline comparison after repository restart.
 
 Remaining work for full issue completion:
 
-- durable evaluation persistence implementation and historical/trend queries;
 - explicit stochastic aggregation/comparison policies for repeated runs;
 - rubric scorer and optional model-judge adapter implementation;
 - richer telemetry, accounting and log references in observations and stored results;
