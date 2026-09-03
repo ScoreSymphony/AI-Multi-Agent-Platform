@@ -53,6 +53,15 @@ NOTIFICATION_COMMANDS = (
     "notification.delivery.retry",
 )
 
+__all__ = [
+    "NOTIFICATION_COLLECTION",
+    "NOTIFICATION_COMMANDS",
+    "NOTIFICATION_PREFERENCE_COLLECTION",
+    "ControlPlane",
+    "ControlPlaneHTTP",
+    "build_openapi",
+]
+
 
 class _NotificationResources(ResourceService):
     def __init__(self, service: NotificationService) -> None:
