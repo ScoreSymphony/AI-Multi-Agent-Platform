@@ -50,6 +50,8 @@ class SearchQuery:
             raise ValueError("text must not be blank")
         if self.exact_id is not None and not self.exact_id.strip():
             raise ValueError("exact_id must not be blank")
+        if self.mode is SearchMode.EXACT and self.exact_id is None:
+            raise ValueError("exact search requires exact_id")
         if not 1 <= self.limit <= 200:
             raise ValueError("limit must be between 1 and 200")
         if self.project_id is not None:
@@ -79,6 +81,8 @@ class SearchDocument:
     summary: str = ""
     project_id: str | None = None
     workspace_id: str | None = None
+    owner_type: str | None = None
+    owner_id: str | None = None
     status: str | None = None
     tags: tuple[str, ...] = ()
     keywords: tuple[str, ...] = ()
@@ -100,6 +104,8 @@ class SearchDocument:
             validate_id(self.project_id, "project")
         if self.workspace_id is not None:
             validate_id(self.workspace_id, "workspace")
+        if (self.owner_type is None) != (self.owner_id is None):
+            raise ValueError("owner_type and owner_id must both be set or both be omitted")
 
     @property
     def key(self) -> tuple[str, str]:
@@ -108,7 +114,7 @@ class SearchDocument:
 
 @dataclass(frozen=True, slots=True)
 class SearchResult:
-    """One safe canonical discovery result."""
+    """One canonical discovery result with explicit authorization state."""
 
     resource_type: str
     resource_id: str
@@ -116,6 +122,8 @@ class SearchResult:
     summary: str
     project_id: str | None
     workspace_id: str | None
+    owner_type: str | None
+    owner_id: str | None
     status: str | None
     tags: tuple[str, ...]
     relevance: float
@@ -126,6 +134,8 @@ class SearchResult:
     updated_at: str | None
     canonical_ref: str | None
     provenance: dict[str, JsonValue]
+    access: Literal["unverified", "authorized"] = "unverified"
+    redacted: bool = False
 
     def to_json(self) -> dict[str, JsonValue]:
         return {
@@ -135,6 +145,8 @@ class SearchResult:
             "summary": self.summary,
             "project_id": self.project_id,
             "workspace_id": self.workspace_id,
+            "owner_type": self.owner_type,
+            "owner_id": self.owner_id,
             "status": self.status,
             "tags": list(self.tags),
             "relevance": self.relevance,
@@ -145,6 +157,8 @@ class SearchResult:
             "updated_at": self.updated_at,
             "canonical_ref": self.canonical_ref,
             "provenance": dict(self.provenance),
+            "access": self.access,
+            "redacted": self.redacted,
         }
 
 
