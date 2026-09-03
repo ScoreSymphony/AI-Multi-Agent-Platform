@@ -73,6 +73,24 @@ def test_cli_search_forwards_canonical_filters_to_one_search_endpoint(tmp_path: 
         "running,succeeded",
         "--tag",
         "search",
+        "--priority",
+        "high,urgent",
+        "--due-after",
+        "2026-09-04T08:00:00+02:00",
+        "--due-before",
+        "2026-09-06T18:00:00+02:00",
+        "--assignment-state",
+        "assigned",
+        "--responsible-id",
+        "team-search",
+        "--agent-assignment-id",
+        "agent_123",
+        "--blocked",
+        "true",
+        "--overdue",
+        "false",
+        "--dependency-id",
+        "task_987",
         "--source",
         "canonical",
         "--provider",
@@ -106,6 +124,15 @@ def test_cli_search_forwards_canonical_filters_to_one_search_endpoint(tmp_path: 
     assert query["workspace_id"] == ["workspace_456"]
     assert query["status"] == ["running,succeeded"]
     assert query["tag"] == ["search"]
+    assert query["priority"] == ["high,urgent"]
+    assert query["due_after"] == ["2026-09-04T08:00:00+02:00"]
+    assert query["due_before"] == ["2026-09-06T18:00:00+02:00"]
+    assert query["assignment_state"] == ["assigned"]
+    assert query["responsible_id"] == ["team-search"]
+    assert query["agent_assignment_id"] == ["agent_123"]
+    assert query["blocked"] == ["true"]
+    assert query["overdue"] == ["false"]
+    assert query["dependency_id"] == ["task_987"]
     assert query["source"] == ["canonical"]
     assert query["provider"] == ["control-plane"]
     assert query["updated_after"] == ["2026-09-03T10:00:00+02:00"]
