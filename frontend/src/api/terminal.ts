@@ -77,6 +77,7 @@ export interface TerminalAttachment {
 }
 
 export interface CreateTerminalSessionInput {
+  session_id?: string;
   workspace_id: string;
   session_type: TerminalSessionType;
   mode: TerminalSessionMode;
