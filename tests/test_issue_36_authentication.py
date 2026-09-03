@@ -230,6 +230,9 @@ def test_authentication_audit_redacts_secret_metadata() -> None:
 
 
 class _EchoControlPlane:
+    registered_collections: tuple[str, ...] = ()
+    registered_commands: tuple[str, ...] = ()
+
     async def list_tasks(
         self,
         context: RequestContext,
@@ -252,6 +255,9 @@ class _EchoControlPlane:
 
 
 class _ForbiddenControlPlane:
+    registered_collections: tuple[str, ...] = ()
+    registered_commands: tuple[str, ...] = ()
+
     async def list_tasks(
         self,
         context: RequestContext,
