@@ -70,6 +70,8 @@ def test_agent_control_plane_create_update_read_and_start_preserve_revision_trut
             "agent-runs",
             "agent-teams",
             "agents",
+            "automation-deliveries",
+            "automations",
         )
         assert "agent.create" in control_plane.registered_commands
         assert "agent.start" in control_plane.registered_commands

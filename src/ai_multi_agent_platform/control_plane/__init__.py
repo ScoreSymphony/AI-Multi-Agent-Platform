@@ -1,6 +1,13 @@
 """Versioned platform-owned northbound Control Plane."""
 
 from .authentication_hardening import AuthenticatedControlPlaneHTTP
+from .automation_api import (
+    AUTOMATION_COLLECTION,
+    AUTOMATION_COMMANDS,
+    DELIVERY_COLLECTION,
+    ControlPlaneHTTP,
+    build_openapi,
+)
 from .extensions import (
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
@@ -10,6 +17,7 @@ from .extensions import (
     InMemoryResourceService,
     ResourceService,
 )
+from .hardened_automation_api import ControlPlane
 from .http import ControlPlaneASGI, HTTPRequest, HTTPResponse
 from .models import (
     API_VERSION,
@@ -21,7 +29,6 @@ from .models import (
     RequestContext,
     WorkspaceIdentity,
 )
-from .registered_search_contract import ControlPlane, ControlPlaneHTTP, build_openapi
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
@@ -29,12 +36,14 @@ from .task_management_contract import (
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
 
-CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS
+CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (AUTOMATION_COLLECTION, DELIVERY_COLLECTION)
 
 __all__ = [
     "APIError",
     "APIException",
     "API_VERSION",
+    "AUTOMATION_COLLECTION",
+    "AUTOMATION_COMMANDS",
     "ActorContext",
     "AuthenticatedControlPlaneHTTP",
     "CURRENT_COLLECTIONS",
@@ -42,6 +51,7 @@ __all__ = [
     "ControlPlane",
     "ControlPlaneASGI",
     "ControlPlaneHTTP",
+    "DELIVERY_COLLECTION",
     "FOUNDATION_COLLECTIONS",
     "HTTPRequest",
     "HTTPResponse",
