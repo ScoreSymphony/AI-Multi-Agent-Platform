@@ -193,6 +193,21 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
             automation_verb, AuthorizationAction.MODIFY
         ), ResourceType.AUTOMATION
 
+    if action.startswith("notification."):
+        notification_verb = action.removeprefix("notification.")
+        notification_actions = {
+            "mark-read": AuthorizationAction.MODIFY,
+            "mark-all-read": AuthorizationAction.MODIFY,
+            "acknowledge": AuthorizationAction.MODIFY,
+            "dismiss": AuthorizationAction.MODIFY,
+            "archive": AuthorizationAction.MODIFY,
+            "preference.update": AuthorizationAction.MODIFY,
+            "delivery.retry": AuthorizationAction.EXECUTE,
+        }
+        return notification_actions.get(
+            notification_verb, AuthorizationAction.MODIFY
+        ), ResourceType.NOTIFICATION
+
     if action.startswith("terminal.session."):
         terminal_verb = action.removeprefix("terminal.session.")
         terminal_actions = {
@@ -248,6 +263,8 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "node": ResourceType.NODE,
         "automation": ResourceType.AUTOMATION,
         "automation-delivery": ResourceType.AUTOMATION,
+        "notification": ResourceType.NOTIFICATION,
+        "notification-preference": ResourceType.NOTIFICATION,
         "integration": ResourceType.INTEGRATION,
         "connector": ResourceType.CONNECTOR,
         "plugin": ResourceType.PLUGIN,
