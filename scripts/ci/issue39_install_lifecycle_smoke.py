@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import tempfile
@@ -83,7 +84,7 @@ def _start_and_stop_once(
         )
         try:
             _wait_until_ready(port, process, log_path)
-            process.terminate()
+            process.send_signal(signal.SIGINT)
             process.wait(timeout=10)
             if process.returncode != 0:
                 raise RuntimeError(
