@@ -70,7 +70,6 @@ __all__ = [
     "ApprovalRecord",
     "ApprovalService",
     "AuthenticatedActor",
-    "AuthenticationAction",
     "AuthenticationAuditRecord",
     "AuthenticationError",
     "AuthenticationFailure",
