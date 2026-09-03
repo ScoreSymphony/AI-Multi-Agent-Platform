@@ -19,6 +19,8 @@ from .forge import (
     ForgeHealth,
 )
 
+EXPECTED_PROTOCOL_VERSION = "forge-executor-sidecar/v1"
+
 
 @dataclass(frozen=True, slots=True)
 class ForgeHttpResponse:
@@ -124,15 +126,22 @@ class ForgeHttpClient:
         payload = self._object(response.payload, "health response")
         allowed = self._strings(payload.get("allowed_executor_types"))
         configured_status = self._configured_executor_status(payload.get("executors"))
-        healthy = payload.get("healthy") is True and self.config.executor_type in allowed
+        protocol_version = payload.get("protocol_version")
+        protocol_compatible = protocol_version == EXPECTED_PROTOCOL_VERSION
+        healthy = (
+            payload.get("healthy") is True
+            and self.config.executor_type in allowed
+            and protocol_compatible
+        )
         if configured_status == "not_found":
             healthy = False
         metadata: dict[str, JsonValue] = {
             "transport": "http-sidecar",
             "base_url": self._base_url,
             "executor_type": self.config.executor_type,
+            "expected_protocol_version": EXPECTED_PROTOCOL_VERSION,
+            "protocol_compatible": protocol_compatible,
         }
-        protocol_version = payload.get("protocol_version")
         if isinstance(protocol_version, str):
             metadata["protocol_version"] = protocol_version
         if configured_status is not None:
@@ -157,6 +166,7 @@ class ForgeHttpClient:
         response = await self._request("POST", "/v1/executions", payload=payload)
         self._raise_for_status(response, operation="submit execution")
         snapshot = self._object(response.payload, "execution submit response")
+        self._require_protocol(snapshot, "execution submit response")
         while self._status(snapshot) == "running":
             execution_id = self._required_string(snapshot, "execution_id")
             await asyncio.sleep(self.config.poll_interval_seconds)
@@ -166,6 +176,7 @@ class ForgeHttpClient:
             )
             self._raise_for_status(response, operation="get execution")
             snapshot = self._object(response.payload, "execution status response")
+            self._require_protocol(snapshot, "execution status response")
         return self._result(snapshot, request_data)
 
     async def cancel(self, request_ref: str) -> None:
@@ -177,6 +188,7 @@ class ForgeHttpClient:
             return
         self._raise_for_status(response, operation="resolve execution for cancellation")
         snapshot = self._object(response.payload, "request lookup response")
+        self._require_protocol(snapshot, "request lookup response")
         execution_id = self._required_string(snapshot, "execution_id")
         response = await self._request(
             "POST",
@@ -184,6 +196,8 @@ class ForgeHttpClient:
             payload={},
         )
         self._raise_for_status(response, operation="cancel execution")
+        cancelled = self._object(response.payload, "cancellation response")
+        self._require_protocol(cancelled, "cancellation response")
 
     async def _request(
         self,
@@ -245,6 +259,15 @@ class ForgeHttpClient:
         if not isinstance(value, str):
             raise RuntimeError("Forge sidecar response is missing status")
         return value
+
+    @staticmethod
+    def _require_protocol(payload: Mapping[str, JsonValue], label: str) -> None:
+        actual = payload.get("protocol_version")
+        if actual != EXPECTED_PROTOCOL_VERSION:
+            raise RuntimeError(
+                f"Forge sidecar {label} uses incompatible protocol: "
+                f"expected {EXPECTED_PROTOCOL_VERSION}, got {actual!r}"
+            )
 
     @staticmethod
     def _optional_positive_int(value: JsonValue | None) -> int | None:
