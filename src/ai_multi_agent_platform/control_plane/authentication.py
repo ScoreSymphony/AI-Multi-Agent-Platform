@@ -18,7 +18,7 @@ from ai_multi_agent_platform.security.authentication import (
 )
 
 from .http import HTTPRequest, HTTPResponse
-from .models import APIError, APIException, API_VERSION
+from .models import API_VERSION, APIError, APIException
 from .workspace_task_management_api import ControlPlaneHTTP as _ControlPlaneHTTP
 
 

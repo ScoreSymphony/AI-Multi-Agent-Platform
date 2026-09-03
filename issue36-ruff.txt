@@ -1,0 +1,24 @@
+F821 Undefined name `JsonValue`
+   --> tests/test_issue_36_authentication.py:236:20
+    |
+234 |         context: RequestContext,
+235 |         query: PageQuery,
+236 |     ) -> dict[str, JsonValue]:
+    |                    ^^^^^^^^^
+237 |         return {
+238 |             "items": [
+    |
+
+F821 Undefined name `JsonValue`
+   --> tests/test_issue_36_authentication.py:258:20
+    |
+256 |         context: RequestContext,
+257 |         query: PageQuery,
+258 |     ) -> dict[str, JsonValue]:
+    |                    ^^^^^^^^^
+259 |         raise APIException(status=403, code="forbidden", message="denied by #15")
+    |
+
+Found 3 errors (1 fixed, 2 remaining).
+5 files left unchanged
+ruff_status=1
