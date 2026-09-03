@@ -169,12 +169,16 @@ def _summary(resource_type: str, resource: Mapping[str, JsonValue]) -> str:
 def _owner(resource: Mapping[str, JsonValue]) -> tuple[str | None, str | None]:
     for field in ("owner", "owner_ref"):
         value = resource.get(field)
-        if not isinstance(value, Mapping):
+        if isinstance(value, Mapping):
+            owner_type = value.get("type")
+            owner_id = value.get("id")
+            if isinstance(owner_type, str) and owner_type.strip() and isinstance(owner_id, str):
+                if owner_id.strip():
+                    return owner_type, owner_id
             continue
-        owner_type = value.get("type")
-        owner_id = value.get("id")
-        if isinstance(owner_type, str) and owner_type.strip() and isinstance(owner_id, str):
-            if owner_id.strip():
+        if field == "owner_ref" and isinstance(value, str) and ":" in value:
+            owner_type, owner_id = value.split(":", 1)
+            if owner_type.strip() and owner_id.strip():
                 return owner_type, owner_id
     return None, None
 
@@ -248,6 +252,7 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "agent_assignment_id",
         "parent_task_id",
         "effective_blocking_reason",
+        "content_type",
     ):
         value = _optional_string(resource, field)
         if value is not None:
@@ -260,6 +265,7 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "step_ids",
         "blocking_task_ids",
         "failed_dependency_ids",
+        "artifact_ids",
     ):
         values.extend(_string_sequence(resource, field))
     for field, positive, negative in (
