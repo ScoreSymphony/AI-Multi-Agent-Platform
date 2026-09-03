@@ -319,6 +319,7 @@ class AgentTeamProfile:
     coordination_policy_ref: str | None = None
     leader_agent_id: str | None = None
     shared_capability_ids: tuple[str, ...] = ()
+    shared_resource_refs: tuple[str, ...] = ()
     max_parallel_agents: int | None = None
     max_steps: int | None = None
     unavailable_member_policy: UnavailableMemberPolicy = UnavailableMemberPolicy.FAIL
@@ -342,6 +343,10 @@ class AgentTeamProfile:
             _require_nonblank(capability_id, "shared capability ID")
         if len(set(self.shared_capability_ids)) != len(self.shared_capability_ids):
             raise ValueError("shared capabilities must be unique")
+        for resource_ref in self.shared_resource_refs:
+            _require_nonblank(resource_ref, "shared resource reference")
+        if len(set(self.shared_resource_refs)) != len(self.shared_resource_refs):
+            raise ValueError("shared resource references must be unique")
         if self.max_parallel_agents is not None and self.max_parallel_agents < 1:
             raise ValueError("max_parallel_agents must be >= 1")
         if self.max_steps is not None and self.max_steps < 1:
