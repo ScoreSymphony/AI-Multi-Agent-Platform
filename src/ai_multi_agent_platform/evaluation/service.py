@@ -174,7 +174,8 @@ class EvaluationService:
             raise ValueError("evaluation runs must use the same suite identity/version")
         if current.repetitions != 1 or baseline.repetitions != 1:
             raise ValueError(
-                "manual comparison currently requires single-repetition runs until aggregation exists"
+                "manual comparison currently requires single-repetition runs "
+                "until aggregation exists"
             )
 
         policy = self.get_policy(regression_policy_ref_value)
