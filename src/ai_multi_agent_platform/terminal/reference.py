@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from uuid import uuid4
 
@@ -18,11 +19,11 @@ from .contracts import (
     TerminalSessionAdapter,
 )
 from .models import (
+    TERMINAL_SESSION_STATUSES,
     SessionMode,
     SessionStatus,
     SessionType,
     StreamChannel,
-    TERMINAL_SESSION_STATUSES,
     TerminalCapabilities,
     TerminalDimensions,
 )
@@ -139,7 +140,7 @@ class ReferenceTerminalAdapter(TerminalSessionAdapter):
         handle: AdapterSessionHandle,
         *,
         after_sequence: int = 0,
-    ):
+    ) -> AsyncIterator[AdapterFrame]:
         if after_sequence < 0:
             raise ContractError(ErrorCode.INVALID_REQUEST, "after_sequence must be non-negative")
         cursor = after_sequence
