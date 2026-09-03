@@ -90,6 +90,25 @@ platform task update-management
 
 Bulk updates use `/api/v1/commands/task-management.bulk-update`. The server preflights authorization for every targeted Task before applying mutations and currently reports `atomic=false`; the CLI surfaces that canonical result unchanged.
 
+## Task queue filtering
+
+`platform task list` forwards the shared canonical list-query contract, including exact filters. This also exposes the #88 queue-specific filters without adding a second client-side interpretation layer:
+
+```bash
+platform task list --filter project_id=PROJECT_ID
+platform task list --filter assignment_state=assigned
+platform task list --filter assignment_state=unassigned
+platform task list --filter due_after=2026-09-03T00:00:00+00:00 \
+  --filter due_before=2026-09-10T23:59:59+00:00
+platform task list --filter responsible_type=user --filter responsible_id=USER_ID
+platform task list --filter blocked=true
+platform task list --filter overdue=true
+```
+
+Deadline boundaries are inclusive ISO 8601 timestamps and must include a timezone offset. `assignment_state` accepts `assigned` or `unassigned`. The Control Plane, not the CLI, validates deadline ranges and computes derived assignment/queue state. Invalid ranges therefore produce the same canonical API error as other clients.
+
+Task lists can additionally use `--sort priority` and `--sort due`; the #88 Control Plane maps those aliases to canonical priority/deadline ordering. Generic `--filter FIELD=VALUE` remains available for the ordinary Task fields published by the API.
+
 ## Output redaction
 
 All CLI rendering now applies the reusable platform redaction policy from #34 before data reaches stdout or stderr. This is a defense-in-depth layer in addition to the Control Plane requirement that ordinary API responses never expose plaintext secrets.
