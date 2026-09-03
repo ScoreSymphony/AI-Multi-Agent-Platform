@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime, timedelta
 from typing import Any
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.kernel import TaskState
 from ai_multi_agent_platform.notifications import (
     DeliveryAttempt,
     EventOwnerRecipientResolver,
@@ -27,11 +29,17 @@ from ai_multi_agent_platform.notifications import (
     RecipientType,
     TaskTerminalNotificationRule,
 )
+from ai_multi_agent_platform.notifications.task_management import (
+    DEFAULT_DEADLINE_APPROACHING_WINDOW,
+    task_attention_state_candidates,
+    task_management_change_candidates,
+)
+from ai_multi_agent_platform.task_management import TaskManagementView
 
+from .automation_runtime_composition import ControlPlane as _BaseControlPlane
+from .automation_runtime_composition import ControlPlaneHTTP, build_openapi
 from .extensions import ResourceService
 from .models import PageQuery, RequestContext
-from .terminal_composition import ControlPlane as _BaseControlPlane
-from .terminal_composition import ControlPlaneASGI, ControlPlaneHTTP, build_openapi
 
 NOTIFICATION_COLLECTION = "notifications"
 NOTIFICATION_PREFERENCE_COLLECTION = "notification-preferences"
@@ -189,6 +197,90 @@ class ControlPlane(_BaseControlPlane):
     def notification_service(self) -> NotificationService:
         return self._notification_service
 
+    async def _update_management_command(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        before_task = await self._kernel.get_task(resource_ref)
+        before = await self._task_management.view(before_task)
+        result = await super()._update_management_command(context, resource_ref, payload)
+        after_task = await self._kernel.get_task(resource_ref)
+        after = await self._task_management.view(after_task)
+        await self._project_task_management_change(before, after, after_task)
+        return result
+
+    async def _bulk_update_management_command(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        task_ids = _attention_bulk_task_ids(resource_ref, payload)
+        before: dict[str, TaskManagementView] = {}
+        if task_ids:
+            for task_id in task_ids:
+                task = await self._kernel.get_task(task_id)
+                before[task_id] = await self._task_management.view(task)
+        try:
+            result = await super()._bulk_update_management_command(context, resource_ref, payload)
+        except Exception:
+            await self._project_bulk_task_management_changes(before)
+            raise
+        await self._project_bulk_task_management_changes(before)
+        return result
+
+    async def evaluate_task_attention_reminders(
+        self,
+        *,
+        now: datetime | None = None,
+        approaching_window: timedelta = DEFAULT_DEADLINE_APPROACHING_WINDOW,
+    ) -> tuple[Notification, ...]:
+        """Project current #88 deadline/dependency attention without owning planning state."""
+
+        active: list[Notification] = []
+        for task_id in await self._task_ids():
+            task = await self._kernel.get_task(task_id)
+            view = await self._task_management.view(task)
+            for candidate in task_attention_state_candidates(
+                view,
+                task,
+                now=now,
+                approaching_window=approaching_window,
+            ):
+                notification = await self._notification_service.create_once(candidate, now=now)
+                if notification is not None:
+                    active.append(notification)
+        return tuple(active)
+
+    async def _project_bulk_task_management_changes(
+        self,
+        before: Mapping[str, TaskManagementView],
+    ) -> None:
+        for task_id, before_view in before.items():
+            try:
+                task = await self._kernel.get_task(task_id)
+                after = await self._task_management.view(task)
+            except Exception:
+                continue
+            if after != before_view:
+                await self._project_task_management_change(before_view, after, task)
+
+    async def _project_task_management_change(
+        self,
+        before: TaskManagementView,
+        after: TaskManagementView,
+        task: TaskState,
+    ) -> None:
+        try:
+            for candidate in task_management_change_candidates(before, after, task):
+                await self._notification_service.create(candidate)
+        except Exception:
+            # The canonical task update is already committed. Notification projection must never
+            # become source-of-truth authority or turn a successful #88 update into a failure.
+            return
+
     async def _mark_read(
         self,
         context: RequestContext,
@@ -332,6 +424,29 @@ class ControlPlane(_BaseControlPlane):
             channel_id=channel_id,
         )
         return _delivery_attempt_resource(attempt)
+
+
+def _attention_bulk_task_ids(
+    resource_ref: str,
+    payload: Mapping[str, JsonValue],
+) -> tuple[str, ...]:
+    if resource_ref != "tasks":
+        return ()
+    raw_updates = payload.get("updates")
+    if not isinstance(raw_updates, list) or not raw_updates or len(raw_updates) > 100:
+        return ()
+    task_ids: list[str] = []
+    for raw_update in raw_updates:
+        if not isinstance(raw_update, dict):
+            return ()
+        task_id = raw_update.get("task_id")
+        changes = raw_update.get("changes")
+        if not isinstance(task_id, str) or not task_id.strip():
+            return ()
+        if not isinstance(changes, dict) or not changes:
+            return ()
+        task_ids.append(task_id)
+    return tuple(dict.fromkeys(task_ids))
 
 
 def _recipient_from_context(context: RequestContext) -> RecipientRef:
