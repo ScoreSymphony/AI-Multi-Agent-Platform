@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from ai_multi_agent_platform.control_plane import (
@@ -12,6 +11,7 @@ from ai_multi_agent_platform.control_plane import (
     RequestContext,
     build_openapi,
 )
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.notifications import (
     NotificationCandidate,
@@ -27,7 +27,6 @@ from ai_multi_agent_platform.testing import (
     FakeLifecycleBackend,
     FakeOrchestrator,
 )
-from ai_multi_agent_platform.domain import new_id
 
 
 def _recipient() -> RecipientRef:
