@@ -38,7 +38,7 @@ def _resources(
     storage: int = 100_000,
     vram: int = 0,
 ) -> ResourceSnapshot:
-    accelerators = ()
+    accelerators: tuple[AcceleratorResource, ...] = ()
     if vram:
         accelerators = (
             AcceleratorResource(
@@ -140,7 +140,8 @@ def test_single_node_uses_same_scheduler_path_as_multi_node() -> None:
 
     assert placement.decision.selected_worker_id == worker.worker_id
     assert placement.reservation.worker_id == worker.worker_id
-    assert placement.reservation.status is ReservationStatus.ACTIVE
+    assert placement.reservation.node_id == node.node_id
+    assert placement.reservation.status is ReservationStatus.RESERVED
 
 
 def test_two_node_selection_filters_resources_capabilities_and_model() -> None:
@@ -262,6 +263,76 @@ def test_reservation_prevents_overcommit_and_duplicate_claims_are_idempotent() -
         )
 
 
+def test_node_capacity_is_shared_across_workers_on_same_host() -> None:
+    registry = DistributedRegistry()
+    node = _node(name="shared", resources=_resources(cpu=4.0, ram=8_000))
+    worker_a = _worker(node)
+    worker_b = _worker(node)
+    _register(registry, node, worker_a, worker_b)
+    scheduler = DeterministicScheduler(registry)
+
+    scheduler.schedule(
+        _job(
+            requirements=JobRequirements(
+                cpu_cores_min=4.0,
+                preferred_worker_ids=(worker_a.worker_id,),
+            )
+        ),
+        now=BASE_TIME,
+    )
+
+    with pytest.raises(NoEligibleWorkerError):
+        scheduler.schedule(
+            _job(requirements=JobRequirements(cpu_cores_min=1.0)),
+            now=BASE_TIME,
+        )
+
+
+def test_vram_reservation_prevents_accelerator_overcommit() -> None:
+    registry = DistributedRegistry()
+    node = _node(name="gpu", resources=_resources(vram=16_000))
+    worker_a = _worker(node, concurrency=2)
+    worker_b = _worker(node, concurrency=2)
+    _register(registry, node, worker_a, worker_b)
+    scheduler = DeterministicScheduler(registry)
+
+    first = scheduler.schedule(
+        _job(requirements=JobRequirements(gpu="required", vram_min_bytes=12_000)),
+        now=BASE_TIME,
+    )
+
+    assert first.reservation.accelerator_id == "gpu-0"
+    assert first.reservation.vram_bytes == 12_000
+    with pytest.raises(NoEligibleWorkerError):
+        scheduler.schedule(
+            _job(requirements=JobRequirements(gpu="required", vram_min_bytes=8_000)),
+            now=BASE_TIME,
+        )
+
+
+def test_stale_unaccepted_reservation_expires_and_capacity_is_reusable() -> None:
+    registry = DistributedRegistry(reservation_ttl=timedelta(seconds=5))
+    node = _node(name="lease", resources=_resources(cpu=2.0))
+    worker = _worker(node, concurrency=2)
+    _register(registry, node, worker)
+    scheduler = DeterministicScheduler(registry)
+
+    first = scheduler.schedule(
+        _job(requirements=JobRequirements(cpu_cores_min=2.0)),
+        now=BASE_TIME,
+    )
+
+    assert registry.expire_reservations(now=BASE_TIME + timedelta(seconds=6)) == (
+        first.reservation.reservation_id,
+    )
+    assert not registry.active_reservations()
+    replacement = scheduler.schedule(
+        _job(requirements=JobRequirements(cpu_cores_min=2.0)),
+        now=BASE_TIME + timedelta(seconds=6),
+    )
+    assert replacement.reservation.status is ReservationStatus.RESERVED
+
+
 def test_heartbeat_timeout_marks_offline_and_reregistration_rejoins() -> None:
     registry = DistributedRegistry(heartbeat_timeout=timedelta(seconds=10))
     node = _node(name="rejoin")
@@ -275,6 +346,27 @@ def test_heartbeat_timeout_marks_offline_and_reregistration_rejoins() -> None:
 
     assert registry.get_worker(worker.worker_id).status is WorkerStatus.HEALTHY
     assert registry.get_node(node.node_id).status.value == "online"
+
+
+def test_worker_liveness_expires_independently_of_live_node() -> None:
+    registry = DistributedRegistry(heartbeat_timeout=timedelta(seconds=5))
+    node = _node(name="worker-loss")
+    worker = _worker(node)
+    _register(registry, node, worker)
+
+    registry.heartbeat(
+        Heartbeat(
+            node_id=node.node_id,
+            sequence=1,
+            observed_at=BASE_TIME + timedelta(seconds=4),
+            workers=(),
+        )
+    )
+    expired_nodes = registry.expire_heartbeats(now=BASE_TIME + timedelta(seconds=6))
+
+    assert expired_nodes == ()
+    assert registry.get_node(node.node_id).status.value == "online"
+    assert registry.get_worker(worker.worker_id).status is WorkerStatus.OFFLINE
 
 
 def test_heartbeat_sequence_is_monotonic_and_duplicate_is_idempotent() -> None:
@@ -320,8 +412,45 @@ def test_local_worker_dispatch_is_idempotent_and_preserves_execution_identity() 
         assert duplicate == first
         assert first.handle is not None
         assert first.handle.run_id == job.execution.run_id
+        assert registry.active_reservations()[0].status is ReservationStatus.ACTIVE
         assert len(lifecycle.start_calls) == 1
-        assert lifecycle.start_calls[0].context.correlation_id == job.execution.context.correlation_id
+        assert (
+            lifecycle.start_calls[0].context.correlation_id == job.execution.context.correlation_id
+        )
+
+    asyncio.run(scenario())
+
+
+def test_active_lease_is_renewed_by_worker_heartbeat() -> None:
+    lifecycle = FakeLifecycleBackend()
+    registry = DistributedRegistry(
+        heartbeat_timeout=timedelta(seconds=10),
+        reservation_ttl=timedelta(seconds=5),
+    )
+    node = _node(name="lease-renewal")
+    worker_record = _worker(node)
+    _register(registry, node, worker_record)
+    runtime = DistributedRuntime(registry)
+    runtime.attach_worker(LocalWorker(worker_record.worker_id, lifecycle))
+    job = _job()
+
+    async def scenario() -> None:
+        await runtime.dispatch(job, now=BASE_TIME)
+        before = registry.active_reservations()[0]
+        assert before.status is ReservationStatus.ACTIVE
+        assert before.expires_at == BASE_TIME + timedelta(seconds=5)
+
+        registry.heartbeat(
+            Heartbeat(
+                node_id=node.node_id,
+                sequence=1,
+                observed_at=BASE_TIME + timedelta(seconds=4),
+                workers=(worker_record,),
+            )
+        )
+        renewed = registry.active_reservations()[0]
+        assert renewed.expires_at == BASE_TIME + timedelta(seconds=9)
+        assert registry.expire_reservations(now=BASE_TIME + timedelta(seconds=8)) == ()
 
     asyncio.run(scenario())
 
