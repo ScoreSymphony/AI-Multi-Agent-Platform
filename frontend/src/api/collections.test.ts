@@ -41,13 +41,11 @@ describe("ControlPlaneCollectionClient", () => {
     await client.get("approvals", "approval/special");
   });
 
-  it("rejects collection path injection before issuing a request", async () => {
+  it("rejects collection path injection before issuing a request", () => {
     const fetchImpl = vi.fn();
     const client = new ControlPlaneCollectionClient({ fetchImpl });
 
-    await expect(client.list("../private-backend")).rejects.toThrow(
-      "invalid canonical collection",
-    );
+    expect(() => client.list("../private-backend")).toThrow("invalid canonical collection");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
