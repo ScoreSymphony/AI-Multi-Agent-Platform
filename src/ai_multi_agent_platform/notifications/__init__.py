@@ -12,6 +12,11 @@ from .delivery import (
 )
 from .events import NotificationProjectingEventProvider, ProjectionFailureSink
 from .integrations import approval_required_candidate, budget_threshold_candidate
+from .live import (
+    NotificationLiveEvent,
+    NotificationLiveHub,
+    fanout_notification_event_sinks,
+)
 from .models import (
     Notification,
     NotificationAction,
@@ -52,6 +57,8 @@ __all__ = [
     "NotificationDeliveryChannel",
     "NotificationDeliveryCoordinator",
     "NotificationEventSink",
+    "NotificationLiveEvent",
+    "NotificationLiveHub",
     "NotificationPreference",
     "NotificationPreferenceRepository",
     "NotificationProjectingEventProvider",
@@ -73,5 +80,6 @@ __all__ = [
     "UnavailableDeliveryChannel",
     "approval_required_candidate",
     "budget_threshold_candidate",
+    "fanout_notification_event_sinks",
     "preference_allows",
 ]
