@@ -73,6 +73,9 @@ class ControlPlaneAuthorizationBridge(AuthorizationProvider):
 
 
 def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction, ResourceType]:
+    if action.startswith("task-management."):
+        return AuthorizationAction.MODIFY, ResourceType.TASK
+
     resource_name, separator, verb = action.partition(":")
     if not separator:
         resource_name, verb = "generic", action
