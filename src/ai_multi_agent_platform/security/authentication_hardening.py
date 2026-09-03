@@ -10,7 +10,7 @@ rate-limit hook.
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
@@ -190,9 +190,14 @@ class LocalAuthenticationService(_BaseLocalAuthenticationService):
         purpose: str,
         expires_at: datetime | None = None,
         now: datetime | None = None,
-        scope: CredentialScope | None = None,
+        scope: CredentialScope | Mapping[str, JsonValue] | None = None,
     ) -> IssuedCredential:
-        effective_scope = scope or CredentialScope()
+        if isinstance(scope, CredentialScope):
+            effective_scope = scope
+        elif scope is None:
+            effective_scope = CredentialScope()
+        else:
+            effective_scope = CredentialScope.from_json(dict(scope))
         return super().create_credential(
             owner_id,
             actor_type,
