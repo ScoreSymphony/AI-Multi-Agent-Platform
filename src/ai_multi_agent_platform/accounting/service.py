@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.observability.models import MetricRecord
 
 from .models import (
+    AggregationMode,
     BudgetState,
     BudgetThresholdEvent,
     MeasurementQuality,
@@ -57,6 +58,7 @@ class AccountingService:
         provider: str | None = None,
         correlation_id: str | None = None,
         causation_id: str | None = None,
+        aggregation_mode: AggregationMode = AggregationMode.ADDITIVE,
     ) -> UsageRecord:
         record = UsageRecord(
             metric_type=metric_type,
@@ -67,6 +69,7 @@ class AccountingService:
             provider=provider,
             correlation_id=correlation_id,
             causation_id=causation_id,
+            aggregation_mode=aggregation_mode,
         )
         self.record(record)
         return record
@@ -78,17 +81,10 @@ class AccountingService:
         records = self.store.query(query)
         if query.metric_type is None or query.unit is None:
             raise ValueError("aggregate query requires metric_type and unit")
-        values = [record.quantity for record in records if record.quantity is not None]
-        quality_counts = {quality: 0 for quality in MeasurementQuality}
-        for record in records:
-            quality_counts[record.quality] += 1
-        return UsageAggregate(
+        return aggregate_usage_records(
+            records,
             metric_type=query.metric_type,
             unit=query.unit,
-            total=sum(values) if values else None,
-            record_count=len(records),
-            unavailable_count=quality_counts[MeasurementQuality.UNAVAILABLE],
-            quality_counts=quality_counts,
             start=query.start,
             end=query.end,
         )
@@ -117,14 +113,13 @@ class AccountingService:
             start=start,
             end=end,
         )
-        records = self.store.query(query)
-        consumed = 0.0
-        for record in records:
-            if record.quantity is None:
-                continue
-            if record.quality is MeasurementQuality.ESTIMATED and not budget.include_estimated:
-                continue
-            consumed += record.quantity
+        records = tuple(
+            record
+            for record in self.store.query(query)
+            if record.quantity is not None
+            and (record.quality is not MeasurementQuality.ESTIMATED or budget.include_estimated)
+        )
+        consumed = _budget_quantity(records)
         fraction = consumed / budget.limit
         level = _threshold_level(fraction, budget.warning_fraction)
         return BudgetState(
@@ -169,6 +164,62 @@ class AccountingService:
                     budget_version=budget.version,
                 )
             )
+
+
+def aggregate_usage_records(
+    records: tuple[UsageRecord, ...],
+    *,
+    metric_type: str,
+    unit: str,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> UsageAggregate:
+    """Aggregate one canonical metric without summing point-in-time gauges."""
+
+    modes = {record.aggregation_mode for record in records}
+    if len(modes) > 1:
+        raise ValueError("one metric/unit query cannot mix aggregation modes")
+    mode = next(iter(modes), AggregationMode.ADDITIVE)
+    quality_counts = {quality: 0 for quality in MeasurementQuality}
+    for record in records:
+        quality_counts[record.quality] += 1
+
+    if mode is AggregationMode.LATEST and records:
+        latest = max(records, key=lambda record: (record.timestamp, record.id))
+        total = latest.quantity
+    else:
+        values = [record.quantity for record in records if record.quantity is not None]
+        total = sum(values) if values else None
+
+    return UsageAggregate(
+        metric_type=metric_type,
+        unit=unit,
+        total=total,
+        record_count=len(records),
+        unavailable_count=quality_counts[MeasurementQuality.UNAVAILABLE],
+        quality_counts=quality_counts,
+        aggregation_mode=mode,
+        start=start,
+        end=end,
+    )
+
+
+def _budget_quantity(records: tuple[UsageRecord, ...]) -> float:
+    if not records:
+        return 0.0
+    modes = {record.aggregation_mode for record in records}
+    if len(modes) > 1:
+        raise ValueError("budget cannot mix aggregation modes for one metric/unit")
+    mode = next(iter(modes))
+    if mode is AggregationMode.LATEST:
+        latest = max(records, key=lambda record: (record.timestamp, record.id))
+        assert latest.quantity is not None
+        return latest.quantity
+    total = 0.0
+    for record in records:
+        assert record.quantity is not None
+        total += record.quantity
+    return total
 
 
 def usage_from_metric(metric: MetricRecord) -> UsageRecord | None:
