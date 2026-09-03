@@ -1,9 +1,13 @@
 """Canonical notification and user-attention domain for Issue #75."""
 
 from .delivery import (
+    DeliveryAttempt,
+    DeliveryAttemptRepository,
     DeliveryResult,
     DeliveryStatus,
+    InMemoryDeliveryAttemptRepository,
     NotificationDeliveryChannel,
+    NotificationDeliveryCoordinator,
     UnavailableDeliveryChannel,
 )
 from .events import NotificationProjectingEventProvider, ProjectionFailureSink
@@ -33,9 +37,12 @@ from .service import NotificationEventSink, NotificationService
 from .sqlite import SqliteNotificationPreferenceRepository, SqliteNotificationRepository
 
 __all__ = [
+    "DeliveryAttempt",
+    "DeliveryAttemptRepository",
     "DeliveryResult",
     "DeliveryStatus",
     "EventOwnerRecipientResolver",
+    "InMemoryDeliveryAttemptRepository",
     "InMemoryNotificationPreferenceRepository",
     "InMemoryNotificationRepository",
     "Notification",
@@ -43,6 +50,7 @@ __all__ = [
     "NotificationCandidate",
     "NotificationCategory",
     "NotificationDeliveryChannel",
+    "NotificationDeliveryCoordinator",
     "NotificationEventSink",
     "NotificationPreference",
     "NotificationPreferenceRepository",
