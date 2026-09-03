@@ -17,6 +17,7 @@ import { ObservabilityPage } from "../pages/ObservabilityPage";
 import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ProjectsPage } from "../pages/ProjectListPage";
 import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
+import { SearchPage } from "../pages/SearchPage";
 import { TaskDetailPage } from "../pages/TaskDetailPage";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
 import { UsagePage } from "../pages/UsagePage";
@@ -56,6 +57,7 @@ export function Shell() {
   else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;
   else if (path === "/files") content = <ReferencesPage client={client} />;
   else if (referenceMatch) content = <ReferenceDetailPage client={client} collection={referenceMatch.collection} resourceId={referenceMatch.resourceId} />;
+  else if (path === "/search") content = <SearchPage client={client} />;
   else if (path === "/models") content = <ModelsPage client={client} />;
   else if (providerMatch) content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
   else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
