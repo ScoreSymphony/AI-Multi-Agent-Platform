@@ -160,9 +160,7 @@ class LiteLLMModelProvider(ModelProvider):
             ),
             health=self._health,
             available=self.config.enabled,
-            adapter_metadata=(
-                AdapterMetadata(namespace="litellm", values=metadata_values),
-            ),
+            adapter_metadata=(AdapterMetadata(namespace="litellm", values=metadata_values),),
         )
 
     async def health(self) -> HealthStatus:
@@ -234,7 +232,9 @@ class LiteLLMModelProvider(ModelProvider):
         if self.config.extra_headers:
             payload["extra_headers"] = dict(self.config.extra_headers)
 
-        timeout_seconds = request_data.context.control.timeout_seconds or self.config.timeout_seconds
+        timeout_seconds = (
+            request_data.context.control.timeout_seconds or self.config.timeout_seconds
+        )
         payload["timeout"] = timeout_seconds
         completion = self._resolve_completion()
 
