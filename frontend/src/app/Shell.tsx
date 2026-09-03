@@ -12,13 +12,11 @@ import {
   UnavailablePage,
 } from "../pages/Pages";
 import { RunsPage } from "../pages/RunListPage";
-import {
-  ModelDetailPage,
-  ModelProviderDetailPage,
-  ModelsPage,
-} from "../pages/ModelPages";
+import { ModelDetailPage, ModelProviderDetailPage } from "../pages/ModelPages";
+import { ModelsPage } from "../pages/ModelInventoryPage";
 import { ObservabilityPage } from "../pages/ObservabilityPage";
-import { ProjectDetailPage, ProjectsPage, WorkspaceDetailPage } from "../pages/ProjectPages";
+import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
+import { ProjectsPage } from "../pages/ProjectListPage";
 import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
 import { UsagePage } from "../pages/UsagePage";
