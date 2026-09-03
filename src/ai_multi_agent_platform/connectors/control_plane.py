@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
+from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue, OperationContext
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 from ai_multi_agent_platform.domain import new_id
@@ -18,7 +18,7 @@ from ai_multi_agent_platform.security import (
     redact_sensitive,
 )
 
-from .models import Connection, ConnectorDefinition
+from .models import Connection, ConnectorDefinition, SyncMode
 from .service import ConnectorService
 
 type ConnectorControlPlaneActorResolver = Callable[[RequestContext], ActorIdentity]
@@ -73,20 +73,31 @@ class ConnectorDefinitionResourceService(ResourceService):
 
 
 class ConnectionResourceService(ResourceService):
-    def __init__(self, connectors: ConnectorService) -> None:
+    def __init__(
+        self,
+        connectors: ConnectorService,
+        actor_resolver: ConnectorControlPlaneActorResolver,
+    ) -> None:
         self._connectors = connectors
+        self._actor_resolver = actor_resolver
 
     async def list_resources(
         self, context: RequestContext, query: PageQuery
     ) -> tuple[dict[str, JsonValue], ...]:
-        del context
         project_id = None if query.filters is None else query.filters.get("project_id")
-        connections = await self._connectors.repository.list_connections(project_id=project_id)
+        connections = await self._connectors.list_connections(
+            actor=self._actor_resolver(context),
+            context=_operation_context(context, project_id),
+            project_id=project_id,
+        )
         return tuple(_connection_resource(connection) for connection in connections)
 
     async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
-        del context
-        connection = await self._connectors.repository.get_connection(resource_id)
+        connection = await self._connectors.get_connection(
+            resource_id,
+            actor=self._actor_resolver(context),
+            context=_operation_context(context, None),
+        )
         return _connection_resource(connection)
 
 
@@ -106,7 +117,7 @@ def register_connector_control_plane(
         CONNECTOR_DEFINITION_COLLECTION, ConnectorDefinitionResourceService(connectors)
     )
     control_plane.register_resource_service(
-        CONNECTION_COLLECTION, ConnectionResourceService(connectors)
+        CONNECTION_COLLECTION, ConnectionResourceService(connectors, actor_resolver)
     )
 
     async def create_connection(
@@ -190,15 +201,18 @@ def register_connector_control_plane(
     ) -> dict[str, JsonValue]:
         existing = await connectors.repository.get_connection(resource_ref)
         stream = _required_string(payload, "stream")
+        mode = _sync_mode(payload.get("mode"))
         result = await connectors.synchronize(
             resource_ref,
             stream,
             actor=actor_resolver(context),
             context=_operation_context(context, existing.project_id),
+            mode=mode,
         )
         return {
             "connection_id": result.checkpoint.connection_id,
             "stream": result.checkpoint.stream,
+            "mode": mode.value,
             "cursor": result.checkpoint.cursor,
             "status": result.checkpoint.status.value,
             "last_successful_sync": (
@@ -261,6 +275,7 @@ def _definition_resource(definition: ConnectorDefinition) -> dict[str, JsonValue
         "event_types": list(definition.event_types),
         "configuration_schema": dict(definition.configuration_schema),
         "health_semantics": dict(definition.health_semantics),
+        "adapter_metadata": _adapter_metadata(definition.adapter_metadata),
     }
 
 
@@ -281,6 +296,7 @@ def _connection_resource(connection: Connection) -> dict[str, JsonValue]:
         "project_id": connection.project_id,
         "organization_id": connection.organization_id,
         "endpoint_metadata": endpoint_metadata,
+        "adapter_metadata": _adapter_metadata(connection.adapter_metadata),
         "secret_references": [reference.to_dict() for reference in connection.secret_references],
         "requested_scopes": list(connection.requested_scopes),
         "granted_scopes": list(connection.granted_scopes),
@@ -296,6 +312,19 @@ def _connection_resource(connection: Connection) -> dict[str, JsonValue]:
         ),
         "revision": connection.revision,
     }
+
+
+def _adapter_metadata(metadata: tuple[AdapterMetadata, ...]) -> list[JsonValue]:
+    serialized: list[JsonValue] = []
+    for item in metadata:
+        values = redact_sensitive(dict(item.values))
+        if not isinstance(values, dict):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "connector adapter metadata cannot be serialized safely",
+            )
+        serialized.append({"namespace": item.namespace, "values": values})
+    return serialized
 
 
 def _connection_from_payload(connection_id: str, payload: dict[str, JsonValue]) -> Connection:
@@ -388,6 +417,20 @@ def _optional_string(value: JsonValue, field_name: str) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be a non-blank string")
     return value
+
+
+def _sync_mode(value: JsonValue) -> SyncMode:
+    if value is None:
+        return SyncMode.INCREMENTAL
+    if not isinstance(value, str):
+        raise ContractError(ErrorCode.INVALID_REQUEST, "sync mode must be a string")
+    try:
+        return SyncMode(value)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "sync mode must be incremental, resync, or rebuild",
+        ) from exc
 
 
 def _require_collection(resource_ref: str, expected: str) -> None:
