@@ -8,6 +8,12 @@ __pycache__/
 .venv/
 venv/
 
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
 # Build
 build/
 dist/
