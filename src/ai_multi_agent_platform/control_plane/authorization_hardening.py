@@ -16,9 +16,14 @@ from .extensions import _reject_private_payload, _validate_command_name
 from .models import RequestContext
 from .run_workspace_contract import _has_binding_fields
 from .service import _optional_string, _payload_digest, _require_key, _required_string
-from .task_management_contract import TASK_MANAGEMENT_COMMANDS, _require_idempotency_key
+from .task_management_contract import (
+    TASK_MANAGEMENT_COMMANDS,
+    TASK_MANAGEMENT_UPDATE_COMMAND,
+    _require_idempotency_key,
+)
 from .workspace_contract import (
     _data_access_context,
+    _merge_workspace_files,
     _workspace_access_mode,
     _workspace_files,
     _workspace_resource,
@@ -61,17 +66,10 @@ class AuthorizationBoundaryHardeningMixin:
         resource_ref: str,
         payload: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
-        """Authorize generic commands against the exact payload before dispatch."""
+        """Authorize built-in and extension commands against their exact payload."""
 
         cp = cast(Any, self)
         _validate_command_name(command)
-        handler = cp._command_handlers.get(command)
-        if handler is None:
-            raise ContractError(
-                ErrorCode.NOT_FOUND,
-                f"canonical command is not registered: {command}",
-                details={"command": command},
-            )
         if context.idempotency_key is None:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
@@ -80,15 +78,32 @@ class AuthorizationBoundaryHardeningMixin:
             )
 
         effective_payload = payload or {}
-        # Task-management handlers perform a richer project/task-scoped authorization
-        # below. Avoid a second generic approval for the same command.
-        if command not in TASK_MANAGEMENT_COMMANDS:
-            await cp._authorize(
+        if command in TASK_MANAGEMENT_COMMANDS:
+            if command == TASK_MANAGEMENT_UPDATE_COMMAND:
+                return await cp._update_management_command(
+                    context,
+                    resource_ref,
+                    effective_payload,
+                )
+            return await cp._bulk_update_management_command(
                 context,
-                command,
                 resource_ref,
-                request_payload_digest=_payload_digest(effective_payload),
+                effective_payload,
             )
+
+        handler = cp._command_handlers.get(command)
+        if handler is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"canonical command is not registered: {command}",
+                details={"command": command},
+            )
+        await cp._authorize(
+            context,
+            command,
+            resource_ref,
+            request_payload_digest=_payload_digest(effective_payload),
+        )
         result = await handler(context, resource_ref, effective_payload)
         _reject_private_payload(result)
         return cast(dict[str, JsonValue], result)
@@ -181,7 +196,7 @@ class AuthorizationBoundaryHardeningMixin:
         context: RequestContext,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        """Keep #37 Workspace creation bound to the original northbound payload."""
+        """Keep Workspace creation exact-bound without bypassing source resolution."""
 
         cp = cast(Any, self)
         provider = cp.workspace_provider
@@ -210,15 +225,32 @@ class AuthorizationBoundaryHardeningMixin:
         workspace_type = cp._workspace_type_for_payload(payload)
         access_mode = _workspace_access_mode(payload, workspace_type)
         retention = _workspace_retention(payload, workspace_type)
+        data_context = _data_access_context(context, project)
+        source_refs = _workspace_source_refs(payload)
+        files = _workspace_files(payload)
+        if source_refs:
+            resolvers = cp.workspace_source_resolvers
+            if resolvers is None:
+                raise ContractError(
+                    ErrorCode.UNAVAILABLE,
+                    "workspace source resolution is not configured",
+                    retryable=True,
+                )
+            resolved_sources = await resolvers.resolve_all(source_refs, data_context)
+            source_files = tuple(
+                entry for resolved in resolved_sources for entry in resolved.files
+            )
+            files = _merge_workspace_files(files, source_files)
+
         workspace = await provider.create_workspace(
             project_id=project_id,
             owner_ref=project.owner_ref,
             workspace_type=workspace_type,
-            context=_data_access_context(context, project),
+            context=data_context,
             access_mode=access_mode,
             retention=retention,
-            source_refs=_workspace_source_refs(payload),
-            files=_workspace_files(payload),
+            source_refs=source_refs,
+            files=files,
             workspace_id=_optional_string(payload, "workspace_id"),
         )
         cp._workspace_command_results[key] = workspace.id
