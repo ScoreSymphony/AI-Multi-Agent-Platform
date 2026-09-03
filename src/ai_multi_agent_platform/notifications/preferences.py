@@ -41,7 +41,9 @@ def preference_allows(
     preference: NotificationPreference,
     candidate: NotificationCandidate,
 ) -> bool:
-    if preference.muted or not preference.in_app_enabled:
+    """Return whether the attention rule is enabled, independent of delivery channel."""
+
+    if preference.muted:
         return False
     if candidate.category not in preference.enabled_categories:
         return False
