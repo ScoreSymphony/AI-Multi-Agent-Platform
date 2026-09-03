@@ -25,8 +25,7 @@ class DataProviderResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
         return tuple(
-            _provider_resource(role, descriptor)
-            for role, descriptor in self._descriptors()
+            _provider_resource(role, descriptor) for role, descriptor in self._descriptors()
         )
 
     async def get_resource(
