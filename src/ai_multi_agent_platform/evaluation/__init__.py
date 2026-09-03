@@ -3,11 +3,13 @@
 from .context import EvaluationExecutionContext
 from .contracts import (
     EvaluationCaseExecutor,
+    EvaluationHistoryRepository,
     EvaluationIsolation,
     EvaluationRepository,
     Evaluator,
 )
 from .evaluators import DeterministicAssertionEvaluator, MetricThresholdEvaluator, SafeEvaluator
+from .history import EvaluationHistoryService, EvaluationTrendPoint
 from .models import (
     EVALUATION_SCHEMA_VERSION,
     AssertionResult,
@@ -40,6 +42,7 @@ from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
 from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolation
+from .sqlite_repository import SqliteEvaluationRepository
 from .workspace import (
     EvaluationFixture,
     EvaluationFixtureResolver,
@@ -64,6 +67,8 @@ __all__ = [
     "EvaluationExecutionContext",
     "EvaluationFixture",
     "EvaluationFixtureResolver",
+    "EvaluationHistoryRepository",
+    "EvaluationHistoryService",
     "EvaluationIsolation",
     "EvaluationObservation",
     "EvaluationOutcome",
@@ -74,6 +79,7 @@ __all__ = [
     "EvaluationRunStatus",
     "EvaluationRunSummary",
     "EvaluationSuite",
+    "EvaluationTrendPoint",
     "Evaluator",
     "EvaluatorDescriptor",
     "EvaluatorKind",
@@ -91,6 +97,7 @@ __all__ = [
     "RubricCriterion",
     "SafeEvaluator",
     "SnapshotValue",
+    "SqliteEvaluationRepository",
     "StaticEvaluationFixtureResolver",
     "VersionReference",
     "WorkspaceEvaluationIsolation",
