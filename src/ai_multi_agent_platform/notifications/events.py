@@ -18,7 +18,7 @@ ProjectionFailureSink = Callable[[PlatformEvent, BaseException], Awaitable[None]
 
 
 class NotificationProjectingEventProvider(EventProvider):
-    """Decorate the canonical event transport with non-authoritative attention projection.
+    """Decorate canonical event transport with non-authoritative attention projection.
 
     Canonical lifecycle persistence has already succeeded before the kernel mirrors an event
     to this provider. Notification projection failures are therefore reported separately and
@@ -39,15 +39,7 @@ class NotificationProjectingEventProvider(EventProvider):
 
     @property
     def descriptor(self) -> ProviderDescriptor:
-        descriptor = self._inner.descriptor
-        return ProviderDescriptor(
-            provider_id=f"{descriptor.provider_id}:notifications",
-            provider_type="event",
-            supported_operations=descriptor.supported_operations,
-            health=descriptor.health,
-            available=descriptor.available,
-            metadata={**dict(descriptor.metadata), "notification_projection": True},
-        )
+        return self._inner.descriptor
 
     async def health(self) -> HealthStatus:
         return await self._inner.health()
