@@ -25,6 +25,12 @@ The platform owns these canonical resources and records:
   metadata;
 - `SyncCheckpoint`: connector-owned checkpoint/recovery metadata keyed by Connection and stream.
 
+`connector_definition_id(connector_type_id, version)` derives the ConnectorDefinition UUID
+platform-side from the type/version pair. The identity is therefore stable across provider object
+recreation and process restarts. `ConnectorRegistry` rejects a provider that supplies a different
+canonical ID for the same pair; adapters do not get to allocate their own long-lived definition
+identity.
+
 The external system continues to own repositories, messages, calendar events, files, records,
 tickets and similar objects. A connector reference does not copy those objects into canonical Task,
 File, Knowledge or Agent ownership.
@@ -35,8 +41,11 @@ Provider-native identities are wrapped by `ExternalNativeReference(namespace, na
 namespace is mandatory. A GitHub issue number, email provider thread ID, calendar event ID or
 vendor record key must therefore never be mistaken for a platform ID.
 
-Backend-private diagnostics remain in explicit `AdapterMetadata` namespaces. They must not become
-routing keys or public platform identity.
+Backend-private diagnostics and safe provider-native account identifiers remain in explicit
+`AdapterMetadata` namespaces. Connection validation may attach namespaced account metadata, while
+ConnectorDefinition metadata may describe the bundled/plugin/adapter source. Connection metadata is
+validated so credential-looking values cannot be persisted there, and northbound serialization
+redacts defensively. These fields must not become routing keys or canonical platform identity.
 
 Removing an adapter may make future reads/actions unavailable, but it does not change previously
 stored canonical IDs or serialized historical external-resource references.
@@ -52,11 +61,11 @@ stored canonical IDs or serialized historical external-resource references.
 - event types;
 - configuration schema;
 - normalized health semantics;
-- optional namespaced adapter metadata.
+- optional namespaced adapter/source metadata.
 
 Operations are capability declarations, not assumptions. Callers must not infer that every
-connector supports mutation, webhooks, synchronization, file transfer or knowledge ingestion.
-Unsupported operations fail canonically.
+connector supports mutation, subscriptions, webhooks, synchronization, file transfer or knowledge
+ingestion. Unsupported operations fail canonically.
 
 The connector domain is independent from the plugin runtime. A provider may be registered directly
 today and packaged by #20 later without changing any connector resource contract.
@@ -73,7 +82,8 @@ The reference provider demonstrates the intended flow:
 2. connector validation resolves that reference through the replaceable #34 `SecretProvider`;
 3. resolution supplies a narrow `SecretAccessContext` for that connector operation;
 4. only the adapter receives short-lived resolved material;
-5. canonical serialization exposes the reference, never the material.
+5. canonical serialization exposes the reference, never the material;
+6. safe provider-native account identity is returned only as namespaced adapter metadata.
 
 OAuth/OIDC tokens, API tokens, service-account credentials, local credentials and webhook-signing
 secrets can all use this same reference boundary. Authentication flow implementations remain
@@ -84,7 +94,13 @@ owned by #15.
 
 `ConnectorService` is the canonical lifecycle/security boundary. When composed with an
 `AuthorizationGate`, connection creation, enable/disable, deletion, health/read operations,
-external resource reads, synchronization and external actions produce #15 authorization requests.
+external resource reads, synchronization, subscription management and external actions produce #15
+authorization requests.
+
+Authorization is evaluated with the Connection's actual owner, project and organization scope, not
+a caller-supplied substitute. Control Plane Connection reads therefore resolve the resource through
+`ConnectorService`; list visibility is evaluated per Connection so a collection-level read grant
+does not reveal Connections from an unauthorized project.
 
 Approval digests are bound to the exact safe proposed operation. In particular an external action
 binds its Connection, capability/action name, invocation identifier and arguments; an approval for
@@ -120,9 +136,16 @@ There is intentionally **no generic `connector.invoke` Control Plane command**. 
 must use the canonical capability invocation path, preserving validation, policy, approvals,
 traceability and future worker placement.
 
-## External events
+## External events and subscriptions
 
-`ConnectorEvent` is a provider-neutral hook with:
+`ConnectorProvider` exposes explicit optional `subscribe_events()` and `unsubscribe_events()` hooks
+for providers that can create remote webhook/event subscriptions. They return/use a namespaced
+provider-native subscription reference. Connectors that do not support subscription lifecycle fail
+with `UNSUPPORTED_CAPABILITY`; subscription support is never assumed from the presence of event
+types.
+
+Inbound webhook/event material crosses `normalize_external_event()`, which verifies/translates it
+into a provider-neutral `ConnectorEvent` containing:
 
 - connector type and Connection identity;
 - namespaced native event identity;
@@ -133,12 +156,12 @@ traceability and future worker placement.
 - verification state;
 - provenance and normalized payload.
 
-An external event is evidence/input, not execution authority. Receiving or verifying a connector
-event must never directly perform privileged work. #18 may consume verified events as automation
-triggers later, and #35 may transport them across processes, without changing the connector event
-contract.
+An external event is evidence/input, not execution authority. Receiving, subscribing to or verifying
+a connector event must never directly perform privileged work. #18 may consume verified events as
+automation triggers later, and #35 may transport them across processes, without changing the
+connector event contract.
 
-## Synchronization
+## Synchronization and recovery
 
 `SyncCheckpoint` keeps connector-owned synchronization state explicit:
 
@@ -151,9 +174,16 @@ contract.
 - conflict policy;
 - update timestamp.
 
-`ConnectorService.synchronize()` reloads the saved checkpoint and passes it back to the provider.
+Every `ConnectorSyncRequest` also carries an explicit `SyncMode`:
+
+- `incremental`: resume from the stored checkpoint;
+- `resync`: perform a full remote refresh while the previous checkpoint remains available to the
+  adapter for comparison/dedupe/reconciliation;
+- `rebuild`: reconstruct sync state from scratch; the adapter receives no prior checkpoint and the
+  previous persisted checkpoint is replaced only after a successful result.
+
 The returned checkpoint must belong to the same Connection and stream before it is persisted. This
-supports deterministic resume/rebuild behavior without making connector state authoritative for
+makes resume/resync/rebuild behavior explicit without making connector state authoritative for
 canonical Task, File or Knowledge history.
 
 ## Reference connector
@@ -161,13 +191,15 @@ canonical Task, File or Knowledge history.
 `ReferenceConnectorProvider` is dependency-free apart from platform components and uses no network,
 paid API, broker, automation runtime or plugin loader. It demonstrates:
 
+- restart-stable ConnectorDefinition identity;
 - connection creation and validation;
 - scoped SecretReference resolution;
+- namespaced provider account/source metadata;
 - health failure/recovery;
 - external resource listing and reading;
 - one external action (`connector.reference.echo`);
 - connector event provenance/dedupe data;
-- resumable synchronization;
+- incremental resume, resync and rebuild synchronization;
 - disable/removal behavior.
 
 It exists for tests and development, not as a production SaaS integration.
@@ -193,9 +225,15 @@ Lifecycle commands:
 
 Mutating commands retain the standard `Idempotency-Key` requirement from the Control Plane.
 Connection creation allocates the canonical Connection ID server-side. Secret values are not
-accepted as Connection fields; callers pass already-created secret references.
+accepted as Connection fields; callers pass already-created secret references. Definition and
+Connection resources expose safe namespaced adapter/source metadata. Connection list/get reads apply
+resource-specific ConnectorService authorization rather than relying only on collection-level
+routing authorization.
 
-Connector actions are deliberately absent from this command list and remain behind #12.
+`connector.sync` accepts `mode=incremental|resync|rebuild`, defaulting to `incremental`.
+
+Connector actions are deliberately absent from this command list and remain behind #12. Event
+subscription hooks are provider/service contracts rather than a generic northbound execution bypass.
 
 ## File and knowledge boundaries
 
@@ -222,7 +260,7 @@ Typical mappings are:
 - missing adapter or disabled/unhealthy connection -> `UNAVAILABLE`;
 - authorization rejection -> `FORBIDDEN`;
 - invalid checkpoint/request -> `INVALID_REQUEST`;
-- adapter returning mismatched canonical identity -> `CONTRACT_VIOLATION`;
+- adapter returning mismatched canonical identity or unsafe metadata -> `CONTRACT_VIOLATION`;
 - unclassified backend failure -> `BACKEND_ERROR`.
 
 Provider SDK exception types must not cross the connector boundary.
