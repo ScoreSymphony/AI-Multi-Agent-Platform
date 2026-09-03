@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from .plugin_api import ControlPlane as _PluginControlPlane
+from .terminal_composition import ControlPlane as _TerminalControlPlane
 from .terminal_composition import (
-    ControlPlane as _TerminalControlPlane,
     ControlPlaneASGI,
     ControlPlaneHTTP,
     build_openapi,
