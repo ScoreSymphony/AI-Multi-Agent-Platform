@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
-from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+from jsonschema.exceptions import ValidationError  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
@@ -92,7 +92,7 @@ def validate_manifest_document(document: object) -> None:
     """Validate a serialized manifest before constructing runtime objects."""
 
     try:
-        Draft202012Validator(cast(dict[str, Any], PLUGIN_MANIFEST_SCHEMA)).validate(document)
+        Draft202012Validator(PLUGIN_MANIFEST_SCHEMA).validate(document)
     except ValidationError as exc:
         path = ".".join(str(part) for part in exc.absolute_path)
         detail = f" at {path}" if path else ""
