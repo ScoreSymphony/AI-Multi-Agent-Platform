@@ -87,9 +87,7 @@ class InMemoryConnectorRepository(ConnectorRepository):
                 ErrorCode.NOT_FOUND, f"connection not found: {connection_id}"
             ) from exc
 
-    async def list_connections(
-        self, *, project_id: str | None = None
-    ) -> tuple[Connection, ...]:
+    async def list_connections(self, *, project_id: str | None = None) -> tuple[Connection, ...]:
         if project_id is not None:
             validate_id(project_id, "project")
         items = (
@@ -102,9 +100,7 @@ class InMemoryConnectorRepository(ConnectorRepository):
     async def delete_connection(self, connection_id: str) -> None:
         validate_id(connection_id, "connection")
         if connection_id not in self._connections:
-            raise ContractError(
-                ErrorCode.NOT_FOUND, f"connection not found: {connection_id}"
-            )
+            raise ContractError(ErrorCode.NOT_FOUND, f"connection not found: {connection_id}")
         del self._connections[connection_id]
         for key in tuple(self._checkpoints):
             if key[0] == connection_id:
