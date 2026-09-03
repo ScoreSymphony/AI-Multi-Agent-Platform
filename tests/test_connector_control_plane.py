@@ -31,7 +31,12 @@ def _headers(key: str | None = None) -> dict[str, str]:
     return headers
 
 
-def _stack() -> tuple[ControlPlane, ControlPlaneHTTP, LocalSecretProvider, ConnectorService]:
+async def _stack() -> tuple[
+    ControlPlane,
+    ControlPlaneHTTP,
+    LocalSecretProvider,
+    ConnectorService,
+]:
     kernel_repository = InMemoryKernelRepository()
     kernel = PlatformKernel(
         orchestrator=FakeOrchestrator(),
@@ -42,14 +47,14 @@ def _stack() -> tuple[ControlPlane, ControlPlaneHTTP, LocalSecretProvider, Conne
     secrets = LocalSecretProvider()
     provider = ReferenceConnectorProvider(secrets)
     service = ConnectorService(InMemoryConnectorRepository(), ConnectorRegistry())
-    asyncio.run(service.register_provider(provider))
+    await service.register_provider(provider)
     register_connector_control_plane(control_plane, service)
     return control_plane, ControlPlaneHTTP(control_plane), secrets, service
 
 
 def test_control_plane_exposes_canonical_connector_resources_and_lifecycle() -> None:
     async def scenario() -> None:
-        control_plane, http, secrets, _ = _stack()
+        control_plane, http, secrets, _ = await _stack()
         assert "connector-definitions" in control_plane.registered_collections
         assert "connections" in control_plane.registered_collections
         assert "connection.create" in control_plane.registered_commands
@@ -145,7 +150,7 @@ def test_control_plane_exposes_canonical_connector_resources_and_lifecycle() -> 
 
 def test_control_plane_rejects_embedded_plaintext_credential_fields() -> None:
     async def scenario() -> None:
-        _, http, _, _ = _stack()
+        _, http, _, _ = await _stack()
         response = await http.handle(
             HTTPRequest(
                 method="POST",
