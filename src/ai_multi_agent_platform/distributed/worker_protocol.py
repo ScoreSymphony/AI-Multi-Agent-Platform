@@ -135,8 +135,7 @@ class WorkerProtocolService:
                 "use explicit deregistration before removing Workers"
             )
         existing_workers = {
-            worker.worker_id: self._optional_worker(worker.worker_id)
-            for worker in request.workers
+            worker.worker_id: self._optional_worker(worker.worker_id) for worker in request.workers
         }
 
         await self._authorize(
