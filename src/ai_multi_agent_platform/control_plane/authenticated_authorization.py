@@ -8,6 +8,7 @@ from ai_multi_agent_platform.contracts.types import (
     OperationContext,
     OperationControl,
 )
+from ai_multi_agent_platform.security.authorization import infer_actor_identity
 
 from .hardened_automation_api import ControlPlane as _CurrentControlPlane
 from .models import RequestContext
@@ -16,9 +17,11 @@ from .models import RequestContext
 class ControlPlane(_CurrentControlPlane):
     """Propagate authenticated actor metadata into the canonical #15 request.
 
-    Authentication establishes identity and credential-local constraints.  This class
+    Authentication establishes identity and credential-local constraints. This class
     transports that trusted context; the configured authorization provider remains the
-    authority that decides whether an operation is allowed.
+    authority that decides whether an operation is allowed. Legacy internal contexts that
+    predate explicit actor types retain the canonical prefix-based inference previously
+    performed by the #15 bridge.
     """
 
     async def _authorization_decision(
@@ -36,10 +39,13 @@ class ControlPlane(_CurrentControlPlane):
             return None
         effective_owner_type = owner_type if owner_type is not None else context.actor.owner_type
         effective_owner_id = owner_id if owner_id is not None else context.actor.owner_id
+        actor_type = context.actor.actor_type
+        if actor_type is None:
+            actor_type = infer_actor_identity(context.actor.principal_ref).actor_type.value
         return await self._authorization.authorize(
             AuthorizationRequest(
                 principal_ref=context.actor.principal_ref,
-                actor_type=context.actor.actor_type or "service",
+                actor_type=actor_type,
                 action=action,
                 resource_ref=resource_ref,
                 context=OperationContext(
