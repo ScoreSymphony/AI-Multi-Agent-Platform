@@ -8,6 +8,9 @@ from ai_multi_agent_platform.contracts import (
     HealthStatus,
     ProviderDescriptor,
 )
+from ai_multi_agent_platform.contracts.authorization import (
+    AuthorizationRequest as CanonicalAuthorizationRequest,
+)
 from ai_multi_agent_platform.contracts.types import AuthorizationRequest as BaseAuthorizationRequest
 
 from .authorization import (
@@ -44,6 +47,14 @@ class ControlPlaneAuthorizationBridge(AuthorizationProvider):
         action, resource_type = canonical_control_plane_vocabulary(request.action)
         task_id = request.resource_ref if request.resource_ref.startswith("task_") else None
         run_id = request.resource_ref if request.resource_ref.startswith("run_") else None
+        request_payload_digest = (
+            request.request_payload_digest
+            if isinstance(request, CanonicalAuthorizationRequest)
+            else None
+        )
+        proposed_payload = {"northbound_action": request.action}
+        if request_payload_digest is not None:
+            proposed_payload["request_payload_sha256"] = request_payload_digest
         proposed = ProposedAction(
             AuthorizationContext(
                 actor=infer_actor_identity(request.principal_ref),
@@ -55,7 +66,7 @@ class ControlPlaneAuthorizationBridge(AuthorizationProvider):
                 run_id=run_id,
                 side_effect=request.action,
             ),
-            payload={"northbound_action": request.action},
+            payload=proposed_payload,
         )
         return await self._gate.decide(proposed)
 
