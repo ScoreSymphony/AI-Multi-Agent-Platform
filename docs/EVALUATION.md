@@ -11,6 +11,7 @@ The platform owns these concepts:
 - `ConfigurationSnapshot`: immutable version references for the platform build and the participating agent, model, provider, orchestrator, executor, prompt, capability, policy and environment identities.
 - `EvaluationRun`: one execution of a suite/configuration snapshot with repetitions, optional seed and optional accepted baseline run.
 - `EvaluationAttempt`: one specific case repetition, with stable attempt identity, repetition index and resolved seed.
+- `EvaluationExecutionContext`: attempt-scoped execution state produced by isolation and consumed explicitly by the case executor. It may carry canonical Workspace/Snapshot identity plus an opaque materialization token, but never a host filesystem path as canonical identity.
 - `EvaluationResult`: one evaluator's result for one case attempt, including pass/fail/error, optional score, assertion evidence, metrics and canonical task/run/artifact/telemetry references.
 - `RegressionPolicy`: versioned regression rules and thresholds.
 - `ComparisonReport`: regressions and improvements discovered against a baseline.
@@ -34,7 +35,7 @@ Rubric criteria are canonical case data. A later rubric/model evaluator adapter 
 `EvaluationRunner` owns suite-level evaluation execution without owning platform Task/Run lifecycle semantics. It consumes two replaceable boundaries:
 
 - `EvaluationCaseExecutor`, which executes one case attempt and returns an `EvaluationObservation`;
-- `EvaluationIsolation`, which provides explicit `reset_case -> setup_case -> execute -> teardown_case` isolation around every attempt.
+- `EvaluationIsolation`, which provides explicit `reset_case -> setup_case -> execute -> teardown_case` isolation around every attempt and returns the attempt-scoped `EvaluationExecutionContext`.
 
 The runner:
 
@@ -42,13 +43,34 @@ The runner:
 - expands every case into the requested number of repetitions;
 - derives repetition seeds deterministically as `base_seed + repetition_index` when a base seed is supplied;
 - creates an `EvaluationAttempt` for every case/repetition pair;
+- obtains an explicit execution context from isolation and passes the same context to the executor and teardown path;
 - enforces `EvaluationCase.timeout_seconds` around the executor call;
 - contains case execution, timeout and teardown failures as explicit error results rather than silently losing the suite history;
 - persists results as they are produced;
 - marks the run completed only after all attempts have been handled;
 - optionally compares a completed run to an accepted baseline under an explicit `RegressionPolicy`.
 
-`NoopEvaluationIsolation` exists only for already-isolated executors and tests. It is not a substitute for the remaining workspace-backed production isolation implementation.
+`NoopEvaluationIsolation` exists only for already-isolated executors and tests. It returns an empty attempt-scoped execution context rather than creating mutable state.
+
+## Workspace-backed isolation
+
+`WorkspaceEvaluationIsolation` is the reference production-style isolation implementation. It reuses the canonical Workspace subsystem rather than maintaining evaluation-private directories or snapshots.
+
+For every attempt it:
+
+1. resolves declared `EvaluationCase.fixtures` through the replaceable `EvaluationFixtureResolver` boundary;
+2. creates a fresh `WorkspaceType.ISOLATED_RUN` workspace with `WorkspaceRetention.EPHEMERAL`;
+3. creates/uses the workspace's immutable canonical base `WorkspaceSnapshot`;
+4. materializes that exact snapshot into a fresh bounded execution workspace;
+5. returns canonical `workspace_id`, `workspace_snapshot_id`, snapshot checksum and the opaque materialization/execution token in `EvaluationExecutionContext`;
+6. releases the materialization after the attempt;
+7. deliberately does **not** commit attempt mutations back into the canonical workspace snapshot.
+
+This gives each repetition a clean starting state. A later repetition rehydrates the fixture from canonical file evidence instead of inheriting files modified by the previous attempt. Tests explicitly mutate a fixture in one materialization and verify that the next attempt sees the original fixture bytes.
+
+`EvaluationFixture` stores fixture IDs plus canonical `WorkspaceFile`/`WorkspaceSourceRef` evidence. `StaticEvaluationFixtureResolver` is the deterministic checked-in/reference resolver. Cases that declare fixture IDs fail explicitly if no resolver is configured; fixture requirements are never silently ignored.
+
+The opaque `execution_workspace` token is implementation-local routing information. It is not a canonical Workspace ID and must not be persisted or compared as if it were one.
 
 ## Canonical reference executor
 
@@ -56,18 +78,23 @@ The runner:
 
 1. create the canonical Task;
 2. move the Task to ready;
-3. start the Task, which creates and starts the canonical Run;
-4. refresh the Run through the lifecycle backend until it reaches a terminal canonical status;
-5. read the final Task, Run and canonical Event history;
-6. project backend-neutral evaluation evidence.
+3. plan when needed;
+4. create the canonical Run in queued state;
+5. when a workspace-backed execution context is present, bind that Run to the exact canonical Workspace/Snapshot through `RunWorkspaceBindingRepository`;
+6. start the Run only after the binding exists;
+7. refresh the Run through the lifecycle backend until it reaches a terminal canonical status;
+8. read the final Task, Run and canonical Event history;
+9. project backend-neutral evaluation evidence.
 
-The resulting `EvaluationObservation` includes the canonical Task/Run IDs and statuses, Run output, Run attempt and dispatch-attempt counts, Artifact and Result references and canonical event types. This makes behavior such as retries, lifecycle transitions and artifact/result production assertable without exposing backend-private execution objects.
+The resulting `EvaluationObservation` includes the canonical Task/Run IDs and statuses, Run output, Run attempt and dispatch-attempt counts, Artifact and Result references, canonical event types and canonical Workspace/Snapshot identity when one was bound. This makes behavior such as retries, lifecycle transitions, workspace provenance and artifact/result production assertable without exposing backend-private execution objects.
+
+The reference executor validates workspace owner/project scope against its configured Task owner/project. Workspace-backed kernel execution requires the canonical `RunWorkspaceBindingRepository`; it does not hide workspace identity in evaluator data or mutate a lifecycle backend's private workspace setting.
 
 ## Observation contract
 
 Evaluators consume `EvaluationObservation`, not provider-private runtime objects. It can carry structured result/behavior data, metrics, Task/Run IDs, Artifact references, telemetry references, selected canonical model/provider IDs, capability references and canonical event types.
 
-This permits assertions over non-output behavior such as selected models/tools, approvals, retries, event sequences and artifact provenance once the corresponding runtime layers project those observations into this contract.
+This permits assertions over non-output behavior such as selected models/tools, approvals, retries, event sequences, workspace provenance and artifact provenance once the corresponding runtime layers project those observations into this contract.
 
 ## Configuration snapshots
 
@@ -106,6 +133,8 @@ Accordingly, the current `EvaluationRunner` allows automatic baseline comparison
 
 `EvaluationRepository` is the replaceable storage boundary. The initial `InMemoryEvaluationRepository` stores runs, case/evaluator results and comparison reports and is suitable for unit tests and local/reference runs. Production persistence must retain run summaries, case results, configuration metadata, comparison/regression findings and artifact/log references without changing canonical models.
 
+Workspace persistence remains owned by the Workspace subsystem. Evaluation persistence should reference canonical Workspace/Snapshot/Artifact evidence rather than duplicate workspace bytes or materialization paths.
+
 ## Current issue #19 implementation status
 
 The implementation is being landed progressively before Control Plane and CLI surfaces, following the repository merge order for canonical contracts and reference behavior first.
@@ -121,21 +150,25 @@ Implemented:
 - rubric/model-evaluator boundary metadata;
 - evaluator failure containment;
 - replaceable evaluation-case executor contract;
-- explicit per-attempt isolation lifecycle contract;
+- explicit per-attempt isolation lifecycle and execution-context contract;
 - suite runner with repetitions, deterministic seed derivation, timeouts and contained execution errors;
 - reference executor through the real canonical PlatformKernel Task/Run lifecycle;
-- Task/Run/output/Artifact/Result/Event projection into `EvaluationObservation`;
+- canonical Run -> WorkspaceSnapshot binding before run start;
+- workspace-backed isolated-run creation/materialization/release;
+- replaceable fixture resolution and deterministic static fixture resolver;
+- explicit no-commit isolation semantics for attempt mutations;
+- Task/Run/output/Artifact/Result/Event/Workspace projection into `EvaluationObservation`;
 - replaceable result/comparison persistence contract plus in-memory reference store;
 - baseline comparison/regression engine matched by case/evaluator identity;
 - explicit rejection of unaggregated repeated results in baseline comparison;
 - versioned regression policy model;
 - no-paid-service policy example;
 - tests for pass/fail, baseline comparison, thresholds, critical/security tags, snapshot integrity, model/provider version differences and evaluator failure handling;
-- tests for repetition/seed propagation, isolation ordering, execution-error containment, comparison persistence and real-kernel reference execution.
+- tests for repetition/seed propagation, isolation ordering, execution-error containment, comparison persistence and real-kernel reference execution;
+- tests proving cross-attempt workspace contamination is prevented and Run workspace binding exists before lifecycle start.
 
 Remaining work for full issue completion:
 
-- workspace-backed `EvaluationIsolation` implementation with fixture preparation, cleanup and contamination tests;
 - durable evaluation persistence implementation and historical/trend queries;
 - explicit stochastic aggregation/comparison policies for repeated runs;
 - rubric scorer and optional model-judge adapter implementation;
