@@ -53,6 +53,13 @@ class LiteLLMMode(StrEnum):
     PROXY = "proxy"
 
 
+class LiteLLMTelemetryMode(StrEnum):
+    """Adapter-owned telemetry/logging metadata policy."""
+
+    PLATFORM_ONLY = "platform_only"
+    DISABLED = "disabled"
+
+
 @dataclass(frozen=True, slots=True)
 class LiteLLMProviderConfig:
     """Configuration for one optional LiteLLM provider instance.
@@ -69,6 +76,8 @@ class LiteLLMProviderConfig:
     base_url: str | None = None
     api_key_env: str | None = None
     timeout_seconds: float = 120.0
+    max_retries: int = 0
+    telemetry_mode: LiteLLMTelemetryMode = LiteLLMTelemetryMode.PLATFORM_ONLY
     extra_headers: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -80,6 +89,10 @@ class LiteLLMProviderConfig:
             raise ValueError("model mappings must contain non-blank IDs and LiteLLM names")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be greater than zero")
+        if isinstance(self.max_retries, bool) or self.max_retries < 0:
+            raise ValueError("max_retries must be a non-negative integer")
+        if not isinstance(self.telemetry_mode, LiteLLMTelemetryMode):
+            raise ValueError("telemetry_mode must be a LiteLLMTelemetryMode")
         if self.base_url is not None and not self.base_url.strip():
             raise ValueError("base_url must not be blank when provided")
         if self.mode is LiteLLMMode.PROXY and self.base_url is None:
@@ -91,6 +104,101 @@ class LiteLLMProviderConfig:
 
         object.__setattr__(self, "models", MappingProxyType(dict(self.models)))
         object.__setattr__(self, "extra_headers", MappingProxyType(dict(self.extra_headers)))
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, object]) -> LiteLLMProviderConfig:
+        """Build validated adapter configuration from resolved JSON-like values."""
+
+        allowed = {
+            "provider_id",
+            "mode",
+            "models",
+            "enabled",
+            "base_url",
+            "api_key_env",
+            "timeout_seconds",
+            "max_retries",
+            "telemetry_mode",
+            "extra_headers",
+        }
+        unknown = sorted(set(values) - allowed)
+        if unknown:
+            raise ValueError(f"unknown LiteLLM configuration fields: {unknown!r}")
+
+        def string_field(name: str, *, required: bool = False) -> str | None:
+            raw = values.get(name)
+            if raw is None:
+                if required:
+                    raise ValueError(f"{name} is required")
+                return None
+            if not isinstance(raw, str) or not raw.strip():
+                raise ValueError(f"{name} must be a non-blank string")
+            return raw
+
+        provider_id = string_field("provider_id", required=True)
+        mode_value = string_field("mode", required=True)
+        assert provider_id is not None
+        assert mode_value is not None
+        try:
+            mode = LiteLLMMode(mode_value)
+        except ValueError as exc:
+            raise ValueError(f"unsupported LiteLLM mode: {mode_value}") from exc
+
+        models_raw = values.get("models")
+        if not isinstance(models_raw, Mapping):
+            raise ValueError(
+                "models must be an object mapping canonical IDs to provider model names"
+            )
+        models: dict[str, str] = {}
+        for raw_key, raw_value in models_raw.items():
+            if not isinstance(raw_key, str) or not isinstance(raw_value, str):
+                raise ValueError("models must contain string keys and values")
+            models[raw_key] = raw_value
+
+        enabled = values.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ValueError("enabled must be a boolean")
+
+        timeout_raw = values.get("timeout_seconds", 120.0)
+        if isinstance(timeout_raw, bool) or not isinstance(timeout_raw, (int, float)):
+            raise ValueError("timeout_seconds must be numeric")
+
+        retries_raw = values.get("max_retries", 0)
+        if isinstance(retries_raw, bool) or not isinstance(retries_raw, int):
+            raise ValueError("max_retries must be an integer")
+
+        telemetry_raw = values.get(
+            "telemetry_mode",
+            LiteLLMTelemetryMode.PLATFORM_ONLY.value,
+        )
+        if not isinstance(telemetry_raw, str):
+            raise ValueError("telemetry_mode must be a string")
+        try:
+            telemetry_mode = LiteLLMTelemetryMode(telemetry_raw)
+        except ValueError as exc:
+            raise ValueError(f"unsupported LiteLLM telemetry_mode: {telemetry_raw}") from exc
+
+        headers_raw = values.get("extra_headers", {})
+        if not isinstance(headers_raw, Mapping):
+            raise ValueError("extra_headers must be an object")
+        extra_headers: dict[str, str] = {}
+        for raw_key, raw_value in headers_raw.items():
+            if not isinstance(raw_key, str) or not isinstance(raw_value, str):
+                raise ValueError("extra_headers must contain string keys and values")
+            extra_headers[raw_key] = raw_value
+
+        return cls(
+            provider_id=provider_id,
+            mode=mode,
+            models=models,
+            enabled=enabled,
+            base_url=string_field("base_url"),
+            api_key_env=string_field("api_key_env"),
+            timeout_seconds=float(timeout_raw),
+            max_retries=retries_raw,
+            telemetry_mode=telemetry_mode,
+            extra_headers=extra_headers,
+        )
 
 
 class LiteLLMModelProvider(ModelProvider):
@@ -120,6 +228,10 @@ class LiteLLMModelProvider(ModelProvider):
                 ),
                 transport=proxy_transport,
             )
+        elif config.enabled and completion is None:
+            # Core imports remain dependency-free, but an enabled library
+            # provider must be executable before it can be registered.
+            self._completion = self._resolve_completion()
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -129,6 +241,8 @@ class LiteLLMModelProvider(ModelProvider):
             "configured_model_count": len(self.config.models),
             "enabled": self.config.enabled,
             "dependency": "optional",
+            "max_retries": self.config.max_retries,
+            "telemetry_mode": self.config.telemetry_mode.value,
         }
         if self.config.base_url is not None:
             metadata_values["base_url"] = self.config.base_url
@@ -212,6 +326,7 @@ class LiteLLMModelProvider(ModelProvider):
             "model": native_model,
             "messages": self._messages(request_data),
             "stream": False,
+            "num_retries": self.config.max_retries,
         }
         for key in ("temperature", "top_p", "max_tokens", "seed", "stop"):
             value = request_data.requirements.get(key)
@@ -295,15 +410,18 @@ class LiteLLMModelProvider(ModelProvider):
         if version is not None:
             adapter_values["litellm_version"] = version
 
+        adapter_metadata: list[AdapterMetadata] = [
+            AdapterMetadata(namespace="model-protocol", values=protocol_values)
+        ]
+        if self.config.telemetry_mode is LiteLLMTelemetryMode.PLATFORM_ONLY:
+            adapter_metadata.insert(0, AdapterMetadata(namespace="litellm", values=adapter_values))
+
         return ModelResponse(
             request_id=request_data.request_id,
             text=content,
             model_ref=canonical_model_id,
             usage=usage,
-            adapter_metadata=(
-                AdapterMetadata(namespace="litellm", values=adapter_values),
-                AdapterMetadata(namespace="model-protocol", values=protocol_values),
-            ),
+            adapter_metadata=tuple(adapter_metadata),
         )
 
     def _canonical_model_id(self, request_data: ModelRequest) -> str:
@@ -468,6 +586,9 @@ class LiteLLMModelProvider(ModelProvider):
         response: ModelResponse,
         request_data: ModelRequest,
     ) -> ModelResponse:
+        if self.config.telemetry_mode is LiteLLMTelemetryMode.DISABLED:
+            return response
+
         values: dict[str, JsonValue] = {
             "mode": LiteLLMMode.PROXY.value,
             "correlation_id": request_data.context.correlation_id,
@@ -547,18 +668,22 @@ class LiteLLMModelProvider(ModelProvider):
             code = ErrorCode.TRANSIENT_FAILURE
             retryable = True
 
+        adapter_metadata: tuple[AdapterMetadata, ...] = ()
+        if self.config.telemetry_mode is LiteLLMTelemetryMode.PLATFORM_ONLY:
+            adapter_metadata = (
+                AdapterMetadata(
+                    namespace="litellm",
+                    values={"exception_type": name, "mode": self.config.mode.value},
+                ),
+            )
+
         return ContractError(
             code,
             f"LiteLLM request failed: {name}",
             retryable=retryable,
             provider_id=self.config.provider_id,
             details={"exception_type": name},
-            adapter_metadata=(
-                AdapterMetadata(
-                    namespace="litellm",
-                    values={"exception_type": name, "mode": self.config.mode.value},
-                ),
-            ),
+            adapter_metadata=adapter_metadata,
         )
 
     def _structured_output(self, request_data: ModelRequest, content: str) -> JsonValue:
