@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { ControlPlaneClient } from "../api/client";
 import type { CanonicalReference, ReferenceCollection } from "../api/references";
 import type { Page } from "../api/types";
+import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
+import { PaginationControls } from "../components/Pagination";
 import {
   CanonicalId,
   Card,
@@ -21,7 +23,10 @@ export function ReferencesPage({ client }: { client: ControlPlaneClient }) {
   const [page, setPage] = useState<Page<CanonicalReference> | null>(null);
   const [totals, setTotals] = useState<Record<ReferenceCollection, number> | null>(null);
   const [query, setQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const queryKey = `${collection}:${appliedQuery}`;
+  const pagination = useCursorPagination(queryKey);
 
   const loadTotals = useCallback(async () => {
     const pages = await Promise.all(collections.map((item) => client.listReferences(item, { limit: 1 })));
@@ -33,23 +38,24 @@ export function ReferencesPage({ client }: { client: ControlPlaneClient }) {
     });
   }, [client]);
 
-  const load = useCallback(async (nextQuery: string) => {
+  const load = useCallback(async () => {
     try {
       const next = await client.listReferences(collection, {
         limit: 100,
-        q: nextQuery.trim() || undefined,
+        cursor: pagination.cursor,
+        q: appliedQuery || undefined,
       });
       setPage(next);
       setError(null);
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client, collection]);
+  }, [appliedQuery, client, collection, pagination.cursor]);
 
   useEffect(() => {
     setPage(null);
-    void load("");
-  }, [collection, load]);
+    void load();
+  }, [load]);
 
   useEffect(() => {
     void loadTotals().catch(() => setTotals(null));
@@ -57,7 +63,35 @@ export function ReferencesPage({ client }: { client: ControlPlaneClient }) {
 
   const search = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void load(query);
+    const normalized = query.trim();
+    if (normalized !== appliedQuery) {
+      setAppliedQuery(normalized);
+      return;
+    }
+    if (pagination.cursor) {
+      pagination.reset();
+      return;
+    }
+    void load();
+  };
+
+  const clear = () => {
+    setQuery("");
+    if (appliedQuery) {
+      setAppliedQuery("");
+      return;
+    }
+    if (pagination.cursor) {
+      pagination.reset();
+      return;
+    }
+    void load();
+  };
+
+  const selectCollection = (item: ReferenceCollection) => {
+    setQuery("");
+    setAppliedQuery("");
+    setCollection(item);
   };
 
   return (
@@ -83,7 +117,7 @@ export function ReferencesPage({ client }: { client: ControlPlaneClient }) {
             <button
               className={item === collection ? "primary" : undefined}
               key={item}
-              onClick={() => { setQuery(""); setCollection(item); }}
+              onClick={() => selectCollection(item)}
               type="button"
             >
               {labelFor(item)}
@@ -93,15 +127,24 @@ export function ReferencesPage({ client }: { client: ControlPlaneClient }) {
         <form className="filter-row" onSubmit={search}>
           <label>Search<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Canonical ID or task ID" /></label>
           <button type="submit">Search</button>
-          <button type="button" onClick={() => { setQuery(""); void load(""); }}>Clear</button>
+          <button type="button" onClick={clear}>Clear</button>
         </form>
       </Card>
 
-      {error ? <ErrorState error={error} onRetry={() => void load(query)} /> : null}
+      {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
       <Card title={labelFor(collection)}>
         {!page ? <LoadingState /> : <ReferenceTable items={page.items} />}
       </Card>
-      <div className="actions"><button onClick={() => void load(query)}>Refresh</button></div>
+      {page ? (
+        <PaginationControls
+          page={page}
+          pageNumber={pagination.pageNumber}
+          hasPrevious={pagination.hasPrevious}
+          onPrevious={pagination.previous}
+          onRefresh={() => void load()}
+          onNext={() => pagination.next(page.next_cursor)}
+        />
+      ) : null}
     </div>
   );
 }
