@@ -52,6 +52,13 @@ SUPPORTED_BUDGET_SCOPE_TYPES = frozenset(
 )
 
 
+class AggregationMode(StrEnum):
+    """How repeated records of one canonical metric combine."""
+
+    ADDITIVE = "additive"
+    LATEST = "latest"
+
+
 class MeasurementQuality(StrEnum):
     """How trustworthy the recorded quantity is and where it came from."""
 
@@ -124,6 +131,7 @@ class UsageRecord:
     source: str
     quantity: float | None = None
     scope: UsageScope = field(default_factory=UsageScope)
+    aggregation_mode: AggregationMode = AggregationMode.ADDITIVE
     id: str = field(default_factory=lambda: _new_id("usage"))
     timestamp: datetime = field(default_factory=utc_now)
     started_at: datetime | None = None
@@ -206,6 +214,7 @@ class UsageAggregate:
     record_count: int
     unavailable_count: int
     quality_counts: dict[MeasurementQuality, int]
+    aggregation_mode: AggregationMode = AggregationMode.ADDITIVE
     start: datetime | None = None
     end: datetime | None = None
 
