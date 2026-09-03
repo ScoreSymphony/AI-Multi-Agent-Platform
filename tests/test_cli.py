@@ -299,8 +299,9 @@ def test_cli_status_doctor_project_workspace_and_canonical_error_output(tmp_path
 
     stdout = StringIO()
     stderr = StringIO()
+    missing_task_id = "task_00000000-0000-0000-0000-000000000001"
     code = run_cli(
-        ["--config", str(config), "--json", "task", "show", "task_missing"],
+        ["--config", str(config), "--json", "task", "show", missing_task_id],
         transport=transport,
         stdout=stdout,
         stderr=stderr,
