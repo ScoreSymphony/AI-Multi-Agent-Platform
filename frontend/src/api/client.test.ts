@@ -173,7 +173,9 @@ describe("ControlPlaneClient", () => {
 
   it("keeps usage aggregates and budgets on their canonical extension routes", async () => {
     const page = { items: [], next_cursor: null, total: 0, limit: 200 };
-    const fetchSpy = vi.fn().mockResolvedValue(new Response(JSON.stringify(page), { status: 200 }));
+    const fetchSpy = vi.fn().mockImplementation(
+      () => Promise.resolve(new Response(JSON.stringify(page), { status: 200 })),
+    );
     const client = new ControlPlaneClient({ fetchImpl: fetchSpy as unknown as typeof fetch });
 
     await client.listUsageAggregates({ limit: 200 });
