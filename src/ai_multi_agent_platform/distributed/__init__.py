@@ -41,6 +41,15 @@ from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
 from .scheduler import DeterministicScheduler, NoEligibleWorkerError, ScheduledPlacement
 from .worker import LocalWorker, WorkerDispatcher
+from .worker_protocol import (
+    WorkerHeartbeatRequest,
+    WorkerProtocolAuthorizationError,
+    WorkerProtocolError,
+    WorkerProtocolReceipt,
+    WorkerProtocolService,
+    WorkerRequestAuthenticator,
+    WorkerRequestCredentials,
+)
 
 __all__ = [
     "DISTRIBUTED_ADMIN_COMMANDS",
@@ -78,10 +87,17 @@ __all__ = [
     "ScheduledPlacement",
     "SchedulingDecision",
     "WorkerDispatcher",
+    "WorkerHeartbeatRequest",
     "WorkerJobRequest",
     "WorkerJobResourceService",
     "WorkerJobResult",
+    "WorkerProtocolAuthorizationError",
+    "WorkerProtocolError",
+    "WorkerProtocolReceipt",
+    "WorkerProtocolService",
     "WorkerRecord",
+    "WorkerRequestAuthenticator",
+    "WorkerRequestCredentials",
     "WorkerResourceService",
     "WorkerStatus",
     "register_distributed_control_plane",
