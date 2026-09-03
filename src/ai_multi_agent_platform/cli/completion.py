@@ -119,31 +119,31 @@ def _matching(values: Iterable[str], prefix: str) -> tuple[str, ...]:
 
 
 def _bash_script() -> str:
-    return r'''_platform_complete() {
+    return r"""_platform_complete() {
     local IFS=$'\n'
     COMPREPLY=( $(platform-completion candidates "${COMP_WORDS[@]:1}") )
 }
-complete -F _platform_complete platform'''
+complete -F _platform_complete platform"""
 
 
 def _zsh_script() -> str:
-    return r'''_platform_complete() {
+    return r"""_platform_complete() {
     local -a replies
     replies=("${(@f)$(platform-completion candidates "${words[@]:2}")}")
     compadd -- $replies
 }
-compdef _platform_complete platform'''
+compdef _platform_complete platform"""
 
 
 def _fish_script() -> str:
-    return r'''function __platform_complete
+    return r"""function __platform_complete
     set -l tokens (commandline -opc)
     if test (count $tokens) -gt 0
         set -e tokens[1]
     end
     platform-completion candidates $tokens (commandline -ct)
 end
-complete -c platform -f -a '(__platform_complete)' '''.rstrip()
+complete -c platform -f -a '(__platform_complete)' """.rstrip()
 
 
 if __name__ == "__main__":
