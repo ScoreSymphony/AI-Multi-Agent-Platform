@@ -295,7 +295,9 @@ def test_issue_20_manifest_v1_requires_explicit_capability_declarations() -> Non
 
 def test_issue_20_manifest_accepts_transport_and_configuration_extensions() -> None:
     validate_manifest_document(_issue_20_manifest_document(extension_type="transport_provider"))
-    validate_manifest_document(_issue_20_manifest_document(extension_type="configuration_extension"))
+    validate_manifest_document(
+        _issue_20_manifest_document(extension_type="configuration_extension")
+    )
 
 
 def test_issue_20_manifest_model_rejects_duplicate_capability_ids() -> None:
