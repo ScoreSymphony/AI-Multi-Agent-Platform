@@ -592,36 +592,38 @@ def _task_command(
         return CommandResult(client.get("/tasks", query=_page_query(args)))
     if args.command == "create":
         owner_type, owner_id = _owner(args.owner_type, args.owner_id, profile)
-        body: dict[str, JsonValue] = {
+        create_body: dict[str, JsonValue] = {
             "title": args.title,
             "objective": args.objective,
             "owner_type": owner_type,
             "owner_id": owner_id,
         }
         if args.project_id is not None:
-            body["project_id"] = args.project_id
-        return CommandResult(client.post("/tasks", body=body, idempotency_key=args.idempotency_key))
+            create_body["project_id"] = args.project_id
+        return CommandResult(
+            client.post("/tasks", body=create_body, idempotency_key=args.idempotency_key)
+        )
     if args.command == "show":
         return CommandResult(client.get(f"/tasks/{_segment(args.task_id)}"))
     if args.command == "update-management":
         _require_confirmation(args, "update task management", args.task_id)
         changes = parse_changes(args.changes_json)
-        body: dict[str, JsonValue] = {"resource_ref": args.task_id, **changes}
+        update_body: dict[str, JsonValue] = {"resource_ref": args.task_id, **changes}
         return CommandResult(
             client.post(
                 "/commands/task-management.update",
-                body=body,
+                body=update_body,
                 idempotency_key=args.idempotency_key,
             )
         )
     if args.command == "bulk-update-management":
         _require_confirmation(args, "bulk update task management", "tasks")
         updates = parse_updates(args.updates_json)
-        body: dict[str, JsonValue] = {"resource_ref": "tasks", "updates": updates}
+        bulk_body: dict[str, JsonValue] = {"resource_ref": "tasks", "updates": updates}
         return CommandResult(
             client.post(
                 "/commands/task-management.bulk-update",
-                body=body,
+                body=bulk_body,
                 idempotency_key=args.idempotency_key,
             )
         )
