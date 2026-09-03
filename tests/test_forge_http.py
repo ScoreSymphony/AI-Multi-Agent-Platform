@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 
+import pytest
+
 from ai_multi_agent_platform.adapters.forge import ForgeClientRequest, ForgeExecutionStatus
 from ai_multi_agent_platform.adapters.forge_http import (
     ForgeHttpClient,
@@ -109,6 +111,7 @@ def test_health_reports_configured_sidecar_executor() -> None:
     assert health.healthy is True
     assert health.capabilities == ("execute",)
     assert health.metadata["protocol_version"] == "forge-executor-sidecar/v1"
+    assert health.metadata["protocol_compatible"] is True
     assert health.metadata["executor_type"] == "null"
 
 
@@ -160,3 +163,60 @@ def test_health_is_false_when_configured_executor_is_not_allowed() -> None:
 
     health = asyncio.run(client(RestrictedTransport()).health())
     assert health.healthy is False
+
+
+def test_health_is_false_for_incompatible_protocol() -> None:
+    class IncompatibleTransport(ScriptedTransport):
+        async def request_json(
+            self,
+            method: str,
+            url: str,
+            *,
+            payload: Mapping[str, JsonValue] | None,
+            timeout_seconds: float,
+        ) -> ForgeHttpResponse:
+            if url.endswith("/healthz"):
+                return ForgeHttpResponse(
+                    200,
+                    {
+                        "healthy": True,
+                        "protocol_version": "forge-executor-sidecar/v2",
+                        "allowed_executor_types": ["null"],
+                        "executors": [{"executor_type": "null", "status": "authenticated"}],
+                    },
+                )
+            return await super().request_json(
+                method,
+                url,
+                payload=payload,
+                timeout_seconds=timeout_seconds,
+            )
+
+    health = asyncio.run(client(IncompatibleTransport()).health())
+    assert health.healthy is False
+    assert health.metadata["protocol_compatible"] is False
+
+
+def test_execute_rejects_incompatible_protocol() -> None:
+    class IncompatibleExecutionTransport(ScriptedTransport):
+        async def request_json(
+            self,
+            method: str,
+            url: str,
+            *,
+            payload: Mapping[str, JsonValue] | None,
+            timeout_seconds: float,
+        ) -> ForgeHttpResponse:
+            if method == "POST" and url.endswith("/v1/executions"):
+                snapshot = self._snapshot("succeeded")
+                snapshot["protocol_version"] = "forge-executor-sidecar/v2"
+                return ForgeHttpResponse(202, snapshot)
+            return await super().request_json(
+                method,
+                url,
+                payload=payload,
+                timeout_seconds=timeout_seconds,
+            )
+
+    with pytest.raises(RuntimeError, match="incompatible protocol"):
+        asyncio.run(client(IncompatibleExecutionTransport()).execute(forge_request()))
