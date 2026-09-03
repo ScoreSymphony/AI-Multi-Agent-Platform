@@ -21,6 +21,7 @@ import type {
   TaskManagementChanges,
   TimelineItem,
 } from "./types";
+import type { CanonicalReference, ReferenceCollection } from "./references";
 
 export interface AuthBoundary {
   getAccessToken?: () => Promise<string | null>;
@@ -103,10 +104,7 @@ export class ControlPlaneClient {
     return this.command<CanonicalTask>("/tasks", { method: "POST", body: input });
   }
 
-  updateTaskManagement(
-    taskId: string,
-    changes: TaskManagementChanges,
-  ): Promise<CanonicalTask> {
+  updateTaskManagement(taskId: string, changes: TaskManagementChanges): Promise<CanonicalTask> {
     return this.command<CanonicalTask>("/commands/task-management.update", {
       body: { resource_ref: taskId, ...changes },
     });
@@ -141,9 +139,7 @@ export class ControlPlaneClient {
   }
 
   listTaskRuns(taskId: string, query: ListQuery = {}): Promise<Page<CanonicalRun>> {
-    return this.request<Page<CanonicalRun>>(
-      `/tasks/${encodeURIComponent(taskId)}/runs${toQuery(query)}`,
-    );
+    return this.request<Page<CanonicalRun>>(`/tasks/${encodeURIComponent(taskId)}/runs${toQuery(query)}`);
   }
 
   getRun(runId: string): Promise<CanonicalRun> {
@@ -151,15 +147,19 @@ export class ControlPlaneClient {
   }
 
   cancelRun(taskId: string, runId: string): Promise<CanonicalRun> {
-    return this.command<CanonicalRun>(
-      `/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}:cancel`,
-    );
+    return this.command<CanonicalRun>(`/tasks/${encodeURIComponent(taskId)}/runs/${encodeURIComponent(runId)}:cancel`);
   }
 
   timeline(taskId: string, query: ListQuery = {}): Promise<Page<TimelineItem>> {
-    return this.request<Page<TimelineItem>>(
-      `/tasks/${encodeURIComponent(taskId)}/timeline${toQuery(query)}`,
-    );
+    return this.request<Page<TimelineItem>>(`/tasks/${encodeURIComponent(taskId)}/timeline${toQuery(query)}`);
+  }
+
+  listReferences(collection: ReferenceCollection, query: ListQuery = {}): Promise<Page<CanonicalReference>> {
+    return this.request<Page<CanonicalReference>>(`/${collection}${toQuery(query)}`);
+  }
+
+  getReference(collection: ReferenceCollection, resourceId: string): Promise<CanonicalReference> {
+    return this.request<CanonicalReference>(`/${collection}/${encodeURIComponent(resourceId)}`);
   }
 
   listModels(query: ListQuery = {}): Promise<Page<CanonicalModel>> {
@@ -183,27 +183,19 @@ export class ControlPlaneClient {
   }
 
   getModelProvider(providerId: string): Promise<CanonicalModelProvider> {
-    return this.request<CanonicalModelProvider>(
-      `/model-providers/${encodeURIComponent(providerId)}`,
-    );
+    return this.request<CanonicalModelProvider>(`/model-providers/${encodeURIComponent(providerId)}`);
   }
 
   enableModelProvider(providerId: string): Promise<CanonicalModelProvider> {
-    return this.command<CanonicalModelProvider>(
-      `/model-providers/${encodeURIComponent(providerId)}:enable`,
-    );
+    return this.command<CanonicalModelProvider>(`/model-providers/${encodeURIComponent(providerId)}:enable`);
   }
 
   disableModelProvider(providerId: string): Promise<CanonicalModelProvider> {
-    return this.command<CanonicalModelProvider>(
-      `/model-providers/${encodeURIComponent(providerId)}:disable`,
-    );
+    return this.command<CanonicalModelProvider>(`/model-providers/${encodeURIComponent(providerId)}:disable`);
   }
 
   refreshModelProviderHealth(providerId: string): Promise<CanonicalModelProvider> {
-    return this.command<CanonicalModelProvider>(
-      `/model-providers/${encodeURIComponent(providerId)}:refresh-health`,
-    );
+    return this.command<CanonicalModelProvider>(`/model-providers/${encodeURIComponent(providerId)}:refresh-health`);
   }
 
   listUsageRecords(query: ListQuery = {}): Promise<Page<CanonicalUsageRecord>> {
@@ -218,10 +210,7 @@ export class ControlPlaneClient {
     return this.request<Page<CanonicalUsageBudget>>(`/usage-budgets${toQuery(query)}`);
   }
 
-  private command<T>(
-    path: string,
-    options: { method?: string; body?: unknown } = {},
-  ): Promise<T> {
+  private command<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
     return this.request<T>(path, {
       method: options.method ?? "POST",
       body: options.body,
@@ -231,26 +220,16 @@ export class ControlPlaneClient {
 
   private async request<T>(
     path: string,
-    options: {
-      method?: string;
-      body?: unknown;
-      idempotencyKey?: string;
-    } = {},
+    options: { method?: string; body?: unknown; idempotencyKey?: string } = {},
   ): Promise<T> {
     const headers = new Headers({
       Accept: "application/json",
       "X-Correlation-ID": crypto.randomUUID(),
     });
-    if (options.body !== undefined) {
-      headers.set("Content-Type", "application/json");
-    }
-    if (options.idempotencyKey) {
-      headers.set("Idempotency-Key", options.idempotencyKey);
-    }
+    if (options.body !== undefined) headers.set("Content-Type", "application/json");
+    if (options.idempotencyKey) headers.set("Idempotency-Key", options.idempotencyKey);
     const accessToken = await this.auth?.getAccessToken?.();
-    if (accessToken) {
-      headers.set("Authorization", `Bearer ${accessToken}`);
-    }
+    if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
     const response = await this.fetchImpl(`${this.baseUrl}/api/v1${path}`, {
       method: options.method ?? "GET",
@@ -261,9 +240,7 @@ export class ControlPlaneClient {
 
     const text = await response.text();
     const payload: unknown = text ? safeJson(text) : null;
-    if (!response.ok) {
-      throw new ControlPlaneError(response.status, normalizeError(response, payload));
-    }
+    if (!response.ok) throw new ControlPlaneError(response.status, normalizeError(response, payload));
     return payload as T;
   }
 }
@@ -277,9 +254,7 @@ function safeJson(text: string): unknown {
 }
 
 function normalizeError(response: Response, payload: unknown): APIErrorBody {
-  if (isErrorBody(payload)) {
-    return payload;
-  }
+  if (isErrorBody(payload)) return payload;
   const requestId = response.headers.get("x-request-id") ?? "unknown";
   return {
     code: "invalid_response",
@@ -311,9 +286,7 @@ function toQuery(query: ListQuery): string {
   if (query.sort) params.set("sort", query.sort);
   if (query.direction) params.set("direction", query.direction);
   if (query.q) params.set("q", query.q);
-  for (const [field, value] of Object.entries(query.filters ?? {})) {
-    params.set(`filter[${field}]`, value);
-  }
+  for (const [field, value] of Object.entries(query.filters ?? {})) params.set(`filter[${field}]`, value);
   if (query.fields?.length) params.set("fields", query.fields.join(","));
   const text = params.toString();
   return text ? `?${text}` : "";
