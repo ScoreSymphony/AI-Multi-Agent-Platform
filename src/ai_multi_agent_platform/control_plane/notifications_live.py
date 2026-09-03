@@ -30,13 +30,13 @@ from .http import (
 from .models import API_VERSION, APIException, RequestContext, api_exception_from_contract
 from .notifications_composition import (
     NOTIFICATION_COLLECTION,
+    _recipient_from_context,
+)
+from .notifications_composition import (
     ControlPlane as _BaseControlPlane,
 )
 from .notifications_composition import (
     ControlPlaneHTTP as _BaseControlPlaneHTTP,
-)
-from .notifications_composition import (
-    _recipient_from_context,
 )
 from .notifications_composition import (
     build_openapi as _build_base_openapi,
