@@ -20,6 +20,9 @@ from ai_multi_agent_platform.control_plane import (
 )
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import ConversationService, JsonConversationRepository
+from ai_multi_agent_platform.conversations.model_runtime import (
+    ModelRuntimeConversationResponseProvider,
+)
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
@@ -90,6 +93,8 @@ class SingleNodeDeployment:
     conversations: ConversationService
     agent_runtime: AgentRuntime
     models: ModelRegistry
+    model_runtime: ModelRuntime
+    conversation_responder: ModelRuntimeConversationResponseProvider
     onboarding: OnboardingService
     first_task: FirstRunTaskService
     secrets: SecretProvider | None
@@ -220,7 +225,12 @@ def build_single_node_deployment(
         model_adapters=onboarding_model_adapters,
     )
     onboarding.restore()
+    model_runtime = ModelRuntime(models)
     agent_runtime = AgentRuntime(agents, model_registry=models)
+    conversation_responder = ModelRuntimeConversationResponseProvider(
+        model_runtime,
+        agent_runtime=agent_runtime,
+    )
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
@@ -234,7 +244,7 @@ def build_single_node_deployment(
         delegate=reference_lifecycle,
         tasks=EventSourcedTaskRepository(kernel_repository),
         agents=agent_runtime,
-        models=ModelRuntime(models),
+        models=model_runtime,
     )
     verification_path = database_dir / "verification.sqlite3"
     verification = SqliteVerificationService(verification_path, require_canonical_subjects=True)
@@ -274,6 +284,7 @@ def build_single_node_deployment(
         conversation_service=conversations,
         conversation_agent_service=agents,
         conversation_file_provider=files,
+        conversation_response_provider=conversation_responder,
     )
     register_agent_control_plane(control_plane, agents, runtime=agent_runtime)
     register_standard_agent_control_plane(control_plane, agents)
@@ -303,6 +314,8 @@ def build_single_node_deployment(
         conversations=conversations,
         agent_runtime=agent_runtime,
         models=models,
+        model_runtime=model_runtime,
+        conversation_responder=conversation_responder,
         onboarding=onboarding,
         first_task=first_task,
         secrets=secret_provider,
