@@ -39,6 +39,7 @@ from .provider import ConnectorProvider
 REFERENCE_CONNECTOR_TYPE = "reference.local"
 REFERENCE_CONNECTOR_VERSION = "1.0"
 REFERENCE_ACTION = "connector.reference.echo"
+REFERENCE_INVALID_CREDENTIAL = "invalid-reference-credential"
 
 
 class ReferenceConnectorProvider(ConnectorProvider):
@@ -147,7 +148,7 @@ class ReferenceConnectorProvider(ConnectorProvider):
                 provider_id=self._provider_id,
             )
         reference = connection.secret_references[0]
-        await self._secret_provider.resolve(
+        material = await self._secret_provider.resolve(
             reference,
             SecretAccessContext(
                 consumer_ref=self._provider_id,
@@ -156,6 +157,12 @@ class ReferenceConnectorProvider(ConnectorProvider):
                 purpose="connector-auth",
             ),
         )
+        if material.reveal() == REFERENCE_INVALID_CREDENTIAL:
+            raise ContractError(
+                ErrorCode.UNAUTHORIZED,
+                "reference connector credential was rejected",
+                provider_id=self._provider_id,
+            )
         self._validated_connections.add(connection.id)
         now = datetime.now(UTC)
         adapter_metadata = tuple(

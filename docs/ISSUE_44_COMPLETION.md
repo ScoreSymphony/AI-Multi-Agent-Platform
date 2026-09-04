@@ -42,6 +42,9 @@ of issue #44. `docs/CONNECTORS.md` is the normative design explanation for this 
 - Secret values are not Connection fields or northbound connector payloads. The canonical
   ConnectorService rejects embedded credentials in endpoint metadata even when callers bypass the
   Control Plane, and event-subscription configuration is subject to the same boundary.
+- Provider-normalized Connection state is revalidated before persistence: adapters cannot inject
+  credential-bearing endpoint metadata, change requested scopes, or grant scopes that were not
+  requested by the canonical Connection.
 - External connector actions are not exposed as a generic Control Plane execution command; they use
   the canonical capability invocation pipeline.
 - Authorization evaluates the actual Connection owner/project/organization scope; Control Plane
@@ -51,6 +54,9 @@ of issue #44. `docs/CONNECTORS.md` is the normative design explanation for this 
 - External events are evidence/input and do not directly execute privileged work.
 - Event subscription and inbound event normalization are explicit optional provider hooks and fail
   closed when unsupported.
+- Provider-produced events cross a canonical ConnectorService validation boundary before they are
+  accepted: Connection identity, connector type, declared event type and project binding are checked
+  for both synchronization output and inbound event normalization.
 - Unsupported optional integration operations fail with the canonical `UNSUPPORTED_CAPABILITY`
   error rather than being assumed universal.
 - Incremental sync resumes from the stored checkpoint, resync performs a full refresh with the prior
@@ -66,14 +72,20 @@ of issue #44. `docs/CONNECTORS.md` is the normative design explanation for this 
 Tests cover:
 
 - connection create/configure/disable/re-enable;
-- missing/invalid credential reference handling;
+- missing credential reference handling plus an existing-but-invalid credential rejected by the
+  deterministic reference connector;
 - direct ConnectorService rejection of credential-bearing endpoint metadata;
+- rejection of credential-bearing endpoint metadata injected by a provider after validation;
+- rejection of unrequested granted scopes returned by a provider;
 - health failure and recovery;
 - resource list/read and safe namespaced serialization;
 - connector action through CapabilityRegistry/CapabilityInvoker;
 - permission denial at the connector service boundary;
 - Connection Control Plane list/get visibility with project-scoped #15 policy;
 - event provenance and deduplication;
+- rejection of undeclared event types and wrong project binding before sync checkpoints are
+  persisted;
+- inbound event normalization through the same canonical event validation boundary;
 - unsupported event subscription/unsubscription and webhook-normalization hooks;
 - subscription configuration credential rejection before provider dispatch;
 - synchronization checkpoint resume plus explicit resync and rebuild;
