@@ -70,9 +70,7 @@ def parse_aggregation_policy(obj: Mapping[str, Any]) -> AggregationPolicy:
     }
     missing = sorted(required - obj.keys())
     if missing:
-        raise ValueError(
-            "aggregation policy is missing required fields: " + ", ".join(missing)
-        )
+        raise ValueError("aggregation policy is missing required fields: " + ", ".join(missing))
     unknown = sorted(obj.keys() - required)
     if unknown:
         raise ValueError("aggregation policy contains unknown fields: " + ", ".join(unknown))
