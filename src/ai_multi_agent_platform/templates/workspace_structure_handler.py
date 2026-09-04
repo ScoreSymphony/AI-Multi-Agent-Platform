@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import OperationContext, OperationControl
+from ai_multi_agent_platform.contracts.types import (
+    FrozenJsonValue,
+    OperationContext,
+    OperationControl,
+)
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.data import DataAccessContext
 from ai_multi_agent_platform.domain import OwnerRef, Project
@@ -155,16 +159,15 @@ class WorkspaceStructureTemplateExporter:
                 )
 
         source_project_id = next(iter(project_ids))
-        configuration: dict[str, object] = {
-            "workspaces": [
-                {
-                    "workspace_type": workspace.workspace_type.value,
-                    "access_mode": workspace.access_mode.value,
-                    "retention": workspace.retention.value,
-                }
-                for workspace in workspaces
-            ]
-        }
+        workspace_specs: tuple[FrozenJsonValue, ...] = tuple(
+            {
+                "workspace_type": workspace.workspace_type.value,
+                "access_mode": workspace.access_mode.value,
+                "retention": workspace.retention.value,
+            }
+            for workspace in workspaces
+        )
+        configuration: dict[str, FrozenJsonValue] = {"workspaces": workspace_specs}
         dependencies: tuple[TemplateDependency, ...] = ()
         if project_template_id is None:
             configuration["project_id"] = source_project_id
@@ -183,7 +186,7 @@ class WorkspaceStructureTemplateExporter:
             name=name,
             description="Reusable canonical Workspace structure",
             template_type=TemplateType.WORKSPACE_STRUCTURE,
-            configuration=TemplateConfiguration(payload=cast(Mapping[str, object], configuration)),
+            configuration=TemplateConfiguration(payload=configuration),
             dependencies=dependencies,
             requirements=TemplateRequirements(),
             provenance=TemplateProvenance(
