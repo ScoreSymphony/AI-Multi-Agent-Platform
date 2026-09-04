@@ -66,6 +66,7 @@ class RepositoryRunIntegration:
         actor_ref: str,
         context: DataAccessContext,
         task_id: str | None = None,
+        agent_id: str | None = None,
     ) -> tuple[RepositoryRunProvenance, ...]:
         """Persist immutable repository inputs from the exact Workspace snapshot bound to a Run.
 
@@ -78,6 +79,8 @@ class RepositoryRunIntegration:
         validate_id(run_id, "run")
         if task_id is not None:
             validate_id(task_id, "task")
+        if agent_id is not None:
+            validate_id(agent_id, "agent")
         if not actor_ref.strip():
             raise ValueError("repository run actor_ref must not be blank")
 
@@ -119,6 +122,7 @@ class RepositoryRunIntegration:
                 input_revision=input_revision,
                 branch_ref=branch_ref,
                 actor_ref=actor_ref,
+                agent_id=agent_id,
                 provider_resource_ids=(binding.reference.id,),
             )
             self._provenance.upsert(provenance)
@@ -134,11 +138,14 @@ class RepositoryRunIntegration:
         actor_ref: str,
         context: DataAccessContext,
         output_revisions: Mapping[str, str] | None = None,
+        agent_id: str | None = None,
     ) -> RepositoryRunArtifactBundle:
         """Capture changed files, create canonical artifacts, and enrich Run provenance."""
 
         validate_id(run_id, "run")
         validate_id(task_id, "task")
+        if agent_id is not None:
+            validate_id(agent_id, "agent")
         if not actor_ref.strip():
             raise ValueError("repository run actor_ref must not be blank")
         change_set = await self._workspaces.capture_changes(materialization_id, context)
@@ -173,6 +180,7 @@ class RepositoryRunIntegration:
                 task_id=task_id,
                 materialization_id=materialization_id,
                 actor_ref=actor_ref,
+                agent_id=agent_id,
                 context=context,
                 change_set=change_set,
             )
@@ -197,6 +205,7 @@ class RepositoryRunIntegration:
                     output_revision=output_revision,
                     diff_artifact_ids=merged_artifacts,
                     actor_ref=actor_ref,
+                    agent_id=agent_id or current.agent_id,
                     recorded_at=utc_now(),
                 )
             )
@@ -215,12 +224,15 @@ class RepositoryRunIntegration:
         repository_id: str,
         output_revision: str,
         actor_ref: str | None = None,
+        agent_id: str | None = None,
         artifact_ids: tuple[str, ...] = (),
     ) -> RepositoryRunProvenance:
         """Record a commit created after execution without implying that push occurred."""
 
         validate_id(run_id, "run")
         validate_git_revision(output_revision)
+        if agent_id is not None:
+            validate_id(agent_id, "agent")
         current = self._provenance.get(run_id, repository_id)
         if current is None:
             raise ContractError(
@@ -234,6 +246,7 @@ class RepositoryRunIntegration:
             current,
             output_revision=output_revision,
             actor_ref=actor_ref or current.actor_ref,
+            agent_id=agent_id or current.agent_id,
             diff_artifact_ids=tuple(dict.fromkeys((*current.diff_artifact_ids, *artifact_ids))),
             recorded_at=utc_now(),
         )
@@ -284,6 +297,7 @@ class RepositoryRunIntegration:
         task_id: str,
         materialization_id: str,
         actor_ref: str,
+        agent_id: str | None,
         context: DataAccessContext,
         change_set: WorkspaceChangeSet,
     ) -> str:
@@ -303,6 +317,8 @@ class RepositoryRunIntegration:
             "schema_version": "1.0",
             "run_id": run_id,
             "task_id": task_id,
+            "actor_ref": actor_ref,
+            "agent_id": agent_id,
             "workspace_id": change_set.workspace_id,
             "workspace_snapshot_id": change_set.snapshot_id,
             "materialization_id": materialization_id,
