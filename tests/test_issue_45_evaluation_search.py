@@ -18,6 +18,7 @@ from ai_multi_agent_platform.evaluation import (
     EvaluationRunner,
     EvaluationSuite,
     InMemoryEvaluationRepository,
+    RegressionPolicy,
     SnapshotValue,
 )
 from ai_multi_agent_platform.evaluation.service import EvaluationService, evaluation_suite_ref
@@ -30,6 +31,7 @@ from ai_multi_agent_platform.testing import (
 
 SUITE_FIXTURE_SECRET = "fixture-secret-must-not-be-searchable"
 SNAPSHOT_SECRET = "snapshot-secret-must-not-be-searchable"
+REGRESSION_POLICY_REF = "search.regression@1.0"
 
 
 class MutableExecutor:
@@ -90,7 +92,13 @@ def _evaluation_service() -> EvaluationService:
             ),
         ),
     )
-    return EvaluationService(repository=repository, runner=runner, suites=(suite,))
+    policy = RegressionPolicy(policy_id="search.regression", version="1.0", rules=())
+    return EvaluationService(
+        repository=repository,
+        runner=runner,
+        suites=(suite,),
+        policies=(policy,),
+    )
 
 
 def _stack(
@@ -145,6 +153,7 @@ def test_evaluation_suites_and_runs_use_global_search_with_safe_flat_metadata() 
                 environment=(SnapshotValue(key="private-mode", value=SNAPSHOT_SECRET),),
             ),
             baseline_run_id=baseline.run.run_id,
+            regression_policy_ref_value=REGRESSION_POLICY_REF,
         )
 
         exact_suite = await _search(http, type="evaluation-suite", id=suite_ref)
