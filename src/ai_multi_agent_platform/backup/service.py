@@ -83,7 +83,9 @@ def create_single_node_backup(
             if not component_source.exists():
                 continue
             if not component_source.is_dir():
-                raise BackupError(f"expected durable component to be a directory: {component_source}")
+                raise BackupError(
+                    f"expected durable component to be a directory: {component_source}"
+                )
             included_components.add(component)
             for item in sorted(component_source.rglob("*")):
                 if item.is_symlink():
@@ -221,7 +223,8 @@ def restore_single_node_backup(
         backup_version = manifest.get("platform", {}).get("version")
         if backup_version != expected_platform_version:
             raise BackupError(
-                f"incompatible platform version: backup={backup_version!r}, expected={expected_platform_version!r}"
+                f"incompatible platform version: backup={backup_version!r}, "
+                f"expected={expected_platform_version!r}"
             )
 
     target = target_data_dir.expanduser().resolve()
@@ -336,7 +339,10 @@ def _assert_non_secret_metadata(value: Any, path: str = "deployment_metadata") -
         for key, nested in value.items():
             normalized = str(key).casefold()
             if any(marker in normalized for marker in _SENSITIVE_METADATA_MARKERS):
-                raise BackupError(f"secret-looking metadata is forbidden in generic backups: {path}.{key}")
+                raise BackupError(
+                    "secret-looking metadata is forbidden in generic backups: "
+                    f"{path}.{key}"
+                )
             _assert_non_secret_metadata(nested, f"{path}.{key}")
     elif isinstance(value, list | tuple):
         for index, nested in enumerate(value):
