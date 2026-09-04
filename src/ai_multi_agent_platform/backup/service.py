@@ -299,6 +299,12 @@ def restore_single_node_backup(
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
 
+        # Directory-only durable components have no file entry in the manifest. Materialize the
+        # required deployment scope explicitly so an empty files/ or workspaces/ component survives
+        # the round trip without weakening source-side completeness validation.
+        for component in ("db", "files", "workspaces"):
+            (partial / component).mkdir(parents=True, exist_ok=True)
+
         auth_db = partial / "db" / "authentication.sqlite3"
         if auth_db.is_file():
             with sqlite3.connect(auth_db) as connection:
