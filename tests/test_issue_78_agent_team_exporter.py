@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 
 from ai_multi_agent_platform.agents import (
     AgentInstructions,
@@ -96,13 +97,13 @@ def test_agent_team_export_builds_portable_published_agent_dependencies() -> Non
         assert second.agent_id not in repr(payload)
         assert source_project_id not in repr(payload)
         profile = payload["profile"]
-        assert isinstance(profile, dict)
+        assert isinstance(profile, Mapping)
         members = profile["members"]
         assert isinstance(members, tuple)
         first_member = members[0]
-        assert isinstance(first_member, dict)
+        assert isinstance(first_member, Mapping)
         second_member = members[1]
-        assert isinstance(second_member, dict)
+        assert isinstance(second_member, Mapping)
         assert first_member["agent_template_id"] != second_member["agent_template_id"]
         assert first_member["can_delegate_to_template_ids"] == (second_member["agent_template_id"],)
         assert profile["leader_agent_template_id"] == first_member["agent_template_id"]
