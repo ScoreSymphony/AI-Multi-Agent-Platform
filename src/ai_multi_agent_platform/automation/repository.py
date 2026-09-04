@@ -39,6 +39,10 @@ class AutomationRepository(ABC):
     async def list_automations(self) -> tuple[Automation, ...]: ...
 
     @abstractmethod
+    async def remove_automation_if_unused(self, automation_id: str) -> None:
+        """Storage compensation seam; never deletes an Automation with delivery history."""
+
+    @abstractmethod
     async def save_delivery(self, delivery: TriggerDelivery) -> TriggerDelivery: ...
 
     @abstractmethod
@@ -76,6 +80,19 @@ class InMemoryAutomationRepository(AutomationRepository):
 
     async def list_automations(self) -> tuple[Automation, ...]:
         return tuple(self._automations.values())
+
+    async def remove_automation_if_unused(self, automation_id: str) -> None:
+        validate_id(automation_id, "automation")
+        if any(
+            delivery.automation_id == automation_id for delivery in self._deliveries.values()
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "cannot remove automation with trigger delivery history",
+                details={"automation_id": automation_id},
+            )
+        if self._automations.pop(automation_id, None) is None:
+            raise ContractError(ErrorCode.NOT_FOUND, f"automation not found: {automation_id}")
 
     async def save_delivery(self, delivery: TriggerDelivery) -> TriggerDelivery:
         key = (delivery.automation_id, delivery.dedupe_key)
@@ -196,6 +213,37 @@ class SqliteAutomationRepository(AutomationRepository):
         except sqlite3.Error as exc:
             raise ContractError(ErrorCode.BACKEND_ERROR, "failed to list automations") from exc
         return tuple(_automation_from_json(cast(str, row["payload"])) for row in rows)
+
+    async def remove_automation_if_unused(self, automation_id: str) -> None:
+        validate_id(automation_id, "automation")
+        try:
+            with self._connect() as connection:
+                delivery = connection.execute(
+                    "SELECT 1 FROM trigger_deliveries WHERE automation_id = ? LIMIT 1",
+                    (automation_id,),
+                ).fetchone()
+                if delivery is not None:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "cannot remove automation with trigger delivery history",
+                        details={"automation_id": automation_id},
+                    )
+                deleted = connection.execute(
+                    "DELETE FROM automations WHERE id = ?",
+                    (automation_id,),
+                )
+                if deleted.rowcount == 0:
+                    raise ContractError(
+                        ErrorCode.NOT_FOUND,
+                        f"automation not found: {automation_id}",
+                    )
+        except ContractError:
+            raise
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to remove unused automation",
+            ) from exc
 
     async def save_delivery(self, delivery: TriggerDelivery) -> TriggerDelivery:
         encoded = json.dumps(_delivery_json(delivery), sort_keys=True, separators=(",", ":"))
