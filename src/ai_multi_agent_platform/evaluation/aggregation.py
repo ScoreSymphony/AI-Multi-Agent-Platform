@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
 from statistics import mean, median
 
@@ -86,7 +87,7 @@ class AggregatedEvaluationResult:
     artifact_refs: tuple[str, ...] = ()
     telemetry_refs: tuple[str, ...] = ()
     result_id: str = field(default_factory=lambda: new_id("evaluation_aggregate"))
-    created_at: object = field(default_factory=utc_now)
+    created_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:
         if not self.evaluation_run_id.strip():
@@ -287,7 +288,10 @@ class ResultAggregator:
             score = (
                 None
                 if any(value is None for value in raw_scores)
-                else _reduce(tuple(float(value) for value in raw_scores if value is not None), policy.score_method)
+                else _reduce(
+                    tuple(float(value) for value in raw_scores if value is not None),
+                    policy.score_method,
+                )
             )
             evaluator = group[0].evaluator
             deterministic_pass = (
