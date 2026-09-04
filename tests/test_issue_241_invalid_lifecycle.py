@@ -52,7 +52,9 @@ async def _task_creator(*args: object) -> str:
     return new_id("task")
 
 
-def _manual_service(repository: InMemoryAutomationRepository | SqliteAutomationRepository) -> AutomationService:
+def _manual_service(
+    repository: InMemoryAutomationRepository | SqliteAutomationRepository,
+) -> AutomationService:
     return AutomationService(repository=repository, task_creator=_task_creator)
 
 
