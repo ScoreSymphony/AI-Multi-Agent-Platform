@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.security import redact_exception
 
 from .models import PortablePackage, PortableResource
@@ -173,7 +174,7 @@ class ImportExecutor:
         context: ImportContext,
         error: Exception,
     ) -> None:
-        rollback_failures: list[str] = []
+        rollback_failures: list[JsonValue] = []
         for item in reversed(applied):
             try:
                 await item.prepared.handler.rollback(
