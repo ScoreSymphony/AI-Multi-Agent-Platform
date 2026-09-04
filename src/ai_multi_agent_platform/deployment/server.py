@@ -7,14 +7,18 @@ import asyncio
 import getpass
 import sys
 from collections.abc import Sequence
+from typing import Any
 
 from ai_multi_agent_platform.backup import (
     PostRestoreRecoveryResult,
+    RestoreValidationError,
     reconcile_restored_single_node,
+    validate_restored_single_node,
 )
+from ai_multi_agent_platform.kernel import RecoveryReport
 
 from .config import load_single_node_config
-from .single_node import build_single_node_deployment
+from .single_node import SingleNodeDeployment, build_single_node_deployment
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -31,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subcommands.add_parser(
         "recover-restore",
-        help="Run required post-restore canonical Run recovery without starting the server",
+        help="Run required post-restore recovery and readiness validation without serving",
     )
 
     bootstrap = subcommands.add_parser(
@@ -67,18 +71,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
 
-    if args.command == "recover-restore":
-        recovery = asyncio.run(
-            reconcile_restored_single_node(data_dir=config.data_dir, kernel=deployment.kernel)
-        )
+    if args.command in {"recover-restore", "serve"}:
+        try:
+            recovery = asyncio.run(_run_restore_recovery(deployment))
+        except (RestoreValidationError, RuntimeError) as exc:
+            print(f"post-restore recovery blocked: {exc}", file=sys.stderr)
+            return 3
         _print_restore_recovery(recovery)
-        return 0
+        if recovery is not None and not recovery.ready_for_service:
+            print(
+                "post-restore recovery remains blocked: "
+                f"unresolved_runs={len(recovery.unresolved_run_ids)} "
+                f"report={recovery.report_path}",
+                file=sys.stderr,
+            )
+            return 3
+        if args.command == "recover-restore":
+            return 0
 
-    if args.command == "serve":
-        recovery = asyncio.run(
-            reconcile_restored_single_node(data_dir=config.data_dir, kernel=deployment.kernel)
-        )
-        _print_restore_recovery(recovery)
         try:
             import uvicorn
         except ImportError as exc:  # pragma: no cover - exercised by packaging/install smoke
@@ -97,13 +107,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     raise AssertionError(f"unhandled deployment command: {args.command}")
 
 
+async def _run_restore_recovery(
+    deployment: SingleNodeDeployment,
+) -> PostRestoreRecoveryResult | None:
+    async def validate(
+        reports: tuple[RecoveryReport, ...],
+        restore_metadata: dict[str, Any],
+    ) -> tuple[str, ...]:
+        return await validate_restored_single_node(
+            data_dir=deployment.config.data_dir,
+            kernel=deployment.kernel,
+            scopes=deployment.scopes,
+            reports=reports,
+            restore_metadata=restore_metadata,
+            health_probe=deployment.control_plane.health,
+        )
+
+    return await reconcile_restored_single_node(
+        data_dir=deployment.config.data_dir,
+        kernel=deployment.kernel,
+        validation=validate,
+        retry_blocked=True,
+    )
+
+
 def _print_restore_recovery(recovery: PostRestoreRecoveryResult | None) -> None:
     if recovery is None:
         return
     print(
         "post-restore recovery completed: "
         f"runs_checked={recovery.runs_checked} "
-        f"unresolved={len(recovery.unresolved_run_ids)} report={recovery.report_path}"
+        f"unresolved={len(recovery.unresolved_run_ids)} "
+        f"ready={str(recovery.ready_for_service).lower()} "
+        f"checks={len(recovery.validation_checks)} report={recovery.report_path}"
     )
 
 
