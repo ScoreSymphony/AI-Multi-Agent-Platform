@@ -23,6 +23,7 @@ from ai_multi_agent_platform.automation import (
 )
 from ai_multi_agent_platform.automation.service import AutomationService as BaseAutomationService
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository
 
@@ -225,7 +226,7 @@ def test_pause_suppresses_pending_retry_until_automation_is_enabled_again() -> N
     async def scenario() -> None:
         now = [datetime(2026, 9, 4, 2, 45, tzinfo=UTC)]
         calls = 0
-        events: list[dict[str, object]] = []
+        events: list[dict[str, JsonValue]] = []
 
         async def creator(*args: object) -> str:
             nonlocal calls
@@ -234,13 +235,13 @@ def test_pause_suppresses_pending_retry_until_automation_is_enabled_again() -> N
                 raise ContractError(ErrorCode.UNAVAILABLE, "temporary", retryable=True)
             return new_id("task")
 
-        async def sink(event: dict[str, object]) -> None:
+        async def sink(event: dict[str, JsonValue]) -> None:
             events.append(event)
 
         service = BaseAutomationService(
             repository=InMemoryAutomationRepository(),
             task_creator=creator,
-            event_sink=cast(object, sink),
+            event_sink=sink,
             clock=lambda: now[0],
         )
         automation = await service.create_automation(
