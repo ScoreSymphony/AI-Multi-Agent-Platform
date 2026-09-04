@@ -6,6 +6,7 @@ from .agent_handlers import (
     AgentTemplateHandler,
     register_agent_template_handlers,
 )
+from .agent_team_exporter import AgentTeamTemplateExporter
 from .application import (
     CompositeTemplateHandler,
     ContextualTemplateHandlerRegistry,
@@ -59,6 +60,7 @@ from .workspace_structure_handler import (
 )
 
 __all__ = [
+    "AgentTeamTemplateExporter",
     "AgentTeamTemplateHandler",
     "AgentTemplateExporter",
     "AgentTemplateHandler",
