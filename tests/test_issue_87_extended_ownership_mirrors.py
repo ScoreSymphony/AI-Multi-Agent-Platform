@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane import ControlPlane, RequestContext
 from ai_multi_agent_platform.control_plane.models import ActorContext, OwnerType
@@ -188,5 +191,78 @@ def test_automation_create_mirrors_identity_owner() -> None:
         ownership = await repository.get_ownership("automation", automation_id)
         assert ownership.owner_ref == OwnerRef(type="organization", id=organization.id)
         assert ownership.organization_id == organization.id
+
+    asyncio.run(scenario())
+
+
+def test_connection_commands_strictly_mirror_structured_canonical_owner() -> None:
+    async def scenario() -> None:
+        control_plane, organizations, repository = _stack()
+        organization = await organizations.create_organization(
+            name="Connection Org",
+            owner_actor_id="user:owner",
+        )
+        connection_id = "connection_test-owner-mirror"
+
+        async def connection_resource(
+            context: RequestContext,
+            resource_ref: str,
+            payload: dict[str, JsonValue],
+        ) -> dict[str, JsonValue]:
+            del context, resource_ref, payload
+            return {
+                "id": connection_id,
+                "type": "connection",
+                "owner_type": "organization",
+                "owner_id": organization.id,
+                "organization_id": organization.id,
+            }
+
+        for command in (
+            "connection.create",
+            "connection.enable",
+            "connection.disable",
+            "connection.health",
+        ):
+            control_plane.register_command(command, connection_resource)
+
+        context = _context(
+            "user:owner",
+            owner_type="organization",
+            owner_id=organization.id,
+            key="connection-create",
+        )
+        await control_plane.execute_command(context, "connection.create", "connections", {})
+        ownership = await repository.get_ownership("connection", connection_id)
+        assert ownership.owner_ref == OwnerRef(type="organization", id=organization.id)
+        assert ownership.organization_id == organization.id
+
+        await control_plane.execute_command(
+            _context(
+                "user:owner",
+                owner_type="organization",
+                owner_id=organization.id,
+                key="connection-enable",
+            ),
+            "connection.enable",
+            connection_id,
+            {},
+        )
+        replay = await repository.get_ownership("connection", connection_id)
+        assert replay.id == ownership.id
+        assert replay.owner_ref == ownership.owner_ref
+
+        with pytest.raises(ContractError) as direct_transfer:
+            await control_plane.execute_command(
+                context,
+                "resource-ownership.transfer",
+                connection_id,
+                {
+                    "resource_type": "connection",
+                    "resource_id": connection_id,
+                    "owner_ref": {"type": "user", "id": "other"},
+                },
+            )
+        assert direct_transfer.value.code is ErrorCode.CONFLICT
 
     asyncio.run(scenario())
