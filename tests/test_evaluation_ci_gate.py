@@ -47,9 +47,7 @@ def test_checked_in_deterministic_ci_assets_are_versioned_and_consistent() -> No
     assert baseline.run.repetitions == 1
     assert len(baseline.results) == 2
     assert all(result.outcome is EvaluationOutcome.PASSED for result in baseline.results)
-    assert {
-        (result.case_id, result.evaluator.evaluator_id) for result in baseline.results
-    } == {
+    assert {(result.case_id, result.evaluator.evaluator_id) for result in baseline.results} == {
         ("case.reference-lifecycle", "reference.deterministic"),
         ("case.reference-lifecycle", "reference.metric-threshold"),
     }
@@ -163,5 +161,7 @@ def test_reference_ci_gate_reports_checked_in_baseline_regression(tmp_path: Path
         "score-drop",
         "critical-case-failure",
     }
-    assert any("task.status" in assertion.message for assertion in report.failed_results[0].assertions)
+    assert any(
+        "task.status" in assertion.message for assertion in report.failed_results[0].assertions
+    )
     assert report.diagnostics()
