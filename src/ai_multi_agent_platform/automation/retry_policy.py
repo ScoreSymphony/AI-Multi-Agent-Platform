@@ -97,7 +97,8 @@ def retry_delay_seconds(policy: RetryPolicy, *, failed_attempt: int) -> float:
 
     if failed_attempt < 1:
         raise ValueError("failed_attempt must be at least 1")
-    return policy.base_backoff_seconds * (2 ** (failed_attempt - 1))
+    multiplier = float(2 ** (failed_attempt - 1))
+    return policy.base_backoff_seconds * multiplier
 
 
 def next_retry_at(
