@@ -23,7 +23,9 @@ def test_single_node_exposes_and_persists_canonical_conversations_across_restart
         )
 
         assert first.control_plane.conversation_service is first.conversations
-        assert first.control_plane.conversation_response_provider is None
+        assert first.control_plane.conversation_response_provider is first.conversation_responder
+        assert first.conversation_responder is not None
+        assert first.model_runtime.registry is first.models
 
         manifest = await first.http.handle(
             HTTPRequest(
@@ -53,6 +55,8 @@ def test_single_node_exposes_and_persists_canonical_conversations_across_restart
 
         restarted = build_single_node_deployment(config)
         assert restarted.control_plane.conversation_service is restarted.conversations
+        assert restarted.control_plane.conversation_response_provider is restarted.conversation_responder
+        assert restarted.model_runtime.registry is restarted.models
         persisted = await restarted.conversations.get_conversation(conversation.id)
         history, cursor = await restarted.conversations.list_messages(conversation.id, limit=20)
 
