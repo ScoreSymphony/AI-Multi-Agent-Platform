@@ -130,7 +130,8 @@ class ImportExecutor:
         _validate_preview(package, preview)
         context = ImportContext(id_mapping=preview.mapping_dict())
         resources_by_key = {
-            (resource.resource_type, resource.resource_id): resource for resource in package.resources
+            (resource.resource_type, resource.resource_id): resource
+            for resource in package.resources
         }
 
         prepared: list[_PreparedResource] = []
