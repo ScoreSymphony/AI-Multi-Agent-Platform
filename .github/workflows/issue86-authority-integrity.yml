@@ -75,7 +75,7 @@ jobs:
           PY
       - name: Apply authority-integrity patch
         run: python .github/scripts/issue86_authority_integrity.py
-      - name: Normalize generated typing and test imports
+      - name: Normalize generated typing and tests
         shell: bash
         run: |
           python - <<'PY'
@@ -98,6 +98,13 @@ jobs:
           test_text = test_path.read_text(encoding='utf-8')
           test_text = test_text.replace('from dataclasses import replace\n\n', '', 1)
           test_path.write_text(test_text, encoding='utf-8')
+
+          for generated_path in (
+              Path('tests/test_issue_86_verification.py'),
+              Path('tests/test_issue_86_repair_runtime.py'),
+          ):
+              generated = generated_path.read_text(encoding='utf-8')
+              generated_path.write_text(generated.replace(r'\"', '"'), encoding='utf-8')
           PY
       - name: Bootstrap test environment
         shell: bash
