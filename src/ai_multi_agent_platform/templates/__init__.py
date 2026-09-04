@@ -38,6 +38,11 @@ from .models import (
     TemplateType,
 )
 from .persistence import TEMPLATE_REPOSITORY_SCHEMA_VERSION, JsonTemplateRepository
+from .project_handler import (
+    ProjectTemplateExporter,
+    ProjectTemplateHandler,
+    register_project_template_handler,
+)
 from .repository import InMemoryTemplateRepository, TemplateRepository
 from .service import (
     TemplateEnvironment,
@@ -60,6 +65,8 @@ __all__ = [
     "ContextualTemplateResourceHandler",
     "InMemoryTemplateRepository",
     "JsonTemplateRepository",
+    "ProjectTemplateExporter",
+    "ProjectTemplateHandler",
     "TEMPLATE_REPOSITORY_SCHEMA_VERSION",
     "TemplateApplicationService",
     "TemplateCompatibility",
@@ -87,5 +94,6 @@ __all__ = [
     "TemplateType",
     "register_agent_template_handlers",
     "register_automation_template_handler",
+    "register_project_template_handler",
     "validate_template_configuration",
 ]
