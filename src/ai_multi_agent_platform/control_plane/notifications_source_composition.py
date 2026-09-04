@@ -26,6 +26,9 @@ from ai_multi_agent_platform.notifications import (
     budget_threshold_candidate,
     canonical_attention_candidate,
 )
+from ai_multi_agent_platform.notifications.task_management import (
+    DEFAULT_DEADLINE_APPROACHING_WINDOW,
+)
 from ai_multi_agent_platform.security.approvals import ApprovalRecord
 from ai_multi_agent_platform.security.enforcement import AuthorizationGate
 
@@ -82,7 +85,7 @@ class ControlPlane(_BaseControlPlane):
         self,
         *,
         now: datetime | None = None,
-        approaching_window: timedelta | None = None,
+        approaching_window: timedelta = DEFAULT_DEADLINE_APPROACHING_WINDOW,
     ) -> tuple[Notification, ...]:
         """Evaluate #88 reminders and drain synchronous completed-domain attention hooks."""
 
