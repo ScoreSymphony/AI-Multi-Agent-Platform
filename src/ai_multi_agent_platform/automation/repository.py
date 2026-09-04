@@ -349,6 +349,18 @@ def _delivery_json(delivery: TriggerDelivery) -> dict[str, JsonValue]:
         "error_code": delivery.error_code,
         "error_message": delivery.error_message,
         "processing_duration_ms": delivery.processing_duration_ms,
+        "retryable": delivery.retryable,
+        "last_failed_at": (
+            None if delivery.last_failed_at is None else delivery.last_failed_at.isoformat()
+        ),
+        "next_retry_at": (
+            None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
+        ),
+        "retry_exhausted_at": (
+            None
+            if delivery.retry_exhausted_at is None
+            else delivery.retry_exhausted_at.isoformat()
+        ),
     }
 
 
@@ -453,6 +465,10 @@ def _delivery_from_json(encoded: str) -> TriggerDelivery:
             error_code=cast(str | None, raw.get("error_code")),
             error_message=cast(str | None, raw.get("error_message")),
             processing_duration_ms=cast(float | None, raw.get("processing_duration_ms")),
+            retryable=bool(raw.get("retryable", False)),
+            last_failed_at=_optional_time(raw.get("last_failed_at")),
+            next_retry_at=_optional_time(raw.get("next_retry_at")),
+            retry_exhausted_at=_optional_time(raw.get("retry_exhausted_at")),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ContractError(
