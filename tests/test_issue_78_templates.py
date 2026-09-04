@@ -112,7 +112,9 @@ def test_create_revise_and_publish_preserves_immutable_history() -> None:
     assert service.repository.get_revision(draft.template_id, 1).content.description == (
         "Reusable Agent Starter"
     )
-    assert service.repository.get_revision(draft.template_id, 2).state is TemplateRevisionState.DRAFT
+    assert (
+        service.repository.get_revision(draft.template_id, 2).state is TemplateRevisionState.DRAFT
+    )
     definition = service.repository.get_template(draft.template_id)
     assert definition.current_revision == 3
     assert definition.latest_published_revision == 3
@@ -382,9 +384,9 @@ def test_new_template_version_never_mutates_prior_instance_or_source_revision() 
 
     assert first_instance.source == first_published.ref
     assert second_published.ref != first_instance.source
-    assert service.repository.get_revision(draft.template_id, first_published.revision).content.description == (
-        "Reusable Versioned"
-    )
+    assert service.repository.get_revision(
+        draft.template_id, first_published.revision
+    ).content.description == ("Reusable Versioned")
     assert first_instance.resource_refs[0].resource_id.startswith("agent_")
 
 
