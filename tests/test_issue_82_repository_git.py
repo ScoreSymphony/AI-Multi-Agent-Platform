@@ -46,8 +46,10 @@ def _operation(project_id: str) -> OperationContext:
 
 def _connection(project_id: str, *, with_secret: bool = False) -> RepositoryConnection:
     secrets = (
-        SecretReference(provider="local", secret_id="git-token", scope="repository"),
-    ) if with_secret else ()
+        (SecretReference(provider="local", secret_id="git-token", scope="repository"),)
+        if with_secret
+        else ()
+    )
     return RepositoryConnection(
         connection=Connection(
             id=new_id("connection"),
