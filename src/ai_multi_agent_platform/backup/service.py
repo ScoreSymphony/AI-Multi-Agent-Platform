@@ -252,6 +252,8 @@ def restore_single_node_backup(
                 if _sqlite_table_exists(connection, "auth_sessions"):
                     connection.execute("DELETE FROM auth_sessions")
                     connection.commit()
+                _checkpoint_sqlite_wal(connection, auth_db)
+            _remove_sqlite_sidecars(auth_db)
 
         (partial / "executor").mkdir(parents=True, exist_ok=True)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -271,12 +273,31 @@ def _sqlite_snapshot(source: Path, destination: Path) -> None:
                 row = dst.execute("PRAGMA integrity_check").fetchone()
                 if row is None or row[0] != "ok":
                     raise BackupError(f"SQLite integrity check failed for {source}")
-    except sqlite3.Error as exc:
+                _checkpoint_sqlite_wal(dst, destination)
+        _remove_sqlite_sidecars(destination)
+    except (OSError, sqlite3.Error) as exc:
         raise BackupError(f"cannot snapshot SQLite database: {source}") from exc
 
 
+def _checkpoint_sqlite_wal(connection: sqlite3.Connection, path: Path) -> None:
+    mode_row = connection.execute("PRAGMA journal_mode").fetchone()
+    mode = str(mode_row[0]).casefold() if mode_row is not None else ""
+    if mode != "wal":
+        return
+    checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
+    if checkpoint is None or int(checkpoint[0]) != 0:
+        raise BackupError(f"SQLite WAL checkpoint could not complete for {path}")
+
+
+def _remove_sqlite_sidecars(path: Path) -> None:
+    for suffix in _SQLITE_SIDECARS:
+        sidecar = path.with_name(path.name + suffix)
+        if sidecar.exists():
+            sidecar.unlink()
+
+
 def _sqlite_user_version(path: Path) -> int:
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
+    with sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True) as connection:
         row = connection.execute("PRAGMA user_version").fetchone()
     return int(row[0]) if row is not None else 0
 
