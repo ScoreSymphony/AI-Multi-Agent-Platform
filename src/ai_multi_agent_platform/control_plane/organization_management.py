@@ -9,6 +9,7 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.organizations import (
     ExternalGroupMapping,
+    MembershipStatus,
     OrganizationService,
     OrganizationStatus,
     TeamStatus,
@@ -25,6 +26,7 @@ from .organization_api import (
 
 ORGANIZATION_MANAGEMENT_COMMANDS = (
     "organization.update",
+    "organization.owner.transfer",
     "team.configure",
     "membership.leave",
     "external-group-mapping.deactivate",
@@ -73,6 +75,38 @@ class OrganizationManagementCommands:
                 "default_configuration_refs",
                 organization.default_configuration_refs,
             ),
+            updated_at=datetime.now(UTC),
+        )
+        return _organization_resource(await self._service.repository.save_organization(updated))
+
+    async def transfer_organization_owner(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        if set(payload) != {"new_owner_actor_id"}:
+            raise ValueError("organization.owner.transfer requires only new_owner_actor_id")
+        new_owner_actor_id = _required_string(payload, "new_owner_actor_id")
+        organization = await self._service.repository.get_organization(resource_ref)
+        if organization.status is not OrganizationStatus.ACTIVE:
+            raise ValueError("archived organizations cannot transfer ownership")
+        if organization.owner_actor_id == new_owner_actor_id:
+            return _organization_resource(organization)
+        if context.actor.principal_ref != organization.owner_actor_id:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "only the current organization owner can transfer ownership",
+            )
+        memberships = await self._service.repository.list_memberships(
+            actor_id=new_owner_actor_id,
+            organization_id=organization.id,
+        )
+        if not any(item.status is MembershipStatus.ACTIVE for item in memberships):
+            raise ValueError("new organization owner must have an active membership")
+        updated = replace(
+            organization,
+            owner_actor_id=new_owner_actor_id,
             updated_at=datetime.now(UTC),
         )
         return _organization_resource(await self._service.repository.save_organization(updated))
@@ -168,6 +202,7 @@ def organization_management_command_handlers(
     commands = OrganizationManagementCommands(service)
     return {
         "organization.update": commands.update_organization,
+        "organization.owner.transfer": commands.transfer_organization_owner,
         "team.configure": commands.configure_team,
         "membership.leave": commands.leave_membership,
         "external-group-mapping.deactivate": commands.deactivate_external_group_mapping,
@@ -179,7 +214,7 @@ async def organization_management_command_scope(
     command: str,
     resource_ref: str,
 ) -> tuple[OwnerType, str] | None:
-    if command == "organization.update":
+    if command in {"organization.update", "organization.owner.transfer"}:
         organization = await service.repository.get_organization(resource_ref)
         return ("organization", organization.id)
     if command == "team.configure":
