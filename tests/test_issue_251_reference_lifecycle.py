@@ -9,6 +9,7 @@ import pytest
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.data import (
     DataAccessContext,
+    KnowledgeSearchRequest,
     KnowledgeSource,
     KnowledgeStatus,
     LocalKnowledgeProvider,
@@ -141,6 +142,74 @@ def test_local_knowledge_provider_exposes_canonical_source_discovery(tmp_path: P
     assert "get_source" in provider.descriptor.supported_operations
     assert "list_sources" in provider.descriptor.supported_operations
     assert "source_discovery" in provider.descriptor.capabilities[0].features
+
+
+def test_knowledge_source_revision_and_query_survive_provider_restart(tmp_path: Path) -> None:
+    db_path = tmp_path / "knowledge.sqlite3"
+    project_id = new_id("project")
+    context = _context(project_id=project_id)
+    now = datetime.now(UTC)
+    source = KnowledgeSource(
+        source_id=new_knowledge_source_id(),
+        project_id=project_id,
+        owner_ref="user:user-a",
+        created_by="user:user-a",
+        title="Restart-persistent source",
+        revision="r1",
+        status=KnowledgeStatus.REGISTERED,
+        created_at=now,
+        updated_at=now,
+        metadata={"classification": "reference", "owner": "issue-251"},
+    )
+
+    provider = LocalKnowledgeProvider(db_path)
+    asyncio.run(provider.register_source(source, context))
+    asyncio.run(provider.ingest_source(source.source_id, "initial revision", "section:r1", context))
+    reindexed = asyncio.run(
+        provider.reindex_source(
+            source.source_id,
+            "r2",
+            "restart persistence remains queryable",
+            "section:restart",
+            context,
+        )
+    )
+
+    restarted = LocalKnowledgeProvider(db_path)
+    restored_source = asyncio.run(restarted.get_source(source.source_id, context))
+    assert restored_source.source_id == source.source_id
+    assert restored_source.project_id == source.project_id
+    assert restored_source.owner_ref == source.owner_ref
+    assert restored_source.title == source.title
+    assert restored_source.revision == "r2"
+    assert restored_source.status is KnowledgeStatus.READY
+    assert restored_source.metadata == source.metadata
+
+    restored_index = asyncio.run(restarted.get_index_status(source.source_id, context))
+    assert restored_index.source_id == source.source_id
+    assert restored_index.revision == "r2"
+    assert restored_index.status is KnowledgeStatus.READY
+
+    results = asyncio.run(
+        restarted.search(
+            KnowledgeSearchRequest(
+                query="restart persistence",
+                context=context,
+                source_ids=(source.source_id,),
+            )
+        )
+    )
+    assert len(results) == 1
+    result = results[0]
+    assert result.source_id == source.source_id
+    assert result.document_id == reindexed.document_id
+    assert result.revision == "r2"
+    assert result.content == "restart persistence remains queryable"
+    assert result.location == "section:restart"
+    assert result.citation.ref == reindexed.document_id
+    assert result.citation.revision == "r2"
+    assert result.citation.location == "section:restart"
+    assert result.citation.checksum == reindexed.checksum
 
 
 def test_knowledge_source_discovery_preserves_project_isolation(tmp_path: Path) -> None:
