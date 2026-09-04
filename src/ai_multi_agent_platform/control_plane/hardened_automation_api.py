@@ -222,7 +222,9 @@ class ControlPlane(_AutomationControlPlane, _RegisteredSearchControlPlane):
             automation,
             resource_ref=delivery.id,
         )
-        return await super()._automation_retry_command(context, resource_ref, payload)
+        del payload
+        retried = await self.automation_service.retry_delivery(resource_ref)
+        return _owned_delivery_resource(retried, automation)
 
     async def _authorize_automation_target(
         self,
@@ -288,4 +290,14 @@ def _owned_delivery_resource(
     }
     resource["project_id"] = automation.project_id
     resource["workspace_id"] = automation.workspace_id
+    resource["retryable"] = delivery.retryable
+    resource["last_failed_at"] = (
+        None if delivery.last_failed_at is None else delivery.last_failed_at.isoformat()
+    )
+    resource["next_retry_at"] = (
+        None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
+    )
+    resource["retry_exhausted_at"] = (
+        None if delivery.retry_exhausted_at is None else delivery.retry_exhausted_at.isoformat()
+    )
     return resource
