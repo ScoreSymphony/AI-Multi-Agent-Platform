@@ -28,18 +28,18 @@ from .http import (
     _send_sse_error,
 )
 from .models import API_VERSION, APIException, RequestContext, api_exception_from_contract
+from .notifications_authorized_composition import (
+    ControlPlane as _BaseControlPlane,
+)
+from .notifications_authorized_composition import (
+    ControlPlaneHTTP as _BaseControlPlaneHTTP,
+)
+from .notifications_authorized_composition import (
+    build_openapi as _build_base_openapi,
+)
 from .notifications_composition import (
     NOTIFICATION_COLLECTION,
     _recipient_from_context,
-)
-from .notifications_source_composition import (
-    ControlPlane as _BaseControlPlane,
-)
-from .notifications_source_composition import (
-    ControlPlaneHTTP as _BaseControlPlaneHTTP,
-)
-from .notifications_source_composition import (
-    build_openapi as _build_base_openapi,
 )
 
 
