@@ -54,6 +54,19 @@ class AuthorizationAction(StrEnum):
     VERIFICATION_ACCEPT = "verification.accept"
     VERIFICATION_REJECT = "verification.reject"
     VERIFICATION_REQUEST_CHANGES = "verification.request-changes"
+    TEMPLATE_LIST = "template:list"
+    TEMPLATE_READ = "template:read"
+    TEMPLATE_INSTANCE_LIST = "template-instance:list"
+    TEMPLATE_INSTANCE_READ = "template-instance:read"
+    TEMPLATE_CREATE = "template.create"
+    TEMPLATE_CREATE_FROM_AGENT = "template.create-from-agent"
+    TEMPLATE_REVISE = "template.revise"
+    TEMPLATE_PUBLISH = "template.publish"
+    TEMPLATE_CLONE = "template.clone"
+    TEMPLATE_FORK = "template.fork"
+    TEMPLATE_PREVIEW = "template.preview"
+    TEMPLATE_APPLY = "template.apply"
+    TEMPLATE_REAPPLY = "template.reapply"
 
 
 class ResourceType(StrEnum):
