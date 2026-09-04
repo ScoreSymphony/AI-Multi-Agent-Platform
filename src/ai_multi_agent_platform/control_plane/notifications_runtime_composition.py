@@ -96,7 +96,9 @@ class ControlPlane(_BaseControlPlane):
 
         events = cast(EventRepository | None, kwargs.get("events"))
         if events is None:
-            raise ValueError("Notification runtime composition requires the canonical EventRepository")
+            raise ValueError(
+                "Notification runtime composition requires the canonical EventRepository"
+            )
 
         custom_service = kwargs.get("notification_service") is not None
         if state_path is not None and not custom_service:
