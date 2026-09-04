@@ -42,9 +42,7 @@ class KnowledgePortableSnapshot:
 
     def __post_init__(self) -> None:
         if self.source.status in _NON_PORTABLE_SOURCE_STATUSES:
-            raise ValueError(
-                f"knowledge source status is not portable: {self.source.status.value}"
-            )
+            raise ValueError(f"knowledge source status is not portable: {self.source.status.value}")
         document = self.document
         if document is None:
             if self.source.status is KnowledgeStatus.READY:
@@ -132,9 +130,7 @@ class KnowledgeSourcePortableCodec:
             )
             target_source_id = context.remap(KNOWLEDGE_SOURCE_RESOURCE_TYPE, source.source_id)
             target_project_id = (
-                None
-                if source.project_id is None
-                else context.remap("project", source.project_id)
+                None if source.project_id is None else context.remap("project", source.project_id)
             )
             remapped_source = replace(
                 source,
@@ -142,9 +138,7 @@ class KnowledgeSourcePortableCodec:
                 project_id=target_project_id,
             )
             remapped_document = (
-                None
-                if document is None
-                else replace(document, source_id=target_source_id)
+                None if document is None else replace(document, source_id=target_source_id)
             )
             return KnowledgePortableSnapshot(
                 source=remapped_source,
