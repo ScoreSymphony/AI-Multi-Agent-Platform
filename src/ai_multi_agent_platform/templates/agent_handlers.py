@@ -32,7 +32,6 @@ from .models import (
     TemplateResourceChange,
     TemplateResourceRef,
     TemplateRevision,
-    TemplateRevisionState,
     TemplateTrust,
     TemplateType,
 )
@@ -124,9 +123,7 @@ class AgentTeamTemplateHandler:
             workspace_id=_optional_canonical_string(payload, "workspace_id"),
             provenance=_resource_provenance(provenance, context),
         )
-        return (
-            TemplateResourceRef(resource_type="agent_team", resource_id=created.team_id),
-        )
+        return (TemplateResourceRef(resource_type="agent_team", resource_id=created.team_id),)
 
 
 @dataclass(slots=True)
