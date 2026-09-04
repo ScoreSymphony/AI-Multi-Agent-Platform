@@ -89,7 +89,7 @@ class EvaluationHistoryRepository(EvaluationRepository, Protocol):
         *,
         suite_id: str | None = None,
         suite_version: str | None = None,
-        limit: int = 100,
+        limit: int | None = 100,
     ) -> tuple[EvaluationRun, ...]: ...
 
     def list_case_results(

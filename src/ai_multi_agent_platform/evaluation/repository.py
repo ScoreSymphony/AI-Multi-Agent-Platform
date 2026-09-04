@@ -7,10 +7,9 @@ from threading import RLock
 from .models import ComparisonReport, EvaluationResult, EvaluationRun
 
 
-def _require_limit(limit: int) -> int:
-    if limit <= 0:
+def _require_limit(limit: int | None) -> None:
+    if limit is not None and limit <= 0:
         raise ValueError("evaluation history limit must be greater than zero")
-    return limit
 
 
 class InMemoryEvaluationRepository:
@@ -35,7 +34,7 @@ class InMemoryEvaluationRepository:
         *,
         suite_id: str | None = None,
         suite_version: str | None = None,
-        limit: int = 100,
+        limit: int | None = 100,
     ) -> tuple[EvaluationRun, ...]:
         _require_limit(limit)
         with self._lock:
@@ -46,7 +45,8 @@ class InMemoryEvaluationRepository:
             if (suite_id is None or run.suite_id == suite_id)
             and (suite_version is None or run.suite_version == suite_version)
         )
-        return tuple(sorted(filtered, key=lambda run: run.started_at, reverse=True))[:limit]
+        ordered = tuple(sorted(filtered, key=lambda run: run.started_at, reverse=True))
+        return ordered if limit is None else ordered[:limit]
 
     def save_result(self, result: EvaluationResult) -> None:
         with self._lock:
