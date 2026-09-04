@@ -1,0 +1,74 @@
+{
+  "suite_id": "suite.pr-deterministic",
+  "name": "Deterministic PR reference suite",
+  "version": "1",
+  "description": "No-paid-service reference evaluation of the canonical Task/Run lifecycle through the platform-owned reference orchestrator and executor.",
+  "tags": ["ci", "pr", "reference"],
+  "cases": [
+    {
+      "case_id": "case.reference-lifecycle",
+      "name": "Reference Task/Run lifecycle succeeds",
+      "version": "1",
+      "input_template": {
+        "title": "Deterministic evaluation CI reference task",
+        "objective": "Exercise the canonical Task/Run lifecycle through local reference components"
+      },
+      "assertions": [
+        {
+          "assertion_id": "task-succeeded",
+          "path": "task.status",
+          "operator": "eq",
+          "expected": "succeeded"
+        },
+        {
+          "assertion_id": "run-succeeded",
+          "path": "run.status",
+          "operator": "eq",
+          "expected": "succeeded"
+        },
+        {
+          "assertion_id": "single-dispatch",
+          "path": "run.dispatch_attempts",
+          "operator": "eq",
+          "expected": 1
+        },
+        {
+          "assertion_id": "run-output-present",
+          "path": "run.output",
+          "operator": "exists"
+        },
+        {
+          "assertion_id": "task-created-event",
+          "path": "event_types",
+          "operator": "contains",
+          "expected": "task.created"
+        },
+        {
+          "assertion_id": "run-created-event",
+          "path": "event_types",
+          "operator": "contains",
+          "expected": "run.created"
+        },
+        {
+          "assertion_id": "run-succeeded-event",
+          "path": "event_types",
+          "operator": "contains",
+          "expected": "run.succeeded"
+        }
+      ],
+      "metric_rules": [
+        {
+          "rule_id": "single-dispatch-metric",
+          "metric_name": "dispatch_attempts",
+          "operator": "lte",
+          "threshold": 1.0,
+          "unit": "attempts"
+        }
+      ],
+      "timeout_seconds": 5.0,
+      "tags": ["ci", "critical", "reference"],
+      "category": "core-lifecycle",
+      "difficulty": "reference"
+    }
+  ]
+}
