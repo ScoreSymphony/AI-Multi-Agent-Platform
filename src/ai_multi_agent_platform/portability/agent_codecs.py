@@ -328,14 +328,18 @@ def _encode(value: object) -> JsonValue:
 def _agent_snapshot_from_payload(payload: dict[str, JsonValue]) -> AgentPortableSnapshot:
     _require_schema(payload)
     definition = _agent_definition(payload.get("definition"))
-    revisions = tuple(_agent_revision(item) for item in _array(payload.get("revisions"), "revisions"))
+    revisions = tuple(
+        _agent_revision(item) for item in _array(payload.get("revisions"), "revisions")
+    )
     return AgentPortableSnapshot(definition=definition, revisions=revisions)
 
 
 def _team_snapshot_from_payload(payload: dict[str, JsonValue]) -> AgentTeamPortableSnapshot:
     _require_schema(payload)
     definition = _team_definition(payload.get("definition"))
-    revisions = tuple(_team_revision(item) for item in _array(payload.get("revisions"), "revisions"))
+    revisions = tuple(
+        _team_revision(item) for item in _array(payload.get("revisions"), "revisions")
+    )
     return AgentTeamPortableSnapshot(definition=definition, revisions=revisions)
 
 
@@ -507,9 +511,7 @@ def _team_profile(value: JsonValue | None) -> AgentTeamProfile:
         description=_string_allow_empty(data, "description"),
         coordination_policy_ref=_optional_string(data, "coordination_policy_ref"),
         leader_agent_id=_optional_string(data, "leader_agent_id"),
-        shared_capability_ids=_strings(
-            data.get("shared_capability_ids"), "shared_capability_ids"
-        ),
+        shared_capability_ids=_strings(data.get("shared_capability_ids"), "shared_capability_ids"),
         shared_resource_refs=_strings(data.get("shared_resource_refs"), "shared_resource_refs"),
         max_parallel_agents=_optional_integer(data, "max_parallel_agents"),
         max_steps=_optional_integer(data, "max_steps"),
@@ -584,9 +586,7 @@ def _remap_agent_profile(profile: AgentProfile, context: ImportContext) -> Agent
         ),
         workspace_defaults=replace(
             profile.workspace_defaults,
-            project_id=_remap_optional(
-                context, "project", profile.workspace_defaults.project_id
-            ),
+            project_id=_remap_optional(context, "project", profile.workspace_defaults.project_id),
             workspace_id=_remap_optional(
                 context, "workspace", profile.workspace_defaults.workspace_id
             ),
@@ -636,9 +636,7 @@ def _remap_team_profile(profile: AgentTeamProfile, context: ImportContext) -> Ag
     return replace(
         profile,
         members=members,
-        leader_agent_id=(
-            None if leader is None else context.remap(AGENT_RESOURCE_TYPE, leader)
-        ),
+        leader_agent_id=(None if leader is None else context.remap(AGENT_RESOURCE_TYPE, leader)),
     )
 
 
