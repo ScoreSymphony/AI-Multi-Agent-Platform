@@ -28,6 +28,26 @@ from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrat
 
 PASSWORD = "correct horse battery staple"
 
+_REQUIRED_TEST_SQLITE_STORES = (
+    "scopes.sqlite3",
+    "files.sqlite3",
+    "workspaces.sqlite3",
+    "verification.sqlite3",
+    "authentication.sqlite3",
+    "authorization.sqlite3",
+    "automation.sqlite3",
+)
+
+
+def _ensure_required_sqlite_stores(root: Path) -> None:
+    database_dir = root / "db"
+    for name in _REQUIRED_TEST_SQLITE_STORES:
+        path = database_dir / name
+        if path.exists():
+            continue
+        with sqlite3.connect(path):
+            pass
+
 
 def _deployment(tmp_path: Path, name: str = "source"):
     config = SingleNodeConfig(data_dir=tmp_path / name, secure_cookie=False)
@@ -155,6 +175,8 @@ def test_full_operator_recovery_runs_integrity_and_health_gate(tmp_path: Path, m
         "canonical-task-run-references:1:0",
         "workspace-project-references:0",
         "durable-file-metadata-and-bytes:0",
+        "agent-team-run-references:0:0:0",
+        "conversation-message-references:0:0",
         "control-plane-provider-health-ready",
     ]
     assert not (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_PENDING).exists()
@@ -280,6 +302,7 @@ def test_server_refuses_normal_service_while_restored_run_is_unresolved(
         await kernel.ready_task(idempotency_key="active:ready", task_id=task.task_id)
         run = await kernel.start_task(idempotency_key="active:start", task_id=task.task_id)
         assert run.status.value == "running"
+        _ensure_required_sqlite_stores(source)
 
         backup = create_single_node_backup(
             data_dir=source,
