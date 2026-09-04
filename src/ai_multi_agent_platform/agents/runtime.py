@@ -158,6 +158,7 @@ class AgentRuntime:
         available_worker_capabilities: frozenset[str] = frozenset(),
         task_context: Mapping[str, JsonValue] | None = None,
         project_context: Mapping[str, JsonValue] | None = None,
+        verification_context: Mapping[str, JsonValue] | None = None,
     ) -> AgentRunRecord:
         spec = self.prepare_agent(
             task_id=task_id,
@@ -181,7 +182,11 @@ class AgentRuntime:
                 ErrorCode.CONTRACT_VIOLATION,
                 "orchestrator mapping adapter ID does not match selected mapper",
             )
-        record = self._record_from_spec(spec, mapping)
+        record = self._record_from_spec(
+            spec,
+            mapping,
+            verification_context=verification_context,
+        )
         self.service.repository.create_agent_run(record)
         return record
 
@@ -284,6 +289,20 @@ class AgentRuntime:
                 "finish_agent_run requires a terminal AgentRun status",
             )
         current = self.service.repository.get_agent_run(agent_run_id)
+        if (
+            verification_context is not None
+            and current.verification_context
+            and dict(verification_context) != dict(current.verification_context)
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "AgentRun verification_context is immutable once bound",
+            )
+        effective_verification_context = (
+            current.verification_context
+            if current.verification_context
+            else (verification_context or {})
+        )
         updated = replace(
             current,
             status=status,
@@ -293,7 +312,7 @@ class AgentRuntime:
             tool_invocation_refs=tool_invocation_refs,
             error=error,
             telemetry=telemetry or current.telemetry,
-            verification_context=verification_context or current.verification_context,
+            verification_context=effective_verification_context,
             finished_at=datetime.now(UTC),
         )
         self.service.repository.update_agent_run(updated)
@@ -467,6 +486,8 @@ class AgentRuntime:
     def _record_from_spec(
         spec: AgentExecutionSpec,
         mapping: OrchestratorMapping,
+        *,
+        verification_context: Mapping[str, JsonValue] | None = None,
     ) -> AgentRunRecord:
         team_ref = None
         if spec.team_revision is not None:
@@ -491,6 +512,7 @@ class AgentRuntime:
             orchestrator_adapter_id=mapping.adapter_id,
             orchestrator_runtime_ref=mapping.runtime_ref,
             telemetry={"orchestrator_mapping": dict(mapping.metadata)},
+            verification_context=verification_context or {},
         )
 
 
