@@ -9,7 +9,7 @@ from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.organizations import OrganizationService, ResourceOwnership
 
 STRICT_MIRRORED_OWNERSHIP_RESOURCE_TYPES = frozenset(
-    {"project", "workspace", "memory", "knowledge_source"}
+    {"project", "workspace", "memory", "knowledge_source", "connection"}
 )
 AUTHORITATIVE_MIRRORED_OWNERSHIP_RESOURCE_TYPES = frozenset(
     {"agent", "agent_team", "automation"}
