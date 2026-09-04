@@ -21,8 +21,10 @@ class ManifestSchemaError(ValueError):
 def backup_manifest_v1_schema() -> dict[str, Any]:
     """Load the packaged schema used by installed backup verification code."""
 
-    raw = files("ai_multi_agent_platform.backup").joinpath(_SCHEMA_RESOURCE).read_text(
-        encoding="utf-8"
+    raw = (
+        files("ai_multi_agent_platform.backup")
+        .joinpath(_SCHEMA_RESOURCE)
+        .read_text(encoding="utf-8")
     )
     payload = json.loads(raw)
     if not isinstance(payload, dict):
@@ -31,7 +33,9 @@ def backup_manifest_v1_schema() -> dict[str, Any]:
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:  # pragma: no cover - repository/schema parity tests guard this
-        raise ManifestSchemaError(f"packaged backup manifest schema is invalid: {exc.message}") from exc
+        raise ManifestSchemaError(
+            f"packaged backup manifest schema is invalid: {exc.message}"
+        ) from exc
     return schema
 
 
