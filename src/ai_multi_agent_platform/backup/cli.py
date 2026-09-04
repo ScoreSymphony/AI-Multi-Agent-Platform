@@ -9,7 +9,12 @@ from pathlib import Path
 
 from ai_multi_agent_platform import __version__
 
-from .service import BackupError, create_single_node_backup, restore_single_node_backup, verify_backup
+from .service import (
+    BackupError,
+    create_single_node_backup,
+    restore_single_node_backup,
+    verify_backup,
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
