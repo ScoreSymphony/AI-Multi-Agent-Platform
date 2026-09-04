@@ -260,9 +260,10 @@ class TemplateApplicationService:
         for item in dependency_order:
             handler = self.handlers.get(item.content.template_type)
             if handler is None:
+                handler_type = item.content.template_type.value
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    f"Template handler disappeared during apply: {item.content.template_type.value}",
+                    f"Template handler disappeared during apply: {handler_type}",
                 )
             context = TemplateInstantiationContext(
                 instance_id=instance_id,
