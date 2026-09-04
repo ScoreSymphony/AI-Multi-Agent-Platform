@@ -10,6 +10,7 @@ from ai_multi_agent_platform.automation import (
     automation_change_actor,
     automation_creation_idempotency_key,
 )
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .automation_api import (
@@ -32,6 +33,8 @@ _CONFIGURATION_COMMANDS = frozenset(
         "automation.pause",
         "automation.resume",
         "automation.disable",
+        "automation.invalidate",
+        "automation.revalidate",
     }
 )
 
@@ -222,7 +225,40 @@ class ControlPlane(_AutomationControlPlane, _RegisteredSearchControlPlane):
             automation,
             resource_ref=delivery.id,
         )
-        return await super()._automation_retry_command(context, resource_ref, payload)
+        del payload
+        retried = await self.automation_service.retry_delivery(resource_ref)
+        latest = await self.automation_service.get_automation(retried.automation_id)
+        return _owned_delivery_resource(retried, latest)
+
+    async def _automation_invalidate_command(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        await self._authorize_automation_target(context, "automation.invalidate", resource_ref)
+        reason_code = payload.get("reason_code")
+        if not isinstance(reason_code, str):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "automation.invalidate requires a categorical reason_code",
+            )
+        invalidated = await self.automation_service.invalidate_automation(
+            resource_ref,
+            reason_code=reason_code,
+        )
+        return _owned_automation_resource(invalidated)
+
+    async def _automation_revalidate_command(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        del payload
+        await self._authorize_automation_target(context, "automation.revalidate", resource_ref)
+        revalidated = await self.automation_service.revalidate_automation(resource_ref)
+        return _owned_automation_resource(revalidated)
 
     async def _authorize_automation_target(
         self,
@@ -274,6 +310,13 @@ def _owned_automation_resource(automation: Automation) -> dict[str, JsonValue]:
         "type": automation.identity.owner_type,
         "id": automation.identity.owner_id,
     }
+    resource["invalidation_reason_code"] = automation.invalidation_reason_code
+    resource["invalidated_at"] = (
+        None if automation.invalidated_at is None else automation.invalidated_at.isoformat()
+    )
+    resource["state_before_invalid"] = (
+        None if automation.state_before_invalid is None else automation.state_before_invalid.value
+    )
     return resource
 
 
@@ -288,4 +331,14 @@ def _owned_delivery_resource(
     }
     resource["project_id"] = automation.project_id
     resource["workspace_id"] = automation.workspace_id
+    resource["retryable"] = delivery.retryable
+    resource["last_failed_at"] = (
+        None if delivery.last_failed_at is None else delivery.last_failed_at.isoformat()
+    )
+    resource["next_retry_at"] = (
+        None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
+    )
+    resource["retry_exhausted_at"] = (
+        None if delivery.retry_exhausted_at is None else delivery.retry_exhausted_at.isoformat()
+    )
     return resource

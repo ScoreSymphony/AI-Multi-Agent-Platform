@@ -17,11 +17,15 @@ from ai_multi_agent_platform.automation.runtime import (
     InMemoryAutomationRuntimeState,
     SqliteAutomationRuntimeState,
 )
+from ai_multi_agent_platform.automation.workspace_event_scope import (
+    CanonicalWorkspaceEventScopeResolver,
+)
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.security.authorization import infer_actor_identity
+from ai_multi_agent_platform.workspaces import RunWorkspaceBindingRepository, WorkspaceProvider
 
 from .models import RequestContext
 from .plugin_terminal_composition import ControlPlane as _BaseControlPlane
@@ -38,6 +42,8 @@ _REPLAYED_AUTOMATION_COMMANDS = frozenset(
         "automation.pause",
         "automation.resume",
         "automation.disable",
+        "automation.invalidate",
+        "automation.revalidate",
     }
 )
 _INTERNAL_AUTOMATION_COMMANDS = frozenset({"automation.event", "automation.evaluate"})
@@ -69,6 +75,11 @@ class ControlPlane(_BaseControlPlane):
             raise ValueError(
                 "Automation runtime composition requires the canonical EventRepository"
             )
+        workspace_provider = cast(WorkspaceProvider | None, kwargs.get("workspace_provider"))
+        run_workspace_bindings = cast(
+            RunWorkspaceBindingRepository | None,
+            kwargs.get("run_workspace_bindings"),
+        )
 
         custom_service = kwargs.get("automation_service") is not None
         if (
@@ -97,6 +108,15 @@ class ControlPlane(_BaseControlPlane):
             kwargs["automation_event_sink"] = runtime_audit_sink
 
         super().__init__(*args, **kwargs)
+        if not custom_service and (
+            workspace_provider is not None or run_workspace_bindings is not None
+        ):
+            self.automation_service.configure_workspace_event_scope_resolver(
+                CanonicalWorkspaceEventScopeResolver(
+                    workspace_provider=workspace_provider,
+                    run_workspace_bindings=run_workspace_bindings,
+                )
+            )
         self._automation_command_locks: dict[tuple[str, str], asyncio.Lock] = {}
         self._automation_runtime = AutomationRuntime(
             service=self.automation_service,

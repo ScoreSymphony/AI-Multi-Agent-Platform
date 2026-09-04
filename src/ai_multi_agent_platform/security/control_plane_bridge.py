@@ -183,6 +183,8 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
             "pause": AuthorizationAction.ADMINISTER,
             "resume": AuthorizationAction.ADMINISTER,
             "disable": AuthorizationAction.ADMINISTER,
+            "invalidate": AuthorizationAction.ADMINISTER,
+            "revalidate": AuthorizationAction.ADMINISTER,
             "test": AuthorizationAction.EXECUTE,
             "webhook": AuthorizationAction.EXECUTE,
             "event": AuthorizationAction.EXECUTE,

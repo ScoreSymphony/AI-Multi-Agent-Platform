@@ -159,8 +159,13 @@ class SqliteVerificationService(_SqliteVerificationState, VerificationService):
 
     _NAMESPACE = "verification-service"
 
-    def __init__(self, db_path: str | Path) -> None:
-        VerificationService.__init__(self)
+    def __init__(
+        self,
+        db_path: str | Path,
+        *,
+        require_canonical_subjects: bool = False,
+    ) -> None:
+        VerificationService.__init__(self, require_canonical_subjects=require_canonical_subjects)
         _SqliteVerificationState.__init__(self, db_path)
         self._restore_service_state()
 
@@ -187,6 +192,7 @@ class SqliteVerificationService(_SqliteVerificationState, VerificationService):
         repair_attempt: int = 0,
         causation_id: str | None = None,
         now: datetime | None = None,
+        _canonical_subject_token: object | None = None,
     ) -> VerificationRequest:
         request = super().request_verification(
             task_id=task_id,
@@ -204,6 +210,7 @@ class SqliteVerificationService(_SqliteVerificationState, VerificationService):
             repair_attempt=repair_attempt,
             causation_id=causation_id,
             now=now,
+            _canonical_subject_token=_canonical_subject_token,
         )
         self._save_service_state()
         return request

@@ -45,6 +45,10 @@ def add_evaluation_parser(
     run.add_argument("--seed", type=int)
     run.add_argument("--baseline-run-id")
     run.add_argument("--regression-policy-ref")
+    run.add_argument(
+        "--aggregation-policy-ref",
+        help="exact versioned aggregation policy required for repeated baseline comparison",
+    )
     run.add_argument("--idempotency-key")
 
     result = commands.add_parser(
@@ -54,7 +58,7 @@ def add_evaluation_parser(
     result_commands = result.add_subparsers(dest="result_command", required=True)
     result_show = result_commands.add_parser(
         "show",
-        help="show one durable evaluation run with results/comparison",
+        help="show one durable evaluation run with raw results, aggregates and comparison",
     )
     result_show.add_argument("run_id")
 
@@ -65,6 +69,10 @@ def add_evaluation_parser(
     compare.add_argument("current_run_id")
     compare.add_argument("--baseline-run-id", required=True)
     compare.add_argument("--regression-policy-ref", required=True)
+    compare.add_argument(
+        "--aggregation-policy-ref",
+        help="exact versioned aggregation policy required when either run is repeated",
+    )
     compare.add_argument("--idempotency-key")
 
 
@@ -84,20 +92,22 @@ def execute_evaluation(
     if args.command == "run":
         if args.repetitions <= 0:
             raise ProfileError("--repetitions must be greater than zero")
-        body: dict[str, JsonValue] = {
+        run_body: dict[str, JsonValue] = {
             "resource_ref": str(args.suite_ref),
             "snapshot": parse_snapshot(args.snapshot_json),
             "repetitions": args.repetitions,
         }
         if args.seed is not None:
-            body["seed"] = args.seed
+            run_body["seed"] = args.seed
         if args.baseline_run_id is not None:
-            body["baseline_run_id"] = str(args.baseline_run_id)
+            run_body["baseline_run_id"] = str(args.baseline_run_id)
         if args.regression_policy_ref is not None:
-            body["regression_policy_ref"] = str(args.regression_policy_ref)
+            run_body["regression_policy_ref"] = str(args.regression_policy_ref)
+        if args.aggregation_policy_ref is not None:
+            run_body["aggregation_policy_ref"] = str(args.aggregation_policy_ref)
         return client.post(
             "/commands/evaluation.run",
-            body=body,
+            body=run_body,
             idempotency_key=args.idempotency_key,
         )
 
@@ -107,13 +117,16 @@ def execute_evaluation(
         raise ProfileError(f"unsupported evaluation result command: {args.result_command}")
 
     if args.command == "compare":
+        compare_body: dict[str, JsonValue] = {
+            "resource_ref": str(args.current_run_id),
+            "baseline_run_id": str(args.baseline_run_id),
+            "regression_policy_ref": str(args.regression_policy_ref),
+        }
+        if args.aggregation_policy_ref is not None:
+            compare_body["aggregation_policy_ref"] = str(args.aggregation_policy_ref)
         return client.post(
             "/commands/evaluation.compare",
-            body={
-                "resource_ref": str(args.current_run_id),
-                "baseline_run_id": str(args.baseline_run_id),
-                "regression_policy_ref": str(args.regression_policy_ref),
-            },
+            body=compare_body,
             idempotency_key=args.idempotency_key,
         )
 

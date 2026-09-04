@@ -2,7 +2,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { APImanifest } from "../api/types";
 import { LiveConnectionStatus } from "../pages/TaskDetailPage";
-import { Shell, apiStatusLabel, manifestResourceState } from "./Shell";
+import {
+  Shell,
+  apiStatusLabel,
+  manifestResourceState,
+  manifestResourcesState,
+} from "./Shell";
 import { RouterProvider } from "./router";
 
 afterEach(() => {
@@ -48,7 +53,7 @@ describe("#17 shell accessibility semantics", () => {
     expect(live).toContain('role="status"');
     expect(live).toContain('aria-live="polite"');
     expect(live).toContain('aria-label="Live updates: reconnecting"');
-    expect(live).toContain(">reconnecting</span>");
+    expect(live).toContain('>reconnecting</span>');
   });
 
   it("distinguishes API loading, ready and unavailable status text", () => {
@@ -75,20 +80,96 @@ describe("#17 shell accessibility semantics", () => {
     const approvals = renderShell("/approvals");
     expect(approvals).toContain("Checking Approvals availability");
     expect(approvals).not.toContain("Read-only inspection of exact-action approval records");
+
+    const integrations = renderShell("/integrations");
+    expect(integrations).toContain("Checking Integrations availability");
+    expect(integrations).not.toContain("Canonical Connector Definitions and Connections");
+
+    const evaluations = renderShell("/evaluations");
+    expect(evaluations).toContain("Checking Evaluations availability");
+    expect(evaluations).not.toContain("Quality and regression evidence");
+
+    const compute = renderShell("/compute");
+    expect(compute).toContain("Checking Compute availability");
+    expect(compute).not.toContain("Canonical Node, Worker and Worker Job state");
+
+    const plugins = renderShell("/plugins");
+    expect(plugins).toContain("Checking Plugins availability");
+    expect(plugins).not.toContain("Canonical plugin lifecycle over the Control Plane");
+
+    const memory = renderShell("/memory");
+    expect(memory).toContain("Checking Memory availability");
+    expect(memory).not.toContain("Scoped durable context");
+
+    const knowledge = renderShell("/knowledge");
+    expect(knowledge).toContain("Checking Knowledge availability");
+    expect(knowledge).not.toContain("Source-backed canonical retrieval");
   });
 
   it("distinguishes advertised, absent and unavailable manifest resources", () => {
     const manifest = {
       api_version: "v1",
-      resources: ["agents", "capabilities", "terminal-sessions", "automations", "approvals"],
+      resources: [
+        "agents",
+        "capabilities",
+        "terminal-sessions",
+        "automations",
+        "approvals",
+        "connector-definitions",
+        "connections",
+        "evaluation-suites",
+        "evaluation-runs",
+        "nodes",
+        "workers",
+        "worker-jobs",
+        "plugins",
+        "plugin-candidates",
+        "memory",
+        "knowledge",
+        "knowledge-results",
+      ],
     } as APImanifest;
 
     expect(manifestResourceState("loading", null, "agents")).toBe("loading");
     expect(manifestResourceState("ready", manifest, "agents")).toBe("available");
     expect(manifestResourceState("ready", manifest, "automations")).toBe("available");
     expect(manifestResourceState("ready", manifest, "approvals")).toBe("available");
+    expect(manifestResourceState("ready", manifest, "plugins")).toBe("available");
+    expect(manifestResourceState("ready", manifest, "plugin-candidates")).toBe("available");
+    expect(manifestResourceState("ready", manifest, "memory")).toBe("available");
     expect(manifestResourceState("ready", manifest, "agent-teams")).toBe("unavailable");
     expect(manifestResourceState("unavailable", null, "agents")).toBe("unavailable");
+
+    expect(
+      manifestResourcesState("ready", manifest, ["connector-definitions", "connections"]),
+    ).toBe("available");
+    expect(
+      manifestResourcesState("ready", manifest, ["connector-definitions", "missing-connections"]),
+    ).toBe("unavailable");
+
+    expect(
+      manifestResourcesState("ready", manifest, ["evaluation-suites", "evaluation-runs"]),
+    ).toBe("available");
+    expect(
+      manifestResourcesState("ready", manifest, ["evaluation-suites", "missing-evaluation-resource"]),
+    ).toBe("unavailable");
+    expect(
+      manifestResourcesState("loading", null, ["evaluation-suites", "evaluation-runs"]),
+    ).toBe("loading");
+
+    expect(
+      manifestResourcesState("ready", manifest, ["nodes", "workers", "worker-jobs"]),
+    ).toBe("available");
+    expect(
+      manifestResourcesState("ready", manifest, ["nodes", "workers", "missing-worker-jobs"]),
+    ).toBe("unavailable");
+
+    expect(
+      manifestResourcesState("ready", manifest, ["knowledge", "knowledge-results"]),
+    ).toBe("available");
+    expect(
+      manifestResourcesState("ready", manifest, ["knowledge", "missing-knowledge-results"]),
+    ).toBe("unavailable");
   });
 
   it("routes Settings to the real browser-session surface", () => {

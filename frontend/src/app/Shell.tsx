@@ -3,7 +3,12 @@ import { AutomationClient } from "../api/automations";
 import { BrowserSessionClient } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
 import { ControlPlaneCollectionClient } from "../api/collections";
+import { ComputeClient } from "../api/compute";
+import { EvaluationClient } from "../api/evaluations";
+import { IntegrationsClient } from "../api/integrations";
+import { MemoryKnowledgeClient } from "../api/memoryKnowledge";
 import { NotificationClient } from "../api/notifications";
+import { PluginsClient } from "../api/plugins";
 import { VerificationClient } from "../api/verification";
 import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
@@ -24,11 +29,38 @@ import {
   CapabilityDetailPage,
   CapabilityProviderDetailPage,
 } from "../pages/CapabilitiesPage";
+import {
+  ComputeNodeDetailPage,
+  ComputePage,
+  ComputeWorkerDetailPage,
+  ComputeWorkerJobDetailPage,
+} from "../pages/ComputePage";
+import {
+  EvaluationRunDetailPage,
+  EvaluationSuiteDetailPage,
+  EvaluationsPage,
+} from "../pages/EvaluationsPage";
+import {
+  ConnectionDetailPage,
+  ConnectorDefinitionDetailPage,
+  IntegrationsPage,
+} from "../pages/IntegrationsPage";
+import {
+  KnowledgeDetailPage,
+  KnowledgePage,
+  MemoryDetailPage,
+  MemoryPage,
+} from "../pages/MemoryKnowledgePages";
 import { ModelDetailPage, ModelProviderDetailPage } from "../pages/ModelPages";
 import { ModelsPage } from "../pages/ModelInventoryPage";
 import { NotificationsPage } from "../pages/NotificationsPage";
 import { ObservabilityPage } from "../pages/ObservabilityPage";
 import { OverviewPage, UnavailablePage } from "../pages/Pages";
+import {
+  PluginCandidateDetailPage,
+  PluginDetailPage,
+  PluginsPage,
+} from "../pages/PluginsPage";
 import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ProjectsPage } from "../pages/ProjectListPage";
 import { ReferencesPage } from "../pages/ReferencePages";
@@ -48,6 +80,11 @@ import {
 export type ManifestState = "loading" | "ready" | "unavailable";
 export type ManifestResourceState = "loading" | "available" | "unavailable";
 
+const EVALUATION_RESOURCES = ["evaluation-suites", "evaluation-runs"] as const;
+const COMPUTE_RESOURCES = ["nodes", "workers", "worker-jobs"] as const;
+const INTEGRATION_RESOURCES = ["connector-definitions", "connections"] as const;
+const KNOWLEDGE_RESOURCES = ["knowledge", "knowledge-results"] as const;
+
 export function Shell() {
   const { path } = useRouter();
   const baseUrl = import.meta.env.VITE_CONTROL_PLANE_URL ?? "";
@@ -64,8 +101,28 @@ export function Shell() {
     () => new AutomationClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
+  const computeClient = useMemo(
+    () => new ComputeClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const evaluationClient = useMemo(
+    () => new EvaluationClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const integrationsClient = useMemo(
+    () => new IntegrationsClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const memoryKnowledgeClient = useMemo(
+    () => new MemoryKnowledgeClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
   const notificationClient = useMemo(
     () => new NotificationClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const pluginsClient = useMemo(
+    () => new PluginsClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const verificationClient = useMemo(
@@ -99,13 +156,25 @@ export function Shell() {
   const agentTeamMatch = matchPath("/agent-teams/:teamId", path);
   const capabilityProviderMatch = matchPath("/tools/providers/:providerId", path);
   const capabilityMatch = matchPath("/tools/:capabilityId", path);
+  const connectorDefinitionMatch = matchPath("/integrations/definitions/:definitionId", path);
+  const connectionMatch = matchPath("/integrations/connections/:connectionId", path);
+  const memoryMatch = matchPath("/memory/:memoryId", path);
+  const knowledgeMatch = matchPath("/knowledge/:sourceId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
+  const evaluationSuiteMatch = matchPath("/evaluations/suites/:suiteRef", path);
+  const evaluationRunMatch = matchPath("/evaluations/runs/:evaluationRunId", path);
+  const computeNodeMatch = matchPath("/compute/nodes/:nodeId", path);
+  const computeWorkerMatch = matchPath("/compute/workers/:workerId", path);
+  const computeWorkerJobMatch = matchPath("/compute/jobs/:workerJobId", path);
+  const pluginCandidateMatch = matchPath("/plugins/candidates/:pluginId", path);
+  const pluginMatch = matchPath("/plugins/:pluginId", path);
   const automationMatch = matchPath("/automations/:automationId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const verificationMatch = matchPath("/verification/:verificationId", path);
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
+  const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
   else if (path === "/projects") content = <ProjectsPage client={client} />;
@@ -137,45 +206,25 @@ export function Shell() {
   }
   else if (path === "/agents") {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Agents"
-        resource="agents"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Agents" resource="agents">
         <AgentsPage client={client} />
       </ManifestResourcePage>
     );
   } else if (agentMatch) {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Agents"
-        resource="agents"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Agents" resource="agents">
         <AgentDetailPage client={client} agentId={agentMatch.agentId} />
       </ManifestResourcePage>
     );
   } else if (path === "/agent-teams") {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Agent Teams"
-        resource="agent-teams"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams">
         <AgentTeamsPage client={client} />
       </ManifestResourcePage>
     );
   } else if (agentTeamMatch) {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Agent Teams"
-        resource="agent-teams"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams">
         <AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} />
       </ManifestResourcePage>
     );
@@ -189,143 +238,227 @@ export function Shell() {
         resourceId={referenceMatch.resourceId}
       />
     );
+  } else if (path === "/memory") {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory">
+        <MemoryPage client={memoryKnowledgeClient} />
+      </ManifestResourcePage>
+    );
+  } else if (memoryMatch) {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory">
+        <MemoryDetailPage client={memoryKnowledgeClient} memoryId={memoryMatch.memoryId} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/knowledge") {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Knowledge"
+        resources={KNOWLEDGE_RESOURCES}
+      >
+        <KnowledgePage client={memoryKnowledgeClient} />
+      </ManifestResourcesPage>
+    );
+  } else if (knowledgeMatch) {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Knowledge"
+        resources={KNOWLEDGE_RESOURCES}
+      >
+        <KnowledgeDetailPage client={memoryKnowledgeClient} sourceId={knowledgeMatch.sourceId} />
+      </ManifestResourcesPage>
+    );
   } else if (path === "/search") content = <SearchPage client={client} />;
   else if (path === "/tools") {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Tools"
-        resource="capabilities"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capabilities">
         <CapabilitiesPage client={client} />
       </ManifestResourcePage>
     );
   } else if (capabilityProviderMatch) {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Tools"
-        resource="capability-providers"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capability-providers">
         <CapabilityProviderDetailPage client={client} providerId={capabilityProviderMatch.providerId} />
       </ManifestResourcePage>
     );
   } else if (capabilityMatch) {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Tools"
-        resource="capabilities"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Tools" resource="capabilities">
         <CapabilityDetailPage client={client} capabilityId={capabilityMatch.capabilityId} />
       </ManifestResourcePage>
+    );
+  } else if (path === "/integrations") {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Integrations"
+        resources={INTEGRATION_RESOURCES}
+      >
+        <IntegrationsPage client={integrationsClient} />
+      </ManifestResourcesPage>
+    );
+  } else if (connectorDefinitionMatch) {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Integrations"
+        resources={INTEGRATION_RESOURCES}
+      >
+        <ConnectorDefinitionDetailPage
+          client={integrationsClient}
+          definitionId={connectorDefinitionMatch.definitionId}
+        />
+      </ManifestResourcesPage>
+    );
+  } else if (connectionMatch) {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Integrations"
+        resources={INTEGRATION_RESOURCES}
+      >
+        <ConnectionDetailPage
+          client={integrationsClient}
+          connectionId={connectionMatch.connectionId}
+        />
+      </ManifestResourcesPage>
     );
   } else if (path === "/models") content = <ModelsPage client={client} />;
   else if (providerMatch) {
     content = <ModelProviderDetailPage client={client} providerId={providerMatch.providerId} />;
   } else if (modelMatch) content = <ModelDetailPage client={client} modelId={modelMatch.modelId} />;
-  else if (path === "/terminal") {
+  else if (path === "/evaluations") {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Evaluations"
+        resources={EVALUATION_RESOURCES}
+      >
+        <EvaluationsPage client={evaluationClient} />
+      </ManifestResourcesPage>
+    );
+  } else if (evaluationSuiteMatch) {
+    content = (
+      <ManifestResourcesPage state={manifestState} manifest={manifest} label="Evaluations" resources={EVALUATION_RESOURCES}>
+        <EvaluationSuiteDetailPage client={evaluationClient} suiteRef={evaluationSuiteMatch.suiteRef} />
+      </ManifestResourcesPage>
+    );
+  } else if (evaluationRunMatch) {
+    content = (
+      <ManifestResourcesPage state={manifestState} manifest={manifest} label="Evaluations" resources={EVALUATION_RESOURCES}>
+        <EvaluationRunDetailPage client={evaluationClient} evaluationRunId={evaluationRunMatch.evaluationRunId} />
+      </ManifestResourcesPage>
+    );
+  } else if (path === "/compute") {
+    content = (
+      <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}>
+        <ComputePage client={computeClient} />
+      </ManifestResourcesPage>
+    );
+  } else if (computeNodeMatch) {
+    content = (
+      <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}>
+        <ComputeNodeDetailPage client={computeClient} nodeId={computeNodeMatch.nodeId} />
+      </ManifestResourcesPage>
+    );
+  } else if (computeWorkerMatch) {
+    content = (
+      <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}>
+        <ComputeWorkerDetailPage client={computeClient} workerId={computeWorkerMatch.workerId} />
+      </ManifestResourcesPage>
+    );
+  } else if (computeWorkerJobMatch) {
+    content = (
+      <ManifestResourcesPage state={manifestState} manifest={manifest} label="Compute" resources={COMPUTE_RESOURCES}>
+        <ComputeWorkerJobDetailPage client={computeClient} workerJobId={computeWorkerJobMatch.workerJobId} />
+      </ManifestResourcesPage>
+    );
+  } else if (path === "/plugins") {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Plugins" resource="plugins">
+        <PluginsPage client={pluginsClient} candidateAvailable={pluginCandidatesAvailable} />
+      </ManifestResourcePage>
+    );
+  } else if (pluginCandidateMatch) {
     content = (
       <ManifestResourcePage
         state={manifestState}
         manifest={manifest}
-        label="Terminal"
-        resource="terminal-sessions"
+        label="Plugin discovery"
+        resource="plugin-candidates"
       >
+        <PluginCandidateDetailPage client={pluginsClient} pluginId={pluginCandidateMatch.pluginId} />
+      </ManifestResourcePage>
+    );
+  } else if (pluginMatch) {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Plugins" resource="plugins">
+        <PluginDetailPage
+          client={pluginsClient}
+          pluginId={pluginMatch.pluginId}
+          candidateAvailable={pluginCandidatesAvailable}
+        />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/terminal") {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Terminal" resource="terminal-sessions">
         <TerminalPage client={client} />
       </ManifestResourcePage>
     );
   } else if (path === "/automations") {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Automations"
-        resource="automations"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Automations" resource="automations">
         <AutomationsPage collections={collections} automations={automationClient} />
       </ManifestResourcePage>
     );
   } else if (automationMatch) {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Automations"
-        resource="automations"
-      >
-        <AutomationDetailPage
-          collections={collections}
-          automations={automationClient}
-          automationId={automationMatch.automationId}
-        />
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Automations" resource="automations">
+        <AutomationDetailPage collections={collections} automations={automationClient} automationId={automationMatch.automationId} />
       </ManifestResourcePage>
     );
   } else if (path === "/verification") {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Verification"
-        resource="verifications"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Verification" resource="verifications">
         <VerificationPage client={verificationClient} />
       </ManifestResourcePage>
     );
   } else if (verificationMatch) {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Verification"
-        resource="verifications"
-      >
-        <VerificationDetailPage
-          client={verificationClient}
-          verificationId={verificationMatch.verificationId}
-        />
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Verification" resource="verifications">
+        <VerificationDetailPage client={verificationClient} verificationId={verificationMatch.verificationId} />
       </ManifestResourcePage>
     );
   } else if (path === "/approvals") {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Approvals"
-        resource="approvals"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Approvals" resource="approvals">
         <ApprovalsPage client={collections} />
       </ManifestResourcePage>
     );
   } else if (approvalMatch) {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Approvals"
-        resource="approvals"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Approvals" resource="approvals">
         <ApprovalDetailPage client={collections} approvalId={approvalMatch.approvalId} />
       </ManifestResourcePage>
     );
   } else if (path === "/notifications") {
     content = (
-      <ManifestResourcePage
-        state={manifestState}
-        manifest={manifest}
-        label="Notifications"
-        resource="notifications"
-      >
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Notifications" resource="notifications">
         <NotificationsPage client={notificationClient} />
       </ManifestResourcePage>
     );
   } else if (path === "/events") content = <ObservabilityPage client={client} view="events" />;
-  else if (path === "/observability") {
-    content = <ObservabilityPage client={client} view="observability" />;
-  } else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
+  else if (path === "/observability") content = <ObservabilityPage client={client} view="observability" />;
+  else if (path === "/usage") content = <UsagePage client={client} manifest={manifest} />;
   else if (path === "/settings") content = <SettingsPage session={session} />;
   else if (navItem) content = <UnavailablePage item={navItem} manifest={manifest} />;
   else content = <UnavailablePage item={{ label: "Unknown route" }} manifest={manifest} />;
@@ -336,10 +469,7 @@ export function Shell() {
     <PermissionHintsProvider>
       <a className="skip-link" href="#main">Skip to content</a>
       <div className="app-shell">
-        <aside
-          id="platform-navigation"
-          className={menuOpen ? "sidebar sidebar-open" : "sidebar"}
-        >
+        <aside id="platform-navigation" className={menuOpen ? "sidebar sidebar-open" : "sidebar"}>
           <div className="brand"><span className="brand-mark">A</span><div><strong>Agent Platform</strong><small>Control Plane UI</small></div></div>
           <nav aria-label="Platform navigation">
             {groups.map((group) => (
@@ -399,11 +529,36 @@ function ManifestResourcePage({
   children: ReactNode;
 }) {
   const resourceState = manifestResourceState(state, manifest, resource);
-  if (resourceState === "loading") {
-    return <LoadingState label={`Checking ${label} availability…`} />;
-  }
+  if (resourceState === "loading") return <LoadingState label={`Checking ${label} availability…`} />;
   if (resourceState === "unavailable") {
     return <UnavailablePage item={{ label, apiResource: resource }} manifest={manifest} />;
+  }
+  return children;
+}
+
+function ManifestResourcesPage({
+  state,
+  manifest,
+  label,
+  resources,
+  children,
+}: {
+  state: ManifestState;
+  manifest: APImanifest | null;
+  label: string;
+  resources: readonly string[];
+  children: ReactNode;
+}) {
+  const resourceState = manifestResourcesState(state, manifest, resources);
+  if (resourceState === "loading") return <LoadingState label={`Checking ${label} availability…`} />;
+  if (resourceState === "unavailable") {
+    const missingResource = resources.find((resource) => !manifest?.resources.includes(resource));
+    return (
+      <UnavailablePage
+        item={{ label, apiResource: missingResource ?? resources[0] }}
+        manifest={manifest}
+      />
+    );
   }
   return children;
 }
@@ -416,6 +571,16 @@ export function manifestResourceState(
   if (state === "loading") return "loading";
   if (state !== "ready" || manifest === null) return "unavailable";
   return manifest.resources.includes(resource) ? "available" : "unavailable";
+}
+
+export function manifestResourcesState(
+  state: ManifestState,
+  manifest: APImanifest | null,
+  resources: readonly string[],
+): ManifestResourceState {
+  if (state === "loading") return "loading";
+  if (state !== "ready" || manifest === null) return "unavailable";
+  return resources.every((resource) => manifest.resources.includes(resource)) ? "available" : "unavailable";
 }
 
 export function apiStatusLabel(state: ManifestState, manifest: APImanifest | null): string {

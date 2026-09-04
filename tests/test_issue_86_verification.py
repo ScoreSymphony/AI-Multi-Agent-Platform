@@ -337,3 +337,118 @@ def test_bounded_repair_preserves_history_and_stops_at_policy_limit() -> None:
             correlation_id="corr-third",
         )
     assert limit.value.code is ErrorCode.CONFLICT
+
+
+def test_later_critical_stage_failure_overrides_earlier_incomplete_stage() -> None:
+    service = VerificationService()
+    policy = service.register_policy(
+        VerificationPolicy(
+            name="multi-stage critical ordering",
+            stages=(
+                VerificationStage("human", VerifierKind.HUMAN),
+                VerificationStage("tests", VerifierKind.DETERMINISTIC, critical=True),
+            ),
+        )
+    )
+    task_id = new_id("task")
+    exact = subject()
+    service.request_verification(
+        task_id=task_id,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+        stage_id="human",
+        subject=exact,
+        result_id=exact.subject_id,
+        correlation_id="human-pending",
+    )
+    failed = service.request_verification(
+        task_id=task_id,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+        stage_id="tests",
+        subject=exact,
+        result_id=exact.subject_id,
+        correlation_id="tests-fail",
+    )
+    service.run_deterministic(
+        failed.verification_id,
+        ReferenceDeterministicVerifier(
+            "deterministic:critical",
+            (DeterministicCheck("tests", lambda _request: False, "critical tests failed"),),
+        ),
+    )
+    decision = service.assess_completion(
+        task_id=task_id,
+        subject=exact,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+    )
+    assert decision.state is CompletionState.REJECTED
+    assert decision.blocking_verification_ids == (failed.verification_id,)
+
+
+def test_agent_revisions_do_not_count_as_distinct_reviewers() -> None:
+    service = VerificationService()
+    policy = service.register_policy(
+        VerificationPolicy(
+            name="two independent agent reviewers",
+            stages=(VerificationStage("review", VerifierKind.AGENT, minimum_results=2),),
+            independence=ReviewerIndependence(require_distinct_verifiers=True),
+        )
+    )
+    task_id = new_id("task")
+    exact = subject()
+    same_agent = new_id("agent")
+
+    def request(correlation: str) -> str:
+        return service.request_verification(
+            task_id=task_id,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id="review",
+            subject=exact,
+            result_id=exact.subject_id,
+            correlation_id=correlation,
+        ).verification_id
+
+    for revision in (1, 2):
+        service.record_agent_review(
+            request(f"same-agent-{revision}"),
+            verifier=VerifierIdentity(
+                verifier_ref=f"agent:{same_agent}@{revision}",
+                kind=VerifierKind.AGENT,
+                agent_id=same_agent,
+                agent_revision=revision,
+                read_only=True,
+            ),
+            outcome=VerificationOutcome.PASS,
+        )
+    waiting = service.assess_completion(
+        task_id=task_id,
+        subject=exact,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+    )
+    assert waiting.state is CompletionState.WAITING
+
+    other_agent = new_id("agent")
+    service.record_agent_review(
+        request("other-agent"),
+        verifier=VerifierIdentity(
+            verifier_ref=f"agent:{other_agent}@1",
+            kind=VerifierKind.AGENT,
+            agent_id=other_agent,
+            agent_revision=1,
+            read_only=True,
+        ),
+        outcome=VerificationOutcome.PASS,
+    )
+    assert (
+        service.assess_completion(
+            task_id=task_id,
+            subject=exact,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+        ).state
+        is CompletionState.ACCEPTED
+    )

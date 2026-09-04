@@ -10,13 +10,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, PlatformEvent
 from ai_multi_agent_platform.kernel.repository import EventRepository
 
-from .models import require_aware, utc_now
+from .models import TriggerDelivery, require_aware, utc_now
 from .runtime_service import AutomationService
 from .service import ReferenceScheduler
 
@@ -52,6 +52,7 @@ class AutomationRuntimeTick:
     failed_event_ids: tuple[str, ...] = ()
     terminal_event_ids: tuple[str, ...] = ()
     event_delivery_ids: tuple[str, ...] = ()
+    retry_delivery_ids: tuple[str, ...] = ()
     schedule_delivery_ids: tuple[str, ...] = ()
 
 
@@ -291,11 +292,11 @@ class SqliteAutomationRuntimeState(AutomationRuntimeState):
 
 
 class AutomationRuntime:
-    """Autonomous reference runner for schedules and canonical #6 events.
+    """Autonomous reference runner for schedules, retries and canonical #6 events.
 
-    The runtime deliberately polls the replaceable canonical ``EventRepository`` instead of
-    depending on a broker. Processed event IDs are persisted so restart does not replay the
-    canonical event stream indefinitely. Delivery-level deduplication remains the final guard.
+    The runtime deliberately polls replaceable persistence seams rather than requiring a broker or
+    workflow engine. Delivery retry deadlines live on canonical TriggerDelivery state, so the
+    reference path survives restart without backend-private scheduler identities.
     """
 
     def __init__(
@@ -334,7 +335,8 @@ class AutomationRuntime:
         failed_event_ids: list[str] = []
         terminal_event_ids: list[str] = []
         event_delivery_ids: list[str] = []
-        first_event_error: Exception | None = None
+        retry_delivery_ids: list[str] = []
+        first_error: Exception | None = None
 
         pending_events = await self._pending_events()
         for event in pending_events:
@@ -353,33 +355,39 @@ class AutomationRuntime:
                         await self._state.mark_processed_event(event.id)
                     except Exception as persistence_exc:
                         failed_event_ids.append(event.id)
-                        if first_event_error is None:
-                            first_event_error = persistence_exc
+                        if first_error is None:
+                            first_error = persistence_exc
                         continue
                     terminal_event_ids.append(event.id)
-                if first_event_error is None:
-                    first_event_error = exc
+                if first_error is None:
+                    first_error = exc
                 continue
             except Exception as exc:
                 # Unknown exceptions are conservatively retryable. The runtime must not discard a
                 # canonical Event without a stable platform error category proving terminality.
                 failed_event_ids.append(event.id)
-                if first_event_error is None:
-                    first_event_error = exc
+                if first_error is None:
+                    first_error = exc
                 continue
             processed_event_ids.append(event.id)
 
-        # Event ingestion failures must not starve the independent schedule path. Retryable Events
-        # remain unacknowledged; permanent ContractErrors are auditable terminal outcomes. If
-        # delivery creation succeeded but cursor persistence failed, TriggerDelivery deduplication
-        # still protects the next attempt from duplicate work.
+        # Delivery retries are independent from canonical Event cursor handling and from schedule
+        # evaluation. A retry persistence failure therefore must not starve the schedule path.
+        try:
+            retry_deliveries = await self._retry_due_deliveries(current)
+            retry_delivery_ids.extend(delivery.id for delivery in retry_deliveries)
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
+
         schedule_deliveries = await self._scheduler.tick(now=current)
-        self._last_error = first_event_error
+        self._last_error = first_error
         return AutomationRuntimeTick(
             processed_event_ids=tuple(processed_event_ids),
             failed_event_ids=tuple(failed_event_ids),
             terminal_event_ids=tuple(terminal_event_ids),
             event_delivery_ids=tuple(event_delivery_ids),
+            retry_delivery_ids=tuple(retry_delivery_ids),
             schedule_delivery_ids=tuple(delivery.id for delivery in schedule_deliveries),
         )
 
@@ -403,8 +411,10 @@ class AutomationRuntime:
     async def _run_loop(self) -> None:
         while not self._stop_event.is_set():
             run_failed = False
+            tick: AutomationRuntimeTick | None = None
             try:
-                await self.run_once()
+                tick = await self.run_once()
+                run_failed = self._last_error is not None
             except Exception as exc:
                 self._last_error = exc
                 run_failed = True
@@ -412,19 +422,21 @@ class AutomationRuntime:
             delay = self._poll_interval_seconds
             if not run_failed:
                 try:
-                    next_wakeup = await self._scheduler.next_wakeup()
+                    next_wakeup = await self._next_wakeup()
                     if next_wakeup is not None:
                         remaining = (
                             next_wakeup.astimezone(UTC) - self._clock().astimezone(UTC)
                         ).total_seconds()
                         delay = min(delay, max(0.0, remaining))
+                        # ``base_backoff_seconds = 0`` is valid policy. After a retry attempt that
+                        # immediately reschedules itself, retain the polling floor instead of
+                        # spinning with repeated zero-delay event-loop yields.
+                        if remaining <= 0 and tick is not None and tick.retry_delivery_ids:
+                            delay = self._poll_interval_seconds
                 except Exception as exc:
                     self._last_error = exc
                     run_failed = True
 
-            # A failed schedule/runtime pass must back off by at least the poll interval. Without
-            # this guard an overdue schedule can keep next_wakeup at or before ``now`` and turn a
-            # persistent backend failure into a zero-delay CPU loop.
             if run_failed:
                 delay = self._poll_interval_seconds
 
@@ -444,6 +456,26 @@ class AutomationRuntime:
                     pending.append(event)
         pending.sort(key=_event_sort_key)
         return tuple(pending)
+
+    async def _retry_due_deliveries(self, current: datetime) -> tuple[TriggerDelivery, ...]:
+        retry_due = getattr(self._service, "retry_due_deliveries", None)
+        if retry_due is None:
+            return ()
+        result: Any = await retry_due(now=current)
+        return cast(tuple[TriggerDelivery, ...], result)
+
+    async def _next_retry_wakeup(self) -> datetime | None:
+        next_retry = getattr(self._service, "next_retry_wakeup", None)
+        if next_retry is None:
+            return None
+        result: Any = await next_retry()
+        return cast(datetime | None, result)
+
+    async def _next_wakeup(self) -> datetime | None:
+        schedule_wakeup = await self._scheduler.next_wakeup()
+        retry_wakeup = await self._next_retry_wakeup()
+        candidates = [item for item in (schedule_wakeup, retry_wakeup) if item is not None]
+        return None if not candidates else min(candidates)
 
 
 def _runtime_event_error_is_retryable(error: ContractError) -> bool:

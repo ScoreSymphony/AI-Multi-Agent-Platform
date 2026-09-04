@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -13,12 +14,25 @@ from ai_multi_agent_platform.data.contracts import FileProvider
 from ai_multi_agent_platform.data.models import DataAccessContext, FileState
 from ai_multi_agent_platform.domain import RunStatus, validate_id
 
-from .gate import VerificationCompletionAuthority
+from .gate import TaskVerificationRequirement, VerificationCompletionAuthority
 from .models import ProducerIdentity, VerificationRequest, VerificationSubject
 
 if TYPE_CHECKING:
+    from ai_multi_agent_platform.agents import AgentRepository
     from ai_multi_agent_platform.kernel import PlatformKernel
     from ai_multi_agent_platform.kernel.repository import EventRepository
+
+
+@dataclass(frozen=True, slots=True)
+class VerificationEvidenceContext:
+    """Canonical subject plus producer/scope facts derived from platform state."""
+
+    task_id: str
+    subject: VerificationSubject
+    run_id: str | None
+    project_id: str | None
+    capability_ids: tuple[str, ...]
+    producer: ProducerIdentity | None
 
 
 @runtime_checkable
@@ -32,6 +46,14 @@ class VerificationEvidenceResolver(Protocol):
         subject_type: str,
         subject_id: str,
     ) -> VerificationSubject: ...
+
+    async def resolve_context(
+        self,
+        *,
+        task_id: str,
+        subject_type: str,
+        subject_id: str,
+    ) -> VerificationEvidenceContext: ...
 
     async def validate_evidence_artifacts(
         self,
@@ -54,10 +76,12 @@ class KernelFileVerificationEvidenceResolver:
         kernel: PlatformKernel,
         events: EventRepository,
         files: FileProvider,
+        agents: AgentRepository | None = None,
     ) -> None:
         self._kernel = kernel
         self._events = events
         self._files = files
+        self._agents = agents
 
     async def resolve_subject(
         self,
@@ -76,6 +100,100 @@ class KernelFileVerificationEvidenceResolver:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "verification subject_type must be result or artifact",
+        )
+
+    async def resolve_context(
+        self,
+        *,
+        task_id: str,
+        subject_type: str,
+        subject_id: str,
+    ) -> VerificationEvidenceContext:
+        task = await self._kernel.get_task(task_id)
+        subject = await self.resolve_subject(
+            task_id=task_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
+        )
+        run_id: str | None = None
+        if subject_type == "result":
+            attachments = [
+                event
+                for event in await self._events.read_events(task_id)
+                if event.event_type == "result.attached"
+                and event.payload.get("result_id") == subject_id
+            ]
+            if not attachments or attachments[-1].subject_type != "run":
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "canonical Result producer context requires a Run attachment",
+                )
+            run_id = attachments[-1].subject_id
+        producer, capability_ids, producer_run_id = self._producer_context(
+            task_id=task_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            run_id=run_id,
+        )
+        if run_id is None:
+            run_id = producer_run_id
+        elif producer_run_id is not None and producer_run_id != run_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical producer AgentRun belongs to a different Run",
+            )
+        return VerificationEvidenceContext(
+            task_id=task_id,
+            subject=subject,
+            run_id=run_id,
+            project_id=task.task.project_id,
+            capability_ids=capability_ids,
+            producer=producer,
+        )
+
+    def _producer_context(
+        self,
+        *,
+        task_id: str,
+        subject_type: str,
+        subject_id: str,
+        run_id: str | None,
+    ) -> tuple[ProducerIdentity | None, tuple[str, ...], str | None]:
+        if self._agents is None:
+            return None, (), run_id
+        records = (
+            self._agents.list_agent_runs(run_id)
+            if run_id is not None
+            else self._agents.list_agent_runs()
+        )
+        candidates = [
+            record
+            for record in records
+            if record.task_id == task_id
+            and (
+                subject_id in record.result_ids
+                if subject_type == "result"
+                else subject_id in record.artifact_ids
+            )
+        ]
+        if len(candidates) > 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "verification subject maps to multiple canonical producer AgentRuns",
+            )
+        if not candidates:
+            return None, (), run_id
+        record = candidates[0]
+        return (
+            ProducerIdentity(
+                actor_ref=f"agent:{record.agent.agent_id}@{record.agent.revision}",
+                agent_id=record.agent.agent_id,
+                agent_revision=record.agent.revision,
+                model_config_id=record.selected_model_config_id,
+                provider_id=record.selected_provider_id,
+            ),
+            record.capability_ids,
+            record.run_id,
         )
 
     async def validate_evidence_artifacts(
@@ -207,6 +325,19 @@ class CanonicalVerificationRuntime:
     def evidence(self) -> VerificationEvidenceResolver:
         return self._evidence
 
+    def require_task(
+        self,
+        *,
+        task_id: str,
+        policy_id: str,
+        policy_version: int,
+    ) -> TaskVerificationRequirement:
+        return self._completion.require_task(
+            task_id=task_id,
+            policy_id=policy_id,
+            policy_version=policy_version,
+        )
+
     async def request_verification(
         self,
         *,
@@ -217,34 +348,28 @@ class CanonicalVerificationRuntime:
         subject_type: str,
         subject_id: str,
         correlation_id: str,
-        run_id: str | None = None,
-        project_id: str | None = None,
-        capability_ids: tuple[str, ...] = (),
-        producer: ProducerIdentity | None = None,
-        repair_attempt: int = 0,
         causation_id: str | None = None,
     ) -> VerificationRequest:
-        subject = await self._evidence.resolve_subject(
+        context = await self._evidence.resolve_context(
             task_id=task_id,
             subject_type=subject_type,
             subject_id=subject_id,
         )
         result_id = subject_id if subject_type == "result" else None
         artifact_ids = (subject_id,) if subject_type == "artifact" else ()
-        return self._completion.request_verification(
-            task_id=task_id,
+        return self._completion.request_canonical_verification(
+            task_id=context.task_id,
             policy_id=policy_id,
             policy_version=policy_version,
             stage_id=stage_id,
-            subject=subject,
+            subject=context.subject,
             correlation_id=correlation_id,
-            run_id=run_id,
+            run_id=context.run_id,
             result_id=result_id,
             artifact_ids=artifact_ids,
-            project_id=project_id,
-            capability_ids=capability_ids,
-            producer=producer,
-            repair_attempt=repair_attempt,
+            project_id=context.project_id,
+            capability_ids=context.capability_ids,
+            producer=context.producer,
             causation_id=causation_id,
         )
 
@@ -252,27 +377,29 @@ class CanonicalVerificationRuntime:
         self,
         verification_id: str,
         *,
-        task_id: str,
         subject_type: str,
         subject_id: str,
         correlation_id: str,
-        run_id: str | None = None,
         causation_id: str | None = None,
     ) -> VerificationRequest:
-        subject = await self._evidence.resolve_subject(
-            task_id=task_id,
+        previous = self._completion.verification.get_request(verification_id)
+        context = await self._evidence.resolve_context(
+            task_id=previous.task_id,
             subject_type=subject_type,
             subject_id=subject_id,
         )
         result_id = subject_id if subject_type == "result" else None
         artifact_ids = (subject_id,) if subject_type == "artifact" else ()
-        return self._completion.request_reverification_after_repair(
+        return self._completion.request_canonical_reverification_after_repair(
             verification_id,
-            new_subject=subject,
+            new_subject=context.subject,
             correlation_id=correlation_id,
-            run_id=run_id,
+            run_id=context.run_id,
             result_id=result_id,
             artifact_ids=artifact_ids,
+            project_id=context.project_id,
+            capability_ids=context.capability_ids,
+            producer=context.producer,
             causation_id=causation_id,
         )
 

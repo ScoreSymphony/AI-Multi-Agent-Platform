@@ -54,6 +54,8 @@ AUTOMATION_COMMANDS = (
     "automation.pause",
     "automation.resume",
     "automation.disable",
+    "automation.invalidate",
+    "automation.revalidate",
     "automation.test",
     "automation.webhook",
     "automation.event",
@@ -167,6 +169,8 @@ class ControlPlane(_BaseControlPlane):
         super().register_command("automation.pause", self._automation_pause_command)
         super().register_command("automation.resume", self._automation_resume_command)
         super().register_command("automation.disable", self._automation_disable_command)
+        super().register_command("automation.invalidate", self._automation_invalidate_command)
+        super().register_command("automation.revalidate", self._automation_revalidate_command)
         super().register_command("automation.test", self._automation_test_command)
         super().register_command("automation.webhook", self._automation_webhook_command)
         super().register_command("automation.event", self._automation_event_command)
@@ -316,6 +320,31 @@ class ControlPlane(_BaseControlPlane):
         del context, payload
         return _automation_resource(
             await self._automation_service.set_state(resource_ref, AutomationState.DISABLED)
+        )
+
+    async def _automation_invalidate_command(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        del context
+        return _automation_resource(
+            await self._automation_service.invalidate_automation(
+                resource_ref,
+                reason_code=_required_string(payload, "reason_code"),
+            )
+        )
+
+    async def _automation_revalidate_command(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        del context, payload
+        return _automation_resource(
+            await self._automation_service.revalidate_automation(resource_ref)
         )
 
     async def _automation_test_command(

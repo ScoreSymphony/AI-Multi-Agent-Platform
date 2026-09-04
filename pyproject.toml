@@ -18,6 +18,7 @@ dependencies = [
 platform = "ai_multi_agent_platform.cli.main:main"
 platform-completion = "ai_multi_agent_platform.cli.completion:main"
 platform-server = "ai_multi_agent_platform.deployment.server:main"
+platform-backup = "ai_multi_agent_platform.backup.cli:main"
 
 [project.optional-dependencies]
 server = [

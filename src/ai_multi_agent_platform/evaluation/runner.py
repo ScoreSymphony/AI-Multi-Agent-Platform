@@ -5,6 +5,12 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, replace
 
+from .aggregation import (
+    AggregatedEvaluationResult,
+    AggregationPolicy,
+    ComparableEvaluationResult,
+    ResultAggregator,
+)
 from .context import EvaluationExecutionContext
 from .contracts import (
     EvaluationCaseExecutor,
@@ -24,6 +30,7 @@ from .models import (
     EvaluationRunStatus,
     EvaluationSuite,
     RegressionPolicy,
+    VersionReference,
     utc_now,
 )
 from .regression import RegressionEngine
@@ -31,11 +38,12 @@ from .regression import RegressionEngine
 
 @dataclass(frozen=True, slots=True)
 class EvaluationRunSummary:
-    """Completed run plus its persisted results and optional baseline comparison."""
+    """Completed run plus raw/aggregated results and optional baseline comparison."""
 
     run: EvaluationRun
     results: tuple[EvaluationResult, ...]
     comparison: ComparisonReport | None = None
+    aggregates: tuple[AggregatedEvaluationResult, ...] = ()
 
 
 class NoopEvaluationIsolation:
@@ -75,6 +83,7 @@ class EvaluationRunner:
         evaluators: tuple[Evaluator, ...],
         isolation: EvaluationIsolation | None = None,
         regression_engine: RegressionEngine | None = None,
+        result_aggregator: ResultAggregator | None = None,
     ) -> None:
         if not evaluators:
             raise ValueError("evaluation runner requires at least one evaluator")
@@ -86,6 +95,7 @@ class EvaluationRunner:
         self._evaluators = evaluators
         self._isolation = isolation or NoopEvaluationIsolation()
         self._regression_engine = regression_engine or RegressionEngine()
+        self._result_aggregator = result_aggregator or ResultAggregator()
 
     async def run_suite(
         self,
@@ -96,6 +106,7 @@ class EvaluationRunner:
         seed: int | None = None,
         baseline_run_id: str | None = None,
         regression_policy: RegressionPolicy | None = None,
+        aggregation_policy: AggregationPolicy | None = None,
     ) -> EvaluationRunSummary:
         """Run every case/repetition and persist canonical results as they are produced."""
 
@@ -105,17 +116,20 @@ class EvaluationRunner:
             raise ValueError(
                 "baseline_run_id and regression_policy must either both be set or both be omitted"
             )
-        if baseline_run_id is not None and repetitions != 1:
+        if baseline_run_id is not None and repetitions != 1 and aggregation_policy is None:
             raise ValueError(
-                "automatic baseline comparison currently requires repetitions=1; "
-                "stochastic aggregation is a separate regression policy concern"
+                "automatic baseline comparison with repeated samples requires aggregation_policy; "
+                "without aggregation repetitions=1 is required"
             )
 
         baseline = self._validate_baseline(
             suite=suite,
             baseline_run_id=baseline_run_id,
             regression_policy=regression_policy,
+            repetitions=repetitions,
+            aggregation_policy=aggregation_policy,
         )
+        snapshot = self._with_aggregation_policy_reference(snapshot, aggregation_policy)
 
         run = EvaluationRun(
             suite_id=suite.suite_id,
@@ -148,19 +162,43 @@ class EvaluationRunner:
         completed = replace(run, status=EvaluationRunStatus.COMPLETED, completed_at=utc_now())
         self._repository.save_run(completed)
         results = self._repository.list_results(completed.run_id)
+        aggregates: tuple[AggregatedEvaluationResult, ...] = ()
+        if aggregation_policy is not None:
+            aggregates = self._aggregate_and_persist(
+                run=completed,
+                results=results,
+                policy=aggregation_policy,
+            )
 
         comparison: ComparisonReport | None = None
         if baseline is not None and regression_policy is not None:
+            baseline_comparable: tuple[ComparableEvaluationResult, ...]
+            current_comparable: tuple[ComparableEvaluationResult, ...]
+            if aggregation_policy is None:
+                baseline_comparable = self._repository.list_results(baseline.run_id)
+                current_comparable = results
+            else:
+                baseline_comparable = self._aggregate_and_persist(
+                    run=baseline,
+                    results=self._repository.list_results(baseline.run_id),
+                    policy=aggregation_policy,
+                )
+                current_comparable = aggregates
             comparison = self._regression_engine.compare(
                 baseline_run_id=baseline.run_id,
                 current_run_id=completed.run_id,
-                baseline_results=self._repository.list_results(baseline.run_id),
-                current_results=results,
+                baseline_results=baseline_comparable,
+                current_results=current_comparable,
                 policy=regression_policy,
             )
             self._repository.save_comparison(comparison)
 
-        return EvaluationRunSummary(run=completed, results=results, comparison=comparison)
+        return EvaluationRunSummary(
+            run=completed,
+            results=results,
+            comparison=comparison,
+            aggregates=aggregates,
+        )
 
     def _validate_baseline(
         self,
@@ -168,6 +206,8 @@ class EvaluationRunner:
         suite: EvaluationSuite,
         baseline_run_id: str | None,
         regression_policy: RegressionPolicy | None,
+        repetitions: int,
+        aggregation_policy: AggregationPolicy | None,
     ) -> EvaluationRun | None:
         if baseline_run_id is None or regression_policy is None:
             return None
@@ -178,11 +218,59 @@ class EvaluationRunner:
             raise ValueError("evaluation baseline run must be completed")
         if baseline.suite_id != suite.suite_id or baseline.suite_version != suite.version:
             raise ValueError("baseline suite identity/version does not match current suite")
-        if baseline.repetitions != 1:
+        if baseline.repetitions != 1 and aggregation_policy is None:
             raise ValueError(
-                "automatic baseline comparison currently requires a single-repetition baseline"
+                "repeated baseline comparison requires aggregation_policy; "
+                "without aggregation the baseline must use repetitions=1"
+            )
+        if (
+            aggregation_policy is not None
+            and aggregation_policy.require_equal_sample_count
+            and baseline.repetitions != repetitions
+        ):
+            raise ValueError(
+                "aggregation policy requires baseline and current runs to use the same "
+                "repetition count"
             )
         return baseline
+
+    @staticmethod
+    def _with_aggregation_policy_reference(
+        snapshot: ConfigurationSnapshot,
+        policy: AggregationPolicy | None,
+    ) -> ConfigurationSnapshot:
+        if policy is None:
+            return snapshot
+        matches = tuple(ref for ref in snapshot.references if ref.kind == "aggregation_policy")
+        expected = VersionReference(
+            kind="aggregation_policy",
+            ref_id=policy.policy_id,
+            version=policy.version,
+        )
+        if matches:
+            if matches != (expected,):
+                raise ValueError(
+                    "configuration snapshot aggregation_policy reference does not match "
+                    "the selected aggregation policy"
+                )
+            return snapshot
+        return replace(snapshot, references=(*snapshot.references, expected))
+
+    def _aggregate_and_persist(
+        self,
+        *,
+        run: EvaluationRun,
+        results: tuple[EvaluationResult, ...],
+        policy: AggregationPolicy,
+    ) -> tuple[AggregatedEvaluationResult, ...]:
+        aggregates = self._result_aggregator.aggregate(
+            results=results,
+            policy=policy,
+            expected_repetitions=run.repetitions,
+        )
+        for aggregate in aggregates:
+            self._repository.save_aggregate(aggregate)
+        return aggregates
 
     async def _run_attempt(
         self,

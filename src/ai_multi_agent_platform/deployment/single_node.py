@@ -31,10 +31,12 @@ from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthent
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
 from ai_multi_agent_platform.templates import (
     AgentTemplateExporter,
+    AutomationTemplateExporter,
     ContextualTemplateHandlerRegistry,
     JsonTemplateRepository,
     TemplateApplicationService,
     register_agent_template_handlers,
+    register_automation_template_handler,
 )
 from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
 from ai_multi_agent_platform.verification import (
@@ -81,7 +83,6 @@ class SingleNodeDeployment:
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     verification: SqliteVerificationService
-    verification_completion: SqliteVerificationCompletionAuthority
     verification_runtime: CanonicalVerificationRuntime
     kernel: PlatformKernel
     control_plane: ControlPlane
@@ -204,7 +205,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         action="echo",
     )
     verification_path = database_dir / "verification.sqlite3"
-    verification = SqliteVerificationService(verification_path)
+    verification = SqliteVerificationService(verification_path, require_canonical_subjects=True)
     verification_completion = SqliteVerificationCompletionAuthority(verification, verification_path)
     kernel = PlatformKernel(
         orchestrator=orchestrator,
@@ -212,7 +213,9 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         repository=kernel_repository,
         completion_authority=verification_completion,
     )
-    verification_evidence = KernelFileVerificationEvidenceResolver(kernel, kernel_repository, files)
+    verification_evidence = KernelFileVerificationEvidenceResolver(
+        kernel, kernel_repository, files, agents.repository
+    )
     verification_runtime = CanonicalVerificationRuntime(
         verification_completion, verification_evidence
     )
@@ -232,10 +235,16 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
     )
     register_agent_control_plane(control_plane, agents)
     register_standard_agent_control_plane(control_plane, agents)
+    register_automation_template_handler(template_handlers, control_plane.automation_service)
+    automation_template_exporter = AutomationTemplateExporter(
+        control_plane.automation_service,
+        templates.templates,
+    )
     register_template_control_plane(
         control_plane,
         templates,
         agent_exporter=agent_template_exporter,
+        automation_exporter=automation_template_exporter,
     )
     register_verification_control_plane(
         control_plane,
@@ -263,7 +272,6 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         authentication=authentication,
         authorization=authorization,
         verification=verification,
-        verification_completion=verification_completion,
         verification_runtime=verification_runtime,
         kernel=kernel,
         control_plane=control_plane,
