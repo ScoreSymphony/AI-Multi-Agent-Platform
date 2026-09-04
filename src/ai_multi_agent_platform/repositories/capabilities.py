@@ -28,6 +28,7 @@ READ_OPERATIONS = frozenset(
 
 LOCAL_WRITE_OPERATIONS = frozenset(
     {
+        RepositoryOperation.FETCH,
         RepositoryOperation.CREATE_BRANCH,
         RepositoryOperation.CHECKOUT,
         RepositoryOperation.COMMIT,
@@ -36,9 +37,19 @@ LOCAL_WRITE_OPERATIONS = frozenset(
 
 EXTERNAL_SIDE_EFFECT_OPERATIONS = frozenset(
     {
-        RepositoryOperation.FETCH,
         RepositoryOperation.PUSH,
         RepositoryOperation.ISSUE_WRITE,
+        RepositoryOperation.CHANGE_REQUEST_WRITE,
+    }
+)
+
+CREDENTIAL_OPERATIONS = frozenset(
+    {
+        RepositoryOperation.FETCH,
+        RepositoryOperation.PUSH,
+        RepositoryOperation.ISSUE_READ,
+        RepositoryOperation.ISSUE_WRITE,
+        RepositoryOperation.CHANGE_REQUEST_READ,
         RepositoryOperation.CHANGE_REQUEST_WRITE,
     }
 )
@@ -71,7 +82,7 @@ def repository_capability_specs() -> tuple[CapabilitySpec, ...]:
     for operation in RepositoryOperation:
         capability = repository_capability(
             operation,
-            requires_credentials=operation in EXTERNAL_SIDE_EFFECT_OPERATIONS,
+            requires_credentials=operation in CREDENTIAL_OPERATIONS,
         )
         sensitive = capability.side_effects in {
             SideEffectClassification.EXTERNAL,
