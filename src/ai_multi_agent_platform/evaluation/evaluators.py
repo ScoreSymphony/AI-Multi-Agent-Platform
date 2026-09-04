@@ -278,7 +278,7 @@ async def evaluate_safely(
         )
         if isawaitable(candidate):
             return await cast(Awaitable[EvaluationResult], candidate)
-        return cast(EvaluationResult, candidate)
+        return candidate
     except Exception as exc:
         return _error_result(
             descriptor=evaluator.descriptor,
