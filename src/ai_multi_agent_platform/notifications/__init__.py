@@ -41,8 +41,10 @@ from .models import (
 from .preferences import (
     InMemoryNotificationPreferenceRepository,
     NotificationPreferenceRepository,
+    external_delivery_allowed,
     preference_allows,
 )
+from .preferences_sqlite import SqliteNotificationPreferenceRepository
 from .recipients import (
     AllowAllRecipientEligibilityGuard,
     EventOwnerRecipientResolver,
@@ -61,7 +63,7 @@ from .runtime import (
     SqliteNotificationRuntimeState,
 )
 from .service import NotificationEventSink, NotificationService
-from .sqlite import SqliteNotificationPreferenceRepository, SqliteNotificationRepository
+from .sqlite import SqliteNotificationRepository
 
 __all__ = [
     "AllowAllRecipientEligibilityGuard",
@@ -113,6 +115,7 @@ __all__ = [
     "approval_resolved_candidate",
     "budget_threshold_candidate",
     "canonical_attention_candidate",
+    "external_delivery_allowed",
     "fanout_notification_event_sinks",
     "membership_attention_candidate",
     "preference_allows",
