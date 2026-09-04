@@ -424,8 +424,7 @@ class LocalGitRepositoryProvider(RepositoryProvider):
                 [self._git_binary, *args],
                 cwd=self._root,
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 check=False,
             )
         except FileNotFoundError as exc:
