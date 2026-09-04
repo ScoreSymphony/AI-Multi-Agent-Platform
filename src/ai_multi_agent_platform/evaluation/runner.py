@@ -5,7 +5,12 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, replace
 
-from .aggregation import AggregatedEvaluationResult, AggregationPolicy, ResultAggregator
+from .aggregation import (
+    AggregatedEvaluationResult,
+    AggregationPolicy,
+    ComparableEvaluationResult,
+    ResultAggregator,
+)
 from .context import EvaluationExecutionContext
 from .contracts import (
     EvaluationCaseExecutor,
@@ -167,6 +172,8 @@ class EvaluationRunner:
 
         comparison: ComparisonReport | None = None
         if baseline is not None and regression_policy is not None:
+            baseline_comparable: tuple[ComparableEvaluationResult, ...]
+            current_comparable: tuple[ComparableEvaluationResult, ...]
             if aggregation_policy is None:
                 baseline_comparable = self._repository.list_results(baseline.run_id)
                 current_comparable = results
