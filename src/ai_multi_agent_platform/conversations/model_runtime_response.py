@@ -146,8 +146,8 @@ class ModelRuntimeConversationResponseProvider:
             )
         if target.kind == "task":
             return (
-                f"Respond about canonical Task {target.id}. The Task/Run lifecycle is authoritative; "
-                "conversation text must not claim to mutate lifecycle state.",
+                f"Respond about canonical Task {target.id}. The Task/Run lifecycle is "
+                "authoritative; conversation text must not claim to mutate lifecycle state.",
                 None,
                 None,
             )
