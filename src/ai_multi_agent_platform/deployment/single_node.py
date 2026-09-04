@@ -29,6 +29,14 @@ from ai_multi_agent_platform.security import (
 )
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
+from ai_multi_agent_platform.templates import (
+    AgentTemplateExporter,
+    ContextualTemplateHandlerRegistry,
+    JsonTemplateRepository,
+    TemplateApplicationService,
+    register_agent_template_handlers,
+)
+from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
 from ai_multi_agent_platform.verification import (
     CanonicalVerificationRuntime,
     KernelFileVerificationEvidenceResolver,
@@ -69,6 +77,7 @@ class SingleNodeDeployment:
     files: LocalFileProvider
     workspaces: SqliteWorkspaceProvider
     agents: AgentService
+    templates: TemplateApplicationService
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     verification: SqliteVerificationService
@@ -178,6 +187,13 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         database_dir / "workspaces.sqlite3",
     )
     agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
+    template_handlers = ContextualTemplateHandlerRegistry()
+    register_agent_template_handlers(template_handlers, agents)
+    templates = TemplateApplicationService(
+        JsonTemplateRepository(database_dir / "templates.json"),
+        template_handlers,
+    )
+    agent_template_exporter = AgentTemplateExporter(agents, templates.templates)
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
@@ -216,6 +232,11 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
     )
     register_agent_control_plane(control_plane, agents)
     register_standard_agent_control_plane(control_plane, agents)
+    register_template_control_plane(
+        control_plane,
+        templates,
+        agent_exporter=agent_template_exporter,
+    )
     register_verification_control_plane(
         control_plane,
         verification,
@@ -238,6 +259,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         files=files,
         workspaces=workspaces,
         agents=agents,
+        templates=templates,
         authentication=authentication,
         authorization=authorization,
         verification=verification,
