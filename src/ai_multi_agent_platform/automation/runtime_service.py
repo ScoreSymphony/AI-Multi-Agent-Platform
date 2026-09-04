@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -13,12 +14,19 @@ from .models import Automation, AutomationState, TriggerDelivery, TriggerType, r
 
 
 class AutomationService(_HardenedAutomationService):
-    """Final #18 service layer for canonical #6 Event ingestion.
+    """Final Automation service layer for canonical Event ingestion and durable retry hooks."""
 
-    The legacy ``deliver_platform_event`` method remains available for explicit embeddings/tests.
-    The autonomous platform runtime uses this method instead so trusted canonical Event ownership,
-    project scope and creation-time boundaries cannot be supplied by an untrusted payload.
-    """
+    async def set_state(
+        self,
+        automation_id: str,
+        state: AutomationState,
+        *,
+        now: datetime | None = None,
+    ) -> Automation:
+        updated = await super().set_state(automation_id, state, now=now)
+        if state is not AutomationState.ENABLED:
+            await self._emit_retry_suppressed_for_state(updated)
+        return updated
 
     async def deliver_canonical_platform_event(
         self,
@@ -61,6 +69,64 @@ class AutomationService(_HardenedAutomationService):
                 )
             )
         return tuple(deliveries)
+
+    async def _emit(self, automation: Automation, delivery: TriggerDelivery, outcome: str) -> None:
+        """Emit canonical delivery audit including #241 retry state without secret material."""
+
+        if self._event_sink is None:
+            return
+        is_schedule = delivery.trigger_type in {TriggerType.ONE_TIME, TriggerType.RECURRING}
+        await self._event_sink(
+            {
+                "type": "automation.delivery",
+                "automation_id": automation.id,
+                "automation_revision": automation.revision,
+                "trigger_delivery_id": delivery.id,
+                "generated_task_id": delivery.generated_task_id,
+                "trigger_type": delivery.trigger_type.value,
+                "source": delivery.source,
+                "fired_at": delivery.fired_at.isoformat(),
+                "received_at": delivery.received_at.isoformat(),
+                "processing_duration_ms": delivery.processing_duration_ms,
+                "dedupe_key": delivery.dedupe_key,
+                "dedupe_outcome": outcome,
+                "outcome": outcome,
+                "attempt": delivery.attempt,
+                "error_code": delivery.error_code,
+                "retryable": delivery.retryable,
+                "last_failed_at": (
+                    None
+                    if delivery.last_failed_at is None
+                    else delivery.last_failed_at.isoformat()
+                ),
+                "next_retry_at": (
+                    None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
+                ),
+                "retry_exhausted_at": (
+                    None
+                    if delivery.retry_exhausted_at is None
+                    else delivery.retry_exhausted_at.isoformat()
+                ),
+                "automation_state": automation.state.value,
+                "schedule_timezone": automation.trigger.timezone if is_schedule else None,
+                "schedule_at": (
+                    automation.trigger.at.isoformat()
+                    if is_schedule and automation.trigger.at is not None
+                    else None
+                ),
+                "schedule_interval_seconds": (
+                    automation.trigger.interval_seconds if is_schedule else None
+                ),
+                "schedule_missed_policy": (
+                    automation.trigger.missed_schedule_policy.value if is_schedule else None
+                ),
+                "schedule_next_evaluation_at": (
+                    automation.next_evaluation_at.isoformat()
+                    if is_schedule and automation.next_evaluation_at is not None
+                    else None
+                ),
+            }
+        )
 
 
 def _canonical_event_visible_to_automation(
