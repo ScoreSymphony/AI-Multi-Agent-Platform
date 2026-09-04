@@ -2,72 +2,66 @@
 
 from __future__ import annotations
 
-from ai_multi_agent_platform.capabilities import (
-    CapabilitySpec,
-    CredentialRequirement,
-    SafetyClassification,
-    SideEffectClassification,
-)
-
-from .models import RepositoryCapability, RepositoryOperation
+import ai_multi_agent_platform.capabilities as capability_contracts
+import ai_multi_agent_platform.repositories.models as repository_models
 
 
 READ_OPERATIONS = frozenset(
     {
-        RepositoryOperation.DISCOVER,
-        RepositoryOperation.READ,
-        RepositoryOperation.MATERIALIZE,
-        RepositoryOperation.INSPECT_REFS,
-        RepositoryOperation.STATUS,
-        RepositoryOperation.DIFF,
-        RepositoryOperation.ISSUE_READ,
-        RepositoryOperation.CHANGE_REQUEST_READ,
-        RepositoryOperation.EVENT_RECEIVE,
+        repository_models.RepositoryOperation.DISCOVER,
+        repository_models.RepositoryOperation.READ,
+        repository_models.RepositoryOperation.MATERIALIZE,
+        repository_models.RepositoryOperation.INSPECT_REFS,
+        repository_models.RepositoryOperation.STATUS,
+        repository_models.RepositoryOperation.DIFF,
+        repository_models.RepositoryOperation.ISSUE_READ,
+        repository_models.RepositoryOperation.CHANGE_REQUEST_READ,
+        repository_models.RepositoryOperation.EVENT_RECEIVE,
     }
 )
 
 LOCAL_WRITE_OPERATIONS = frozenset(
     {
-        RepositoryOperation.FETCH,
-        RepositoryOperation.CREATE_BRANCH,
-        RepositoryOperation.CHECKOUT,
-        RepositoryOperation.COMMIT,
+        repository_models.RepositoryOperation.FETCH,
+        repository_models.RepositoryOperation.CREATE_BRANCH,
+        repository_models.RepositoryOperation.CHECKOUT,
+        repository_models.RepositoryOperation.COMMIT,
     }
 )
 
 EXTERNAL_SIDE_EFFECT_OPERATIONS = frozenset(
     {
-        RepositoryOperation.PUSH,
-        RepositoryOperation.ISSUE_WRITE,
-        RepositoryOperation.CHANGE_REQUEST_WRITE,
+        repository_models.RepositoryOperation.PUSH,
+        repository_models.RepositoryOperation.ISSUE_WRITE,
+        repository_models.RepositoryOperation.CHANGE_REQUEST_WRITE,
     }
 )
 
 CREDENTIAL_OPERATIONS = frozenset(
     {
-        RepositoryOperation.FETCH,
-        RepositoryOperation.PUSH,
-        RepositoryOperation.ISSUE_READ,
-        RepositoryOperation.ISSUE_WRITE,
-        RepositoryOperation.CHANGE_REQUEST_READ,
-        RepositoryOperation.CHANGE_REQUEST_WRITE,
+        repository_models.RepositoryOperation.FETCH,
+        repository_models.RepositoryOperation.PUSH,
+        repository_models.RepositoryOperation.ISSUE_READ,
+        repository_models.RepositoryOperation.ISSUE_WRITE,
+        repository_models.RepositoryOperation.CHANGE_REQUEST_READ,
+        repository_models.RepositoryOperation.CHANGE_REQUEST_WRITE,
     }
 )
 
 
 def repository_capability(
-    operation: RepositoryOperation,
+    operation: repository_models.RepositoryOperation,
     *,
     requires_credentials: bool = False,
     supported: bool = True,
-) -> RepositoryCapability:
+) -> repository_models.RepositoryCapability:
     if operation in LOCAL_WRITE_OPERATIONS:
-        side_effects = SideEffectClassification.LOCAL_WRITE
+        side_effects = capability_contracts.SideEffectClassification.LOCAL_WRITE
     elif operation in EXTERNAL_SIDE_EFFECT_OPERATIONS:
-        side_effects = SideEffectClassification.EXTERNAL
+        side_effects = capability_contracts.SideEffectClassification.EXTERNAL
     else:
-        side_effects = SideEffectClassification.NONE
-    return RepositoryCapability(
+        side_effects = capability_contracts.SideEffectClassification.NONE
+    return repository_models.RepositoryCapability(
         operation=operation,
         side_effects=side_effects,
         requires_credentials=requires_credentials,
@@ -75,34 +69,36 @@ def repository_capability(
     )
 
 
-def repository_capability_specs() -> tuple[CapabilitySpec, ...]:
+def repository_capability_specs() -> tuple[capability_contracts.CapabilitySpec, ...]:
     """Return #12-compatible capability definitions for canonical repository operations."""
 
-    specs: list[CapabilitySpec] = []
-    for operation in RepositoryOperation:
+    specs: list[capability_contracts.CapabilitySpec] = []
+    for operation in repository_models.RepositoryOperation:
         capability = repository_capability(
             operation,
             requires_credentials=operation in CREDENTIAL_OPERATIONS,
         )
         sensitive = capability.side_effects in {
-            SideEffectClassification.EXTERNAL,
-            SideEffectClassification.DESTRUCTIVE,
+            capability_contracts.SideEffectClassification.EXTERNAL,
+            capability_contracts.SideEffectClassification.DESTRUCTIVE,
         }
         specs.append(
-            CapabilitySpec(
+            capability_contracts.CapabilitySpec(
                 capability_id=operation.value,
                 name=operation.value,
                 description=f"Canonical provider-neutral {operation.value} operation",
                 tags=("repository", "git"),
                 safety=(
-                    SafetyClassification.RESTRICTED if sensitive else SafetyClassification.STANDARD
+                    capability_contracts.SafetyClassification.RESTRICTED
+                    if sensitive
+                    else capability_contracts.SafetyClassification.STANDARD
                 ),
                 side_effects=capability.side_effects,
                 required_permissions=(operation.value,),
                 credential_requirement=(
-                    CredentialRequirement.REQUIRED
+                    capability_contracts.CredentialRequirement.REQUIRED
                     if capability.requires_credentials
-                    else CredentialRequirement.NONE
+                    else capability_contracts.CredentialRequirement.NONE
                 ),
                 features=("provider-neutral",),
             )
@@ -113,16 +109,16 @@ def repository_capability_specs() -> tuple[CapabilitySpec, ...]:
 LOCAL_GIT_CAPABILITIES = tuple(
     repository_capability(operation)
     for operation in (
-        RepositoryOperation.DISCOVER,
-        RepositoryOperation.READ,
-        RepositoryOperation.MATERIALIZE,
-        RepositoryOperation.FETCH,
-        RepositoryOperation.INSPECT_REFS,
-        RepositoryOperation.CREATE_BRANCH,
-        RepositoryOperation.CHECKOUT,
-        RepositoryOperation.STATUS,
-        RepositoryOperation.DIFF,
-        RepositoryOperation.COMMIT,
-        RepositoryOperation.PUSH,
+        repository_models.RepositoryOperation.DISCOVER,
+        repository_models.RepositoryOperation.READ,
+        repository_models.RepositoryOperation.MATERIALIZE,
+        repository_models.RepositoryOperation.FETCH,
+        repository_models.RepositoryOperation.INSPECT_REFS,
+        repository_models.RepositoryOperation.CREATE_BRANCH,
+        repository_models.RepositoryOperation.CHECKOUT,
+        repository_models.RepositoryOperation.STATUS,
+        repository_models.RepositoryOperation.DIFF,
+        repository_models.RepositoryOperation.COMMIT,
+        repository_models.RepositoryOperation.PUSH,
     )
 )
