@@ -4,6 +4,12 @@ import asyncio
 from pathlib import Path
 
 from ai_multi_agent_platform.agents import AgentInstructions, AgentProfile, InstructionSource
+from ai_multi_agent_platform.automation import (
+    IdentityContext,
+    TaskTemplate,
+    TriggerDefinition,
+    TriggerType,
+)
 from ai_multi_agent_platform.control_plane.models import ActorContext, PageQuery, RequestContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.domain import OwnerRef
@@ -42,6 +48,7 @@ def test_single_node_wires_durable_agent_templates_and_control_plane(tmp_path: P
         assert "templates" in deployment.control_plane.registered_collections
         assert "template-instances" in deployment.control_plane.registered_collections
         assert "template.create-from-agent" in deployment.control_plane.registered_commands
+        assert "template.create-from-automation" in deployment.control_plane.registered_commands
         assert "template.apply" in deployment.control_plane.registered_commands
 
         created = await deployment.control_plane.execute_command(
@@ -115,6 +122,74 @@ def test_single_node_wires_durable_agent_templates_and_control_plane(tmp_path: P
             instance_id,
         )
         assert instance_detail["id"] == instance_id
+
+        source_automation = await deployment.control_plane.automation_service.create_automation(
+            name="Single-node Automation template source",
+            description="Reusable manual Automation",
+            identity=IdentityContext(
+                principal_ref=admin.user_id,
+                owner_type="user",
+                owner_id=admin.user_id,
+            ),
+            trigger=TriggerDefinition(type=TriggerType.MANUAL),
+            task_template=TaskTemplate(
+                title="Template-generated task",
+                objective="Verify Automation Template instantiation",
+            ),
+        )
+        automation_template = await deployment.control_plane.execute_command(
+            RequestContext(
+                request_id="request-automation-template-create",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="automation-template-create",
+            ),
+            "template.create-from-automation",
+            "templates",
+            {"automation_id": source_automation.id},
+        )
+        automation_template_id = automation_template["id"]
+        assert isinstance(automation_template_id, str)
+        await deployment.control_plane.execute_command(
+            RequestContext(
+                request_id="request-automation-template-publish",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="automation-template-publish",
+            ),
+            "template.publish",
+            automation_template_id,
+            {"expected_revision": 1},
+        )
+        automation_applied = await deployment.control_plane.execute_command(
+            RequestContext(
+                request_id="request-automation-template-apply",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="automation-template-apply",
+            ),
+            "template.apply",
+            automation_template_id,
+            {},
+        )
+        automation_instance_id = automation_applied["id"]
+        assert isinstance(automation_instance_id, str)
+        automation_instance = deployment.templates.repository.get_instantiation(
+            automation_instance_id
+        )
+        assert len(automation_instance.resource_refs) == 1
+        automation_ref = automation_instance.resource_refs[0]
+        assert automation_ref.resource_type == "automation"
+        assert automation_ref.resource_id != source_automation.id
+        created_automation = await deployment.control_plane.automation_service.get_automation(
+            automation_ref.resource_id
+        )
+        assert created_automation.name == source_automation.name
+        assert created_automation.description == source_automation.description
+        assert created_automation.trigger == source_automation.trigger
+        assert created_automation.task_template == source_automation.task_template
+        assert created_automation.identity.owner_id == admin.user_id
+
         assert (config.database_dir / "templates.json").exists()
 
         restarted = build_single_node_deployment(config)
@@ -122,6 +197,11 @@ def test_single_node_wires_durable_agent_templates_and_control_plane(tmp_path: P
         assert restored.latest_published_revision == 2
         assert restarted.templates.repository.get_instantiation(instance_id) == instance
         assert restarted.agents.get_agent_revision(created_agent_id).profile == source.profile
+        restored_automation = await restarted.control_plane.automation_service.get_automation(
+            automation_ref.resource_id
+        )
+        assert restored_automation.name == source_automation.name
         assert "template.create-from-agent" in restarted.control_plane.registered_commands
+        assert "template.create-from-automation" in restarted.control_plane.registered_commands
 
     asyncio.run(scenario())
