@@ -94,21 +94,21 @@ class OnboardingService:
         """Restore adapter attachments, command replays and canonical model inventory."""
 
         records = self.provider_store.load()
-        for record in records:
-            adapter = self._model_adapter(record.adapter_id)
+        for provider_record in records:
+            adapter = self._model_adapter(provider_record.adapter_id)
             provider = adapter.build_provider(
                 OnboardingModelEndpoint(
-                    provider_id=record.provider_id,
-                    base_url=record.base_url,
-                    models=record.models,
-                    credential_ref=record.credential_ref,
+                    provider_id=provider_record.provider_id,
+                    base_url=provider_record.base_url,
+                    models=provider_record.models,
+                    credential_ref=provider_record.credential_ref,
                 )
             )
             self.models.register_provider(provider)
-            self._provider_records[record.provider_id] = record
+            self._provider_records[provider_record.provider_id] = provider_record
         if self.command_store is not None:
-            for record in self.command_store.load():
-                self._command_records[record.replay_key] = record
+            for command_record in self.command_store.load():
+                self._command_records[command_record.replay_key] = command_record
         if self.model_store.path.exists():
             self.model_store.restore(self.models)
 
