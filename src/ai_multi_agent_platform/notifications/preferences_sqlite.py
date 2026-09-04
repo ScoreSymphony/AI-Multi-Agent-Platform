@@ -129,9 +129,7 @@ def _decode(encoded: str) -> NotificationPreference:
             NotificationCategory(item)
             for item in _string_list(raw.get("enabled_categories"), "enabled_categories")
         ),
-        minimum_severity=NotificationSeverity(
-            _required_string(raw, "minimum_severity")
-        ),
+        minimum_severity=NotificationSeverity(_required_string(raw, "minimum_severity")),
         project_ids=frozenset(_string_list(raw.get("project_ids"), "project_ids")),
         muted=_bool(raw, "muted", False),
         in_app_enabled=_bool(raw, "in_app_enabled", True),
@@ -140,9 +138,7 @@ def _decode(encoded: str) -> NotificationPreference:
         ),
         aggregate_duplicates=_bool(raw, "aggregate_duplicates", True),
         deadline_reminders_enabled=_bool(raw, "deadline_reminders_enabled", True),
-        deadline_reminder_lead_seconds=_int(
-            raw, "deadline_reminder_lead_seconds", 24 * 60 * 60
-        ),
+        deadline_reminder_lead_seconds=_int(raw, "deadline_reminder_lead_seconds", 24 * 60 * 60),
         overdue_reminders_enabled=_bool(raw, "overdue_reminders_enabled", True),
         quiet_hours_start=_optional_string(raw.get("quiet_hours_start")),
         quiet_hours_end=_optional_string(raw.get("quiet_hours_end")),
