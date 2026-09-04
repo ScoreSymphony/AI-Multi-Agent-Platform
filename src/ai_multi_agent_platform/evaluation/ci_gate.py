@@ -19,6 +19,7 @@ from .config import (
 from .evaluators import DeterministicAssertionEvaluator, MetricThresholdEvaluator
 from .models import (
     ComparisonFinding,
+    ConfigurationSnapshot,
     EvaluationOutcome,
     EvaluationResult,
     EvaluationSuite,
@@ -199,7 +200,7 @@ async def run_reference_ci_gate(
         evaluators=evaluators,
     )
 
-    snapshot = baseline.run.snapshot.__class__(
+    snapshot = ConfigurationSnapshot(
         platform_version=platform_version,
         platform_commit=platform_commit,
         references=(
