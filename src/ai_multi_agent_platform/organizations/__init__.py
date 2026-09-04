@@ -1,6 +1,7 @@
 """Organization, team, membership, invitation and ownership domain."""
 
 from .authorization import MembershipAuthorizationProvider
+from .file_ownership import OrganizationOwnershipFileProvider, with_organization_file_ownership
 from .models import (
     ExternalGroupMapping,
     Invitation,
@@ -30,6 +31,7 @@ __all__ = [
     "MembershipAuthorizationScope",
     "MembershipStatus",
     "Organization",
+    "OrganizationOwnershipFileProvider",
     "OrganizationRepository",
     "OrganizationService",
     "OrganizationStatus",
@@ -39,4 +41,5 @@ __all__ = [
     "SqliteOrganizationRepository",
     "Team",
     "TeamStatus",
+    "with_organization_file_ownership",
 ]
