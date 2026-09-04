@@ -93,9 +93,7 @@ class AutomationTemplateHandler:
             retry_policy=config.retry_policy,
             overlap_policy=config.overlap_policy,
         )
-        return (
-            TemplateResourceRef(resource_type="automation", resource_id=automation.id),
-        )
+        return (TemplateResourceRef(resource_type="automation", resource_id=automation.id),)
 
 
 @dataclass(slots=True)
@@ -168,8 +166,7 @@ def _configuration(revision: TemplateRevision) -> _AutomationConfiguration:
         task_template = _task_template(_required_mapping(data, "task_template"))
         retry_policy = _retry_policy(_optional_mapping(data, "retry_policy") or {})
         overlap_policy = OverlapPolicy(
-            _optional_string(data, "overlap_policy")
-            or OverlapPolicy.SKIP_WHILE_PROCESSING.value
+            _optional_string(data, "overlap_policy") or OverlapPolicy.SKIP_WHILE_PROCESSING.value
         )
     except (TypeError, ValueError) as exc:
         raise ContractError(
@@ -217,8 +214,7 @@ def _trigger(data: Mapping[str, object]) -> TriggerDefinition:
         webhook_source=_optional_string(data, "webhook_source"),
         verification_ref=_optional_string(data, "verification_ref"),
         missed_schedule_policy=MissedSchedulePolicy(
-            _optional_string(data, "missed_schedule_policy")
-            or MissedSchedulePolicy.COALESCE.value
+            _optional_string(data, "missed_schedule_policy") or MissedSchedulePolicy.COALESCE.value
         ),
     )
 
