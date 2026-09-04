@@ -182,9 +182,7 @@ def require_blocked_restore_run(data_dir: Path, *, task_id: str, run_id: str) ->
             ):
                 return
         break
-    raise RuntimeError(
-        f"run {run_id} is not an orphaned restore-recovery Run for task {task_id}"
-    )
+    raise RuntimeError(f"run {run_id} is not an orphaned restore-recovery Run for task {task_id}")
 
 
 def _load_marker(path: Path) -> dict[str, Any]:
