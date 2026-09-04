@@ -64,6 +64,8 @@ The reference `DistributedRegistry` supports:
 - graceful deregistration;
 - reservation release on deregistration.
 
+Both the outer registration/heartbeat protocol version and every declared `WorkerRecord.protocol_version` must match `WORKER_PROTOCOL_VERSION` before registry state is mutated. Explicit Worker deregistration also removes the corresponding ID from the owning Node's `worker_refs`, so discovery state cannot retain a stale schedulable Worker reference.
+
 A Worker that disappears is not trusted as healthy indefinitely. Re-registration restores participation using the same canonical identity.
 
 ### Authenticated remote reporter
@@ -170,6 +172,40 @@ Current reference behavior:
 
 This deliberately avoids both an unsafe "still running forever" assumption and an unsafe immediate duplicate dispatch after loss of an acknowledgement.
 
+## Controlled cross-Worker failover
+
+Liveness loss is not proof that the previous execution stopped. A network partition, missed heartbeat or unreachable dispatcher therefore moves the Worker Job to `lost` but does **not** by itself authorize a second Worker to run the same canonical work.
+
+Controlled ownership transfer uses a separate, replaceable `WorkerOwnershipFencer`. A deployment-specific supervisor, process manager or other trusted authority may implement that protocol and return a `FailoverFenceReceipt` proving that the exact `(worker_job_id, worker_id)` ownership has been fenced/stopped. No concrete supervisor or infrastructure product is canonical.
+
+The safe state transition is:
+
+```text
+running/dispatched
+    -> lost
+    -> valid matching fence receipt
+    -> fenced
+    -> new reservation on a different eligible Worker
+    -> next dispatch attempt
+```
+
+The rules are:
+
+- `RetryMode.NEVER` is never eligible for cross-Worker failover;
+- retry-safe `SAFE`/`IDEMPOTENT` work may transfer only after successful fencing;
+- a missing, failed or identity-mismatched fence leaves the Worker Job `lost` and preserves its old capacity claim;
+- the old reservation is released only after the valid fence has been accepted;
+- `fenced` is persisted before a replacement dispatch, so a Control-Plane restart between fencing and redispatch cannot recreate two valid owners;
+- the replacement Worker is evaluated through the same scheduler hard filters and deterministic scoring used for ordinary placement;
+- the previous Worker is explicitly excluded from the replacement candidate set;
+- `worker_job_id`, `ExecutionRequest`/Run identity, requirements, workspace/snapshot/artifact/secret references, actor/cancellation/idempotency and trace context remain unchanged;
+- only `dispatch_attempt` advances for the new ownership attempt;
+- cancellation while `fenced` terminates the canonical Worker Job instead of starting a replacement;
+- if no alternate attached Worker is eligible, the job remains safely `fenced` without an active capacity claim;
+- a late return of the previously fenced Worker cannot reclaim the current dispatch record after ownership moved to the replacement Worker.
+
+Tests cover network partition without fencing, retry-forbidden work, invalid fence identity, A-to-B capacity transfer, deterministic alternate selection, restart between fence and redispatch, cancellation while fenced, no-replacement behavior and late old-Worker rejoin.
+
 ## Restart persistence
 
 `DistributedStateStore` is a replaceable persistence boundary. `JsonDistributedStateStore` is the dependency-free reference implementation and atomically replaces one versioned JSON snapshot containing:
@@ -181,6 +217,8 @@ This deliberately avoids both an unsafe "still running forever" assumption and a
 - dispatch ownership records and portable Worker Job data.
 
 The runtime persists dispatch ownership before the external Worker acknowledgement can be lost. After Control-Plane restart, persisted health is deliberately restored as offline rather than trusted as fresh liveness evidence. Re-registration/heartbeat then re-establishes reachability and reconciliation continues without duplicating execution.
+
+A persisted `fenced` dispatch record is intentionally restored without an old active reservation. The replacement attempt may then be scheduled after eligible Worker liveness is re-established; fencing is not repeated merely because the Control Plane restarted.
 
 The JSON store is a reference backend, not a canonical database choice. A durable database implementation can replace it without changing scheduling semantics.
 
@@ -249,11 +287,12 @@ A lost dispatch acknowledgement does not trigger premature cleanup or a second w
 
 `WorkerJobRequest` stores only opaque secret references. Plaintext `SecretMaterial` exists only in the ephemeral per-dispatch bundle passed to a secret-aware execution adapter and is not stored in distributed JSON persistence, Worker Job Control Plane resources, #16 telemetry or #35 transport envelopes.
 
-## Remaining #14 integration work
+## Issue #14 completion status
 
-The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration, authenticated/authorized Worker registration-heartbeat, #5 Node/Worker provider adapters, #16 telemetry integration, #37 remote workspace materialization/result/cleanup composition, #34 scoped secret delivery and a #35-backed replaceable Worker command/result transport with lost-reply recovery tests.
+The distributed-runtime scope now includes canonical runtime projections, versioned registration/heartbeat, capability/resource scheduling, node-wide and accelerator capacity leases, local and remote Worker dispatch, authenticated Worker reporting, provider/Control-Plane integration, restart persistence, remote workspace composition, scoped secret delivery, structured telemetry, replaceable #35 transport, lost-reply recovery and controlled fenced cross-Worker failover.
 
-After the remote-transport slice, full issue completion is intentionally narrowed to:
+The acceptance path uses the same canonical `ExecutionRequest`/`WorkerJobRequest` regardless of whether the selected Worker is local or remote. Tests cover ordinary single-/multi-Worker scheduling as well as controlled transfer of the same canonical work from one lost/fenced Worker to another eligible Worker without changing Task or agent logic.
 
-- controlled cross-Worker failover/re-dispatch policy only for work whose previous ownership is proven released/fenced and safe to retry;
-- the remaining failover-specific recovery/acceptance tests and final cross-issue integration review.
+No infrastructure-provider identifier, host name, GPU vendor, broker, container runtime or deployment topology becomes a canonical execution identity. Deployment profiles such as #240 consume these contracts rather than introducing a second scheduler.
+
+After the controlled-failover implementation, no additional functional #14 subsystem is intentionally deferred. Issue closure requires only the final synchronized CI/integration review of the completing PR.
