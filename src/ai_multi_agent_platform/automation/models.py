@@ -1,4 +1,4 @@
-"""Canonical Automation, Trigger and TriggerDelivery value types for issue #18."""
+"""Canonical Automation, Trigger and TriggerDelivery value types for issues #18 and #241."""
 
 from __future__ import annotations
 
@@ -308,6 +308,10 @@ class TriggerDelivery:
     error_code: str | None = None
     error_message: str | None = None
     processing_duration_ms: float | None = None
+    retryable: bool = False
+    last_failed_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    retry_exhausted_at: datetime | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.id, "trigger_delivery")
@@ -322,6 +326,18 @@ class TriggerDelivery:
             raise ValueError("delivery attempt must not be negative")
         if self.generated_task_id is not None:
             validate_id(self.generated_task_id, "task")
+        if self.last_failed_at is not None:
+            require_aware(self.last_failed_at, "last_failed_at")
+        if self.next_retry_at is not None:
+            require_aware(self.next_retry_at, "next_retry_at")
+        if self.retry_exhausted_at is not None:
+            require_aware(self.retry_exhausted_at, "retry_exhausted_at")
+        if self.next_retry_at is not None and self.status is not DeliveryStatus.FAILED:
+            raise ValueError("next_retry_at requires failed delivery status")
+        if self.retry_exhausted_at is not None and self.status is not DeliveryStatus.FAILED:
+            raise ValueError("retry_exhausted_at requires failed delivery status")
+        if self.next_retry_at is not None and self.retry_exhausted_at is not None:
+            raise ValueError("delivery cannot be retry-pending and retry-exhausted simultaneously")
 
     @classmethod
     def create(
