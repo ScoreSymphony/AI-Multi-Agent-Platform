@@ -23,6 +23,7 @@ from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel import RecoveryReport
 
 from .config import SingleNodeConfig, load_single_node_config
+from .restore_integrity import single_node_restore_integrity_validators
 from .single_node import SingleNodeDeployment, build_single_node_deployment
 
 DeploymentBuilder = Callable[[SingleNodeConfig], SingleNodeDeployment]
@@ -254,6 +255,7 @@ async def _run_restore_recovery(
             reports=reports,
             restore_metadata=restore_metadata,
             health_probe=deployment.control_plane.health,
+            additional_validators=single_node_restore_integrity_validators(deployment),
         )
 
     return await reconcile_restored_single_node(
