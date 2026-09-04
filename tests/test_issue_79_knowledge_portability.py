@@ -21,6 +21,7 @@ from ai_multi_agent_platform.portability import (
     KNOWLEDGE_SOURCE_RESOURCE_TYPE,
     ExclusionCategory,
     IdPolicy,
+    ImportContext,
     ImportExecutor,
     ImportMutationRegistry,
     ImportPreviewService,
@@ -87,6 +88,7 @@ def test_knowledge_source_round_trip_rebuilds_destination_index(tmp_path: Path) 
     context = _context(project_id)
     source_provider = LocalKnowledgeProvider(tmp_path / "source.sqlite")
     snapshot = _ready_snapshot(source_provider, context)
+    assert snapshot.document is not None
 
     serializers = ResourceSerializerRegistry()
     register_knowledge_portability_codec(serializers, id_policy=IdPolicy.REGENERATE)
@@ -152,13 +154,7 @@ def test_knowledge_source_project_reference_is_deterministically_remapped(tmp_pa
     resource = serializers.serialize(KNOWLEDGE_SOURCE_RESOURCE_TYPE, snapshot)
     decoded = serializers.deserialize(
         resource,
-        context=type("ImportContextLike", (), {
-            "remap": lambda self, resource_type, resource_id: (
-                target_project
-                if (resource_type, resource_id) == ("project", source_project)
-                else resource_id
-            )
-        })(),
+        ImportContext(id_mapping={("project", source_project): target_project}),
     )
 
     assert isinstance(decoded, KnowledgePortableSnapshot)
@@ -188,19 +184,15 @@ def test_cross_project_knowledge_import_is_rejected_before_mutation(tmp_path: Pa
     ).preview(package)
     target_provider = LocalKnowledgeProvider(tmp_path / "target.sqlite")
     mutations = ImportMutationRegistry()
-    mutations.register(
-        KnowledgeSourceImportMutationHandler(
-            target_provider,
-            _context(wrong_target_project),
-        )
-    )
+    target_context = _context(wrong_target_project)
+    mutations.register(KnowledgeSourceImportMutationHandler(target_provider, target_context))
 
     with pytest.raises(ContractError) as failed:
         asyncio.run(ImportExecutor(serializers, mutations).execute(package, preview))
 
     assert failed.value.code is ErrorCode.FORBIDDEN
     with pytest.raises(ContractError) as missing:
-        asyncio.run(target_provider.get_index_status(snapshot.source.source_id, _context(wrong_target_project)))
+        asyncio.run(target_provider.get_index_status(snapshot.source.source_id, target_context))
     assert missing.value.code is ErrorCode.NOT_FOUND
 
 
@@ -217,11 +209,13 @@ def test_knowledge_source_rollback_removes_active_destination_index(tmp_path: Pa
 
     target_provider = LocalKnowledgeProvider(tmp_path / "target.sqlite")
     handler = KnowledgeSourceImportMutationHandler(target_provider, context)
-    token = asyncio.run(handler.apply(resource, decoded, type("Unused", (), {})()))
+    import_context = ImportContext()
+    token = asyncio.run(handler.apply(resource, decoded, import_context))
     assert token == snapshot.source.source_id
-    assert asyncio.run(target_provider.get_index_status(snapshot.source.source_id, context)).status is KnowledgeStatus.READY
+    index = asyncio.run(target_provider.get_index_status(snapshot.source.source_id, context))
+    assert index.status is KnowledgeStatus.READY
 
-    asyncio.run(handler.rollback(resource, decoded, token, type("Unused", (), {})()))
+    asyncio.run(handler.rollback(resource, decoded, token, import_context))
     with pytest.raises(ContractError) as missing:
         asyncio.run(target_provider.get_index_status(snapshot.source.source_id, context))
     assert missing.value.code is ErrorCode.NOT_FOUND
