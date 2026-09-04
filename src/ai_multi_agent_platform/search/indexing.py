@@ -75,6 +75,7 @@ def document_from_resource(
                 responsible_id,
                 agent_assignment_id,
                 *_resource_keywords(resource),
+                *_verification_keywords(resource_type, resource),
                 *dependency_ids,
                 *_profile_keywords(resource),
             )
@@ -153,6 +154,14 @@ def _display_title(
             return f"Evaluation run for {suite_id} {suite_version}"
         if suite_id is not None:
             return f"Evaluation run for {suite_id}"
+    if resource_type == "verification":
+        task_id = _optional_string(resource, "task_id")
+        if task_id is not None:
+            return f"Verification for task {task_id}"
+    if resource_type == "verification_requirement":
+        task_id = _optional_string(resource, "task_id")
+        if task_id is not None:
+            return f"Verification requirement for task {task_id}"
     if resource_type == "usage-aggregate":
         metric_type = _optional_string(resource, "metric_type")
         unit = _optional_string(resource, "unit")
@@ -276,6 +285,13 @@ def _updated_at(resource_type: str, resource: Mapping[str, JsonValue]) -> str | 
         return _optional_string(resource, "completed_at") or _optional_string(
             resource, "started_at"
         )
+    if resource_type == "verification":
+        result = _nested_mapping(resource, "verification_result")
+        if result is not None:
+            completed_at = _optional_string(result, "completed_at")
+            if completed_at is not None:
+                return completed_at
+        return _optional_string(resource, "created_at")
     return None
 
 
@@ -356,6 +372,10 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "suite_id",
         "suite_version",
         "baseline_run_id",
+        "result_id",
+        "stage_id",
+        "requested_verifier_kind",
+        "requested_capability_ref",
     ):
         value = _optional_string(resource, field)
         if value is not None:
@@ -370,6 +390,7 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "failed_dependency_ids",
         "artifact_ids",
         "capabilities",
+        "capability_ids",
         "extension_ids",
         "extension_types",
         "requested_permissions",
@@ -390,6 +411,29 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         boolean_value = resource.get(field)
         if isinstance(boolean_value, bool):
             values.append(positive if boolean_value else negative)
+    return _deduplicate_strings(tuple(values))
+
+
+def _verification_keywords(
+    resource_type: str,
+    resource: Mapping[str, JsonValue],
+) -> tuple[str, ...]:
+    """Return explicit safe nested Verification metadata, never free-form evidence."""
+
+    values: list[str] = []
+    if resource_type == "verification":
+        result = _nested_mapping(resource, "verification_result")
+        if result is not None:
+            outcome = _optional_string(result, "outcome")
+            if outcome is not None:
+                values.append(outcome)
+    elif resource_type == "verification_requirement":
+        completion = _nested_mapping(resource, "completion")
+        if completion is not None:
+            state = _optional_string(completion, "state")
+            if state is not None:
+                values.append(state)
+            values.extend(_string_sequence(completion, "blocking_verification_ids"))
     return _deduplicate_strings(tuple(values))
 
 
