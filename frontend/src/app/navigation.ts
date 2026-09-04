@@ -14,7 +14,7 @@ export const navigation: NavigationItem[] = [
   { label: "Templates", path: "/templates", group: "Work" },
   { label: "Agents", path: "/agents", group: "Agents", apiResource: "agents" },
   { label: "Agent Teams", path: "/agent-teams", group: "Agents", apiResource: "agent-teams" },
-  { label: "Verification", path: "/verification", group: "Agents", apiResource: "verification" },
+  { label: "Verification", path: "/verification", group: "Agents", apiResource: "verifications" },
   { label: "Organizations", path: "/organizations", group: "Agents", apiResource: "organizations" },
   { label: "Files & Artifacts", path: "/files", group: "Data", apiResource: "artifacts" },
   { label: "Memory", path: "/memory", group: "Data", apiResource: "memory" },

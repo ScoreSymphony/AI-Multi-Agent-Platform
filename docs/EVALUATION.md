@@ -170,7 +170,19 @@ Run-list pagination remains owned by the generic Control Plane `PageQuery`/curso
 
 The Control Plane serializes canonical evaluation records through the existing strict evaluation codec. It does not invent a second EvaluationRun/Result wire lifecycle or expose backend-private execution objects.
 
-The CLI remains API-first by design: later `platform eval ...` commands should call these resources and commands instead of constructing a local `EvaluationRunner` path.
+## API-first CLI
+
+The canonical CLI exposes the Evaluation API without constructing an `EvaluationRunner` or reading Evaluation persistence directly:
+
+- `platform eval suite list`;
+- `platform eval suite show <suite-ref>`;
+- `platform eval run <suite-ref> --snapshot-json ...`;
+- `platform eval result show <run-id>`;
+- `platform eval compare <current-run-id> --baseline-run-id ... --regression-policy-ref ...`.
+
+Suite reads use `/api/v1/evaluation-suites`; run detail uses `/api/v1/evaluation-runs`; mutations use `/api/v1/commands/evaluation.run` and `/api/v1/commands/evaluation.compare`. The CLI sends explicit immutable snapshot data and versioned suite/policy references and relies on the Control Plane for canonical domain validation and execution semantics.
+
+CLI contract tests verify URL encoding for versioned suite refs, pagination/filter forwarding, exact mutation payloads, explicit idempotency keys, durable result reads and local rejection of invalid snapshot/repetition input before transport.
 
 ## Current issue #19 implementation status
 
@@ -206,19 +218,20 @@ Implemented:
 - Control Plane `evaluation-suites` and `evaluation-runs` resources;
 - Control Plane `evaluation.run` and `evaluation.compare` commands backed by `EvaluationService`;
 - complete generic cursor pagination over evaluation-run history without the repository default-limit truncation;
+- API-first `platform eval` suite/run/result/compare CLI surface;
 - no-paid-service policy example;
 - tests for pass/fail, baseline comparison, thresholds, critical/security tags, snapshot integrity, model/provider version differences and evaluator failure handling;
 - tests for repetition/seed propagation, isolation ordering, execution-error containment, comparison persistence and real-kernel reference execution;
 - tests proving cross-attempt workspace contamination is prevented and Run workspace binding exists before lifecycle start;
 - tests for strict JSON persistence, SQLite restart/history/trend queries and baseline comparison after repository restart;
-- tests for Control Plane manifest/OpenAPI exposure, HTTP run/compare flow, persisted comparison reads and run-history pagination beyond 100 records.
+- tests for Control Plane manifest/OpenAPI exposure, HTTP run/compare flow, persisted comparison reads and run-history pagination beyond 100 records;
+- tests for the API-first Evaluation CLI request/payload/validation contract.
 
 Remaining work for full issue completion:
 
 - explicit stochastic aggregation/comparison policies for repeated runs;
 - rubric scorer and optional model-judge adapter implementation;
 - richer telemetry, accounting and log references in observations and stored results;
-- API-first CLI commands (`platform eval suite list`, `platform eval run`, `platform eval result show`, `platform eval compare` or equivalent canonical surface);
 - deterministic PR-gating workflow driven by canonical evaluation suites and versioned policies;
 - Search integration/indexing for canonical Evaluation resources and history where useful.
 

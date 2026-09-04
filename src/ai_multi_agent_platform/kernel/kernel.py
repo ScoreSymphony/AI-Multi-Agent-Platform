@@ -36,6 +36,7 @@ from ai_multi_agent_platform.domain import (
     validate_id,
     validate_subject_id,
 )
+from ai_multi_agent_platform.verification import CompletionAuthority, CompletionState
 
 from .models import (
     TERMINAL_RUN_STATUSES,
@@ -80,6 +81,7 @@ class PlatformKernel:
         task_repository: TaskRepository | None = None,
         run_repository: RunRepository | None = None,
         event_sink: EventProvider | None = None,
+        completion_authority: CompletionAuthority | None = None,
     ) -> None:
         self._orchestrator = orchestrator
         self._lifecycle = lifecycle
@@ -87,6 +89,7 @@ class PlatformKernel:
         self._tasks = task_repository or EventSourcedTaskRepository(self._repository)
         self._runs = run_repository or EventSourcedRunRepository(self._repository)
         self._event_sink = event_sink
+        self._completion_authority = completion_authority
 
     async def create_task(
         self,
@@ -326,7 +329,13 @@ class PlatformKernel:
         task = await self.get_task(task_id)
         if await self._task_command(task_id, idempotency_key, "complete_task") is not None:
             return await self.get_task(task_id)
-        if task.status is not TaskStatus.RUNNING:
+        verification_wait = (
+            self._completion_authority is not None
+            and task.status is TaskStatus.WAITING
+            and task.wait_reason is not None
+            and task.wait_reason.startswith("verification:")
+        )
+        if task.status is not TaskStatus.RUNNING and not verification_wait:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"task {task_id} cannot succeed from {task.status.value}",
@@ -337,11 +346,24 @@ class PlatformKernel:
                 ErrorCode.CONFLICT,
                 f"task {task_id} cannot succeed while run {active.run_id} is {active.status.value}",
             )
+        completion_spec = self._completion_task_spec(task_id)
+        specs: list[EventSpec] = []
+        if task.status is TaskStatus.WAITING and completion_spec[0] == "task.succeeded":
+            specs.append(
+                (
+                    "task.resumed",
+                    "task",
+                    task_id,
+                    {"verification_completed": True},
+                    (),
+                )
+            )
+        specs.append(completion_spec)
         await self._commit_task_command(
             task=task,
             key=idempotency_key,
             operation="complete_task",
-            event_specs=(("task.succeeded", "task", task_id, {}, ()),),
+            event_specs=tuple(specs),
             result_id=task_id,
             actor_ref=actor_ref,
             source=source,
@@ -1450,7 +1472,10 @@ class PlatformKernel:
             specs.append(("run.running", "run", run.run_id, {"inferred": True}, ()))
             if task.status is TaskStatus.READY:
                 specs.append(("task.running", "task", task.task_id, {"inferred": True}, ()))
-        elif run.status is RunStatus.STARTING and target in {RunStatus.FAILED, RunStatus.CANCELLED}:
+        elif run.status is RunStatus.STARTING and target in {
+            RunStatus.FAILED,
+            RunStatus.CANCELLED,
+        }:
             pass
         elif run.status is not RunStatus.RUNNING:
             raise ContractError(
@@ -1467,6 +1492,14 @@ class PlatformKernel:
         task_status = task.status
         if any(spec[0] == "task.running" for spec in specs):
             task_status = TaskStatus.RUNNING
+
+        if target is RunStatus.SUCCEEDED:
+            completion_spec = self._completion_task_spec(task.task_id)
+            if completion_spec[0] == "task.waiting":
+                if task_status in {TaskStatus.RUNNING, TaskStatus.WAITING}:
+                    specs.append(completion_spec)
+                return tuple(specs)
+
         task_event = self._task_event_for_terminal(target)
         if target is RunStatus.CANCELLED and task_status is TaskStatus.READY:
             specs.append(("task.cancelled", "task", task.task_id, {}, ()))
@@ -1483,6 +1516,35 @@ class PlatformKernel:
             if task_status in {TaskStatus.RUNNING, TaskStatus.WAITING}:
                 specs.append((task_event, "task", task.task_id, {}, ()))
         return tuple(specs)
+
+    def _completion_task_spec(self, task_id: str) -> EventSpec:
+        if self._completion_authority is None:
+            return ("task.succeeded", "task", task_id, {}, ())
+        decision = self._completion_authority.assess_task_completion(task_id)
+        if decision.state is CompletionState.ACCEPTED:
+            return ("task.succeeded", "task", task_id, {}, ())
+
+        payload: dict[str, JsonValue] = {
+            "reason": f"verification:{decision.state.value}",
+            "blocked": True,
+            "verification_state": decision.state.value,
+            "verification_reason": decision.reason,
+            "repair_attempts_remaining": decision.repair_attempts_remaining,
+        }
+        if decision.policy_id is not None:
+            payload["verification_policy_id"] = decision.policy_id
+        if decision.policy_version is not None:
+            payload["verification_policy_version"] = decision.policy_version
+        if decision.blocking_verification_ids:
+            payload["blocking_verification_ids"] = list(decision.blocking_verification_ids)
+        if decision.subject is not None:
+            payload["verification_subject"] = {
+                "type": decision.subject.subject_type,
+                "id": decision.subject.subject_id,
+                "revision": decision.subject.revision,
+                "digest": decision.subject.digest,
+            }
+        return ("task.waiting", "task", task_id, payload, ())
 
     @staticmethod
     def _task_event_for_terminal(status: RunStatus) -> str | None:
