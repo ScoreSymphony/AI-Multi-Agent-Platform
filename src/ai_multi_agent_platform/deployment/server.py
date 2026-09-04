@@ -8,7 +8,10 @@ import getpass
 import sys
 from collections.abc import Sequence
 
-from ai_multi_agent_platform.backup import reconcile_restored_single_node
+from ai_multi_agent_platform.backup import (
+    PostRestoreRecoveryResult,
+    reconcile_restored_single_node,
+)
 
 from .config import load_single_node_config
 from .single_node import build_single_node_deployment
@@ -94,15 +97,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     raise AssertionError(f"unhandled deployment command: {args.command}")
 
 
-def _print_restore_recovery(recovery: object | None) -> None:
+def _print_restore_recovery(recovery: PostRestoreRecoveryResult | None) -> None:
     if recovery is None:
         return
-    runs_checked = getattr(recovery, "runs_checked")
-    unresolved = getattr(recovery, "unresolved_run_ids")
-    report_path = getattr(recovery, "report_path")
     print(
         "post-restore recovery completed: "
-        f"runs_checked={runs_checked} unresolved={len(unresolved)} report={report_path}"
+        f"runs_checked={recovery.runs_checked} "
+        f"unresolved={len(recovery.unresolved_run_ids)} report={recovery.report_path}"
     )
 
 
