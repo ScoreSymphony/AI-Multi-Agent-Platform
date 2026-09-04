@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from types import MappingProxyType
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
@@ -188,12 +189,38 @@ class NotificationPreference:
     in_app_enabled: bool = True
     external_channels: frozenset[str] = frozenset()
     aggregate_duplicates: bool = True
+    deadline_reminders_enabled: bool = True
+    deadline_reminder_lead_seconds: int = 24 * 60 * 60
+    overdue_reminders_enabled: bool = True
+    quiet_hours_start: str | None = None
+    quiet_hours_end: str | None = None
+    quiet_hours_timezone: str | None = None
 
     def __post_init__(self) -> None:
         for project_id in self.project_ids:
             validate_id(project_id, "project")
         if any(not value.strip() for value in self.external_channels):
             raise ValueError("external_channels must not contain blank values")
+        if not 1 <= self.deadline_reminder_lead_seconds <= 365 * 24 * 60 * 60:
+            raise ValueError("deadline_reminder_lead_seconds must be between 1 second and 365 days")
+        quiet_values = (
+            self.quiet_hours_start,
+            self.quiet_hours_end,
+            self.quiet_hours_timezone,
+        )
+        if any(value is not None for value in quiet_values):
+            if any(value is None for value in quiet_values):
+                raise ValueError(
+                    "quiet_hours_start, quiet_hours_end and quiet_hours_timezone must be set together"
+                )
+            start = _validate_clock(cast_str(self.quiet_hours_start), "quiet_hours_start")
+            end = _validate_clock(cast_str(self.quiet_hours_end), "quiet_hours_end")
+            if start == end:
+                raise ValueError("quiet hours start and end must differ")
+            try:
+                ZoneInfo(cast_str(self.quiet_hours_timezone))
+            except ZoneInfoNotFoundError as exc:
+                raise ValueError("quiet_hours_timezone must be a valid IANA timezone") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -268,3 +295,19 @@ class NotificationCandidate:
 def _validate_optional_id(value: str | None, prefix: str) -> None:
     if value is not None:
         validate_id(value, prefix)
+
+
+def _validate_clock(value: str, name: str) -> tuple[int, int]:
+    if len(value) != 5 or value[2] != ":" or not value[:2].isdigit() or not value[3:].isdigit():
+        raise ValueError(f"{name} must use 24-hour HH:MM format")
+    hour = int(value[:2])
+    minute = int(value[3:])
+    if hour > 23 or minute > 59:
+        raise ValueError(f"{name} must use 24-hour HH:MM format")
+    return hour, minute
+
+
+def cast_str(value: str | None) -> str:
+    if value is None:
+        raise TypeError("expected configured string")
+    return value
