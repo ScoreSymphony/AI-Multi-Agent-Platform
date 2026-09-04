@@ -73,3 +73,13 @@ The hardening regression suite covers:
 - exact file-backed Artifact subjects and checksum tamper detection;
 - Control Plane rejection of a forged subject and unknown Evidence Artifact;
 - real single-node Task completion blocking, human acceptance and durable restart recovery.
+
+## Authority-integrity hardening
+
+The production-shaped composition now runs `SqliteVerificationService` in strict canonical-subject mode. Raw caller-supplied `VerificationSubject` requests are rejected there; `CanonicalVerificationRuntime` is the supported request boundary and obtains an internal canonical-subject permit only after evidence resolution. The low-level provider-neutral service remains permissive by default for isolated adapters/tests.
+
+`VerificationEvidenceContext` derives Task project scope and, when a canonical AgentRun produced the reviewed Result/Artifact, the exact producer Agent revision, selected model/provider and capability IDs. Canonical request creation no longer accepts those facts from callers. Reverification derives the Task from the previous immutable request and resolves producer context again for the repaired revision, preventing cross-Task rebinding and stale producer provenance.
+
+Repair execution uses a stable key `(source verification ID, repair attempt)`. A caller retry with a different idempotency key therefore reuses the same canonical Plan/Run; durable kernel history is checked before any new repair mutation.
+
+Completion assessment scans every stage for critical failure before returning an earlier incomplete-stage `waiting` result. Distinct Agent reviewer quorum is keyed by Agent ID rather than revision-specific verifier text, so two revisions of one Agent do not count as two independent reviewers.

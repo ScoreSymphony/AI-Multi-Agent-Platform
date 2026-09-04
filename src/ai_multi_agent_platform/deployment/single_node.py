@@ -72,7 +72,6 @@ class SingleNodeDeployment:
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     verification: SqliteVerificationService
-    verification_completion: SqliteVerificationCompletionAuthority
     verification_runtime: CanonicalVerificationRuntime
     kernel: PlatformKernel
     control_plane: ControlPlane
@@ -188,7 +187,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         action="echo",
     )
     verification_path = database_dir / "verification.sqlite3"
-    verification = SqliteVerificationService(verification_path)
+    verification = SqliteVerificationService(verification_path, require_canonical_subjects=True)
     verification_completion = SqliteVerificationCompletionAuthority(verification, verification_path)
     kernel = PlatformKernel(
         orchestrator=orchestrator,
@@ -196,7 +195,9 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         repository=kernel_repository,
         completion_authority=verification_completion,
     )
-    verification_evidence = KernelFileVerificationEvidenceResolver(kernel, kernel_repository, files)
+    verification_evidence = KernelFileVerificationEvidenceResolver(
+        kernel, kernel_repository, files, agents.repository
+    )
     verification_runtime = CanonicalVerificationRuntime(
         verification_completion, verification_evidence
     )
@@ -241,7 +242,6 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         authentication=authentication,
         authorization=authorization,
         verification=verification,
-        verification_completion=verification_completion,
         verification_runtime=verification_runtime,
         kernel=kernel,
         control_plane=control_plane,
