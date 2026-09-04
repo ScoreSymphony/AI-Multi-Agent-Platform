@@ -51,7 +51,7 @@ class ConnectorSearchAuthorization(FakeAuthorizationProvider):
         if (
             request.action == "connection:list"
             and self.denied_project_id is not None
-            and request.project_id == self.denied_project_id
+            and request.context.project_id == self.denied_project_id
         ):
             return AuthorizationDecision(allowed=False, reason="connection-project-hidden")
         return AuthorizationDecision(allowed=True, reason="connector-visible")
@@ -233,7 +233,8 @@ def test_connector_definitions_and_connections_are_discoverable_without_sensitiv
         assert connection_item["title"] == "Visible local account"
         assert connection_item["status"] == "ready"
         assert connection_item["project_id"] is not None
-        assert connection_item["owner"] == {"type": "user", "id": "alice"}
+        assert connection_item["owner_type"] == "user"
+        assert connection_item["owner_id"] == "alice"
         assert connection_item["canonical_ref"] == f"/api/v1/connections/{visible_id}"
 
         by_status = await _search(http, type="connection", status="ready")
@@ -268,7 +269,7 @@ def test_connector_search_filters_authorization_before_counts_and_exact_ids() ->
         assert hidden_exact["total"] == 0
         assert hidden_id not in repr(hidden_exact)
         assert any(
-            call.action == "connection:list" and call.project_id == hidden_project
+            call.action == "connection:list" and call.context.project_id == hidden_project
             for call in authorization.calls
         )
 
