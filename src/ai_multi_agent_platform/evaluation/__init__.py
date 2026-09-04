@@ -1,5 +1,14 @@
 """Canonical evaluation and regression framework."""
 
+from .ci_gate import EvaluationCIGateReport, run_reference_ci_gate
+from .config import (
+    EvaluationBaseline,
+    load_evaluation_baseline,
+    load_evaluation_suite,
+    load_regression_policy,
+    parse_evaluation_suite,
+    parse_regression_policy,
+)
 from .context import EvaluationExecutionContext
 from .contracts import (
     EvaluationCaseExecutor,
@@ -68,6 +77,8 @@ __all__ = [
     "DeterministicAssertion",
     "DeterministicAssertionEvaluator",
     "EvaluationAttempt",
+    "EvaluationBaseline",
+    "EvaluationCIGateReport",
     "EvaluationCase",
     "EvaluationCaseExecutor",
     "EvaluationExecutionContext",
@@ -110,5 +121,11 @@ __all__ = [
     "VersionReference",
     "WorkspaceEvaluationIsolation",
     "evaluation_suite_ref",
+    "load_evaluation_baseline",
+    "load_evaluation_suite",
+    "load_regression_policy",
+    "parse_evaluation_suite",
+    "parse_regression_policy",
     "regression_policy_ref",
+    "run_reference_ci_gate",
 ]
