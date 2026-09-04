@@ -13,6 +13,7 @@ from ai_multi_agent_platform.domain import OwnerRef
 
 from .agent_handlers import AgentTemplateExporter
 from .application import TemplateApplicationService
+from .automation_handler import AutomationTemplateExporter
 from .codec import template_content_from_json
 from .models import TemplateContent, TemplateProvenance, TemplateTrust
 from .repository import TemplateRepository
@@ -23,6 +24,7 @@ TEMPLATE_INSTANCE_COLLECTION = "template-instances"
 TEMPLATE_COMMANDS = (
     "template.create",
     "template.create-from-agent",
+    "template.create-from-automation",
     "template.revise",
     "template.publish",
     "template.clone",
@@ -108,10 +110,12 @@ class TemplateCommandHandlers:
         *,
         environment_resolver: TemplateEnvironmentResolver | None = None,
         agent_exporter: AgentTemplateExporter | None = None,
+        automation_exporter: AutomationTemplateExporter | None = None,
     ) -> None:
         self.application = application
         self.environment_resolver = environment_resolver
         self.agent_exporter = agent_exporter
+        self.automation_exporter = automation_exporter
 
     async def create_template(
         self,
@@ -150,6 +154,26 @@ class TemplateCommandHandlers:
             owner_ref=_actor_owner(context),
             author=context.actor.principal_ref,
             revision=_optional_positive_int(payload, "revision"),
+            name=_optional_string(payload, "name"),
+        )
+        return _template_resource(self.application.repository, revision.template_id)
+
+    async def create_from_automation(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _require_collection(resource_ref, TEMPLATE_COLLECTION)
+        if self.automation_exporter is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "Automation-to-Template export is not enabled in this Control Plane composition",
+            )
+        revision = await self.automation_exporter.create_from_automation(
+            _required_string(payload, "automation_id"),
+            owner_ref=_actor_owner(context),
+            author=context.actor.principal_ref,
             name=_optional_string(payload, "name"),
         )
         return _template_resource(self.application.repository, revision.template_id)
@@ -275,6 +299,7 @@ def register_template_control_plane(
     *,
     environment_resolver: TemplateEnvironmentResolver | None = None,
     agent_exporter: AgentTemplateExporter | None = None,
+    automation_exporter: AutomationTemplateExporter | None = None,
 ) -> None:
     """Register Template resources/commands without changing the Control Plane foundation."""
 
@@ -290,10 +315,16 @@ def register_template_control_plane(
         application,
         environment_resolver=environment_resolver,
         agent_exporter=agent_exporter,
+        automation_exporter=automation_exporter,
     )
     control_plane.register_command("template.create", handlers.create_template)
     if agent_exporter is not None:
         control_plane.register_command("template.create-from-agent", handlers.create_from_agent)
+    if automation_exporter is not None:
+        control_plane.register_command(
+            "template.create-from-automation",
+            handlers.create_from_automation,
+        )
     control_plane.register_command("template.revise", handlers.revise_template)
     control_plane.register_command("template.publish", handlers.publish_template)
     control_plane.register_command("template.clone", handlers.clone_template)
