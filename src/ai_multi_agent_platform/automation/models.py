@@ -354,7 +354,7 @@ class Automation:
         )
 
     def revalidated(self, now: datetime) -> Automation:
-        """Restore the exact lifecycle state that preceded INVALID and preserve schedule metadata."""
+        """Restore the prior lifecycle state after INVALID without changing schedule metadata."""
 
         if self.state is not AutomationState.INVALID or self.state_before_invalid is None:
             raise ValueError("automation is not invalid")
