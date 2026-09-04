@@ -1,13 +1,14 @@
-"""Reference evaluators that require no paid or model-based service."""
+"""Reference evaluators and safe evaluator execution helpers."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Mapping, Sequence
+from inspect import isawaitable
 from typing import cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .contracts import Evaluator
+from .contracts import Evaluator, EvaluatorLike
 from .models import (
     AssertionResult,
     ComparisonOperator,
@@ -99,6 +100,30 @@ def _metric_compare(value: float, operator: ComparisonOperator, threshold: float
     if operator is ComparisonOperator.NE:
         return value != threshold
     raise ValueError(f"unsupported metric comparison operator: {operator}")
+
+
+def _error_result(
+    *,
+    descriptor: EvaluatorDescriptor,
+    evaluation_run_id: str,
+    case: EvaluationCase,
+    observation: EvaluationObservation,
+    error: Exception,
+) -> EvaluationResult:
+    return EvaluationResult(
+        evaluation_run_id=evaluation_run_id,
+        case_id=case.case_id,
+        case_version=case.version,
+        evaluator=descriptor,
+        outcome=EvaluationOutcome.ERROR,
+        case_tags=case.tags,
+        task_id=observation.task_id,
+        run_id=observation.run_id,
+        artifact_refs=observation.artifact_refs,
+        telemetry_refs=observation.telemetry_refs,
+        error_category="evaluator_failure",
+        error_message=str(error),
+    )
 
 
 class DeterministicAssertionEvaluator:
@@ -204,7 +229,7 @@ class MetricThresholdEvaluator:
 
 
 class SafeEvaluator:
-    """Contain evaluator failures so one faulty evaluator becomes an explicit result."""
+    """Contain failures from synchronous evaluators as explicit canonical results."""
 
     def __init__(self, evaluator: Evaluator) -> None:
         self._evaluator = evaluator
@@ -227,17 +252,38 @@ class SafeEvaluator:
                 observation=observation,
             )
         except Exception as exc:
-            return EvaluationResult(
+            return _error_result(
+                descriptor=self.descriptor,
                 evaluation_run_id=evaluation_run_id,
-                case_id=case.case_id,
-                case_version=case.version,
-                evaluator=self.descriptor,
-                outcome=EvaluationOutcome.ERROR,
-                case_tags=case.tags,
-                task_id=observation.task_id,
-                run_id=observation.run_id,
-                artifact_refs=observation.artifact_refs,
-                telemetry_refs=observation.telemetry_refs,
-                error_category="evaluator_failure",
-                error_message=str(exc),
+                case=case,
+                observation=observation,
+                error=exc,
             )
+
+
+async def evaluate_safely(
+    evaluator: EvaluatorLike,
+    *,
+    evaluation_run_id: str,
+    case: EvaluationCase,
+    observation: EvaluationObservation,
+) -> EvaluationResult:
+    """Run either sync or async evaluators and contain evaluator-local failures."""
+
+    try:
+        candidate = evaluator.evaluate(
+            evaluation_run_id=evaluation_run_id,
+            case=case,
+            observation=observation,
+        )
+        if isawaitable(candidate):
+            return await cast(Awaitable[EvaluationResult], candidate)
+        return candidate
+    except Exception as exc:
+        return _error_result(
+            descriptor=evaluator.descriptor,
+            evaluation_run_id=evaluation_run_id,
+            case=case,
+            observation=observation,
+            error=exc,
+        )
