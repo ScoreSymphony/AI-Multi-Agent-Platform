@@ -207,12 +207,8 @@ def test_context_requires_revision_pin_when_same_template_has_multiple_applied_r
         instance_id=new_id("template_instance"),
         environment=TemplateEnvironment(),
         created_resources={
-            TemplateRevisionRef(template_id, 1): (
-                TemplateResourceRef("agent", "agent-one"),
-            ),
-            TemplateRevisionRef(template_id, 2): (
-                TemplateResourceRef("agent", "agent-two"),
-            ),
+            TemplateRevisionRef(template_id, 1): (TemplateResourceRef("agent", "agent-one"),),
+            TemplateRevisionRef(template_id, 2): (TemplateResourceRef("agent", "agent-two"),),
         },
     )
 
