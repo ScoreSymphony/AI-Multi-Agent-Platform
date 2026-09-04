@@ -19,7 +19,7 @@ from ai_multi_agent_platform.domain import (
     Task,
     TaskStatus,
 )
-from ai_multi_agent_platform.kernel.models import RunState, TERMINAL_RUN_STATUSES
+from ai_multi_agent_platform.kernel.models import TERMINAL_RUN_STATUSES, RunState
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.kernel.state import reduce_run, reduce_task
 
