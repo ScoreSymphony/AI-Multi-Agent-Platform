@@ -6,7 +6,11 @@ import json
 from collections.abc import AsyncIterator, Callable
 
 from ai_multi_agent_platform.agents import AgentService
-from ai_multi_agent_platform.agents.models import AgentRevision, AgentTeamRevision, InstructionSource
+from ai_multi_agent_platform.agents.models import (
+    AgentRevision,
+    AgentTeamRevision,
+    InstructionSource,
+)
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.models import (
@@ -213,7 +217,9 @@ def _effective_routing(
     request: ConversationResponseRequest,
 ) -> tuple[str | None, dict[str, JsonValue]]:
     requirements = _routing_requirements_json(agent_requirements)
-    model_config_id = agent_requirements.explicit_model_id if agent_requirements is not None else None
+    model_config_id = (
+        agent_requirements.explicit_model_id if agent_requirements is not None else None
+    )
     preference = request.model_preference
     if preference is not None:
         requirements.update(dict(preference.routing_requirements))
