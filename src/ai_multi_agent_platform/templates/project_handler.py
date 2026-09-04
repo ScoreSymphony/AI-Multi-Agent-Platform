@@ -42,8 +42,7 @@ class ProjectTemplateHandler:
                 resource_type="project",
                 action="create",
                 description=(
-                    f"Create Project {name!r} from "
-                    f"{revision.template_id}@{revision.revision}"
+                    f"Create Project {name!r} from {revision.template_id}@{revision.revision}"
                 ),
             ),
         )
