@@ -12,6 +12,7 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.control_plane.service import _payload_digest
 from ai_multi_agent_platform.kernel import TaskState
 
+from .evidence import VerificationEvidenceResolver
 from .gate import VerificationCompletionAuthority
 from .models import (
     VerificationFinding,
@@ -205,9 +206,11 @@ class VerificationCommandHandlers:
         self,
         control_plane: ControlPlane,
         verification: VerificationService,
+        evidence: VerificationEvidenceResolver | None = None,
     ) -> None:
         self._control_plane = control_plane
         self._verification = verification
+        self._evidence = evidence
 
     async def accept(
         self,
@@ -298,6 +301,23 @@ class VerificationCommandHandlers:
                 "verification request already has a different canonical result",
             )
 
+        evidence_artifact_ids = _artifact_ids(payload)
+        if self._evidence is not None:
+            canonical_subject = await self._evidence.resolve_subject(
+                task_id=request.task_id,
+                subject_type=request.subject.subject_type,
+                subject_id=request.subject.subject_id,
+            )
+            if canonical_subject != request.subject:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "verification request subject differs from canonical Result/Artifact evidence",
+                )
+            await self._evidence.validate_evidence_artifacts(
+                task_id=request.task_id,
+                artifact_ids=evidence_artifact_ids,
+            )
+
         comment = _optional_comment(payload)
         findings: tuple[VerificationFinding, ...] = ()
         if comment is not None:
@@ -319,7 +339,7 @@ class VerificationCommandHandlers:
                 outcome=outcome,
                 subject=request.subject,
                 findings=findings,
-                evidence_artifact_ids=_artifact_ids(payload),
+                evidence_artifact_ids=evidence_artifact_ids,
                 checks_executed=("human_review",),
                 metadata={
                     "control_plane": {
@@ -338,6 +358,7 @@ def register_verification_control_plane(
     control_plane: ControlPlane,
     verification: VerificationService,
     completion: VerificationCompletionAuthority,
+    evidence: VerificationEvidenceResolver | None = None,
 ) -> None:
     """Register #86 read/review surfaces on the generic #32 extension seam."""
 
@@ -353,7 +374,7 @@ def register_verification_control_plane(
         VERIFICATION_REQUIREMENT_COLLECTION,
         VerificationRequirementResourceService(control_plane, completion),
     )
-    handlers = VerificationCommandHandlers(control_plane, verification)
+    handlers = VerificationCommandHandlers(control_plane, verification, evidence)
     control_plane.register_command("verification.accept", handlers.accept)
     control_plane.register_command("verification.reject", handlers.reject)
     control_plane.register_command("verification.request-changes", handlers.request_changes)

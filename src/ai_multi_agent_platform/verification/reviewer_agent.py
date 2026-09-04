@@ -15,6 +15,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.models import RoutingRequirements
 
+from .evidence import VerificationEvidenceResolver
 from .models import (
     VerificationFinding,
     VerificationOutcome,
@@ -39,9 +40,15 @@ class ReviewerAgentRuntime:
     becomes only a ``VerificationResult`` submitted back to the platform-owned service.
     """
 
-    def __init__(self, verification: VerificationService, agents: AgentRuntime) -> None:
+    def __init__(
+        self,
+        verification: VerificationService,
+        agents: AgentRuntime,
+        evidence: VerificationEvidenceResolver | None = None,
+    ) -> None:
         self._verification = verification
         self._agents = agents
+        self._evidence = evidence
 
     async def start_review(
         self,
@@ -65,6 +72,17 @@ class ReviewerAgentRuntime:
                 ErrorCode.CONFLICT,
                 "verification request is not assigned to a reviewer Agent",
             )
+        if self._evidence is not None:
+            canonical_subject = await self._evidence.resolve_subject(
+                task_id=request.task_id,
+                subject_type=request.subject.subject_type,
+                subject_id=request.subject.subject_id,
+            )
+            if canonical_subject != request.subject:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "reviewer Agent request subject differs from canonical evidence",
+                )
         if task_context is not None and _RESERVED_TASK_CONTEXT_KEY in task_context:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,

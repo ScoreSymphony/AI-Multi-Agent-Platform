@@ -225,6 +225,21 @@ class SqliteVerificationService(_SqliteVerificationState, VerificationService):
         self._save_service_state()
         return submitted
 
+    def cancel_request(
+        self,
+        verification_id: str,
+        *,
+        now: datetime | None = None,
+        causation_id: str | None = None,
+    ) -> VerificationRequest:
+        cancelled = super().cancel_request(
+            verification_id,
+            now=now,
+            causation_id=causation_id,
+        )
+        self._save_service_state()
+        return cancelled
+
     def snapshot_requests(self) -> tuple[VerificationRequest, ...]:
         """Return durable request creation order for recovery reconciliation."""
 
