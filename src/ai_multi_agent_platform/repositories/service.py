@@ -286,5 +286,24 @@ class RepositoryProvenanceStore:
             return
         records.append(provenance)
 
+    def upsert(self, provenance: RepositoryRunProvenance) -> None:
+        """Replace one Run/repository input record as output evidence becomes available."""
+
+        records = self._records.setdefault(provenance.run_id, [])
+        for index, current in enumerate(records):
+            if (
+                current.repository_id == provenance.repository_id
+                and current.input_revision == provenance.input_revision
+            ):
+                records[index] = provenance
+                return
+        records.append(provenance)
+
+    def get(self, run_id: str, repository_id: str) -> RepositoryRunProvenance | None:
+        for provenance in self._records.get(run_id, ()):
+            if provenance.repository_id == repository_id:
+                return provenance
+        return None
+
     def for_run(self, run_id: str) -> tuple[RepositoryRunProvenance, ...]:
         return tuple(self._records.get(run_id, ()))
