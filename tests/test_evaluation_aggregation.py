@@ -23,6 +23,7 @@ from ai_multi_agent_platform.evaluation import (
     EvaluationSuite,
     EvaluatorDescriptor,
     EvaluatorKind,
+    InMemoryEvaluationRepository,
     MetricResult,
     RegressionPolicy,
     RegressionRule,
@@ -245,20 +246,15 @@ def test_aggregation_policy_loader_is_strict(tmp_path: Path) -> None:
         load_aggregation_policy(duplicate)
 
     unknown = tmp_path / "unknown.json"
-    unknown.write_text(valid.read_text(encoding="utf-8")[:-2] + ',"private":true}', encoding="utf-8")
+    unknown.write_text(
+        valid.read_text(encoding="utf-8")[:-2] + ',"private":true}', encoding="utf-8"
+    )
     with pytest.raises(ValueError, match="unknown fields: private"):
         load_aggregation_policy(unknown)
 
 
 def test_runner_compares_repeated_runs_through_versioned_aggregates() -> None:
     async def scenario() -> None:
-        repository = SqliteEvaluationRepository(":memory:")
-        # sqlite ':memory:' cannot survive the repository's per-operation connections, so use the
-        # in-memory canonical repository through the service-free runner path instead.
-        del repository
-
-        from ai_multi_agent_platform.evaluation import InMemoryEvaluationRepository
-
         memory = InMemoryEvaluationRepository()
         suite = _suite()
         aggregation = _aggregation_policy()
@@ -305,19 +301,20 @@ def test_runner_compares_repeated_runs_through_versioned_aggregates() -> None:
         assert len(aggregation_refs) == 1
         assert aggregation_refs[0].ref_id == aggregation.policy_id
         assert aggregation_refs[0].version == aggregation.version
-        assert memory.list_aggregates(
-            current.run.run_id,
-            aggregation_policy_id=aggregation.policy_id,
-            aggregation_policy_version=aggregation.version,
-        ) == current.aggregates
+        assert (
+            memory.list_aggregates(
+                current.run.run_id,
+                aggregation_policy_id=aggregation.policy_id,
+                aggregation_policy_version=aggregation.version,
+            )
+            == current.aggregates
+        )
 
     asyncio.run(scenario())
 
 
 def test_runner_rejects_mismatched_sample_counts_when_policy_requires_equality() -> None:
     async def scenario() -> None:
-        from ai_multi_agent_platform.evaluation import InMemoryEvaluationRepository
-
         repository = InMemoryEvaluationRepository()
         suite = _suite()
         aggregation = _aggregation_policy()
@@ -351,8 +348,6 @@ def test_runner_rejects_mismatched_sample_counts_when_policy_requires_equality()
 
 def test_service_can_compare_existing_repeated_runs_post_hoc() -> None:
     async def scenario() -> None:
-        from ai_multi_agent_platform.evaluation import InMemoryEvaluationRepository
-
         repository = InMemoryEvaluationRepository()
         suite = _suite()
         aggregation = _aggregation_policy()
