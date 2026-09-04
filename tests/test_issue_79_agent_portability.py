@@ -126,7 +126,10 @@ def test_composite_agent_team_preview_orders_dependency_and_remaps_references() 
     ).preview(package)
 
     assert preview.ready is True
-    assert preview.import_order == ((AGENT_RESOURCE_TYPE, agent_id), (AGENT_TEAM_RESOURCE_TYPE, team_id))
+    assert preview.import_order == (
+        (AGENT_RESOURCE_TYPE, agent_id),
+        (AGENT_TEAM_RESOURCE_TYPE, team_id),
+    )
     mapping = preview.mapping_dict()
     assert mapping[(AGENT_RESOURCE_TYPE, agent_id)] != agent_id
     assert mapping[(AGENT_TEAM_RESOURCE_TYPE, team_id)] != team_id
@@ -188,8 +191,7 @@ def test_preview_reports_required_missing_capability_dependency() -> None:
     assert preview.ready is False
     assert preview.missing_dependencies
     assert all(
-        item.requirement.kind is DependencyKind.CAPABILITY
-        for item in preview.missing_dependencies
+        item.requirement.kind is DependencyKind.CAPABILITY for item in preview.missing_dependencies
     )
     assert any(
         item.requirement.identifier == "capability.repo.read"
