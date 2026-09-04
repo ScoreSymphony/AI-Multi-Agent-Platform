@@ -211,7 +211,8 @@ class NotificationPreference:
         if any(value is not None for value in quiet_values):
             if any(value is None for value in quiet_values):
                 raise ValueError(
-                    "quiet_hours_start, quiet_hours_end and quiet_hours_timezone must be set together"
+                    "quiet_hours_start, quiet_hours_end and quiet_hours_timezone "
+                    "must be set together"
                 )
             start = _validate_clock(cast_str(self.quiet_hours_start), "quiet_hours_start")
             end = _validate_clock(cast_str(self.quiet_hours_end), "quiet_hours_end")
