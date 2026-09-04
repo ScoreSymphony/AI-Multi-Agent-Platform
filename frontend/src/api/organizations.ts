@@ -116,6 +116,7 @@ export interface CanonicalOrganizationAuditEvent {
   resource_id?: string;
   team_id?: string;
   affected_actor_id?: string;
+  owner_actor_id?: string;
   status?: string;
   role_refs?: string[];
   policy_refs?: string[];
@@ -141,6 +142,10 @@ export interface UpdateOrganizationInput {
   settings?: Record<string, JsonValue>;
   default_policy_refs?: string[];
   default_configuration_refs?: string[];
+}
+
+export interface TransferOrganizationOwnerInput {
+  new_owner_actor_id: string;
 }
 
 export interface CreateTeamInput {
@@ -225,6 +230,13 @@ export class OrganizationClient {
     input: UpdateOrganizationInput,
   ): Promise<CanonicalOrganization> {
     return this.command("organization.update", organizationId, input);
+  }
+
+  transferOrganizationOwner(
+    organizationId: string,
+    input: TransferOrganizationOwnerInput,
+  ): Promise<CanonicalOrganization> {
+    return this.command("organization.owner.transfer", organizationId, input);
   }
 
   archiveOrganization(organizationId: string): Promise<CanonicalOrganization> {
