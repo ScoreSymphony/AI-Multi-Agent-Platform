@@ -93,7 +93,9 @@ def doctor_compute(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
                 {
                     "name": f"{kind}_health",
                     "status": "degraded",
-                    "message": f"canonical {kind} collection is missing while compute is partially available",
+                    "message": (
+                        f"canonical {kind} collection is missing while compute is partially available"
+                    ),
                 }
             )
             continue
