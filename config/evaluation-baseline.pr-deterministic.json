@@ -1,0 +1,136 @@
+{
+  "run": {
+    "run_id": "evaluation_run_pr_baseline_v1",
+    "suite_id": "suite.pr-deterministic",
+    "suite_version": "1",
+    "status": "completed",
+    "baseline_run_id": null,
+    "repetitions": 1,
+    "seed": 19,
+    "started_at": "2026-09-04T00:00:00+00:00",
+    "completed_at": "2026-09-04T00:00:01+00:00",
+    "snapshot": {
+      "snapshot_id": "evaluation_snapshot_pr_baseline_v1",
+      "schema_version": "1.0",
+      "platform_version": "0.0.1",
+      "platform_commit": "accepted-pr-reference-v1",
+      "references": [
+        {
+          "kind": "orchestrator",
+          "ref_id": "reference",
+          "version": "0.0.1",
+          "revision": "accepted-pr-reference-v1"
+        },
+        {
+          "kind": "executor",
+          "ref_id": "reference",
+          "version": "0.0.1",
+          "revision": "accepted-pr-reference-v1"
+        },
+        {
+          "kind": "evaluator",
+          "ref_id": "reference.deterministic",
+          "version": "1.0",
+          "revision": "accepted-pr-reference-v1"
+        },
+        {
+          "kind": "evaluator",
+          "ref_id": "reference.metric-threshold",
+          "version": "1.0",
+          "revision": "accepted-pr-reference-v1"
+        },
+        {
+          "kind": "regression_policy",
+          "ref_id": "policy.pr-deterministic",
+          "version": "1",
+          "revision": null
+        },
+        {
+          "kind": "evaluation_suite",
+          "ref_id": "suite.pr-deterministic",
+          "version": "1",
+          "revision": null
+        }
+      ],
+      "environment": [
+        {
+          "key": "evaluation_profile",
+          "value": "pr-deterministic"
+        }
+      ]
+    }
+  },
+  "results": [
+    {
+      "result_id": "evaluation_result_pr_baseline_deterministic_v1",
+      "evaluation_run_id": "evaluation_run_pr_baseline_v1",
+      "case_id": "case.reference-lifecycle",
+      "case_version": "1",
+      "evaluator": {
+        "evaluator_id": "reference.deterministic",
+        "kind": "deterministic",
+        "version": "1.0",
+        "deterministic": true,
+        "model_config_id": null,
+        "provider_id": null,
+        "configuration_ref": null
+      },
+      "outcome": "passed",
+      "deterministic_pass": true,
+      "score": 1.0,
+      "assertions": [],
+      "metrics": [],
+      "case_tags": ["ci", "critical", "reference"],
+      "task_id": null,
+      "run_id": null,
+      "artifact_refs": [],
+      "telemetry_refs": [],
+      "attempt_id": null,
+      "repetition_index": 0,
+      "seed": 19,
+      "error_category": null,
+      "error_message": null,
+      "created_at": "2026-09-04T00:00:01+00:00"
+    },
+    {
+      "result_id": "evaluation_result_pr_baseline_metric_v1",
+      "evaluation_run_id": "evaluation_run_pr_baseline_v1",
+      "case_id": "case.reference-lifecycle",
+      "case_version": "1",
+      "evaluator": {
+        "evaluator_id": "reference.metric-threshold",
+        "kind": "metric",
+        "version": "1.0",
+        "deterministic": true,
+        "model_config_id": null,
+        "provider_id": null,
+        "configuration_ref": null
+      },
+      "outcome": "passed",
+      "deterministic_pass": true,
+      "score": 1.0,
+      "assertions": [],
+      "metrics": [
+        {
+          "metric_name": "dispatch_attempts",
+          "value": 1.0,
+          "passed": true,
+          "threshold": 1.0,
+          "operator": "lte",
+          "unit": "attempts"
+        }
+      ],
+      "case_tags": ["ci", "critical", "reference"],
+      "task_id": null,
+      "run_id": null,
+      "artifact_refs": [],
+      "telemetry_refs": [],
+      "attempt_id": null,
+      "repetition_index": 0,
+      "seed": 19,
+      "error_category": null,
+      "error_message": null,
+      "created_at": "2026-09-04T00:00:01+00:00"
+    }
+  ]
+}

@@ -130,6 +130,8 @@ class ReviewerIndependence:
     model_must_differ: bool = False
     provider_must_differ: bool = False
     agent_reviewer_must_be_read_only: bool = False
+    human_reviewer_must_differ: bool = False
+    forbid_self_verification: bool = False
     require_distinct_verifiers: bool = False
 
 
@@ -168,6 +170,7 @@ class VerificationPolicy:
     request_timeout_seconds: float | None = None
     result_expiry_seconds: float | None = None
     failure_policy: VerificationFailurePolicy = VerificationFailurePolicy.FAIL
+    timeout_failure_policy: VerificationFailurePolicy = VerificationFailurePolicy.WAIT
     creator_ref: str | None = None
     created_at: datetime = field(default_factory=utc_now)
     provenance: Provenance | None = None

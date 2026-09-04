@@ -29,6 +29,14 @@ from ai_multi_agent_platform.security import (
 )
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
+from ai_multi_agent_platform.verification import (
+    CanonicalVerificationRuntime,
+    KernelFileVerificationEvidenceResolver,
+    SqliteVerificationCompletionAuthority,
+    SqliteVerificationService,
+)
+from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
+from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
 from ai_multi_agent_platform.workspaces import SqliteWorkspaceProvider
 
 from .config import SingleNodeConfig
@@ -63,6 +71,9 @@ class SingleNodeDeployment:
     agents: AgentService
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
+    verification: SqliteVerificationService
+    verification_completion: SqliteVerificationCompletionAuthority
+    verification_runtime: CanonicalVerificationRuntime
     kernel: PlatformKernel
     control_plane: ControlPlane
     http: AuthenticatedControlPlaneHTTP
@@ -176,10 +187,18 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         workspace=_REFERENCE_EXECUTION_WORKSPACE,
         action="echo",
     )
+    verification_path = database_dir / "verification.sqlite3"
+    verification = SqliteVerificationService(verification_path)
+    verification_completion = SqliteVerificationCompletionAuthority(verification, verification_path)
     kernel = PlatformKernel(
         orchestrator=orchestrator,
         lifecycle=lifecycle,
         repository=kernel_repository,
+        completion_authority=verification_completion,
+    )
+    verification_evidence = KernelFileVerificationEvidenceResolver(kernel, kernel_repository, files)
+    verification_runtime = CanonicalVerificationRuntime(
+        verification_completion, verification_evidence
     )
 
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
@@ -197,6 +216,13 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
     )
     register_agent_control_plane(control_plane, agents)
     register_standard_agent_control_plane(control_plane, agents)
+    register_verification_control_plane(
+        control_plane,
+        verification,
+        verification_completion,
+        verification_evidence,
+    )
+    control_plane.bind_observability_timeline(VerificationTimelineReader(verification))
 
     http = AuthenticatedControlPlaneHTTP(
         control_plane,
@@ -214,6 +240,9 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         agents=agents,
         authentication=authentication,
         authorization=authorization,
+        verification=verification,
+        verification_completion=verification_completion,
+        verification_runtime=verification_runtime,
         kernel=kernel,
         control_plane=control_plane,
         http=http,
