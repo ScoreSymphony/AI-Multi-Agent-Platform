@@ -83,3 +83,7 @@ The production-shaped composition now runs `SqliteVerificationService` in strict
 Repair execution uses a stable key `(source verification ID, repair attempt)`. A caller retry with a different idempotency key therefore reuses the same canonical Plan/Run; durable kernel history is checked before any new repair mutation.
 
 Completion assessment scans every stage for critical failure before returning an earlier incomplete-stage `waiting` result. Distinct Agent reviewer quorum is keyed by Agent ID rather than revision-specific verifier text, so two revisions of one Agent do not count as two independent reviewers.
+
+## Integration validation discipline
+
+Because Verification is a cross-cutting completion authority, a green feature-branch test run is not the final integration signal after `main` advances. The pull-request merge-ref CI must be rerun against the then-current `main`; mergeability alone proves only that Git can compose the histories, not that the combined platform behavior still passes the repository-wide gates.
