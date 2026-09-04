@@ -192,7 +192,11 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         action="echo",
     )
     verification_path = database_dir / "verification.sqlite3"
-    verification = SqliteVerificationService(verification_path, require_canonical_subjects=True)
+    verification = SqliteVerificationService(
+        verification_path,
+        require_canonical_subjects=True,
+        require_canonical_results=True,
+    )
     verification_completion = SqliteVerificationCompletionAuthority(verification, verification_path)
     kernel = PlatformKernel(
         orchestrator=orchestrator,
@@ -230,6 +234,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         verification,
         verification_completion,
         verification_evidence,
+        verification_runtime,
     )
     control_plane.bind_observability_timeline(VerificationTimelineReader(verification))
 
