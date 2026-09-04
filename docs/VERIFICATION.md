@@ -214,9 +214,9 @@ The current #86 implementation provides:
 - reviewer-Agent runtime binding with pre-start independence/read-only enforcement and immutable exact-subject context;
 - canonical bounded repair execution through ordinary Plan/Step/Run kernel operations;
 - end-to-end repair-to-new-subject-to-reverification coverage;
-- focused regression tests for core, kernel-gate, persistence/recovery, Control Plane authorization, observability, reviewer-Agent and repair semantics.
+- dedicated frontend pending-review queue, detail/history surface and authorized human review actions;
+- read-only Verification policy/status/history projections directly on Task, Run and Result detail surfaces;
+- replacement-conformance coverage across replaceable orchestrators, reviewer models/providers and external Verification providers;
+- focused regression tests for core, kernel-gate, persistence/recovery, Control Plane authorization, observability, reviewer-Agent, repair and replacement semantics.
 
-Remaining issue work is intentionally layered on top of these authorities:
-
-- frontend pending-review/detail/history/action surface;
-- broader replacement conformance tests proving equivalent completion semantics across replaceable orchestrators/models/providers.
+The implementation work owned directly by #86 is complete. Follow-up integrations remain intentionally owned by their respective issues, including #19 evaluation consumption, #75 review notifications, #82 repository diff/test evidence and #78 reusable policy templates. Those integrations may consume canonical Verification facts but do not own Verification or Task completion semantics.
