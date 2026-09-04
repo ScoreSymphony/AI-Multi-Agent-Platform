@@ -25,19 +25,13 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
     DurableStoreSpec("files", "db/files.sqlite3", "sqlite", True, "data"),
     DurableStoreSpec("workspaces", "db/workspaces.sqlite3", "sqlite", True, "workspaces"),
     DurableStoreSpec("verification", "db/verification.sqlite3", "sqlite", True, "verification"),
-    DurableStoreSpec(
-        "authentication", "db/authentication.sqlite3", "sqlite", True, "security"
-    ),
-    DurableStoreSpec(
-        "authorization", "db/authorization.sqlite3", "sqlite", True, "security"
-    ),
+    DurableStoreSpec("authentication", "db/authentication.sqlite3", "sqlite", True, "security"),
+    DurableStoreSpec("authorization", "db/authorization.sqlite3", "sqlite", True, "security"),
     DurableStoreSpec("automation", "db/automation.sqlite3", "sqlite", True, "automation"),
     DurableStoreSpec("agents", "db/agents.json", "json", False, "agents"),
     DurableStoreSpec("conversations", "db/conversations.json", "json", False, "conversations"),
     DurableStoreSpec("models", "db/models.json", "json", False, "models"),
-    DurableStoreSpec(
-        "model-providers", "db/model-providers.json", "json", False, "onboarding"
-    ),
+    DurableStoreSpec("model-providers", "db/model-providers.json", "json", False, "onboarding"),
     DurableStoreSpec(
         "onboarding-commands", "db/onboarding-commands.json", "json", False, "onboarding"
     ),
