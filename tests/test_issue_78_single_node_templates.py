@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from ai_multi_agent_platform.agents import AgentInstructions, AgentProfile, InstructionSource
-from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
+from ai_multi_agent_platform.control_plane.models import ActorContext, PageQuery, RequestContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.domain import OwnerRef
 
@@ -66,6 +66,24 @@ def test_single_node_wires_durable_agent_templates_and_control_plane(tmp_path: P
         )
         assert published["latest_published_revision"] == 2
 
+        read_context = RequestContext(
+            request_id="request-template-read",
+            correlation_id=context.correlation_id,
+            actor=context.actor,
+        )
+        listed = await deployment.control_plane.list_extension_resources(
+            read_context,
+            "templates",
+            PageQuery(),
+        )
+        assert [item["id"] for item in listed["items"]] == [template_id]
+        detail = await deployment.control_plane.get_extension_resource(
+            read_context,
+            "templates",
+            template_id,
+        )
+        assert detail["id"] == template_id
+
         applied = await deployment.control_plane.execute_command(
             RequestContext(
                 request_id="request-template-apply",
@@ -84,6 +102,19 @@ def test_single_node_wires_durable_agent_templates_and_control_plane(tmp_path: P
         created_agent_id = instance.resource_refs[0].resource_id
         assert created_agent_id != source.agent_id
         assert deployment.agents.get_agent_revision(created_agent_id).profile == source.profile
+
+        instance_list = await deployment.control_plane.list_extension_resources(
+            read_context,
+            "template-instances",
+            PageQuery(),
+        )
+        assert [item["id"] for item in instance_list["items"]] == [instance_id]
+        instance_detail = await deployment.control_plane.get_extension_resource(
+            read_context,
+            "template-instances",
+            instance_id,
+        )
+        assert instance_detail["id"] == instance_id
         assert (config.database_dir / "templates.json").exists()
 
         restarted = build_single_node_deployment(config)
