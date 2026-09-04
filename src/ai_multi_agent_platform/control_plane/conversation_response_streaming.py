@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Mapping
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
+from ai_multi_agent_platform.contracts import OperationContext, OperationControl
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.conversations import (
@@ -102,6 +103,14 @@ async def stream_conversation_response(
         source_message_id=source.id,
         target=_response_target(conversation),
         history=history,
+        operation=OperationContext(
+            correlation_id=context.correlation_id,
+            causation_id=context.idempotency_key,
+            owner_type=context.actor.owner_type,
+            owner_id=context.actor.owner_id,
+            project_id=conversation.project_id,
+            control=OperationControl(idempotency_key=context.idempotency_key),
+        ),
         model_preference=conversation.model_preference,
     )
 
