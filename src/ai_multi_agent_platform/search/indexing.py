@@ -273,7 +273,9 @@ def _updated_at(resource_type: str, resource: Mapping[str, JsonValue]) -> str | 
     if updated_at is not None:
         return updated_at
     if resource_type == "evaluation-run":
-        return _optional_string(resource, "completed_at") or _optional_string(resource, "started_at")
+        return _optional_string(resource, "completed_at") or _optional_string(
+            resource, "started_at"
+        )
     return None
 
 
