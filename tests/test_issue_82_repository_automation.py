@@ -36,39 +36,13 @@ from ai_multi_agent_platform.testing import (
 
 def test_verified_repository_event_triggers_canonical_automation_task(tmp_path: Path) -> None:
     async def scenario() -> None:
-        kernel_repository = InMemoryKernelRepository()
-        kernel = PlatformKernel(
-            orchestrator=FakeOrchestrator(),
-            lifecycle=FakeLifecycleBackend(),
-            repository=kernel_repository,
-        )
-        control_plane = ControlPlane(
-            kernel=kernel,
-            events=kernel_repository,
-            authorization=FakeAuthorizationProvider(),
-        )
         project_id = new_id("project")
-        automation = await control_plane.automation_service.create_automation(
-            name="Repository push watcher",
-            description="Create a canonical task for one repository push event.",
-            identity=IdentityContext(
-                principal_ref="user:repository-user",
-                owner_type="user",
-                owner_id="repository-user",
-            ),
-            trigger=TriggerDefinition(
-                type=TriggerType.PLATFORM_EVENT,
-                event_type="repository.external.push",
-                filters={"repository_id": "placeholder"},
-            ),
-            task_template=TaskTemplate(
-                title="Review repository push",
-                objective="Review the canonical repository event.",
-                project_id=project_id,
-            ),
+        operation = OperationContext(
+            correlation_id="issue-82-repository-automation",
+            owner_type="user",
+            owner_id="repository-user",
             project_id=project_id,
         )
-
         connection = RepositoryConnection(
             connection=Connection(
                 id=new_id("connection"),
@@ -83,19 +57,20 @@ def test_verified_repository_event_triggers_canonical_automation_task(tmp_path: 
             local=True,
         )
         provider = LocalGitRepositoryProvider(tmp_path / "repo", connection)
-        repository = await provider.initialize(
-            OperationContext(
-                correlation_id="issue-82-repository-automation",
-                owner_type="user",
-                owner_id="repository-user",
-                project_id=project_id,
-            )
-        )
+        repository = await provider.initialize(operation)
         binding = RepositoryBinding(connection, repository, provider)
 
-        # Recreate the Automation only after the canonical repository identity exists so the
-        # filter proves that provider-native event data is not needed at the #18 boundary.
-        await control_plane.automation_service.delete_automation(automation.id)
+        kernel_repository = InMemoryKernelRepository()
+        kernel = PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=FakeLifecycleBackend(),
+            repository=kernel_repository,
+        )
+        control_plane = ControlPlane(
+            kernel=kernel,
+            events=kernel_repository,
+            authorization=FakeAuthorizationProvider(),
+        )
         automation = await control_plane.automation_service.create_automation(
             name="Repository push watcher",
             description="Create a canonical task for one repository push event.",
