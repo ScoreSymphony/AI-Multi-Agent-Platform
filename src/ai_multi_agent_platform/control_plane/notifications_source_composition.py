@@ -10,6 +10,7 @@ from typing import Any, cast
 from ai_multi_agent_platform.accounting import AccountingService
 from ai_multi_agent_platform.accounting.models import BudgetThresholdEvent
 from ai_multi_agent_platform.automation import AutomationEventSink
+from ai_multi_agent_platform.connectors.models import Connection
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.notifications import (
     Notification,
@@ -23,6 +24,7 @@ from ai_multi_agent_platform.notifications import (
     approval_required_candidate,
     approval_resolved_candidate,
     budget_threshold_candidate,
+    canonical_attention_candidate,
 )
 from ai_multi_agent_platform.security.approvals import ApprovalRecord
 from ai_multi_agent_platform.security.enforcement import AuthorizationGate
@@ -142,6 +144,43 @@ class ControlPlane(_BaseControlPlane):
         except Exception:
             # Accounting already owns and committed the budget/usage state. Invalid or missing
             # recipient metadata must not make accounting ingestion fail.
+            return
+
+    async def connector_health_event_sink(
+        self,
+        previous: Connection,
+        current: Connection,
+    ) -> None:
+        """Project #44 degraded/error health changes while leaving Connection state authoritative."""
+
+        del previous
+        try:
+            status = current.status.value
+            if status not in {"degraded", "error"}:
+                return
+            recipient = RecipientRef(RecipientType(current.owner_type), current.owner_id)
+            await self.notification_service.create_once(
+                canonical_attention_candidate(
+                    category=NotificationCategory.CONNECTOR,
+                    recipient=recipient,
+                    source=SourceRef("connector", current.id),
+                    attention=f"health:{status}",
+                    title=(
+                        "Connector connection failed"
+                        if status == "error"
+                        else "Connector connection degraded"
+                    ),
+                    severity=(
+                        NotificationSeverity.ERROR
+                        if status == "error"
+                        else NotificationSeverity.WARNING
+                    ),
+                    project_id=current.project_id,
+                )
+            )
+        except Exception:
+            # #44 has already committed the authoritative health transition. A Notification
+            # projection failure must not alter the Connector result.
             return
 
     async def _project_automation_event(self, event: dict[str, JsonValue]) -> None:
