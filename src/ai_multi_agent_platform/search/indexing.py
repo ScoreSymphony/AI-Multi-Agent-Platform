@@ -38,12 +38,8 @@ def document_from_resource(
     resource_id = _required_string(resource, "id")
     title = _display_title(resource_type, resource_id, resource)
     summary = _summary(resource_type, resource)
-    project_id = _optional_string(resource, "project_id")
-    if resource_type == "project":
-        project_id = resource_id
-    workspace_id = (
-        resource_id if resource_type == "workspace" else _optional_string(resource, "workspace_id")
-    )
+    project_id = _project_id(resource_type, resource_id, resource)
+    workspace_id = _workspace_id(resource_type, resource_id, resource)
     owner_type, owner_id = _owner(resource)
     status = _status(resource)
     updated_at = _optional_string(resource, "updated_at")
@@ -137,11 +133,30 @@ def _display_title(
         subject_id = _optional_string(resource, "subject_id")
         if subject_type is not None and subject_id is not None:
             return f"Run for {subject_type} {subject_id}"
+    if resource_type == "event":
+        event_type = _optional_string(resource, "event_type")
+        subject_type = _optional_string(resource, "subject_type")
+        subject_id = _optional_string(resource, "subject_id")
+        if event_type is not None and subject_type is not None and subject_id is not None:
+            return f"{event_type} for {subject_type} {subject_id}"
+        if event_type is not None:
+            return f"Event {event_type}"
     if resource_type == "approval":
         subject_type = _optional_string(resource, "subject_type")
         subject_id = _optional_string(resource, "subject_id")
         if subject_type is not None and subject_id is not None:
             return f"Approval for {subject_type} {subject_id}"
+    if resource_type == "usage-aggregate":
+        metric_type = _optional_string(resource, "metric_type")
+        unit = _optional_string(resource, "unit")
+        if metric_type is not None and unit is not None:
+            return f"{metric_type} usage ({unit})"
+    if resource_type == "usage-budget":
+        metric_type = _optional_string(resource, "metric_type")
+        scope_type = _optional_string(resource, "scope_type")
+        scope_id = _optional_string(resource, "scope_id")
+        if metric_type is not None and scope_type is not None and scope_id is not None:
+            return f"{metric_type} budget for {scope_type} {scope_id}"
     return f"{resource_type.replace('-', ' ').replace('_', ' ').title()} {resource_id}"
 
 
@@ -166,6 +181,46 @@ def _summary(resource_type: str, resource: Mapping[str, JsonValue]) -> str:
     return ""
 
 
+def _project_id(
+    resource_type: str,
+    resource_id: str,
+    resource: Mapping[str, JsonValue],
+) -> str | None:
+    if resource_type == "project":
+        return resource_id
+    project_id = _optional_string(resource, "project_id")
+    if project_id is not None:
+        return project_id
+    scope = _nested_mapping(resource, "scope")
+    if scope is not None:
+        project_id = _optional_string(scope, "project_id")
+        if project_id is not None:
+            return project_id
+    if _optional_string(resource, "scope_type") == "project":
+        return _optional_string(resource, "scope_id")
+    return None
+
+
+def _workspace_id(
+    resource_type: str,
+    resource_id: str,
+    resource: Mapping[str, JsonValue],
+) -> str | None:
+    if resource_type == "workspace":
+        return resource_id
+    workspace_id = _optional_string(resource, "workspace_id")
+    if workspace_id is not None:
+        return workspace_id
+    scope = _nested_mapping(resource, "scope")
+    if scope is not None:
+        workspace_id = _optional_string(scope, "workspace_id")
+        if workspace_id is not None:
+            return workspace_id
+    if _optional_string(resource, "scope_type") == "workspace":
+        return _optional_string(resource, "scope_id")
+    return None
+
+
 def _owner(resource: Mapping[str, JsonValue]) -> tuple[str | None, str | None]:
     for field in ("owner", "owner_ref"):
         value = resource.get(field)
@@ -180,6 +235,18 @@ def _owner(resource: Mapping[str, JsonValue]) -> tuple[str | None, str | None]:
             owner_type, owner_id = value.split(":", 1)
             if owner_type.strip() and owner_id.strip():
                 return owner_type, owner_id
+
+    owner_type = _optional_string(resource, "owner_type")
+    owner_id = _optional_string(resource, "owner_id")
+    if owner_type is not None and owner_id is not None:
+        return owner_type, owner_id
+
+    scope = _nested_mapping(resource, "scope")
+    if scope is not None:
+        owner_type = _optional_string(scope, "owner_type")
+        owner_id = _optional_string(scope, "owner_id")
+        if owner_type is not None and owner_id is not None:
+            return owner_type, owner_id
     return None, None
 
 
@@ -195,12 +262,10 @@ def _status(resource: Mapping[str, JsonValue]) -> str | None:
 
 
 def _version(resource: Mapping[str, JsonValue]) -> str | None:
-    value = resource.get("revision")
-    if isinstance(value, int | str):
-        return str(value)
-    current_revision = resource.get("current_revision")
-    if isinstance(current_revision, int | str):
-        return str(current_revision)
+    for field in ("revision", "current_revision", "plugin_version"):
+        value = resource.get(field)
+        if isinstance(value, int | str):
+            return str(value)
     return None
 
 
@@ -239,6 +304,7 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "automation_id",
         "trigger_type",
         "source",
+        "event_type",
         "subject_type",
         "subject_id",
         "action",
@@ -253,6 +319,20 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "parent_task_id",
         "effective_blocking_reason",
         "content_type",
+        "author",
+        "plugin_version",
+        "manifest_version",
+        "compatibility",
+        "install_source",
+        "provenance_license",
+        "metric_type",
+        "unit",
+        "aggregation_mode",
+        "scope_type",
+        "scope_id",
+        "kind",
+        "threshold_level",
+        "window_mode",
     ):
         value = _optional_string(resource, field)
         if value is not None:
@@ -266,6 +346,12 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "blocking_task_ids",
         "failed_dependency_ids",
         "artifact_ids",
+        "capabilities",
+        "extension_ids",
+        "extension_types",
+        "requested_permissions",
+        "granted_permissions",
+        "dependencies",
     ):
         values.extend(_string_sequence(resource, field))
     for field, positive, negative in (
@@ -276,6 +362,7 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         ("archived", "archived", "active"),
         ("hidden", "hidden", "visible"),
         ("eligible", "eligible", "ineligible"),
+        ("configured", "configured", "unconfigured"),
     ):
         boolean_value = resource.get(field)
         if isinstance(boolean_value, bool):
@@ -297,6 +384,14 @@ def _dependency_ids(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         if isinstance(task_id, str) and task_id.strip() and task_id not in dependency_ids:
             dependency_ids.append(task_id)
     return tuple(dependency_ids)
+
+
+def _nested_mapping(
+    resource: Mapping[str, JsonValue],
+    field: str,
+) -> Mapping[str, JsonValue] | None:
+    value = resource.get(field)
+    return value if isinstance(value, Mapping) else None
 
 
 def _string_sequence(resource: Mapping[str, JsonValue], field: str) -> tuple[str, ...]:

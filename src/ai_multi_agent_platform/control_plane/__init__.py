@@ -1,18 +1,11 @@
 """Versioned platform-owned northbound Control Plane."""
 
-from .authentication_hardening import AuthenticatedControlPlaneHTTP
 from .automation_api import (
     AUTOMATION_COLLECTION,
     AUTOMATION_COMMANDS,
     DELIVERY_COLLECTION,
 )
-from .automation_runtime_composition import (
-    AUTOMATION_STATE_ENV,
-    ControlPlane,
-    ControlPlaneASGI,
-    ControlPlaneHTTP,
-    build_openapi,
-)
+from .automation_runtime_composition import AUTOMATION_STATE_ENV
 from .extensions import (
     FOUNDATION_COLLECTIONS,
     IMPLEMENTED_DOMAIN_COLLECTIONS,
@@ -33,6 +26,18 @@ from .models import (
     RequestContext,
     WorkspaceIdentity,
 )
+from .notifications_composition import (
+    NOTIFICATION_COLLECTION,
+    NOTIFICATION_COMMANDS,
+    NOTIFICATION_PREFERENCE_COLLECTION,
+)
+from .notifications_plugin_composition import (
+    AuthenticatedControlPlaneHTTP,
+    ControlPlane,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
+)
 from .plugin_api import (
     PLUGIN_CANDIDATE_COLLECTION,
     PLUGIN_COLLECTION,
@@ -47,7 +52,12 @@ from .task_management_contract import (
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
 
-CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (AUTOMATION_COLLECTION, DELIVERY_COLLECTION)
+CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (
+    AUTOMATION_COLLECTION,
+    DELIVERY_COLLECTION,
+    NOTIFICATION_COLLECTION,
+    NOTIFICATION_PREFERENCE_COLLECTION,
+)
 
 __all__ = [
     "APIError",
@@ -69,6 +79,9 @@ __all__ = [
     "HTTPResponse",
     "IMPLEMENTED_DOMAIN_COLLECTIONS",
     "InMemoryResourceService",
+    "NOTIFICATION_COLLECTION",
+    "NOTIFICATION_COMMANDS",
+    "NOTIFICATION_PREFERENCE_COLLECTION",
     "PLATFORM_COLLECTIONS",
     "PLUGIN_CANDIDATE_COLLECTION",
     "PLUGIN_COLLECTION",

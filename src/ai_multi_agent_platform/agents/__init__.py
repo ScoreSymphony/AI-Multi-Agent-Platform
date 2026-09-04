@@ -68,6 +68,18 @@ from .standards import (
     get_standard_agent_template,
     get_standard_team_template,
 )
+from .standards_control_plane import (
+    SCOPED_STANDARD_AGENT_KEYS,
+    SCOPED_STANDARD_TEAM_KEYS,
+    STANDARD_AGENT_CATALOG_COLLECTION,
+    STANDARD_AGENT_CATALOG_REF,
+    STANDARD_AGENT_CONTROL_PLANE_COMMANDS,
+    STANDARD_TEAM_CATALOG_COLLECTION,
+    StandardAgentCatalogResourceService,
+    StandardAgentCommandHandlers,
+    StandardAgentTeamCatalogResourceService,
+    register_standard_agent_control_plane,
+)
 
 __all__ = [
     "AGENT_COLLECTION",
@@ -75,8 +87,14 @@ __all__ = [
     "AGENT_REPOSITORY_SCHEMA_VERSION",
     "AGENT_RUN_COLLECTION",
     "AGENT_TEAM_COLLECTION",
+    "SCOPED_STANDARD_AGENT_KEYS",
+    "SCOPED_STANDARD_TEAM_KEYS",
+    "STANDARD_AGENT_CATALOG_COLLECTION",
+    "STANDARD_AGENT_CATALOG_REF",
+    "STANDARD_AGENT_CONTROL_PLANE_COMMANDS",
     "STANDARD_AGENT_IDS",
     "STANDARD_AGENT_TEMPLATES",
+    "STANDARD_TEAM_CATALOG_COLLECTION",
     "STANDARD_TEAM_IDS",
     "STANDARD_TEAM_TEMPLATES",
     "STARTER_CATALOG_SOURCE",
@@ -119,7 +137,10 @@ __all__ = [
     "ModelFallbackPolicy",
     "OrchestratorMapping",
     "ReferenceOrchestratorMapper",
+    "StandardAgentCatalogResourceService",
+    "StandardAgentCommandHandlers",
     "StandardAgentReadiness",
+    "StandardAgentTeamCatalogResourceService",
     "StandardAgentTemplate",
     "StandardTeamMemberTemplate",
     "StandardTeamTemplate",
@@ -136,4 +157,5 @@ __all__ = [
     "new_agent_run_id",
     "new_team_id",
     "register_agent_control_plane",
+    "register_standard_agent_control_plane",
 ]

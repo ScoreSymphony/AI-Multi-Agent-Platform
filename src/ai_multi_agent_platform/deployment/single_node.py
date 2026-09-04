@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ai_multi_agent_platform.agents import (
+    AgentService,
+    JsonAgentRepository,
+    register_agent_control_plane,
+    register_standard_agent_control_plane,
+)
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlane,
@@ -54,6 +60,7 @@ class SingleNodeDeployment:
     scopes: SqliteScopeStore
     files: LocalFileProvider
     workspaces: SqliteWorkspaceProvider
+    agents: AgentService
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     kernel: PlatformKernel
@@ -159,6 +166,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         files,
         database_dir / "workspaces.sqlite3",
     )
+    agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
@@ -187,6 +195,9 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         health_providers=(orchestrator, lifecycle, files),
         automation_state_path=database_dir / "automation.sqlite3",
     )
+    register_agent_control_plane(control_plane, agents)
+    register_standard_agent_control_plane(control_plane, agents)
+
     http = AuthenticatedControlPlaneHTTP(
         control_plane,
         authentication,
@@ -200,6 +211,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         scopes=scopes,
         files=files,
         workspaces=workspaces,
+        agents=agents,
         authentication=authentication,
         authorization=authorization,
         kernel=kernel,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Protocol, runtime_checkable
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -16,6 +17,7 @@ from .search_contract import ControlPlane as _BaseSearchControlPlane
 from .search_contract import ControlPlaneHTTP, build_openapi
 from .service import (
     ReferenceCollection,
+    _event_resource,
     _model_provider_resource,
     _model_resource,
     _project_resource,
@@ -25,6 +27,7 @@ from .service import (
 )
 
 _FOUNDATION_SEARCH_TYPES = frozenset({"project", "workspace", "task", "run"})
+_EVENT_SEARCH_TYPE = "event"
 _MODEL_SEARCH_AUTHORIZATION = {
     "model": ("models", "model:list"),
     "model-provider": ("model-providers", "model-provider:list"),
@@ -43,11 +46,22 @@ _REFERENCE_SEARCH_AUTHORIZATION = {
 }
 _REFERENCE_SEARCH_TYPES = frozenset(_REFERENCE_SEARCH_AUTHORIZATION)
 _BUILTIN_SEARCH_TYPES = (
-    _FOUNDATION_SEARCH_TYPES | frozenset(_MODEL_SEARCH_AUTHORIZATION) | _REFERENCE_SEARCH_TYPES
+    _FOUNDATION_SEARCH_TYPES
+    | frozenset({_EVENT_SEARCH_TYPE})
+    | frozenset(_MODEL_SEARCH_AUTHORIZATION)
+    | _REFERENCE_SEARCH_TYPES
 )
 
 ReferenceKey = tuple[str, str]
 ReferenceScope = tuple[str, str, str | None]
+EventScope = tuple[str, str, str, str | None]
+
+
+@runtime_checkable
+class _SearchResourceEnumerator(Protocol):
+    """Optional internal rebuild seam for actor-filtered canonical collections."""
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]: ...
 
 
 class ControlPlane(_BaseSearchControlPlane):
@@ -95,10 +109,14 @@ class ControlPlane(_BaseSearchControlPlane):
         reference_resources: dict[ReferenceKey, dict[str, JsonValue]] = {}
         reference_scopes: dict[ReferenceKey, list[ReferenceScope]] = {}
         ambiguous_reference_keys: set[ReferenceKey] = set()
+        event_authorization: dict[str, EventScope] = {}
 
         binding_repository = self.run_workspace_bindings
         for task_id in await self._task_ids():
             task = await self._kernel.get_task(task_id)
+            owner_type = task.task.owner_ref.type
+            owner_id = task.task.owner_ref.id
+            project_id = task.task.project_id
             documents.append(document_from_resource(await self._managed_task_resource(task)))
             _collect_reference_search_state(
                 task,
@@ -106,6 +124,26 @@ class ControlPlane(_BaseSearchControlPlane):
                 scopes=reference_scopes,
                 ambiguous_keys=ambiguous_reference_keys,
             )
+            for event in await self._events.read_events(task_id):
+                event_resource = _event_resource(event)
+                event_document = document_from_resource(event_resource)
+                documents.append(
+                    replace(
+                        event_document,
+                        owner_type=owner_type,
+                        owner_id=owner_id,
+                        project_id=project_id,
+                        updated_at=event.occurred_at.isoformat(),
+                        canonical_ref=f"/api/{API_VERSION}/tasks/{task_id}/timeline",
+                        provenance={"indexed_from": "canonical-event-repository"},
+                    )
+                )
+                event_authorization[event.id] = (
+                    task_id,
+                    owner_type,
+                    owner_id,
+                    project_id,
+                )
             for run_id in task.run_ids:
                 run = await self._kernel.get_run(task_id, run_id)
                 run_document = document_from_resource(_run_resource(run))
@@ -118,8 +156,8 @@ class ControlPlane(_BaseSearchControlPlane):
                     replace(
                         run_document,
                         workspace_id=workspace_id,
-                        owner_type=task.task.owner_ref.type,
-                        owner_id=task.task.owner_ref.id,
+                        owner_type=owner_type,
+                        owner_id=owner_id,
                     )
                 )
 
@@ -149,6 +187,7 @@ class ControlPlane(_BaseSearchControlPlane):
             tuple(documents),
             OperationContext(correlation_id=correlation_id),
         )
+        self._search_event_authorization = event_authorization
         self._search_reference_authorization = reference_authorization
         self._search_extension_authorization = extension_authorization
         return len(documents)
@@ -169,7 +208,12 @@ class ControlPlane(_BaseSearchControlPlane):
 
         for collection in self.registered_collections:
             service = self._registered_resource_service(collection)
-            resources = list(await service.list_resources(context, query))
+            if getattr(service, "search_indexable", True) is False:
+                continue
+            if isinstance(service, _SearchResourceEnumerator):
+                resources = list(await service.list_search_resources())
+            else:
+                resources = list(await service.list_resources(context, query))
             _validate_resources(collection, resources)
             action = f"{_singular(collection)}:list"
 
@@ -208,6 +252,21 @@ class ControlPlane(_BaseSearchControlPlane):
     ) -> bool:
         if result.resource_type in _FOUNDATION_SEARCH_TYPES:
             return await super()._search_result_allowed(context, result)
+
+        if result.resource_type == _EVENT_SEARCH_TYPE:
+            authorization = getattr(self, "_search_event_authorization", {})
+            scope = authorization.get(result.resource_id)
+            if scope is None:
+                return False
+            task_id, owner_type, owner_id, project_id = scope
+            return await self._allowed(
+                context,
+                "event:list",
+                task_id,
+                owner_type=owner_type,
+                owner_id=owner_id,
+                project_id=project_id,
+            )
 
         reference_authorization = _REFERENCE_SEARCH_AUTHORIZATION.get(result.resource_type)
         if reference_authorization is not None:

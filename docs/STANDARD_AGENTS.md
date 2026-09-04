@@ -2,9 +2,9 @@
 
 Issue #77 provides an optional starter catalog on top of the canonical Agent contracts from
 issue #33. The catalog is convenience configuration, not a second runtime architecture.
-Every starter is a normal `AgentProfile` or `AgentTeamProfile` and therefore uses the same
-model routing, capability, authorization, memory, persistence, revision and orchestration
-boundaries as user-created Agents.
+Every installed starter is a normal `AgentProfile` or `AgentTeamProfile` and therefore uses
+the same model routing, capability, authorization, memory, persistence, revision and
+orchestration boundaries as user-created Agents.
 
 ## Design invariants
 
@@ -25,6 +25,8 @@ boundaries as user-created Agents.
 - A user-owned clone is an ordinary canonical Agent/Team. It can be edited, disabled and,
   while no historical Team/run references require it, deleted through the normal repository
   lifecycle.
+- Catalog discovery is separate from installation. A deployment can expose the starter
+  catalog without installing any bundled Agent identity.
 
 ## Catalog version and provenance
 
@@ -60,6 +62,21 @@ version and explicit migration policy below.
 The capability IDs describe requested platform semantics, not installed tools. A deployment
 may satisfy them through native tools, MCP, another provider, or a future adapter.
 
+### Explicit scope for file-facing starters
+
+The managed starter workflow marks `Developer` and `File Assistant` as explicitly scoped
+starters. `Software Development Team` is scoped for the same reason.
+
+A clone created through `standard-agent.clone` for either scoped Agent must include a
+canonical `project_id` or `workspace_id`. `standard-agent-team.clone` applies the same rule to
+the Software Development Team. Missing scope fails with `invalid_request` instead of
+silently producing a supposedly workspace-restricted starter with no assigned scope.
+
+This is deliberately starter-specific. The general #33 Agent contracts remain capable of
+representing unscoped custom Agents where a deployment explicitly chooses that design.
+Actual file access is still granted by the canonical capability/authorization/provider path;
+an Agent's requested file capability is not itself a filesystem grant.
+
 ### Required versus optional capabilities
 
 `assess_standard_agent_capabilities()` compares a starter with the canonical capability
@@ -84,6 +101,7 @@ separate checks and are not replaced by this readiness result.
 
 The Planner may delegate to Developer or Reviewer; the Developer may delegate to Reviewer.
 The initial Team allows two Agents to run in parallel and caps coordination at 16 steps.
+Managed clones require an explicit project/workspace scope.
 
 ### Research Team
 
@@ -97,9 +115,9 @@ Agents to run in parallel and caps coordination at 16 steps.
 Member Agent policies remain authoritative. Team membership does not widen the model,
 capability, memory or authorization rights of a member.
 
-## Bootstrap
+## Library bootstrap API
 
-A deployment composes its normal `AgentService` and then calls:
+A deployment that directly composes Python services may call:
 
 ```python
 result = bootstrap_standard_agents(
@@ -113,30 +131,76 @@ exists and its revision-1 provenance identifies the same starter, bootstrap pres
 current revision unchanged. If the stable ID is occupied by a non-catalog definition,
 bootstrap fails with a conflict rather than overwriting data.
 
-This gives upgrades a deliberately conservative rule: **bootstrap never silently migrates
-or overwrites an existing starter**. A future catalog revision must provide an explicit
-migration/upgrade operation and changelog before it can alter installed definitions.
-User-owned clones are separate IDs and are never bootstrap targets.
+## Control Plane catalog and lifecycle
+
+`register_standard_agent_control_plane(...)` exposes the starter library through the generic,
+versioned Control Plane extension seam.
+
+Read-only catalog collections:
+
+- `standard-agents`
+- `standard-agent-teams`
+
+The catalog collections exist even when no standard Agent has been installed. They expose
+stable definition IDs, versions, capability requirements, permission posture and the
+machine-readable explicit-scope requirement.
+
+Registered commands:
+
+- `standard-agent.bootstrap` — explicitly install missing bundled Agent/Team identities;
+- `standard-agent.clone` — clone bundled revision 1 into an authenticated user-owned Agent;
+- `standard-agent-team.clone` — clone bundled Team revision 1;
+- `agent.delete` — delete the authenticated owner's unreferenced Agent copy;
+- `agent-team.delete` — delete the authenticated owner's unreferenced Team copy.
+
+Bootstrap uses `resource_ref=standard-agent-catalog`. The generic Control Plane still applies
+its normal issue #15 authorization and idempotency boundary before these mutation handlers.
+The delete handlers additionally bind deletion to the authenticated owner, so a user-owned
+copy cannot be used to delete the service-owned bundled identity or another user's copy.
+
+The generic #33 `agent.create`, `agent.update`, `agent.clone`, `agent-team.create`,
+`agent-team.update` and related commands remain available. The starter-specific clone
+commands add catalog identity validation and the explicit-scope guard; they do not replace
+the canonical lifecycle.
+
+## Single-node deployment
+
+The production-shaped single-node composition now includes a durable `JsonAgentRepository`
+at `db/agents.json`, registers the canonical #33 Agent Control Plane, and registers the
+standard catalog integration.
+
+It intentionally **does not auto-bootstrap standard Agents on process startup**. A fresh
+single-node deployment can discover the catalog immediately and an authorized administrator
+can explicitly run `standard-agent.bootstrap`. Once installed, definitions persist across
+restart.
+
+This separation matters for ownership and upgrades: if a deployment intentionally removes a
+bundled default, restarting the process must not silently reinstall it. Explicit bootstrap
+remains available when the deployment actually wants missing defaults restored.
 
 ## Clone and customize
+
+The lower-level library helper remains available:
 
 ```python
 copy = clone_standard_agent(
     agent_service,
-    "developer",
+    "general_assistant",
     owner_ref=current_user,
-    name="Project Developer",
+    name="Project Assistant",
 )
 ```
 
-`clone_standard_agent()` and `clone_standard_team()` copy bundled revision 1 into a new
-canonical ID owned by the caller. The copy can then use the normal issue #33 update path to
-change, among other things:
+For file-facing standard roles, prefer the managed Control Plane clone workflow so an explicit
+project/workspace scope is recorded atomically with the clone.
+
+A user-owned copy can use the normal issue #33 update path to change, among other things:
 
 - model routing requirements or explicit model selection;
 - allowed/denied/required capabilities;
-- memory and knowledge-source policy;
-- project/workspace scope;
+- memory scopes and memory configuration references;
+- knowledge-source policy;
+- project/workspace assignment;
 - instructions and role text;
 - enabled/disabled state;
 - Team membership and coordination limits.
@@ -146,35 +210,39 @@ The bundled source remains unchanged.
 ## Delete semantics
 
 `AgentService.delete_agent(..., expected_owner_ref=...)` and
-`delete_team(..., expected_owner_ref=...)` provide an ownership-checked deletion boundary.
+`delete_team(..., expected_owner_ref=...)` provide the repository/service ownership boundary.
 The repositories reject deletion when historical Team revisions or Agent-run records still
 reference the resource. `JsonAgentRepository` persists successful deletions atomically.
 
-A user therefore can delete an unreferenced user-owned copy without deleting the bundled
-starter. Supplying the user's owner reference for a bundled service-owned starter fails the
-owner check. A deployment administrator may still remove or replace bundled defaults through
-the same canonical repository lifecycle where policy permits; dependent Team revisions must
-be removed first. Higher-level API/UI deletion remains subject to issue #15 authorization.
+The Control Plane `agent.delete` and `agent-team.delete` commands use the authenticated actor's
+owner identity as `expected_owner_ref`. A user therefore can delete an unreferenced user-owned
+copy without deleting the bundled starter or another owner's resource.
+
+A deployment administrator may still remove or replace bundled defaults through deployment
+configuration/repository lifecycle where policy permits; dependent Team revisions must be
+removed first. The Control Plane user-copy delete command deliberately does not turn a normal
+user identity into the service owner of the bundled catalog.
 
 ## Security-sensitive profiles
 
 The catalog intentionally errs toward least privilege:
 
 - Researcher and Reviewer do not receive destructive filesystem or shell capabilities.
-- File Assistant never receives shell execution and its instructions require assigned
-  project/workspace scope.
+- File Assistant never receives shell execution; managed clones require explicit project or
+  workspace assignment.
 - Developer does not receive credentials or unrestricted host authority. Shell execution is
-  optional and carries the standard shell approval reference.
+  optional, carries the standard shell approval reference, and managed clones require scope.
 - System Administrator is disabled by default and its privileged shell/write paths carry the
   standard privileged-administration approval reference.
 
 An `approval_ref` is not descriptive metadata: the issue #33 runtime validates it against the
 resolved canonical `CapabilitySpec.required_approvals`. The actual invocation still passes
-through the issue #15 authorization/approval path.
+through the issue #15 authorization/approval path. Regression coverage includes the disabled
+System Administrator profile itself, not only the Developer shell profile.
 
 ## Upgrade and migration policy
 
-For catalog `1.0.0` there is no automatic migration. The migration note is therefore:
+For catalog `1.0.0` there is no automatic migration. The migration rule is:
 
 > Existing bundled identities and all user-owned clones are preserved. Re-bootstrap only
 > installs definitions that are missing. No profile revision is rewritten automatically.
@@ -183,8 +251,13 @@ Future incompatible catalog changes must bump the catalog version, document the 
 provide an explicit migration decision. They must never infer that a locally modified
 starter or clone should be replaced.
 
+The single-node composition reinforces this rule by exposing catalog discovery at startup
+without invoking bootstrap automatically.
+
 ## Future boundaries
 
-Export/import and portable sharing of customized Agents belong to issue #79. UI-specific
-starter management belongs to the relevant UI work. Those layers should consume these
-canonical definitions rather than inventing another starter schema.
+Export/import and portable sharing of customized Agents belong to issue #79. Once that
+portable subsystem exists, these resources require no starter-specific export format because
+installed definitions and user-owned copies are ordinary canonical Agent/Team resources.
+Frontend-specific catalog presentation may be added separately; the generic Control Plane
+already exposes the versioned resources and mutation commands required by clients.

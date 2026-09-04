@@ -34,6 +34,32 @@ jobs:
       - name: Build package
         run: python -m build
 
+  single-node-install-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Create clean server-only installation
+        shell: bash
+        run: |
+          python -m venv .install-smoke-venv
+          source .install-smoke-venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install ".[server]"
+          python - <<'PY'
+          import importlib.util
+
+          assert importlib.util.find_spec("uvicorn") is not None
+          assert importlib.util.find_spec("pytest") is None
+          PY
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Run fresh-install process lifecycle smoke
+        run: python scripts/ci/issue39_install_lifecycle_smoke.py
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -74,6 +100,41 @@ jobs:
       - name: Verify pinned LiteLLM async entrypoint
         run: |
           python -c "import litellm; assert callable(litellm.acompletion)"
+
+  hermes-pinned-compat:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install platform test environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Checkout pinned Hermes runtime source
+        uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: 63279301bcbdc185c1b07b98a9312eb0c862f26d
+          path: .upstream/hermes
+          persist-credentials: false
+      - name: Install pinned Hermes runtime dependencies
+        run: |
+          python -m pip install -e ".upstream/hermes"
+          python -m pip install "aiohttp==3.14.3"
+      - name: Run real pinned Hermes API compatibility test
+        env:
+          HERMES_UPSTREAM_DIR: ${{ github.workspace }}/.upstream/hermes
+          HERMES_UPSTREAM_REVISION: 63279301bcbdc185c1b07b98a9312eb0c862f26d
+        run: pytest -q tests/test_issue_8_hermes_pinned_integration.py
 
   forge-sidecar-integration:
     needs: test

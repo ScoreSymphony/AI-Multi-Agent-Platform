@@ -35,9 +35,24 @@ const TERMINAL_TYPES: Array<{ value: TerminalSessionType; label: string }> = [
   { value: "log_stream", label: "Log stream" },
 ];
 
+export function terminalSessionFilters(
+  projectId: string,
+  workspaceId: string,
+  status: string,
+): Record<string, string> {
+  const filters: Record<string, string> = {};
+  const project = projectId.trim();
+  const workspace = workspaceId.trim();
+  if (project) filters.project_id = project;
+  if (workspace) filters.workspace_id = workspace;
+  if (status) filters.status = status;
+  return filters;
+}
+
 export function TerminalPage({ client }: { client: ControlPlaneClient }) {
   const [page, setPage] = useState<Page<CanonicalTerminalSession> | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [projectFilter, setProjectFilter] = useState("");
   const [workspaceFilter, setWorkspaceFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -74,15 +89,20 @@ export function TerminalPage({ client }: { client: ControlPlaneClient }) {
   }, []);
 
   const load = useCallback(async () => {
+    const projectId = projectFilter.trim();
+    if (!projectId) {
+      setPage({ items: [], next_cursor: null, total: 0, limit: 100 });
+      setSelectedId(null);
+      setError(null);
+      return;
+    }
+
     try {
-      const filters: Record<string, string> = {};
-      if (workspaceFilter.trim()) filters.workspace_id = workspaceFilter.trim();
-      if (statusFilter) filters.status = statusFilter;
       const nextPage = await client.listTerminalSessions({
         limit: 100,
         sort: "started_at",
         direction: "desc",
-        filters,
+        filters: terminalSessionFilters(projectId, workspaceFilter, statusFilter),
       });
       setPage(nextPage);
       setSelectedId((current) =>
@@ -94,7 +114,7 @@ export function TerminalPage({ client }: { client: ControlPlaneClient }) {
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client, statusFilter, workspaceFilter]);
+  }, [client, projectFilter, statusFilter, workspaceFilter]);
 
   useEffect(() => {
     void load();
@@ -252,11 +272,20 @@ export function TerminalPage({ client }: { client: ControlPlaneClient }) {
         client={client}
         onCreated={(session) => {
           replaceSession(session);
+          setProjectFilter(session.context.project_id);
           setSelectedId(session.id);
         }}
       />
 
       <div className="toolbar card terminal-filters">
+        <label>
+          Project ID
+          <input
+            value={projectFilter}
+            onChange={(event) => setProjectFilter(event.target.value)}
+            placeholder="project_..."
+          />
+        </label>
         <label>
           Workspace ID
           <input
@@ -277,12 +306,16 @@ export function TerminalPage({ client }: { client: ControlPlaneClient }) {
             <option value="lost">Lost</option>
           </select>
         </label>
-        <button onClick={() => void load()}>Refresh</button>
+        <button disabled={!projectFilter.trim()} onClick={() => void load()}>
+          Refresh
+        </button>
       </div>
 
       {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
       {!page ? (
         <LoadingState />
+      ) : !projectFilter.trim() ? (
+        <EmptyState title="Choose a project" />
       ) : page.items.length === 0 ? (
         <EmptyState title="No terminal sessions" />
       ) : (

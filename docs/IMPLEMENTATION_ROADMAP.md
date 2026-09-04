@@ -1,616 +1,159 @@
 # Dependency-Driven Implementation Roadmap
 
-> Status baseline: 2026-09-03
+> Status baseline: 2026-09-04
 
-This roadmap defines the recommended implementation order for the AI Multi-Agent Platform from the current repository state toward the ideal end product.
+This roadmap orders the remaining work toward two distinct outcomes:
 
-The roadmap is a point-in-time planning view. GitHub issue state and the target issue's current wording remain the source of truth for whether work is complete and which hard dependencies apply. Re-check them immediately before starting implementation.
+1. a genuinely usable, local-first single-node prototype; and
+2. the broader operational and distributed platform described by the product vision.
 
-Issue numbers are identifiers only. The actual order is determined by canonical ownership, explicit hard dependencies, contract stability, unlock value and safe parallelization.
-
-The normative product and architecture baseline remains:
+GitHub issue state and the current wording of each issue remain the source of truth. The normative product and architecture baseline is:
 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md)
 - [`ARCHITECTURE_PRINCIPLES.md`](ARCHITECTURE_PRINCIPLES.md)
 - accepted ADRs under [`adr/`](adr/README.md)
 
-## 1. Execution rules
+## Planning model
 
-### 1.1 Hard dependencies are blockers
+Work is grouped into four milestones:
 
-An issue may start when its explicit hard dependencies are implemented/merged sufficiently for the target work to consume their canonical contracts.
+| Milestone | Outcome |
+|---|---|
+| M1 - Architecture Foundation | Stable canonical domain, contracts and security boundaries |
+| M2 - Usable Single-Node Prototype | A new user can install locally, configure a local model, perform useful Agent work and recover state after restart |
+| M3 - Operational v1 | Complete product domains, operations, integrations and full conformance |
+| M4 - Distributed & Ecosystem | Optional Registry, heterogeneous deployment and HA capabilities |
 
-`Follow-up integrations`, related issues, progressive integrations and future extension references are not blockers unless the target issue explicitly says otherwise.
+Labels use three orthogonal dimensions: `type:*` for the kind of work, `area:*` for canonical ownership and `stage:*` for the target maturity level.
 
-### 1.2 Closed issue state is the roadmap completion signal
+Hard dependencies block issue completion. Follow-up integrations and related work do not block unless an issue explicitly says otherwise. Canonical contracts merge before their UI, CLI, adapter or deployment consumers.
 
-For this roadmap, a substantive issue is treated as completed when it is closed on GitHub.
+## Completed foundation
 
-Issue-body checkboxes may describe progressive integrations, historical acceptance work or extracted follow-ups and can lag behind the actual issue state. Conversely, an open issue can already contain a substantial foundation. Do not infer completion from checkboxes alone.
+The main branch already contains the substantive M1 baseline:
 
-### 1.3 Contracts merge before consumers
+- product, repository and provenance foundations: #1, #2, #3;
+- canonical domain, replaceable interfaces, kernel and reference executor: #4, #5, #6, #7;
+- adapters and provider boundaries: #8, #9, #10, #11, #12, #13;
+- identity, authorization, observability and the initial Web shell: #15, #16, #17;
+- automations, evaluation and plugins: #18, #19, #20;
+- Control Plane, Agents, configuration, transport, authentication and Workspaces: #32, #33, #34, #35, #36, #37;
+- CLI and supported single-node deployment: #38, #39;
+- Browser, Terminal, starter Agents, accounting and practical Task management: #73, #74, #76, #77, #88.
 
-When parallel branches depend on a shared contract, prefer this merge order:
+Closed issues can still have extracted follow-ups. In particular, #17 owns the completed initial shell; progressive domain coverage is now owned by #236 and the prototype gate #252.
 
-1. canonical contract/domain change;
-2. reference implementation + contract tests;
-3. adapters/providers;
-4. Control Plane/API extension;
-5. UI/CLI/client integration;
-6. deployment/operations integration.
+## M2 - Usable Single-Node Prototype
 
-### 1.4 Parallel work must preserve ownership
+The project previously had broad platform acceptance in #46 but no smaller gate proving that the current product is useful before Registry, HA or distributed infrastructure exists. M2 closes that gap.
 
-Parallelization is valid only when branches do not independently redefine the same canonical concept.
-
-Examples:
-
-- #33 owns canonical Agent/AgentTeam definitions; #8 Hermes must consume them.
-- #36 authenticates actors; #15 remains authorization authority.
-- #14 owns Node/Worker scheduling semantics; #39 packages them into deployment profiles.
-- #75 owns Notifications; #76/#171 provide accounting events/integration rather than a second notification model.
-- #87 owns Organization/Team/Membership semantics; #157 consumes those semantics for cross-scope Task moves.
-
-### 1.5 Progressive issues may start before all follow-up domains exist
-
-Issues such as #38, #39 and #45 deliberately have an early usable stage plus later integrations. Their hard dependencies determine when implementation may begin; later domains determine when all progressive acceptance criteria can be satisfied.
-
----
-
-# 2. Completed platform baseline on `main`
-
-The repository has progressed well beyond the original #1–#7 foundation.
-
-## Canonical architecture and execution foundation
-
-Completed:
-
-- #1 — product vision and architecture principles
-- #2 — repository structure, CI and contribution baseline
-- #3 — upstream/license/provenance policy
-- #4 — canonical platform domain model
-- #5 — replaceable core interfaces/contracts
-- #6 — platform-owned Task/Run/Event kernel
-- #7 — execution abstraction and deterministic reference executor
-
-## Models, capabilities, data and reusable execution work
-
-Completed:
-
-- #9 — Forge reuse audit and selective execution-port work
-- #10 — ModelProvider, Model Registry and Model Router
-- #11 — optional LiteLLM adapter
-- #12 — Capability Registry and MCP adapter
-- #13 — persistence, Files, scoped Memory and Knowledge boundaries
-
-## Security, control and platform foundations
-
-Completed:
-
-- #15 — identity, authorization, permissions and approvals
-- #16 — progressive end-to-end observability foundation/integrations
-- #17 — initial API-first Web UI shell and core Task/Run frontend
-- #32 — versioned Control Plane and Task/Run API foundation
-- #34 — configuration, credentials and secrets management
-- #35 — event transport and internal messaging architecture
-- #37 — Workspace and project-environment management
-- #43 — threat model and security-hardening baseline
-
-## Product/accounting work already completed
-
-Completed:
-
-- #76 — canonical usage/resource accounting foundation and implemented progressive accounting scope
-- #88 — practical Task management: priorities, deadlines, assignment and dependencies
-
-Important extracted follow-ups:
-
-- #157 owns canonical Task Project reassignment/move semantics; it was intentionally kept out of #88 because `Task.project_id` is canonical scope, not ordinary planning metadata.
-- #171 owns post-#76 Workspace/Organization/Notification accounting integrations that depend on later domain semantics.
-
-These completed issues materially change the execution frontier below.
-
----
-
-# 3. Current execution frontier — highest-leverage work
-
-The five highest-leverage open issues can now be worked in parallel because all of their hard dependencies are closed.
-
-## Lane A — Authentication
-
-### #36 — Authentication and session management
-
-Ready now because #15 and #32 are complete.
-
-Why prioritize it:
-
-- unlocks #44 Connectors;
-- unlocks #75 Notifications;
-- unlocks #87 Organizations/Memberships;
-- unlocks the initial production deployment baseline in #39;
-- combines with #33 to unlock #72 Chat;
-- enables the remaining authentication-sensitive CLI work in #38.
-
-This is currently one of the strongest critical-path issues.
-
----
-
-## Lane B — Canonical Agents and Agent Teams
-
-### #33 — Agent definitions, profiles and team runtime
-
-Ready now because #4, #5, #10, #12, #13 and #15 are complete.
-
-Why prioritize it:
-
-- unlocks #8 Hermes;
-- unlocks #77 Standard Agents/Teams;
-- unlocks #86 runtime Verification/Review;
-- combines with #36 to unlock #72 Chat;
-- contributes to the gates for #78 Templates and #79 Import/Export;
-- enables Agent metadata/inspection completion in #38.
-
-Required direction remains:
-
-`Canonical Agent/Team -> orchestrator adapter mapping`
-
-not:
-
-`Hermes/private orchestrator Agent -> canonical Agent`
-
----
-
-## Lane C — Distributed compute
-
-### #14 — Node registry, Worker protocol and capability-based scheduler
-
-Ready now because #4, #5, #7, #10, #12, #15 and #37 are complete.
-
-Why prioritize it:
-
-- establishes the real single-node/multi-node shared scheduling path;
-- unlocks the remaining hard dependency for #21 together with #18;
-- enables distributed deployment profiles in #39;
-- supplies Node/Worker administrative surfaces needed for full #38 completion;
-- provides the distributed runtime needed by final conformance.
-
-#14 must consume the existing Workspace, authorization, model, capability and execution contracts rather than redefine them.
-
----
-
-## Lane D — Automations
-
-### #18 — Automations, triggers and event-driven Task creation
-
-Ready now because #4, #6, #15 and #32 are complete.
-
-Why prioritize it:
-
-- unlocks #21 together with #14;
-- contributes to #78 Templates;
-- contributes to #79 portable Import/Export;
-- establishes schedule/webhook/event-driven work through the normal canonical Task lifecycle.
-
-Core invariant:
-
-`Trigger -> Automation evaluation -> canonical Task creation -> normal platform lifecycle`
-
----
-
-## Lane E — Plugin runtime
-
-### #20 — Plugin system and extension registry
-
-Ready now because #3, #4, #5, #12 and #15 are complete.
-
-Why prioritize it:
-
-- contributes to #78 Templates and #79 Import/Export;
-- is required for #81 optional Registry/Marketplace;
-- is required for #40 Backup/Restore and #41 Upgrade/Migration paths;
-- is required for #42 release/upstream compatibility work.
-
-Plugins must extend platform contracts, never become a parallel architecture or security bypass.
-
----
-
-# 4. Additional work that is already ready now
-
-These issues are not blocked by the five lanes above and may run concurrently when capacity allows.
-
-## #19 — Evaluation and regression framework
-
-All hard dependencies (#4, #6, #10, #12, #16) are complete.
-
-This is useful now because it begins producing evidence before more adapters and product features accumulate. It also removes one future blocker for #42.
-
-## #45 — Platform-wide Search and resource discovery
-
-Stage 1 is ready because its only hard dependencies, #15 and #32, are complete.
-
-Do not wait for every later searchable domain. Start with currently available canonical resources and add Agents, Workers, Connectors, Conversations, Verification and other resources progressively.
-
-## #73 — Terminal and execution-session interface
-
-Ready because #7, #15, #32 and #37 are complete.
-
-The reference/local session path can be built now. #14 later adds remote Worker sessions and #36 adds the final authenticated user/service context.
-
-## #74 — Replaceable Browser/Web capability
-
-Ready because #7, #12, #13 and #15 are complete.
-
-Build against canonical Capability/File/Security boundaries; #14 later adds Worker placement and #34/#43 already provide the secret/security foundations it consumes.
-
-## #38 — CLI and administrative control interface
-
-#38 remains open, but its foundational CLI and much of its current functionality already exist. Its hard dependency #32 is complete, so further work may continue now.
-
-Do not force premature closure: full completion still needs progressive integration with domains such as #36 Authentication, #14 Nodes/Workers and #33 Agents/Teams. Treat #38 as a continuing client lane rather than a blocker for those backend contracts.
-
----
-
-# 5. Convergence Gate A — after #36 Authentication
-
-Once #36 is complete, four major platform/product areas become directly available in parallel.
-
-## #44 — Connector and external-integration framework
-
-Hard path now:
-
-`#36 -> #44`
-
-All other hard dependencies (#5, #12, #13, #15, #34) are already complete.
-
-After #44, #82 Repository/Git becomes available.
-
-## #75 — Notifications and user-attention system
-
-Hard path now:
-
-`#36 -> #75`
-
-All other hard dependencies (#6, #15, #32) are already complete.
-
-#75 later combines with #87 to unlock the remaining #171 accounting integrations.
-
-## #87 — Organization, Team and Membership management
-
-Hard path now:
-
-`#36 -> #87`
-
-All other hard dependencies (#15, #32) are complete.
-
-After #87 stabilizes:
-
-- #157 can define safe cross-scope Task Project moves against real ownership/sharing semantics;
-- #171 can integrate real Organization/Team accounting once #75 is also available.
-
-## #39 — Deployment profiles and self-hosted installation
-
-The initial single-node production profile becomes ready after #36 because #32, #34, #16 and #4–#7 are already complete.
-
-Important: #39 must **not** wait for #14 to begin its single-node baseline. #14 is a progressive dependency for distributed Worker profiles, not a blocker for the first supported production deployment.
-
----
-
-# 6. Convergence Gate B — after #33 Agents/Teams
-
-Once #33 is complete, several major features become directly available.
-
-## #8 — Hermes orchestrator adapter
-
-Hard path now:
-
-`#33 -> #8`
-
-All other hard dependencies (#3–#7, #10, #12) are already complete.
-
-Hermes must consume canonical Agent/Team/Task contracts and remain optional.
-
-## #77 — Editable Standard Agents and starter Teams
-
-Hard path now:
-
-`#33 -> #77`
-
-All other hard dependencies (#10, #12, #15) are complete.
-
-These remain ordinary canonical definitions, not mandatory platform roles.
-
-## #86 — Runtime Task Verification, Review and completion policies
-
-Hard path now:
-
-`#33 -> #86`
-
-All other hard dependencies (#4, #6, #13, #15, #32) are complete.
-
-Verification must stay distinct from:
-
-- #15 security Approval; and
-- #19 regression Evaluation.
-
-## #72 — Task-centric Chat
-
-Requires both current frontier lanes:
-
-`#33 + #36 -> #72`
-
-All other hard dependencies (#10, #13, #15, #32) are complete.
-
-Chat remains an interaction surface; durable work still becomes canonical Tasks.
-
----
-
-# 7. Convergence Gate C — orchestration packages, portability and workflow decision
-
-## #21 — Durable workflow-engine decision
-
-Remaining hard path:
-
-`#14 + #18 -> #21`
-
-All other hard dependencies (#1, #4, #5, #6, #9) are complete.
-
-This remains an evidence/ADR issue. Do not introduce Temporal or another workflow engine as a production dependency before this decision is made.
-
-## #78 — Reusable Templates
-
-Remaining hard path:
-
-`#33 + #18 + #20 -> #78`
-
-All other hard dependencies (#10, #12, #15, #37) are complete.
-
-## #79 — Portable Import/Export
-
-Remaining hard path:
-
-`#33 + #18 + #20 -> #79`
-
-All other hard dependencies (#4, #13, #15) are complete.
-
-Operational backup/restore remains separate in #40.
-
-## #81 — Optional Registry / Marketplace
-
-Path:
-
-`#20 + #78 + #79 -> #81`
-
-#3 and #15 are already complete.
-
-The Registry remains optional and must not become a baseline dependency.
-
----
-
-# 8. Connector and collaboration follow-ups
-
-## #82 — Provider-neutral Repository/Git integration
-
-Remaining hard path:
-
-`#36 -> #44 -> #82`
-
-#37, #12, #13, #15 and #34 are already complete.
-
-Local Git remains the self-hosted baseline; hosted providers are connector implementations.
-
-## #157 — Canonical Task Project reassignment/move
-
-Implement after #87's sharing/ownership semantics are stable enough to define cross-scope compatibility.
-
-#157 must preserve historical Task/Run/Event provenance and cannot be implemented as frontend-only or metadata-only reassignment.
-
-## #171 — Post-#76 accounting integrations
-
-Remaining integration gate:
-
-`#36 -> (#75 + #87) -> #171`
-
-#37 and the canonical #76 accounting core are already complete.
-
-#171 finishes:
-
-- Workspace/snapshot accounting semantics against #37;
-- real Organization/Team accounting visibility against #87;
-- budget-threshold Notification delivery through #75.
-
----
-
-# 9. Deployment, recovery and release lifecycle
-
-## #39 — Deployment profiles
-
-As noted above, the single-node baseline begins after #36.
-
-Distributed profiles progressively consume #14/#35. Optional HA packaging later consumes #89.
-
-## #40 — Backup, Restore and disaster recovery
-
-Remaining hard path:
-
-`#20 + #38 + #39 -> #40`
-
-#6, #13 and #34 are already complete.
-
-This means #38 should be finished before #40 is treated as complete operational tooling.
-
-## #41 — Database migrations and platform upgrade lifecycle
-
-Remaining hard path:
-
-`#20 + #40 + #79 -> #41`
-
-#13 and #32 are already complete.
-
-## #42 — Release, update and upstream synchronization
-
-Remaining hard path:
-
-`#8 + #19 + #20 + #41 -> #42`
-
-#3, #9 and #11 are already complete.
-
-Compatibility claims must be based on actual adapter, migration and regression evidence.
-
-## #89 — Optional Control Plane HA/failover
-
-Remaining hard path:
-
-`#36 + #39 + #40 -> #89`
-
-#6, #13, #32 and #35 are already complete.
-
-HA is optional. Single-node production must remain valid with all HA components disabled.
-
----
-
-# 10. Final cross-platform acceptance
-
-## #46 — End-to-end Conformance and Platform Acceptance Suite
-
-#46 is the final system acceptance gate.
-
-It consumes the completed platform domains and validates representative paths across:
-
-- canonical lifecycle and recovery;
-- reference-only local operation;
-- Hermes and Forge adapter paths;
-- local/self-hosted model and capability paths;
-- distributed Workers;
-- authorization and Approvals;
-- runtime Verification;
-- Authentication;
-- Workspaces/Artifacts;
-- Automations;
-- UI/CLI consistency;
-- Chat;
-- Terminal;
-- Browser;
-- Notifications;
-- Usage/Resources;
-- Organizations/Memberships;
-- practical Task management;
-- Templates and portable Import/Export;
-- Repository/Git;
-- Registry-disabled and Registry-enabled paths;
-- backup/migration/release compatibility;
-- optional HA/failover while preserving the HA-disabled baseline.
-
-No earlier issue should redefine canonical contracts merely to make #46 easier to pass.
-
----
-
-# 11. Recommended parallel allocation
-
-## If five implementation agents are available
-
-This is the recommended highest-leverage allocation now:
-
-| Agent | Issue | Primary unlock |
-|---|---|---|
-| A | #36 Authentication | #44, #75, #87, #39, part of #72 |
-| B | #33 Agents/Teams | #8, #77, #86, part of #72/#78/#79 |
-| C | #14 Nodes/Workers | distributed runtime, #21, distributed #39 |
-| D | #18 Automations | #21, #78, #79 |
-| E | #20 Plugins | #78, #79, #81, #40/#41/#42 chain |
-
-These five lanes attack the largest remaining dependency bottlenecks simultaneously.
-
-## If more capacity is available
-
-Add independent lanes in roughly this order:
-
-- #19 Evaluation/Regression;
-- #45 Search foundation;
-- #38 CLI progressive completion;
-- #73 Terminal;
-- #74 Browser.
-
-The exact order among these secondary lanes may be adjusted to product priorities because they do not currently unlock as many downstream hard dependencies as #36/#33/#14/#18/#20.
-
-## Merge discipline
-
-Do not merge downstream compatibility hacks ahead of their owning contracts.
-
-Examples:
-
-- merge #33 canonical Agent contracts before #8 Hermes mappings;
-- merge #36 actor/session contracts before #44/#75/#87 authentication integrations;
-- merge #14 Worker contracts before distributed deployment/client assumptions;
-- merge #20 plugin lifecycle before #81 distribution logic;
-- merge #87 ownership/sharing semantics before #157 cross-project move semantics.
-
----
-
-# 12. Current dependency map
+### Critical prototype lane
 
 ```text
-COMPLETED BASELINE
-#1-#7, #9-#13, #15-#17,
-#32, #34, #35, #37, #43, #76, #88
+closed foundations (#7, #10, #12, #15, #17, #32, #34, #36, #37, #38, #39, #77)
         |
-        +------------------------------------------------------------+
-        |              |              |              |              |
-       #36            #33            #14            #18            #20
-   Authentication   Agents/Teams   Nodes/Workers   Automation      Plugins
-        |              |              |              |              |
-        |              |              +------+#18---+              |
-        |              |                     |                      |
-        |              |                    #21                     |
-        |              |                                             |
-        |              +--> #8 Hermes                                |
-        |              +--> #77 Standard Agents                      |
-        |              +--> #86 Verification                         |
-        |              +--------------------+                        |
-        |                                   |                        |
-        +-------------------------------> #72 Chat                   |
-        |                                                            |
-        +--> #44 Connectors --> #82 Repository/Git                    |
-        +--> #75 Notifications ----+                                  |
-        +--> #87 Orgs/Members -----+--> #171 accounting integrations |
-        |       |                                                    |
-        |       +--> #157 Task project moves                         |
-        |                                                            |
-        +--> #39 Deployment --> #40 Backup --> #41 Upgrade --> #42 Release
-                                  ^              ^             ^
-                                  |              |             |
-                                #20            #79        #8 + #19 + #20
-                                                ^
-                                                |
-                                   #33 + #18 + #20
-                                                |
-                                               #79
-
-#33 + #18 + #20 --> #78 Templates
-#20 + #78 + #79 --> #81 optional Registry
-#36 + #39 + #40 --> #89 optional HA
-
-READY IN PARALLEL NOW:
-#19 Evaluation, #45 Search, #73 Terminal, #74 Browser, progressive #38 CLI
-
-FINAL:
-#46 End-to-End Platform Acceptance
+        +--> #72 Task-centric Chat -------------------+
+        +--> #86 Verification/Review -----------------+
+        +--> #250 First-run and local-model path -----+--> #252 usable-prototype acceptance gate
+        +--> #251 Memory/Knowledge lifecycle ---------+
+        +--> required progressive UI slices in #236 -+
 ```
 
----
+### Required outcome
 
-# 13. Critical-path summary
+#252 is the release gate for the prototype. It must demonstrate, without a recurring paid service:
 
-The remaining work no longer has one simple linear chain. The most important converging chains are:
+- a clean supported single-node installation;
+- first-user authentication and Project/Workspace selection;
+- a local or self-hosted model configuration;
+- an editable General Assistant;
+- Chat or Task execution through canonical APIs;
+- one safe capability and a visible result/artifact;
+- distinct Approval and Verification behavior;
+- a minimal Memory/Knowledge lifecycle;
+- actionable degraded states; and
+- persistence across restart.
+
+#72, #86 and #236 may deliver the slices consumed by #252 before their broader issues close, provided the consumed contracts are merged, stable and covered by owning tests.
+
+### Explicit non-blockers for M2
+
+The following capabilities are valuable but must not block the usable prototype:
+
+- distributed scheduling beyond local/reference execution (#14);
+- external Connectors and hosted Repository integration (#44, #82);
+- Notifications, Organizations and cross-scope collaboration (#75, #87, #157, #171);
+- Templates and portable distribution (#78, #79, #81);
+- full backup, upgrade and release automation (#40, #41, #42);
+- heterogeneous deployments and HA (#240, #89).
+
+## M3 - Operational v1
+
+M3 completes the product and operational domains around the proven single-node path.
+
+### Runtime and workflow decisions
+
+- #14 defines Node/Worker scheduling semantics for distributed execution.
+- #21 evaluates durable workflow-engine adoption after #14; it remains an ADR/evidence issue and must not introduce Temporal by assumption.
+- #214 integrates upstream lifecycle contracts without making an upstream project canonical.
+
+### Product and collaboration domains
+
+- #44 owns external Connector contracts; #82 consumes them for hosted Repository providers.
+- #45 expands platform-wide search over canonical resources.
+- #75 owns Notifications and user-attention delivery.
+- #78 and #79 own reusable Templates and portable Import/Export.
+- #87 owns Organization, Team and Membership semantics.
+- #157 consumes #87 for safe cross-scope Task moves.
+- #171 consumes #75 and #87 for the remaining accounting integrations.
+- #236 completes progressive Web UI coverage without creating client-private domain contracts.
+- #241 verifies Forge compatibility against platform-owned contracts.
+
+### Operations chain
 
 ```text
-#36 -> #39 -> #40 -> #41 -> #42 -> #46
-#33 -> #8 ---------------------> #42 -> #46
-#20 -> #40/#41/#42 ------------------> #46
-#33 + #18 + #20 -> #79 -> #41 -> #42 -> #46
-#14 + #18 -> #21
-#36 -> #44 -> #82 --------------------> #46
-#36 -> #87 -> #157 -------------------> #46
-#36 -> #75 + #87 -> #171 ------------> #46
+#39 single-node deployment
+        |
+        v
+#40 backup/restore --> #41 migrations/upgrades --> #42 release/update synchronization
 ```
 
-The best immediate strategy is therefore **not** to resume the old model/tool/data/control-plane wave. Those foundations are already complete. The current bottlenecks are Authentication, canonical Agents/Teams, distributed Workers, Automations and Plugins, with Evaluation/Search/Terminal/Browser/CLI able to advance in parallel.
+The chain may consume Templates/Import-Export where useful, but operational backup must remain distinct from portable resource export.
+
+### Full conformance
+
+#46 remains the final cross-platform and cross-domain conformance suite. It is not the prototype gate. Optional Registry, HA and distributed scenarios belong in conditional profiles and cannot make the reference single-node baseline fail.
+
+## M4 - Distributed & Ecosystem
+
+M4 contains optional expansion work:
+
+- #81 optional Registry/Marketplace for shareable platform extensions;
+- #89 Control Plane HA and failover architecture;
+- #240 distributed and heterogeneous deployment profiles.
+
+Disabling all M4 components must leave the M2 single-node product usable and the M3 operational baseline valid.
+
+## Recommended execution order
+
+1. Finish the four M2 product gaps: #72, #86, #250 and #251.
+2. Integrate only their required Web slices through #236.
+3. Run and pass #252; publish the first prototype only after this gate is reproducible.
+4. In parallel where ownership is independent, advance #14, #44, #45, #75, #78, #79, #87 and #241.
+5. Complete dependent integrations #82, #157, #171 and #214.
+6. Drive the operational chain #40 -> #41 -> #42.
+7. Close M3 through #46 full conformance.
+8. Build #81, #89 and #240 only as optional M4 profiles.
+
+## Consistency rules for every issue
+
+Each implementation issue should contain:
+
+- exactly one canonical owner and no competing private contract;
+- an explicit `Hard dependencies` section;
+- separate `Follow-up integrations` or `Related work` sections for non-blockers;
+- acceptance criteria and required tests proportional to its risk;
+- one `type:*`, one `area:*` and one `stage:*` label; and
+- the milestone whose outcome the issue is required to satisfy.
+
+When a broad issue contains a smaller milestone-critical slice, the broad issue may stay open after that slice lands. The consuming gate must name the stable contracts it uses and may not silently duplicate the owner issue.
