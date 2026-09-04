@@ -134,10 +134,7 @@ def main(
                 file=sys.stderr,
             )
             return 3
-        print(
-            "restore run resolved: "
-            f"task={task_id} run={run_id} resolution={resolution.value}"
-        )
+        print(f"restore run resolved: task={task_id} run={run_id} resolution={resolution.value}")
         return 0
 
     if args.command in {"recover-restore", "serve"}:
