@@ -114,7 +114,7 @@ This permits assertions over non-output behavior such as selected models/tools, 
 
 Two runs are only meaningful to compare when the caller can inspect these snapshots. The framework does not hide relevant configuration inside evaluator code.
 
-## Regression policy
+## Regression policy and checked-in configuration
 
 Regression thresholds are explicit versioned data represented by `RegressionPolicy`. The initial engine supports:
 
@@ -129,7 +129,47 @@ Baseline matching is performed per `(case_id, evaluator_id)`. Results produced b
 
 Accordingly, the current `EvaluationRunner` allows automatic baseline comparison only with `repetitions=1`. Repeated runs are executable and reproducible now, but stochastic aggregation/comparison remains explicit follow-up work rather than an implicit average hidden in the engine.
 
-`config/evaluation-regression.example.json` demonstrates a no-paid-service PR policy. A later configuration loader will deserialize versioned policy files rather than embedding thresholds in evaluator implementations.
+The framework now includes strict JSON loaders for checked-in `EvaluationSuite`, `RegressionPolicy` and accepted Evaluation baseline assets. Duplicate JSON keys, unknown fields and invalid field types are rejected rather than silently accepted. Accepted baselines are deserialized through the existing strict canonical `EvaluationRun`/`EvaluationResult` codec and validated against suite/case identity and version.
+
+The deterministic PR profile is versioned in:
+
+- `config/evaluation-suite.pr-deterministic.json`;
+- `config/evaluation-regression.pr-deterministic.json`;
+- `config/evaluation-baseline.pr-deterministic.json`.
+
+The accepted baseline must contain exactly one result for every required `(case_id, evaluator_id)` pair and only passing results. The reference PR profile uses `repetitions=1` and deterministic seed `19`.
+
+The concrete `dispatch_attempts <= 1` threshold belongs to the versioned `MetricRule` in the EvaluationCase and is evaluated by `MetricThresholdEvaluator`. The PR `RegressionPolicy` then classifies deterministic pass-to-fail, score-drop and tagged critical/security regressions. This avoids duplicating thresholds in workflow YAML or evaluator implementation code and avoids applying an unrelated global metric threshold to evaluator results that do not emit that metric.
+
+## Deterministic no-paid PR CI gate
+
+`run_reference_ci_gate(...)` turns the canonical Evaluation framework into the required lightweight PR gate. It composes existing platform-owned reference components:
+
+```text
+ReferenceOrchestrator
+    -> PlatformKernel
+    -> KernelEvaluationCaseExecutor
+    -> ExecutorLifecycleBackend
+    -> ReferenceExecutor
+    -> EvaluationObservation
+    -> DeterministicAssertionEvaluator / MetricThresholdEvaluator
+    -> EvaluationRunner
+    -> RegressionEngine
+```
+
+The gate therefore evaluates the same canonical Task/Run lifecycle as ordinary platform work. It does not introduce a fake evaluation-only lifecycle and requires no LLM judge, model endpoint, paid API, Hermes runtime or Forge runtime. The generated `ConfigurationSnapshot` records the current platform version/commit plus the orchestrator, executor, both evaluator identities, exact regression-policy version and exact suite version.
+
+The checked-in reference case verifies canonical Task and Run success, one dispatch attempt, output presence, required lifecycle events and the versioned dispatch-attempt metric threshold. Tests also run a deliberately regressed suite and verify that the normal `RegressionEngine` reports deterministic pass-to-fail, score-drop and critical-case regressions against the accepted baseline.
+
+The executable CI entry point is `scripts/ci/issue19_evaluation_gate.py`. It emits a compact JSON summary containing suite/policy/baseline/current-run identity and regression counts. Its exit contract is:
+
+- `0` when the deterministic run and accepted-baseline comparison pass;
+- `1` for a failed EvaluationResult or classified regression;
+- `2` for configuration or gate-execution setup errors.
+
+The repository's main CI runs `Deterministic evaluation gate` after the full Pytest suite and before package build. Because the existing Hermes and Forge compatibility jobs depend on the main `test` job, a failed Evaluation gate blocks those downstream checks rather than becoming an optional detached signal.
+
+This narrow reference profile fails explicitly when a case declares fixtures, rubric criteria or resource limits whose semantics the profile does not enforce. Such suites must use the canonical workspace isolation, rubric evaluator or resource-accounting paths rather than having requirements silently ignored.
 
 ## Persistence and historical trends
 
@@ -184,6 +224,17 @@ Suite reads use `/api/v1/evaluation-suites`; run detail uses `/api/v1/evaluation
 
 CLI contract tests verify URL encoding for versioned suite refs, pagination/filter forwarding, exact mutation payloads, explicit idempotency keys, durable result reads and local rejection of invalid snapshot/repetition input before transport.
 
+## Global Search integration
+
+Issue #45 now projects canonical Evaluation discovery into the global Search layer without making Search authoritative for Evaluation state. Search consumes only the registered Control Plane Evaluation resources:
+
+- `evaluation-suites` -> `evaluation-suite` discovery documents;
+- `evaluation-runs` -> `evaluation-run` discovery documents.
+
+Only approved top-level discovery metadata is indexed. Nested case content, fixtures, input templates, assertions, rubric criteria, snapshot environment values, evaluator descriptors, Evaluation results, metric values/thresholds and comparison/regression findings are deliberately excluded from global search text. Authorization is applied using the existing Evaluation collection vocabulary before totals or exact-ID results become visible.
+
+Search remains a derived navigation layer and links callers back to the canonical `/api/v1/evaluation-suites/{suite-ref}` and `/api/v1/evaluation-runs/{run-id}` resources. It does not read `EvaluationHistoryRepository`, `EvaluationRunner` internals or provider state directly, and it requires no external Search backend or paid service.
+
 ## Current issue #19 implementation status
 
 The implementation is being landed progressively from canonical contracts/reference behavior outward through persistence and northbound surfaces.
@@ -215,26 +266,29 @@ Implemented:
 - baseline comparison/regression engine matched by case/evaluator identity;
 - explicit rejection of unaggregated repeated results in baseline comparison;
 - versioned regression policy model;
+- strict checked-in EvaluationSuite/RegressionPolicy/baseline configuration loading;
 - Control Plane `evaluation-suites` and `evaluation-runs` resources;
 - Control Plane `evaluation.run` and `evaluation.compare` commands backed by `EvaluationService`;
 - complete generic cursor pagination over evaluation-run history without the repository default-limit truncation;
 - API-first `platform eval` suite/run/result/compare CLI surface;
-- no-paid-service policy example;
+- checked-in deterministic PR suite, regression policy and accepted canonical baseline;
+- real no-paid deterministic PR Evaluation gate through the canonical Task/Run reference path;
+- CI integration that blocks the main test job on Evaluation regression;
+- global Search discovery for canonical Evaluation suites/runs with explicit privacy and authorization boundaries;
 - tests for pass/fail, baseline comparison, thresholds, critical/security tags, snapshot integrity, model/provider version differences and evaluator failure handling;
 - tests for repetition/seed propagation, isolation ordering, execution-error containment, comparison persistence and real-kernel reference execution;
 - tests proving cross-attempt workspace contamination is prevented and Run workspace binding exists before lifecycle start;
 - tests for strict JSON persistence, SQLite restart/history/trend queries and baseline comparison after repository restart;
 - tests for Control Plane manifest/OpenAPI exposure, HTTP run/compare flow, persisted comparison reads and run-history pagination beyond 100 records;
-- tests for the API-first Evaluation CLI request/payload/validation contract.
+- tests for the API-first Evaluation CLI request/payload/validation contract;
+- tests for strict Evaluation configuration loading, real reference CI-gate execution and deliberate baseline regression detection.
 
 Remaining work for full issue completion:
 
 - explicit stochastic aggregation/comparison policies for repeated runs;
 - rubric scorer and optional model-judge adapter implementation;
-- richer telemetry, accounting and log references in observations and stored results;
-- deterministic PR-gating workflow driven by canonical evaluation suites and versioned policies;
-- Search integration/indexing for canonical Evaluation resources and history where useful.
+- richer telemetry, accounting and log references in observations and stored results.
 
 ## CI principle
 
-Baseline PR evaluation must stay stable, deterministic and free of paid evaluation services. Heavier stochastic/model-judge suites belong in separately selected integration or release validation.
+Baseline PR evaluation stays stable, deterministic and free of paid evaluation services. The checked-in PR profile runs only platform-owned reference components and deterministic evaluators. Heavier stochastic suites, resource-intensive scenarios and optional model-judge suites belong in separately selected integration or release validation and must not become a mandatory paid CI dependency.
