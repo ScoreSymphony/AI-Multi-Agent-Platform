@@ -74,6 +74,7 @@ class EvaluationCLITransport:
                 "suite_version": "1",
                 "status": "completed",
                 "results": [],
+                "aggregates": [],
                 "comparison": None,
             }
         elif method == "GET" and parsed.path == "/api/v1/evaluation-runs/evaluation_run_test":
@@ -83,6 +84,7 @@ class EvaluationCLITransport:
                 "run_id": "evaluation_run_test",
                 "status": "completed",
                 "results": [{"id": "result_test", "type": "evaluation-result"}],
+                "aggregates": [],
                 "comparison": None,
             }
         elif method == "POST" and parsed.path == "/api/v1/commands/evaluation.compare":
@@ -191,6 +193,8 @@ def test_eval_run_sends_explicit_snapshot_and_versioned_refs(tmp_path: Path) -> 
         "evaluation_run_baseline",
         "--regression-policy-ref",
         "policy_ci@3",
+        "--aggregation-policy-ref",
+        "aggregation_release@2",
         "--idempotency-key",
         "eval-run-test",
     )
@@ -209,6 +213,7 @@ def test_eval_run_sends_explicit_snapshot_and_versioned_refs(tmp_path: Path) -> 
         "seed": 41,
         "baseline_run_id": "evaluation_run_baseline",
         "regression_policy_ref": "policy_ci@3",
+        "aggregation_policy_ref": "aggregation_release@2",
     }
 
 
@@ -226,6 +231,7 @@ def test_eval_result_show_and_compare_use_durable_run_identity(tmp_path: Path) -
     )
     assert code == 0 and not error
     assert shown["data"]["results"][0]["id"] == "result_test"  # type: ignore[index]
+    assert shown["data"]["aggregates"] == []  # type: ignore[index]
     assert transport.calls[-1][1] == "/api/v1/evaluation-runs/evaluation_run_test"
 
     code, compared, error = _invoke(
@@ -238,6 +244,8 @@ def test_eval_result_show_and_compare_use_durable_run_identity(tmp_path: Path) -
         "evaluation_run_baseline",
         "--regression-policy-ref",
         "policy_ci@3",
+        "--aggregation-policy-ref",
+        "aggregation_release@2",
         "--idempotency-key",
         "eval-compare-test",
     )
@@ -251,6 +259,7 @@ def test_eval_result_show_and_compare_use_durable_run_identity(tmp_path: Path) -
         "resource_ref": "evaluation_run_test",
         "baseline_run_id": "evaluation_run_baseline",
         "regression_policy_ref": "policy_ci@3",
+        "aggregation_policy_ref": "aggregation_release@2",
     }
 
 
