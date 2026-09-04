@@ -13,13 +13,15 @@ canonical resource
     -> versioned PortablePackage manifest
     -> schema + checksum verification
     -> dependency/conflict preview
-    -> explicit import plan
-    -> canonical repository/service mutation
+    -> accepted ImportContext mapping
+    -> resource-specific non-mutating preflight
+    -> dependency-ordered mutation
+    -> reverse compensation on failure
 ```
 
 No Python object representation, backend database row, provider session or host path is itself a portable contract.
 
-The initial foundation in `ai_multi_agent_platform.portability` owns the package models, format schema, integrity verification, safety validation and serializer/deserializer registry. Resource-specific codecs and the mutation-oriented import planner are layered on top of these contracts rather than redefining the package format.
+`ai_multi_agent_platform.portability` owns package models, format schema, integrity verification, safety validation, explicit codecs, import preview and the rollback-safe import execution boundary. Resource-specific codecs and mutation handlers layer on those contracts rather than redefining package semantics.
 
 ## Portable package format v1
 
@@ -41,15 +43,15 @@ The runtime JSON Schema is `PORTABLE_PACKAGE_SCHEMA_V1` in `portability/schema.p
 
 Each exported resource declares one `IdPolicy`:
 
-- `preserve` — import should preserve the canonical ID when the destination admits it;
-- `regenerate` — import planning must allocate a destination ID and rewrite canonical references through an explicit mapping;
-- `historical_preserve` — historical identity must remain stable and must not be silently activated as current runtime work.
+- `preserve` — import preserves the canonical ID when the destination admits it;
+- `regenerate` — import planning allocates a destination ID and codecs rewrite canonical references through the accepted mapping;
+- `historical_preserve` — historical identity remains stable and must not be silently activated as current runtime work.
 
-The format carries the requested identity semantics. Conflict detection and the final mapping decision belong to import planning; codecs receive an `ImportContext` containing the accepted deterministic mapping.
+Conflict detection and the final mapping decision belong to import planning. Codecs receive an `ImportContext` containing the accepted deterministic mapping.
 
 ## Dependencies
 
-`DependencyRequirement` uses a stable kind plus identifier, optional version constraint and purpose. Initial dependency kinds are:
+`DependencyRequirement` uses a stable kind plus identifier, optional version constraint and purpose. Dependency kinds include:
 
 - canonical resource;
 - plugin;
@@ -58,7 +60,9 @@ The format carries the requested identity semantics. Conflict detection and the 
 - model;
 - secret reference.
 
-Dependencies are descriptive requirements, not installation authority. Import must not auto-install untrusted code or silently create credentials merely because a package declares them.
+Dependencies are descriptive requirements, not installation authority. Import does not auto-install untrusted code or silently create credentials merely because a package declares them.
+
+Canonical resource dependencies also drive topological import ordering. Missing required dependencies and dependency cycles are reported by the dry-run before mutation.
 
 ## Secret boundary
 
@@ -95,9 +99,11 @@ Resource checksum input is deterministic canonical JSON over:
 - dependency declarations;
 - portable payload.
 
-The package checksum binds the complete manifest plus the sealed resources. Any modification to a payload, resource descriptor, dependency declaration, compatibility metadata, provenance metadata or exclusion report therefore invalidates integrity until the package is intentionally rebuilt.
+The package checksum binds the complete manifest plus sealed resources. Any modification to a payload, resource descriptor, dependency declaration, compatibility metadata, provenance metadata or exclusion report therefore invalidates integrity until the package is intentionally rebuilt.
 
 Checksums provide corruption/tamper detection; they are not signatures and do not establish trust in the package author.
+
+Durable files add an independent integrity layer: decoded file bytes must match the canonical `FileRecord.sha256` and size before import, and the destination `FileProvider` is checked again after materialization.
 
 ## Serializer/deserializer registry
 
@@ -111,30 +117,119 @@ The registry:
 - verifies a resource before passing it to a deserializer;
 - provides the accepted canonical ID mapping to the deserializer through `ImportContext`.
 
-## Import transaction boundary
+A codec only grants serialization/deserialization capability. It never grants destination write authority. Mutations require a separately registered `ImportMutationHandler`.
 
-The foundation does **not** mutate canonical repositories. The next import layer must perform, before mutation:
+## Agent and Agent Team semantics
 
-1. schema/version/integrity verification;
-2. platform and contract compatibility validation;
-3. dependency availability checks;
-4. authorization/security checks;
-5. canonical ID conflict discovery;
-6. deterministic preserve/regenerate mapping;
-7. dry-run/preview reporting;
-8. safe dependency-ordered import planning.
+Agent and Agent Team resources carry complete immutable revision history, not active runtime/session state.
 
-Only an accepted plan may enter a transactional/rollback-safe mutation boundary. A failed import must not leave partially imported canonical state.
+Agent dependencies describe canonical model assignments, capabilities, project/workspace scope and declared knowledge/memory configuration references. Team dependencies describe member Agent revisions and shared scope/configuration references. Clone/import-as-new uses deterministic ID mapping, including Team member/leader/delegation references back to imported Agents.
+
+Import reconstructs revision history through the normal Agent repository boundary. Agent/Team mutation handlers self-compensate if a multi-revision write fails part-way through.
+
+## File and Artifact semantics
+
+Portable `file` resources contain canonical `FileRecord` metadata plus Base64 transport bytes. They never use filesystem paths or object-store keys as identity.
+
+Portable `artifact` resources preserve canonical metadata and external references but deliberately omit `Artifact.uri`, because that field may be a source filesystem path, provider-native object location or temporary URL. The target installation owns its new materialized locator.
+
+File import:
+
+1. verifies decoded bytes against canonical size and SHA-256;
+2. remaps canonical File/Artifact/Project references;
+3. creates bytes through the destination `FileProvider`;
+4. verifies destination checksum and size;
+5. restores Artifact links using remapped canonical IDs;
+6. compensates a partially materialized File if a later per-file step fails.
+
+Package-level compensation is handled by `ImportExecutor`.
+
+## Scoped Memory semantics
+
+Memory portability is deliberately more restrictive than generic JSON transport. The portable contract preserves the canonical `MemoryEntry` value, retention metadata, classification, metadata and provenance while carrying the export-time project context needed to enforce privacy for project-bound scopes.
+
+### Allowed scopes
+
+The ordinary portable format allows durable:
+
+- `task` Memory;
+- `agent` Memory;
+- `workspace` Memory;
+- `user` Memory;
+- `historical` Memory.
+
+`short_term` Memory is never portable. It represents active execution/session context and is part of the runtime-state exclusion boundary.
+
+Expired Memory is not exported by the portable snapshot contract.
+
+### Project privacy
+
+Task-, Agent- and Workspace-scoped Memory snapshots record the authorized export `project_id`. This is privacy context, not a backend storage identity.
+
+On import:
+
+- Task scope IDs are remapped through canonical Task mappings;
+- Agent scope IDs are remapped through canonical Agent mappings;
+- Workspace scope IDs are remapped through canonical Project mappings;
+- the target project must match the remapped project for scopes whose canonical access policy denies cross-project access;
+- `explicit_policy_only` cross-project semantics require an explicit `MemoryImportPrivacyPolicy` grant rather than an implicit migration shortcut.
+
+The destination `MemoryProvider` remains authoritative. Using `AuthorizedDataMemoryProvider` therefore retains the normal #15 authorization gate during both export reads and import writes.
+
+### User/owner privacy
+
+Ordinary import does not silently transfer `MemoryEntry.owner_ref`. By default the destination actor must match the preserved owner. `MemoryImportPrivacyPolicy.allow_owner_transfer` is an explicit exception for callers that already obtained appropriate authorization; it does not bypass provider authorization.
+
+User-scoped Memory additionally remains bound to its canonical user scope. A package imported by another user cannot silently rewrite the user scope.
+
+### Provenance and Memory chains
+
+Memory provenance is serialized explicitly and preserved. `supersedes_memory_id` and `superseded_by_memory_id` are canonical Memory references: they are declared as dependencies and deterministically remapped when their referenced Memory resources are imported together.
+
+No backend search/vector/index identity is carried by the Memory resource.
+
+## Dry-run and conflict boundary
+
+`ImportPreviewService` is mutation-free. Before a package may enter the executor it reports or computes:
+
+- package/schema/integrity validity;
+- existing canonical ID conflicts;
+- caller-supplied name conflicts;
+- required and optional missing dependencies;
+- deterministic preserve/regenerate target IDs;
+- canonical reference mapping;
+- dependency-safe topological order;
+- dependency cycles.
+
+The preview checksum binds it to one exact package. `ImportExecutor` rejects a stale preview, a non-ready preview, incomplete mappings or an import order that does not cover the package exactly once.
+
+## Import transaction and recovery boundary
+
+The platform intentionally does not pretend a single database transaction can atomically cover replaceable Agent repositories, File providers, Memory providers and future external adapters.
+
+The baseline multi-provider transaction model is therefore:
+
+1. verify package and accepted preview;
+2. resolve every codec and mutation handler;
+3. deserialize every resource;
+4. execute every resource-specific non-mutating preflight;
+5. apply resources in dependency order;
+6. on failure, compensate already-applied resources in reverse order;
+7. report explicitly if compensation itself is incomplete.
+
+A mutation handler that fails after partially changing its own resource must compensate that partial mutation before raising. The package executor then rolls back only resources whose `apply()` completed successfully.
+
+Rollback error details pass through the platform redaction boundary before entering an import failure report.
 
 ## Portability versus backup
 
-Portable export optimizes for canonical semantics and migration between compatible installations. It may deliberately omit runtime/provider material that a deployment backup would preserve.
+Portable export optimizes for canonical semantics and migration between compatible installations. It deliberately omits runtime/provider material that a deployment backup may preserve.
 
 Backup/restore (#40) instead protects one installation's operational state and may include backend-specific databases, indexes and deployment metadata. Neither mechanism is a substitute for the other.
 
-## Foundation test coverage
+## Current test coverage
 
-`tests/test_portability.py` currently verifies:
+The #79 portability stack verifies at least:
 
 - package serialize/deserialize round trip;
 - resource and package checksum tamper detection;
@@ -143,6 +238,18 @@ Backup/restore (#40) instead protects one installation's operational state and m
 - safe secret-reference placeholders;
 - recursive runtime-private-state rejection;
 - codec registry round trip and canonical ID remapping;
-- duplicate/unknown codec failure.
+- duplicate/unknown codec failure;
+- Agent/Team full-revision round trip;
+- composite Agent/Team reference remapping;
+- dependency/conflict preview;
+- provider-neutral File/Artifact round trip and byte checksum verification;
+- destination File compensation;
+- package-wide Agent/Team/File reverse rollback;
+- stale/not-ready preview rejection before mutation;
+- durable Workspace Memory round trip with provenance preservation;
+- deterministic Workspace Project remapping;
+- cross-project Workspace Memory rejection before mutation;
+- cross-user User Memory rejection;
+- `short_term` Memory runtime-state exclusion.
 
-Resource-specific Agent/Team, file/artifact, memory/knowledge, automation and historical Task codecs, dependency/conflict preview, rollback-safe import, and Control Plane/CLI surfaces remain follow-up work within #79.
+Historical Task archive/import semantics, Knowledge-source/config metadata, further canonical configuration codecs, import/export reports and Control Plane/CLI surfaces remain follow-up work within #79.

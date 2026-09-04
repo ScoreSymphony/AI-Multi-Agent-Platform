@@ -33,6 +33,18 @@ from .file_codecs import (
     snapshot_file,
 )
 from .file_import import FileImportMutationHandler
+from .memory_codecs import (
+    MEMORY_PORTABLE_SCHEMA_VERSION,
+    MEMORY_RESOURCE_TYPE,
+    MemoryPortableCodec,
+    MemoryPortableSnapshot,
+    register_memory_portability_codec,
+    snapshot_memory,
+)
+from .memory_import import (
+    MemoryImportMutationHandler,
+    MemoryImportPrivacyPolicy,
+)
 from .models import (
     PORTABLE_FORMAT_VERSION,
     PORTABLE_INTEGRITY_ALGORITHM,
@@ -75,6 +87,8 @@ __all__ = [
     "ARTIFACT_RESOURCE_TYPE",
     "FILE_PORTABLE_SCHEMA_VERSION",
     "FILE_RESOURCE_TYPE",
+    "MEMORY_PORTABLE_SCHEMA_VERSION",
+    "MEMORY_RESOURCE_TYPE",
     "PORTABLE_FORMAT_VERSION",
     "PORTABLE_INTEGRITY_ALGORITHM",
     "PORTABLE_PACKAGE_SCHEMA_V1",
@@ -104,6 +118,10 @@ __all__ = [
     "ImportMutationRegistry",
     "ImportPreview",
     "ImportPreviewService",
+    "MemoryImportMutationHandler",
+    "MemoryImportPrivacyPolicy",
+    "MemoryPortableCodec",
+    "MemoryPortableSnapshot",
     "MissingDependency",
     "PackageProvenance",
     "PlannedResource",
@@ -123,11 +141,13 @@ __all__ = [
     "parse_resource_dependency",
     "register_agent_portability_codecs",
     "register_file_portability_codecs",
+    "register_memory_portability_codec",
     "resource_dependency",
     "seal_resource",
     "snapshot_agent",
     "snapshot_agent_team",
     "snapshot_file",
+    "snapshot_memory",
     "validate_package_document",
     "validate_portable_payload",
     "verify_package",
