@@ -683,9 +683,7 @@ class AutomationService:
                 "attempt": delivery.attempt,
                 "retryable": delivery.retryable,
                 "last_failed_at": (
-                    None
-                    if delivery.last_failed_at is None
-                    else delivery.last_failed_at.isoformat()
+                    None if delivery.last_failed_at is None else delivery.last_failed_at.isoformat()
                 ),
                 "next_retry_at": (
                     None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
