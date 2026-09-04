@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext, OperationControl
 from ai_multi_agent_platform.search import (
@@ -19,27 +17,27 @@ from .registered_search_contract import ControlPlane as _RegisteredSearchControl
 class ControlPlane(_RegisteredSearchControlPlane):
     """Add optional checkpointed Search refresh without weakening the safe default.
 
-    ``search_rebuild_before_query=True`` preserves the original correctness-first
-    behavior. Deployments with a provider that is kept synchronized through canonical
-    write-through/event delivery may explicitly disable unconditional rebuilds. In that
-    mode a missing, stale or incompatible checkpoint always forces recovery before
-    Search results are served.
+    The correctness-first default remains rebuild-before-query. Deployments whose
+    provider is kept synchronized through canonical write-through/event delivery may
+    explicitly switch to checkpointed refresh after Control Plane construction. A
+    missing, stale or incompatible checkpoint always forces recovery before Search
+    results are served.
     """
-
-    def __init__(
-        self,
-        *args: Any,
-        search_rebuild_before_query: bool = True,
-        **kwargs: Any,
-    ) -> None:
-        if not isinstance(search_rebuild_before_query, bool):
-            raise TypeError("search_rebuild_before_query must be a boolean")
-        self._search_rebuild_before_query = search_rebuild_before_query
-        super().__init__(*args, **kwargs)
 
     @property
     def search_rebuild_before_query(self) -> bool:
-        return self._search_rebuild_before_query
+        return getattr(self, "_search_rebuild_before_query", True)
+
+    def configure_search_refresh(self, *, rebuild_before_query: bool) -> None:
+        """Choose correctness-first or checkpointed refresh after composition setup.
+
+        Configuration is intentionally outside ``__init__`` so the option does not have
+        to propagate through every cooperative Control Plane mixin constructor.
+        """
+
+        if not isinstance(rebuild_before_query, bool):
+            raise TypeError("rebuild_before_query must be a boolean")
+        self._search_rebuild_before_query = rebuild_before_query
 
     async def search_index_checkpoint(
         self,
@@ -88,7 +86,7 @@ class ControlPlane(_RegisteredSearchControlPlane):
         return page.to_json()
 
     async def _ensure_search_index(self, *, correlation_id: str) -> None:
-        if self._search_rebuild_before_query:
+        if self.search_rebuild_before_query:
             await self.rebuild_search_index(correlation_id=correlation_id)
             return
 
