@@ -93,10 +93,6 @@ class ControlPlane(_AutomationControlPlane, _RegisteredSearchControlPlane):
         # Search can enforce the same owner policy as direct reads.
         self._resource_services[AUTOMATION_COLLECTION] = _OwnedAutomationResources(self)
         self._resource_services[DELIVERY_COLLECTION] = _OwnedDeliveryResources(self)
-        # #241 lifecycle commands live in the hardened layer because INVALID was intentionally
-        # only a dormant enum during the #18 baseline.
-        super().register_command("automation.invalidate", self._automation_invalidate_command)
-        super().register_command("automation.revalidate", self._automation_revalidate_command)
 
     async def execute_command(
         self,
