@@ -53,6 +53,16 @@ export function OrganizationConfigurationPanel({
     );
   };
 
+  const transferOrganizationOwner = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    await run("organization.owner.transfer", () =>
+      client.transferOrganizationOwner(organization.id, {
+        new_owner_actor_id: required(form, "new_owner_actor_id"),
+      }),
+    );
+  };
+
   const configureTeam = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!team) return;
@@ -74,7 +84,7 @@ export function OrganizationConfigurationPanel({
       {error ? <ErrorState error={error} /> : null}
       <div className="two-column">
         <Card title="Edit organization">
-          <form className="form-grid" key={organization.id} onSubmit={updateOrganization}>
+          <form className="form-grid" key={`edit:${organization.id}`} onSubmit={updateOrganization}>
             <label>
               Name
               <input name="name" defaultValue={organization.name} required />
@@ -117,6 +127,36 @@ export function OrganizationConfigurationPanel({
               disabled={busy !== null || organization.status !== "active"}
             >
               {busy === "organization.update" ? "Saving…" : "Save organization"}
+            </button>
+          </form>
+
+          <form
+            className="form-grid"
+            key={`owner:${organization.id}:${organization.owner_actor_id}`}
+            onSubmit={transferOrganizationOwner}
+          >
+            <label>
+              Current owner
+              <input value={organization.owner_actor_id} readOnly />
+            </label>
+            <label>
+              New owner actor ref
+              <input
+                name="new_owner_actor_id"
+                placeholder="user:alice"
+                aria-describedby="owner-transfer-help"
+                required
+              />
+            </label>
+            <p id="owner-transfer-help" className="muted">
+              The target must already have an active membership in this organization. Only the
+              current owner can perform the transfer.
+            </p>
+            <button
+              className="secondary"
+              disabled={busy !== null || organization.status !== "active"}
+            >
+              {busy === "organization.owner.transfer" ? "Transferring…" : "Transfer ownership"}
             </button>
           </form>
         </Card>
