@@ -23,7 +23,7 @@ from .automation_api import (
 )
 from .extensions import ResourceService
 from .models import PageQuery, RequestContext, paginate
-from .registered_search_contract import ControlPlane as _RegisteredSearchControlPlane
+from .search_checkpoint_contract import ControlPlane as _RegisteredSearchControlPlane
 
 _CONFIGURATION_COMMANDS = frozenset(
     {

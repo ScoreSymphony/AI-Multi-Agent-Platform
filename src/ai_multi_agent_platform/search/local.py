@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import UTC, datetime
+
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext, ProviderDescriptor
 
+from .checkpoint import SEARCH_INDEX_SCHEMA_VERSION, SearchIndexCheckpoint
 from .models import (
     SearchDocument,
     SearchMode,
@@ -20,12 +24,28 @@ from .provider import SearchProvider
 class LocalSearchProvider(SearchProvider):
     """Small in-memory derived index with deterministic keyword ranking."""
 
-    def __init__(self, *, provider_id: str = "search_local") -> None:
+    def __init__(
+        self,
+        *,
+        provider_id: str = "search_local",
+        index_schema_version: str = SEARCH_INDEX_SCHEMA_VERSION,
+    ) -> None:
+        if not index_schema_version.strip():
+            raise ValueError("index_schema_version must not be blank")
         self._documents: dict[tuple[str, str], SearchDocument] = {}
+        self._index_schema_version = index_schema_version
+        self._checkpoint: SearchIndexCheckpoint | None = None
         self._descriptor = ProviderDescriptor(
             provider_id=provider_id,
             provider_type="search",
-            supported_operations=("exact", "keyword", "metadata", "rebuild"),
+            supported_operations=(
+                "exact",
+                "keyword",
+                "metadata",
+                "rebuild",
+                "checkpoint",
+                "mark_stale",
+            ),
             resources={
                 "modes": [
                     SearchMode.EXACT.value,
@@ -33,6 +53,7 @@ class LocalSearchProvider(SearchProvider):
                     SearchMode.METADATA.value,
                 ],
                 "authoritative": False,
+                "index_schema_version": index_schema_version,
             },
         )
 
@@ -41,7 +62,9 @@ class LocalSearchProvider(SearchProvider):
         return self._descriptor
 
     async def upsert(self, document: SearchDocument, context: OperationContext) -> None:
+        del context
         self._documents[document.key] = document
+        self._record_incremental_change()
 
     async def delete(
         self,
@@ -49,16 +72,73 @@ class LocalSearchProvider(SearchProvider):
         resource_id: str,
         context: OperationContext,
     ) -> None:
+        del context
         self._documents.pop((resource_type, resource_id), None)
+        self._record_incremental_change()
 
     async def rebuild(
         self,
         documents: tuple[SearchDocument, ...],
         context: OperationContext,
     ) -> None:
+        del context
         self._documents = {document.key: document for document in documents}
+        previous_generation = self._checkpoint.generation if self._checkpoint is not None else 0
+        self._checkpoint = SearchIndexCheckpoint(
+            generation=previous_generation + 1,
+            schema_version=self._index_schema_version,
+            document_count=len(self._documents),
+            rebuilt_at=datetime.now(UTC).isoformat(),
+            stale=False,
+        )
+
+    async def index_checkpoint(
+        self,
+        context: OperationContext,
+    ) -> SearchIndexCheckpoint | None:
+        del context
+        return self._checkpoint
+
+    async def mark_stale(self, reason: str, context: OperationContext) -> None:
+        del context
+        if not reason.strip():
+            raise ValueError("search stale reason must not be blank")
+        if self._checkpoint is None:
+            self._checkpoint = SearchIndexCheckpoint(
+                generation=0,
+                schema_version=self._index_schema_version,
+                document_count=len(self._documents),
+                rebuilt_at=None,
+                stale=True,
+                stale_reason=reason,
+            )
+            return
+        self._checkpoint = replace(
+            self._checkpoint,
+            document_count=len(self._documents),
+            stale=True,
+            stale_reason=reason,
+        )
+
+    def _record_incremental_change(self) -> None:
+        if self._checkpoint is None:
+            self._checkpoint = SearchIndexCheckpoint(
+                generation=1,
+                schema_version=self._index_schema_version,
+                document_count=len(self._documents),
+                rebuilt_at=None,
+                stale=True,
+                stale_reason="incremental update before full rebuild",
+            )
+            return
+        self._checkpoint = replace(
+            self._checkpoint,
+            generation=self._checkpoint.generation + 1,
+            document_count=len(self._documents),
+        )
 
     async def search(self, query: SearchQuery, context: OperationContext) -> SearchPage:
+        del context
         if query.mode in {SearchMode.SEMANTIC, SearchMode.HYBRID}:
             raise ContractError(
                 ErrorCode.UNSUPPORTED_CAPABILITY,
