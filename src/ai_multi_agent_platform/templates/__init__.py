@@ -1,0 +1,58 @@
+"""Reusable, versioned configuration Templates."""
+
+from .models import (
+    CapabilityRequirement,
+    TemplateCompatibility,
+    TemplateConfiguration,
+    TemplateContent,
+    TemplateDefinition,
+    TemplateDependency,
+    TemplateInstantiation,
+    TemplateInstantiationProvenance,
+    TemplateProvenance,
+    TemplateRequirements,
+    TemplateResourceChange,
+    TemplateResourceRef,
+    TemplateRevision,
+    TemplateRevisionRef,
+    TemplateRevisionState,
+    TemplateTrust,
+    TemplateType,
+)
+from .repository import InMemoryTemplateRepository, TemplateRepository
+from .service import (
+    TemplateEnvironment,
+    TemplateHandlerRegistry,
+    TemplatePreview,
+    TemplateResourceHandler,
+    TemplateService,
+    validate_template_configuration,
+)
+
+__all__ = [
+    "CapabilityRequirement",
+    "InMemoryTemplateRepository",
+    "TemplateCompatibility",
+    "TemplateConfiguration",
+    "TemplateContent",
+    "TemplateDefinition",
+    "TemplateDependency",
+    "TemplateEnvironment",
+    "TemplateHandlerRegistry",
+    "TemplateInstantiation",
+    "TemplateInstantiationProvenance",
+    "TemplatePreview",
+    "TemplateProvenance",
+    "TemplateRepository",
+    "TemplateRequirements",
+    "TemplateResourceChange",
+    "TemplateResourceHandler",
+    "TemplateResourceRef",
+    "TemplateRevision",
+    "TemplateRevisionRef",
+    "TemplateRevisionState",
+    "TemplateService",
+    "TemplateTrust",
+    "TemplateType",
+    "validate_template_configuration",
+]
