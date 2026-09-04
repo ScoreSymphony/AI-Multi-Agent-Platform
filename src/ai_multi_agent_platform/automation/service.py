@@ -28,9 +28,16 @@ from .models import (
     utc_now,
 )
 from .repository import AutomationRepository
+from .retry_policy import (
+    RetryDisposition,
+    classify_delivery_failure,
+    next_retry_at,
+    retry_exhausted,
+)
 
 TaskCreator = Callable[[Automation, TriggerDelivery, dict[str, JsonValue], str], Awaitable[str]]
 AutomationEventSink = Callable[[dict[str, JsonValue]], Awaitable[None]]
+AutomationClock = Callable[[], datetime]
 
 DEFAULT_MAX_WEBHOOK_PAYLOAD_BYTES = 256 * 1024
 DEFAULT_MAX_WEBHOOK_EVENT_ID_LENGTH = 512
@@ -49,6 +56,7 @@ class AutomationService:
         max_webhook_payload_bytes: int = DEFAULT_MAX_WEBHOOK_PAYLOAD_BYTES,
         max_webhook_event_id_length: int = DEFAULT_MAX_WEBHOOK_EVENT_ID_LENGTH,
         max_webhook_source_length: int = DEFAULT_MAX_WEBHOOK_SOURCE_LENGTH,
+        clock: AutomationClock = utc_now,
     ) -> None:
         if max_webhook_payload_bytes < 1:
             raise ValueError("max_webhook_payload_bytes must be positive")
@@ -62,7 +70,9 @@ class AutomationService:
         self._max_webhook_payload_bytes = max_webhook_payload_bytes
         self._max_webhook_event_id_length = max_webhook_event_id_length
         self._max_webhook_source_length = max_webhook_source_length
+        self._clock = clock
         self._locks: dict[str, asyncio.Lock] = {}
+        self._delivery_locks: dict[str, asyncio.Lock] = {}
 
     @property
     def repository(self) -> AutomationRepository:
@@ -120,9 +130,12 @@ class AutomationService:
         now: datetime | None = None,
     ) -> Automation:
         automation = await self._repository.get_automation(automation_id)
-        current = require_aware(now or utc_now(), "now")
+        current = require_aware(now or self._clock(), "now")
         updated = automation.with_state(state, current)
-        return await self._repository.save_automation(updated)
+        persisted = await self._repository.save_automation(updated)
+        if state is not AutomationState.ENABLED:
+            await self._emit_retry_suppressed_for_state(persisted)
+        return persisted
 
     async def update_automation(
         self,
@@ -138,7 +151,7 @@ class AutomationService:
         now: datetime | None = None,
     ) -> Automation:
         automation = await self._repository.get_automation(automation_id)
-        current = require_aware(now or utc_now(), "now")
+        current = require_aware(now or self._clock(), "now")
         next_trigger = trigger or automation.trigger
         updated = replace(
             automation,
@@ -164,7 +177,7 @@ class AutomationService:
         return await self._repository.save_automation(updated)
 
     async def evaluate_due(self, *, now: datetime | None = None) -> tuple[TriggerDelivery, ...]:
-        current = require_aware(now or utc_now(), "now").astimezone(UTC)
+        current = require_aware(now or self._clock(), "now").astimezone(UTC)
         fired: list[TriggerDelivery] = []
         for automation in await self._repository.list_automations():
             if automation.state is not AutomationState.ENABLED:
@@ -203,6 +216,52 @@ class AutomationService:
             )
             await self._repository.save_automation(advanced)
         return tuple(fired)
+
+    async def retry_due_deliveries(
+        self, *, now: datetime | None = None
+    ) -> tuple[TriggerDelivery, ...]:
+        """Process retryable failed deliveries whose durable retry deadline is due."""
+
+        current = require_aware(now or self._clock(), "now").astimezone(UTC)
+        automations = {item.id: item for item in await self._repository.list_automations()}
+        due = [
+            delivery
+            for delivery in await self._repository.list_deliveries()
+            if delivery.status is DeliveryStatus.FAILED
+            and delivery.retryable
+            and delivery.next_retry_at is not None
+            and delivery.next_retry_at.astimezone(UTC) <= current
+            and automations.get(delivery.automation_id) is not None
+            and automations[delivery.automation_id].state is AutomationState.ENABLED
+        ]
+        due.sort(
+            key=lambda delivery: (
+                cast_datetime(delivery.next_retry_at).astimezone(UTC),
+                delivery.id,
+            )
+        )
+        retried: list[TriggerDelivery] = []
+        for delivery in due:
+            retried.append(await self.retry_delivery(delivery.id))
+        return tuple(retried)
+
+    async def next_retry_wakeup(self) -> datetime | None:
+        """Return the next retry deadline for an enabled Automation, if any."""
+
+        enabled_ids = {
+            automation.id
+            for automation in await self._repository.list_automations()
+            if automation.state is AutomationState.ENABLED
+        }
+        candidates = [
+            delivery.next_retry_at
+            for delivery in await self._repository.list_deliveries()
+            if delivery.automation_id in enabled_ids
+            and delivery.status is DeliveryStatus.FAILED
+            and delivery.retryable
+            and delivery.next_retry_at is not None
+        ]
+        return None if not candidates else min(cast_datetime(item) for item in candidates)
 
     def validate_webhook_input(
         self,
@@ -264,7 +323,7 @@ class AutomationService:
         automation = await self._repository.get_automation(automation_id)
         if automation.trigger.type is not TriggerType.WEBHOOK:
             raise ContractError(ErrorCode.INVALID_REQUEST, "automation is not webhook-triggered")
-        occurred = require_aware(fired_at or utc_now(), "fired_at")
+        occurred = require_aware(fired_at or self._clock(), "fired_at")
         dedupe_key = f"webhook:{source}:{event_id}"
         if not verified:
             existing = await self._repository.find_delivery_by_dedupe(automation.id, dedupe_key)
@@ -306,7 +365,7 @@ class AutomationService:
         payload: dict[str, JsonValue],
         fired_at: datetime | None = None,
     ) -> tuple[TriggerDelivery, ...]:
-        occurred = require_aware(fired_at or utc_now(), "fired_at")
+        occurred = require_aware(fired_at or self._clock(), "fired_at")
         deliveries: list[TriggerDelivery] = []
         for automation in await self._repository.list_automations():
             trigger = automation.trigger
@@ -342,7 +401,7 @@ class AutomationService:
             trigger_type=TriggerType.MANUAL,
             source="manual-test",
             dedupe_key=f"manual:{occurrence_id}",
-            fired_at=require_aware(fired_at or utc_now(), "fired_at"),
+            fired_at=require_aware(fired_at or self._clock(), "fired_at"),
             payload=dict(payload or {}),
         )
 
@@ -351,10 +410,53 @@ class AutomationService:
         if delivery.status is not DeliveryStatus.FAILED:
             return delivery
         automation = await self._repository.get_automation(delivery.automation_id)
-        if delivery.attempt >= automation.retry_policy.max_attempts:
-            await self._emit(automation, delivery, "retry-exhausted")
+        if automation.state is not AutomationState.ENABLED:
+            await self._emit(automation, delivery, "retry-suppressed")
             return delivery
-        return await self._process(automation, delivery)
+        if delivery.attempt >= automation.retry_policy.max_attempts:
+            exhausted = delivery
+            if delivery.retry_exhausted_at is None:
+                exhausted = replace(
+                    delivery,
+                    next_retry_at=None,
+                    retry_exhausted_at=require_aware(self._clock(), "retry_exhausted_at"),
+                )
+                exhausted = await self._repository.save_delivery(exhausted)
+            await self._emit(automation, exhausted, "retry-exhausted")
+            return exhausted
+
+        delivery_lock = self._delivery_locks.setdefault(delivery.id, asyncio.Lock())
+        if delivery_lock.locked():
+            return await self._repository.get_delivery(delivery.id)
+        async with delivery_lock:
+            current = await self._repository.get_delivery(delivery.id)
+            if current.status is not DeliveryStatus.FAILED:
+                return current
+            latest_automation = await self._repository.get_automation(current.automation_id)
+            if latest_automation.state is not AutomationState.ENABLED:
+                await self._emit(latest_automation, current, "retry-suppressed")
+                return current
+            if current.attempt >= latest_automation.retry_policy.max_attempts:
+                exhausted = current
+                if current.retry_exhausted_at is None:
+                    exhausted = replace(
+                        current,
+                        next_retry_at=None,
+                        retry_exhausted_at=require_aware(self._clock(), "retry_exhausted_at"),
+                    )
+                    exhausted = await self._repository.save_delivery(exhausted)
+                await self._emit(latest_automation, exhausted, "retry-exhausted")
+                return exhausted
+
+            if latest_automation.overlap_policy is OverlapPolicy.ALLOW:
+                return await self._process(latest_automation, current)
+
+            automation_lock = self._locks.setdefault(latest_automation.id, asyncio.Lock())
+            if automation_lock.locked():
+                await self._emit(latest_automation, current, "retry-suppressed-overlap")
+                return current
+            async with automation_lock:
+                return await self._process(latest_automation, current)
 
     async def _deliver(
         self,
@@ -445,14 +547,20 @@ class AutomationService:
 
     async def _process(self, automation: Automation, delivery: TriggerDelivery) -> TriggerDelivery:
         started = perf_counter()
+        is_retry = delivery.attempt > 0
         processing = replace(
             delivery,
             status=DeliveryStatus.PROCESSING,
             attempt=delivery.attempt + 1,
             error_code=None,
             error_message=None,
+            retryable=False,
+            next_retry_at=None,
+            retry_exhausted_at=None,
         )
         await self._repository.save_delivery(processing)
+        if is_retry:
+            await self._emit(automation, processing, "retry-started")
         rendered = automation.task_template.render(
             automation_id=automation.id,
             delivery_id=processing.id,
@@ -462,26 +570,24 @@ class AutomationService:
         try:
             task_id = await self._task_creator(automation, processing, rendered, idempotency_key)
         except ContractError as exc:
-            failed = replace(
+            failed = await self._persist_failure(
+                automation,
                 processing,
-                status=DeliveryStatus.FAILED,
                 error_code=exc.code.value,
                 error_message=exc.message,
-                processing_duration_ms=(perf_counter() - started) * 1000,
+                retryable_hint=exc.retryable,
+                started=started,
             )
-            await self._repository.save_delivery(failed)
-            await self._emit(automation, failed, "failed")
             return failed
         except Exception as exc:
-            failed = replace(
+            failed = await self._persist_failure(
+                automation,
                 processing,
-                status=DeliveryStatus.FAILED,
                 error_code="automation_task_creation_failed",
                 error_message=str(exc),
-                processing_duration_ms=(perf_counter() - started) * 1000,
+                retryable_hint=True,
+                started=started,
             )
-            await self._repository.save_delivery(failed)
-            await self._emit(automation, failed, "failed")
             return failed
 
         succeeded = replace(
@@ -489,10 +595,74 @@ class AutomationService:
             status=DeliveryStatus.SUCCEEDED,
             generated_task_id=task_id,
             processing_duration_ms=(perf_counter() - started) * 1000,
+            retryable=False,
+            next_retry_at=None,
+            retry_exhausted_at=None,
         )
         await self._repository.save_delivery(succeeded)
         await self._emit(automation, succeeded, "succeeded")
+        if is_retry:
+            await self._emit(automation, succeeded, "retry-succeeded")
         return succeeded
+
+    async def _persist_failure(
+        self,
+        automation: Automation,
+        processing: TriggerDelivery,
+        *,
+        error_code: str,
+        error_message: str,
+        retryable_hint: bool,
+        started: float,
+    ) -> TriggerDelivery:
+        failed_at = require_aware(self._clock(), "failed_at").astimezone(UTC)
+        disposition = classify_delivery_failure(
+            error_code,
+            retryable_hint=retryable_hint,
+        )
+        retryable = disposition is RetryDisposition.RETRYABLE
+        exhausted = retryable and retry_exhausted(
+            automation.retry_policy,
+            completed_attempts=processing.attempt,
+        )
+        scheduled_at = (
+            next_retry_at(
+                automation.retry_policy,
+                failed_attempt=processing.attempt,
+                failed_at=failed_at,
+            )
+            if retryable and not exhausted
+            else None
+        )
+        failed = replace(
+            processing,
+            status=DeliveryStatus.FAILED,
+            error_code=error_code,
+            error_message=error_message,
+            processing_duration_ms=(perf_counter() - started) * 1000,
+            retryable=retryable,
+            last_failed_at=failed_at,
+            next_retry_at=scheduled_at,
+            retry_exhausted_at=failed_at if exhausted else None,
+        )
+        persisted = await self._repository.save_delivery(failed)
+        await self._emit(automation, persisted, "failed")
+        if retryable:
+            await self._emit(
+                automation,
+                persisted,
+                "retry-exhausted" if exhausted else "retry-scheduled",
+            )
+        return persisted
+
+    async def _emit_retry_suppressed_for_state(self, automation: Automation) -> None:
+        for delivery in await self._repository.list_deliveries(automation.id):
+            if (
+                delivery.status is DeliveryStatus.FAILED
+                and delivery.retryable
+                and delivery.next_retry_at is not None
+            ):
+                await self._emit(automation, delivery, "retry-suppressed")
 
     async def _emit(self, automation: Automation, delivery: TriggerDelivery, outcome: str) -> None:
         if self._event_sink is None:
@@ -510,6 +680,20 @@ class AutomationService:
                 "dedupe_key": delivery.dedupe_key,
                 "outcome": outcome,
                 "error_code": delivery.error_code,
+                "attempt": delivery.attempt,
+                "retryable": delivery.retryable,
+                "last_failed_at": (
+                    None if delivery.last_failed_at is None else delivery.last_failed_at.isoformat()
+                ),
+                "next_retry_at": (
+                    None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
+                ),
+                "retry_exhausted_at": (
+                    None
+                    if delivery.retry_exhausted_at is None
+                    else delivery.retry_exhausted_at.isoformat()
+                ),
+                "automation_state": automation.state.value,
             }
         )
 
@@ -531,6 +715,12 @@ class ReferenceScheduler:
             and automation.next_evaluation_at is not None
         ]
         return None if not candidates else min(candidates)
+
+
+def cast_datetime(value: datetime | None) -> datetime:
+    if value is None:
+        raise ValueError("expected retry timestamp")
+    return value
 
 
 def _matches(filters: dict[str, JsonValue], payload: dict[str, JsonValue]) -> bool:

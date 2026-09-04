@@ -330,6 +330,15 @@ def _automation_json(automation: Automation) -> dict[str, JsonValue]:
             if automation.next_evaluation_at is None
             else automation.next_evaluation_at.isoformat()
         ),
+        "invalidation_reason_code": automation.invalidation_reason_code,
+        "invalidated_at": (
+            None if automation.invalidated_at is None else automation.invalidated_at.isoformat()
+        ),
+        "state_before_invalid": (
+            None
+            if automation.state_before_invalid is None
+            else automation.state_before_invalid.value
+        ),
     }
 
 
@@ -349,6 +358,16 @@ def _delivery_json(delivery: TriggerDelivery) -> dict[str, JsonValue]:
         "error_code": delivery.error_code,
         "error_message": delivery.error_message,
         "processing_duration_ms": delivery.processing_duration_ms,
+        "retryable": delivery.retryable,
+        "last_failed_at": (
+            None if delivery.last_failed_at is None else delivery.last_failed_at.isoformat()
+        ),
+        "next_retry_at": (
+            None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
+        ),
+        "retry_exhausted_at": (
+            None if delivery.retry_exhausted_at is None else delivery.retry_exhausted_at.isoformat()
+        ),
     }
 
 
@@ -397,6 +416,21 @@ def _automation_from_json(encoded: str) -> Automation:
                 cast(str, trigger_raw.get("missed_schedule_policy", "coalesce"))
             ),
         )
+        state = AutomationState(cast(str, raw["state"]))
+        updated_at = _time(raw["updated_at"])
+        invalidation_reason_code = cast(str | None, raw.get("invalidation_reason_code"))
+        invalidated_at = _optional_time(raw.get("invalidated_at"))
+        state_before_invalid_raw = cast(str | None, raw.get("state_before_invalid"))
+        state_before_invalid = (
+            None if state_before_invalid_raw is None else AutomationState(state_before_invalid_raw)
+        )
+        # #18 could persist the canonical INVALID enum before #241 gave it lifecycle metadata.
+        # Preserve readability for such rows and fail closed by restoring them to DISABLED only
+        # after an explicit revalidation.
+        if state is AutomationState.INVALID and invalidation_reason_code is None:
+            invalidation_reason_code = "legacy_invalid_state"
+            invalidated_at = updated_at
+            state_before_invalid = AutomationState.DISABLED
         return Automation(
             id=cast(str, raw["id"]),
             name=cast(str, raw["name"]),
@@ -416,7 +450,7 @@ def _automation_from_json(encoded: str) -> Automation:
             ),
             project_id=cast(str | None, raw.get("project_id")),
             workspace_id=cast(str | None, raw.get("workspace_id")),
-            state=AutomationState(cast(str, raw["state"])),
+            state=state,
             deduplication_strategy=cast(str, raw["deduplication_strategy"]),
             retry_policy=RetryPolicy(
                 max_attempts=cast(int, retry_raw["max_attempts"]),
@@ -424,10 +458,13 @@ def _automation_from_json(encoded: str) -> Automation:
             ),
             overlap_policy=OverlapPolicy(cast(str, raw["overlap_policy"])),
             created_at=_time(raw["created_at"]),
-            updated_at=_time(raw["updated_at"]),
+            updated_at=updated_at,
             revision=cast(int, raw["revision"]),
             last_evaluated_at=_optional_time(raw.get("last_evaluated_at")),
             next_evaluation_at=_optional_time(raw.get("next_evaluation_at")),
+            invalidation_reason_code=invalidation_reason_code,
+            invalidated_at=invalidated_at,
+            state_before_invalid=state_before_invalid,
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ContractError(
@@ -453,6 +490,10 @@ def _delivery_from_json(encoded: str) -> TriggerDelivery:
             error_code=cast(str | None, raw.get("error_code")),
             error_message=cast(str | None, raw.get("error_message")),
             processing_duration_ms=cast(float | None, raw.get("processing_duration_ms")),
+            retryable=bool(raw.get("retryable", False)),
+            last_failed_at=_optional_time(raw.get("last_failed_at")),
+            next_retry_at=_optional_time(raw.get("next_retry_at")),
+            retry_exhausted_at=_optional_time(raw.get("retry_exhausted_at")),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ContractError(
