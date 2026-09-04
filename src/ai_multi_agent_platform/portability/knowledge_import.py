@@ -90,7 +90,10 @@ class KnowledgeSourceImportMutationHandler:
                 if index.revision != source.revision or index.status is not KnowledgeStatus.READY:
                     raise ContractError(
                         ErrorCode.CONTRACT_VIOLATION,
-                        "destination KnowledgeProvider did not rebuild the imported source revision",
+                        (
+                            "destination KnowledgeProvider did not rebuild the imported "
+                            "source revision"
+                        ),
                         details={"source_id": source.source_id},
                     )
             return source.source_id
