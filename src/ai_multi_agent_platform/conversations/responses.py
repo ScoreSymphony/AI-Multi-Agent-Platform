@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.domain import validate_id
 
 from .models import ConversationMessage, ModelRoutingPreference
 
@@ -53,6 +54,7 @@ class ConversationResponseRequest:
     source_message_id: str
     target: ConversationResponseTarget
     history: tuple[ConversationMessage, ...]
+    project_id: str | None = None
     model_preference: ModelRoutingPreference | None = None
 
     def __post_init__(self) -> None:
@@ -65,6 +67,8 @@ class ConversationResponseRequest:
         ):
             if not value.strip():
                 raise ValueError(f"{name} must not be blank")
+        if self.project_id is not None:
+            validate_id(self.project_id, "project")
         if not self.history:
             raise ValueError("conversation response requires durable message history")
         if self.history[-1].id != self.source_message_id:
