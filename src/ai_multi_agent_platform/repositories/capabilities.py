@@ -8,7 +8,8 @@ from ai_multi_agent_platform.capabilities.types import (
     SafetyClassification,
     SideEffectClassification,
 )
-from ai_multi_agent_platform.repositories.models import (
+
+from .models import (
     RepositoryCapability,
     RepositoryOperation,
 )
