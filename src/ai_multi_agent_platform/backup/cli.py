@@ -22,7 +22,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "create":
-            result = create_single_node_backup(
+            backup_path = create_single_node_backup(
                 data_dir=Path(args.data_dir),
                 destination=Path(args.destination),
                 platform_version=__version__,
@@ -30,29 +30,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                 deployment_metadata={"profile": "single-node"},
                 quiesced=args.quiesced,
             )
-            print(json.dumps({"backup": str(result), "status": "created"}, sort_keys=True))
+            print(json.dumps({"backup": str(backup_path), "status": "created"}, sort_keys=True))
             return 0
         if args.command == "verify":
-            result = verify_backup(Path(args.backup))
+            verification = verify_backup(Path(args.backup))
             print(
                 json.dumps(
                     {
-                        "backup": str(result.backup_dir),
+                        "backup": str(verification.backup_dir),
                         "status": "valid",
-                        "files_checked": result.files_checked,
-                        "bytes_checked": result.bytes_checked,
+                        "files_checked": verification.files_checked,
+                        "bytes_checked": verification.bytes_checked,
                     },
                     sort_keys=True,
                 )
             )
             return 0
         if args.command == "restore":
-            result = restore_single_node_backup(
+            restored_data_dir = restore_single_node_backup(
                 backup_dir=Path(args.backup),
                 target_data_dir=Path(args.target_data_dir),
                 expected_platform_version=__version__,
             )
-            print(json.dumps({"data_dir": str(result), "status": "restored"}, sort_keys=True))
+            print(
+                json.dumps(
+                    {"data_dir": str(restored_data_dir), "status": "restored"}, sort_keys=True
+                )
+            )
             return 0
     except BackupError as exc:
         parser.exit(2, f"backup error: {exc}\n")
