@@ -209,9 +209,7 @@ class RepositoryRunIntegration:
             current,
             output_revision=output_revision,
             actor_ref=actor_ref or current.actor_ref,
-            diff_artifact_ids=tuple(
-                dict.fromkeys((*current.diff_artifact_ids, *artifact_ids))
-            ),
+            diff_artifact_ids=tuple(dict.fromkeys((*current.diff_artifact_ids, *artifact_ids))),
             recorded_at=utc_now(),
         )
         self._provenance.upsert(updated)
