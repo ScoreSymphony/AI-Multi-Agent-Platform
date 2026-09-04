@@ -22,6 +22,7 @@ AUDITED_ORGANIZATION_COMMANDS = frozenset(
     {
         "organization.create",
         "organization.update",
+        "organization.owner.transfer",
         "organization.archive",
         "team.create",
         "team.update",
@@ -212,6 +213,7 @@ def _audit_payload(
         ("organization_id", "organization_id"),
         ("team_id", "team_id"),
         ("actor_id", "affected_actor_id"),
+        ("owner_actor_id", "owner_actor_id"),
         ("status", "status"),
     ):
         value = result.get(source)
@@ -243,6 +245,7 @@ def _audit_resource(event: Event) -> dict[str, JsonValue]:
         "resource_id",
         "team_id",
         "affected_actor_id",
+        "owner_actor_id",
         "status",
     ):
         value = event.payload.get(field)
