@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane import ControlPlane, RequestContext
 from ai_multi_agent_platform.control_plane.models import ActorContext, OwnerType
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
@@ -140,6 +141,84 @@ def test_organization_and_team_configuration_are_canonical_and_audited() -> None
             event.provenance is not None and event.provenance.actor_ref == "user:owner"
             for event in history
         )
+
+    asyncio.run(scenario())
+
+
+def test_organization_owner_transfer_requires_current_owner_and_active_target() -> None:
+    async def scenario() -> None:
+        control_plane, organizations, repository = _stack()
+        organization = await organizations.create_organization(
+            name="Transfer Org",
+            owner_actor_id="user:owner",
+            administrator_actor_ids=("user:admin",),
+        )
+        owner_membership = await organizations.add_member(
+            actor_id="user:owner",
+            actor_type=ActorType.HUMAN,
+            organization_id=organization.id,
+        )
+        await organizations.add_member(
+            actor_id="user:admin",
+            actor_type=ActorType.HUMAN,
+            organization_id=organization.id,
+        )
+
+        with pytest.raises(ContractError) as admin_error:
+            await control_plane.execute_command(
+                _context(
+                    "user:admin",
+                    owner_type="organization",
+                    owner_id=organization.id,
+                    key="owner-transfer-admin",
+                ),
+                "organization.owner.transfer",
+                organization.id,
+                {"new_owner_actor_id": "user:admin"},
+            )
+        assert admin_error.value.code is ErrorCode.FORBIDDEN
+        assert (await repository.get_organization(organization.id)).owner_actor_id == "user:owner"
+
+        with pytest.raises(ValueError, match="active membership"):
+            await control_plane.execute_command(
+                _context(
+                    "user:owner",
+                    owner_type="organization",
+                    owner_id=organization.id,
+                    key="owner-transfer-missing-member",
+                ),
+                "organization.owner.transfer",
+                organization.id,
+                {"new_owner_actor_id": "user:not-a-member"},
+            )
+
+        transferred = await control_plane.execute_command(
+            _context(
+                "user:owner",
+                owner_type="organization",
+                owner_id=organization.id,
+                key="owner-transfer",
+            ),
+            "organization.owner.transfer",
+            organization.id,
+            {"new_owner_actor_id": "user:admin"},
+        )
+        assert transferred["owner_actor_id"] == "user:admin"
+        assert (await repository.get_organization(organization.id)).owner_actor_id == "user:admin"
+
+        left = await control_plane.execute_command(
+            _context(
+                "user:owner",
+                owner_type="user",
+                owner_id="owner",
+                key="former-owner-leave",
+            ),
+            "membership.leave",
+            owner_membership.id,
+            {},
+        )
+        assert left["status"] == MembershipStatus.LEFT.value
+        assert (await repository.get_membership(owner_membership.id)).status is MembershipStatus.LEFT
 
     asyncio.run(scenario())
 
