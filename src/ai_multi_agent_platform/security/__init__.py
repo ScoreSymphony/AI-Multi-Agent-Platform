@@ -52,8 +52,8 @@ from .control_plane_bridge import (
     ControlPlaneAuthorizationBridge,
     canonical_control_plane_vocabulary,
 )
-from .data_enforcement import (
-    AuthorizedDataFileProvider,
+from .data_enforcement import AuthorizedDataFileProvider
+from .data_enforcement_lifecycle import (
     AuthorizedDataKnowledgeProvider,
     AuthorizedDataMemoryProvider,
 )

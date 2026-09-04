@@ -7,6 +7,8 @@ from pathlib import Path
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
+from .aggregate_codec import decode_aggregate, encode_aggregate
+from .aggregation import AggregatedEvaluationResult
 from .codec import (
     decode_comparison,
     decode_result,
@@ -17,7 +19,8 @@ from .codec import (
 )
 from .models import ComparisonReport, EvaluationResult, EvaluationRun
 
-_STORAGE_SCHEMA_VERSION = "1"
+_STORAGE_SCHEMA_VERSION = "2"
+_SUPPORTED_STORAGE_SCHEMA_VERSIONS = {"1", _STORAGE_SCHEMA_VERSION}
 
 
 def _require_limit(limit: int | None) -> None:
@@ -26,7 +29,7 @@ def _require_limit(limit: int | None) -> None:
 
 
 class SqliteEvaluationRepository:
-    """Restart-safe evaluation run/result/comparison history and indexed case queries."""
+    """Restart-safe evaluation run/result/aggregate/comparison history and indexed queries."""
 
     def __init__(self, path: str | Path) -> None:
         self._path = Path(path)
@@ -50,6 +53,23 @@ class SqliteEvaluationRepository:
                     )
                     """
                 )
+                row = connection.execute(
+                    "SELECT value FROM evaluation_storage_meta WHERE key = 'schema_version'"
+                ).fetchone()
+                if row is None:
+                    storage_version = _STORAGE_SCHEMA_VERSION
+                    connection.execute(
+                        "INSERT INTO evaluation_storage_meta(key, value) VALUES (?, ?)",
+                        ("schema_version", storage_version),
+                    )
+                else:
+                    storage_version = str(row["value"])
+                if storage_version not in _SUPPORTED_STORAGE_SCHEMA_VERSIONS:
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "unsupported evaluation SQLite storage schema version",
+                    )
+
                 connection.execute(
                     """
                     CREATE TABLE IF NOT EXISTS evaluation_runs (
@@ -80,6 +100,22 @@ class SqliteEvaluationRepository:
                 )
                 connection.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS evaluation_aggregates (
+                        result_id TEXT PRIMARY KEY,
+                        evaluation_run_id TEXT NOT NULL,
+                        case_id TEXT NOT NULL,
+                        case_version TEXT NOT NULL,
+                        evaluator_id TEXT NOT NULL,
+                        aggregation_policy_id TEXT NOT NULL,
+                        aggregation_policy_version TEXT NOT NULL,
+                        outcome TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        aggregate_json TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS evaluation_comparisons (
                         current_run_id TEXT PRIMARY KEY,
                         baseline_run_id TEXT NOT NULL,
@@ -102,16 +138,15 @@ class SqliteEvaluationRepository:
                     "ON evaluation_results(case_id, evaluator_id, created_at DESC)"
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO evaluation_storage_meta(key, value) VALUES (?, ?)",
-                    ("schema_version", _STORAGE_SCHEMA_VERSION),
+                    "CREATE INDEX IF NOT EXISTS idx_evaluation_aggregates_run_policy "
+                    "ON evaluation_aggregates("
+                    "evaluation_run_id, aggregation_policy_id, aggregation_policy_version, "
+                    "case_id, evaluator_id)"
                 )
-                row = connection.execute(
-                    "SELECT value FROM evaluation_storage_meta WHERE key = 'schema_version'"
-                ).fetchone()
-                if row is None or str(row["value"]) != _STORAGE_SCHEMA_VERSION:
-                    raise ContractError(
-                        ErrorCode.CONTRACT_VIOLATION,
-                        "unsupported evaluation SQLite storage schema version",
+                if storage_version == "1":
+                    connection.execute(
+                        "UPDATE evaluation_storage_meta SET value = ? WHERE key = 'schema_version'",
+                        (_STORAGE_SCHEMA_VERSION,),
                     )
         except sqlite3.Error as exc:
             raise ContractError(
@@ -137,6 +172,16 @@ class SqliteEvaluationRepository:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "evaluation result is not strict-JSON serializable",
+            ) from exc
+
+    @staticmethod
+    def _encode_aggregate(aggregate: AggregatedEvaluationResult) -> str:
+        try:
+            return encode_aggregate(aggregate)
+        except (TypeError, ValueError) as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "evaluation aggregate is not strict-JSON serializable",
             ) from exc
 
     @staticmethod
@@ -167,6 +212,16 @@ class SqliteEvaluationRepository:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "stored evaluation result is invalid",
+            ) from exc
+
+    @staticmethod
+    def _decode_aggregate(raw: str) -> AggregatedEvaluationResult:
+        try:
+            return decode_aggregate(raw)
+        except (TypeError, ValueError, KeyError) as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "stored evaluation aggregate is invalid",
             ) from exc
 
     @staticmethod
@@ -314,6 +369,82 @@ class SqliteEvaluationRepository:
                 ErrorCode.BACKEND_ERROR, "failed to list evaluation results"
             ) from exc
         return tuple(self._decode_result(str(row["result_json"])) for row in rows)
+
+    def save_aggregate(self, aggregate: AggregatedEvaluationResult) -> None:
+        self._require_run(aggregate.evaluation_run_id)
+        raw = self._encode_aggregate(aggregate)
+        created_at = aggregate.created_at
+        if not hasattr(created_at, "isoformat"):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "evaluation aggregate created_at must be datetime-like",
+            )
+        try:
+            with self._connect() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO evaluation_aggregates(
+                        result_id, evaluation_run_id, case_id, case_version, evaluator_id,
+                        aggregation_policy_id, aggregation_policy_version, outcome, created_at,
+                        aggregate_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(result_id) DO UPDATE SET
+                        evaluation_run_id = excluded.evaluation_run_id,
+                        case_id = excluded.case_id,
+                        case_version = excluded.case_version,
+                        evaluator_id = excluded.evaluator_id,
+                        aggregation_policy_id = excluded.aggregation_policy_id,
+                        aggregation_policy_version = excluded.aggregation_policy_version,
+                        outcome = excluded.outcome,
+                        created_at = excluded.created_at,
+                        aggregate_json = excluded.aggregate_json
+                    """,
+                    (
+                        aggregate.result_id,
+                        aggregate.evaluation_run_id,
+                        aggregate.case_id,
+                        aggregate.case_version,
+                        aggregate.evaluator.evaluator_id,
+                        aggregate.aggregation_policy_id,
+                        aggregate.aggregation_policy_version,
+                        aggregate.outcome.value,
+                        created_at.isoformat(),
+                        raw,
+                    ),
+                )
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to persist evaluation aggregate"
+            ) from exc
+
+    def list_aggregates(
+        self,
+        evaluation_run_id: str,
+        *,
+        aggregation_policy_id: str | None = None,
+        aggregation_policy_version: str | None = None,
+    ) -> tuple[AggregatedEvaluationResult, ...]:
+        clauses = ["evaluation_run_id = ?"]
+        parameters: list[str] = [evaluation_run_id]
+        if aggregation_policy_id is not None:
+            clauses.append("aggregation_policy_id = ?")
+            parameters.append(aggregation_policy_id)
+        if aggregation_policy_version is not None:
+            clauses.append("aggregation_policy_version = ?")
+            parameters.append(aggregation_policy_version)
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT aggregate_json FROM evaluation_aggregates WHERE "
+                    + " AND ".join(clauses)
+                    + " ORDER BY case_id ASC, evaluator_id ASC, result_id ASC",
+                    tuple(parameters),
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to list evaluation aggregates"
+            ) from exc
+        return tuple(self._decode_aggregate(str(row["aggregate_json"])) for row in rows)
 
     def list_case_results(
         self,
