@@ -249,6 +249,7 @@ class RepositoryRunProvenance:
     repository_id: str
     input_revision: str
     actor_ref: str
+    agent_id: str | None = None
     branch_ref: str | None = None
     output_revision: str | None = None
     task_id: str | None = None
@@ -261,6 +262,8 @@ class RepositoryRunProvenance:
         validate_id(self.repository_id, "external_resource")
         object.__setattr__(self, "input_revision", validate_git_revision(self.input_revision))
         _nonblank(self.actor_ref, "actor_ref")
+        if self.agent_id is not None:
+            validate_id(self.agent_id, "agent")
         if self.branch_ref is not None:
             _nonblank(self.branch_ref, "branch_ref")
         if self.output_revision is not None:
