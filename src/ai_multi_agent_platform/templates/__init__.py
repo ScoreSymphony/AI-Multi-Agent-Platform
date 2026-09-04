@@ -1,5 +1,11 @@
 """Reusable, versioned configuration Templates."""
 
+from .agent_handlers import (
+    AgentTeamTemplateHandler,
+    AgentTemplateExporter,
+    AgentTemplateHandler,
+    register_agent_template_handlers,
+)
 from .application import (
     CompositeTemplateHandler,
     ContextualTemplateHandlerRegistry,
@@ -38,6 +44,9 @@ from .service import (
 )
 
 __all__ = [
+    "AgentTeamTemplateHandler",
+    "AgentTemplateExporter",
+    "AgentTemplateHandler",
     "CapabilityRequirement",
     "CompositeTemplateHandler",
     "ContextualTemplateHandlerRegistry",
@@ -62,12 +71,12 @@ __all__ = [
     "TemplateRequirements",
     "TemplateResourceChange",
     "TemplateResourceHandler",
-    "TemplateResourceRef",
     "TemplateRevision",
     "TemplateRevisionRef",
     "TemplateRevisionState",
     "TemplateService",
     "TemplateTrust",
     "TemplateType",
+    "register_agent_template_handlers",
     "validate_template_configuration",
 ]
