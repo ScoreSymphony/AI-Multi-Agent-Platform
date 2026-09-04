@@ -343,7 +343,9 @@ class ControlPlane(_BaseControlPlane):
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         del context, payload
-        return _automation_resource(await self._automation_service.revalidate_automation(resource_ref))
+        return _automation_resource(
+            await self._automation_service.revalidate_automation(resource_ref)
+        )
 
     async def _automation_test_command(
         self,
