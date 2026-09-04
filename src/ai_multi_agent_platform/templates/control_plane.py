@@ -11,6 +11,7 @@ from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_object
 from ai_multi_agent_platform.domain import OwnerRef
 
+from .agent_handlers import AgentTemplateExporter
 from .application import TemplateApplicationService
 from .codec import template_content_from_json
 from .models import TemplateContent, TemplateProvenance, TemplateTrust
@@ -21,6 +22,7 @@ TEMPLATE_COLLECTION = "templates"
 TEMPLATE_INSTANCE_COLLECTION = "template-instances"
 TEMPLATE_COMMANDS = (
     "template.create",
+    "template.create-from-agent",
     "template.revise",
     "template.publish",
     "template.clone",
@@ -105,9 +107,11 @@ class TemplateCommandHandlers:
         application: TemplateApplicationService,
         *,
         environment_resolver: TemplateEnvironmentResolver | None = None,
+        agent_exporter: AgentTemplateExporter | None = None,
     ) -> None:
         self.application = application
         self.environment_resolver = environment_resolver
+        self.agent_exporter = agent_exporter
 
     async def create_template(
         self,
@@ -126,6 +130,27 @@ class TemplateCommandHandlers:
             content=content,
             project_id=_optional_string(payload, "project_id"),
             organization_id=_optional_string(payload, "organization_id"),
+        )
+        return _template_resource(self.application.repository, revision.template_id)
+
+    async def create_from_agent(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _require_collection(resource_ref, TEMPLATE_COLLECTION)
+        if self.agent_exporter is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "Agent-to-Template export is not enabled in this Control Plane composition",
+            )
+        revision = self.agent_exporter.create_from_agent(
+            _required_string(payload, "agent_id"),
+            owner_ref=_actor_owner(context),
+            author=context.actor.principal_ref,
+            revision=_optional_positive_int(payload, "revision"),
+            name=_optional_string(payload, "name"),
         )
         return _template_resource(self.application.repository, revision.template_id)
 
@@ -247,6 +272,7 @@ def register_template_control_plane(
     application: TemplateApplicationService,
     *,
     environment_resolver: TemplateEnvironmentResolver | None = None,
+    agent_exporter: AgentTemplateExporter | None = None,
 ) -> None:
     """Register Template resources/commands without changing the Control Plane foundation."""
 
@@ -261,8 +287,11 @@ def register_template_control_plane(
     handlers = TemplateCommandHandlers(
         application,
         environment_resolver=environment_resolver,
+        agent_exporter=agent_exporter,
     )
     control_plane.register_command("template.create", handlers.create_template)
+    if agent_exporter is not None:
+        control_plane.register_command("template.create-from-agent", handlers.create_from_agent)
     control_plane.register_command("template.revise", handlers.revise_template)
     control_plane.register_command("template.publish", handlers.publish_template)
     control_plane.register_command("template.clone", handlers.clone_template)
@@ -351,6 +380,13 @@ def _required(payload: dict[str, JsonValue], key: str) -> JsonValue:
     if key not in payload:
         raise ContractError(ErrorCode.INVALID_REQUEST, f"missing required field: {key}")
     return payload[key]
+
+
+def _required_string(payload: dict[str, JsonValue], key: str) -> str:
+    value = _required(payload, key)
+    if not isinstance(value, str) or not value.strip():
+        raise ContractError(ErrorCode.INVALID_REQUEST, f"{key} must be a non-blank string")
+    return value
 
 
 def _required_positive_int(payload: dict[str, JsonValue], key: str) -> int:
