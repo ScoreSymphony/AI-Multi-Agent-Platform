@@ -22,6 +22,7 @@ from ai_multi_agent_platform.conversations import (
     ConversationResponseRequest,
     ConversationResponseTarget,
     MessageRole,
+    ModelRoutingPreference,
     ModelRuntimeConversationResponseProvider,
 )
 from ai_multi_agent_platform.conversations.models import ConversationMessage
@@ -57,9 +58,7 @@ def _agent_profile(name: str, instruction: str) -> AgentProfile:
         name=name,
         role="assistant",
         instructions=AgentInstructions(role=InstructionSource(content=instruction, version="1")),
-        model=AgentModelPolicy(
-            requirements=RoutingRequirements(explicit_model_id="model-chat")
-        ),
+        model=AgentModelPolicy(requirements=RoutingRequirements(explicit_model_id="model-chat")),
     )
 
 
@@ -192,7 +191,6 @@ def test_conversation_model_preference_overrides_agent_model_choice() -> None:
         owner_ref=OwnerRef(type="user", id="alice"),
     )
     source = _message()
-    from ai_multi_agent_platform.conversations import ModelRoutingPreference
 
     request = ConversationResponseRequest(
         request_id="request-model-override",
