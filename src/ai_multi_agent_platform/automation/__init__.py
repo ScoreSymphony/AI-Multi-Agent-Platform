@@ -33,6 +33,10 @@ from .runtime import (
 )
 from .runtime_service import AutomationService
 from .service import AutomationEventSink, ReferenceScheduler, TaskCreator
+from .workspace_event_scope import (
+    CanonicalWorkspaceEventScopeResolver,
+    WorkspaceEventScopeResolver,
+)
 
 __all__ = [
     "Automation",
@@ -44,6 +48,7 @@ __all__ = [
     "AutomationRuntimeTick",
     "AutomationService",
     "AutomationState",
+    "CanonicalWorkspaceEventScopeResolver",
     "DeliveryStatus",
     "IdentityContext",
     "InMemoryAutomationRepository",
@@ -60,6 +65,7 @@ __all__ = [
     "TriggerDelivery",
     "TriggerType",
     "WebhookPayloadValidator",
+    "WorkspaceEventScopeResolver",
     "automation_change_actor",
     "automation_creation_idempotency_key",
 ]
