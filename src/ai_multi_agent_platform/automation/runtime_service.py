@@ -19,6 +19,7 @@ from .models import (
     require_aware,
     validate_invalidation_reason_code,
 )
+from .workspace_event_scope import WorkspaceEventScopeResolver
 
 _AUTO_INVALIDATING_DELIVERY_ERRORS = frozenset(
     {
@@ -41,6 +42,16 @@ _REVALIDATION_TRANSIENT_ERRORS = frozenset(
 
 class AutomationService(_HardenedAutomationService):
     """Final Automation service layer for canonical events, retries and INVALID lifecycle."""
+
+    _workspace_event_scope_resolver: WorkspaceEventScopeResolver | None = None
+
+    def configure_workspace_event_scope_resolver(
+        self,
+        resolver: WorkspaceEventScopeResolver | None,
+    ) -> None:
+        """Bind the canonical workspace resolver before event ingestion starts."""
+
+        self._workspace_event_scope_resolver = resolver
 
     async def set_state(
         self,
@@ -258,7 +269,16 @@ class AutomationService(_HardenedAutomationService):
             # runtime against an existing EventRepository therefore cannot backfire old events.
             if fired_at < automation.created_at:
                 continue
-            if not _canonical_event_visible_to_automation(automation, event):
+            visible, rejection_reason = await _canonical_event_visibility(
+                automation,
+                event,
+                self._workspace_event_scope_resolver,
+            )
+            if not visible:
+                await self._emit_event_visibility_rejection(
+                    automation,
+                    reason_code=rejection_reason or "scope_not_visible",
+                )
                 continue
             if not _matches(trigger.filters, payload):
                 continue
@@ -314,6 +334,28 @@ class AutomationService(_HardenedAutomationService):
                     else automation.invalidated_at.isoformat()
                 ),
                 "occurred_at": require_aware(occurred_at, "occurred_at").isoformat(),
+            }
+        )
+
+    async def _emit_event_visibility_rejection(
+        self,
+        automation: Automation,
+        *,
+        reason_code: str,
+    ) -> None:
+        """Audit scope rejection without including inaccessible Event/resource identifiers."""
+
+        if self._event_sink is None:
+            return
+        await self._event_sink(
+            {
+                "type": "automation.event_visibility",
+                "automation_id": automation.id,
+                "automation_revision": automation.revision,
+                "outcome": "rejected",
+                "reason_code": reason_code,
+                "project_scoped": automation.project_id is not None,
+                "workspace_scoped": automation.workspace_id is not None,
             }
         )
 
@@ -374,28 +416,44 @@ class AutomationService(_HardenedAutomationService):
         )
 
 
-def _canonical_event_visible_to_automation(
+async def _canonical_event_visibility(
     automation: Automation,
     event: PlatformEvent,
-) -> bool:
-    """Apply a conservative canonical visibility floor before trigger filters.
+    workspace_resolver: WorkspaceEventScopeResolver | None,
+) -> tuple[bool, str | None]:
+    """Apply project/workspace/owner visibility before any Automation trigger filters."""
 
-    An explicitly project-scoped Automation may consume Events from that project because the
-    Control Plane separately authorizes the Automation's project scope when it is configured.
-    An unscoped Automation is restricted to Events owned by the same canonical owner. Truly
-    global/unowned Events are reserved for service-owned Automations.
-    """
+    if automation.project_id is not None and event.project_id != automation.project_id:
+        return False, "project_scope_mismatch"
+
+    if automation.workspace_id is not None:
+        if workspace_resolver is None:
+            return False, "workspace_scope_unproven"
+        try:
+            event_workspace_id = await workspace_resolver.resolve_workspace_id(event)
+        except Exception:
+            # Visibility resolution is security-sensitive: any resolver/backend failure must
+            # reject rather than accidentally broadening access.
+            return False, "workspace_scope_resolution_failed"
+        if event_workspace_id is None:
+            return False, "workspace_scope_unproven"
+        if event_workspace_id != automation.workspace_id:
+            return False, "workspace_scope_mismatch"
+        if automation.project_id is not None:
+            return True, None
 
     if automation.project_id is not None:
-        return event.project_id == automation.project_id
+        return True, None
 
     if event.owner_ref is not None:
-        return (
+        visible = (
             event.owner_ref.type == automation.identity.owner_type
             and event.owner_ref.id == automation.identity.owner_id
         )
+        return (True, None) if visible else (False, "owner_scope_mismatch")
 
-    return event.project_id is None and automation.identity.owner_type == "service"
+    visible = event.project_id is None and automation.identity.owner_type == "service"
+    return (True, None) if visible else (False, "owner_scope_unproven")
 
 
 def _canonical_event_payload(event: PlatformEvent) -> dict[str, JsonValue]:
