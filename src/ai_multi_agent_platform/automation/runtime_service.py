@@ -3,18 +3,44 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, PlatformEvent
 
 from .hardened_service import AutomationService as _HardenedAutomationService
-from .models import Automation, AutomationState, TriggerDelivery, TriggerType, require_aware
+from .models import (
+    Automation,
+    AutomationState,
+    DeliveryStatus,
+    TriggerDelivery,
+    TriggerType,
+    require_aware,
+    validate_invalidation_reason_code,
+)
+
+_AUTO_INVALIDATING_DELIVERY_ERRORS = frozenset(
+    {
+        ErrorCode.INVALID_CONFIGURATION.value,
+        ErrorCode.UNSUPPORTED_CAPABILITY.value,
+    }
+)
+_REVALIDATION_TRANSIENT_ERRORS = frozenset(
+    {
+        ErrorCode.MODEL_UNAVAILABLE,
+        ErrorCode.UNAVAILABLE,
+        ErrorCode.TIMEOUT,
+        ErrorCode.RATE_LIMITED,
+        ErrorCode.RESOURCE_EXHAUSTED,
+        ErrorCode.TRANSIENT_FAILURE,
+        ErrorCode.BACKEND_ERROR,
+    }
+)
 
 
 class AutomationService(_HardenedAutomationService):
-    """Final Automation service layer for canonical Event ingestion and durable retry hooks."""
+    """Final Automation service layer for canonical events, retries and INVALID lifecycle."""
 
     async def set_state(
         self,
@@ -23,10 +49,188 @@ class AutomationService(_HardenedAutomationService):
         *,
         now: datetime | None = None,
     ) -> Automation:
+        current = await self.repository.get_automation(automation_id)
+        if state is AutomationState.INVALID:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "use explicit automation invalidation semantics to enter invalid state",
+            )
+        if current.state is AutomationState.INVALID:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "invalid automation requires explicit revalidation before lifecycle changes",
+            )
         updated = await super().set_state(automation_id, state, now=now)
         if state is not AutomationState.ENABLED:
             await self._emit_retry_suppressed_for_state(updated)
         return updated
+
+    async def invalidate_automation(
+        self,
+        automation_id: str,
+        *,
+        reason_code: str,
+        now: datetime | None = None,
+    ) -> Automation:
+        """Enter canonical INVALID using categorical metadata only.
+
+        ``reason_code`` is deliberately a restricted machine category, never free-form provider
+        error text. INVALID preserves the current schedule position and the prior lifecycle state.
+        """
+
+        try:
+            reason = validate_invalidation_reason_code(reason_code)
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "invalid automation invalidation reason code",
+            ) from exc
+        current = await self.repository.get_automation(automation_id)
+        occurred = require_aware(now or self._clock(), "now").astimezone(UTC)
+        invalidated = current.invalidate(reason, occurred)
+        persisted = await self.repository.save_automation(invalidated)
+        await self._emit_configuration(
+            persisted,
+            action="invalidated",
+            changed_fields=(
+                "state",
+                "invalidation_reason_code",
+                "invalidated_at",
+                "state_before_invalid",
+            ),
+            previous_state=current.state,
+        )
+        await self._emit_lifecycle_event(
+            persisted,
+            action="invalidated",
+            previous_state=current.state,
+            reason_code=reason,
+            occurred_at=occurred,
+        )
+        await self._emit_retry_suppressed_for_state(persisted)
+        return persisted
+
+    async def revalidate_automation(
+        self,
+        automation_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> Automation:
+        """Revalidate and restore the lifecycle state that preceded INVALID.
+
+        The default validator confirms canonical in-process structure. Deployments that own
+        durable external references may override ``_validate_configuration_for_revalidation``
+        without changing the canonical lifecycle contract.
+        """
+
+        current = await self.repository.get_automation(automation_id)
+        if current.state is not AutomationState.INVALID:
+            return current
+        occurred = require_aware(now or self._clock(), "now").astimezone(UTC)
+        try:
+            await self._validate_configuration_for_revalidation(current)
+        except ContractError as exc:
+            if exc.retryable or exc.code in _REVALIDATION_TRANSIENT_ERRORS:
+                await self._emit_lifecycle_event(
+                    current,
+                    action="revalidation_deferred",
+                    previous_state=current.state_before_invalid,
+                    reason_code=current.invalidation_reason_code,
+                    occurred_at=occurred,
+                )
+                raise ContractError(
+                    exc.code,
+                    "automation revalidation could not be completed due to a transient failure",
+                    retryable=True,
+                ) from exc
+            reason = f"revalidation_{exc.code.value}"
+            retained = current.invalidate(reason, occurred)
+            retained = await self.repository.save_automation(retained)
+            await self._emit_lifecycle_event(
+                retained,
+                action="revalidation_failed",
+                previous_state=retained.state_before_invalid,
+                reason_code=reason,
+                occurred_at=occurred,
+            )
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automation configuration remains invalid",
+            ) from exc
+        except (TypeError, ValueError) as exc:
+            reason = "revalidation_invalid_configuration"
+            retained = current.invalidate(reason, occurred)
+            retained = await self.repository.save_automation(retained)
+            await self._emit_lifecycle_event(
+                retained,
+                action="revalidation_failed",
+                previous_state=retained.state_before_invalid,
+                reason_code=reason,
+                occurred_at=occurred,
+            )
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automation configuration remains invalid",
+            ) from exc
+
+        recovered = current.revalidated(occurred)
+        recovered = await self.repository.save_automation(recovered)
+        await self._emit_configuration(
+            recovered,
+            action="revalidated",
+            changed_fields=(
+                "state",
+                "invalidation_reason_code",
+                "invalidated_at",
+                "state_before_invalid",
+            ),
+            previous_state=AutomationState.INVALID,
+        )
+        await self._emit_lifecycle_event(
+            recovered,
+            action="revalidated",
+            previous_state=AutomationState.INVALID,
+            reason_code=None,
+            occurred_at=occurred,
+        )
+        return recovered
+
+    async def _validate_configuration_for_revalidation(self, automation: Automation) -> None:
+        """Replaceable validation seam for durable external configuration references.
+
+        Canonical dataclass construction and repository decoding already validate the local
+        Automation/Trigger/TaskTemplate structure. The default reference path therefore treats an
+        explicit authorized revalidation as confirmation that an externally fixed configuration
+        may return to service. Integrations can override this seam to resolve secrets, providers or
+        referenced resources and raise a provider-neutral ContractError on failure.
+        """
+
+        del automation
+
+    async def deliver_webhook(
+        self,
+        automation_id: str,
+        *,
+        event_id: str,
+        payload: dict[str, JsonValue],
+        source: str,
+        verified: bool,
+        fired_at: datetime | None = None,
+    ) -> TriggerDelivery:
+        automation = await self.repository.get_automation(automation_id)
+        if automation.state is AutomationState.INVALID:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "automation is invalid and cannot accept webhook deliveries",
+            )
+        return await super().deliver_webhook(
+            automation_id,
+            event_id=event_id,
+            payload=payload,
+            source=source,
+            verified=verified,
+            fired_at=fired_at,
+        )
 
     async def deliver_canonical_platform_event(
         self,
@@ -69,6 +273,49 @@ class AutomationService(_HardenedAutomationService):
                 )
             )
         return tuple(deliveries)
+
+    async def _process(self, automation: Automation, delivery: TriggerDelivery) -> TriggerDelivery:
+        processed = await super()._process(automation, delivery)
+        if (
+            processed.status is DeliveryStatus.FAILED
+            and processed.error_code in _AUTO_INVALIDATING_DELIVERY_ERRORS
+        ):
+            occurred = processed.last_failed_at or require_aware(self._clock(), "now")
+            await self.invalidate_automation(
+                automation.id,
+                reason_code=f"delivery_{processed.error_code}",
+                now=occurred,
+            )
+        return processed
+
+    async def _emit_lifecycle_event(
+        self,
+        automation: Automation,
+        *,
+        action: str,
+        previous_state: AutomationState | None,
+        reason_code: str | None,
+        occurred_at: datetime,
+    ) -> None:
+        if self._event_sink is None:
+            return
+        await self._event_sink(
+            {
+                "type": "automation.lifecycle",
+                "automation_id": automation.id,
+                "automation_revision": automation.revision,
+                "action": action,
+                "state": automation.state.value,
+                "previous_state": None if previous_state is None else previous_state.value,
+                "invalidation_reason_code": reason_code,
+                "invalidated_at": (
+                    None
+                    if automation.invalidated_at is None
+                    else automation.invalidated_at.isoformat()
+                ),
+                "occurred_at": require_aware(occurred_at, "occurred_at").isoformat(),
+            }
+        )
 
     async def _emit(self, automation: Automation, delivery: TriggerDelivery, outcome: str) -> None:
         """Emit canonical delivery audit including #241 retry state without secret material."""
