@@ -54,10 +54,7 @@ class ProjectTemplateHandler:
         payload = _payload(revision)
         owner = provenance.applied_by
         project = self.scopes.create_project(
-            key=(
-                f"template:{context.instance_id}:"
-                f"{revision.template_id}:{revision.revision}:project"
-            ),
+            key=f"template:{context.instance_id}:{revision.template_id}:{revision.revision}:project",
             name=_required_string(payload, "name"),
             owner_type=cast(OwnerType, owner.type),
             owner_id=owner.id,
