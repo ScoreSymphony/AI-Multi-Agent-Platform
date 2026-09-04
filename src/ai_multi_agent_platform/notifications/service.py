@@ -22,6 +22,7 @@ from .preferences import NotificationPreferenceRepository, preference_allows
 from .recipients import AllowAllRecipientEligibilityGuard, RecipientEligibilityGuard
 from .repository import NotificationRepository
 from .rules import NotificationRule
+from .visibility import AllowAllNotificationVisibilityGuard, NotificationVisibilityGuard
 
 NotificationEventSink = Callable[[dict[str, JsonValue]], Awaitable[None]]
 
@@ -38,6 +39,7 @@ class NotificationService:
         delivery: NotificationDeliveryCoordinator | None = None,
         event_sink: NotificationEventSink | None = None,
         recipient_eligibility: RecipientEligibilityGuard | None = None,
+        visibility: NotificationVisibilityGuard | None = None,
     ) -> None:
         self._repository = repository
         self._preferences = preferences
@@ -45,6 +47,7 @@ class NotificationService:
         self._delivery = delivery
         self._event_sink = event_sink
         self._recipient_eligibility = recipient_eligibility or AllowAllRecipientEligibilityGuard()
+        self._visibility = visibility or AllowAllNotificationVisibilityGuard()
 
     async def project_event(self, event: PlatformEvent) -> tuple[Notification, ...]:
         created: list[Notification] = []
@@ -190,17 +193,28 @@ class NotificationService:
     async def get(self, notification_id: str, *, recipient: RecipientRef) -> Notification:
         notification = await self._repository.get(notification_id)
         self._require_recipient(notification, recipient)
+        await self._require_visible(notification, recipient=recipient)
         return notification
 
     async def list(self, query: NotificationQuery) -> tuple[Notification, ...]:
         if not self._preferences.get(query.recipient).in_app_enabled:
             return ()
-        return await self._repository.list(query)
+        repository_query = replace(query, limit=None, offset=0)
+        candidates = await self._repository.list(repository_query)
+        visible = [
+            item
+            for item in candidates
+            if await self._visibility.allows(item, recipient=query.recipient)
+        ]
+        if query.limit is None:
+            return tuple(visible[query.offset :])
+        return tuple(visible[query.offset : query.offset + query.limit])
 
     async def unread_count(self, recipient: RecipientRef) -> int:
         if not self._preferences.get(recipient).in_app_enabled:
             return 0
-        return await self._repository.count_unread(recipient)
+        visible = await self.list(NotificationQuery(recipient=recipient, unread_only=True))
+        return len(visible)
 
     def get_preference(self, recipient: RecipientRef) -> NotificationPreference:
         return self._preferences.get(recipient)
@@ -250,9 +264,12 @@ class NotificationService:
     ) -> Notification:
         current = _aware(at or datetime.now(UTC), "at")
         notification = await self.get(notification_id, recipient=recipient)
-        if notification.state is NotificationState.READ:
-            return notification
-        if notification.state in {NotificationState.DISMISSED, NotificationState.ARCHIVED}:
+        if notification.state in {
+            NotificationState.READ,
+            NotificationState.ACKNOWLEDGED,
+            NotificationState.DISMISSED,
+            NotificationState.ARCHIVED,
+        }:
             return notification
         updated = replace(
             notification,
@@ -271,14 +288,19 @@ class NotificationService:
         at: datetime | None = None,
     ) -> tuple[Notification, ...]:
         current = _aware(at or datetime.now(UTC), "at")
-        updated = await self._repository.mark_all_read(recipient, at=current)
+        visible_unread = await self.list(NotificationQuery(recipient=recipient, unread_only=True))
+        updated: list[Notification] = []
+        for notification in visible_unread:
+            updated.append(
+                await self.mark_read(notification.id, recipient=recipient, at=current)
+            )
         if updated:
             await self._emit(
                 "notification.mark_all_read",
                 recipient=recipient,
                 count=len(updated),
             )
-        return updated
+        return tuple(updated)
 
     async def acknowledge(
         self,
@@ -357,6 +379,16 @@ class NotificationService:
     def _require_recipient(notification: Notification, recipient: RecipientRef) -> None:
         if notification.recipient != recipient:
             # Deliberately return not-found semantics so notification existence is not leaked.
+            raise ContractError(ErrorCode.NOT_FOUND, "notification not found")
+
+    async def _require_visible(
+        self,
+        notification: Notification,
+        *,
+        recipient: RecipientRef,
+    ) -> None:
+        if not await self._visibility.allows(notification, recipient=recipient):
+            # Preserve not-found semantics so a revoked source resource cannot leak existence.
             raise ContractError(ErrorCode.NOT_FOUND, "notification not found")
 
     async def _deliver_external(
