@@ -92,16 +92,19 @@ def test_json_repository_restores_revisions_and_instantiations(tmp_path) -> None
     restored = JsonTemplateRepository(path)
 
     assert restored.get_template(draft.template_id) == repository.get_template(draft.template_id)
-    assert restored.list_revisions(draft.template_id) == repository.list_revisions(draft.template_id)
+    assert restored.list_revisions(draft.template_id) == repository.list_revisions(
+        draft.template_id
+    )
     assert restored.get_revision(draft.template_id, revised.revision) == revised
     assert restored.get_instantiation(instance.instance_id) == instance
     assert restored.list_instantiations(draft.template_id) == (instance,)
 
     document = json.loads(path.read_text(encoding="utf-8"))
     assert document["schema_version"] == TEMPLATE_REPOSITORY_SCHEMA_VERSION
-    assert document["revisions"][0]["content"]["configuration"]["payload"]["profile"][
-        "labels"
-    ] == ["portable", "durable"]
+    assert document["revisions"][0]["content"]["configuration"]["payload"]["profile"]["labels"] == [
+        "portable",
+        "durable",
+    ]
 
 
 def test_json_repository_rejects_unknown_schema_version(tmp_path) -> None:
