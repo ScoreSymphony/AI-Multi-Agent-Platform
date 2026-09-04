@@ -29,6 +29,7 @@ from .registry import ImportContext, ResourceExport, ResourceSerializerRegistry
 
 CONNECTION_PORTABLE_SCHEMA_VERSION = "1"
 CONNECTION_RESOURCE_TYPE = "connection"
+_SYNC_REASON = "provider cursors, retry state and sync checkpoints are not portable configuration"
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,10 +163,7 @@ def connection_runtime_exclusions(connection_id: str) -> tuple[ExcludedState, ..
         ExcludedState(
             category=ExclusionCategory.BACKEND_RUNTIME_STATE,
             path="$.connection.sync_checkpoints",
-            reason=(
-                "provider cursors, retry state and sync checkpoints are not portable "
-                "configuration"
-            ),
+            reason=_SYNC_REASON,
             resource_type=CONNECTION_RESOURCE_TYPE,
             resource_id=connection_id,
         ),
