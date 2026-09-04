@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ai_multi_agent_platform.capabilities import (
+from ai_multi_agent_platform.capabilities.types import (
     CapabilitySpec,
     CredentialRequirement,
     SafetyClassification,
