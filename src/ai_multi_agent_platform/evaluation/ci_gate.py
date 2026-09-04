@@ -49,7 +49,9 @@ class EvaluationCIGateReport:
     @property
     def failed_results(self) -> tuple[EvaluationResult, ...]:
         return tuple(
-            result for result in self.summary.results if result.outcome is not EvaluationOutcome.PASSED
+            result
+            for result in self.summary.results
+            if result.outcome is not EvaluationOutcome.PASSED
         )
 
     @property
@@ -65,13 +67,9 @@ class EvaluationCIGateReport:
         messages: list[str] = []
         for result in self.failed_results:
             detail = result.error_message or result.outcome.value
-            messages.append(
-                f"result {result.case_id}/{result.evaluator.evaluator_id}: {detail}"
-            )
+            messages.append(f"result {result.case_id}/{result.evaluator.evaluator_id}: {detail}")
         for finding in self.regressions:
-            messages.append(
-                f"regression {finding.rule_id}/{finding.case_id}: {finding.message}"
-            )
+            messages.append(f"regression {finding.rule_id}/{finding.case_id}: {finding.message}")
         return tuple(messages)
 
 
