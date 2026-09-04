@@ -53,7 +53,7 @@ def _required_int(obj: dict[str, Any], key: str) -> int:
     value = obj.get(key)
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"stored evaluation aggregate field '{key}' must be an integer")
-    return value
+    return int(value)
 
 
 def _optional_int(obj: dict[str, Any], key: str) -> int | None:
@@ -62,7 +62,7 @@ def _optional_int(obj: dict[str, Any], key: str) -> int | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"stored evaluation aggregate field '{key}' must be an integer or null")
-    return value
+    return int(value)
 
 
 def _optional_float(obj: dict[str, Any], key: str) -> float | None:
