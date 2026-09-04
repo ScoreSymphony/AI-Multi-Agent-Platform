@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 
 from ai_multi_agent_platform.contracts.interfaces import ProviderContract
-from ai_multi_agent_platform.contracts.types import OperationContext
+from ai_multi_agent_platform.contracts.types import OperationContext, ProviderDescriptor
 
 from .models import (
     RepositoryCommit,
@@ -22,10 +22,17 @@ class RepositoryProvider(ProviderContract):
     """Canonical repository seam implemented by local Git or connector-backed providers."""
 
     @property
-    def provider_id(self) -> str:
-        """Compatibility shorthand for the common provider descriptor identity."""
+    @abstractmethod
+    def provider_id(self) -> str: ...
 
-        return self.descriptor.provider_id
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        """Expose repository adapters through the platform-wide provider metadata seam."""
+
+        return ProviderDescriptor(
+            provider_id=self.provider_id,
+            provider_type="repository",
+        )
 
     @abstractmethod
     async def discover(
