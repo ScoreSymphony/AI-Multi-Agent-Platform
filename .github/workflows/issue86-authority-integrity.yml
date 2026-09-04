@@ -94,67 +94,6 @@ jobs:
               raise SystemExit('CanonicalVerificationRuntime.require_task annotation anchor missing')
           evidence.write_text(text.replace(old, new, 1), encoding='utf-8')
 
-          test_path = Path('tests/test_issue_86_authority_integrity.py')
-          test_text = test_path.read_text(encoding='utf-8')
-          test_text = test_text.replace('from dataclasses import replace\n\n', '', 1)
-          test_text = test_text.replace(
-              '    AgentRevisionRef,\n'
-              '    AgentRunRecord,\n'
-              '    AgentRunStatus,\n'
-              '    InMemoryAgentRepository,\n',
-              '    AgentInstructions,\n'
-              '    AgentProfile,\n'
-              '    AgentRevisionRef,\n'
-              '    AgentRunRecord,\n'
-              '    AgentRunStatus,\n'
-              '    AgentService,\n'
-              '    InMemoryAgentRepository,\n'
-              '    InstructionSource,\n',
-              1,
-          )
-          test_text = test_text.replace(
-              'from ai_multi_agent_platform.domain import new_id\n',
-              'from ai_multi_agent_platform.domain import OwnerRef, new_id\n',
-              1,
-          )
-          fixture_old = '''        agents = InMemoryAgentRepository()
-        agents.create_agent_run(
-            AgentRunRecord(
-                agent_run_id=new_agent_run_id(),
-                run_id=run.run_id,
-                task_id=task.task_id,
-                agent=AgentRevisionRef(agent_id=agent_id, revision=3),'''
-          fixture_new = '''        agents = InMemoryAgentRepository()
-        producer_revision = AgentService(agents).create_agent(
-            AgentProfile(
-                name="Canonical producer",
-                role="producer",
-                instructions=AgentInstructions(
-                    role=InstructionSource(content="Produce the exact canonical result.")
-                ),
-            ),
-            owner_ref=OwnerRef(type="service", id="issue-86"),
-            agent_id=agent_id,
-        )
-        agents.create_agent_run(
-            AgentRunRecord(
-                agent_run_id=new_agent_run_id(),
-                run_id=run.run_id,
-                task_id=task.task_id,
-                agent=AgentRevisionRef(
-                    agent_id=agent_id,
-                    revision=producer_revision.revision,
-                ),'''
-          if fixture_old not in test_text:
-              raise SystemExit('canonical producer Agent fixture anchor missing')
-          test_text = test_text.replace(fixture_old, fixture_new, 1)
-          test_text = test_text.replace(
-              '        assert request.producer.agent_revision == 3\n',
-              '        assert request.producer.agent_revision == producer_revision.revision\n',
-              1,
-          )
-          test_path.write_text(test_text, encoding='utf-8')
-
           for generated_path in (
               Path('tests/test_issue_86_verification.py'),
               Path('tests/test_issue_86_repair_runtime.py'),
@@ -176,6 +115,8 @@ jobs:
           )
           integration.write_text(integration_text, encoding='utf-8')
           PY
+      - name: Seed valid canonical Agent fixture
+        run: python .github/scripts/issue86_fixture_fix.py
       - name: Bootstrap test environment
         shell: bash
         run: |
@@ -215,6 +156,7 @@ jobs:
           git add src tests docs
           git commit -m "fix(verification): close canonical authority integrity gaps (#86)"
           rm .github/scripts/issue86_authority_integrity.py
+          rm .github/scripts/issue86_fixture_fix.py
           rm .github/workflows/issue86-authority-integrity.yml
           git add -A
           git commit -m "chore: remove temporary issue 86 authority validator"
