@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -16,15 +17,22 @@ RESTORE_RECOVERY_DIR = "recovery"
 RESTORE_RECOVERY_PENDING = "restore-pending.json"
 RESTORE_RECOVERY_REPORT = "restore-report.json"
 
+RestoreValidationHook = Callable[
+    [tuple[RecoveryReport, ...], dict[str, Any]],
+    Awaitable[tuple[str, ...]],
+]
+
 
 @dataclass(frozen=True, slots=True)
 class PostRestoreRecoveryResult:
-    """Outcome of one required post-restore kernel reconciliation pass."""
+    """Outcome of one required post-restore reconciliation/readiness pass."""
 
     data_dir: Path
     reports: tuple[RecoveryReport, ...]
     unresolved_run_ids: tuple[str, ...]
     report_path: Path
+    ready_for_service: bool = False
+    validation_checks: tuple[str, ...] = ()
 
     @property
     def runs_checked(self) -> int:
@@ -44,6 +52,8 @@ def write_restore_recovery_marker(data_dir: Path, manifest: dict[str, Any]) -> P
         "restored_at": datetime.now(UTC).isoformat(),
         "backup_created_at": manifest.get("created_at"),
         "source_platform": manifest.get("platform", {}),
+        "schema_migration": manifest.get("schema_migration", {}),
+        "included_components": manifest.get("included_components", []),
         "restore_policy": manifest.get("restore_policy", {}),
     }
     _atomic_json_write(marker, payload)
@@ -54,22 +64,37 @@ async def reconcile_restored_single_node(
     *,
     data_dir: Path,
     kernel: PlatformKernel,
+    validation: RestoreValidationHook | None = None,
+    retry_blocked: bool = False,
 ) -> PostRestoreRecoveryResult | None:
-    """Reconcile canonical unfinished runs before a restored deployment starts serving.
+    """Reconcile and optionally validate a disaster-restored single-node deployment.
 
-    The pending marker is written by the restore service. If reconciliation fails, the marker is
-    intentionally kept so a later retry cannot silently skip the required recovery pass. A
-    successful pass may still leave canonical RUNNING runs with ``recovery_required=True``; that
-    is the explicit kernel state for work whose former execution backend no longer exists.
+    A normal first pass is driven by ``restore-pending.json``. The marker is removed only after a
+    durable recovery report has been written. The report itself remains authoritative for whether
+    normal serving is allowed. ``retry_blocked=True`` re-opens a prior non-ready report so the
+    operator/server path can retry unresolved work or a previously skipped/failed readiness gate.
+
+    If the validation hook raises, the pending marker (when present) is deliberately retained. If
+    unresolved canonical Runs remain, the report is persisted with ``ready_for_service=false``;
+    subsequent normal server startup retries that blocked report instead of silently serving.
     """
 
     root = data_dir.expanduser().resolve()
     recovery_dir = root / RESTORE_RECOVERY_DIR
     marker = recovery_dir / RESTORE_RECOVERY_PENDING
-    if not marker.is_file():
+    report_path = recovery_dir / RESTORE_RECOVERY_REPORT
+
+    marker_exists = marker.is_file()
+    if marker_exists:
+        restore_metadata = _load_marker(marker)
+    elif retry_blocked:
+        blocked_restore_metadata = _load_blocked_report_restore(report_path)
+        if blocked_restore_metadata is None:
+            return None
+        restore_metadata = blocked_restore_metadata
+    else:
         return None
 
-    marker_payload = _load_marker(marker)
     reports = await kernel.recover_all()
     unresolved = tuple(
         entry.run_id
@@ -78,13 +103,20 @@ async def reconcile_restored_single_node(
         if entry.disposition is RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED
     )
 
-    report_path = recovery_dir / RESTORE_RECOVERY_REPORT
+    validation_checks: tuple[str, ...] = ()
+    ready_for_service = False
+    if not unresolved and validation is not None:
+        validation_checks = await validation(reports, restore_metadata)
+        ready_for_service = True
+
     report_payload = {
         "report_version": 1,
         "completed_at": datetime.now(UTC).isoformat(),
-        "restore": marker_payload,
+        "restore": restore_metadata,
         "runs_checked": sum(len(report.entries) for report in reports),
         "unresolved_run_ids": list(unresolved),
+        "ready_for_service": ready_for_service,
+        "validation_checks": list(validation_checks),
         "tasks": [
             {
                 "task_id": report.task_id,
@@ -102,12 +134,15 @@ async def reconcile_restored_single_node(
         ],
     }
     _atomic_json_write(report_path, report_payload)
-    marker.unlink()
+    if marker_exists:
+        marker.unlink()
     return PostRestoreRecoveryResult(
         data_dir=root,
         reports=reports,
         unresolved_run_ids=unresolved,
         report_path=report_path,
+        ready_for_service=ready_for_service,
+        validation_checks=validation_checks,
     )
 
 
@@ -121,6 +156,23 @@ def _load_marker(path: Path) -> dict[str, Any]:
     if payload.get("marker_version") != RESTORE_RECOVERY_MARKER_VERSION:
         raise RuntimeError("restore recovery marker version is incompatible")
     return payload
+
+
+def _load_blocked_report_restore(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("restore recovery report is unreadable or invalid JSON") from exc
+    if not isinstance(payload, dict) or payload.get("report_version") != 1:
+        raise RuntimeError("restore recovery report version is incompatible")
+    if payload.get("ready_for_service") is True:
+        return None
+    restore = payload.get("restore")
+    if not isinstance(restore, dict):
+        raise RuntimeError("restore recovery report does not contain restore metadata")
+    return restore
 
 
 def _atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
