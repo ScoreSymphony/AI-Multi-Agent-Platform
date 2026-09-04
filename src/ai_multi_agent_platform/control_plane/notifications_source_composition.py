@@ -151,7 +151,7 @@ class ControlPlane(_BaseControlPlane):
         previous: Connection,
         current: Connection,
     ) -> None:
-        """Project #44 degraded/error health changes while leaving Connection state authoritative."""
+        """Project #44 degraded/error health after Connection state is committed."""
 
         del previous
         try:
