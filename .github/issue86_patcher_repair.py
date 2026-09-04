@@ -11,3 +11,28 @@ if old not in text:
     raise SystemExit("kernel anchor block not found in patcher")
 patcher.write_text(text.replace(old, new, 1))
 runpy.run_path(str(patcher), run_name="__main__")
+
+# Complete imports required by generated focused regressions.
+authority_test = Path("tests/test_issue_86_authority_integrity.py")
+authority = authority_test.read_text()
+authority = authority.replace(
+    "from ai_multi_agent_platform.domain import OwnerRef, new_id\n",
+    "from ai_multi_agent_platform.domain import OwnerRef, TaskStatus, new_id\n",
+    1,
+)
+authority = authority.replace(
+    "from ai_multi_agent_platform.verification import (\n",
+    "from ai_multi_agent_platform.verification import (\n    CompletionState,\n",
+    1,
+)
+authority_test.write_text(authority)
+
+hardening_test = Path("tests/test_issue_86_hardening.py")
+hardening = hardening_test.read_text()
+if "    VerificationCompletionAuthority,\n" not in hardening:
+    hardening = hardening.replace(
+        "from ai_multi_agent_platform.verification import (\n",
+        "from ai_multi_agent_platform.verification import (\n    VerificationCompletionAuthority,\n",
+        1,
+    )
+hardening_test.write_text(hardening)
