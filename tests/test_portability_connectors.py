@@ -119,7 +119,9 @@ def test_connection_round_trip_excludes_runtime_and_remaps_canonical_scope() -> 
     assert DependencyKind.SECRET in kinds
     assert DependencyKind.RESOURCE in kinds
     connector_requirement = next(
-        dependency for dependency in resource.dependencies if dependency.kind is DependencyKind.CONNECTOR
+        dependency
+        for dependency in resource.dependencies
+        if dependency.kind is DependencyKind.CONNECTOR
     )
     assert connector_requirement.identifier == definition.id
     assert connector_requirement.version_constraint == REFERENCE_CONNECTOR_VERSION
@@ -302,7 +304,9 @@ def test_connection_import_compensation_refuses_sync_history() -> None:
         disabled = snapshot_connection(source, ReferenceConnectorProvider().definition).connection
         repository = InMemoryConnectorRepository()
         await repository.save_connection(disabled)
-        await repository.save_checkpoint(SyncCheckpoint(connection_id=disabled.id, stream="records"))
+        await repository.save_checkpoint(
+            SyncCheckpoint(connection_id=disabled.id, stream="records")
+        )
 
         with pytest.raises(ContractError) as exc_info:
             await repository.remove_connection_if_unused(disabled.id)
