@@ -1,0 +1,63 @@
+name: Issue 86 authority-integrity hardening
+
+on:
+  push:
+    branches: [fix/issue-86-authority-integrity]
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/issue-86-authority-integrity
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Apply authority-integrity patch
+        run: python .github/scripts/issue86_authority_integrity.py
+      - name: Bootstrap test environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Normalize formatting
+        run: ruff format .
+      - name: Ruff lint
+        run: ruff check .
+      - name: Mypy
+        run: mypy
+      - name: Focused verification and deployment tests
+        run: |
+          pytest -q \
+            tests/test_issue_86_verification.py \
+            tests/test_issue_86_kernel_gate.py \
+            tests/test_issue_86_persistence.py \
+            tests/test_issue_86_control_plane.py \
+            tests/test_issue_86_observability.py \
+            tests/test_issue_86_reviewer_agent.py \
+            tests/test_issue_86_repair_runtime.py \
+            tests/test_issue_86_replacement_conformance.py \
+            tests/test_issue_86_hardening.py \
+            tests/test_issue_86_hardening_integration.py \
+            tests/test_issue_86_authority_integrity.py
+      - name: Commit validated product changes and cleanup
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src tests docs
+          git commit -m "fix(verification): close canonical authority integrity gaps (#86)"
+          rm .github/scripts/issue86_authority_integrity.py
+          rm .github/workflows/issue86-authority-integrity.yml
+          git add -A
+          git commit -m "chore: remove temporary issue 86 authority validator"
+          git push origin HEAD:fix/issue-86-authority-integrity
