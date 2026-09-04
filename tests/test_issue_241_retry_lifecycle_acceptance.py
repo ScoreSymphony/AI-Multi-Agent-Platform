@@ -56,8 +56,8 @@ def test_disable_suppresses_pending_retry_without_consuming_attempt() -> None:
         service = AutomationService(
             repository=InMemoryAutomationRepository(),
             task_creator=creator,
-            clock=lambda: now,
         )
+        service._clock = lambda: now
         automation = await service.create_automation(
             name="disabled retry",
             description="",
@@ -101,8 +101,8 @@ def test_invalid_suppresses_pending_retry_and_revalidation_resumes_same_delivery
         service = AutomationService(
             repository=InMemoryAutomationRepository(),
             task_creator=creator,
-            clock=lambda: now,
         )
+        service._clock = lambda: now
         automation = await service.create_automation(
             name="invalid retry",
             description="",
@@ -155,7 +155,6 @@ def test_zero_delay_retry_wakeup_uses_polling_floor_instead_of_spin(
         service = AutomationService(
             repository=InMemoryAutomationRepository(),
             task_creator=creator,
-            clock=lambda: now,
         )
 
         class ZeroDueRuntime(AutomationRuntime):
