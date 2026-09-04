@@ -1,5 +1,18 @@
 """Portable canonical import/export contracts for issue #79."""
 
+from .agent_codecs import (
+    AGENT_PORTABLE_SCHEMA_VERSION,
+    AGENT_RESOURCE_TYPE,
+    AGENT_TEAM_RESOURCE_TYPE,
+    AgentPortableCodec,
+    AgentPortableSnapshot,
+    AgentTeamPortableCodec,
+    AgentTeamPortableSnapshot,
+    register_agent_portability_codecs,
+    snapshot_agent,
+    snapshot_agent_team,
+)
+from .dependencies import ResourceDependencyRef, parse_resource_dependency, resource_dependency
 from .models import (
     PORTABLE_FORMAT_VERSION,
     PORTABLE_INTEGRITY_ALGORITHM,
@@ -23,34 +36,61 @@ from .package import (
     verify_package,
     verify_resource,
 )
+from .planner import (
+    ImportConflict,
+    ImportConflictKind,
+    ImportPreview,
+    ImportPreviewService,
+    MissingDependency,
+    PlannedResource,
+)
 from .registry import ImportContext, ResourceCodec, ResourceExport, ResourceSerializerRegistry
 from .schema import PORTABLE_PACKAGE_SCHEMA_V1, validate_package_document
 from .validation import find_runtime_private_path, validate_portable_payload
 
 __all__ = [
+    "AGENT_PORTABLE_SCHEMA_VERSION",
+    "AGENT_RESOURCE_TYPE",
+    "AGENT_TEAM_RESOURCE_TYPE",
     "PORTABLE_FORMAT_VERSION",
     "PORTABLE_INTEGRITY_ALGORITHM",
     "PORTABLE_PACKAGE_SCHEMA_V1",
+    "AgentPortableCodec",
+    "AgentPortableSnapshot",
+    "AgentTeamPortableCodec",
+    "AgentTeamPortableSnapshot",
     "CompatibilityMetadata",
     "DependencyKind",
     "DependencyRequirement",
     "ExcludedState",
     "ExclusionCategory",
     "IdPolicy",
+    "ImportConflict",
+    "ImportConflictKind",
     "ImportContext",
+    "ImportPreview",
+    "ImportPreviewService",
+    "MissingDependency",
     "PackageProvenance",
+    "PlannedResource",
     "PortablePackage",
     "PortablePackageManifest",
     "PortableResource",
     "PortableResourceDescriptor",
     "ResourceCodec",
+    "ResourceDependencyRef",
     "ResourceExport",
     "ResourceSerializerRegistry",
     "build_package",
     "find_runtime_private_path",
     "package_from_dict",
     "package_to_dict",
+    "parse_resource_dependency",
+    "register_agent_portability_codecs",
+    "resource_dependency",
     "seal_resource",
+    "snapshot_agent",
+    "snapshot_agent_team",
     "validate_package_document",
     "validate_portable_payload",
     "verify_package",
