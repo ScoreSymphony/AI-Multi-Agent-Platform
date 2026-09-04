@@ -92,22 +92,22 @@ def execute_evaluation(
     if args.command == "run":
         if args.repetitions <= 0:
             raise ProfileError("--repetitions must be greater than zero")
-        body: dict[str, JsonValue] = {
+        run_body: dict[str, JsonValue] = {
             "resource_ref": str(args.suite_ref),
             "snapshot": parse_snapshot(args.snapshot_json),
             "repetitions": args.repetitions,
         }
         if args.seed is not None:
-            body["seed"] = args.seed
+            run_body["seed"] = args.seed
         if args.baseline_run_id is not None:
-            body["baseline_run_id"] = str(args.baseline_run_id)
+            run_body["baseline_run_id"] = str(args.baseline_run_id)
         if args.regression_policy_ref is not None:
-            body["regression_policy_ref"] = str(args.regression_policy_ref)
+            run_body["regression_policy_ref"] = str(args.regression_policy_ref)
         if args.aggregation_policy_ref is not None:
-            body["aggregation_policy_ref"] = str(args.aggregation_policy_ref)
+            run_body["aggregation_policy_ref"] = str(args.aggregation_policy_ref)
         return client.post(
             "/commands/evaluation.run",
-            body=body,
+            body=run_body,
             idempotency_key=args.idempotency_key,
         )
 
@@ -117,16 +117,16 @@ def execute_evaluation(
         raise ProfileError(f"unsupported evaluation result command: {args.result_command}")
 
     if args.command == "compare":
-        body: dict[str, JsonValue] = {
+        compare_body: dict[str, JsonValue] = {
             "resource_ref": str(args.current_run_id),
             "baseline_run_id": str(args.baseline_run_id),
             "regression_policy_ref": str(args.regression_policy_ref),
         }
         if args.aggregation_policy_ref is not None:
-            body["aggregation_policy_ref"] = str(args.aggregation_policy_ref)
+            compare_body["aggregation_policy_ref"] = str(args.aggregation_policy_ref)
         return client.post(
             "/commands/evaluation.compare",
-            body=body,
+            body=compare_body,
             idempotency_key=args.idempotency_key,
         )
 
