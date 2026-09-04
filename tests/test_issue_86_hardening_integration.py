@@ -55,8 +55,7 @@ def test_cancelled_verification_request_survives_sqlite_restart(tmp_path: Path) 
 
     restored = SqliteVerificationService(path)
     assert (
-        restored.get_request(request.verification_id).status
-        is VerificationRequestStatus.CANCELLED
+        restored.get_request(request.verification_id).status is VerificationRequestStatus.CANCELLED
     )
     assert restored.result_for(request.verification_id) is None
     assert [
