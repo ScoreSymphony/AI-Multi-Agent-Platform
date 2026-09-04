@@ -32,13 +32,13 @@ from .notifications_composition import (
     NOTIFICATION_COLLECTION,
     _recipient_from_context,
 )
-from .notifications_runtime_composition import (
+from .notifications_source_composition import (
     ControlPlane as _BaseControlPlane,
 )
-from .notifications_runtime_composition import (
+from .notifications_source_composition import (
     ControlPlaneHTTP as _BaseControlPlaneHTTP,
 )
-from .notifications_runtime_composition import (
+from .notifications_source_composition import (
     build_openapi as _build_base_openapi,
 )
 
