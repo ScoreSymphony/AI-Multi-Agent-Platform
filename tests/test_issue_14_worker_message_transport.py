@@ -27,6 +27,7 @@ from ai_multi_agent_platform.distributed.transport import (
 from ai_multi_agent_platform.domain import RunStatus, new_id
 from ai_multi_agent_platform.messaging import (
     InProcessMessageTransport,
+    MessageKind,
     PublishReceipt,
     TransportEnvelope,
 )
@@ -339,15 +340,20 @@ def test_lost_terminal_result_reply_is_retried_without_reexecuting_job() -> None
             result_commands = [
                 envelope
                 for _, envelope in transport.published
-                if envelope.message_type == "worker.result"
+                if envelope.kind is MessageKind.COMMAND
+                and envelope.message_type == "worker.result"
             ]
             assert len(result_commands) == 2
             assert result_commands[0].message_id != result_commands[1].message_id
             assert result_commands[0].idempotency_key == result_commands[1].idempotency_key
-            assert not any(
-                envelope.message_type == "worker.dispatch"
-                for _, envelope in transport.published[len(result_commands) :]
-            )
+
+            dispatch_commands = [
+                envelope
+                for _, envelope in transport.published
+                if envelope.kind is MessageKind.COMMAND
+                and envelope.message_type == "worker.dispatch"
+            ]
+            assert len(dispatch_commands) == 1
         finally:
             await _stop_endpoint(endpoint_task, transport)
 
