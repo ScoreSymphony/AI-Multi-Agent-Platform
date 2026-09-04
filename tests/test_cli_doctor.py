@@ -50,7 +50,13 @@ class DoctorTransport:
             payload = self.health
             status = self.readiness_status
         else:
-            raise AssertionError(f"unexpected doctor path: {path}")
+            payload = {
+                "error": {
+                    "code": "not_found",
+                    "message": "canonical extension is not registered",
+                }
+            }
+            status = 404
         return RawResponse(
             status=status,
             body=json.dumps(payload).encode("utf-8"),
