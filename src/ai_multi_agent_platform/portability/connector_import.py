@@ -148,7 +148,10 @@ class ConnectionImportMutationHandler:
                     if cleanup_error.code is not ErrorCode.NOT_FOUND:
                         raise ContractError(
                             ErrorCode.BACKEND_ERROR,
-                            "Connection import failed and partial mutation could not be compensated",
+                            (
+                                "Connection import failed and partial mutation could not be "
+                                "compensated"
+                            ),
                             details={"connection_id": created.id},
                         ) from cleanup_error
             raise
