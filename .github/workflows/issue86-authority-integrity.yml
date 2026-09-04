@@ -18,6 +18,27 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - name: Fix temporary patcher anchor
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/scripts/issue86_authority_integrity.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    text = replace_once(
+              text,
+              protocol_anchor,
+              protocol_method + protocol_anchor,
+              label="evidence context protocol",
+          )'''
+          new = '''    if protocol_anchor not in text:
+              raise RuntimeError("evidence context protocol: anchor not found")
+          text = text.replace(protocol_anchor, protocol_method + protocol_anchor, 1)'''
+          if old not in text:
+              raise SystemExit('temporary patcher protocol anchor block not found')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Apply authority-integrity patch
         run: python .github/scripts/issue86_authority_integrity.py
       - name: Bootstrap test environment
