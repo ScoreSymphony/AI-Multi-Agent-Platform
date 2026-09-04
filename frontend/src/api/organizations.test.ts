@@ -54,6 +54,9 @@ describe("OrganizationClient", () => {
       display_name: "Example Org",
       administrator_actor_ids: ["user:admin"],
     });
+    await client.transferOrganizationOwner("org_1", {
+      new_owner_actor_id: "user:member",
+    });
     await client.createTeam("org_1", { name: "Platform" });
     await client.configureTeam("team_1", {
       description: "Platform team",
@@ -102,6 +105,7 @@ describe("OrganizationClient", () => {
     expect(calls.map((call) => call.url)).toEqual([
       "/api/v1/commands/organization.create",
       "/api/v1/commands/organization.update",
+      "/api/v1/commands/organization.owner.transfer",
       "/api/v1/commands/team.create",
       "/api/v1/commands/team.configure",
       "/api/v1/commands/membership.add",
@@ -125,17 +129,21 @@ describe("OrganizationClient", () => {
       resource_ref: "org_1",
       display_name: "Example Org",
     });
-    expect(calls[4]?.body).toMatchObject({
+    expect(calls[2]?.body).toMatchObject({
+      resource_ref: "org_1",
+      new_owner_actor_id: "user:member",
+    });
+    expect(calls[5]?.body).toMatchObject({
       resource_ref: "org_1",
       actor_id: "user:member",
     });
-    expect(calls[9]?.body.token_ref).toBe("secret:invitation:test");
-    expect(calls[11]?.body).toMatchObject({
+    expect(calls[10]?.body.token_ref).toBe("secret:invitation:test");
+    expect(calls[12]?.body).toMatchObject({
       resource_ref: "template_1",
       resource_id: "template_1",
       resource_type: "template",
     });
-    expect(calls[13]?.body).toMatchObject({
+    expect(calls[14]?.body).toMatchObject({
       target_ref: { type: "team", id: "team_2" },
       allow_cross_organization: true,
     });
