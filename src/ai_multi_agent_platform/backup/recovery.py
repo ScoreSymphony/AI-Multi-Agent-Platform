@@ -88,9 +88,10 @@ async def reconcile_restored_single_node(
     if marker_exists:
         restore_metadata = _load_marker(marker)
     elif retry_blocked:
-        restore_metadata = _load_blocked_report_restore(report_path)
-        if restore_metadata is None:
+        blocked_restore_metadata = _load_blocked_report_restore(report_path)
+        if blocked_restore_metadata is None:
             return None
+        restore_metadata = blocked_restore_metadata
     else:
         return None
 
