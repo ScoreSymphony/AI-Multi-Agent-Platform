@@ -31,6 +31,8 @@ jobs:
         run: mypy
       - name: Pytest
         run: pytest
+      - name: Deterministic evaluation gate
+        run: python scripts/ci/issue19_evaluation_gate.py --platform-commit "$GITHUB_SHA"
       - name: Build package
         run: python -m build
 
