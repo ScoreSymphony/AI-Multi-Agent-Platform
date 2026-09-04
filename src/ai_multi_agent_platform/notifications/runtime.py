@@ -78,7 +78,9 @@ class SqliteNotificationRuntimeState:
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT OR IGNORE INTO notification_processed_events(event_id, event_type, processed_at)
+                INSERT OR IGNORE INTO notification_processed_events(
+                    event_id, event_type, processed_at
+                )
                 VALUES (?, ?, ?)
                 """,
                 (event_id, event_type, datetime.now(UTC).isoformat()),
