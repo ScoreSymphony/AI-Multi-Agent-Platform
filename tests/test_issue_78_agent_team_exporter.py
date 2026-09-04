@@ -103,9 +103,7 @@ def test_agent_team_export_builds_portable_published_agent_dependencies() -> Non
         second_member = members[1]
         assert isinstance(second_member, dict)
         assert first_member["agent_template_id"] != second_member["agent_template_id"]
-        assert first_member["can_delegate_to_template_ids"] == (
-            second_member["agent_template_id"],
-        )
+        assert first_member["can_delegate_to_template_ids"] == (second_member["agent_template_id"],)
         assert profile["leader_agent_template_id"] == first_member["agent_template_id"]
 
         published = application.templates.publish(
@@ -132,16 +130,16 @@ def test_agent_team_export_builds_portable_published_agent_dependencies() -> Non
             ref.resource_id for ref in instance.resource_refs if ref.resource_type == "agent"
         ]
         created_team_id = next(
-            ref.resource_id
-            for ref in instance.resource_refs
-            if ref.resource_type == "agent_team"
+            ref.resource_id for ref in instance.resource_refs if ref.resource_type == "agent_team"
         )
         assert len(created_agent_ids) == 2
         assert set(created_agent_ids).isdisjoint({first.agent_id, second.agent_id})
         created_team = agents.get_team_revision(created_team_id)
         assert created_team.owner_ref == destination_owner
         assert created_team.project_id is None
-        assert [member.agent.agent_id for member in created_team.profile.members] == created_agent_ids
+        assert [
+            member.agent.agent_id for member in created_team.profile.members
+        ] == created_agent_ids
         assert created_team.profile.leader_agent_id == created_agent_ids[0]
         assert created_team.profile.members[0].can_delegate_to == (created_agent_ids[1],)
         for created_agent_id in created_agent_ids:
