@@ -64,9 +64,7 @@ class JsonTemplateRepository(InMemoryTemplateRepository):
                 for template in self.list_templates()
                 for revision in self.list_revisions(template.template_id)
             ],
-            "instantiations": [
-                _instantiation_to_json(item) for item in self.list_instantiations()
-            ],
+            "instantiations": [_instantiation_to_json(item) for item in self.list_instantiations()],
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(f"{self.path.suffix}.tmp")
@@ -86,12 +84,8 @@ class JsonTemplateRepository(InMemoryTemplateRepository):
                 f"{version!r}; expected {TEMPLATE_REPOSITORY_SCHEMA_VERSION!r}"
             )
 
-        definitions = tuple(
-            _definition(item) for item in _required_array(document, "templates")
-        )
-        revisions = tuple(
-            _revision(item) for item in _required_array(document, "revisions")
-        )
+        definitions = tuple(_definition(item) for item in _required_array(document, "templates"))
+        revisions = tuple(_revision(item) for item in _required_array(document, "revisions"))
         instantiations = tuple(
             _instantiation(item) for item in _required_array(document, "instantiations")
         )
@@ -304,9 +298,7 @@ def _content(value: object) -> TemplateContent:
         description=_required_string(item, "description"),
         template_type=TemplateType(_required_string(item, "template_type")),
         configuration=_configuration(_required(item, "configuration")),
-        dependencies=tuple(
-            _dependency(value) for value in _required_array(item, "dependencies")
-        ),
+        dependencies=tuple(_dependency(value) for value in _required_array(item, "dependencies")),
         requirements=_requirements(_required(item, "requirements")),
         compatibility=_compatibility(_required(item, "compatibility")),
         provenance=_provenance(_required(item, "provenance")),
@@ -335,9 +327,7 @@ def _dependency(value: object) -> TemplateDependency:
 
 def _requirements(value: object) -> TemplateRequirements:
     item = _object(value, "Template requirements")
-    capabilities = tuple(
-        _capability(value) for value in _required_array(item, "capabilities")
-    )
+    capabilities = tuple(_capability(value) for value in _required_array(item, "capabilities"))
     return TemplateRequirements(
         capabilities=capabilities,
         plugin_ids=_string_tuple(item, "plugin_ids"),
@@ -366,7 +356,9 @@ def _capability(value: object) -> CapabilityRequirement:
 def _compatibility(value: object) -> TemplateCompatibility:
     item = _object(value, "Template compatibility")
     versions_raw = _object(_required(item, "contract_versions"), "contract versions")
-    versions = {key: _string(value, f"contract version {key}") for key, value in versions_raw.items()}
+    versions = {
+        key: _string(value, f"contract version {key}") for key, value in versions_raw.items()
+    }
     metadata_raw = _required(item, "metadata")
     metadata = _frozen_object(metadata_raw, "compatibility metadata")
     return TemplateCompatibility(
