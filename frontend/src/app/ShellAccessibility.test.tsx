@@ -53,7 +53,7 @@ describe("#17 shell accessibility semantics", () => {
     expect(live).toContain('role="status"');
     expect(live).toContain('aria-live="polite"');
     expect(live).toContain('aria-label="Live updates: reconnecting"');
-    expect(live).toContain(">reconnecting</span>");
+    expect(live).toContain('>reconnecting</span>');
   });
 
   it("distinguishes API loading, ready and unavailable status text", () => {
@@ -96,6 +96,14 @@ describe("#17 shell accessibility semantics", () => {
     const plugins = renderShell("/plugins");
     expect(plugins).toContain("Checking Plugins availability");
     expect(plugins).not.toContain("Canonical plugin lifecycle over the Control Plane");
+
+    const memory = renderShell("/memory");
+    expect(memory).toContain("Checking Memory availability");
+    expect(memory).not.toContain("Scoped durable context");
+
+    const knowledge = renderShell("/knowledge");
+    expect(knowledge).toContain("Checking Knowledge availability");
+    expect(knowledge).not.toContain("Source-backed canonical retrieval");
   });
 
   it("distinguishes advertised, absent and unavailable manifest resources", () => {
@@ -116,6 +124,9 @@ describe("#17 shell accessibility semantics", () => {
         "worker-jobs",
         "plugins",
         "plugin-candidates",
+        "memory",
+        "knowledge",
+        "knowledge-results",
       ],
     } as APImanifest;
 
@@ -125,6 +136,7 @@ describe("#17 shell accessibility semantics", () => {
     expect(manifestResourceState("ready", manifest, "approvals")).toBe("available");
     expect(manifestResourceState("ready", manifest, "plugins")).toBe("available");
     expect(manifestResourceState("ready", manifest, "plugin-candidates")).toBe("available");
+    expect(manifestResourceState("ready", manifest, "memory")).toBe("available");
     expect(manifestResourceState("ready", manifest, "agent-teams")).toBe("unavailable");
     expect(manifestResourceState("unavailable", null, "agents")).toBe("unavailable");
 
@@ -150,6 +162,13 @@ describe("#17 shell accessibility semantics", () => {
     ).toBe("available");
     expect(
       manifestResourcesState("ready", manifest, ["nodes", "workers", "missing-worker-jobs"]),
+    ).toBe("unavailable");
+
+    expect(
+      manifestResourcesState("ready", manifest, ["knowledge", "knowledge-results"]),
+    ).toBe("available");
+    expect(
+      manifestResourcesState("ready", manifest, ["knowledge", "missing-knowledge-results"]),
     ).toBe("unavailable");
   });
 
