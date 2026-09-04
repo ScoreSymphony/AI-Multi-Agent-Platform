@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 from ai_multi_agent_platform.agents.models import (
     AgentCapabilityPolicy,
     AgentInstructions,
+    AgentModelPolicy,
     AgentProfile,
     AgentRevisionRef,
     AgentTeamMember,
@@ -40,13 +39,8 @@ def _profile(name: str, *, capability: str = "capability.repo.read") -> AgentPro
         name=name,
         role="research",
         instructions=AgentInstructions(role=InstructionSource(content="Inspect canonical state.")),
-        model=replace(
-            AgentProfile(
-                name="base",
-                role="base",
-                instructions=AgentInstructions(role=InstructionSource(content="base")),
-            ).model,
-            requirements=RoutingRequirements(explicit_model_id="model.local.default"),
+        model=AgentModelPolicy(
+            requirements=RoutingRequirements(explicit_model_id="model.local.default")
         ),
         capabilities=AgentCapabilityPolicy(
             allowed=(capability,),
