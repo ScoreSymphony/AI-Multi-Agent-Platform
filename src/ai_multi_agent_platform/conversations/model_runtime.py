@@ -112,7 +112,11 @@ class ModelRuntimeConversationResponseProvider:
         if target.kind == "agent":
             agent = runtime.service.get_agent_revision(target.id, target.revision)
             _require_enabled(agent)
-            return agent, None, _merge_agent_and_conversation_requirements(runtime, agent, preference)
+            return (
+                agent,
+                None,
+                _merge_agent_and_conversation_requirements(runtime, agent, preference),
+            )
 
         team = runtime.service.get_team_revision(target.id, target.revision)
         if not team.profile.enabled:
@@ -273,9 +277,7 @@ def _system_instruction(
             )
         parts.append(instruction.content)
     else:
-        parts.append(
-            f"Respond in the canonical {request.target.kind} context {request.target.id}."
-        )
+        parts.append(f"Respond in the canonical {request.target.kind} context {request.target.id}.")
     return "\n\n".join(parts)
 
 
