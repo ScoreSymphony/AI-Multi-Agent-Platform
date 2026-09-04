@@ -219,6 +219,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         workspace_provider=workspaces,
         health_providers=(orchestrator, lifecycle, files),
         automation_state_path=database_dir / "automation.sqlite3",
+        notification_state_path=database_dir / "notifications.sqlite3",
         conversation_service=conversations,
         conversation_agent_service=agents,
         conversation_file_provider=files,
