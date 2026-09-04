@@ -231,6 +231,24 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         }
         return plugin_actions.get(plugin_verb, AuthorizationAction.MODIFY), ResourceType.PLUGIN
 
+    if action.startswith("node."):
+        node_verb = action.removeprefix("node.")
+        node_actions = {
+            "drain": AuthorizationAction.ADMINISTER,
+            "undrain": AuthorizationAction.ADMINISTER,
+            "maintenance-enable": AuthorizationAction.ADMINISTER,
+            "maintenance-disable": AuthorizationAction.ADMINISTER,
+        }
+        return node_actions.get(node_verb, AuthorizationAction.MODIFY), ResourceType.NODE
+
+    if action.startswith("worker."):
+        worker_verb = action.removeprefix("worker.")
+        worker_actions = {
+            "drain": AuthorizationAction.ADMINISTER,
+            "undrain": AuthorizationAction.ADMINISTER,
+        }
+        return worker_actions.get(worker_verb, AuthorizationAction.MODIFY), ResourceType.WORKER
+
     resource_name, separator, verb = action.partition(":")
     if not separator:
         resource_name, verb = "generic", action
