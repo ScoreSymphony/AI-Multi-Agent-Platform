@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.control_plane.service import ScopeStore
-from ai_multi_agent_platform.data import LocalFileProvider
+from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.templates import (
     ContextualTemplateHandlerRegistry,
@@ -22,7 +23,7 @@ from ai_multi_agent_platform.templates.workspace_structure_handler import (
     WorkspaceStructureTemplateExporter,
     register_workspace_structure_template_handler,
 )
-from ai_multi_agent_platform.workspaces import LocalWorkspaceProvider
+from ai_multi_agent_platform.workspaces import LocalWorkspaceProvider, WorkspaceType
 
 
 def test_workspace_structure_resolves_new_project_dependency(tmp_path: Path) -> None:
@@ -131,10 +132,6 @@ def test_workspace_structure_export_keeps_source_ids_out_of_configuration(tmp_pa
         register_project_template_handler(handlers, scopes)
         register_workspace_structure_template_handler(handlers, workspaces, scopes)
         application = TemplateApplicationService(InMemoryTemplateRepository(), handlers)
-
-        from ai_multi_agent_platform.contracts import OperationContext
-        from ai_multi_agent_platform.data import DataAccessContext
-        from ai_multi_agent_platform.workspaces import WorkspaceType
 
         source_workspace = await workspaces.create_workspace(
             project_id=source_project.id,
