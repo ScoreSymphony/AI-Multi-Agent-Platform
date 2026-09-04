@@ -188,6 +188,18 @@ Memory provenance is serialized explicitly and preserved. `supersedes_memory_id`
 
 No backend search/vector/index identity is carried by the Memory resource.
 
+## Historical Task and Run semantics
+
+Portable `task_history` resources are archival records, not executable Task imports. They always use `historical_preserve` identity semantics.
+
+A Task history snapshot is accepted only when the canonical Task is terminal and every referenced Run is terminal. Draft, ready, running and waiting Tasks are rejected, as is a terminal Task that still references a non-terminal Run.
+
+The historical snapshot preserves terminal Task/Run projections, revisions, output metadata, lifecycle event order, timestamps, provenance, durable external references and canonical Plan/Step/Artifact/Result relationships. Runtime execution authority is removed: backend execution references, worker IDs, active trace/span IDs, live leases/reservations, recovery state and equivalent provider-private fields are not portable history.
+
+Historical import writes only through `HistoricalTaskArchiveRepository`. It never commits imported lifecycle events to the live `EventRepository`, so imported history cannot become schedulable, recoverable or dispatchable work. `TaskHistoryImportMutationHandler` participates in the ordinary package rollback model by deleting the archive entry if a later package mutation fails.
+
+The focused contract and invariants are documented in `PORTABILITY_TASK_HISTORY.md`.
+
 ## Dry-run and conflict boundary
 
 `ImportPreviewService` is mutation-free. Before a package may enter the executor it reports or computes:
@@ -250,6 +262,9 @@ The #79 portability stack verifies at least:
 - deterministic Workspace Project remapping;
 - cross-project Workspace Memory rejection before mutation;
 - cross-user User Memory rejection;
-- `short_term` Memory runtime-state exclusion.
+- `short_term` Memory runtime-state exclusion;
+- terminal Task/Run history snapshot from canonical event streams;
+- rejection of active Tasks and non-terminal Runs from historical export;
+- historical Task archive import without creation of a live kernel stream.
 
-Historical Task archive/import semantics, Knowledge-source/config metadata, further canonical configuration codecs, import/export reports and Control Plane/CLI surfaces remain follow-up work within #79.
+Knowledge-source/config metadata, further canonical configuration codecs, import/export reports and Control Plane/CLI surfaces remain follow-up work within #79.
