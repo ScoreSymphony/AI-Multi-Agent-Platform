@@ -1,15 +1,18 @@
-"""Production-shaped single-node composition for issue #39."""
+"""Production-shaped single-node composition for issue #39 and first-run onboarding."""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.agents import (
+    AgentRuntime,
     AgentService,
     JsonAgentRepository,
     register_agent_control_plane,
     register_standard_agent_control_plane,
 )
+from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlane,
@@ -20,7 +23,21 @@ from ai_multi_agent_platform.conversations import ConversationService, JsonConve
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
-from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
+from ai_multi_agent_platform.kernel import (
+    EventSourcedTaskRepository,
+    PlatformKernel,
+    SqliteKernelRepository,
+)
+from ai_multi_agent_platform.models import JsonModelRegistryStore, ModelRegistry, ModelRuntime
+from ai_multi_agent_platform.onboarding import (
+    FirstRunAgentLifecycleBackend,
+    FirstRunTaskService,
+    JsonModelProviderSetupStore,
+    JsonOnboardingCommandStore,
+    OnboardingModelAdapter,
+    OnboardingService,
+    register_onboarding_control_plane,
+)
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.security import (
     ActorType,
@@ -71,6 +88,11 @@ class SingleNodeDeployment:
     workspaces: SqliteWorkspaceProvider
     agents: AgentService
     conversations: ConversationService
+    agent_runtime: AgentRuntime
+    models: ModelRegistry
+    onboarding: OnboardingService
+    first_task: FirstRunTaskService
+    secrets: SecretProvider | None
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     verification: SqliteVerificationService
@@ -164,7 +186,12 @@ class SingleNodeDeployment:
         )
 
 
-def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployment:
+def build_single_node_deployment(
+    config: SingleNodeConfig,
+    *,
+    onboarding_model_adapters: Iterable[OnboardingModelAdapter] = (),
+    secret_provider: SecretProvider | None = None,
+) -> SingleNodeDeployment:
     """Build the durable Stage-1 profile without optional external services."""
 
     config.prepare_directories()
@@ -182,14 +209,32 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
     conversations = ConversationService(
         JsonConversationRepository(database_dir / "conversations.json")
     )
+    models = ModelRegistry()
+    onboarding = OnboardingService(
+        models=models,
+        model_store=JsonModelRegistryStore(database_dir / "models.json"),
+        provider_store=JsonModelProviderSetupStore(database_dir / "model-providers.json"),
+        command_store=JsonOnboardingCommandStore(database_dir / "onboarding-commands.json"),
+        scopes=scopes,
+        agents=agents,
+        model_adapters=onboarding_model_adapters,
+    )
+    onboarding.restore()
+    agent_runtime = AgentRuntime(agents, model_registry=models)
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
     orchestrator = ReferenceOrchestrator()
-    lifecycle = ExecutorLifecycleBackend(
+    reference_lifecycle = ExecutorLifecycleBackend(
         ReferenceExecutor(config.executor_dir),
         workspace=_REFERENCE_EXECUTION_WORKSPACE,
         action="echo",
+    )
+    lifecycle = FirstRunAgentLifecycleBackend(
+        delegate=reference_lifecycle,
+        tasks=EventSourcedTaskRepository(kernel_repository),
+        agents=agent_runtime,
+        models=ModelRuntime(models),
     )
     verification_path = database_dir / "verification.sqlite3"
     verification = SqliteVerificationService(verification_path, require_canonical_subjects=True)
@@ -206,6 +251,12 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
     verification_runtime = CanonicalVerificationRuntime(
         verification_completion, verification_evidence
     )
+    first_task = FirstRunTaskService(
+        onboarding=onboarding,
+        kernel=kernel,
+        scopes=scopes,
+        agents=agents,
+    )
 
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
     authentication = LocalAuthenticationService(store=authentication_store)
@@ -218,14 +269,15 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         authorization=authorization,
         workspace_provider=workspaces,
         health_providers=(orchestrator, lifecycle, files),
+        model_registry=models,
         automation_state_path=database_dir / "automation.sqlite3",
-        notification_state_path=database_dir / "notifications.sqlite3",
         conversation_service=conversations,
         conversation_agent_service=agents,
         conversation_file_provider=files,
     )
-    register_agent_control_plane(control_plane, agents)
+    register_agent_control_plane(control_plane, agents, runtime=agent_runtime)
     register_standard_agent_control_plane(control_plane, agents)
+    register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
     register_verification_control_plane(
         control_plane,
         verification,
@@ -249,6 +301,11 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         workspaces=workspaces,
         agents=agents,
         conversations=conversations,
+        agent_runtime=agent_runtime,
+        models=models,
+        onboarding=onboarding,
+        first_task=first_task,
+        secrets=secret_provider,
         authentication=authentication,
         authorization=authorization,
         verification=verification,

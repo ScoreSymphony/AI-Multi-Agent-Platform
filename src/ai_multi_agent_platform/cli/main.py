@@ -27,6 +27,7 @@ from .memory_knowledge import (
     execute_knowledge,
     execute_memory,
 )
+from .onboarding import add_onboarding_parser, execute_onboarding
 from .plugins import add_plugin_parser, execute_plugin
 from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
@@ -135,6 +136,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_plugin_parser(areas)
     add_evaluation_parser(areas)
     add_memory_knowledge_parsers(areas)
+    add_onboarding_parser(areas)
 
     profile = areas.add_parser("profile", help="manage non-secret target profiles")
     profile.set_defaults(area="profile")
@@ -408,6 +410,8 @@ def _execute(
         return CommandResult(execute_plugin(args, client, _require_confirmation))
     if args.area == "evaluation":
         return CommandResult(execute_evaluation(args, client))
+    if args.area == "onboarding":
+        return CommandResult(execute_onboarding(args, client))
     if args.area == "memory":
         return CommandResult(execute_memory(args, client, _require_confirmation))
     if args.area == "knowledge":
