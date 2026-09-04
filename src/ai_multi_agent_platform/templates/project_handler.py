@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane.models import OwnerType
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.domain import OwnerRef
 
@@ -58,7 +57,7 @@ class ProjectTemplateHandler:
         project = self.scopes.create_project(
             key=f"template:{context.instance_id}:{revision.template_id}:{revision.revision}:project",
             name=_required_string(payload, "name"),
-            owner_type=cast(OwnerType, owner.type),
+            owner_type=owner.type,
             owner_id=owner.id,
         )
         return (TemplateResourceRef(resource_type="project", resource_id=project.id),)
