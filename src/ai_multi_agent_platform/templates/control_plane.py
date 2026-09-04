@@ -62,7 +62,10 @@ class TemplateResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(_template_resource(self.repository, item.template_id) for item in self.repository.list_templates())
+        return tuple(
+            _template_resource(self.repository, item.template_id)
+            for item in self.repository.list_templates()
+        )
 
     async def get_resource(
         self,
@@ -248,7 +251,9 @@ def register_template_control_plane(
     """Register Template resources/commands without changing the Control Plane foundation."""
 
     repository = application.repository
-    control_plane.register_resource_service(TEMPLATE_COLLECTION, TemplateResourceService(repository))
+    control_plane.register_resource_service(
+        TEMPLATE_COLLECTION, TemplateResourceService(repository)
+    )
     control_plane.register_resource_service(
         TEMPLATE_INSTANCE_COLLECTION,
         TemplateInstanceResourceService(repository),
