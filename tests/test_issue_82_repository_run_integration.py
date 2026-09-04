@@ -116,11 +116,12 @@ def test_repository_run_records_exact_input_and_returns_changed_file_artifacts(
             files,
             kernel,  # type: ignore[arg-type]
         )
-        inputs = integration.record_input_snapshot(
+        inputs = await integration.record_input_snapshot(
             run_id=run_id,
             task_id=task_id,
             snapshot=snapshot,
             actor_ref="user:repository-user",
+            context=data_context,
         )
         assert len(inputs) == 1
         assert inputs[0].repository_id == repository.id
@@ -175,6 +176,79 @@ def test_repository_run_records_exact_input_and_returns_changed_file_artifacts(
         assert updated.input_revision == input_commit.revision
         assert set(updated.diff_artifact_ids) == set(bundle.artifact_ids)
         assert provenance.for_run(run_id) == (updated,)
+
+    asyncio.run(scenario())
+
+
+def test_run_input_recovers_materialized_sha_when_snapshot_keeps_symbolic_ref(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        project_id = new_id("project")
+        run_id = new_id("run")
+        operation = _operation(project_id)
+        data_context = DataAccessContext(operation=operation, actor_ref="user:repository-user")
+        repository_root = tmp_path / "repo"
+        connection = _connection(project_id)
+        provider = LocalGitRepositoryProvider(repository_root, connection)
+        repository = await provider.initialize(operation)
+        (repository_root / "value.txt").write_text("input\n", encoding="utf-8")
+        input_commit = await provider.commit(
+            repository,
+            "input",
+            operation,
+            author_name="Repository Test",
+            author_email="repository@example.invalid",
+        )
+
+        repositories = RepositoryRegistry()
+        repositories.register(RepositoryBinding(connection, repository, provider))
+        files = LocalFileProvider(tmp_path / "objects", tmp_path / "files.sqlite")
+        resolver = RepositoryWorkspaceSourceResolver(repositories, files)
+        resolved = await resolver.resolve(
+            WorkspaceSourceRef(
+                kind=WorkspaceSourceKind.REPOSITORY,
+                ref=repository.id,
+                revision="main",
+            ),
+            data_context,
+        )
+        assert resolved.source_ref.revision == input_commit.revision
+
+        workspaces = LocalWorkspaceProvider(tmp_path / "workspaces", files)
+        workspace = await workspaces.create_workspace(
+            project_id=project_id,
+            owner_ref=OwnerRef(type="user", id="repository-user"),
+            workspace_type=WorkspaceType.ISOLATED_RUN,
+            context=data_context,
+            source_refs=(
+                WorkspaceSourceRef(
+                    kind=WorkspaceSourceKind.REPOSITORY,
+                    ref=repository.id,
+                    revision="main",
+                ),
+            ),
+            files=resolved.files,
+        )
+        assert workspace.base_snapshot_id is not None
+        snapshot = await workspaces.get_snapshot(workspace.base_snapshot_id)
+
+        provenance = RepositoryProvenanceStore()
+        integration = RepositoryRunIntegration(
+            repositories,
+            provenance,
+            workspaces,
+            files,
+            _ArtifactKernel(),  # type: ignore[arg-type]
+        )
+        inputs = await integration.record_input_snapshot(
+            run_id=run_id,
+            snapshot=snapshot,
+            actor_ref="user:repository-user",
+            context=data_context,
+        )
+        assert inputs[0].input_revision == input_commit.revision
+        assert inputs[0].branch_ref == "main"
 
     asyncio.run(scenario())
 
