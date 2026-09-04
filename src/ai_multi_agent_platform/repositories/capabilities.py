@@ -2,66 +2,100 @@
 
 from __future__ import annotations
 
-import ai_multi_agent_platform.capabilities as capability_contracts
-import ai_multi_agent_platform.repositories.models as repository_models
+from dataclasses import dataclass
+from enum import StrEnum
+
+from ai_multi_agent_platform.capabilities import (
+    CapabilitySpec,
+    CredentialRequirement,
+    SafetyClassification,
+    SideEffectClassification,
+)
+
+
+class RepositoryOperation(StrEnum):
+    DISCOVER = "repository.discover"
+    READ = "repository.read"
+    MATERIALIZE = "repository.materialize"
+    FETCH = "repository.fetch"
+    INSPECT_REFS = "repository.inspect_refs"
+    CREATE_BRANCH = "repository.create_branch"
+    CHECKOUT = "repository.checkout"
+    STATUS = "repository.status"
+    DIFF = "repository.diff"
+    COMMIT = "repository.commit"
+    PUSH = "repository.push"
+    ISSUE_READ = "repository.issue.read"
+    ISSUE_WRITE = "repository.issue.write"
+    CHANGE_REQUEST_READ = "repository.change_request.read"
+    CHANGE_REQUEST_WRITE = "repository.change_request.write"
+    EVENT_RECEIVE = "repository.event.receive"
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryCapability:
+    operation: RepositoryOperation
+    side_effects: SideEffectClassification = SideEffectClassification.NONE
+    requires_credentials: bool = False
+    supported: bool = True
 
 
 READ_OPERATIONS = frozenset(
     {
-        repository_models.RepositoryOperation.DISCOVER,
-        repository_models.RepositoryOperation.READ,
-        repository_models.RepositoryOperation.MATERIALIZE,
-        repository_models.RepositoryOperation.INSPECT_REFS,
-        repository_models.RepositoryOperation.STATUS,
-        repository_models.RepositoryOperation.DIFF,
-        repository_models.RepositoryOperation.ISSUE_READ,
-        repository_models.RepositoryOperation.CHANGE_REQUEST_READ,
-        repository_models.RepositoryOperation.EVENT_RECEIVE,
+        RepositoryOperation.DISCOVER,
+        RepositoryOperation.READ,
+        RepositoryOperation.MATERIALIZE,
+        RepositoryOperation.INSPECT_REFS,
+        RepositoryOperation.STATUS,
+        RepositoryOperation.DIFF,
+        RepositoryOperation.ISSUE_READ,
+        RepositoryOperation.CHANGE_REQUEST_READ,
+        RepositoryOperation.EVENT_RECEIVE,
     }
 )
 
 LOCAL_WRITE_OPERATIONS = frozenset(
     {
-        repository_models.RepositoryOperation.FETCH,
-        repository_models.RepositoryOperation.CREATE_BRANCH,
-        repository_models.RepositoryOperation.CHECKOUT,
-        repository_models.RepositoryOperation.COMMIT,
+        RepositoryOperation.FETCH,
+        RepositoryOperation.CREATE_BRANCH,
+        RepositoryOperation.CHECKOUT,
+        RepositoryOperation.COMMIT,
     }
 )
 
 EXTERNAL_SIDE_EFFECT_OPERATIONS = frozenset(
     {
-        repository_models.RepositoryOperation.PUSH,
-        repository_models.RepositoryOperation.ISSUE_WRITE,
-        repository_models.RepositoryOperation.CHANGE_REQUEST_WRITE,
+        RepositoryOperation.PUSH,
+        RepositoryOperation.ISSUE_WRITE,
+        RepositoryOperation.CHANGE_REQUEST_WRITE,
     }
 )
 
 CREDENTIAL_OPERATIONS = frozenset(
     {
-        repository_models.RepositoryOperation.FETCH,
-        repository_models.RepositoryOperation.PUSH,
-        repository_models.RepositoryOperation.ISSUE_READ,
-        repository_models.RepositoryOperation.ISSUE_WRITE,
-        repository_models.RepositoryOperation.CHANGE_REQUEST_READ,
-        repository_models.RepositoryOperation.CHANGE_REQUEST_WRITE,
+        RepositoryOperation.FETCH,
+        RepositoryOperation.PUSH,
+        RepositoryOperation.ISSUE_READ,
+        RepositoryOperation.ISSUE_WRITE,
+        RepositoryOperation.CHANGE_REQUEST_READ,
+        RepositoryOperation.CHANGE_REQUEST_WRITE,
     }
 )
 
 
 def repository_capability(
-    operation: repository_models.RepositoryOperation,
+    operation: RepositoryOperation,
     *,
     requires_credentials: bool = False,
     supported: bool = True,
-) -> repository_models.RepositoryCapability:
+) -> RepositoryCapability:
     if operation in LOCAL_WRITE_OPERATIONS:
-        side_effects = capability_contracts.SideEffectClassification.LOCAL_WRITE
+        side_effects = SideEffectClassification.LOCAL_WRITE
     elif operation in EXTERNAL_SIDE_EFFECT_OPERATIONS:
-        side_effects = capability_contracts.SideEffectClassification.EXTERNAL
+        side_effects = SideEffectClassification.EXTERNAL
     else:
-        side_effects = capability_contracts.SideEffectClassification.NONE
-    return repository_models.RepositoryCapability(
+        side_effects = SideEffectClassification.NONE
+    return RepositoryCapability(
         operation=operation,
         side_effects=side_effects,
         requires_credentials=requires_credentials,
@@ -69,36 +103,34 @@ def repository_capability(
     )
 
 
-def repository_capability_specs() -> tuple[capability_contracts.CapabilitySpec, ...]:
+def repository_capability_specs() -> tuple[CapabilitySpec, ...]:
     """Return #12-compatible capability definitions for canonical repository operations."""
 
-    specs: list[capability_contracts.CapabilitySpec] = []
-    for operation in repository_models.RepositoryOperation:
+    specs: list[CapabilitySpec] = []
+    for operation in RepositoryOperation:
         capability = repository_capability(
             operation,
             requires_credentials=operation in CREDENTIAL_OPERATIONS,
         )
         sensitive = capability.side_effects in {
-            capability_contracts.SideEffectClassification.EXTERNAL,
-            capability_contracts.SideEffectClassification.DESTRUCTIVE,
+            SideEffectClassification.EXTERNAL,
+            SideEffectClassification.DESTRUCTIVE,
         }
         specs.append(
-            capability_contracts.CapabilitySpec(
+            CapabilitySpec(
                 capability_id=operation.value,
                 name=operation.value,
                 description=f"Canonical provider-neutral {operation.value} operation",
                 tags=("repository", "git"),
                 safety=(
-                    capability_contracts.SafetyClassification.RESTRICTED
-                    if sensitive
-                    else capability_contracts.SafetyClassification.STANDARD
+                    SafetyClassification.RESTRICTED if sensitive else SafetyClassification.STANDARD
                 ),
                 side_effects=capability.side_effects,
                 required_permissions=(operation.value,),
                 credential_requirement=(
-                    capability_contracts.CredentialRequirement.REQUIRED
+                    CredentialRequirement.REQUIRED
                     if capability.requires_credentials
-                    else capability_contracts.CredentialRequirement.NONE
+                    else CredentialRequirement.NONE
                 ),
                 features=("provider-neutral",),
             )
@@ -109,16 +141,16 @@ def repository_capability_specs() -> tuple[capability_contracts.CapabilitySpec, 
 LOCAL_GIT_CAPABILITIES = tuple(
     repository_capability(operation)
     for operation in (
-        repository_models.RepositoryOperation.DISCOVER,
-        repository_models.RepositoryOperation.READ,
-        repository_models.RepositoryOperation.MATERIALIZE,
-        repository_models.RepositoryOperation.FETCH,
-        repository_models.RepositoryOperation.INSPECT_REFS,
-        repository_models.RepositoryOperation.CREATE_BRANCH,
-        repository_models.RepositoryOperation.CHECKOUT,
-        repository_models.RepositoryOperation.STATUS,
-        repository_models.RepositoryOperation.DIFF,
-        repository_models.RepositoryOperation.COMMIT,
-        repository_models.RepositoryOperation.PUSH,
+        RepositoryOperation.DISCOVER,
+        RepositoryOperation.READ,
+        RepositoryOperation.MATERIALIZE,
+        RepositoryOperation.FETCH,
+        RepositoryOperation.INSPECT_REFS,
+        RepositoryOperation.CREATE_BRANCH,
+        RepositoryOperation.CHECKOUT,
+        RepositoryOperation.STATUS,
+        RepositoryOperation.DIFF,
+        RepositoryOperation.COMMIT,
+        RepositoryOperation.PUSH,
     )
 )
