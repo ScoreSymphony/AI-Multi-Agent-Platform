@@ -37,7 +37,8 @@ The foundation rebuild covers:
 - Projects;
 - Workspaces;
 - Tasks;
-- Runs.
+- Runs;
+- canonical Task lifecycle Events.
 
 These resources use their existing canonical list/discovery authorization actions before a Search result becomes caller-visible.
 
@@ -83,6 +84,12 @@ Reference results reuse the existing plural Control Plane authorization actions:
 
 A canonical reference ID can theoretically be attached to more than one Task. Search therefore tracks every Task scope associated with that `(resource_type, resource_id)` identity. When multiple attachments exist, the derived document is deliberately reduced to scope-neutral ID/type metadata: parent Task IDs, owner information and Project relationships are not indexed or exposed. Authorization succeeds only if at least one canonical attachment is visible to the caller. This preserves discoverability of the shared canonical identity without leaking relationships from another Task or Project.
 
+### Canonical Events
+
+Task lifecycle Events are derived from the canonical Event repository while rebuilding Search. Search does not create a second event history or treat event results as lifecycle authority.
+
+The Search document keeps the canonical Event ID and safe event metadata while inheriting the parent Task owner and Project scope. Event candidates are authorized through `event:list` against the canonical Task scope before result counts or exact-ID matches become visible. Their canonical navigation remains the owning Task timeline rather than an invented Search-owned Event endpoint.
+
 ### Progressive registered domains
 
 Canonical domains exposed through the generic Control Plane `ResourceService` registration seam are automatically eligible for Search. The registered service remains the domain/schema authority; Search reads its canonical northbound resource shape, validates it through the same private-field leak checks used by the Control Plane, derives a `SearchDocument`, and retains the registered collection in result provenance.
@@ -100,11 +107,19 @@ The current progressive path supports, when those domain services are registered
 - Files;
 - Plugins;
 - Plugin Candidates;
+- Usage Aggregates;
+- Usage Budgets;
+- Evaluation Suites;
+- Evaluation Runs;
+- Connector Definitions;
+- privacy-safe Connections;
 - other future registered canonical collections that satisfy the same contract.
 
 Registered Search results reuse the collection's canonical `<singular>:list` authorization action. Candidate owner and Project scope are forwarded into that authorization decision so two resources in the same collection can still have different visibility. Unauthorized registered resources are removed before caller-visible counts, snippets, cursors or exact-ID results are calculated.
 
 A registered resource type may not collide with a built-in Search resource type or ambiguously map to multiple canonical collections.
+
+A registered `ResourceService` may opt out of global Search by exposing `search_indexable = False`. Actor-filtered domains that require a complete rebuild may expose the internal `list_search_resources()` rebuild seam while leaving normal northbound listing semantics unchanged. This separation is used only to reconstruct derived Search state; it does not bypass the per-result authorization boundary.
 
 ### Files
 
@@ -128,7 +143,7 @@ The canonical `/files` read surface uses the same scope principle. The File Reso
 
 Tombstoned Files are excluded by the canonical FileProvider. Because the correctness-first Search path rebuilds from canonical sources before a query, a deleted/tombstoned File disappears from Search without a Search-owned deletion state or second lifecycle.
 
-Memory and Knowledge are intentionally not derived from private provider internals. The current #13 Memory contract is query/scope-oriented rather than globally enumerable, and the canonical KnowledgeProvider does not yet expose public source/document enumeration. Global Search waits for privacy-aware northbound enumeration contracts instead of using implementation-private methods such as a local provider's `_list_sources()`.
+Memory and Knowledge are intentionally not derived from private provider internals. The current Memory/Knowledge contracts do not yet provide the privacy-aware globally enumerable northbound content lifecycle required for Search. Global Search waits for that canonical contract rather than using implementation-private provider methods. The follow-up content lifecycle/enumeration work is tracked separately, including #251.
 
 ### Plugins and Plugin Candidates
 
@@ -213,6 +228,65 @@ Approval candidates reuse the registered-domain `approval:list` authorization ac
 
 Search is discovery-only: an Approval Search result or its displayed status never authorizes, approves, rejects or otherwise mutates the canonical Approval lifecycle.
 
+### Usage Aggregates and Budgets
+
+Issue #76 exposes canonical accounting state through registered `usage-records`, `usage-aggregates` and `usage-budgets` ResourceServices. Global Search intentionally does **not** index raw `usage-records`: they are high-cardinality accounting records and remain available through the owning accounting API instead of turning global Search into a telemetry query engine.
+
+The `usage-aggregates` and `usage-budgets` services provide complete Search rebuild enumerators while their normal northbound reads remain owner-isolated. Searchable metadata is limited to safe flat discovery vocabulary such as:
+
+- metric type and unit;
+- aggregation mode;
+- canonical scope type/ID where exposed;
+- budget kind/action/window mode;
+- threshold level/status where available;
+- canonical owner scope.
+
+Nested trend points, quality-count structures, raw quantities/cost evidence and arbitrary provenance are not recursively flattened into Search text. Per-result authorization still happens before caller-visible counts and exact-ID results.
+
+### Evaluation Suites and Runs
+
+Issue #19 exposes canonical `evaluation-suites` and `evaluation-runs` through registered Control Plane ResourceServices. Search consumes those northbound shapes only; it does not query Evaluation repositories, runners, evaluators or provider internals directly.
+
+The safe discovery projection includes:
+
+- Evaluation Suite name and description;
+- Suite tags, canonical `suite_id` and exact version;
+- Evaluation Run `suite_id` and `suite_version`;
+- Run lifecycle status;
+- optional `baseline_run_id`;
+- start/completion time for time filtering.
+
+Suite version is mapped into the generic Search result version. Run `completed_at`, falling back to `started_at`, supplies the generic Search time projection.
+
+Search deliberately does not traverse nested Suite cases, fixtures, input templates, assertions, metrics or rubrics. Run snapshot environment/configuration references and nested result/comparison evidence likewise remain outside global Search text. Evaluation candidates reuse `evaluation-suite:list` and `evaluation-run:list`; authorization is applied before totals, snippets or exact-ID results become visible.
+
+Search is discovery-only and does not determine Evaluation outcomes. See `docs/SEARCH_EVALUATIONS.md` for the focused integration contract.
+
+### Connector Definitions and Connections
+
+Issue #44 exposes canonical Connector Definitions and Connections through the existing `register_connector_control_plane(...)` ResourceService registration path. Search does not create a parallel connector catalog or query adapters/remote services directly.
+
+The northbound resources carry explicit canonical types:
+
+- `connector-definition` from `connector-definitions`;
+- `connection` from `connections`.
+
+Connector Definition Search uses safe flat metadata such as canonical type/version, name/description, supported operations, features, resource types, actions and event types. Nested configuration schemas, health semantics, authentication metadata and source/adapter metadata are not recursively flattened into global Search.
+
+Connection Search uses a dedicated complete rebuild projection because ordinary `/connections` listing is actor-filtered. The Search rebuild projection contains only safe discovery state such as canonical Connection identity, display name, connector type/version, owner/Project scope, requested/granted scope identifiers, enabled state, lifecycle status/health, timestamps and revision. It deliberately excludes:
+
+- `SecretReference` values and IDs;
+- endpoint metadata;
+- account/adapter metadata;
+- provider-native account identifiers;
+- arbitrary remote payloads.
+
+Per-result `connection:list` authorization still occurs above the derived index before caller-visible counts or exact-ID matches. The rebuild enumerator therefore reconstructs candidate state but is not an authorization bypass.
+
+Organization-scoped Connections are intentionally excluded from global Search until #87 supplies stable membership/removal/suspension visibility semantics that Search can enforce. `ExternalResourceReference` objects are also not indexed yet because #44 currently does not expose them through a durable, listable canonical ResourceService; Search does not crawl sync responses or adapter state to invent such an index.
+
+See `docs/SEARCH_CONNECTORS.md` for the focused integration contract.
+
 ## Query features
 
 The current canonical query supports:
@@ -228,7 +302,7 @@ The current canonical query supports:
 - pagination and deterministic sorting;
 - explicit unsupported-capability responses for semantic/hybrid modes on the local provider.
 
-Later domains are added only after their owning canonical APIs exist. Search must not invent a second schema authority for Memory, Knowledge, Connectors, Conversations, Verification, Organizations or future domains.
+Later domains are added only after their owning canonical APIs and privacy contracts are stable. Search must not invent a second schema authority for Memory, Knowledge, Nodes/Workers, Conversations, Notifications, Templates, Repository/Git, Verification, Organizations or other future domains.
 
 ## CLI and frontend clients
 
@@ -267,7 +341,7 @@ The `/search` navigation entry is backed by a global Search page that:
 - reuses canonical provider-unavailable error presentation;
 - links known resource types to their canonical UI routes using the result's canonical type and ID.
 
-Known Project, Workspace, Task, Run, Artifact, Result, Plan, Step, Model, Model-Provider and Approval results can navigate to their existing canonical UI route. Unknown or newly indexed types are not assigned invented client routes; their canonical API reference remains visible until that domain's UI integration exists.
+Known Project, Workspace, Task, Run, Artifact, Result, Plan, Step, Model, Model-Provider and Approval results can navigate to their existing canonical UI route. Other indexed types retain their canonical API reference even where the owning domain does not yet provide a dedicated frontend detail route. The Search frontend does not invent client-only identities or routes.
 
 ## Synchronization semantics
 
@@ -279,9 +353,11 @@ The provider boundary supports:
 
 The baseline local provider replaces documents by `(resource_type, resource_id)`, so updates do not create duplicate identities. `rebuild(...)` atomically replaces its in-memory derived state.
 
-For the current correctness-first Control Plane path, the index is rebuilt from canonical sources before each query. Updates and deletions therefore cannot remain silently stale even without a durable index or event bus. Later durable providers may replace this with write-through/event-driven synchronization plus revision/checkpoint metadata, but that metadata remains provider provenance and never becomes canonical resource state.
+For the current correctness-first Control Plane path, the index is rebuilt from canonical sources before each query. Updates and deletions therefore cannot remain silently stale even without a durable index or event bus. Rebuild also removes provider-only stale documents that no longer exist in canonical state.
 
-A rebuild tolerates absent optional domains: for example, Search remains functional when no Model Registry or no optional registered ResourceService is configured.
+Later durable providers may replace the per-query rebuild with write-through/event-driven synchronization plus revision/checkpoint metadata, batching and missed-event recovery. That synchronization metadata remains provider provenance and never becomes canonical resource state. A full canonical rebuild remains the recovery authority for all indexed resource types.
+
+A rebuild tolerates absent optional domains: for example, Search remains functional when no Model Registry, Registry/Marketplace connection or optional registered ResourceService is configured.
 
 ## Authorization placement
 
@@ -302,29 +378,33 @@ The baseline `SearchService` scans provider candidates and applies canonical aut
 
 Exact-ID lookup follows the same rule: knowing or guessing a canonical ID does not reveal whether an unauthorized resource exists.
 
+For registered actor-filtered domains, an internal rebuild enumerator may expose more candidate resources than one caller could list directly. This is safe only because the raw SearchProvider is not northbound and the Control Plane re-authorizes every candidate using its canonical owner/Project scope before it can influence visible totals or results.
+
 ## Failure and degraded behavior
 
-- A SearchProvider outage is returned through the canonical error contract (for example `503 unavailable` when retryable).
+- A SearchProvider outage is returned through the canonical error contract, including retryable `503 unavailable` where appropriate.
 - Unsupported optional query modes return `unsupported_capability` rather than silently changing semantics.
 - The CLI preserves those canonical errors.
 - The frontend distinguishes optional-mode degradation from general request/provider failures.
 - The baseline has no dependency on Registry connectivity, embeddings, vector databases or paid search services.
+- A failed rebuild does not make stale provider state authoritative; the request fails rather than silently serving a potentially incorrect authorization-sensitive snapshot as fresh canonical Search.
 
 ## Remaining #45 integrations
 
-The secure foundation, task-reference search, progressive registration bridge, Model/Capability inventory support, Automation/Approval/File/Plugin discovery, Task-management filtering and CLI/frontend clients establish one canonical discovery path. Remaining progressive work includes, as the corresponding canonical APIs and privacy contracts are ready:
+The secure Search foundation, Task/reference/Event indexing, progressive registration bridge, Model/Capability inventory support, Automation/Approval/File/Plugin/Usage/Evaluation/Connector discovery, Task-management filtering and CLI/frontend clients now establish one canonical discovery path across the currently stable domains.
 
-- policy-permitted Events where useful for global discovery;
-- scoped Memory and Knowledge after canonical privacy-aware enumeration exists;
-- Nodes/Workers;
-- Evaluations;
-- Connectors/external-resource references;
-- Conversations/Messages with retention/deletion propagation;
-- Notifications and usage/resource summaries where useful;
-- Templates and Repository/Git references;
-- Verification resources;
-- Organizations/Memberships with membership-removal isolation;
-- durable/event-driven indexing, batching and stale-index checkpoints for larger deployments;
+Remaining progressive work is intentionally gated on the owning canonical APIs and privacy contracts:
+
+- scoped Memory and Knowledge after privacy-aware canonical content enumeration exists (#251/#13);
+- Nodes/Workers after #14 stabilizes its northbound registry/resource contract;
+- Conversations/Messages with retention/deletion propagation (#72);
+- Notifications where useful after the currently reopened #75 is stable;
+- Templates (#78);
+- Repository/Git and durable external-resource references (#82/#44);
+- Verification Requests/Results/Policies after the currently reopened #86 is stable;
+- Organizations/Memberships with membership-removal/suspension isolation (#87);
+- Organization-scoped Connector Connections after #87 visibility semantics are available;
+- durable/event-driven indexing, batching and stale-index checkpoints for larger deployments as an optimization over the correctness-first rebuild path;
 - optional semantic/hybrid provider adapters without making them baseline requirements.
 
 External Registry/Marketplace search remains a separate optional distribution concern and is not required for local platform Search.
