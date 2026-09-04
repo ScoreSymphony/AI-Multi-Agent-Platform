@@ -67,6 +67,7 @@ new_task = '''  } else if (taskMatch) {
         taskId={taskMatch.taskId}
       />
     );
+  }
 '''
 if old_task not in text and '<VerificationBoundTaskDetailPage' not in text:
     raise SystemExit("task detail route anchor not found")
@@ -81,6 +82,7 @@ new_run = '''  else if (runMatch) {
         runId={runMatch.runId}
       />
     );
+  }
 '''
 if old_run not in text and '<VerificationBoundRunDetailPage' not in text:
     raise SystemExit("run detail route anchor not found")
