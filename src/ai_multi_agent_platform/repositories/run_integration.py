@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from uuid import NAMESPACE_URL, uuid5
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
 from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.kernel import PlatformKernel
@@ -278,13 +279,14 @@ class RepositoryRunIntegration:
         result: dict[str, str] = {}
         for repository_id, values in revisions.items():
             if len(values) != 1:
+                revision_values: list[JsonValue] = [value for value in sorted(values)]
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
                     "repository Workspace snapshot mixes multiple input revisions",
                     details={
                         "repository_id": repository_id,
                         "snapshot_id": snapshot.id,
-                        "revisions": sorted(values),
+                        "revisions": revision_values,
                     },
                 )
             result[repository_id] = next(iter(values))
