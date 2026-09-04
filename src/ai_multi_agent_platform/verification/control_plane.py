@@ -68,6 +68,25 @@ class VerificationResourceService(ResourceService):
         resources.sort(key=lambda item: (item[0].created_at, item[0].verification_id))
         return tuple(resource for _request, resource in resources)
 
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate all canonical requests with task scope for Search rebuild."""
+
+        resources: list[tuple[VerificationRequest, dict[str, JsonValue]]] = []
+        for task_id in await _task_ids(self._control_plane):
+            task = await self._control_plane._kernel.get_task(task_id)
+            for request, result in self._verification.history(task_id=task_id):
+                resources.append(
+                    (
+                        request,
+                        _search_scoped_resource(
+                            _verification_resource(request, result),
+                            task,
+                        ),
+                    )
+                )
+        resources.sort(key=lambda item: (item[0].created_at, item[0].verification_id))
+        return tuple(resource for _request, resource in resources)
+
     async def get_resource(
         self,
         context: RequestContext,
@@ -87,6 +106,12 @@ class VerificationResourceService(ResourceService):
 
 class VerificationReviewQueueResourceService(ResourceService):
     """Authorized pending-human-review queue derived from canonical requests."""
+
+    # This collection is a filtered navigation view over the same canonical
+    # ``verification`` resources exposed by VERIFICATION_COLLECTION. Indexing it would
+    # duplicate one resource type across two canonical collections and create ambiguous
+    # Search authorization/canonical refs.
+    search_indexable = False
 
     def __init__(
         self,
@@ -177,6 +202,22 @@ class VerificationRequirementResourceService(ResourceService):
             ):
                 continue
             resources.append(_requirement_resource(self._completion, task_id))
+        return tuple(resources)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate all canonical requirements with task scope for Search rebuild."""
+
+        resources: list[dict[str, JsonValue]] = []
+        for task_id in await _task_ids(self._control_plane):
+            if self._completion.requirement_for(task_id) is None:
+                continue
+            task = await self._control_plane._kernel.get_task(task_id)
+            resources.append(
+                _search_scoped_resource(
+                    _requirement_resource(self._completion, task_id),
+                    task,
+                )
+            )
         return tuple(resources)
 
     async def get_resource(
@@ -403,6 +444,19 @@ async def _allowed_for_task(
         owner_id=task.task.owner_ref.id,
         project_id=task.task.project_id,
     )
+
+
+def _search_scoped_resource(
+    resource: dict[str, JsonValue],
+    task: TaskState,
+) -> dict[str, JsonValue]:
+    """Add only canonical task authorization scope to an internal Search projection."""
+
+    scoped = dict(resource)
+    scoped["owner_type"] = task.task.owner_ref.type
+    scoped["owner_id"] = task.task.owner_ref.id
+    scoped["project_id"] = task.task.project_id
+    return scoped
 
 
 def _verification_resource(
