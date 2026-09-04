@@ -16,6 +16,7 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.contracts.authorization import AuthorizationRequest
 from ai_multi_agent_platform.domain import RunStatus
+from ai_multi_agent_platform.security.authorization import infer_actor_identity
 
 from .failover import (
     FailoverError,
@@ -588,7 +589,14 @@ class DistributedRuntime:
             return
         operation = job.execution.context
         principal_ref = job.actor_ref or operation.owner_id or "service:distributed-runtime"
-        actor_type = operation.owner_type or "service"
+        actor_identity_ref = principal_ref
+        if (
+            job.actor_ref is None
+            and operation.owner_id is not None
+            and operation.owner_type == "user"
+        ):
+            actor_identity_ref = f"user:{operation.owner_id}"
+        actor_type = infer_actor_identity(actor_identity_ref).actor_type.value
         task_id = job.execution.subject_id if job.execution.subject_type == "task" else None
         capability_ref = (
             job.requirements.capability_refs[0]
