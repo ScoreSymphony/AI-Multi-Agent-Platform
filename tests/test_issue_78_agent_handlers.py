@@ -176,7 +176,9 @@ def test_team_template_remaps_agent_template_members_leader_and_delegation() -> 
             item.resource_id for item in instance.resource_refs if item.resource_type == "agent"
         ]
         team_id = next(
-            item.resource_id for item in instance.resource_refs if item.resource_type == "agent_team"
+            item.resource_id
+            for item in instance.resource_refs
+            if item.resource_type == "agent_team"
         )
         team = agents.get_team_revision(team_id)
 
