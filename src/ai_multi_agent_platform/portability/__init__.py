@@ -13,6 +13,16 @@ from .agent_codecs import (
     snapshot_agent_team,
 )
 from .agent_import import AgentImportMutationHandler, AgentTeamImportMutationHandler
+from .automation_codecs import (
+    AUTOMATION_PORTABLE_SCHEMA_VERSION,
+    AUTOMATION_RESOURCE_TYPE,
+    AutomationPortableCodec,
+    AutomationPortableSnapshot,
+    automation_runtime_exclusions,
+    register_automation_portability_codec,
+    snapshot_automation,
+)
+from .automation_import import AutomationImportMutationHandler, AutomationImportPolicy
 from .dependencies import ResourceDependencyRef, parse_resource_dependency, resource_dependency
 from .executor import (
     AppliedImportResource,
@@ -111,6 +121,8 @@ __all__ = [
     "AGENT_RESOURCE_TYPE",
     "AGENT_TEAM_RESOURCE_TYPE",
     "ARTIFACT_RESOURCE_TYPE",
+    "AUTOMATION_PORTABLE_SCHEMA_VERSION",
+    "AUTOMATION_RESOURCE_TYPE",
     "FILE_PORTABLE_SCHEMA_VERSION",
     "FILE_RESOURCE_TYPE",
     "KNOWLEDGE_PORTABLE_SCHEMA_VERSION",
@@ -130,6 +142,10 @@ __all__ = [
     "AgentTeamPortableSnapshot",
     "AppliedImportResource",
     "ArtifactPortableCodec",
+    "AutomationImportMutationHandler",
+    "AutomationImportPolicy",
+    "AutomationPortableCodec",
+    "AutomationPortableSnapshot",
     "CompatibilityMetadata",
     "DependencyKind",
     "DependencyRequirement",
@@ -173,6 +189,7 @@ __all__ = [
     "ResourceSerializerRegistry",
     "TaskHistoryImportMutationHandler",
     "TaskHistoryPortableCodec",
+    "automation_runtime_exclusions",
     "build_package",
     "find_runtime_private_path",
     "knowledge_index_exclusion",
@@ -181,6 +198,7 @@ __all__ = [
     "package_to_dict",
     "parse_resource_dependency",
     "register_agent_portability_codecs",
+    "register_automation_portability_codec",
     "register_file_portability_codecs",
     "register_knowledge_portability_codec",
     "register_memory_portability_codec",
@@ -189,6 +207,7 @@ __all__ = [
     "seal_resource",
     "snapshot_agent",
     "snapshot_agent_team",
+    "snapshot_automation",
     "snapshot_file",
     "snapshot_memory",
     "snapshot_task_history",
