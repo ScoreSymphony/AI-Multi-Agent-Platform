@@ -31,6 +31,7 @@ from ai_multi_agent_platform.portability import (
     ImportMutationRegistry,
     ImportPreviewService,
     PackageProvenance,
+    PortablePackage,
     PortableResource,
     ResourceExport,
     ResourceSerializerRegistry,
@@ -79,7 +80,7 @@ def _agent_package(
     source: InMemoryAgentRepository,
     agent_id: str,
     team_id: str,
-) -> tuple[ResourceSerializerRegistry, object]:
+) -> tuple[ResourceSerializerRegistry, PortablePackage]:
     serializers = ResourceSerializerRegistry()
     register_agent_portability_codecs(
         serializers,
@@ -98,25 +99,23 @@ def _agent_package(
 
 def test_executor_imports_agent_then_team_with_full_revision_history() -> None:
     source, agent_id, team_id = _source_agents()
-    serializers, package_object = _agent_package(source, agent_id, team_id)
-    package = package_object
-    assert hasattr(package, "resources")
+    serializers, package = _agent_package(source, agent_id, team_id)
 
     preview = ImportPreviewService(
         resource_exists=lambda _resource_type, _resource_id: False,
         dependency_available=lambda _requirement: True,
-    ).preview(package)  # type: ignore[arg-type]
+    ).preview(package)
     target = InMemoryAgentRepository()
     mutations = ImportMutationRegistry()
     mutations.register(AgentImportMutationHandler(target))
     mutations.register(AgentTeamImportMutationHandler(target))
 
-    result = asyncio.run(ImportExecutor(serializers, mutations).execute(package, preview))  # type: ignore[arg-type]
+    result = asyncio.run(ImportExecutor(serializers, mutations).execute(package, preview))
     mapping = preview.mapping_dict()
     imported_agent_id = mapping[(AGENT_RESOURCE_TYPE, agent_id)]
     imported_team_id = mapping[(AGENT_TEAM_RESOURCE_TYPE, team_id)]
 
-    assert result.package_checksum == package.checksum  # type: ignore[union-attr]
+    assert result.package_checksum == package.checksum
     assert target.get_agent(imported_agent_id).current_revision == 2
     assert len(target.list_agent_revisions(imported_agent_id)) == 2
     imported_team = target.get_team_revision(imported_team_id, 1)
@@ -182,14 +181,12 @@ class _FailMutationHandler:
 
 def test_executor_rolls_back_real_team_and_agent_in_reverse_order() -> None:
     source, agent_id, team_id = _source_agents()
-    serializers, package_object = _agent_package(source, agent_id, team_id)
-    package = package_object
-    assert hasattr(package, "resources")
+    serializers, package = _agent_package(source, agent_id, team_id)
     serializers.register(_FailCodec(AGENT_TEAM_RESOURCE_TYPE, team_id))
     fail_resource = serializers.serialize("fail", object())
     package = build_package(
         source_platform_version="0.0.1",
-        resources=(*package.resources, fail_resource),  # type: ignore[union-attr]
+        resources=(*package.resources, fail_resource),
         provenance=PackageProvenance(source="test"),
     )
     preview = ImportPreviewService(
@@ -217,15 +214,13 @@ def test_executor_rolls_back_real_team_and_agent_in_reverse_order() -> None:
     assert team_missing.value.code is ErrorCode.NOT_FOUND
 
 
-def test_executor_rejects_stale_or_not_ready_preview_before_mutation() -> None:
+def test_executor_rejects_not_ready_preview_before_mutation() -> None:
     source, agent_id, team_id = _source_agents()
-    serializers, package_object = _agent_package(source, agent_id, team_id)
-    package = package_object
-    assert hasattr(package, "resources")
+    serializers, package = _agent_package(source, agent_id, team_id)
     preview = ImportPreviewService(
         resource_exists=lambda _resource_type, _resource_id: False,
         dependency_available=lambda _requirement: True,
-    ).preview(package)  # type: ignore[arg-type]
+    ).preview(package)
     blocked = replace(preview, ready=False)
     target = InMemoryAgentRepository()
     mutations = ImportMutationRegistry()
@@ -233,7 +228,7 @@ def test_executor_rejects_stale_or_not_ready_preview_before_mutation() -> None:
     mutations.register(AgentTeamImportMutationHandler(target))
 
     with pytest.raises(ContractError) as failed:
-        asyncio.run(ImportExecutor(serializers, mutations).execute(package, blocked))  # type: ignore[arg-type]
+        asyncio.run(ImportExecutor(serializers, mutations).execute(package, blocked))
 
     assert failed.value.code is ErrorCode.CONFLICT
     assert target.list_agents() == ()
@@ -242,19 +237,17 @@ def test_executor_rejects_stale_or_not_ready_preview_before_mutation() -> None:
 
 def test_executor_resolves_all_handlers_before_first_mutation() -> None:
     source, agent_id, team_id = _source_agents()
-    serializers, package_object = _agent_package(source, agent_id, team_id)
-    package = package_object
-    assert hasattr(package, "resources")
+    serializers, package = _agent_package(source, agent_id, team_id)
     preview = ImportPreviewService(
         resource_exists=lambda _resource_type, _resource_id: False,
         dependency_available=lambda _requirement: True,
-    ).preview(package)  # type: ignore[arg-type]
+    ).preview(package)
     target = InMemoryAgentRepository()
     mutations = ImportMutationRegistry()
     mutations.register(AgentImportMutationHandler(target))
 
     with pytest.raises(ContractError) as failed:
-        asyncio.run(ImportExecutor(serializers, mutations).execute(package, preview))  # type: ignore[arg-type]
+        asyncio.run(ImportExecutor(serializers, mutations).execute(package, preview))
 
     assert failed.value.code is ErrorCode.NOT_FOUND
     assert target.list_agents() == ()
