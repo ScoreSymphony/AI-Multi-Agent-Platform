@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime
 from enum import Enum
-from typing import Any, Literal, cast
+from typing import Literal, cast
 
 from ai_multi_agent_platform.agents.models import (
     AgentCapabilityPolicy,
