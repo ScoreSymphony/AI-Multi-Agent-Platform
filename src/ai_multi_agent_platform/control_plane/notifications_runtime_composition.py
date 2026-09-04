@@ -35,7 +35,9 @@ from .notifications_composition import (
     _recipient_from_context,
     build_openapi,
 )
-from .notifications_composition import ControlPlane as _BaseControlPlane
+from .notifications_composition import (
+    ControlPlane as _BaseControlPlane,
+)
 
 NOTIFICATION_STATE_ENV = "AI_MULTI_AGENT_PLATFORM_NOTIFICATION_STATE"
 _MAX_REMINDER_SCAN_WINDOW = timedelta(days=365)
@@ -74,7 +76,12 @@ class _RuntimePreferenceResources(ResourceService):
 
 
 class ControlPlane(_BaseControlPlane):
-    """Canonical Notifications with durable persistence and autonomous projection/reminders."""
+    """Canonical Notifications with durable persistence and autonomous projection/reminders.
+
+    ``notification_state_path`` activates the restart-safe reference implementation. When it is
+    omitted, low-level embeddings remain explicitly ephemeral. Production-shaped deployments may
+    set ``AI_MULTI_AGENT_PLATFORM_NOTIFICATION_STATE`` instead of passing the path directly.
+    """
 
     def __init__(
         self,
@@ -91,7 +98,9 @@ class ControlPlane(_BaseControlPlane):
 
         events = cast(EventRepository | None, kwargs.get("events"))
         if events is None:
-            raise ValueError("Notification runtime composition requires the canonical EventRepository")
+            raise ValueError(
+                "Notification runtime composition requires the canonical EventRepository"
+            )
 
         custom_service = kwargs.get("notification_service") is not None
         if state_path is not None and not custom_service:
