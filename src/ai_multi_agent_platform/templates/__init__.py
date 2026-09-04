@@ -71,6 +71,7 @@ __all__ = [
     "TemplateRequirements",
     "TemplateResourceChange",
     "TemplateResourceHandler",
+    "TemplateResourceRef",
     "TemplateRevision",
     "TemplateRevisionRef",
     "TemplateRevisionState",
