@@ -7,6 +7,7 @@ it never exposes provider-native session identifiers and never executes privileg
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from dataclasses import replace
 
 from ai_multi_agent_platform.agents.models import (
@@ -24,6 +25,7 @@ from ai_multi_agent_platform.models import (
     ModelContentKind,
     ModelMessage,
     ModelRole,
+    ModelRoute,
     ModelRuntime,
     RoutingRequirements,
 )
@@ -58,8 +60,8 @@ class ModelRuntimeConversationResponseProvider:
     def stream_response(
         self,
         request: ConversationResponseRequest,
-    ):
-        async def stream():
+    ) -> AsyncIterator[ConversationResponseChunk]:
+        async def stream() -> AsyncIterator[ConversationResponseChunk]:
             agent, team, requirements = self._resolve_target_policy(request)
             route = self._route(requirements, agent)
             model_request = CanonicalModelRequest(
@@ -129,7 +131,7 @@ class ModelRuntimeConversationResponseProvider:
         self,
         requirements: RoutingRequirements,
         agent: AgentRevision | None,
-    ):
+    ) -> ModelRoute:
         router = DeterministicModelRouter(self._runtime.registry)
         try:
             return router.route(requirements)
@@ -306,16 +308,14 @@ def _history_messages(history: tuple[ConversationMessage, ...]) -> tuple[ModelMe
 def _reference_block(reference: ResourceReference) -> ModelContentBlock:
     if reference.kind is ReferenceKind.FILE:
         return ModelContentBlock(ModelContentKind.FILE_REF, ref=reference.id)
-    return ModelContentBlock(
-        ModelContentKind.JSON,
-        value={
-            "canonical_reference": {
-                "kind": reference.kind.value,
-                "id": reference.id,
-                "label": reference.label,
-            }
-        },
-    )
+    value: JsonValue = {
+        "canonical_reference": {
+            "kind": reference.kind.value,
+            "id": reference.id,
+            "label": reference.label,
+        }
+    }
+    return ModelContentBlock(ModelContentKind.JSON, value=value)
 
 
 def _model_role(role: MessageRole) -> ModelRole:
