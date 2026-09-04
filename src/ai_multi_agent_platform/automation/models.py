@@ -10,9 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
 
-_INVALIDATION_REASON_CHARS = frozenset(
-    "abcdefghijklmnopqrstuvwxyz0123456789._-"
-)
+_INVALIDATION_REASON_CHARS = frozenset("abcdefghijklmnopqrstuvwxyz0123456789._-")
 _MAX_INVALIDATION_REASON_LENGTH = 128
 
 
@@ -338,9 +336,7 @@ class Automation:
         reason = validate_invalidation_reason_code(reason_code)
         current = require_aware(now, "now")
         previous_state = (
-            self.state_before_invalid
-            if self.state is AutomationState.INVALID
-            else self.state
+            self.state_before_invalid if self.state is AutomationState.INVALID else self.state
         )
         assert previous_state is not None
         if previous_state is AutomationState.INVALID:
@@ -349,7 +345,9 @@ class Automation:
             self,
             state=AutomationState.INVALID,
             invalidation_reason_code=reason,
-            invalidated_at=(self.invalidated_at if self.state is AutomationState.INVALID else current),
+            invalidated_at=(
+                self.invalidated_at if self.state is AutomationState.INVALID else current
+            ),
             state_before_invalid=previous_state,
             updated_at=current,
             revision=self.revision + 1,
