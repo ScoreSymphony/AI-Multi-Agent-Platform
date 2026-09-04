@@ -1,5 +1,12 @@
 """Reusable, versioned configuration Templates."""
 
+from .application import (
+    CompositeTemplateHandler,
+    ContextualTemplateHandlerRegistry,
+    ContextualTemplateResourceHandler,
+    TemplateApplicationService,
+    TemplateInstantiationContext,
+)
 from .models import (
     CapabilityRequirement,
     TemplateCompatibility,
@@ -19,6 +26,7 @@ from .models import (
     TemplateTrust,
     TemplateType,
 )
+from .persistence import TEMPLATE_REPOSITORY_SCHEMA_VERSION, JsonTemplateRepository
 from .repository import InMemoryTemplateRepository, TemplateRepository
 from .service import (
     TemplateEnvironment,
@@ -31,7 +39,13 @@ from .service import (
 
 __all__ = [
     "CapabilityRequirement",
+    "CompositeTemplateHandler",
+    "ContextualTemplateHandlerRegistry",
+    "ContextualTemplateResourceHandler",
     "InMemoryTemplateRepository",
+    "JsonTemplateRepository",
+    "TEMPLATE_REPOSITORY_SCHEMA_VERSION",
+    "TemplateApplicationService",
     "TemplateCompatibility",
     "TemplateConfiguration",
     "TemplateContent",
@@ -40,6 +54,7 @@ __all__ = [
     "TemplateEnvironment",
     "TemplateHandlerRegistry",
     "TemplateInstantiation",
+    "TemplateInstantiationContext",
     "TemplateInstantiationProvenance",
     "TemplatePreview",
     "TemplateProvenance",
