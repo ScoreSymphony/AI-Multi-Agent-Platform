@@ -16,7 +16,7 @@ from ai_multi_agent_platform.contracts import (
     ProviderDescriptor,
     RetryMode,
 )
-from ai_multi_agent_platform.distributed import LocalWorker, WorkerJobRequest
+from ai_multi_agent_platform.distributed import LocalWorker, WorkerJobRequest, WorkerJobResult
 from ai_multi_agent_platform.distributed.transport import (
     WORKER_REPLY_TOPIC_PREFIX,
     RemoteWorkerTransportError,
@@ -70,7 +70,7 @@ class _ResultWorker(LocalWorker):
         self.output_artifact = new_id("artifact")
         self.evidence_ref = "evidence:worker-transport"
 
-    async def result(self, worker_job_id: str):  # type: ignore[no-untyped-def]
+    async def result(self, worker_job_id: str) -> WorkerJobResult | None:
         result = await super().result(worker_job_id)
         if result is None:
             return None
