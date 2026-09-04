@@ -340,8 +340,7 @@ def test_lost_terminal_result_reply_is_retried_without_reexecuting_job() -> None
             result_commands = [
                 envelope
                 for _, envelope in transport.published
-                if envelope.kind is MessageKind.COMMAND
-                and envelope.message_type == "worker.result"
+                if envelope.kind is MessageKind.COMMAND and envelope.message_type == "worker.result"
             ]
             assert len(result_commands) == 2
             assert result_commands[0].message_id != result_commands[1].message_id
