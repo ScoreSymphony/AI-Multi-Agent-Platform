@@ -129,7 +129,9 @@ class ControlPlane(_BaseControlPlane):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.register_resource_service(NOTIFICATION_COLLECTION, _AuthorizedNotificationResources(self))
+        self.register_resource_service(
+            NOTIFICATION_COLLECTION, _AuthorizedNotificationResources(self)
+        )
         self.register_resource_service(
             NOTIFICATION_PREFERENCE_COLLECTION,
             _AuthorizedPreferenceResources(self),
