@@ -137,7 +137,7 @@ def test_configure_model_sends_secret_reference_but_never_secret_value(tmp_path:
     method, path, headers, body = transport.calls[0]
     assert method == "POST"
     assert path == "/api/v1/commands/onboarding.configure-model"
-    assert headers["Idempotency-Key"] == "issue-250-cli-model"
+    assert headers["idempotency-key"] == "issue-250-cli-model"
     assert body == {
         "resource_ref": "first-run",
         "adapter_id": "openai-compatible",
@@ -181,7 +181,7 @@ def test_run_first_task_uses_same_control_plane_command_surface(tmp_path: Path) 
     method, path, headers, body = transport.calls[0]
     assert method == "POST"
     assert path == "/api/v1/commands/onboarding.run-first-task"
-    assert headers["Idempotency-Key"] == "issue-250-cli-first-task"
+    assert headers["idempotency-key"] == "issue-250-cli-first-task"
     assert body == {
         "resource_ref": "first-run",
         "objective": "Return one short local response.",
