@@ -208,3 +208,14 @@ Completion requires the full #18/#241 regression surface plus the repository's t
 backend, frontend, deterministic evaluation, LiteLLM, package/install and real Forge/Hermes gates
 on combined `main`. This feature branch is only an implementation vehicle; isolated green tests are
 not sufficient completion evidence.
+
+The final #241 test inventory explicitly includes restart-safe retries, manual/automatic retry
+interaction, pause/disable/INVALID suppression, authorization re-checks, retry exhaustion,
+deterministic backoff, zero-delay spin prevention, INVALID migration/revalidation, and matching,
+cross-workspace, unresolved and resolver-failure event-scope cases.
+
+CI is evaluated on GitHub's pull-request merge ref rather than the feature head alone, so the final
+acceptance run exercises #241 together with the then-current combined `main`. The completion run
+must pass Ruff formatting/lint, strict Mypy, the full Pytest suite, deterministic evaluation,
+package build, frontend typecheck/tests/build, LiteLLM compatibility, single-node install smoke,
+pinned Hermes compatibility and the real Forge sidecar integration.
