@@ -315,6 +315,11 @@ def package_from_dict(document: object) -> PortablePackage:
             ErrorCode.INVALID_CONFIGURATION,
             "portable package created_at is not a valid date-time",
         ) from exc
+    if created_at.tzinfo is None or created_at.utcoffset() is None:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "portable package created_at must be timezone-aware",
+        )
 
     manifest = PortablePackageManifest(
         format_version=cast(str, manifest_document["format_version"]),
