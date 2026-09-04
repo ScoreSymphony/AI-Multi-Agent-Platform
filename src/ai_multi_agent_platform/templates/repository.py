@@ -10,9 +10,13 @@ from .models import TemplateDefinition, TemplateRevision
 
 
 class TemplateRepository(Protocol):
-    def create_template(self, definition: TemplateDefinition, revision: TemplateRevision) -> None: ...
+    def create_template(
+        self, definition: TemplateDefinition, revision: TemplateRevision
+    ) -> None: ...
 
-    def append_revision(self, definition: TemplateDefinition, revision: TemplateRevision) -> None: ...
+    def append_revision(
+        self, definition: TemplateDefinition, revision: TemplateRevision
+    ) -> None: ...
 
     def get_template(self, template_id: str) -> TemplateDefinition: ...
 
@@ -45,7 +49,10 @@ class InMemoryTemplateRepository:
     def append_revision(self, definition: TemplateDefinition, revision: TemplateRevision) -> None:
         current = self.get_template(definition.template_id)
         expected_revision = current.current_revision + 1
-        if definition.current_revision != expected_revision or revision.revision != expected_revision:
+        if (
+            definition.current_revision != expected_revision
+            or revision.revision != expected_revision
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "template revision must increase exactly by one",
@@ -82,9 +89,7 @@ class InMemoryTemplateRepository:
     def list_revisions(self, template_id: str) -> tuple[TemplateRevision, ...]:
         self.get_template(template_id)
         revisions = [
-            item
-            for (current_id, _), item in self._revisions.items()
-            if current_id == template_id
+            item for (current_id, _), item in self._revisions.items() if current_id == template_id
         ]
         return tuple(sorted(revisions, key=lambda item: item.revision))
 
