@@ -162,7 +162,10 @@ def connection_runtime_exclusions(connection_id: str) -> tuple[ExcludedState, ..
         ExcludedState(
             category=ExclusionCategory.BACKEND_RUNTIME_STATE,
             path="$.connection.sync_checkpoints",
-            reason="provider cursors, retry state and sync checkpoints are not portable configuration",
+            reason=(
+                "provider cursors, retry state and sync checkpoints are not portable "
+                "configuration"
+            ),
             resource_type=CONNECTION_RESOURCE_TYPE,
             resource_id=connection_id,
         ),
@@ -292,7 +295,8 @@ def _connection_dependencies(
             required=True,
             version_constraint=requirement.version,
             purpose=(
-                f"Connector {requirement.connector_type_id!r} implementation required for Connection"
+                f"Connector {requirement.connector_type_id!r} implementation required for "
+                "Connection"
             ),
         )
     ]
