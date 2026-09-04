@@ -70,12 +70,15 @@ def _workspace_ids(value: JsonValue) -> tuple[str, ...]:
             ErrorCode.INVALID_REQUEST,
             "workspace_ids must be a non-empty array",
         )
-    if not all(isinstance(item, str) and item.strip() for item in value):
-        raise ContractError(
-            ErrorCode.INVALID_REQUEST,
-            "workspace_ids must contain only non-blank strings",
-        )
-    result = tuple(value)
+    result_items: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "workspace_ids must contain only non-blank strings",
+            )
+        result_items.append(item)
+    result = tuple(result_items)
     if len(set(result)) != len(result):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
