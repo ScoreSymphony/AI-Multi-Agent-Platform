@@ -249,7 +249,9 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         if selected_base is None:
             return RepositoryDiff(repository.id, None, "", ())
         resolved = self._text("rev-parse", "--verify", f"{selected_base}^{{commit}}").strip()
-        patch = self._run("diff", "--binary", resolved, "--").stdout.decode("utf-8", errors="replace")
+        patch = self._run("diff", "--binary", resolved, "--").stdout.decode(
+            "utf-8", errors="replace"
+        )
         paths = self._lines("diff", "--name-only", resolved, "--")
         return RepositoryDiff(repository.id, resolved, patch, paths)
 
@@ -451,5 +453,8 @@ class LocalGitRepositoryProvider(RepositoryProvider):
             stderr or f"Git command failed: {' '.join(args)}",
             retryable=False,
             provider_id=self.provider_id,
-            details={"git_exit_code": completed.returncode, "operation": args[0] if args else "git"},
+            details={
+                "git_exit_code": completed.returncode,
+                "operation": args[0] if args else "git",
+            },
         )
