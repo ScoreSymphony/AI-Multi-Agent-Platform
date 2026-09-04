@@ -9,7 +9,18 @@ import { OrganizationClient } from "../api/organizations";
 import type { Page } from "../api/types";
 import { CanonicalId, Card, EmptyState, ErrorState, LoadingState, StatusBadge } from "../components/States";
 
-const MIRRORED_TYPES = new Set(["project", "workspace", "agent", "agent_team", "automation"]);
+const MIRRORED_TYPES = new Set([
+  "project",
+  "workspace",
+  "agent",
+  "agent_team",
+  "automation",
+  "memory",
+  "knowledge_source",
+  "connection",
+  "file",
+  "artifact",
+]);
 
 interface OrganizationResourcesPanelProps {
   client: OrganizationClient;
@@ -65,6 +76,10 @@ export function OrganizationResourcesPanel({
     const resourceId = required(form, "resource_id");
     const ownerType = ownerType(form, "owner_type");
     const ownerId = required(form, "owner_id");
+    if (MIRRORED_TYPES.has(resourceType)) {
+      setError(new Error(`${resourceType} ownership is managed by its canonical resource API.`));
+      return;
+    }
     await run("ownership.create", async () => {
       await client.setOwnership({
         resource_type: resourceType,
@@ -114,11 +129,11 @@ export function OrganizationResourcesPanel({
               <form className="form-grid" onSubmit={createOwnership}>
                 <label>
                   Resource type
-                  <input name="resource_type" placeholder="template" required />
+                  <input name="resource_type" placeholder="custom-resource" required />
                 </label>
                 <label>
                   Resource ID
-                  <input name="resource_id" placeholder="template_..." required />
+                  <input name="resource_id" placeholder="resource_..." required />
                 </label>
                 <label>
                   Owner type
@@ -138,8 +153,10 @@ export function OrganizationResourcesPanel({
                 </button>
               </form>
               <p>
-                Project, workspace, agent, agent-team and automation ownership is mirrored from the
-                canonical resource API and cannot be changed through this generic command.
+                Canonical platform resources such as projects, workspaces, agents, automations,
+                memory, knowledge, connections, files and artifacts mirror their owner from the
+                owning resource domain. Register or transfer those owners through that canonical
+                resource API, not through this generic metadata command.
               </p>
             </Card>
 
