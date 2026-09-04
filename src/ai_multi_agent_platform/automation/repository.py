@@ -357,9 +357,7 @@ def _delivery_json(delivery: TriggerDelivery) -> dict[str, JsonValue]:
             None if delivery.next_retry_at is None else delivery.next_retry_at.isoformat()
         ),
         "retry_exhausted_at": (
-            None
-            if delivery.retry_exhausted_at is None
-            else delivery.retry_exhausted_at.isoformat()
+            None if delivery.retry_exhausted_at is None else delivery.retry_exhausted_at.isoformat()
         ),
     }
 
