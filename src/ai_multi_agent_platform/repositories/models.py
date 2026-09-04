@@ -14,7 +14,7 @@ from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.security import SecretReference
 from ai_multi_agent_platform.workspaces.models import validate_relative_path
 
-from .capabilities import RepositoryCapability
+from .capabilities import RepositoryCapability as RepositoryCapability
 from .capabilities import RepositoryOperation as RepositoryOperation
 
 
