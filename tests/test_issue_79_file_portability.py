@@ -104,7 +104,10 @@ def test_file_artifact_package_round_trip_remaps_provider_and_ids(tmp_path: Path
     target_record = asyncio.run(materialize_file(imported_file, target, source_context))
     assert target_record.sha256 == imported_file.record.sha256
     assert target_record.artifact_ids == (imported_artifact.id,)
-    assert asyncio.run(target.read(target_record.file_id, source_context.operation)) == imported_file.data
+    assert (
+        asyncio.run(target.read(target_record.file_id, source_context.operation))
+        == imported_file.data
+    )
 
 
 def test_file_snapshot_rejects_bytes_that_do_not_match_canonical_checksum(tmp_path: Path) -> None:
