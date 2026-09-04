@@ -18,7 +18,11 @@ from .models import (
     NotificationState,
     RecipientRef,
 )
-from .preferences import NotificationPreferenceRepository, preference_allows
+from .preferences import (
+    NotificationPreferenceRepository,
+    external_delivery_allowed,
+    preference_allows,
+)
 from .recipients import AllowAllRecipientEligibilityGuard, RecipientEligibilityGuard
 from .repository import NotificationRepository
 from .rules import NotificationRule
@@ -111,7 +115,7 @@ class NotificationService:
                     notification=persisted,
                     occurrence_count=persisted.occurrence_count,
                 )
-                await self._deliver_external(persisted, preference)
+                await self._deliver_external(persisted, preference, now=current)
                 return persisted
 
         notification = Notification(
@@ -142,7 +146,7 @@ class NotificationService:
         )
         persisted = await self._repository.save(notification)
         await self._emit("notification.created", notification=persisted)
-        await self._deliver_external(persisted, preference)
+        await self._deliver_external(persisted, preference, now=current)
         return persisted
 
     async def create_once(
@@ -291,9 +295,7 @@ class NotificationService:
         visible_unread = await self.list(NotificationQuery(recipient=recipient, unread_only=True))
         updated: list[Notification] = []
         for notification in visible_unread:
-            updated.append(
-                await self.mark_read(notification.id, recipient=recipient, at=current)
-            )
+            updated.append(await self.mark_read(notification.id, recipient=recipient, at=current))
         if updated:
             await self._emit(
                 "notification.mark_all_read",
@@ -395,8 +397,17 @@ class NotificationService:
         self,
         notification: Notification,
         preference: NotificationPreference,
+        *,
+        now: datetime,
     ) -> None:
         if self._delivery is None or not preference.external_channels:
+            return
+        if not external_delivery_allowed(preference, now=now):
+            await self._emit(
+                "notification.delivery_suppressed",
+                notification=notification,
+                reason="quiet_hours",
+            )
             return
         try:
             attempts = await self._delivery.deliver_configured(notification, preference)
