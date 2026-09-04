@@ -11,6 +11,8 @@ from .control_plane import (
     AgentResourceService,
     AgentRunResourceService,
     AgentTeamResourceService,
+    _profile_from_json as agent_profile_from_json,
+    _team_profile_from_json as agent_team_profile_from_json,
     register_agent_control_plane,
 )
 from .models import (
@@ -146,6 +148,8 @@ __all__ = [
     "StandardTeamTemplate",
     "StarterBootstrapResult",
     "UnavailableMemberPolicy",
+    "agent_profile_from_json",
+    "agent_team_profile_from_json",
     "assess_standard_agent_capabilities",
     "bootstrap_standard_agents",
     "clone_standard_agent",
