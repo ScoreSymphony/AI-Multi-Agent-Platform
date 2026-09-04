@@ -13,8 +13,12 @@ describe("#17 stable navigation baseline", () => {
       "/files",
       "/search",
       "/tools",
+      "/integrations",
       "/models",
+      "/evaluations",
+      "/compute",
       "/terminal",
+      "/plugins",
       "/events",
       "/observability",
       "/usage",
@@ -23,9 +27,18 @@ describe("#17 stable navigation baseline", () => {
     }
   });
 
-  it("binds the Tools route to the canonical capability collection", () => {
+  it("binds implemented product routes to canonical collections", () => {
     const tools = navigation.find((item) => item.path === "/tools");
+    const integrations = navigation.find((item) => item.path === "/integrations");
+    const evaluations = navigation.find((item) => item.path === "/evaluations");
+    const compute = navigation.find((item) => item.path === "/compute");
+    const plugins = navigation.find((item) => item.path === "/plugins");
+
     expect(tools?.apiResource).toBe("capabilities");
+    expect(integrations?.apiResource).toBe("connector-definitions");
+    expect(evaluations?.apiResource).toBe("evaluation-suites");
+    expect(compute?.apiResource).toBe("nodes");
+    expect(plugins?.apiResource).toBe("plugins");
   });
 
   it("does not expose optional Registry or HA navigation in the baseline shell", () => {
