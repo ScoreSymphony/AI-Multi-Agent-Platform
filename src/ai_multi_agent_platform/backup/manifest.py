@@ -7,8 +7,8 @@ from functools import lru_cache
 from importlib.resources import files
 from typing import Any, cast
 
-from jsonschema import Draft202012Validator, FormatChecker
-from jsonschema.exceptions import SchemaError, ValidationError
+from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
+from jsonschema.exceptions import SchemaError, ValidationError  # type: ignore[import-untyped]
 
 _SCHEMA_RESOURCE = "backup-manifest-v1.schema.json"
 
