@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+from .aggregation import ComparableEvaluationResult
 from .models import (
     ComparisonFinding,
     ComparisonKind,
     ComparisonOperator,
     ComparisonReport,
     EvaluationOutcome,
-    EvaluationResult,
     RegressionPolicy,
     RegressionRule,
     RegressionRuleKind,
@@ -31,25 +31,25 @@ def _metric_passes(value: float, operator: ComparisonOperator, threshold: float)
     raise ValueError(f"unsupported metric operator: {operator}")
 
 
-def _metric_value(result: EvaluationResult, metric_name: str) -> float | None:
+def _metric_value(result: ComparableEvaluationResult, metric_name: str) -> float | None:
     for metric in result.metrics:
         if metric.metric_name == metric_name:
             return metric.value
     return None
 
 
-def _result_key(result: EvaluationResult) -> tuple[str, str]:
+def _result_key(result: ComparableEvaluationResult) -> tuple[str, str]:
     """Match baselines by canonical case and evaluator identity."""
 
     return result.case_id, result.evaluator.evaluator_id
 
 
 def _index_results(
-    results: tuple[EvaluationResult, ...],
+    results: tuple[ComparableEvaluationResult, ...],
     *,
     label: str,
-) -> dict[tuple[str, str], EvaluationResult]:
-    indexed: dict[tuple[str, str], EvaluationResult] = {}
+) -> dict[tuple[str, str], ComparableEvaluationResult]:
+    indexed: dict[tuple[str, str], ComparableEvaluationResult] = {}
     for result in results:
         key = _result_key(result)
         if key in indexed:
@@ -70,8 +70,8 @@ class RegressionEngine:
         *,
         baseline_run_id: str,
         current_run_id: str,
-        baseline_results: tuple[EvaluationResult, ...],
-        current_results: tuple[EvaluationResult, ...],
+        baseline_results: tuple[ComparableEvaluationResult, ...],
+        current_results: tuple[ComparableEvaluationResult, ...],
         policy: RegressionPolicy,
     ) -> ComparisonReport:
         baseline = _index_results(baseline_results, label="baseline")
@@ -96,8 +96,8 @@ class RegressionEngine:
     def _apply_rule(
         self,
         rule: RegressionRule,
-        baseline: EvaluationResult | None,
-        current: EvaluationResult,
+        baseline: ComparableEvaluationResult | None,
+        current: ComparableEvaluationResult,
     ) -> ComparisonFinding | None:
         if rule.kind is RegressionRuleKind.DETERMINISTIC_PASS_TO_FAIL:
             if baseline is None:
@@ -223,8 +223,8 @@ class RegressionEngine:
     def _finding(
         kind: ComparisonKind,
         rule: RegressionRule,
-        baseline: EvaluationResult | None,
-        current: EvaluationResult,
+        baseline: ComparableEvaluationResult | None,
+        current: ComparableEvaluationResult,
         message: str,
     ) -> ComparisonFinding:
         return ComparisonFinding(

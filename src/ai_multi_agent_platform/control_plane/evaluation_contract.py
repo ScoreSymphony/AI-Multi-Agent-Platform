@@ -7,6 +7,8 @@ from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.evaluation.aggregate_codec import encode_aggregate
+from ai_multi_agent_platform.evaluation.aggregation import AggregatedEvaluationResult
 from ai_multi_agent_platform.evaluation.codec import (
     encode_comparison,
     encode_result,
@@ -25,6 +27,7 @@ from ai_multi_agent_platform.evaluation.models import (
 from ai_multi_agent_platform.evaluation.service import (
     EvaluationRunDetail,
     EvaluationService,
+    aggregation_policy_ref,
     evaluation_suite_ref,
     regression_policy_ref,
 )
@@ -62,7 +65,7 @@ class EvaluationSuiteResourceService(ResourceService):
 
 
 class EvaluationRunResourceService(ResourceService):
-    """Read durable evaluation runs with result/comparison detail on single-resource reads."""
+    """Read durable evaluation runs with raw/derived evidence on single-resource reads."""
 
     def __init__(self, service: EvaluationService) -> None:
         self._service = service
@@ -109,6 +112,7 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
             seed=_optional_int(payload, "seed"),
             baseline_run_id=_optional_string(payload, "baseline_run_id"),
             regression_policy_ref_value=_optional_string(payload, "regression_policy_ref"),
+            aggregation_policy_ref_value=_optional_string(payload, "aggregation_policy_ref"),
         )
         return _run_detail_resource(service.get_run_detail(summary.run.run_id))
 
@@ -122,6 +126,7 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
             current_run_id=resource_ref,
             baseline_run_id=_required_string(payload, "baseline_run_id"),
             regression_policy_ref_value=_required_string(payload, "regression_policy_ref"),
+            aggregation_policy_ref_value=_optional_string(payload, "aggregation_policy_ref"),
         )
         return _comparison_resource(comparison)
 
@@ -169,6 +174,7 @@ def _run_resource(run: EvaluationRun) -> dict[str, JsonValue]:
 def _run_detail_resource(detail: EvaluationRunDetail) -> dict[str, JsonValue]:
     resource = _run_resource(detail.run)
     resource["results"] = [_result_resource(item) for item in detail.results]
+    resource["aggregates"] = [_aggregate_resource(item) for item in detail.aggregates]
     resource["comparison"] = (
         None if detail.comparison is None else _comparison_resource(detail.comparison)
     )
@@ -179,6 +185,18 @@ def _result_resource(result: EvaluationResult) -> dict[str, JsonValue]:
     resource = _encoded_object(encode_result(result))
     resource["id"] = result.result_id
     resource["type"] = "evaluation-result"
+    return resource
+
+
+def _aggregate_resource(aggregate: AggregatedEvaluationResult) -> dict[str, JsonValue]:
+    resource = _encoded_object(encode_aggregate(aggregate))
+    resource["id"] = aggregate.result_id
+    resource["type"] = "evaluation-aggregate"
+    resource["sample_count"] = aggregate.sample_count
+    resource["passed_count"] = aggregate.passed_count
+    resource["failed_count"] = aggregate.failed_count
+    resource["error_count"] = aggregate.error_count
+    resource["pass_rate"] = aggregate.pass_rate
     return resource
 
 
@@ -286,6 +304,7 @@ __all__ = [
     "EVALUATION_SUITE_COLLECTION",
     "EvaluationRunResourceService",
     "EvaluationSuiteResourceService",
+    "aggregation_policy_ref",
     "evaluation_command_handlers",
     "evaluation_resource_services",
     "regression_policy_ref",

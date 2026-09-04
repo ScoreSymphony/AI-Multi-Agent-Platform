@@ -1,5 +1,13 @@
 """Canonical evaluation and regression framework."""
 
+from .aggregation import (
+    AggregatedEvaluationResult,
+    AggregationMethod,
+    AggregationPolicy,
+    AggregationSampleRef,
+    ResultAggregator,
+)
+from .aggregation_config import load_aggregation_policy, parse_aggregation_policy
 from .ci_gate import EvaluationCIGateReport, run_reference_ci_gate
 from .config import (
     EvaluationBaseline,
@@ -54,6 +62,7 @@ from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolat
 from .service import (
     EvaluationRunDetail,
     EvaluationService,
+    aggregation_policy_ref,
     evaluation_suite_ref,
     regression_policy_ref,
 )
@@ -68,6 +77,10 @@ from .workspace import (
 
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
+    "AggregatedEvaluationResult",
+    "AggregationMethod",
+    "AggregationPolicy",
+    "AggregationSampleRef",
     "AssertionResult",
     "ComparisonFinding",
     "ComparisonKind",
@@ -113,6 +126,7 @@ __all__ = [
     "RegressionRule",
     "RegressionRuleKind",
     "ResolvedEvaluationFixtures",
+    "ResultAggregator",
     "RubricCriterion",
     "SafeEvaluator",
     "SnapshotValue",
@@ -120,10 +134,13 @@ __all__ = [
     "StaticEvaluationFixtureResolver",
     "VersionReference",
     "WorkspaceEvaluationIsolation",
+    "aggregation_policy_ref",
     "evaluation_suite_ref",
+    "load_aggregation_policy",
     "load_evaluation_baseline",
     "load_evaluation_suite",
     "load_regression_policy",
+    "parse_aggregation_policy",
     "parse_evaluation_suite",
     "parse_regression_policy",
     "regression_policy_ref",
