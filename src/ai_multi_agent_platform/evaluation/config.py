@@ -69,7 +69,7 @@ def _object(value: Any, *, context: str) -> JsonObject:
 def _list(value: Any, *, context: str) -> list[Any]:
     if not isinstance(value, list):
         raise ValueError(f"{context} must be a JSON array")
-    return cast(list[Any], value)
+    return value
 
 
 def _keys(
