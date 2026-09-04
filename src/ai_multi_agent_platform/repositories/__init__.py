@@ -26,6 +26,7 @@ from .models import (
     RepositoryVisibility,
     validate_git_revision,
 )
+from .run_integration import RepositoryRunArtifactBundle, RepositoryRunIntegration
 from .service import (
     RepositoryBinding,
     RepositoryCallContext,
@@ -54,6 +55,8 @@ __all__ = [
     "RepositoryReference",
     "RepositoryRegistry",
     "RepositoryRevision",
+    "RepositoryRunArtifactBundle",
+    "RepositoryRunIntegration",
     "RepositoryRunProvenance",
     "RepositoryService",
     "RepositoryStatus",
