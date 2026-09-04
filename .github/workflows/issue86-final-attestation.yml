@@ -21,7 +21,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Apply final #86 patch
-        run: python .github/issue86_final_attestation_patch.py
+        run: python .github/issue86_patcher_repair.py
       - name: Bootstrap test environment
         shell: bash
         run: |
@@ -50,6 +50,6 @@ jobs:
       - name: Remove temporary validator files
         shell: bash
         run: |
-          git rm .github/issue86_final_attestation_patch.py .github/workflows/issue86-final-attestation.yml
+          git rm .github/issue86_final_attestation_patch.py .github/issue86_patcher_repair.py .github/workflows/issue86-final-attestation.yml
           git commit -m "chore: remove temporary #86 final attestation validator"
           git push
