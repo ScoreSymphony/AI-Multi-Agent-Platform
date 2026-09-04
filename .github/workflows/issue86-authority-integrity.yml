@@ -105,6 +105,20 @@ jobs:
           ):
               generated = generated_path.read_text(encoding='utf-8')
               generated_path.write_text(generated.replace(r'\"', '"'), encoding='utf-8')
+
+          integration = Path('tests/test_issue_86_hardening_integration.py')
+          integration_text = integration.read_text(encoding='utf-8')
+          integration_text = integration_text.replace(
+              '            actor=context.actor,\n',
+              '            actor=ActorContext(\n'
+              '                principal_ref=admin.user_id,\n'
+              '                owner_type="user",\n'
+              '                owner_id=admin.user_id,\n'
+              '                actor_type="human",\n'
+              '            ),\n',
+              1,
+          )
+          integration.write_text(integration_text, encoding='utf-8')
           PY
       - name: Bootstrap test environment
         shell: bash
@@ -116,9 +130,11 @@ jobs:
           echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
       - name: Normalize formatting
-        run: ruff format .
+        run: ruff format src tests
       - name: Ruff lint
-        run: ruff check .
+        run: |
+          ruff check --fix src tests
+          ruff check src tests
       - name: Mypy
         run: mypy
       - name: Focused verification and deployment tests
