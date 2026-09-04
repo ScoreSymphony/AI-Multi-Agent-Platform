@@ -81,7 +81,8 @@ class RepositoryRunIntegration:
             if source_ref.revision is None:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    "repository Workspace source must be resolved to an immutable revision before Run binding",
+                    "repository Workspace source must be resolved to an immutable revision "
+                    "before Run binding",
                     details={"repository_id": source_ref.ref, "snapshot_id": snapshot.id},
                 )
             binding = self._repositories.resolve(source_ref.ref)
