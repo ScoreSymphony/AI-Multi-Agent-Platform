@@ -100,9 +100,7 @@ def test_configure_model_replay_survives_restart_without_second_provider_call(
     first = _service(tmp_path, first_transport)
     payload = _payload()
 
-    first_result = asyncio.run(
-        first.configure_model(_context(), FIRST_RUN_RESOURCE_ID, payload)
-    )
+    first_result = asyncio.run(first.configure_model(_context(), FIRST_RUN_RESOURCE_ID, payload))
     first_revision = first.models.get_model("model-qwen-local").revision
     assert first_transport.calls
 
