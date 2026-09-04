@@ -19,6 +19,7 @@ from ai_multi_agent_platform.backup import (
     reconcile_restored_single_node,
     validate_restored_single_node,
 )
+from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel import RecoveryReport
 
@@ -112,7 +113,7 @@ def main(
                     reason=str(args.reason),
                 )
             )
-        except (RestoreValidationError, RuntimeError, ValueError) as exc:
+        except (ContractError, RestoreValidationError, RuntimeError, ValueError) as exc:
             print(f"restore run resolution failed: {exc}", file=sys.stderr)
             return 3
 
@@ -194,10 +195,7 @@ async def _resolve_restore_run(
         actor_ref="operator:disaster-recovery",
         source="operator-disaster-recovery",
     )
-    print(
-        "restored run resolved: "
-        f"task={task_id} run={run_id} outcome={outcome.value}"
-    )
+    print(f"restored run resolved: task={task_id} run={run_id} outcome={outcome.value}")
 
     recovery = await _run_restore_recovery(deployment)
     _print_restore_recovery(recovery)
