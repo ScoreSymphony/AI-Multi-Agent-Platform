@@ -8,12 +8,13 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from types import MappingProxyType
 
-from ai_multi_agent_platform.capabilities import SideEffectClassification
 from ai_multi_agent_platform.connectors import Connection, ExternalResourceReference
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.security import SecretReference
 from ai_multi_agent_platform.workspaces.models import validate_relative_path
+
+from .capabilities import RepositoryCapability, RepositoryOperation
 
 
 def utc_now() -> datetime:
@@ -49,33 +50,6 @@ class RepositoryVisibility(StrEnum):
     INTERNAL = "internal"
     LOCAL = "local"
     UNKNOWN = "unknown"
-
-
-class RepositoryOperation(StrEnum):
-    DISCOVER = "repository.discover"
-    READ = "repository.read"
-    MATERIALIZE = "repository.materialize"
-    FETCH = "repository.fetch"
-    INSPECT_REFS = "repository.inspect_refs"
-    CREATE_BRANCH = "repository.create_branch"
-    CHECKOUT = "repository.checkout"
-    STATUS = "repository.status"
-    DIFF = "repository.diff"
-    COMMIT = "repository.commit"
-    PUSH = "repository.push"
-    ISSUE_READ = "repository.issue.read"
-    ISSUE_WRITE = "repository.issue.write"
-    CHANGE_REQUEST_READ = "repository.change_request.read"
-    CHANGE_REQUEST_WRITE = "repository.change_request.write"
-    EVENT_RECEIVE = "repository.event.receive"
-
-
-@dataclass(frozen=True, slots=True)
-class RepositoryCapability:
-    operation: RepositoryOperation
-    side_effects: SideEffectClassification = SideEffectClassification.NONE
-    requires_credentials: bool = False
-    supported: bool = True
 
 
 @dataclass(frozen=True, slots=True)
