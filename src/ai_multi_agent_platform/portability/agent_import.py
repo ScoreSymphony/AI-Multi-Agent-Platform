@@ -124,7 +124,10 @@ class AgentTeamImportMutationHandler:
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,
-                        "portable Agent Team apply failed and its internal compensation also failed",
+                        (
+                            "portable Agent Team apply failed and its internal compensation "
+                            "also failed"
+                        ),
                         details={"team_id": snapshot.definition.team_id},
                     ) from rollback_error
             raise
