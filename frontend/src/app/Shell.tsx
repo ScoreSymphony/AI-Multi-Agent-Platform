@@ -3,6 +3,7 @@ import { AutomationClient } from "../api/automations";
 import { BrowserSessionClient } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
 import { ControlPlaneCollectionClient } from "../api/collections";
+import { ConversationClient } from "../api/conversations";
 import { ComputeClient } from "../api/compute";
 import { EvaluationClient } from "../api/evaluations";
 import { IntegrationsClient } from "../api/integrations";
@@ -29,6 +30,7 @@ import {
   CapabilityDetailPage,
   CapabilityProviderDetailPage,
 } from "../pages/CapabilitiesPage";
+import { ChatPage } from "../pages/ChatPage";
 import {
   ComputeNodeDetailPage,
   ComputePage,
@@ -95,6 +97,10 @@ export function Shell() {
   );
   const collections = useMemo(
     () => new ControlPlaneCollectionClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const conversationClient = useMemo(
+    () => new ConversationClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const automationClient = useMemo(
@@ -177,6 +183,18 @@ export function Shell() {
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
+  else if (path === "/chat") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Chat"
+        resource="conversations"
+      >
+        <ChatPage client={conversationClient} />
+      </ManifestResourcePage>
+    );
+  }
   else if (path === "/projects") content = <ProjectsPage client={client} />;
   else if (projectMatch) {
     content = <ProjectDetailPage client={client} projectId={projectMatch.projectId} />;

@@ -364,3 +364,46 @@ def test_exhausted_repair_budget_cannot_start_another_repair_run() -> None:
         assert exc_info.value.code is ErrorCode.CONFLICT
 
     asyncio.run(scenario())
+
+
+def test_repair_round_reuses_same_execution_even_with_new_caller_key() -> None:
+    async def scenario() -> None:
+        (
+            verification,
+            completion,
+            kernel,
+            lifecycle,
+            task_id,
+            verification_id,
+            _plan,
+        ) = await _needs_changes_stack()
+        repair_runtime = VerificationRepairRuntime(verification, completion, kernel)
+        first = await repair_runtime.start_repair(
+            verification_id,
+            idempotency_key="first-caller-key",
+        )
+        lifecycle.complete(
+            first.run_id,
+            status=ExecutionStatus.SUCCEEDED,
+            output={"answer": "repair finished"},
+        )
+        await kernel.refresh_run(
+            idempotency_key="first-caller-key:refresh",
+            task_id=task_id,
+            run_id=first.run_id,
+        )
+        second = await repair_runtime.start_repair(
+            verification_id,
+            idempotency_key="different-caller-key",
+        )
+        assert second == first
+        repair_runs = [
+            event
+            for event in await kernel.history(task_id)
+            if event.event_type == "run.created"
+            and event.provenance is not None
+            and event.provenance.source == "verification-repair"
+        ]
+        assert len(repair_runs) == 1
+
+    asyncio.run(scenario())

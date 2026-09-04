@@ -49,6 +49,8 @@ Each exported resource declares one `IdPolicy`:
 
 Conflict detection and the final mapping decision belong to import planning. Codecs receive an `ImportContext` containing the accepted deterministic mapping.
 
+The default deterministic allocator preserves the complete canonical ID prefix before the final generated UUID. Compound canonical prefixes such as `knowledge_source_` therefore remain valid under `regenerate` rather than being truncated to a different resource family.
+
 ## Dependencies
 
 `DependencyRequirement` uses a stable kind plus identifier, optional version constraint and purpose. Dependency kinds include:
@@ -188,6 +190,18 @@ Memory provenance is serialized explicitly and preserved. `supersedes_memory_id`
 
 No backend search/vector/index identity is carried by the Memory resource.
 
+## Knowledge Source semantics
+
+Portable `knowledge_source` resources contain canonical `KnowledgeSource` configuration plus the current canonical document content needed to reconstruct the source on another provider. The content checksum is preserved and verified before and after destination materialization.
+
+Provider-local document/index identities are not canonical migration identities. Import therefore lets the destination `KnowledgeProvider` create its own document and index IDs and records the source index omission as `REBUILDABLE_INDEX` state. Search/vector/index backend state is rebuilt from the canonical source content.
+
+Project references are canonical dependencies and are deterministically remapped. Ordinary import also enforces conservative project/owner privacy before mutation.
+
+Absolute filesystem paths and `file://` document locations are rejected because they identify source-host implementation state rather than portable source locations.
+
+The detailed Knowledge contract is documented in `PORTABILITY_KNOWLEDGE.md`.
+
 ## Historical Task and Run semantics
 
 Portable `task_history` resources are archival records, not executable Task imports. They always use `historical_preserve` identity semantics.
@@ -199,6 +213,20 @@ The historical snapshot preserves terminal Task/Run projections, revisions, outp
 Historical import writes only through `HistoricalTaskArchiveRepository`. It never commits imported lifecycle events to the live `EventRepository`, so imported history cannot become schedulable, recoverable or dispatchable work. `TaskHistoryImportMutationHandler` participates in the ordinary package rollback model by deleting the archive entry if a later package mutation fails.
 
 The focused contract and invariants are documented in `PORTABILITY_TASK_HISTORY.md`.
+
+## Automation semantics
+
+Portable `automation` resources carry canonical Automation configuration, not a transferable scheduler process.
+
+The resource preserves identity, Trigger definition, Task template, Project/Workspace references, deduplication strategy, retry/overlap policy, durable revision metadata and lifecycle intent. Webhook `verification_ref` values are carried only as required `secret` dependencies/reference identifiers; credential values remain destination-side secrets.
+
+Scheduler and delivery runtime state is deliberately omitted. `last_evaluated_at`, `next_evaluation_at`, TriggerDelivery processing/retry history and source scheduler state appear only in the exclusion report where applicable.
+
+A source Automation that is `enabled` materializes as `paused` at the destination and therefore cannot create Tasks until an authorized destination action explicitly resumes it. Paused, disabled and invalid Automations remain non-running; invalidation metadata is retained for an invalid source definition.
+
+Import preserves `IdentityContext` and rejects implicit identity transfer by default. Package rollback removes only a newly imported Automation that has no TriggerDelivery history. The guarded compensation repository seam refuses to delete any Automation once delivery history exists, so normal #18 audit/runtime history cannot be erased by an import rollback.
+
+The detailed Automation contract is documented in `PORTABILITY_AUTOMATION.md`.
 
 ## Dry-run and conflict boundary
 
@@ -254,6 +282,7 @@ The #79 portability stack verifies at least:
 - Agent/Team full-revision round trip;
 - composite Agent/Team reference remapping;
 - dependency/conflict preview;
+- compound canonical ID-prefix preservation during deterministic regeneration;
 - provider-neutral File/Artifact round trip and byte checksum verification;
 - destination File compensation;
 - package-wide Agent/Team/File reverse rollback;
@@ -263,8 +292,18 @@ The #79 portability stack verifies at least:
 - cross-project Workspace Memory rejection before mutation;
 - cross-user User Memory rejection;
 - `short_term` Memory runtime-state exclusion;
+- Knowledge source/content checksum round trip and destination index rebuild;
+- deterministic Knowledge Project/Source remapping;
+- cross-project Knowledge rejection and Knowledge rollback;
+- provider-local Knowledge index identity exclusion;
+- rejection of absolute filesystem/file-URI Knowledge locations;
 - terminal Task/Run history snapshot from canonical event streams;
 - rejection of active Tasks and non-terminal Runs from historical export;
-- historical Task archive import without creation of a live kernel stream.
+- historical Task archive import without creation of a live kernel stream;
+- enabled Automation import as paused/non-running configuration;
+- Automation Project/Workspace/ID remapping;
+- webhook SecretReference dependency declaration without credential transfer;
+- Automation identity-transfer rejection before mutation;
+- guarded Automation rollback for in-memory and SQLite repositories.
 
-Knowledge-source/config metadata, further canonical configuration codecs, import/export reports and Control Plane/CLI surfaces remain follow-up work within #79.
+Further canonical configuration codecs, import/export reports and Control Plane/CLI surfaces remain follow-up work within #79.

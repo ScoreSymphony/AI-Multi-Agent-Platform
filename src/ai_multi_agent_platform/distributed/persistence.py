@@ -25,19 +25,22 @@ from ai_multi_agent_platform.domain import RunStatus
 from .models import (
     AcceleratorResource,
     JobRequirements,
+    JobResultStatus,
     NodeRecord,
     NodeStatus,
     Reservation,
     ReservationStatus,
     ResourceSnapshot,
     WorkerJobRequest,
+    WorkerJobResult,
     WorkerRecord,
     WorkerStatus,
 )
 from .registry import DistributedRegistry, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
 
-DISTRIBUTED_STATE_SCHEMA_VERSION = "1"
+DISTRIBUTED_STATE_SCHEMA_VERSION = "2"
+_SUPPORTED_DISTRIBUTED_STATE_SCHEMA_VERSIONS = frozenset({"1", "2"})
 
 
 class DistributedStateStore(Protocol):
@@ -83,10 +86,11 @@ class JsonDistributedStateStore:
         raw: object = json.loads(self.path.read_text(encoding="utf-8"))
         document = _object(raw, "distributed state document")
         version = _string(_required(document, "schema_version"), "schema_version")
-        if version != DISTRIBUTED_STATE_SCHEMA_VERSION:
+        if version not in _SUPPORTED_DISTRIBUTED_STATE_SCHEMA_VERSIONS:
             raise ValueError(
                 "unsupported distributed state schema version: "
-                f"{version!r}; expected {DISTRIBUTED_STATE_SCHEMA_VERSION!r}"
+                f"{version!r}; expected one of "
+                f"{sorted(_SUPPORTED_DISTRIBUTED_STATE_SCHEMA_VERSIONS)!r}"
             )
 
         registry_document = _object(_required(document, "registry"), "registry")
@@ -302,6 +306,7 @@ def _dispatch_record(value: JsonValue) -> DispatchRecord:
     data = _object(value, "DispatchRecord")
     handle_raw = data.get("handle")
     snapshot_raw = data.get("snapshot")
+    result_raw = data.get("result")
     return DispatchRecord(
         job=_worker_job_request(_required(data, "job")),
         worker_id=_required_string(data, "worker_id"),
@@ -309,6 +314,7 @@ def _dispatch_record(value: JsonValue) -> DispatchRecord:
         state=DispatchState(_required_string(data, "state")),
         handle=None if handle_raw is None else _execution_handle(handle_raw),
         snapshot=None if snapshot_raw is None else _execution_snapshot(snapshot_raw),
+        result=None if result_raw is None else _worker_job_result(result_raw),
         last_error=_optional_string(data.get("last_error"), "last_error"),
     )
 
@@ -331,6 +337,21 @@ def _worker_job_request(value: JsonValue) -> WorkerJobRequest:
         dispatch_attempt=_integer(_required(data, "dispatch_attempt"), "dispatch_attempt"),
         idempotency_key=_optional_string(data.get("idempotency_key"), "idempotency_key"),
         trace_parent=_optional_string(data.get("trace_parent"), "trace_parent"),
+    )
+
+
+def _worker_job_result(value: JsonValue) -> WorkerJobResult:
+    data = _object(value, "WorkerJobResult")
+    execution_raw = data.get("execution")
+    return WorkerJobResult(
+        worker_job_id=_required_string(data, "worker_job_id"),
+        worker_id=_required_string(data, "worker_id"),
+        status=JobResultStatus(_required_string(data, "status")),
+        execution=None if execution_raw is None else _execution_snapshot(execution_raw),
+        artifact_refs=_string_tuple(_required(data, "artifact_refs"), "artifact_refs"),
+        evidence_refs=_string_tuple(_required(data, "evidence_refs"), "evidence_refs"),
+        error_category=_optional_string(data.get("error_category"), "error_category"),
+        completed_at=_datetime(_required(data, "completed_at"), "completed_at"),
     )
 
 

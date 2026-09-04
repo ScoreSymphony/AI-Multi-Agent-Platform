@@ -65,6 +65,10 @@ describe("#17 shell accessibility semantics", () => {
   });
 
   it("gates optional functional routes until the manifest is known", () => {
+    const chat = renderShell("/chat");
+    expect(chat).toContain("Checking Chat availability");
+    expect(chat).not.toContain("Task-centric interaction");
+
     const agents = renderShell("/agents");
     expect(agents).toContain("Checking Agents availability");
     expect(agents).not.toContain("Durable Agent definitions");
@@ -110,6 +114,7 @@ describe("#17 shell accessibility semantics", () => {
     const manifest = {
       api_version: "v1",
       resources: [
+        "conversations",
         "agents",
         "capabilities",
         "terminal-sessions",
@@ -131,6 +136,7 @@ describe("#17 shell accessibility semantics", () => {
     } as APImanifest;
 
     expect(manifestResourceState("loading", null, "agents")).toBe("loading");
+    expect(manifestResourceState("ready", manifest, "conversations")).toBe("available");
     expect(manifestResourceState("ready", manifest, "agents")).toBe("available");
     expect(manifestResourceState("ready", manifest, "automations")).toBe("available");
     expect(manifestResourceState("ready", manifest, "approvals")).toBe("available");

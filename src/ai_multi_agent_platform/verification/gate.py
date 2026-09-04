@@ -15,7 +15,7 @@ from .models import (
     VerificationRequest,
     VerificationSubject,
 )
-from .service import VerificationService
+from .service import _CANONICAL_SUBJECT_TOKEN, VerificationService
 
 
 def _utc_now() -> datetime:
@@ -92,6 +92,10 @@ class VerificationCompletionAuthority(CompletionAuthority):
     def __init__(self, verification: VerificationService) -> None:
         self._verification = verification
         self._requirements: dict[str, TaskVerificationRequirement] = {}
+
+    @property
+    def verification(self) -> VerificationService:
+        return self._verification
 
     def require_task(
         self,
@@ -193,6 +197,54 @@ class VerificationCompletionAuthority(CompletionAuthority):
         self.bind_subject(task_id=task_id, subject=subject, now=now)
         return request
 
+    def request_canonical_verification(
+        self,
+        *,
+        task_id: str,
+        policy_id: str,
+        policy_version: int,
+        stage_id: str,
+        subject: VerificationSubject,
+        correlation_id: str,
+        run_id: str | None = None,
+        result_id: str | None = None,
+        artifact_ids: tuple[str, ...] = (),
+        project_id: str | None = None,
+        capability_ids: tuple[str, ...] = (),
+        producer: ProducerIdentity | None = None,
+        repair_attempt: int = 0,
+        causation_id: str | None = None,
+        now: datetime | None = None,
+    ) -> VerificationRequest:
+        """Bind a subject that was resolved from canonical platform evidence."""
+
+        request = self._verification.request_verification(
+            task_id=task_id,
+            policy_id=policy_id,
+            policy_version=policy_version,
+            stage_id=stage_id,
+            subject=subject,
+            correlation_id=correlation_id,
+            run_id=run_id,
+            result_id=result_id,
+            artifact_ids=artifact_ids,
+            project_id=project_id,
+            capability_ids=capability_ids,
+            producer=producer,
+            repair_attempt=repair_attempt,
+            causation_id=causation_id,
+            now=now,
+            _canonical_subject_token=_CANONICAL_SUBJECT_TOKEN,
+        )
+        self.require_task(
+            task_id=task_id,
+            policy_id=policy_id,
+            policy_version=policy_version,
+            now=now,
+        )
+        self.bind_subject(task_id=task_id, subject=subject, now=now)
+        return request
+
     def request_reverification_after_repair(
         self,
         verification_id: str,
@@ -212,6 +264,44 @@ class VerificationCompletionAuthority(CompletionAuthority):
             result_id=result_id,
             artifact_ids=artifact_ids,
             causation_id=causation_id,
+        )
+        self.require_task(
+            task_id=request.task_id,
+            policy_id=request.policy_id,
+            policy_version=request.policy_version,
+        )
+        self.bind_subject(task_id=request.task_id, subject=request.subject)
+        return request
+
+    def request_canonical_reverification_after_repair(
+        self,
+        verification_id: str,
+        *,
+        new_subject: VerificationSubject,
+        correlation_id: str,
+        run_id: str | None = None,
+        result_id: str | None = None,
+        artifact_ids: tuple[str, ...] = (),
+        project_id: str | None = None,
+        capability_ids: tuple[str, ...] = (),
+        producer: ProducerIdentity | None = None,
+        causation_id: str | None = None,
+    ) -> VerificationRequest:
+        """Rebind a repaired subject and its newly derived producer context."""
+
+        request = self._verification.request_reverification_after_repair(
+            verification_id,
+            new_subject=new_subject,
+            correlation_id=correlation_id,
+            run_id=run_id,
+            result_id=result_id,
+            artifact_ids=artifact_ids,
+            project_id=project_id,
+            capability_ids=capability_ids,
+            producer=producer,
+            causation_id=causation_id,
+            _replace_context=True,
+            _canonical_subject_token=_CANONICAL_SUBJECT_TOKEN,
         )
         self.require_task(
             task_id=request.task_id,

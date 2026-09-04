@@ -25,6 +25,8 @@ from .models import (
     VerifierKind,
 )
 
+_CANONICAL_SUBJECT_TOKEN = object()
+
 
 class VerificationService:
     """Reference canonical verification authority.
@@ -35,7 +37,8 @@ class VerificationService:
     state; kernel integration consumes ``assess_completion`` as a deterministic gate.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, require_canonical_subjects: bool = False) -> None:
+        self._require_canonical_subjects = require_canonical_subjects
         self._policies: dict[tuple[str, int], VerificationPolicy] = {}
         self._requests: dict[str, VerificationRequest] = {}
         self._results: dict[str, VerificationResult] = {}
@@ -92,7 +95,16 @@ class VerificationService:
         repair_attempt: int = 0,
         causation_id: str | None = None,
         now: datetime | None = None,
+        _canonical_subject_token: object | None = None,
     ) -> VerificationRequest:
+        if (
+            self._require_canonical_subjects
+            and _canonical_subject_token is not _CANONICAL_SUBJECT_TOKEN
+        ):
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "raw verification subjects are disabled; use CanonicalVerificationRuntime",
+            )
         policy = self.get_policy(policy_id, policy_version)
         try:
             stage = policy.stage(stage_id)
@@ -408,7 +420,20 @@ class VerificationService:
         result_id: str | None = None,
         artifact_ids: tuple[str, ...] = (),
         causation_id: str | None = None,
+        producer: ProducerIdentity | None = None,
+        project_id: str | None = None,
+        capability_ids: tuple[str, ...] | None = None,
+        _replace_context: bool = False,
+        _canonical_subject_token: object | None = None,
     ) -> VerificationRequest:
+        if (
+            self._require_canonical_subjects
+            and _canonical_subject_token is not _CANONICAL_SUBJECT_TOKEN
+        ):
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "raw repaired verification subjects are disabled; use CanonicalVerificationRuntime",
+            )
         previous = self.get_request(verification_id)
         previous_result = self.result_for(verification_id)
         if (
@@ -438,11 +463,16 @@ class VerificationService:
             run_id=run_id,
             result_id=result_id,
             artifact_ids=artifact_ids,
-            project_id=previous.project_id,
-            capability_ids=previous.capability_ids,
-            producer=previous.producer,
+            project_id=project_id if _replace_context else previous.project_id,
+            capability_ids=(
+                capability_ids
+                if _replace_context and capability_ids is not None
+                else previous.capability_ids
+            ),
+            producer=producer if _replace_context else previous.producer,
             repair_attempt=next_attempt,
             causation_id=causation_id,
+            _canonical_subject_token=_canonical_subject_token,
         )
 
     def assess_completion(
@@ -478,6 +508,78 @@ class VerificationService:
                 policy_id=policy_id,
                 policy_version=policy_version,
             )
+
+        # Definitive outcomes must be evaluated across every stage before an
+        # earlier incomplete stage can return WAITING. This makes the policy invariant
+        # "any critical failure blocks completion" independent of stage ordering.
+        stage_matches = {
+            stage.stage_id: self._matching_stage_results(
+                task_id=task_id,
+                subject=subject,
+                policy=policy,
+                stage_id=stage.stage_id,
+                now=current,
+            )
+            for stage in policy.stages
+        }
+        observed_repair_attempt = max(
+            (
+                request.repair_attempt
+                for matching in stage_matches.values()
+                for request, _result in matching
+            ),
+            default=0,
+        )
+        for stage in policy.stages:
+            matching = stage_matches[stage.stage_id]
+            if stage.critical and any(
+                result.outcome is VerificationOutcome.FAIL for _request, result in matching
+            ):
+                return CompletionAssessment(
+                    task_id=task_id,
+                    subject=subject,
+                    state=self._failure_state(policy),
+                    reason="critical verification stage failed",
+                    policy_id=policy_id,
+                    policy_version=policy_version,
+                    blocking_verification_ids=tuple(
+                        request.verification_id
+                        for request, result in matching
+                        if result.outcome is VerificationOutcome.FAIL
+                    ),
+                    repair_attempts_remaining=max(
+                        0, policy.max_repair_attempts - observed_repair_attempt
+                    ),
+                )
+        for stage in policy.stages:
+            matching = stage_matches[stage.stage_id]
+            if any(
+                result.outcome is VerificationOutcome.NEEDS_CHANGES for _request, result in matching
+            ):
+                remaining = max(0, policy.max_repair_attempts - observed_repair_attempt)
+                state = (
+                    CompletionState.REPAIR_REQUIRED
+                    if remaining > 0
+                    else self._failure_state(policy)
+                )
+                return CompletionAssessment(
+                    task_id=task_id,
+                    subject=subject,
+                    state=state,
+                    reason=(
+                        "verification requested changes"
+                        if remaining > 0
+                        else "verification repair limit exhausted"
+                    ),
+                    policy_id=policy_id,
+                    policy_version=policy_version,
+                    blocking_verification_ids=tuple(
+                        request.verification_id
+                        for request, result in matching
+                        if result.outcome is VerificationOutcome.NEEDS_CHANGES
+                    ),
+                    repair_attempts_remaining=remaining,
+                )
 
         blocking: list[str] = []
         max_repair_attempt = 0
@@ -544,7 +646,9 @@ class VerificationService:
                 if result.outcome in stage.accepted_outcomes
             ]
             if policy.independence.require_distinct_verifiers:
-                distinct = {result.verifier.verifier_ref for _request, result in accepted}
+                distinct = {
+                    self._distinct_verifier_key(result.verifier) for _request, result in accepted
+                }
                 accepted_count = len(distinct)
             else:
                 accepted_count = len(accepted)
@@ -676,6 +780,18 @@ class VerificationService:
                     continue
             matches.append((request, result))
         return matches
+
+    @staticmethod
+    def _distinct_verifier_key(verifier: VerifierIdentity) -> str:
+        if verifier.kind is VerifierKind.AGENT:
+            assert verifier.agent_id is not None
+            return f"agent:{verifier.agent_id}"
+        if verifier.kind is VerifierKind.HUMAN:
+            return f"human:{verifier.verifier_ref}"
+        if verifier.kind is VerifierKind.PROVIDER:
+            provider = verifier.provider_id or "unknown-provider"
+            return f"provider:{provider}:{verifier.verifier_ref}"
+        return f"deterministic:{verifier.verifier_ref}"
 
     @staticmethod
     def _failure_state_for(

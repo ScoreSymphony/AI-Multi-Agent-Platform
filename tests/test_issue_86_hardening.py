@@ -438,7 +438,7 @@ def test_single_node_deployment_enables_durable_verification_end_to_end(tmp_path
             owner_type="user",
             owner_id=admin.user_id,
         )
-        deployment.verification_completion.require_task(
+        deployment.verification_runtime.require_task(
             task_id=task.task_id,
             policy_id=policy.policy_id,
             policy_version=policy.version,
@@ -475,7 +475,6 @@ def test_single_node_deployment_enables_durable_verification_end_to_end(tmp_path
             subject_type="result",
             subject_id=result_id,
             correlation_id=task.task_id,
-            run_id=run.run_id,
         )
         assert request.subject.digest.startswith("sha256:")
         deployment.verification.record_human_review(
@@ -494,7 +493,8 @@ def test_single_node_deployment_enables_durable_verification_end_to_end(tmp_path
         assert restored.subject == request.subject
         assert restarted.verification.result_for(request.verification_id) is not None
         assert (
-            restarted.verification_completion.assess_task_completion(task.task_id).state
+            restarted.kernel._completion_authority is not None
+            and restarted.kernel._completion_authority.assess_task_completion(task.task_id).state
             is CompletionState.ACCEPTED
         )
         assert "verifications" in restarted.control_plane.registered_collections
