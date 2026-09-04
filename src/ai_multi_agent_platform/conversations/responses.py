@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .models import ConversationMessage, ModelRoutingPreference
@@ -53,6 +54,7 @@ class ConversationResponseRequest:
     source_message_id: str
     target: ConversationResponseTarget
     history: tuple[ConversationMessage, ...]
+    operation: OperationContext
     model_preference: ModelRoutingPreference | None = None
 
     def __post_init__(self) -> None:
@@ -69,6 +71,8 @@ class ConversationResponseRequest:
             raise ValueError("conversation response requires durable message history")
         if self.history[-1].id != self.source_message_id:
             raise ValueError("conversation response source message must be the latest history item")
+        if self.operation.correlation_id != self.correlation_id:
+            raise ValueError("conversation response operation must preserve correlation_id")
 
 
 @dataclass(frozen=True, slots=True)
