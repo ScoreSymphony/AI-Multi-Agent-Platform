@@ -10,11 +10,11 @@ from ai_multi_agent_platform.agents import (
     AgentInstructions,
     AgentModelPolicy,
     AgentProfile,
+    AgentRevisionRef,
     AgentRuntime,
     AgentService,
     AgentTeamMember,
     AgentTeamProfile,
-    AgentRevisionRef,
     InMemoryAgentRepository,
     InstructionSource,
 )
@@ -43,7 +43,11 @@ from ai_multi_agent_platform.models import (
     ModelRuntime,
     RoutingRequirements,
 )
-from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeModelProvider, FakeOrchestrator
+from ai_multi_agent_platform.testing import (
+    FakeLifecycleBackend,
+    FakeModelProvider,
+    FakeOrchestrator,
+)
 
 T = TypeVar("T")
 
@@ -75,7 +79,19 @@ def _profile(instruction: str, *, explicit_model: str = MODEL_ID) -> AgentProfil
     )
 
 
-def _model_stack(tmp_path: Path, *, response_text: str = "Canonical assistant answer"):
+def _model_stack(
+    tmp_path: Path,
+    *,
+    response_text: str = "Canonical assistant answer",
+) -> tuple[
+    FakeModelProvider,
+    ModelRegistry,
+    AgentService,
+    ConversationService,
+    ControlPlane,
+    ControlPlaneHTTP,
+    ModelRuntimeConversationResponseProvider,
+]:
     provider = FakeModelProvider(
         response_text=response_text,
         model_ref="provider-private/native-chat-model",
@@ -112,7 +128,15 @@ def _model_stack(tmp_path: Path, *, response_text: str = "Canonical assistant an
         conversation_agent_service=agents,
         conversation_response_provider=responder,
     )
-    return provider, models, agents, conversations, control_plane, ControlPlaneHTTP(control_plane)
+    return (
+        provider,
+        models,
+        agents,
+        conversations,
+        control_plane,
+        ControlPlaneHTTP(control_plane),
+        responder,
+    )
 
 
 def _post(
@@ -147,7 +171,7 @@ def _context(key: str) -> RequestContext:
 
 
 def test_agent_conversation_pins_revision_and_uses_canonical_model_runtime(tmp_path: Path) -> None:
-    provider, _, agents, conversations, control_plane, http = _model_stack(tmp_path)
+    provider, _, agents, conversations, control_plane, http, responder = _model_stack(tmp_path)
     owner = OwnerRef(type="user", id=ACTOR.owner_id)
     first = agents.create_agent(
         _profile("Always answer as revision one."),
@@ -163,7 +187,9 @@ def test_agent_conversation_pins_revision_and_uses_canonical_model_runtime(tmp_p
         },
         key="create-agent-chat",
     )
-    target = cast(dict[str, JsonValue], cast(dict[str, JsonValue], conversation["metadata"])["target"])
+    target = cast(
+        dict[str, JsonValue], cast(dict[str, JsonValue], conversation["metadata"])["target"]
+    )
     assert target == {"kind": "agent", "id": first.agent_id, "revision": 1}
     assert cast(dict[str, JsonValue], conversation["default_agent"])["revision"] == 1
 
@@ -183,7 +209,7 @@ def test_agent_conversation_pins_revision_and_uses_canonical_model_runtime(tmp_p
         stream_conversation_response(
             control_plane,
             conversations,
-            control_plane.conversation_response_provider,
+            responder,
             _context("agent-runtime-response"),
             cast(str, message["id"]),
         )
@@ -216,7 +242,7 @@ def test_agent_conversation_pins_revision_and_uses_canonical_model_runtime(tmp_p
 
 
 def test_team_conversation_pins_team_revision_and_uses_leader_model_policy(tmp_path: Path) -> None:
-    provider, _, agents, conversations, control_plane, http = _model_stack(
+    provider, _, agents, conversations, control_plane, http, responder = _model_stack(
         tmp_path,
         response_text="Team response",
     )
@@ -250,7 +276,9 @@ def test_team_conversation_pins_team_revision_and_uses_leader_model_policy(tmp_p
         },
         key="create-team-chat",
     )
-    target = cast(dict[str, JsonValue], cast(dict[str, JsonValue], conversation["metadata"])["target"])
+    target = cast(
+        dict[str, JsonValue], cast(dict[str, JsonValue], conversation["metadata"])["target"]
+    )
     assert target == {"kind": "agent_team", "id": team.team_id, "revision": 1}
 
     message = _post(
@@ -263,7 +291,7 @@ def test_team_conversation_pins_team_revision_and_uses_leader_model_policy(tmp_p
         stream_conversation_response(
             control_plane,
             conversations,
-            control_plane.conversation_response_provider,
+            responder,
             _context("team-runtime-response"),
             cast(str, message["id"]),
         )
@@ -277,13 +305,26 @@ def test_team_conversation_pins_team_revision_and_uses_leader_model_policy(tmp_p
     assert provider.calls[0].requirements["agent_id"] == leader.agent_id
 
 
-def test_project_and_orchestrator_conversations_use_same_model_runtime_surface(tmp_path: Path) -> None:
-    provider, _, _, conversations, control_plane, http = _model_stack(tmp_path)
+def test_project_task_and_orchestrator_conversations_use_same_model_runtime_surface(
+    tmp_path: Path,
+) -> None:
+    provider, _, _, conversations, control_plane, http, responder = _model_stack(tmp_path)
     project = _post(http, "/api/v1/projects", {"name": "Conversation Project"}, key="project")
+    task = _post(
+        http,
+        "/api/v1/tasks",
+        {
+            "title": "Conversation Task",
+            "objective": "Provide task-scoped conversational context",
+            "project_id": project["id"],
+        },
+        key="task",
+    )
 
     for index, target in enumerate(
         (
             {"kind": "project", "id": project["id"]},
+            {"kind": "task", "id": task["id"]},
             {"kind": "orchestrator", "id": "platform"},
         )
     ):
@@ -303,7 +344,7 @@ def test_project_and_orchestrator_conversations_use_same_model_runtime_surface(t
             stream_conversation_response(
                 control_plane,
                 conversations,
-                control_plane.conversation_response_provider,
+                responder,
                 _context(f"target-response-{index}"),
                 cast(str, message["id"]),
             )
@@ -311,5 +352,5 @@ def test_project_and_orchestrator_conversations_use_same_model_runtime_surface(t
         events = _run(_collect(stream))
         assert events[-1]["type"] == "conversation.response.committed"
 
-    assert len(provider.calls) == 2
+    assert len(provider.calls) == 3
     assert all(call.requirements["model_config_id"] == MODEL_ID for call in provider.calls)
