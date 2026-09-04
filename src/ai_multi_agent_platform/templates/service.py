@@ -268,7 +268,9 @@ class TemplateService:
             )
         current = self.repository.get_revision(template_id, definition.current_revision)
         if current.state is TemplateRevisionState.PUBLISHED:
-            raise ContractError(ErrorCode.CONFLICT, "current template revision is already published")
+            raise ContractError(
+                ErrorCode.CONFLICT, "current template revision is already published"
+            )
         validate_template_configuration(current.content.configuration)
         next_revision = definition.current_revision + 1
         now = utc_now()
@@ -378,7 +380,9 @@ class TemplateService:
                     target.add(capability.capability_id)
             missing_plugins.update(set(requirements.plugin_ids) - environment.plugin_ids)
             missing_connectors.update(set(requirements.connector_ids) - environment.connector_ids)
-            missing_models.update(set(requirements.model_policy_refs) - environment.model_policy_refs)
+            missing_models.update(
+                set(requirements.model_policy_refs) - environment.model_policy_refs
+            )
             ungrantable_permissions.update(
                 set(requirements.permission_actions) - environment.grantable_permissions
             )
@@ -414,9 +418,7 @@ class TemplateService:
             ungrantable_permissions=tuple(sorted(ungrantable_permissions)),
             missing_workspace_prerequisites=tuple(sorted(missing_workspaces)),
             unresolved_placeholders=tuple(sorted(unresolved_placeholders)),
-            unresolved_secret_reference_placeholders=tuple(
-                sorted(unresolved_secret_placeholders)
-            ),
+            unresolved_secret_reference_placeholders=tuple(sorted(unresolved_secret_placeholders)),
             unvalidated_configuration_refs=tuple(sorted(unvalidated_configuration_refs)),
             missing_optional_dependencies=missing_optional_dependencies,
             missing_handler_types=tuple(sorted(missing_handler_types)),
@@ -462,9 +464,7 @@ class TemplateService:
                     "unresolved_secret_reference_placeholders": list(
                         preview.unresolved_secret_reference_placeholders
                     ),
-                    "unvalidated_configuration_refs": list(
-                        preview.unvalidated_configuration_refs
-                    ),
+                    "unvalidated_configuration_refs": list(preview.unvalidated_configuration_refs),
                     "missing_handler_types": list(preview.missing_handler_types),
                 },
             )
@@ -503,7 +503,9 @@ class TemplateService:
         selected_revision = revision
         if selected_revision is None:
             selected_revision = (
-                definition.latest_published_revision if published_only else definition.current_revision
+                definition.latest_published_revision
+                if published_only
+                else definition.current_revision
             )
         if selected_revision is None:
             raise ContractError(
