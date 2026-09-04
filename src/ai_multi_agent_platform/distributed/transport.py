@@ -435,9 +435,7 @@ class WorkerTransportEndpoint:
                     "worker_job_id": worker_job_id,
                     "handle": WorkerTransportCodec.encode_handle(handle),
                 }
-                await self._publish_reply(
-                    command, reply_topic, "worker.dispatch.accepted", payload
-                )
+                await self._publish_reply(command, reply_topic, "worker.dispatch.accepted", payload)
                 return
             if operation == "get":
                 snapshot = await self._dispatcher.get(worker_job_id)
