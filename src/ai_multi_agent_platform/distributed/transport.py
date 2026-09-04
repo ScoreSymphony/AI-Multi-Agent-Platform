@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal, Protocol, cast
+from typing import Literal, Protocol, cast, runtime_checkable
 
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
@@ -46,6 +45,7 @@ def worker_command_topic(worker_id: str) -> str:
     return f"{WORKER_COMMAND_TOPIC_PREFIX}.{worker_id}"
 
 
+@runtime_checkable
 class WorkerResultProvider(Protocol):
     """Optional Worker-side result surface used by transport result requests."""
 
@@ -83,7 +83,7 @@ class WorkerTransportCodec:
         }
 
     @staticmethod
-    def decode_job(value: JsonValue) -> WorkerJobRequest:
+    def decode_job(value: object) -> WorkerJobRequest:
         data = _mapping(value, "WorkerJobRequest")
         return WorkerJobRequest(
             worker_job_id=_required_string(data, "worker_job_id"),
@@ -94,9 +94,7 @@ class WorkerTransportCodec:
             artifact_refs=_string_tuple(_required(data, "artifact_refs"), "artifact_refs"),
             secret_refs=_string_tuple(_required(data, "secret_refs"), "secret_refs"),
             actor_ref=_optional_string(data.get("actor_ref"), "actor_ref"),
-            cancellation_ref=_optional_string(
-                data.get("cancellation_ref"), "cancellation_ref"
-            ),
+            cancellation_ref=_optional_string(data.get("cancellation_ref"), "cancellation_ref"),
             timeout_seconds=_optional_number(data.get("timeout_seconds"), "timeout_seconds"),
             dispatch_attempt=_integer(_required(data, "dispatch_attempt"), "dispatch_attempt"),
             idempotency_key=_optional_string(data.get("idempotency_key"), "idempotency_key"),
@@ -112,7 +110,7 @@ class WorkerTransportCodec:
         }
 
     @staticmethod
-    def decode_handle(value: JsonValue) -> ExecutionHandle:
+    def decode_handle(value: object) -> ExecutionHandle:
         data = _mapping(value, "ExecutionHandle")
         return ExecutionHandle(
             run_id=_required_string(data, "run_id"),
@@ -132,7 +130,7 @@ class WorkerTransportCodec:
         }
 
     @staticmethod
-    def decode_snapshot(value: JsonValue) -> ExecutionSnapshot:
+    def decode_snapshot(value: object) -> ExecutionSnapshot:
         data = _mapping(value, "ExecutionSnapshot")
         output = _mapping(_required(data, "output"), "output")
         return ExecutionSnapshot(
@@ -162,7 +160,7 @@ class WorkerTransportCodec:
         }
 
     @staticmethod
-    def decode_result(value: JsonValue) -> WorkerJobResult:
+    def decode_result(value: object) -> WorkerJobResult:
         data = _mapping(value, "WorkerJobResult")
         execution_raw = data.get("execution")
         return WorkerJobResult(
@@ -172,7 +170,7 @@ class WorkerTransportCodec:
             execution=(
                 None
                 if execution_raw is None
-                else WorkerTransportCodec.decode_snapshot(cast(JsonValue, execution_raw))
+                else WorkerTransportCodec.decode_snapshot(execution_raw)
             ),
             artifact_refs=_string_tuple(_required(data, "artifact_refs"), "artifact_refs"),
             evidence_refs=_string_tuple(_required(data, "evidence_refs"), "evidence_refs"),
@@ -241,7 +239,7 @@ class TransportWorkerDispatcher:
         result_raw = reply.get("result")
         if result_raw is None:
             return None
-        return WorkerTransportCodec.decode_result(cast(JsonValue, result_raw))
+        return WorkerTransportCodec.decode_result(result_raw)
 
     async def _request(
         self,
@@ -321,7 +319,9 @@ class TransportWorkerDispatcher:
             retry_mode=RetryMode.IDEMPOTENT,
         )
         try:
-            await self._transport.publish(worker_command_topic(self.worker_id), command, control=control)
+            await self._transport.publish(
+                worker_command_topic(self.worker_id), command, control=control
+            )
             try:
                 async with asyncio.timeout(timeout_seconds):
                     delivery = await subscription.__anext__()
@@ -435,7 +435,9 @@ class WorkerTransportEndpoint:
                     "worker_job_id": worker_job_id,
                     "handle": WorkerTransportCodec.encode_handle(handle),
                 }
-                await self._publish_reply(command, reply_topic, "worker.dispatch.accepted", payload)
+                await self._publish_reply(
+                    command, reply_topic, "worker.dispatch.accepted", payload
+                )
                 return
             if operation == "get":
                 snapshot = await self._dispatcher.get(worker_job_id)
@@ -456,13 +458,12 @@ class WorkerTransportEndpoint:
                 await self._publish_reply(command, reply_topic, "worker.snapshot", payload)
                 return
             if operation == "result":
-                result_method = getattr(self._dispatcher, "result", None)
-                if result_method is None:
+                if not isinstance(self._dispatcher, WorkerResultProvider):
                     raise RemoteWorkerTransportError(
                         "result_unsupported",
                         "Worker dispatcher does not expose terminal result retrieval",
                     )
-                result = await result_method(worker_job_id)
+                result = await self._dispatcher.result(worker_job_id)
                 payload = {
                     "worker_id": self.worker_id,
                     "worker_job_id": worker_job_id,
@@ -480,7 +481,7 @@ class WorkerTransportEndpoint:
                 reply_topic,
                 worker_job_id,
                 category=category,
-                message=redact_exception(exc),
+                message=_safe_error_message(exc, category),
                 retryable=retryable,
             )
 
@@ -636,9 +637,7 @@ def _decode_requirements(value: object) -> JobRequirements:
         os_name=_optional_string(data.get("os_name"), "os_name"),
         network_required=_boolean(data.get("network_required"), "network_required"),
         required_labels=_string_tuple(_required(data, "required_labels"), "required_labels"),
-        preferred_labels=_string_tuple(
-            _required(data, "preferred_labels"), "preferred_labels"
-        ),
+        preferred_labels=_string_tuple(_required(data, "preferred_labels"), "preferred_labels"),
         preferred_node_ids=_string_tuple(
             _required(data, "preferred_node_ids"), "preferred_node_ids"
         ),
@@ -657,10 +656,7 @@ def _decode_requirements(value: object) -> JobRequirements:
 
 
 def _encode_adapter_metadata(values: tuple[AdapterMetadata, ...]) -> list[JsonValue]:
-    return [
-        {"namespace": value.namespace, "values": dict(value.values)}
-        for value in values
-    ]
+    return [{"namespace": value.namespace, "values": dict(value.values)} for value in values]
 
 
 def _decode_adapter_metadata(value: object, name: str) -> tuple[AdapterMetadata, ...]:
@@ -681,11 +677,23 @@ def _decode_adapter_metadata(value: object, name: str) -> tuple[AdapterMetadata,
 def _error_category(error: Exception) -> tuple[str, bool]:
     if isinstance(error, RemoteWorkerTransportError):
         return error.category, error.retryable
-    if isinstance(error, RegistryError | ValueError):
+    if isinstance(error, (RegistryError, ValueError)):
         return "worker_contract_error", False
-    if isinstance(error, TimeoutError | ConnectionError):
+    if isinstance(error, (TimeoutError, ConnectionError)):
         return "worker_unavailable", True
     return "worker_execution_error", False
+
+
+def _safe_error_message(error: Exception, category: str) -> str:
+    if isinstance(error, RemoteWorkerTransportError):
+        return redact_exception(error)
+    if isinstance(error, RegistryError):
+        return redact_exception(error)
+    if category == "worker_contract_error":
+        return "Worker transport contract rejected the request"
+    if category == "worker_unavailable":
+        return "Worker is unavailable"
+    return "Worker execution failed"
 
 
 def _mapping(value: object, name: str) -> Mapping[str, object]:
@@ -700,7 +708,7 @@ def _mapping(value: object, name: str) -> Mapping[str, object]:
 
 
 def _sequence(value: object, name: str) -> tuple[object, ...]:
-    if not isinstance(value, list | tuple):
+    if not isinstance(value, (list, tuple)):
         raise ValueError(f"{name} must be an array")
     return tuple(value)
 
@@ -734,7 +742,7 @@ def _string_tuple(value: object, name: str) -> tuple[str, ...]:
 
 
 def _number(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name} must be a number")
     return float(value)
 
