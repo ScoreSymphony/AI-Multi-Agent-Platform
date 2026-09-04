@@ -116,9 +116,7 @@ def test_manifest_matches_versioned_json_schema(tmp_path: Path) -> None:
         quiesced=True,
     )
     manifest = json.loads((backup / "manifest.json").read_text(encoding="utf-8"))
-    schema = json.loads(
-        Path("schemas/backup-manifest-v1.schema.json").read_text(encoding="utf-8")
-    )
+    schema = json.loads(Path("schemas/backup-manifest-v1.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(manifest)
     assert manifest["schema_migration"]["sqlite_user_versions"]["db/kernel.sqlite3"] == 7
 
