@@ -49,6 +49,8 @@ def test_single_node_wires_durable_agent_templates_and_control_plane(tmp_path: P
         assert "template-instances" in deployment.control_plane.registered_collections
         assert "template.create-from-agent" in deployment.control_plane.registered_commands
         assert "template.create-from-automation" in deployment.control_plane.registered_commands
+        assert "template.create-from-project" in deployment.control_plane.registered_commands
+        assert "template.create-from-workspaces" in deployment.control_plane.registered_commands
         assert "template.apply" in deployment.control_plane.registered_commands
 
         created = await deployment.control_plane.execute_command(
@@ -190,6 +192,113 @@ def test_single_node_wires_durable_agent_templates_and_control_plane(tmp_path: P
         assert created_automation.task_template == source_automation.task_template
         assert created_automation.identity.owner_id == admin.user_id
 
+        source_project = deployment.scopes.create_project(
+            key="template-source-project",
+            name="Template source project",
+            owner_type="user",
+            owner_id=admin.user_id,
+        )
+        source_workspace_resource = await deployment.control_plane.create_workspace(
+            RequestContext(
+                request_id="request-template-source-workspace",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="template-source-workspace",
+            ),
+            {"project_id": source_project.id},
+        )
+        source_workspace_id = source_workspace_resource["id"]
+        assert isinstance(source_workspace_id, str)
+
+        project_template = await deployment.control_plane.execute_command(
+            RequestContext(
+                request_id="request-project-template-create",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="project-template-create",
+            ),
+            "template.create-from-project",
+            "templates",
+            {"project_id": source_project.id},
+        )
+        project_template_id = project_template["id"]
+        assert isinstance(project_template_id, str)
+        project_template_published = await deployment.control_plane.execute_command(
+            RequestContext(
+                request_id="request-project-template-publish",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="project-template-publish",
+            ),
+            "template.publish",
+            project_template_id,
+            {"expected_revision": 1},
+        )
+        project_template_revision = project_template_published["latest_published_revision"]
+        assert project_template_revision == 2
+
+        workspace_template = await deployment.control_plane.execute_command(
+            RequestContext(
+                request_id="request-workspace-template-create",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="workspace-template-create",
+            ),
+            "template.create-from-workspaces",
+            "templates",
+            {
+                "workspace_ids": [source_workspace_id],
+                "name": "Portable Workspace Structure",
+                "project_template_id": project_template_id,
+                "project_template_revision": project_template_revision,
+            },
+        )
+        workspace_template_id = workspace_template["id"]
+        assert isinstance(workspace_template_id, str)
+        workspace_template_published = await deployment.control_plane.execute_command(
+            RequestContext(
+                request_id="request-workspace-template-publish",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="workspace-template-publish",
+            ),
+            "template.publish",
+            workspace_template_id,
+            {"expected_revision": 1},
+        )
+        assert workspace_template_published["latest_published_revision"] == 2
+
+        workspace_applied = await deployment.control_plane.execute_command(
+            RequestContext(
+                request_id="request-workspace-template-apply",
+                correlation_id=context.correlation_id,
+                actor=context.actor,
+                idempotency_key="workspace-template-apply",
+            ),
+            "template.apply",
+            workspace_template_id,
+            {},
+        )
+        workspace_instance_id = workspace_applied["id"]
+        assert isinstance(workspace_instance_id, str)
+        workspace_instance = deployment.templates.repository.get_instantiation(
+            workspace_instance_id
+        )
+        assert [item.resource_type for item in workspace_instance.resource_refs] == [
+            "project",
+            "workspace",
+        ]
+        generated_project_ref, generated_workspace_ref = workspace_instance.resource_refs
+        assert generated_project_ref.resource_id != source_project.id
+        assert generated_workspace_ref.resource_id != source_workspace_id
+        generated_workspace = await deployment.workspaces.get_workspace(
+            generated_workspace_ref.resource_id
+        )
+        assert generated_workspace.project_id == generated_project_ref.resource_id
+        generated_project = deployment.scopes.get_project(generated_project_ref.resource_id)
+        assert generated_project.owner_ref == owner
+        assert generated_workspace.owner_ref == owner
+
         assert (config.database_dir / "templates.json").exists()
 
         restarted = build_single_node_deployment(config)
@@ -201,7 +310,14 @@ def test_single_node_wires_durable_agent_templates_and_control_plane(tmp_path: P
             automation_ref.resource_id
         )
         assert restored_automation.name == source_automation.name
+        restored_workspace = await restarted.workspaces.get_workspace(
+            generated_workspace_ref.resource_id
+        )
+        assert restored_workspace.project_id == generated_project_ref.resource_id
+        assert restarted.scopes.get_project(generated_project_ref.resource_id).owner_ref == owner
         assert "template.create-from-agent" in restarted.control_plane.registered_commands
         assert "template.create-from-automation" in restarted.control_plane.registered_commands
+        assert "template.create-from-project" in restarted.control_plane.registered_commands
+        assert "template.create-from-workspaces" in restarted.control_plane.registered_commands
 
     asyncio.run(scenario())
