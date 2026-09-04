@@ -10,6 +10,11 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id, validate_id
 
+_INVALIDATION_REASON_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyz0123456789._-"
+)
+_MAX_INVALIDATION_REASON_LENGTH = 128
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -18,6 +23,18 @@ def utc_now() -> datetime:
 def require_aware(value: datetime, field_name: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{field_name} must be timezone-aware")
+    return value
+
+
+def validate_invalidation_reason_code(value: str) -> str:
+    """Validate a safe categorical invalidation code rather than free-form error text."""
+
+    if not value or len(value) > _MAX_INVALIDATION_REASON_LENGTH:
+        raise ValueError("invalidation reason code must contain 1..128 characters")
+    if value[0] not in "abcdefghijklmnopqrstuvwxyz0123456789":
+        raise ValueError("invalidation reason code must start with a lowercase letter or digit")
+    if any(character not in _INVALIDATION_REASON_CHARS for character in value):
+        raise ValueError("invalidation reason code contains unsupported characters")
     return value
 
 
@@ -218,6 +235,9 @@ class Automation:
     revision: int = 1
     last_evaluated_at: datetime | None = None
     next_evaluation_at: datetime | None = None
+    invalidation_reason_code: str | None = None
+    invalidated_at: datetime | None = None
+    state_before_invalid: AutomationState | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.id, "automation")
@@ -237,6 +257,23 @@ class Automation:
             require_aware(self.last_evaluated_at, "last_evaluated_at")
         if self.next_evaluation_at is not None:
             require_aware(self.next_evaluation_at, "next_evaluation_at")
+        if self.invalidated_at is not None:
+            require_aware(self.invalidated_at, "invalidated_at")
+
+        invalid_metadata = (
+            self.invalidation_reason_code,
+            self.invalidated_at,
+            self.state_before_invalid,
+        )
+        if self.state is AutomationState.INVALID:
+            if any(value is None for value in invalid_metadata):
+                raise ValueError("invalid automation requires complete invalidation metadata")
+            assert self.invalidation_reason_code is not None
+            validate_invalidation_reason_code(self.invalidation_reason_code)
+            if self.state_before_invalid is AutomationState.INVALID:
+                raise ValueError("state_before_invalid cannot be invalid")
+        elif any(value is not None for value in invalid_metadata):
+            raise ValueError("invalidation metadata requires invalid automation state")
 
     @classmethod
     def create(
@@ -273,6 +310,10 @@ class Automation:
         )
 
     def with_state(self, state: AutomationState, now: datetime) -> Automation:
+        if state is AutomationState.INVALID:
+            raise ValueError("use invalidate() to enter invalid state")
+        if self.state is AutomationState.INVALID:
+            raise ValueError("use revalidated() to leave invalid state")
         current = require_aware(now, "now")
         next_at = self.next_evaluation_at
         if state is AutomationState.ENABLED and self.state is not AutomationState.ENABLED:
@@ -289,6 +330,45 @@ class Automation:
             updated_at=current,
             revision=self.revision + 1,
             next_evaluation_at=next_at,
+        )
+
+    def invalidate(self, reason_code: str, now: datetime) -> Automation:
+        """Enter INVALID without mutating schedule position or losing the prior lifecycle state."""
+
+        reason = validate_invalidation_reason_code(reason_code)
+        current = require_aware(now, "now")
+        previous_state = (
+            self.state_before_invalid
+            if self.state is AutomationState.INVALID
+            else self.state
+        )
+        assert previous_state is not None
+        if previous_state is AutomationState.INVALID:
+            raise ValueError("state_before_invalid cannot be invalid")
+        return replace(
+            self,
+            state=AutomationState.INVALID,
+            invalidation_reason_code=reason,
+            invalidated_at=(self.invalidated_at if self.state is AutomationState.INVALID else current),
+            state_before_invalid=previous_state,
+            updated_at=current,
+            revision=self.revision + 1,
+        )
+
+    def revalidated(self, now: datetime) -> Automation:
+        """Restore the exact lifecycle state that preceded INVALID and preserve schedule metadata."""
+
+        if self.state is not AutomationState.INVALID or self.state_before_invalid is None:
+            raise ValueError("automation is not invalid")
+        current = require_aware(now, "now")
+        return replace(
+            self,
+            state=self.state_before_invalid,
+            invalidation_reason_code=None,
+            invalidated_at=None,
+            state_before_invalid=None,
+            updated_at=current,
+            revision=self.revision + 1,
         )
 
 
