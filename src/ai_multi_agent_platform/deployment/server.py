@@ -8,6 +8,11 @@ import getpass
 import sys
 from collections.abc import Sequence
 
+from ai_multi_agent_platform.backup import (
+    PostRestoreRecoveryResult,
+    reconcile_restored_single_node,
+)
+
 from .config import load_single_node_config
 from .single_node import build_single_node_deployment
 
@@ -23,6 +28,10 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands.add_parser(
         "smoke",
         help="Run a retry-safe canonical Task/Run through the local reference execution path",
+    )
+    subcommands.add_parser(
+        "recover-restore",
+        help="Run required post-restore canonical Run recovery without starting the server",
     )
 
     bootstrap = subcommands.add_parser(
@@ -58,7 +67,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 0
 
+    if args.command == "recover-restore":
+        recovery = asyncio.run(
+            reconcile_restored_single_node(data_dir=config.data_dir, kernel=deployment.kernel)
+        )
+        _print_restore_recovery(recovery)
+        return 0
+
     if args.command == "serve":
+        recovery = asyncio.run(
+            reconcile_restored_single_node(data_dir=config.data_dir, kernel=deployment.kernel)
+        )
+        _print_restore_recovery(recovery)
         try:
             import uvicorn
         except ImportError as exc:  # pragma: no cover - exercised by packaging/install smoke
@@ -75,6 +95,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     raise AssertionError(f"unhandled deployment command: {args.command}")
+
+
+def _print_restore_recovery(recovery: PostRestoreRecoveryResult | None) -> None:
+    if recovery is None:
+        return
+    print(
+        "post-restore recovery completed: "
+        f"runs_checked={recovery.runs_checked} "
+        f"unresolved={len(recovery.unresolved_run_ids)} report={recovery.report_path}"
+    )
 
 
 def _read_password(*, password_stdin: bool) -> str:
