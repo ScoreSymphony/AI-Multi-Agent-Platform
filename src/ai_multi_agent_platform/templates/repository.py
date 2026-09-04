@@ -125,10 +125,10 @@ class InMemoryTemplateRepository:
         self,
         template_id: str | None = None,
     ) -> tuple[TemplateInstantiation, ...]:
-        values = self._instantiations.values()
+        values = tuple(self._instantiations.values())
         if template_id is not None:
             self.get_template(template_id)
-            values = (
+            values = tuple(
                 item for item in values if item.source.template_id == template_id
             )
         return tuple(sorted(values, key=lambda item: (item.created_at, item.instance_id)))
