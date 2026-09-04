@@ -104,9 +104,7 @@ class RepositoryService:
         self._registry = registry
         self._authorization = authorization
 
-    async def status(
-        self, repository_id: str, context: RepositoryCallContext
-    ) -> RepositoryStatus:
+    async def status(self, repository_id: str, context: RepositoryCallContext) -> RepositoryStatus:
         binding = self._registry.resolve(repository_id)
         await self._enforce(binding.reference, RepositoryOperation.STATUS, context)
         return await binding.provider.status(binding.reference, context.operation)
