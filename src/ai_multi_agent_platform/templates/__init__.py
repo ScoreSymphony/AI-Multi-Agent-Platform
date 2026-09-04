@@ -13,6 +13,11 @@ from .application import (
     TemplateApplicationService,
     TemplateInstantiationContext,
 )
+from .automation_handler import (
+    AutomationTemplateExporter,
+    AutomationTemplateHandler,
+    register_automation_template_handler,
+)
 from .models import (
     CapabilityRequirement,
     TemplateCompatibility,
@@ -47,6 +52,8 @@ __all__ = [
     "AgentTeamTemplateHandler",
     "AgentTemplateExporter",
     "AgentTemplateHandler",
+    "AutomationTemplateExporter",
+    "AutomationTemplateHandler",
     "CapabilityRequirement",
     "CompositeTemplateHandler",
     "ContextualTemplateHandlerRegistry",
@@ -79,5 +86,6 @@ __all__ = [
     "TemplateTrust",
     "TemplateType",
     "register_agent_template_handlers",
+    "register_automation_template_handler",
     "validate_template_configuration",
 ]
