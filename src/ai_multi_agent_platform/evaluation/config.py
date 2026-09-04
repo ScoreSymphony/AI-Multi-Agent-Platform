@@ -250,7 +250,9 @@ def parse_evaluation_suite(obj: Mapping[str, Any]) -> EvaluationSuite:
                 }
             ),
         )
-        input_template = _object(item.get("input_template", {}), context=f"{context}.input_template")
+        input_template = _object(
+            item.get("input_template", {}), context=f"{context}.input_template"
+        )
         cases.append(
             EvaluationCase(
                 case_id=_string(item, "case_id", context=context),
@@ -347,7 +349,11 @@ def load_evaluation_baseline(
     run_obj = _object(obj.get("run"), context="evaluation baseline.run")
     run = decode_run(json.dumps(run_obj, allow_nan=False))
     results = tuple(
-        decode_result(json.dumps(_object(raw, context=f"evaluation baseline.results[{index}]"), allow_nan=False))
+        decode_result(
+            json.dumps(
+                _object(raw, context=f"evaluation baseline.results[{index}]"), allow_nan=False
+            )
+        )
         for index, raw in enumerate(
             _list(obj.get("results"), context="evaluation baseline.results")
         )
