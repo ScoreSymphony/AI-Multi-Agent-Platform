@@ -12,7 +12,15 @@ from .agent_codecs import (
     snapshot_agent,
     snapshot_agent_team,
 )
+from .agent_import import AgentImportMutationHandler, AgentTeamImportMutationHandler
 from .dependencies import ResourceDependencyRef, parse_resource_dependency, resource_dependency
+from .executor import (
+    AppliedImportResource,
+    ImportExecutionResult,
+    ImportExecutor,
+    ImportMutationHandler,
+    ImportMutationRegistry,
+)
 from .file_codecs import (
     ARTIFACT_RESOURCE_TYPE,
     FILE_PORTABLE_SCHEMA_VERSION,
@@ -24,6 +32,7 @@ from .file_codecs import (
     register_file_portability_codecs,
     snapshot_file,
 )
+from .file_import import FileImportMutationHandler
 from .models import (
     PORTABLE_FORMAT_VERSION,
     PORTABLE_INTEGRITY_ALGORITHM,
@@ -69,22 +78,30 @@ __all__ = [
     "PORTABLE_FORMAT_VERSION",
     "PORTABLE_INTEGRITY_ALGORITHM",
     "PORTABLE_PACKAGE_SCHEMA_V1",
+    "AgentImportMutationHandler",
     "AgentPortableCodec",
     "AgentPortableSnapshot",
+    "AgentTeamImportMutationHandler",
     "AgentTeamPortableCodec",
     "AgentTeamPortableSnapshot",
+    "AppliedImportResource",
     "ArtifactPortableCodec",
     "CompatibilityMetadata",
     "DependencyKind",
     "DependencyRequirement",
     "ExcludedState",
     "ExclusionCategory",
+    "FileImportMutationHandler",
     "FilePortableCodec",
     "FilePortableSnapshot",
     "IdPolicy",
     "ImportConflict",
     "ImportConflictKind",
     "ImportContext",
+    "ImportExecutionResult",
+    "ImportExecutor",
+    "ImportMutationHandler",
+    "ImportMutationRegistry",
     "ImportPreview",
     "ImportPreviewService",
     "MissingDependency",
