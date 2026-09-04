@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import AsyncIterator
 
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import (
     FileProvider as CoreFileProvider,
 )
@@ -112,6 +113,24 @@ class MemoryProvider(CoreMemoryProvider):
     @abstractmethod
     async def delete_entry(self, memory_id: str, context: DataAccessContext) -> None: ...
 
+    async def expire_entry(
+        self,
+        memory_id: str,
+        query: MemoryQuery,
+        context: DataAccessContext,
+    ) -> MemoryEntry:
+        """Expire exactly one due Memory entry bound to its canonical scope.
+
+        The scoped query prevents callers from turning expiry into a cross-scope scan.
+        Pre-#251 providers degrade explicitly until they implement exact expiration.
+        """
+
+        del memory_id, query, context
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "memory provider does not support exact scoped expiration",
+        )
+
     @abstractmethod
     async def expire_entries(self, context: DataAccessContext) -> tuple[str, ...]: ...
 
@@ -125,6 +144,56 @@ class KnowledgeProvider(CoreKnowledgeProvider):
         source: KnowledgeSource,
         context: DataAccessContext,
     ) -> KnowledgeSource: ...
+
+    async def get_source(
+        self,
+        source_id: str,
+        context: DataAccessContext,
+    ) -> KnowledgeSource:
+        """Inspect canonical source metadata when the provider supports source discovery.
+
+        The default keeps pre-#251 providers source-compatible while making missing
+        inspection support explicit instead of forcing callers to reach into provider
+        implementation details.
+        """
+
+        del source_id, context
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "knowledge provider does not support canonical source inspection",
+        )
+
+    async def list_sources(
+        self,
+        context: DataAccessContext,
+    ) -> tuple[KnowledgeSource, ...]:
+        """List canonical sources visible in one access context.
+
+        Older provider implementations degrade canonically until they implement this
+        optional #251 content-management capability.
+        """
+
+        del context
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "knowledge provider does not support canonical source discovery",
+        )
+
+    async def update_source(
+        self,
+        source_id: str,
+        context: DataAccessContext,
+        *,
+        title: str | None = None,
+        metadata: dict[str, JsonValue] | None = None,
+    ) -> KnowledgeSource:
+        """Update canonical source metadata without changing source identity/revision."""
+
+        del source_id, context, title, metadata
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "knowledge provider does not support canonical source metadata updates",
+        )
 
     @abstractmethod
     async def ingest_source(

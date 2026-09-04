@@ -14,6 +14,7 @@ from .models import (
     KnowledgeStatus,
     MemoryAccessPolicy,
     MemoryEntry,
+    MemoryOrigin,
     MemoryQuery,
     MemoryScope,
     OrphanReport,
@@ -26,7 +27,8 @@ from .models import (
     new_knowledge_source_id,
     new_memory_id,
 )
-from .reference import LocalFileProvider, LocalKnowledgeProvider, LocalMemoryProvider
+from .reference import LocalFileProvider
+from .reference_lifecycle import LocalKnowledgeProvider, LocalMemoryProvider
 from .registry import DataProviderSet
 
 __all__ = [
@@ -48,6 +50,7 @@ __all__ = [
     "LocalMemoryProvider",
     "MemoryAccessPolicy",
     "MemoryEntry",
+    "MemoryOrigin",
     "MemoryProvider",
     "MemoryQuery",
     "MemoryScope",
