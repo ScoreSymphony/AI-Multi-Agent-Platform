@@ -28,7 +28,6 @@ from .models import (
 )
 from .repository import TemplateRepository
 
-
 _FORBIDDEN_SECRET_KEYS = frozenset(
     {
         "password",
