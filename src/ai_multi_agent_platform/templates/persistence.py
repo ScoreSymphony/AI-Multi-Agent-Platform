@@ -312,7 +312,9 @@ def _configuration(value: object) -> TemplateConfiguration:
     payload = item.get("payload")
     reference = _optional_string(item, "reference")
     if payload is not None:
-        return TemplateConfiguration(payload=_frozen(payload))
+        return TemplateConfiguration(
+            payload=_frozen_object(payload, "Template configuration payload")
+        )
     return TemplateConfiguration(reference=reference)
 
 
