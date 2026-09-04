@@ -24,7 +24,9 @@ from .service import ConnectorService
 type ConnectorControlPlaneActorResolver = Callable[[RequestContext], ActorIdentity]
 
 CONNECTOR_DEFINITION_COLLECTION = "connector-definitions"
+CONNECTOR_DEFINITION_TYPE = "connector-definition"
 CONNECTION_COLLECTION = "connections"
+CONNECTION_TYPE = "connection"
 CONNECTOR_COMMANDS = (
     "connection.create",
     "connection.enable",
@@ -91,6 +93,23 @@ class ConnectionResourceService(ResourceService):
             project_id=project_id,
         )
         return tuple(_connection_resource(connection) for connection in connections)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate safe derived-search metadata without inventing a system actor.
+
+        The normal collection list remains actor-filtered by ``ConnectorService``. A full
+        Search rebuild instead enumerates canonical repository records and relies on the
+        Control Plane's per-result authorization before counts or results become visible.
+        Organization-scoped Connections remain excluded until #87 membership visibility
+        is available to the Search authorization contract.
+        """
+
+        connections = await self._connectors.repository.list_connections()
+        return tuple(
+            _connection_search_resource(connection)
+            for connection in connections
+            if connection.organization_id is None
+        )
 
     async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         connection = await self._connectors.get_connection(
@@ -263,6 +282,7 @@ def _operation_context(request: RequestContext, project_id: str | None) -> Opera
 def _definition_resource(definition: ConnectorDefinition) -> dict[str, JsonValue]:
     return {
         "id": definition.id,
+        "type": CONNECTOR_DEFINITION_TYPE,
         "connector_type_id": definition.connector_type_id,
         "name": definition.name,
         "version": definition.version,
@@ -288,6 +308,7 @@ def _connection_resource(connection: Connection) -> dict[str, JsonValue]:
         )
     return {
         "id": connection.id,
+        "type": CONNECTION_TYPE,
         "connector_type_id": connection.connector_type_id,
         "connector_version": connection.connector_version,
         "owner_type": connection.owner_type,
@@ -310,6 +331,28 @@ def _connection_resource(connection: Connection) -> dict[str, JsonValue]:
             if connection.last_checked_at is not None
             else None
         ),
+        "revision": connection.revision,
+    }
+
+
+def _connection_search_resource(connection: Connection) -> dict[str, JsonValue]:
+    """Return the intentionally small, non-secret Connection search projection."""
+
+    return {
+        "id": connection.id,
+        "type": CONNECTION_TYPE,
+        "connector_type_id": connection.connector_type_id,
+        "connector_version": connection.connector_version,
+        "owner_type": connection.owner_type,
+        "owner_id": connection.owner_id,
+        "display_name": connection.display_name,
+        "project_id": connection.project_id,
+        "requested_scopes": list(connection.requested_scopes),
+        "granted_scopes": list(connection.granted_scopes),
+        "enabled": connection.enabled,
+        "status": connection.status.value,
+        "health": connection.health.value,
+        "updated_at": connection.updated_at.isoformat(),
         "revision": connection.revision,
     }
 
