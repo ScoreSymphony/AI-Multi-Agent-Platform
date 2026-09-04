@@ -335,7 +335,9 @@ def _automation_json(automation: Automation) -> dict[str, JsonValue]:
             None if automation.invalidated_at is None else automation.invalidated_at.isoformat()
         ),
         "state_before_invalid": (
-            None if automation.state_before_invalid is None else automation.state_before_invalid.value
+            None
+            if automation.state_before_invalid is None
+            else automation.state_before_invalid.value
         ),
     }
 
@@ -420,9 +422,7 @@ def _automation_from_json(encoded: str) -> Automation:
         invalidated_at = _optional_time(raw.get("invalidated_at"))
         state_before_invalid_raw = cast(str | None, raw.get("state_before_invalid"))
         state_before_invalid = (
-            None
-            if state_before_invalid_raw is None
-            else AutomationState(state_before_invalid_raw)
+            None if state_before_invalid_raw is None else AutomationState(state_before_invalid_raw)
         )
         # #18 could persist the canonical INVALID enum before #241 gave it lifecycle metadata.
         # Preserve readability for such rows and fail closed by restoring them to DISABLED only
