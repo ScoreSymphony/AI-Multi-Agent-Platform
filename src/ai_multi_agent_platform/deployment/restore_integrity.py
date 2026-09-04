@@ -10,7 +10,7 @@ from ai_multi_agent_platform.backup.integrity import (
     RestoreValidationError,
 )
 from ai_multi_agent_platform.contracts import ContractError
-from ai_multi_agent_platform.conversations import ParticipantKind, ReferenceKind
+from ai_multi_agent_platform.conversations import AgentSelectionRef, ParticipantKind, ReferenceKind
 
 if TYPE_CHECKING:
     from .single_node import SingleNodeDeployment
@@ -181,7 +181,11 @@ async def _validate_agents(
     )
 
 
-def _validate_agent_selection(deployment: SingleNodeDeployment, selection, owner: str) -> None:
+def _validate_agent_selection(
+    deployment: SingleNodeDeployment,
+    selection: AgentSelectionRef,
+    owner: str,
+) -> None:
     repository = deployment.agents.repository
     try:
         if selection.kind is ParticipantKind.AGENT:
@@ -193,7 +197,9 @@ def _validate_agent_selection(deployment: SingleNodeDeployment, selection, owner
             revision = selection.revision or definition.current_revision
             repository.get_team_revision(selection.id, revision)
     except ContractError as exc:
-        raise RestoreValidationError(f"{owner} references missing {selection.kind.value} {selection.id}") from exc
+        raise RestoreValidationError(
+            f"{owner} references missing {selection.kind.value} {selection.id}"
+        ) from exc
 
 
 async def _validate_conversations(
@@ -286,7 +292,10 @@ async def _validate_conversations(
                         raise RestoreValidationError(
                             f"conversation message {message.id} references missing run {reference.id}"
                         )
-                    if reference.kind is ReferenceKind.ARTIFACT and reference.id not in artifact_ids:
+                    if (
+                        reference.kind is ReferenceKind.ARTIFACT
+                        and reference.id not in artifact_ids
+                    ):
                         raise RestoreValidationError(
                             f"conversation message {message.id} references missing artifact {reference.id}"
                         )
