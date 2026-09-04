@@ -12,6 +12,7 @@ Task / Run
     -> WorkerJobRequest
     -> DeterministicScheduler
     -> capacity Reservation
+    -> #15 dispatch authorization (when configured)
     -> WorkerDispatcher
     -> LifecycleBackend
     -> executor adapter
@@ -119,6 +120,16 @@ A newly selected reservation is `reserved`. Successful Worker acceptance commits
 
 The registry prevents a second Worker from claiming the same canonical Worker Job while its reservation is active and prevents subsequent jobs from overcommitting already-reserved capacity.
 
+## Dispatch authorization
+
+`DistributedRuntime` accepts the existing canonical #15 `AuthorizationProvider` as an optional deployment dependency. When configured, every new placement is authorized against the **exact selected `worker_*` resource before the external Worker dispatch boundary**.
+
+The authorization request carries only canonical scope/context fields needed for policy evaluation: principal, action, Worker/Node, Project, Workspace, Task, Run and an unambiguous required capability when available. Job input and `secret_refs` are not copied into the policy request.
+
+Placement still reserves capacity before this final authorization gate so the authorization decision refers to the deterministic selected Worker. A denial or authorization-provider failure releases that reservation before the Worker can start execution; no dispatch ownership record is created and the denied Worker Job is not executed.
+
+Reference scheduler tests may construct a runtime without an authorization provider, matching the deterministic local/reference path allowed by #14. Production composition that requires #15 enforcement supplies the canonical provider rather than defining a distributed-specific policy system.
+
 ## Worker protocol and local reference worker
 
 `WorkerJobRequest` is the transport-neutral job message. It carries:
@@ -214,9 +225,14 @@ Tests cover network partition without fencing, retry-forbidden work, invalid fen
 - Worker runtime records;
 - heartbeat sequence state;
 - active/reserved capacity claims;
-- dispatch ownership records and portable Worker Job data.
+- dispatch ownership records and portable Worker Job data;
+- retrieved terminal `WorkerJobResult` state including canonical artifact/evidence references.
+
+Distributed JSON state schema v2 adds the optional terminal result field while the reference store remains able to restore schema v1 snapshots. A v1 record therefore restores with no cached result and can recover the result from the same Worker after reachability is re-established.
 
 The runtime persists dispatch ownership before the external Worker acknowledgement can be lost. After Control-Plane restart, persisted health is deliberately restored as offline rather than trusted as fresh liveness evidence. Re-registration/heartbeat then re-establishes reachability and reconciliation continues without duplicating execution.
+
+Terminal execution state and result collection are intentionally separate. `DistributedRuntime.result(...)` first returns a previously persisted `WorkerJobResult`; otherwise it queries the exact owning result-capable Worker, validates Worker Job/Worker/Run identity and persists the canonical result. A lost completion response therefore survives Control-Plane restart: the same Worker Job result is requested again after rejoin, without a new dispatch. Once persisted, the result remains retrievable after another restart even when no Worker is attached.
 
 A persisted `fenced` dispatch record is intentionally restored without an old active reservation. The replacement attempt may then be scheduled after eligible Worker liveness is re-established; fencing is not repeated merely because the Control Plane restarted.
 
@@ -234,7 +250,7 @@ Registered read collections are:
 
 Administrative commands currently include Node drain/undrain, Node maintenance enable/disable and Worker drain/undrain. They inherit the existing Control Plane idempotency and #15 authorization boundary.
 
-Worker-job projections intentionally omit `secret_refs`. Secret values never belong in Node/Worker/job diagnostic resources.
+Worker-job projections intentionally omit `secret_refs`. Input `artifact_refs` remain distinct from the optional terminal `result` projection. When a terminal result has been collected, the read-only projection exposes its status, canonical output artifact refs, evidence refs, error category, completion time and execution status; it never exposes secret references or plaintext secret material.
 
 Remote Worker registration and heartbeat are not implemented as ordinary human/admin Control Plane commands. They use `WorkerProtocolService`, because they require #36 Worker-token authentication, replay protection, reporter binding and protocol-specific authorization before any runtime mutation.
 
@@ -289,10 +305,10 @@ A lost dispatch acknowledgement does not trigger premature cleanup or a second w
 
 ## Issue #14 completion status
 
-The distributed-runtime scope now includes canonical runtime projections, versioned registration/heartbeat, capability/resource scheduling, node-wide and accelerator capacity leases, local and remote Worker dispatch, authenticated Worker reporting, provider/Control-Plane integration, restart persistence, remote workspace composition, scoped secret delivery, structured telemetry, replaceable #35 transport, lost-reply recovery and controlled fenced cross-Worker failover.
+The distributed-runtime scope now includes canonical runtime projections, versioned registration/heartbeat, capability/resource scheduling, node-wide and accelerator capacity leases, local and remote Worker dispatch, authenticated Worker reporting, explicit #15 pre-dispatch authorization hooks, provider/Control-Plane integration, restart persistence, durable terminal result/evidence recovery, remote workspace composition, scoped secret delivery, structured telemetry, replaceable #35 transport, lost-reply recovery and controlled fenced cross-Worker failover.
 
-The acceptance path uses the same canonical `ExecutionRequest`/`WorkerJobRequest` regardless of whether the selected Worker is local or remote. Tests cover ordinary single-/multi-Worker scheduling as well as controlled transfer of the same canonical work from one lost/fenced Worker to another eligible Worker without changing Task or agent logic.
+The acceptance path uses the same canonical `ExecutionRequest`/`WorkerJobRequest` regardless of whether the selected Worker is local or remote. Tests cover ordinary single-/multi-Worker scheduling as well as controlled transfer of the same canonical work from one lost/fenced Worker to another eligible Worker without changing Task or agent logic. Result recovery tests additionally prove lost-completion-response -> Control-Plane restart -> same-Worker result recovery -> second restart without Worker attachment, while the original execution is started only once.
 
 No infrastructure-provider identifier, host name, GPU vendor, broker, container runtime or deployment topology becomes a canonical execution identity. Deployment profiles such as #240 consume these contracts rather than introducing a second scheduler.
 
-After the controlled-failover implementation, no additional functional #14 subsystem is intentionally deferred. Issue closure requires only the final synchronized CI/integration review of the completing PR.
+No additional functional #14 subsystem is intentionally deferred. Issue closure requires the final synchronized CI/integration review of the completing PR.
