@@ -32,7 +32,10 @@ jobs:
           echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
       - name: Normalize product and tests
-        run: ruff format src tests
+        run: |
+          ruff format src tests
+          ruff check --fix src tests
+          ruff format src tests
       - name: Ruff lint
         run: ruff check src tests
       - name: Mypy
