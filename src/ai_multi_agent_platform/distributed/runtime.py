@@ -8,13 +8,19 @@ from enum import StrEnum
 from time import perf_counter
 from typing import TYPE_CHECKING
 
-from ai_multi_agent_platform.contracts import ExecutionHandle, ExecutionSnapshot
+from ai_multi_agent_platform.contracts import ExecutionHandle, ExecutionSnapshot, RetryMode
 from ai_multi_agent_platform.domain import RunStatus
 
+from .failover import (
+    FailoverError,
+    FailoverRejectionCode,
+    WorkerOwnershipFencer,
+)
 from .models import (
     Heartbeat,
     NodeRecord,
     RegistrationRequest,
+    Reservation,
     ReservationStatus,
     WorkerJobRequest,
     WorkerRecord,
@@ -22,7 +28,7 @@ from .models import (
     utc_now,
 )
 from .registry import DistributedRegistry, RegistryError
-from .scheduler import DeterministicScheduler, ScheduledPlacement
+from .scheduler import DeterministicScheduler, NoEligibleWorkerError, ScheduledPlacement
 from .worker import WorkerDispatcher
 
 if TYPE_CHECKING:
@@ -35,6 +41,7 @@ class DispatchState(StrEnum):
     DISPATCHED = "dispatched"
     RUNNING = "running"
     LOST = "lost"
+    FENCED = "fenced"
     CANCEL_PENDING = "cancel_pending"
     TERMINAL = "terminal"
 
@@ -60,6 +67,7 @@ class DistributedRuntime:
         scheduler: DeterministicScheduler | None = None,
         state_store: DistributedStateStore | None = None,
         telemetry: DistributedTelemetry | None = None,
+        ownership_fencer: WorkerOwnershipFencer | None = None,
     ) -> None:
         self.registry = registry
         self.telemetry = telemetry
@@ -67,6 +75,7 @@ class DistributedRuntime:
         self._dispatchers: dict[str, WorkerDispatcher] = {}
         self._records: dict[str, DispatchRecord] = {}
         self._state_store = state_store
+        self._ownership_fencer = ownership_fencer
         if self._state_store is not None:
             self._state_store.restore(self.registry, self)
 
@@ -182,10 +191,152 @@ class DistributedRuntime:
         placement = self.scheduler.schedule_to_worker(job, worker_id, now=timestamp)
         return await self._dispatch_placement(job, placement, timestamp=timestamp)
 
+    async def fence_for_failover(
+        self,
+        worker_job_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> DispatchRecord:
+        """Persist proof that the lost Worker no longer owns execution before redispatch."""
+
+        record = self.get_record(worker_job_id)
+        if record.state is DispatchState.FENCED:
+            return record
+        if record.state is DispatchState.CANCEL_PENDING:
+            raise FailoverError(
+                FailoverRejectionCode.CANCELLATION_PENDING,
+                "worker job cancellation is pending; failover is not allowed",
+            )
+        if record.state is not DispatchState.LOST:
+            raise FailoverError(
+                FailoverRejectionCode.STATE_NOT_LOST,
+                f"worker job must be lost before failover fencing; state={record.state.value}",
+            )
+        self._assert_retry_safe(record.job)
+        if self._ownership_fencer is None:
+            raise FailoverError(
+                FailoverRejectionCode.FENCE_UNAVAILABLE,
+                "no ownership fencer is configured for lost-worker failover",
+            )
+
+        try:
+            receipt = await self._ownership_fencer.fence(
+                worker_id=record.worker_id,
+                job=record.job,
+            )
+        except FailoverError:
+            raise
+        except Exception as exc:
+            raise FailoverError(
+                FailoverRejectionCode.FENCE_REJECTED,
+                "ownership fencer could not prove the previous Worker stopped",
+            ) from exc
+        if receipt.worker_job_id != worker_job_id or receipt.worker_id != record.worker_id:
+            raise FailoverError(
+                FailoverRejectionCode.FENCE_IDENTITY_MISMATCH,
+                "ownership fence receipt does not match the lost Worker Job ownership",
+            )
+
+        timestamp = now or utc_now()
+        reservation = self._active_reservation(record.reservation_id)
+        if reservation is not None:
+            self.registry.release_reservation(record.reservation_id)
+            if self.telemetry is not None:
+                self.telemetry.reservation(
+                    record.job,
+                    reservation,
+                    event="released_failover_fenced",
+                )
+        fenced = replace(
+            record,
+            state=DispatchState.FENCED,
+            last_error="ownership_fenced",
+        )
+        self._records[worker_job_id] = fenced
+        self._observe_reconciliation(
+            record,
+            fenced,
+            timestamp=timestamp,
+            node_id=self._node_id_or_none(record.worker_id),
+        )
+        self._persist()
+        return fenced
+
+    async def redispatch_fenced(
+        self,
+        worker_job_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> DispatchRecord:
+        """Create the next dispatch attempt on a different eligible Worker after fencing."""
+
+        record = self.get_record(worker_job_id)
+        if record.state is not DispatchState.FENCED:
+            raise FailoverError(
+                FailoverRejectionCode.NOT_FENCED,
+                "worker job ownership must be fenced before cross-Worker redispatch",
+            )
+        self._assert_retry_safe(record.job)
+        timestamp = now or utc_now()
+        next_job = replace(record.job, dispatch_attempt=record.job.dispatch_attempt + 1)
+        decision = self.scheduler.evaluate(next_job)
+        alternatives = sorted(
+            (
+                evaluation
+                for evaluation in decision.evaluations
+                if evaluation.accepted
+                and evaluation.worker_id != record.worker_id
+                and evaluation.worker_id in self._dispatchers
+            ),
+            key=lambda evaluation: (-evaluation.score, evaluation.worker_id),
+        )
+        for evaluation in alternatives:
+            try:
+                placement = self.scheduler.schedule_to_worker(
+                    next_job,
+                    evaluation.worker_id,
+                    now=timestamp,
+                )
+            except NoEligibleWorkerError:
+                continue
+            return await self._dispatch_placement(
+                next_job,
+                placement,
+                timestamp=timestamp,
+            )
+        raise FailoverError(
+            FailoverRejectionCode.NO_ALTERNATE_WORKER,
+            "no alternate attached Worker is currently eligible for fenced redispatch",
+        )
+
+    async def failover(
+        self,
+        worker_job_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> DispatchRecord:
+        """Fence one lost owner and redispatch the same canonical job as the next attempt."""
+
+        await self.fence_for_failover(worker_job_id, now=now)
+        return await self.redispatch_fenced(worker_job_id, now=now)
+
     async def cancel(self, worker_job_id: str) -> DispatchRecord:
         record = self.get_record(worker_job_id)
         if record.state is DispatchState.TERMINAL:
             return record
+        if record.state is DispatchState.FENCED:
+            cancelled = replace(
+                record,
+                state=DispatchState.TERMINAL,
+                snapshot=ExecutionSnapshot(
+                    run_id=record.job.execution.run_id,
+                    status=RunStatus.CANCELLED,
+                ),
+                last_error=None,
+            )
+            self._records[worker_job_id] = cancelled
+            self._persist()
+            return cancelled
         worker = self.registry.get_worker(record.worker_id)
         dispatcher = self._dispatchers.get(record.worker_id)
         if worker.status is WorkerStatus.OFFLINE or dispatcher is None:
@@ -212,7 +363,7 @@ class DistributedRuntime:
         reconciled: list[DispatchRecord] = []
         for worker_job_id in sorted(self._records):
             record = self._records[worker_job_id]
-            if record.state is DispatchState.TERMINAL:
+            if record.state in {DispatchState.FENCED, DispatchState.TERMINAL}:
                 reconciled.append(record)
                 continue
 
@@ -375,14 +526,7 @@ class DistributedRuntime:
             RunStatus.CANCELLED,
             RunStatus.TIMED_OUT,
         }
-        reservation = next(
-            (
-                item
-                for item in self.registry.active_reservations()
-                if item.reservation_id == record.reservation_id
-            ),
-            None,
-        )
+        reservation = self._active_reservation(record.reservation_id)
         if terminal:
             if reservation is not None:
                 self.registry.release_reservation(record.reservation_id)
@@ -421,6 +565,29 @@ class DistributedRuntime:
         )
         self._records[record.job.worker_job_id] = updated
         return updated
+
+    def _assert_retry_safe(self, job: WorkerJobRequest) -> None:
+        if job.execution.context.control.retry_mode is RetryMode.NEVER:
+            raise FailoverError(
+                FailoverRejectionCode.RETRY_FORBIDDEN,
+                "worker job retry_mode forbids cross-Worker failover",
+            )
+
+    def _active_reservation(self, reservation_id: str) -> Reservation | None:
+        return next(
+            (
+                item
+                for item in self.registry.active_reservations()
+                if item.reservation_id == reservation_id
+            ),
+            None,
+        )
+
+    def _node_id_or_none(self, worker_id: str) -> str | None:
+        try:
+            return self.registry.get_worker(worker_id).node_id
+        except RegistryError:
+            return None
 
     def _observe_reconciliation(
         self,
