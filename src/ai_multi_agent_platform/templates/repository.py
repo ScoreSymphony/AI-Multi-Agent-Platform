@@ -6,7 +6,7 @@ from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
-from .models import TemplateDefinition, TemplateRevision
+from .models import TemplateDefinition, TemplateInstantiation, TemplateRevision
 
 
 class TemplateRepository(Protocol):
@@ -26,13 +26,23 @@ class TemplateRepository(Protocol):
 
     def list_revisions(self, template_id: str) -> tuple[TemplateRevision, ...]: ...
 
+    def record_instantiation(self, instantiation: TemplateInstantiation) -> None: ...
+
+    def get_instantiation(self, instance_id: str) -> TemplateInstantiation: ...
+
+    def list_instantiations(
+        self,
+        template_id: str | None = None,
+    ) -> tuple[TemplateInstantiation, ...]: ...
+
 
 class InMemoryTemplateRepository:
-    """Reference repository preserving every immutable Template revision."""
+    """Reference repository preserving every immutable Template revision and instance."""
 
     def __init__(self) -> None:
         self._templates: dict[str, TemplateDefinition] = {}
         self._revisions: dict[tuple[str, int], TemplateRevision] = {}
+        self._instantiations: dict[str, TemplateInstantiation] = {}
 
     def create_template(self, definition: TemplateDefinition, revision: TemplateRevision) -> None:
         if definition.template_id in self._templates:
@@ -92,6 +102,36 @@ class InMemoryTemplateRepository:
             item for (current_id, _), item in self._revisions.items() if current_id == template_id
         ]
         return tuple(sorted(revisions, key=lambda item: item.revision))
+
+    def record_instantiation(self, instantiation: TemplateInstantiation) -> None:
+        if instantiation.instance_id in self._instantiations:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"template instantiation already exists: {instantiation.instance_id}",
+            )
+        self.get_revision(instantiation.source.template_id, instantiation.source.revision)
+        self._instantiations[instantiation.instance_id] = instantiation
+
+    def get_instantiation(self, instance_id: str) -> TemplateInstantiation:
+        try:
+            return self._instantiations[instance_id]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"template instantiation not found: {instance_id}",
+            ) from exc
+
+    def list_instantiations(
+        self,
+        template_id: str | None = None,
+    ) -> tuple[TemplateInstantiation, ...]:
+        values = self._instantiations.values()
+        if template_id is not None:
+            self.get_template(template_id)
+            values = (
+                item for item in values if item.source.template_id == template_id
+            )
+        return tuple(sorted(values, key=lambda item: (item.created_at, item.instance_id)))
 
     @staticmethod
     def _validate_pair(definition: TemplateDefinition, revision: TemplateRevision) -> None:
