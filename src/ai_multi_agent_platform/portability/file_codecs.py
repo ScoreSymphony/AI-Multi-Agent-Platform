@@ -114,7 +114,9 @@ class FilePortableCodec:
         _require_schema(resource.payload)
         raw = resource.payload.get("data_base64")
         if not isinstance(raw, str):
-            raise ContractError(ErrorCode.INVALID_CONFIGURATION, "portable file data must be base64")
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION, "portable file data must be base64"
+            )
         try:
             data = base64.b64decode(raw, validate=True)
             record = _file_record_from_json(resource.payload.get("record"))
@@ -268,9 +270,7 @@ def _file_dependencies(record: FileRecord) -> tuple[DependencyRequirement, ...]:
 def _artifact_dependencies(artifact: Artifact) -> tuple[DependencyRequirement, ...]:
     if artifact.project_id is None:
         return ()
-    return (
-        resource_dependency("project", artifact.project_id, purpose="Artifact project scope"),
-    )
+    return (resource_dependency("project", artifact.project_id, purpose="Artifact project scope"),)
 
 
 def _require_schema(payload: dict[str, JsonValue]) -> None:
@@ -301,7 +301,9 @@ def _file_record_to_json(record: FileRecord) -> dict[str, JsonValue]:
 def _file_record_from_json(value: JsonValue | None) -> FileRecord:
     data = _object(value, "FileRecord")
     artifact_ids = data.get("artifact_ids")
-    if not isinstance(artifact_ids, list) or any(not isinstance(item, str) for item in artifact_ids):
+    if not isinstance(artifact_ids, list) or any(
+        not isinstance(item, str) for item in artifact_ids
+    ):
         raise ValueError("artifact_ids must be a list of strings")
     metadata = _object(data.get("metadata"), "FileRecord.metadata")
     return FileRecord(
