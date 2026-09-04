@@ -229,7 +229,9 @@ class TemplateCommandHandlers:
             revision=_optional_positive_int(payload, "revision"),
             allow_draft=_optional_bool(payload, "allow_draft", default=False),
         )
-        return json_object(preview)
+        result = json_object(preview)
+        result["applicable"] = preview.applicable
+        return result
 
     async def apply_template(
         self,
