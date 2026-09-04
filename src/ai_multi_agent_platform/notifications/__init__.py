@@ -10,6 +10,7 @@ from .delivery import (
     NotificationDeliveryCoordinator,
     UnavailableDeliveryChannel,
 )
+from .delivery_sqlite import SqliteDeliveryAttemptRepository
 from .events import NotificationProjectingEventProvider, ProjectionFailureSink
 from .integrations import (
     approval_required_candidate,
@@ -52,6 +53,13 @@ from .recipients import (
 )
 from .repository import InMemoryNotificationRepository, NotificationRepository
 from .rules import NotificationRule, TaskTerminalNotificationRule
+from .runtime import (
+    InMemoryNotificationRuntimeState,
+    NotificationRuntime,
+    NotificationRuntimeState,
+    NotificationRuntimeTick,
+    SqliteNotificationRuntimeState,
+)
 from .service import NotificationEventSink, NotificationService
 from .sqlite import SqliteNotificationPreferenceRepository, SqliteNotificationRepository
 
@@ -65,6 +73,7 @@ __all__ = [
     "InMemoryDeliveryAttemptRepository",
     "InMemoryNotificationPreferenceRepository",
     "InMemoryNotificationRepository",
+    "InMemoryNotificationRuntimeState",
     "Notification",
     "NotificationAction",
     "NotificationCandidate",
@@ -80,6 +89,9 @@ __all__ = [
     "NotificationQuery",
     "NotificationRepository",
     "NotificationRule",
+    "NotificationRuntime",
+    "NotificationRuntimeState",
+    "NotificationRuntimeTick",
     "NotificationService",
     "NotificationSeverity",
     "NotificationState",
@@ -89,8 +101,10 @@ __all__ = [
     "RecipientResolver",
     "RecipientType",
     "SourceRef",
+    "SqliteDeliveryAttemptRepository",
     "SqliteNotificationPreferenceRepository",
     "SqliteNotificationRepository",
+    "SqliteNotificationRuntimeState",
     "StaticRecipientEligibilityGuard",
     "StaticRecipientResolver",
     "TaskTerminalNotificationRule",
