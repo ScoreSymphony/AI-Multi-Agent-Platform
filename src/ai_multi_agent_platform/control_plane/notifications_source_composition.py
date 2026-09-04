@@ -138,9 +138,7 @@ class ControlPlane(_BaseControlPlane):
             if budget.owner_type is None or budget.owner_id is None:
                 return
             recipient = RecipientRef(RecipientType(budget.owner_type), budget.owner_id)
-            self._source_attention_queue.put(
-                budget_threshold_candidate(event, recipient=recipient)
-            )
+            self._source_attention_queue.put(budget_threshold_candidate(event, recipient=recipient))
         except Exception:
             # Accounting already owns and committed the budget/usage state. Invalid or missing
             # recipient metadata must not make accounting ingestion fail.
