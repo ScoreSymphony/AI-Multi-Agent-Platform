@@ -237,7 +237,9 @@ def test_integrity_gate_rejects_missing_canonical_project_reference(tmp_path: Pa
     asyncio.run(scenario())
 
 
-def test_composed_conversation_integrity_rejects_missing_project(tmp_path: Path, monkeypatch) -> None:
+def test_composed_conversation_integrity_rejects_missing_project(
+    tmp_path: Path, monkeypatch
+) -> None:
     async def prepare() -> tuple[Path, str]:
         config, deployment = _deployment(tmp_path)
         admin = deployment.bootstrap_admin("admin", PASSWORD)
@@ -392,7 +394,9 @@ def test_server_refuses_then_operator_resolves_orphaned_restored_run(
     assert recovered_run.recovery_required is False
 
 
-def test_restore_run_resolution_rejects_run_not_in_blocked_report(tmp_path: Path, monkeypatch) -> None:
+def test_restore_run_resolution_rejects_run_not_in_blocked_report(
+    tmp_path: Path, monkeypatch
+) -> None:
     async def prepare() -> tuple[Path, str, str]:
         config, deployment = _deployment(tmp_path)
         task = await deployment.kernel.create_task(
