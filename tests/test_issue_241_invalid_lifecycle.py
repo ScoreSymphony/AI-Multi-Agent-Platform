@@ -357,6 +357,7 @@ def test_control_plane_exposes_and_authorizes_invalid_lifecycle_commands() -> No
                 owner_type="user",
                 owner_id="issue-241",
             ),
+            idempotency_key="issue-241-invalid-lifecycle",
         )
         automation = await control_plane.automation_service.create_automation(
             name="control-plane invalid",
