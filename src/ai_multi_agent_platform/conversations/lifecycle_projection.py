@@ -41,18 +41,27 @@ async def project_conversation_lifecycle_event(
     subject_type = _optional_string(event, "subject_type")
     subject_id = _optional_string(event, "subject_id")
     payload = _payload(event)
+    conversation = await service.get_conversation(conversation_id)
 
     references: list[ResourceReference] = []
 
     if subject_type == "run" and subject_id is not None and event_type.startswith("run."):
         validate_id(subject_id, "run")
-        await service.link_run(conversation_id=conversation_id, run_id=subject_id)
+        if subject_id not in conversation.run_ids:
+            conversation = await service.link_run(
+                conversation_id=conversation_id,
+                run_id=subject_id,
+            )
         references.append(ResourceReference(kind=ReferenceKind.RUN, id=subject_id))
 
     if event_type == "artifact.attached":
         artifact_id = _required_string(payload, "artifact_id")
         validate_id(artifact_id, "artifact")
-        await service.link_artifact(conversation_id=conversation_id, artifact_id=artifact_id)
+        if artifact_id not in conversation.artifact_ids:
+            await service.link_artifact(
+                conversation_id=conversation_id,
+                artifact_id=artifact_id,
+            )
         references.append(ResourceReference(kind=ReferenceKind.ARTIFACT, id=artifact_id))
 
     if event_type == "result.attached":
