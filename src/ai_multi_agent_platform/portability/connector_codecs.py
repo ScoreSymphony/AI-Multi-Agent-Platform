@@ -347,7 +347,9 @@ def _connector_requirement_from_json(value: JsonValue | None) -> ConnectorRequir
         definition_id=_string(data, "definition_id"),
         connector_type_id=_string(data, "connector_type_id"),
         version=_string(data, "version"),
-        supported_operations=_string_tuple(data.get("supported_operations"), "supported_operations"),
+        supported_operations=_string_tuple(
+            data.get("supported_operations"), "supported_operations"
+        ),
         features=_string_tuple(data.get("features"), "features"),
         authentication_requirements=_string_tuple(
             data.get("authentication_requirements"), "authentication_requirements"
@@ -387,9 +389,7 @@ def _connection_from_json(value: JsonValue | None) -> Connection:
     raw_secret_references = data.get("secret_references")
     if not isinstance(raw_secret_references, list):
         raise ValueError("secret_references must be an array")
-    secret_references = tuple(
-        _secret_reference_from_json(item) for item in raw_secret_references
-    )
+    secret_references = tuple(_secret_reference_from_json(item) for item in raw_secret_references)
     return Connection(
         id=_string(data, "id"),
         connector_type_id=_string(data, "connector_type_id"),
