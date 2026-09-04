@@ -54,8 +54,16 @@ _CANONICAL_OWNER_COMMAND_TYPES = {
     "memory.update": "memory",
     "knowledge.register": "knowledge_source",
     "knowledge.update": "knowledge_source",
+    "connection.create": "connection",
+    "connection.enable": "connection",
+    "connection.disable": "connection",
+    "connection.health": "connection",
 }
 _STRICT_DATA_OWNER_RESOURCE_TYPES = frozenset({"memory", "knowledge_source"})
+_STRICT_STRUCTURED_OWNER_RESOURCE_TYPES = frozenset({"connection"})
+_STRICT_COMMAND_OWNER_RESOURCE_TYPES = (
+    _STRICT_DATA_OWNER_RESOURCE_TYPES | _STRICT_STRUCTURED_OWNER_RESOURCE_TYPES
+)
 
 
 class ControlPlane(_CurrentControlPlane):
@@ -307,6 +315,8 @@ async def _mirror_command_resource(
         owner_ref = _owner_ref(identity.get("owner_type"), identity.get("owner_id"))
     elif resource_type in _STRICT_DATA_OWNER_RESOURCE_TYPES:
         owner_ref = _principal_owner_ref(resource.get("owner_ref"), resource_type)
+    elif resource_type in _STRICT_STRUCTURED_OWNER_RESOURCE_TYPES:
+        owner_ref = _owner_ref(resource.get("owner_type"), resource.get("owner_id"))
     else:
         raw_owner = resource.get("owner_ref")
         if not isinstance(raw_owner, dict):
@@ -316,7 +326,7 @@ async def _mirror_command_resource(
             )
         owner_ref = _owner_ref(raw_owner.get("type"), raw_owner.get("id"))
 
-    if resource_type in _STRICT_DATA_OWNER_RESOURCE_TYPES:
+    if resource_type in _STRICT_COMMAND_OWNER_RESOURCE_TYPES:
         await mirror.mirror(
             resource_type=resource_type,
             resource_id=resource_id,
