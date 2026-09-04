@@ -74,7 +74,7 @@ def _message(text: str = "Hello") -> ConversationMessage:
 async def _collect(
     stream: AsyncIterator[ConversationResponseChunk],
 ) -> tuple[ConversationResponseChunk, ...]:
-    return tuple(item async for item in stream)
+    return tuple([item async for item in stream])
 
 
 def test_agent_conversation_routes_through_canonical_model_runtime() -> None:
