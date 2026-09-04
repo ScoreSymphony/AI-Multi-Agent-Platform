@@ -251,7 +251,10 @@ def _project_selector(
     if (template_id is None) == (project_id is None):
         raise ContractError(
             ErrorCode.INVALID_CONFIGURATION,
-            "Workspace structure Template requires exactly one of project_template_id or project_id",
+            (
+                "Workspace structure Template requires exactly one of "
+                "project_template_id or project_id"
+            ),
         )
     if template_id is not None:
         declared = {dependency.template_id for dependency in revision.content.dependencies}
