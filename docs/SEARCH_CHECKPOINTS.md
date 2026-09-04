@@ -48,13 +48,19 @@ This prevents one later incremental event from accidentally hiding the fact that
 
 ### Correctness-first default
 
-`search_rebuild_before_query=True` is the default and preserves the original #45 baseline. Every query rebuilds from canonical sources before provider candidate discovery.
+Rebuild-before-query is the default and preserves the original #45 baseline. Every query rebuilds from canonical sources before provider candidate discovery.
 
 This remains appropriate for the in-memory baseline and for deployments that do not have a durable event-driven indexing pipeline.
 
 ### Checkpointed mode
 
-A deployment may explicitly set `search_rebuild_before_query=False` when its SearchProvider is maintained by canonical write-through/event delivery.
+A deployment whose SearchProvider is maintained by canonical write-through/event delivery may explicitly switch the composed Control Plane after construction:
+
+```python
+control_plane.configure_search_refresh(rebuild_before_query=False)
+```
+
+Configuration is intentionally not a Control Plane constructor argument. The platform composes many cooperative Control Plane mixins, so keeping this as an explicit runtime configuration seam avoids forcing a new keyword through unrelated constructor contracts.
 
 Before serving a query the Control Plane checks provider state:
 
