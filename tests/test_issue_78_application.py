@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.templates.application import (
     ContextualTemplateHandlerRegistry,
     TemplateApplicationService,
@@ -202,25 +202,26 @@ def test_reapply_creates_new_instance_without_mutating_previous_instance() -> No
 
 
 def test_context_requires_revision_pin_when_same_template_has_multiple_applied_revisions() -> None:
+    template_id = new_id("template")
     context = TemplateInstantiationContext(
-        instance_id="template_instance_test",
+        instance_id=new_id("template_instance"),
         environment=TemplateEnvironment(),
         created_resources={
-            TemplateRevisionRef("template_dependency", 1): (
+            TemplateRevisionRef(template_id, 1): (
                 TemplateResourceRef("agent", "agent-one"),
             ),
-            TemplateRevisionRef("template_dependency", 2): (
+            TemplateRevisionRef(template_id, 2): (
                 TemplateResourceRef("agent", "agent-two"),
             ),
         },
     )
 
     with pytest.raises(ContractError) as exc_info:
-        context.resources_for("template_dependency", resource_type="agent")
+        context.resources_for(template_id, resource_type="agent")
     assert exc_info.value.code is ErrorCode.CONFLICT
 
     pinned = context.single_resource_for(
-        "template_dependency",
+        template_id,
         revision=2,
         resource_type="agent",
     )
