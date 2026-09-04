@@ -34,11 +34,21 @@ from ai_multi_agent_platform.templates import (
     AutomationTemplateExporter,
     ContextualTemplateHandlerRegistry,
     JsonTemplateRepository,
+    ProjectTemplateExporter,
     TemplateApplicationService,
+    WorkspaceStructureTemplateExporter,
     register_agent_template_handlers,
     register_automation_template_handler,
+    register_project_template_handler,
+    register_workspace_structure_template_handler,
 )
 from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
+from ai_multi_agent_platform.templates.project_control_plane import (
+    register_project_template_control_plane,
+)
+from ai_multi_agent_platform.templates.workspace_structure_control_plane import (
+    register_workspace_structure_template_control_plane,
+)
 from ai_multi_agent_platform.verification import (
     CanonicalVerificationRuntime,
     KernelFileVerificationEvidenceResolver,
@@ -190,11 +200,18 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
     agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
     template_handlers = ContextualTemplateHandlerRegistry()
     register_agent_template_handlers(template_handlers, agents)
+    register_project_template_handler(template_handlers, scopes)
+    register_workspace_structure_template_handler(template_handlers, workspaces, scopes)
     templates = TemplateApplicationService(
         JsonTemplateRepository(database_dir / "templates.json"),
         template_handlers,
     )
     agent_template_exporter = AgentTemplateExporter(agents, templates.templates)
+    project_template_exporter = ProjectTemplateExporter(scopes, templates.templates)
+    workspace_template_exporter = WorkspaceStructureTemplateExporter(
+        workspaces,
+        templates.templates,
+    )
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
@@ -245,6 +262,16 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         templates,
         agent_exporter=agent_template_exporter,
         automation_exporter=automation_template_exporter,
+    )
+    register_project_template_control_plane(
+        control_plane,
+        templates.repository,
+        project_template_exporter,
+    )
+    register_workspace_structure_template_control_plane(
+        control_plane,
+        templates.repository,
+        workspace_template_exporter,
     )
     register_verification_control_plane(
         control_plane,
