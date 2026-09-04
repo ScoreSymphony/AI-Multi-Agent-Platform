@@ -16,9 +16,9 @@ from .contracts import (
     EvaluationCaseExecutor,
     EvaluationIsolation,
     EvaluationRepository,
-    Evaluator,
+    EvaluatorLike,
 )
-from .evaluators import SafeEvaluator
+from .evaluators import evaluate_safely
 from .models import (
     ComparisonReport,
     ConfigurationSnapshot,
@@ -73,14 +73,14 @@ class NoopEvaluationIsolation:
 
 
 class EvaluationRunner:
-    """Execute versioned suites while keeping execution and isolation replaceable."""
+    """Execute versioned suites while keeping execution, isolation and evaluators replaceable."""
 
     def __init__(
         self,
         *,
         repository: EvaluationRepository,
         executor: EvaluationCaseExecutor,
-        evaluators: tuple[Evaluator, ...],
+        evaluators: tuple[EvaluatorLike, ...],
         isolation: EvaluationIsolation | None = None,
         regression_engine: RegressionEngine | None = None,
         result_aggregator: ResultAggregator | None = None,
@@ -328,7 +328,8 @@ class EvaluationRunner:
 
         assert observation is not None
         for evaluator in self._evaluators:
-            result = SafeEvaluator(evaluator).evaluate(
+            result = await evaluate_safely(
+                evaluator,
                 evaluation_run_id=run.run_id,
                 case=case,
                 observation=observation,
