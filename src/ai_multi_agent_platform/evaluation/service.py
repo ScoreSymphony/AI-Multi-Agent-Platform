@@ -6,7 +6,12 @@ from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
-from .aggregation import AggregatedEvaluationResult, AggregationPolicy, ResultAggregator
+from .aggregation import (
+    AggregatedEvaluationResult,
+    AggregationPolicy,
+    ComparableEvaluationResult,
+    ResultAggregator,
+)
 from .contracts import EvaluationHistoryRepository
 from .models import (
     ComparisonReport,
@@ -234,6 +239,8 @@ class EvaluationService:
                 "repetition count"
             )
 
+        baseline_comparable: tuple[ComparableEvaluationResult, ...]
+        current_comparable: tuple[ComparableEvaluationResult, ...]
         if aggregation_policy is None:
             baseline_comparable = self._repository.list_results(baseline_run_id)
             current_comparable = self._repository.list_results(current_run_id)
