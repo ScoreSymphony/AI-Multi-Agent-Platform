@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import replace
 from pathlib import Path
-from typing import TypeAlias
+from typing import Protocol
 
 from control_plane_contract_helpers import api_headers
 
@@ -13,14 +13,14 @@ from ai_multi_agent_platform.control_plane import (
 from ai_multi_agent_platform.control_plane import (
     ControlPlaneHTTP as ComposedControlPlaneHTTP,
 )
-from ai_multi_agent_platform.control_plane import HTTPRequest
+from ai_multi_agent_platform.control_plane import HTTPRequest, HTTPResponse
 from ai_multi_agent_platform.control_plane.workspace_contract import (
     ControlPlane as WorkspaceControlPlane,
 )
 from ai_multi_agent_platform.control_plane.workspace_contract import (
     ControlPlaneHTTP as WorkspaceControlPlaneHTTP,
 )
-from ai_multi_agent_platform.data import LocalFileProvider
+from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 from ai_multi_agent_platform.workspaces import (
@@ -32,8 +32,10 @@ from ai_multi_agent_platform.workspaces import (
 )
 
 _SHA = "b" * 40
-_ControlPlaneType: TypeAlias = type[ComposedControlPlane] | type[WorkspaceControlPlane]
-_HTTPType: TypeAlias = type[ComposedControlPlaneHTTP] | type[WorkspaceControlPlaneHTTP]
+
+
+class _HTTPHandler(Protocol):
+    async def handle(self, request: HTTPRequest) -> HTTPResponse: ...
 
 
 class _RepositoryPinningResolver(WorkspaceSourceResolver):
@@ -41,7 +43,11 @@ class _RepositoryPinningResolver(WorkspaceSourceResolver):
     def kind(self) -> WorkspaceSourceKind:
         return WorkspaceSourceKind.REPOSITORY
 
-    async def resolve(self, source_ref: WorkspaceSourceRef, context: object) -> ResolvedWorkspaceSource:
+    async def resolve(
+        self,
+        source_ref: WorkspaceSourceRef,
+        context: DataAccessContext,
+    ) -> ResolvedWorkspaceSource:
         del context
         assert source_ref.revision == "main"
         return ResolvedWorkspaceSource(
@@ -53,11 +59,7 @@ class _RepositoryPinningResolver(WorkspaceSourceResolver):
         )
 
 
-def _stack(
-    tmp_path: Path,
-    control_plane_type: _ControlPlaneType,
-    http_type: _HTTPType,
-) -> tuple[object, SqliteWorkspaceProvider]:
+def _workspace_stack(tmp_path: Path) -> tuple[_HTTPHandler, SqliteWorkspaceProvider]:
     repository = InMemoryKernelRepository()
     kernel = PlatformKernel(
         orchestrator=FakeOrchestrator(),
@@ -70,7 +72,7 @@ def _stack(
         files,
         tmp_path / "workspaces.sqlite",
     )
-    control_plane = control_plane_type(
+    control_plane = WorkspaceControlPlane(
         kernel=kernel,
         events=repository,
         workspace_provider=workspaces,
@@ -78,14 +80,38 @@ def _stack(
     resolvers = control_plane.workspace_source_resolvers
     assert resolvers is not None
     resolvers.register(_RepositoryPinningResolver())
-    return http_type(control_plane), workspaces
+    return WorkspaceControlPlaneHTTP(control_plane), workspaces
+
+
+def _composed_stack(tmp_path: Path) -> tuple[_HTTPHandler, SqliteWorkspaceProvider]:
+    repository = InMemoryKernelRepository()
+    kernel = PlatformKernel(
+        orchestrator=FakeOrchestrator(),
+        lifecycle=FakeLifecycleBackend(),
+        repository=repository,
+    )
+    files = LocalFileProvider(tmp_path / "objects", tmp_path / "files.sqlite")
+    workspaces = SqliteWorkspaceProvider(
+        tmp_path / "materializations",
+        files,
+        tmp_path / "workspaces.sqlite",
+    )
+    control_plane = ComposedControlPlane(
+        kernel=kernel,
+        events=repository,
+        workspace_provider=workspaces,
+    )
+    resolvers = control_plane.workspace_source_resolvers
+    assert resolvers is not None
+    resolvers.register(_RepositoryPinningResolver())
+    return ComposedControlPlaneHTTP(control_plane), workspaces
 
 
 def test_control_plane_persists_resolved_repository_revision(tmp_path: Path) -> None:
     async def scenario() -> None:
         stacks = (
-            _stack(tmp_path / "workspace-contract", WorkspaceControlPlane, WorkspaceControlPlaneHTTP),
-            _stack(tmp_path / "composed", ComposedControlPlane, ComposedControlPlaneHTTP),
+            _workspace_stack(tmp_path / "workspace-contract"),
+            _composed_stack(tmp_path / "composed"),
         )
         for index, (http, provider) in enumerate(stacks):
             project_response = await http.handle(
@@ -129,7 +155,9 @@ def test_control_plane_persists_resolved_repository_revision(tmp_path: Path) -> 
             assert isinstance(source_refs, list) and len(source_refs) == 1
             assert isinstance(source_refs[0], dict)
             assert source_refs[0]["revision"] == _SHA
-            assert source_refs[0]["metadata"]["requested_revision"] == "main"
+            metadata = source_refs[0]["metadata"]
+            assert isinstance(metadata, dict)
+            assert metadata["requested_revision"] == "main"
 
             workspace_id = created.body["id"]
             assert isinstance(workspace_id, str)
