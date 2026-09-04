@@ -11,10 +11,10 @@ from .control_plane import (
     AgentResourceService,
     AgentRunResourceService,
     AgentTeamResourceService,
-    _profile_from_json as agent_profile_from_json,
-    _team_profile_from_json as agent_team_profile_from_json,
     register_agent_control_plane,
 )
+from .control_plane import _profile_from_json as agent_profile_from_json
+from .control_plane import _team_profile_from_json as agent_team_profile_from_json
 from .models import (
     AgentCapabilityPolicy,
     AgentDataAccess,
