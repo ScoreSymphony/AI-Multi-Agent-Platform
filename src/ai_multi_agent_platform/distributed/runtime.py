@@ -590,7 +590,11 @@ class DistributedRuntime:
         operation = job.execution.context
         principal_ref = job.actor_ref or operation.owner_id or "service:distributed-runtime"
         actor_identity_ref = principal_ref
-        if job.actor_ref is None and operation.owner_id is not None and operation.owner_type == "user":
+        if (
+            job.actor_ref is None
+            and operation.owner_id is not None
+            and operation.owner_type == "user"
+        ):
             actor_identity_ref = f"user:{operation.owner_id}"
         actor_type = infer_actor_identity(actor_identity_ref).actor_type.value
         task_id = job.execution.subject_id if job.execution.subject_type == "task" else None
