@@ -49,7 +49,13 @@ _CANONICAL_OWNER_COMMAND_TYPES = {
     "automation.pause": "automation",
     "automation.resume": "automation",
     "automation.disable": "automation",
+    "memory.create": "memory",
+    "memory.promote": "memory",
+    "memory.update": "memory",
+    "knowledge.register": "knowledge_source",
+    "knowledge.update": "knowledge_source",
 }
+_STRICT_DATA_OWNER_RESOURCE_TYPES = frozenset({"memory", "knowledge_source"})
 
 
 class ControlPlane(_CurrentControlPlane):
@@ -299,6 +305,8 @@ async def _mirror_command_resource(
                 "canonical automation response is missing its identity owner",
             )
         owner_ref = _owner_ref(identity.get("owner_type"), identity.get("owner_id"))
+    elif resource_type in _STRICT_DATA_OWNER_RESOURCE_TYPES:
+        owner_ref = _principal_owner_ref(resource.get("owner_ref"), resource_type)
     else:
         raw_owner = resource.get("owner_ref")
         if not isinstance(raw_owner, dict):
@@ -307,12 +315,31 @@ async def _mirror_command_resource(
                 f"canonical {resource_type} response is missing owner_ref",
             )
         owner_ref = _owner_ref(raw_owner.get("type"), raw_owner.get("id"))
+
+    if resource_type in _STRICT_DATA_OWNER_RESOURCE_TYPES:
+        await mirror.mirror(
+            resource_type=resource_type,
+            resource_id=resource_id,
+            owner_ref=owner_ref,
+            actor_ref=context.actor.principal_ref,
+        )
+        return
     await mirror.mirror_authoritative(
         resource_type=resource_type,
         resource_id=resource_id,
         owner_ref=owner_ref,
         actor_ref=context.actor.principal_ref,
     )
+
+
+def _principal_owner_ref(raw_owner: JsonValue | None, resource_type: str) -> OwnerRef:
+    if not isinstance(raw_owner, str) or ":" not in raw_owner:
+        raise ContractError(
+            ErrorCode.BACKEND_ERROR,
+            f"canonical {resource_type} response is missing a canonical owner_ref",
+        )
+    raw_type, raw_id = raw_owner.split(":", 1)
+    return _owner_ref(raw_type, raw_id)
 
 
 def _owner_ref(raw_type: JsonValue | None, raw_id: JsonValue | None) -> OwnerRef:
