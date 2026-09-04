@@ -340,8 +340,7 @@ def _assert_non_secret_metadata(value: Any, path: str = "deployment_metadata") -
             normalized = str(key).casefold()
             if any(marker in normalized for marker in _SENSITIVE_METADATA_MARKERS):
                 raise BackupError(
-                    "secret-looking metadata is forbidden in generic backups: "
-                    f"{path}.{key}"
+                    f"secret-looking metadata is forbidden in generic backups: {path}.{key}"
                 )
             _assert_non_secret_metadata(nested, f"{path}.{key}")
     elif isinstance(value, list | tuple):
