@@ -83,9 +83,7 @@ class InMemoryAutomationRepository(AutomationRepository):
 
     async def remove_automation_if_unused(self, automation_id: str) -> None:
         validate_id(automation_id, "automation")
-        if any(
-            delivery.automation_id == automation_id for delivery in self._deliveries.values()
-        ):
+        if any(delivery.automation_id == automation_id for delivery in self._deliveries.values()):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "cannot remove automation with trigger delivery history",
