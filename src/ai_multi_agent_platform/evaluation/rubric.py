@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from ai_multi_agent_platform.contracts.types import JsonValue
-
 from .models import (
     AssertionResult,
     EvaluationCase,

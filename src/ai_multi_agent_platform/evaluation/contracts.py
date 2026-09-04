@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol, TypeAlias
+from typing import Protocol
 
 from .aggregation import AggregatedEvaluationResult
 from .context import EvaluationExecutionContext
@@ -47,7 +47,7 @@ class AsyncEvaluator(Protocol):
     ) -> EvaluationResult: ...
 
 
-EvaluatorLike: TypeAlias = Evaluator | AsyncEvaluator
+type EvaluatorLike = Evaluator | AsyncEvaluator
 
 
 class EvaluationCaseExecutor(Protocol):
