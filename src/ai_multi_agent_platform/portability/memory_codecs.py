@@ -80,9 +80,7 @@ async def snapshot_memory(
             "short-term execution memory is runtime state and cannot be exported portably",
             details={"memory_id": memory_id, "scope": entry.scope.value},
         )
-    source_project_id = (
-        context.project_id if entry.scope in _PROJECT_BOUND_MEMORY_SCOPES else None
-    )
+    source_project_id = context.project_id if entry.scope in _PROJECT_BOUND_MEMORY_SCOPES else None
     try:
         return MemoryPortableSnapshot(entry=entry, source_project_id=source_project_id)
     except ValueError as exc:
@@ -147,17 +145,13 @@ class MemoryPortableCodec:
                 "source_project_id",
             )
             remapped_project_id = (
-                None
-                if source_project_id is None
-                else context.remap("project", source_project_id)
+                None if source_project_id is None else context.remap("project", source_project_id)
             )
             entry = replace(
                 entry,
                 memory_id=context.remap(MEMORY_RESOURCE_TYPE, entry.memory_id),
                 scope_id=_remap_scope_id(context, entry.scope, entry.scope_id),
-                supersedes_memory_id=_remap_optional_memory_id(
-                    context, entry.supersedes_memory_id
-                ),
+                supersedes_memory_id=_remap_optional_memory_id(context, entry.supersedes_memory_id),
                 superseded_by_memory_id=_remap_optional_memory_id(
                     context, entry.superseded_by_memory_id
                 ),
