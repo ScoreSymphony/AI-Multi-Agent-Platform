@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, TypeAlias
 
 from .aggregation import AggregatedEvaluationResult
 from .context import EvaluationExecutionContext
@@ -18,7 +18,7 @@ from .models import (
 
 
 class Evaluator(Protocol):
-    """Replaceable evaluator boundary shared by deterministic and scored evaluation."""
+    """Replaceable synchronous evaluator boundary."""
 
     @property
     def descriptor(self) -> EvaluatorDescriptor: ...
@@ -30,6 +30,24 @@ class Evaluator(Protocol):
         case: EvaluationCase,
         observation: EvaluationObservation,
     ) -> EvaluationResult: ...
+
+
+class AsyncEvaluator(Protocol):
+    """Replaceable asynchronous evaluator boundary for model/network-backed scoring."""
+
+    @property
+    def descriptor(self) -> EvaluatorDescriptor: ...
+
+    async def evaluate(
+        self,
+        *,
+        evaluation_run_id: str,
+        case: EvaluationCase,
+        observation: EvaluationObservation,
+    ) -> EvaluationResult: ...
+
+
+EvaluatorLike: TypeAlias = Evaluator | AsyncEvaluator
 
 
 class EvaluationCaseExecutor(Protocol):

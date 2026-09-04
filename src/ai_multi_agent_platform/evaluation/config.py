@@ -203,16 +203,20 @@ def _rubric(value: Any, *, context: str) -> tuple[RubricCriterion, ...]:
             item,
             context=item_context,
             required=frozenset({"criterion_id", "description"}),
-            optional=frozenset({"weight"}),
+            optional=frozenset({"weight", "minimum_score"}),
         )
         weight = item.get("weight", 1.0)
         if isinstance(weight, bool) or not isinstance(weight, int | float):
             raise ValueError(f"{item_context}.weight must be numeric")
+        minimum_score = item.get("minimum_score", 0.0)
+        if isinstance(minimum_score, bool) or not isinstance(minimum_score, int | float):
+            raise ValueError(f"{item_context}.minimum_score must be numeric")
         criteria.append(
             RubricCriterion(
                 criterion_id=_string(item, "criterion_id", context=item_context),
                 description=_string(item, "description", context=item_context),
                 weight=float(weight),
+                minimum_score=float(minimum_score),
             )
         )
     return tuple(criteria)
