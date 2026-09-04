@@ -78,7 +78,9 @@ def external_delivery_allowed(preference: NotificationPreference, *, now: dateti
     if preference.quiet_hours_end is None or preference.quiet_hours_timezone is None:
         raise ValueError("quiet-hours preference is incomplete")
 
-    local_time = now.astimezone(ZoneInfo(preference.quiet_hours_timezone)).time().replace(tzinfo=None)
+    local_time = (
+        now.astimezone(ZoneInfo(preference.quiet_hours_timezone)).time().replace(tzinfo=None)
+    )
     start = time.fromisoformat(preference.quiet_hours_start)
     end = time.fromisoformat(preference.quiet_hours_end)
     if start < end:
