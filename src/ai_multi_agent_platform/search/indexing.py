@@ -42,8 +42,8 @@ def document_from_resource(
     workspace_id = _workspace_id(resource_type, resource_id, resource)
     owner_type, owner_id = _owner(resource)
     status = _status(resource)
-    updated_at = _optional_string(resource, "updated_at")
-    version = _version(resource)
+    updated_at = _updated_at(resource_type, resource)
+    version = _version(resource_type, resource)
     canonical_collection = collection or _COLLECTIONS.get(resource_type)
     canonical_ref = (
         f"/api/v1/{canonical_collection}/{resource_id}"
@@ -146,6 +146,13 @@ def _display_title(
         subject_id = _optional_string(resource, "subject_id")
         if subject_type is not None and subject_id is not None:
             return f"Approval for {subject_type} {subject_id}"
+    if resource_type == "evaluation-run":
+        suite_id = _optional_string(resource, "suite_id")
+        suite_version = _optional_string(resource, "suite_version")
+        if suite_id is not None and suite_version is not None:
+            return f"Evaluation run for {suite_id} {suite_version}"
+        if suite_id is not None:
+            return f"Evaluation run for {suite_id}"
     if resource_type == "usage-aggregate":
         metric_type = _optional_string(resource, "metric_type")
         unit = _optional_string(resource, "unit")
@@ -261,11 +268,22 @@ def _status(resource: Mapping[str, JsonValue]) -> str | None:
     return None
 
 
-def _version(resource: Mapping[str, JsonValue]) -> str | None:
+def _updated_at(resource_type: str, resource: Mapping[str, JsonValue]) -> str | None:
+    updated_at = _optional_string(resource, "updated_at")
+    if updated_at is not None:
+        return updated_at
+    if resource_type == "evaluation-run":
+        return _optional_string(resource, "completed_at") or _optional_string(resource, "started_at")
+    return None
+
+
+def _version(resource_type: str, resource: Mapping[str, JsonValue]) -> str | None:
     for field in ("revision", "current_revision", "plugin_version"):
         value = resource.get(field)
         if isinstance(value, int | str):
             return str(value)
+    if resource_type == "evaluation-suite":
+        return _optional_string(resource, "version")
     return None
 
 
@@ -333,6 +351,9 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "kind",
         "threshold_level",
         "window_mode",
+        "suite_id",
+        "suite_version",
+        "baseline_run_id",
     ):
         value = _optional_string(resource, field)
         if value is not None:
