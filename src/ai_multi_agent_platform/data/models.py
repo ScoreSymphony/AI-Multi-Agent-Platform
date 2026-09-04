@@ -25,6 +25,15 @@ class MemoryScope(StrEnum):
     WORKSPACE = "workspace"
     USER = "user"
     HISTORICAL = "historical"
+    ORGANIZATION = "organization"
+
+
+class MemoryOrigin(StrEnum):
+    """Canonical provenance class for Memory content."""
+
+    USER_AUTHORED = "user-authored"
+    AGENT_DERIVED = "agent-derived"
+    IMPORTED = "imported"
 
 
 class RetentionPolicy(StrEnum):
@@ -180,6 +189,7 @@ class MemoryEntry:
     value: JsonValue
     created_at: datetime
     retention: RetentionPolicy
+    origin: MemoryOrigin = MemoryOrigin.USER_AUTHORED
     expires_at: datetime | None = None
     provenance: tuple[SourceRef, ...] = ()
     supersedes_memory_id: str | None = None
@@ -404,6 +414,15 @@ def memory_access_policy_for_scope(scope: MemoryScope, owner_ref: str) -> Memory
             team_access="deny_by_default",
             task_inheritance="explicit_user_grant_only",
             cross_project_access="explicit_policy_only",
+        )
+    if scope is MemoryScope.ORGANIZATION:
+        return MemoryAccessPolicy(
+            readers=(owner_ref, "authorized_organization_member"),
+            writers=(owner_ref, "authorized_organization_memory_writer"),
+            agent_revision_access="organization_policy_controlled",
+            team_access="organization_policy_controlled",
+            task_inheritance="explicit_only",
+            cross_project_access="organization_policy_controlled",
         )
     return MemoryAccessPolicy(
         readers=(owner_ref, "authorized_history_reader"),

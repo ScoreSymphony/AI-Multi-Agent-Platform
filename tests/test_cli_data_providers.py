@@ -135,11 +135,14 @@ def test_data_provider_cli_reads_public_health_and_capability_metadata(tmp_path:
 
     assert providers["memory"]["id"] == "local-memory-reference"
     assert providers["memory"]["health"] == "healthy"
-    assert "six_scopes" in providers["memory"]["capabilities"][0]["features"]
+    assert "seven_scopes" in providers["memory"]["capabilities"][0]["features"]
+    assert "memory_origin" in providers["memory"]["capabilities"][0]["features"]
 
     assert providers["knowledge"]["id"] == "local-knowledge-reference"
     assert providers["knowledge"]["health"] == "healthy"
     assert "keyword_search" in providers["knowledge"]["supported_operations"]
+    assert "get_source" in providers["knowledge"]["supported_operations"]
+    assert "list_sources" in providers["knowledge"]["supported_operations"]
 
     code, memory, error = _invoke(
         config,
