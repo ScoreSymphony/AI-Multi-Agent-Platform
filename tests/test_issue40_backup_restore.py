@@ -32,7 +32,7 @@ from ai_multi_agent_platform.distributed import (
     WorkerStatus,
     prepare_registry_disaster_recovery,
 )
-from ai_multi_agent_platform.domain import RunStatus, new_id
+from ai_multi_agent_platform.domain import RunStatus, TaskStatus, new_id
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 
@@ -109,9 +109,7 @@ def test_single_node_backup_restore_preserves_canonical_state_on_new_data_root(
         )
         restored_config = SingleNodeConfig(data_dir=restored_root, secure_cookie=False)
         assert list(restored_config.executor_dir.iterdir()) == []
-        assert (
-            restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_PENDING
-        ).is_file()
+        assert (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_PENDING).is_file()
         restored = build_single_node_deployment(restored_config)
 
         persisted_task = await restored.kernel.get_task(task.task_id)
@@ -131,6 +129,19 @@ def test_single_node_backup_restore_preserves_canonical_state_on_new_data_root(
         with sqlite3.connect(restored_config.database_dir / "authentication.sqlite3") as connection:
             assert connection.execute("SELECT COUNT(*) FROM auth_sessions").fetchone() == (0,)
         assert login.session.token
+
+        recovery = await reconcile_restored_single_node(
+            data_dir=restored_root,
+            kernel=restored.kernel,
+        )
+        assert recovery is not None
+        assert recovery.unresolved_run_ids == ()
+        assert not (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_PENDING).exists()
+        assert (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_REPORT).is_file()
+
+        smoke = await restored.run_reference_smoke()
+        assert smoke.task_status is TaskStatus.SUCCEEDED
+        assert smoke.run_status is RunStatus.SUCCEEDED
 
     asyncio.run(scenario())
 
@@ -369,8 +380,7 @@ def test_active_run_enters_canonical_reconciliation_after_disaster_restore(tmp_p
             "orphaned_reconciliation_required"
         )
         assert (
-            await reconcile_restored_single_node(data_dir=restored_root, kernel=restarted)
-            is None
+            await reconcile_restored_single_node(data_dir=restored_root, kernel=restarted) is None
         )
 
     asyncio.run(scenario())
