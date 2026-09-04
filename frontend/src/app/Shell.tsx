@@ -8,6 +8,7 @@ import { EvaluationClient } from "../api/evaluations";
 import { IntegrationsClient } from "../api/integrations";
 import { MemoryKnowledgeClient } from "../api/memoryKnowledge";
 import { NotificationClient } from "../api/notifications";
+import { OrganizationClient } from "../api/organizations";
 import { PluginsClient } from "../api/plugins";
 import { VerificationClient } from "../api/verification";
 import type { ReferenceCollection } from "../api/references";
@@ -55,6 +56,7 @@ import { ModelDetailPage, ModelProviderDetailPage } from "../pages/ModelPages";
 import { ModelsPage } from "../pages/ModelInventoryPage";
 import { NotificationsPage } from "../pages/NotificationsPage";
 import { ObservabilityPage } from "../pages/ObservabilityPage";
+import { OrganizationsPage } from "../pages/OrganizationsPage";
 import { OverviewPage, UnavailablePage } from "../pages/Pages";
 import {
   PluginCandidateDetailPage,
@@ -119,6 +121,10 @@ export function Shell() {
   );
   const notificationClient = useMemo(
     () => new NotificationClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const organizationClient = useMemo(
+    () => new OrganizationClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const pluginsClient = useMemo(
@@ -226,6 +232,17 @@ export function Shell() {
     content = (
       <ManifestResourcePage state={manifestState} manifest={manifest} label="Agent Teams" resource="agent-teams">
         <AgentTeamDetailPage client={client} teamId={agentTeamMatch.teamId} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/organizations") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Organizations"
+        resource="organizations"
+      >
+        <OrganizationsPage client={organizationClient} />
       </ManifestResourcePage>
     );
   } else if (path === "/files") content = <ReferencesPage client={client} />;
