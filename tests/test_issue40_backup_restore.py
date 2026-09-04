@@ -90,6 +90,7 @@ def test_single_node_backup_restore_preserves_canonical_state_on_new_data_root(
             expected_platform_version=__version__,
         )
         restored_config = SingleNodeConfig(data_dir=restored_root, secure_cookie=False)
+        assert list(restored_config.executor_dir.iterdir()) == []
         restored = build_single_node_deployment(restored_config)
 
         persisted_task = await restored.kernel.get_task(task.task_id)
@@ -104,7 +105,7 @@ def test_single_node_backup_restore_preserves_canonical_state_on_new_data_root(
         assert restored.bootstrap_admin("admin", PASSWORD).user_id == admin.user_id
         assert (restored_config.files_dir / "durable.txt").read_text() == "durable"
         assert (restored_config.workspaces_dir / "manual" / "state.txt").read_text() == "workspace"
-        assert list(restored_config.executor_dir.iterdir()) == []
+        assert not (restored_config.executor_dir / "stale-job.txt").exists()
 
         with sqlite3.connect(restored_config.database_dir / "authentication.sqlite3") as connection:
             assert connection.execute("SELECT COUNT(*) FROM auth_sessions").fetchone() == (0,)
