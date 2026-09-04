@@ -95,9 +95,7 @@ def repository_capability_specs() -> tuple[CapabilitySpec, ...]:
                 description=f"Canonical provider-neutral {operation.value} operation",
                 tags=("repository", "git"),
                 safety=(
-                    SafetyClassification.RESTRICTED
-                    if sensitive
-                    else SafetyClassification.STANDARD
+                    SafetyClassification.RESTRICTED if sensitive else SafetyClassification.STANDARD
                 ),
                 side_effects=capability.side_effects,
                 required_permissions=(operation.value,),
