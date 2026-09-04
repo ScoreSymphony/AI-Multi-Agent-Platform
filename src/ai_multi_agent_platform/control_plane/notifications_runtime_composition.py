@@ -31,10 +31,12 @@ from .extensions import ResourceService
 from .models import PageQuery, RequestContext
 from .notifications_composition import (
     NOTIFICATION_PREFERENCE_COLLECTION,
-    ControlPlane as _BaseControlPlane,
     ControlPlaneHTTP,
     _recipient_from_context,
     build_openapi,
+)
+from .notifications_composition import (
+    ControlPlane as _BaseControlPlane,
 )
 
 NOTIFICATION_STATE_ENV = "AI_MULTI_AGENT_PLATFORM_NOTIFICATION_STATE"
@@ -42,7 +44,7 @@ _MAX_REMINDER_SCAN_WINDOW = timedelta(days=365)
 
 
 class _RuntimePreferenceResources(ResourceService):
-    def __init__(self, control_plane: "ControlPlane") -> None:
+    def __init__(self, control_plane: ControlPlane) -> None:
         self._control_plane = control_plane
 
     async def list_resources(
