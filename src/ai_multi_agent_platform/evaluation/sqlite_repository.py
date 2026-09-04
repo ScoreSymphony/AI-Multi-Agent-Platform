@@ -20,10 +20,9 @@ from .models import ComparisonReport, EvaluationResult, EvaluationRun
 _STORAGE_SCHEMA_VERSION = "1"
 
 
-def _require_limit(limit: int) -> int:
-    if limit <= 0:
+def _require_limit(limit: int | None) -> None:
+    if limit is not None and limit <= 0:
         raise ValueError("evaluation history limit must be greater than zero")
-    return limit
 
 
 class SqliteEvaluationRepository:
@@ -228,7 +227,7 @@ class SqliteEvaluationRepository:
         *,
         suite_id: str | None = None,
         suite_version: str | None = None,
-        limit: int = 100,
+        limit: int | None = 100,
     ) -> tuple[EvaluationRun, ...]:
         _require_limit(limit)
         clauses: list[str] = []
@@ -240,13 +239,17 @@ class SqliteEvaluationRepository:
             clauses.append("suite_version = ?")
             parameters.append(suite_version)
         where = "" if not clauses else " WHERE " + " AND ".join(clauses)
-        parameters.append(limit)
+        limit_clause = ""
+        if limit is not None:
+            limit_clause = " LIMIT ?"
+            parameters.append(limit)
         try:
             with self._connect() as connection:
                 rows = connection.execute(
                     "SELECT run_json FROM evaluation_runs"
                     + where
-                    + " ORDER BY started_at DESC, run_id DESC LIMIT ?",
+                    + " ORDER BY started_at DESC, run_id DESC"
+                    + limit_clause,
                     tuple(parameters),
                 ).fetchall()
         except sqlite3.Error as exc:

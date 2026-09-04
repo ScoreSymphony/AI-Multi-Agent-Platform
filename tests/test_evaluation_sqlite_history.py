@@ -141,6 +141,7 @@ def test_sqlite_history_survives_restart_and_projects_case_trend(tmp_path: Path)
     assert reopened.get_run(baseline.run_id) == baseline
     assert reopened.get_run(current.run_id) == current
     assert reopened.list_runs(suite_id="suite.history") == (current, baseline)
+    assert reopened.list_runs(suite_id="suite.history", limit=None) == (current, baseline)
     assert reopened.list_case_results(
         case_id="case.history",
         evaluator_id="test.sqlite",

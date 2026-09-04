@@ -42,6 +42,12 @@ from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
 from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolation
+from .service import (
+    EvaluationRunDetail,
+    EvaluationService,
+    evaluation_suite_ref,
+    regression_policy_ref,
+)
 from .sqlite_repository import SqliteEvaluationRepository
 from .workspace import (
     EvaluationFixture,
@@ -75,9 +81,11 @@ __all__ = [
     "EvaluationRepository",
     "EvaluationResult",
     "EvaluationRun",
+    "EvaluationRunDetail",
     "EvaluationRunner",
     "EvaluationRunStatus",
     "EvaluationRunSummary",
+    "EvaluationService",
     "EvaluationSuite",
     "EvaluationTrendPoint",
     "Evaluator",
@@ -101,4 +109,6 @@ __all__ = [
     "StaticEvaluationFixtureResolver",
     "VersionReference",
     "WorkspaceEvaluationIsolation",
+    "evaluation_suite_ref",
+    "regression_policy_ref",
 ]
