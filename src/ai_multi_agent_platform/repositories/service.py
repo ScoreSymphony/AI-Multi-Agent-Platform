@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import OperationContext
+from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 from ai_multi_agent_platform.security import (
     AuthorizationAction,
     AuthorizationContext,
@@ -226,7 +226,7 @@ class RepositoryService:
         operation: RepositoryOperation,
         context: RepositoryCallContext,
         *,
-        payload: dict[str, object] | None = None,
+        payload: dict[str, JsonValue] | None = None,
     ) -> None:
         if operation in {
             RepositoryOperation.CREATE_BRANCH,
