@@ -146,6 +146,24 @@ def test_unsupported_portable_format_version_fails_before_deserialization() -> N
     assert exc_info.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
 
 
+def test_timezone_less_created_at_maps_to_canonical_import_error() -> None:
+    package = build_package(
+        source_platform_version="0.0.1",
+        resources=(_resource(),),
+        provenance=PackageProvenance(source="test"),
+    )
+    document = package_to_dict(package)
+    manifest = document["manifest"]
+    assert isinstance(manifest, dict)
+    manifest["created_at"] = "2026-09-04T01:02:03"
+
+    with pytest.raises(ContractError) as exc_info:
+        package_from_dict(document)
+
+    assert exc_info.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert "timezone-aware" in exc_info.value.message
+
+
 def test_plaintext_secret_bearing_field_is_rejected() -> None:
     with pytest.raises(ContractError) as exc_info:
         seal_resource(_resource(payload={"api_key": "plaintext-secret"}))
