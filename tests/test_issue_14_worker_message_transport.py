@@ -116,6 +116,27 @@ class _DropFirstDispatchReplyTransport(_RecordingTransport):
         return await InProcessMessageTransport._publish_once(self, topic, envelope)
 
 
+class _DropFirstResultReplyTransport(_RecordingTransport):
+    def __init__(self) -> None:
+        super().__init__()
+        self.dropped = False
+
+    async def _publish_once(
+        self,
+        topic: str,
+        envelope: TransportEnvelope,
+    ) -> PublishReceipt:
+        self.published.append((topic, envelope))
+        if (
+            not self.dropped
+            and topic.startswith(f"{WORKER_REPLY_TOPIC_PREFIX}.")
+            and envelope.message_type == "worker.result"
+        ):
+            self.dropped = True
+            return PublishReceipt(message_id=envelope.message_id, topic=topic)
+        return await InProcessMessageTransport._publish_once(self, topic, envelope)
+
+
 def _job() -> WorkerJobRequest:
     project_id = new_id("project")
     return WorkerJobRequest(
@@ -269,6 +290,64 @@ def test_lost_dispatch_reply_retries_same_worker_job_without_duplicate_execution
             assert len(dispatch_commands) == 2
             assert dispatch_commands[0].message_id != dispatch_commands[1].message_id
             assert dispatch_commands[0].idempotency_key == dispatch_commands[1].idempotency_key
+        finally:
+            await _stop_endpoint(endpoint_task, transport)
+
+    asyncio.run(scenario())
+
+
+def test_lost_terminal_result_reply_is_retried_without_reexecuting_job() -> None:
+    async def scenario() -> None:
+        transport = _DropFirstResultReplyTransport()
+        lifecycle = _Lifecycle()
+        worker_id = new_id("worker")
+        worker = _ResultWorker(worker_id, lifecycle)
+        endpoint = WorkerTransportEndpoint(worker, transport)
+        endpoint_task = asyncio.create_task(endpoint.serve())
+        await asyncio.sleep(0)
+        client = TransportWorkerDispatcher(
+            worker_id,
+            transport,
+            response_timeout_seconds=0.02,
+        )
+        job = replace(_job(), timeout_seconds=None, dispatch_attempt=1)
+
+        try:
+            await client.dispatch(job)
+            assert lifecycle.start_calls == 1
+            lifecycle.states[job.execution.run_id] = RunStatus.SUCCEEDED
+
+            terminal = await client.get(job.worker_job_id)
+            assert terminal.status is RunStatus.SUCCEEDED
+
+            with pytest.raises(RemoteWorkerTransportError) as lost:
+                await client.result(job.worker_job_id)
+            assert lost.value.category == "response_timeout"
+            assert lost.value.retryable is True
+            assert transport.dropped is True
+            assert lifecycle.start_calls == 1
+
+            result = await client.result(job.worker_job_id)
+            assert result is not None
+            assert result.status.value == "succeeded"
+            assert result.execution is not None
+            assert result.execution.status is RunStatus.SUCCEEDED
+            assert worker.output_artifact in result.artifact_refs
+            assert result.evidence_refs == (worker.evidence_ref,)
+            assert lifecycle.start_calls == 1
+
+            result_commands = [
+                envelope
+                for _, envelope in transport.published
+                if envelope.message_type == "worker.result"
+            ]
+            assert len(result_commands) == 2
+            assert result_commands[0].message_id != result_commands[1].message_id
+            assert result_commands[0].idempotency_key == result_commands[1].idempotency_key
+            assert not any(
+                envelope.message_type == "worker.dispatch"
+                for _, envelope in transport.published[len(result_commands) :]
+            )
         finally:
             await _stop_endpoint(endpoint_task, transport)
 
