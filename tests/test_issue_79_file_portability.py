@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
-from ai_multi_agent_platform.data import DataAccessContext, FileState, LocalFileProvider
+from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import Artifact, ExternalRef, OwnerRef, new_id
 from ai_multi_agent_platform.portability import (
     ARTIFACT_RESOURCE_TYPE,
@@ -164,8 +164,9 @@ def test_file_materialization_rolls_back_when_artifact_link_fails(
     with pytest.raises(ContractError, match="simulated artifact-link failure"):
         asyncio.run(materialize_file(snapshot, target, context))
 
-    rolled_back = asyncio.run(target.get_file(record.file_id, context))
-    assert rolled_back.state is FileState.TOMBSTONED
+    with pytest.raises(ContractError) as rolled_back:
+        asyncio.run(target.get_file(record.file_id, context))
+    assert rolled_back.value.code is ErrorCode.NOT_FOUND
 
 
 def test_file_codec_can_be_registered_independently() -> None:
