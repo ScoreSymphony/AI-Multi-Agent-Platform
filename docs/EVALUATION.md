@@ -147,7 +147,7 @@ Durable behavior includes:
 - upserted `EvaluationRun` state so a running record can become completed/failed without changing its public identity;
 - Result persistence attached to an existing run;
 - ComparisonReport persistence only when current and baseline runs exist;
-- `list_runs(...)` filtered by suite identity/version;
+- `list_runs(...)` filtered by suite identity/version, with the historical default limit retained and an internal `limit=None` mode for complete Control Plane pagination;
 - `list_case_results(...)` filtered by case and optional evaluator identity;
 - restart-safe baseline comparison: a new runner can reopen SQLite and compare against a baseline produced before the process restart.
 
@@ -155,9 +155,26 @@ Durable behavior includes:
 
 Workspace persistence remains owned by the Workspace subsystem. Evaluation persistence references canonical Workspace/Snapshot/Artifact evidence rather than duplicating workspace bytes or materialization paths.
 
+## Control Plane API
+
+`EvaluationService` is the application boundary between northbound surfaces and the canonical runner/history layer. Configured suites and regression policies are addressed by exact versioned references of the form `<id>@<version>`; the service delegates execution to `EvaluationRunner`, comparison to `RegressionEngine` and persistence to `EvaluationHistoryRepository` rather than creating parallel lifecycle state.
+
+The initial Control Plane surface registers:
+
+- `evaluation-suites` for configured versioned suite discovery and inspection;
+- `evaluation-runs` for durable run history and single-run detail including evaluator results and a stored comparison report;
+- `evaluation.run` to execute an exact configured suite with an explicit `ConfigurationSnapshot`, repetitions/seed and optional baseline/policy references;
+- `evaluation.compare` to compare two completed single-repetition runs under an exact versioned `RegressionPolicy` and persist the resulting `ComparisonReport`.
+
+Run-list pagination remains owned by the generic Control Plane `PageQuery`/cursor machinery. The Evaluation resource service therefore supplies the complete internal run history to the generic paginator rather than pre-truncating it to the repository's normal 100-run history default. Tests explicitly create 105 runs and verify that the second API page remains reachable. The SQLite implementation separately exercises the unbounded internal read path.
+
+The Control Plane serializes canonical evaluation records through the existing strict evaluation codec. It does not invent a second EvaluationRun/Result wire lifecycle or expose backend-private execution objects.
+
+The CLI remains API-first by design: later `platform eval ...` commands should call these resources and commands instead of constructing a local `EvaluationRunner` path.
+
 ## Current issue #19 implementation status
 
-The implementation is being landed progressively before Control Plane and CLI surfaces, following the repository merge order for canonical contracts and reference behavior first.
+The implementation is being landed progressively from canonical contracts/reference behavior outward through persistence and northbound surfaces.
 
 Implemented:
 
@@ -186,21 +203,24 @@ Implemented:
 - baseline comparison/regression engine matched by case/evaluator identity;
 - explicit rejection of unaggregated repeated results in baseline comparison;
 - versioned regression policy model;
+- Control Plane `evaluation-suites` and `evaluation-runs` resources;
+- Control Plane `evaluation.run` and `evaluation.compare` commands backed by `EvaluationService`;
+- complete generic cursor pagination over evaluation-run history without the repository default-limit truncation;
 - no-paid-service policy example;
 - tests for pass/fail, baseline comparison, thresholds, critical/security tags, snapshot integrity, model/provider version differences and evaluator failure handling;
 - tests for repetition/seed propagation, isolation ordering, execution-error containment, comparison persistence and real-kernel reference execution;
 - tests proving cross-attempt workspace contamination is prevented and Run workspace binding exists before lifecycle start;
-- tests for strict JSON persistence, SQLite restart/history/trend queries and baseline comparison after repository restart.
+- tests for strict JSON persistence, SQLite restart/history/trend queries and baseline comparison after repository restart;
+- tests for Control Plane manifest/OpenAPI exposure, HTTP run/compare flow, persisted comparison reads and run-history pagination beyond 100 records.
 
 Remaining work for full issue completion:
 
 - explicit stochastic aggregation/comparison policies for repeated runs;
 - rubric scorer and optional model-judge adapter implementation;
 - richer telemetry, accounting and log references in observations and stored results;
-- Control Plane Evaluation resources/API;
-- CLI commands (`platform eval suite list`, `platform eval run`, `platform eval result show`, `platform eval compare` or equivalent canonical surface);
+- API-first CLI commands (`platform eval suite list`, `platform eval run`, `platform eval result show`, `platform eval compare` or equivalent canonical surface);
 - deterministic PR-gating workflow driven by canonical evaluation suites and versioned policies;
-- Search integration after the canonical Evaluation API is available.
+- Search integration/indexing for canonical Evaluation resources and history where useful.
 
 ## CI principle
 
