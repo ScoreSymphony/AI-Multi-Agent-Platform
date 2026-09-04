@@ -110,8 +110,8 @@ class AgentPortableCodec:
             resource_version=str(value.definition.current_revision),
             payload={
                 "schema_version": AGENT_PORTABLE_SCHEMA_VERSION,
-                "definition": cast(JsonValue, _encode(value.definition)),
-                "revisions": cast(JsonValue, _encode(value.revisions)),
+                "definition": _encode(value.definition),
+                "revisions": _encode(value.revisions),
             },
             id_policy=self.id_policy,
             dependencies=dependencies,
@@ -153,8 +153,8 @@ class AgentTeamPortableCodec:
             resource_version=str(value.definition.current_revision),
             payload={
                 "schema_version": AGENT_PORTABLE_SCHEMA_VERSION,
-                "definition": cast(JsonValue, _encode(value.definition)),
-                "revisions": cast(JsonValue, _encode(value.revisions)),
+                "definition": _encode(value.definition),
+                "revisions": _encode(value.revisions),
             },
             id_policy=self.id_policy,
             dependencies=_team_dependencies(value),
