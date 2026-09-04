@@ -152,8 +152,7 @@ class AccountingEvaluationEvidenceProvider:
                     "unavailable_count": aggregate.unavailable_count,
                     "aggregation_mode": aggregate.aggregation_mode.value,
                     "quality_counts": {
-                        quality.value: count
-                        for quality, count in aggregate.quality_counts.items()
+                        quality.value: count for quality, count in aggregate.quality_counts.items()
                     },
                 }
             )
@@ -243,7 +242,9 @@ class InMemoryObservabilityEvaluationEvidenceProvider:
                 if reference is None:
                     continue
                 if not reference.strip():
-                    raise ValueError("observability log reference resolver returned a blank reference")
+                    raise ValueError(
+                        "observability log reference resolver returned a blank reference"
+                    )
                 refs.append(f"observability:log:{reference}")
 
         span_data: list[JsonValue] = [
