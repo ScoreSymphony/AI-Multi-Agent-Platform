@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .client import ClientResponse, ControlPlaneClient
+from .client import ClientResponse, ControlPlaneClient, TransportError
 from .profiles import ProfileError
 
 Confirmation = Callable[[argparse.Namespace, str, str], None]
@@ -68,10 +68,19 @@ def execute_compute(
 def doctor_compute(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
     """Inspect optional canonical compute resources for `platform doctor`."""
 
-    responses = {
-        "node": client.get("/nodes", query={"limit": "200"}, raise_for_status=False),
-        "worker": client.get("/workers", query={"limit": "200"}, raise_for_status=False),
-    }
+    responses: dict[str, ClientResponse] = {}
+    for kind, path in (("node", "/nodes"), ("worker", "/workers")):
+        try:
+            responses[kind] = client.get(path, query={"limit": "200"}, raise_for_status=False)
+        except TransportError as exc:
+            return "degraded", [
+                {
+                    "name": "compute_health",
+                    "status": "degraded",
+                    "message": str(exc),
+                }
+            ]
+
     if all(response.status == 404 for response in responses.values()):
         return "healthy", []
 
