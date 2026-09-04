@@ -322,9 +322,7 @@ class TemplateApplicationService:
                 "missing_plugins": list(preview.missing_plugin_ids),
                 "missing_connectors": list(preview.missing_connector_ids),
                 "missing_model_policies": list(preview.missing_model_policy_refs),
-                "missing_workspace_prerequisites": list(
-                    preview.missing_workspace_prerequisites
-                ),
+                "missing_workspace_prerequisites": list(preview.missing_workspace_prerequisites),
                 "unresolved_placeholders": list(preview.unresolved_placeholders),
                 "unresolved_secret_reference_placeholders": list(
                     preview.unresolved_secret_reference_placeholders
