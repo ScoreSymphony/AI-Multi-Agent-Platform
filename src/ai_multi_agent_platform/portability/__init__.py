@@ -47,6 +47,18 @@ from .history_import import (
     InMemoryHistoricalTaskArchiveRepository,
     TaskHistoryImportMutationHandler,
 )
+from .knowledge_codecs import (
+    KNOWLEDGE_PORTABLE_SCHEMA_VERSION,
+    KNOWLEDGE_SOURCE_RESOURCE_TYPE,
+    KnowledgePortableSnapshot,
+    KnowledgeSourcePortableCodec,
+    knowledge_index_exclusion,
+    register_knowledge_portability_codec,
+)
+from .knowledge_import import (
+    KnowledgeImportPrivacyPolicy,
+    KnowledgeSourceImportMutationHandler,
+)
 from .memory_codecs import (
     MEMORY_PORTABLE_SCHEMA_VERSION,
     MEMORY_RESOURCE_TYPE,
@@ -101,6 +113,8 @@ __all__ = [
     "ARTIFACT_RESOURCE_TYPE",
     "FILE_PORTABLE_SCHEMA_VERSION",
     "FILE_RESOURCE_TYPE",
+    "KNOWLEDGE_PORTABLE_SCHEMA_VERSION",
+    "KNOWLEDGE_SOURCE_RESOURCE_TYPE",
     "MEMORY_PORTABLE_SCHEMA_VERSION",
     "MEMORY_RESOURCE_TYPE",
     "PORTABLE_FORMAT_VERSION",
@@ -138,6 +152,10 @@ __all__ = [
     "ImportPreview",
     "ImportPreviewService",
     "InMemoryHistoricalTaskArchiveRepository",
+    "KnowledgeImportPrivacyPolicy",
+    "KnowledgePortableSnapshot",
+    "KnowledgeSourceImportMutationHandler",
+    "KnowledgeSourcePortableCodec",
     "MemoryImportMutationHandler",
     "MemoryImportPrivacyPolicy",
     "MemoryPortableCodec",
@@ -157,12 +175,14 @@ __all__ = [
     "TaskHistoryPortableCodec",
     "build_package",
     "find_runtime_private_path",
+    "knowledge_index_exclusion",
     "materialize_file",
     "package_from_dict",
     "package_to_dict",
     "parse_resource_dependency",
     "register_agent_portability_codecs",
     "register_file_portability_codecs",
+    "register_knowledge_portability_codec",
     "register_memory_portability_codec",
     "register_task_history_portability_codec",
     "resource_dependency",
