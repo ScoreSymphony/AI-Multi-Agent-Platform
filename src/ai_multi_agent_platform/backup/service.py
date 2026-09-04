@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .recovery import write_restore_recovery_marker
+
 BACKUP_FORMAT_VERSION = 1
 MANIFEST_SCHEMA_VERSION = 1
 MANIFEST_NAME = "manifest.json"
@@ -256,6 +258,7 @@ def restore_single_node_backup(
             _remove_sqlite_sidecars(auth_db)
 
         (partial / "executor").mkdir(parents=True, exist_ok=True)
+        write_restore_recovery_marker(partial, manifest)
         target.parent.mkdir(parents=True, exist_ok=True)
         os.replace(partial, target)
         return target
