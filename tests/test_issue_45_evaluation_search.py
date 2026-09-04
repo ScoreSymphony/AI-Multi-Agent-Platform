@@ -188,8 +188,9 @@ def test_evaluation_suites_and_runs_use_global_search_with_safe_flat_metadata() 
             type="evaluation-run",
             q=baseline.run.run_id,
         )
-        assert by_baseline["total"] == 1
-        assert _items(by_baseline)[0]["resource_id"] == current.run.run_id
+        assert by_baseline["total"] == 2
+        baseline_match_ids = {str(item["resource_id"]) for item in _items(by_baseline)}
+        assert baseline_match_ids == {baseline.run.run_id, current.run.run_id}
         by_status = await _search(http, type="evaluation-run", status="completed")
         assert by_status["total"] == 2
 
