@@ -179,9 +179,7 @@ def _validate_file_store(*, data_dir: Path, project_ids: set[str]) -> int:
         state = str(row[4])
 
         if project_id is not None and project_id not in project_ids:
-            raise RestoreValidationError(
-                f"file {file_id} references missing project {project_id}"
-            )
+            raise RestoreValidationError(f"file {file_id} references missing project {project_id}")
         if state == "pending":
             raise RestoreValidationError(f"file {file_id} remained pending across disaster restore")
         if state == "tombstoned":
