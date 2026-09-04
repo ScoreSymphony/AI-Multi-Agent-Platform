@@ -78,8 +78,10 @@ class LocalGitRepositoryProvider(RepositoryProvider):
     async def open(self, context: OperationContext) -> RepositoryReference:
         del context
         self._run("rev-parse", "--git-dir")
-        branch = self._text("symbolic-ref", "--quiet", "--short", "HEAD", allow_failure=True)
-        branch = branch.strip() or None
+        branch_text = self._text(
+            "symbolic-ref", "--quiet", "--short", "HEAD", allow_failure=True
+        )
+        branch: str | None = branch_text.strip() or None
         head = self._head_revision()
         if self._repository is None:
             self._repository = self._new_reference(default_branch=branch)
