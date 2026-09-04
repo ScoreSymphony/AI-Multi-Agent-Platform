@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, PlatformEvent
@@ -19,7 +19,7 @@ from ai_multi_agent_platform.domain import (
     Task,
     TaskStatus,
 )
-from ai_multi_agent_platform.kernel.models import RunState, TaskState, TERMINAL_RUN_STATUSES
+from ai_multi_agent_platform.kernel.models import RunState, TERMINAL_RUN_STATUSES
 from ai_multi_agent_platform.kernel.repository import EventRepository
 from ai_multi_agent_platform.kernel.state import reduce_run, reduce_task
 
@@ -35,6 +35,24 @@ _TERMINAL_TASK_STATUSES = frozenset(
         TaskStatus.SUCCEEDED,
         TaskStatus.FAILED,
         TaskStatus.CANCELLED,
+    }
+)
+_HISTORY_RUNTIME_EVENT_KEYS = frozenset(
+    {
+        "backend_ref",
+        "trace_id",
+        "span_id",
+        "worker_id",
+        "worker_lease",
+        "worker_lease_id",
+        "worker_reservation",
+        "worker_reservation_id",
+        "forge_job_id",
+        "forge_job_state",
+        "hermes_session_id",
+        "live_session_id",
+        "local_pid",
+        "process_id",
     }
 )
 
@@ -123,11 +141,15 @@ async def snapshot_task_history(
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Task history contains a non-terminal Run",
-                details={"task_id": task_id, "run_id": run_id, "status": run_state.run.status.value},
+                details={
+                    "task_id": task_id,
+                    "run_id": run_id,
+                    "status": run_state.run.status.value,
+                },
             )
         run_snapshots.append(_historical_run(run_state))
 
-    sanitized_events = tuple(replace(event, trace_id=None) for event in stream)
+    sanitized_events = tuple(_historical_event(event) for event in stream)
     return HistoricalTaskSnapshot(
         task=task_state.task,
         revision=task_state.revision,
@@ -219,6 +241,14 @@ def _historical_run(state: RunState) -> HistoricalRunSnapshot:
     )
 
 
+def _historical_event(event: PlatformEvent) -> PlatformEvent:
+    return replace(
+        event,
+        trace_id=None,
+        payload=_portable_event_payload(event.payload),
+    )
+
+
 def _validate_snapshot(snapshot: HistoricalTaskSnapshot) -> None:
     try:
         HistoricalTaskSnapshot(
@@ -253,7 +283,9 @@ def _history_dependencies(snapshot: HistoricalTaskSnapshot) -> tuple[DependencyR
     task = snapshot.task
     if task.project_id is not None:
         dependencies.add(
-            resource_dependency("project", task.project_id, purpose="Task history project/privacy scope")
+            resource_dependency(
+                "project", task.project_id, purpose="Task history project/privacy scope"
+            )
         )
     if task.goal_id is not None:
         dependencies.add(
@@ -317,7 +349,9 @@ def _all_result_ids(snapshot: HistoricalTaskSnapshot) -> tuple[str, ...]:
     return tuple(sorted(values))
 
 
-def _remap_history(snapshot: HistoricalTaskSnapshot, context: ImportContext) -> HistoricalTaskSnapshot:
+def _remap_history(
+    snapshot: HistoricalTaskSnapshot, context: ImportContext
+) -> HistoricalTaskSnapshot:
     source_task_id = snapshot.task.id
     target_task_id = context.remap(TASK_HISTORY_RESOURCE_TYPE, source_task_id)
     task = replace(
@@ -493,12 +527,13 @@ def _run_to_json(value: Run) -> dict[str, JsonValue]:
 
 def _run_from_json(value: JsonValue | None) -> Run:
     data = _object(value, "Run")
-    subject_type = _string(data, "subject_type")
-    if subject_type not in {"task", "step"}:
+    subject_type_value = _string(data, "subject_type")
+    if subject_type_value not in {"task", "step"}:
         raise ValueError("Run.subject_type must be task or step")
+    subject_type = cast(Literal["task", "step"], subject_type_value)
     return Run(
         id=_string(data, "id"),
-        subject_type=cast(Any, subject_type),
+        subject_type=subject_type,
         subject_id=_string(data, "subject_id"),
         owner_ref=_owner_from_json(data.get("owner_ref")),
         correlation_id=_string(data, "correlation_id"),
@@ -536,7 +571,7 @@ def _event_to_json(value: PlatformEvent) -> dict[str, JsonValue]:
         "project_id": value.project_id,
         "causation_id": value.causation_id,
         "occurred_at": value.occurred_at.isoformat(),
-        "payload": _require_json_object(value.payload, "Event.payload"),
+        "payload": _portable_event_payload(value.payload),
         "schema_version": value.schema_version,
         "provenance": _provenance_to_json(value.provenance),
         "external_refs": [_external_ref_to_json(item) for item in value.external_refs],
@@ -570,10 +605,11 @@ def _owner_to_json(value: OwnerRef) -> dict[str, JsonValue]:
 
 def _owner_from_json(value: JsonValue | None) -> OwnerRef:
     data = _object(value, "OwnerRef")
-    owner_type = _string(data, "type")
-    if owner_type not in {"user", "organization", "team", "service"}:
+    owner_type_value = _string(data, "type")
+    if owner_type_value not in {"user", "organization", "team", "service"}:
         raise ValueError("unsupported OwnerRef.type")
-    return OwnerRef(type=cast(Any, owner_type), id=_string(data, "id"))
+    owner_type = cast(Literal["user", "organization", "team", "service"], owner_type_value)
+    return OwnerRef(type=owner_type, id=_string(data, "id"))
 
 
 def _external_ref_to_json(value: ExternalRef) -> dict[str, JsonValue]:
@@ -581,14 +617,17 @@ def _external_ref_to_json(value: ExternalRef) -> dict[str, JsonValue]:
 
 
 def _external_refs_from_json(value: JsonValue | None) -> tuple[ExternalRef, ...]:
-    return tuple(
-        ExternalRef(
-            system=_string(_object(item, "ExternalRef"), "system"),
-            kind=_string(_object(item, "ExternalRef"), "kind"),
-            value=_string(_object(item, "ExternalRef"), "value"),
+    refs: list[ExternalRef] = []
+    for item in _array(value, "external_refs"):
+        data = _object(item, "ExternalRef")
+        refs.append(
+            ExternalRef(
+                system=_string(data, "system"),
+                kind=_string(data, "kind"),
+                value=_string(data, "value"),
+            )
         )
-        for item in _array(value, "external_refs")
-    )
+    return tuple(refs)
 
 
 def _provenance_to_json(value: Provenance | None) -> JsonValue:
@@ -612,14 +651,63 @@ def _provenance_from_json(value: JsonValue | None) -> Provenance | None:
     )
 
 
-def _require_json_object(value: Mapping[str, Any], field_name: str) -> dict[str, JsonValue]:
-    copied = dict(value)
-    if not all(isinstance(key, str) and _is_json_value(item) for key, item in copied.items()):
-        raise ContractError(
-            ErrorCode.INVALID_CONFIGURATION,
-            f"{field_name} contains non-portable non-JSON values",
+def _portable_event_payload(value: Mapping[str, Any]) -> dict[str, JsonValue]:
+    portable: dict[str, JsonValue] = {}
+    for key, item in value.items():
+        if key.casefold() in _HISTORY_RUNTIME_EVENT_KEYS:
+            continue
+        portable[key] = _portable_json_value(
+            item,
+            f"Event.payload.{key}",
+            strip_runtime_keys=True,
         )
-    return cast(dict[str, JsonValue], copied)
+    return portable
+
+
+def _require_json_object(value: Mapping[str, Any], field_name: str) -> dict[str, JsonValue]:
+    return {
+        key: _portable_json_value(item, f"{field_name}.{key}", strip_runtime_keys=False)
+        for key, item in value.items()
+    }
+
+
+def _portable_json_value(
+    value: object,
+    field_name: str,
+    *,
+    strip_runtime_keys: bool,
+) -> JsonValue:
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    if isinstance(value, list | tuple):
+        return [
+            _portable_json_value(
+                item,
+                f"{field_name}[]",
+                strip_runtime_keys=strip_runtime_keys,
+            )
+            for item in value
+        ]
+    if isinstance(value, Mapping):
+        result: dict[str, JsonValue] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    f"{field_name} contains a non-string JSON key",
+                )
+            if strip_runtime_keys and key.casefold() in _HISTORY_RUNTIME_EVENT_KEYS:
+                continue
+            result[key] = _portable_json_value(
+                item,
+                f"{field_name}.{key}",
+                strip_runtime_keys=strip_runtime_keys,
+            )
+        return result
+    raise ContractError(
+        ErrorCode.INVALID_CONFIGURATION,
+        f"{field_name} contains a non-portable non-JSON value",
+    )
 
 
 def _object(value: object, field_name: str) -> dict[str, JsonValue]:
@@ -639,7 +727,7 @@ def _array(value: object, field_name: str) -> list[JsonValue]:
 def _is_json_value(value: object) -> bool:
     if value is None or isinstance(value, str | int | float | bool):
         return True
-    if isinstance(value, list | tuple):
+    if isinstance(value, list):
         return all(_is_json_value(item) for item in value)
     if isinstance(value, Mapping):
         return all(isinstance(key, str) and _is_json_value(item) for key, item in value.items())
@@ -672,7 +760,7 @@ def _string_tuple(value: JsonValue | None, field_name: str) -> tuple[str, ...]:
     raw = _array(value, field_name)
     if not all(isinstance(item, str) and item.strip() for item in raw):
         raise ValueError(f"{field_name} must contain only non-blank strings")
-    return tuple(cast(list[str], raw))
+    return tuple(cast(str, item) for item in raw)
 
 
 def _positive_int(value: JsonValue | None, field_name: str) -> int:
