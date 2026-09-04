@@ -11,7 +11,13 @@ from uuid import NAMESPACE_URL, uuid5
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 
 from .dependencies import ResourceDependencyRef, parse_resource_dependency
-from .models import DependencyKind, DependencyRequirement, IdPolicy, PortablePackage, PortableResource
+from .models import (
+    DependencyKind,
+    DependencyRequirement,
+    IdPolicy,
+    PortablePackage,
+    PortableResource,
+)
 from .package import verify_package
 
 ResourceExists = Callable[[str, str], bool]
