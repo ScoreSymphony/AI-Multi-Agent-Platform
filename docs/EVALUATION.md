@@ -13,6 +13,8 @@ The platform owns these concepts:
 - `EvaluationAttempt`: one specific case repetition, with stable attempt identity, repetition index and resolved seed.
 - `EvaluationExecutionContext`: attempt-scoped execution state produced by isolation and consumed explicitly by the case executor. It may carry canonical Workspace/Snapshot identity plus an opaque materialization token, but never a host filesystem path as canonical identity.
 - `EvaluationResult`: one evaluator's result for one case attempt, including pass/fail/error, optional score, assertion evidence, metrics and canonical task/run/artifact/telemetry references.
+- `AggregationPolicy`: exact versioned rules for reducing repeated result samples into comparable values without hiding the selected statistical semantics.
+- `AggregatedEvaluationResult`: one derived result for a `(case_id, evaluator_id)` sample group, retaining the aggregation-policy identity and all source result/repetition/seed provenance.
 - `RegressionPolicy`: versioned regression rules and thresholds.
 - `ComparisonReport`: regressions and improvements discovered against a baseline.
 
@@ -48,9 +50,10 @@ The runner:
 - obtains an explicit execution context from isolation and passes the same context to the executor and teardown path;
 - enforces `EvaluationCase.timeout_seconds` around the executor call;
 - contains case execution, timeout and teardown failures as explicit error results rather than silently losing the suite history;
-- persists results as they are produced;
+- persists raw results as they are produced;
 - marks the run completed only after all attempts have been handled;
-- optionally compares a completed run to an accepted baseline under an explicit `RegressionPolicy`.
+- optionally derives explicit aggregates under a selected `AggregationPolicy`;
+- optionally compares a completed run to an accepted baseline under an explicit `RegressionPolicy`, using raw results for single-repetition runs or explicit policy-derived aggregates for repeated runs.
 
 `NoopEvaluationIsolation` exists only for already-isolated executors and tests. It returns an empty attempt-scoped execution context rather than creating mutable state.
 
@@ -108,7 +111,7 @@ This permits assertions over non-output behavior such as selected models/tools, 
 - canonical model configuration and provider versions;
 - tool/capability versions;
 - prompt/configuration revisions;
-- policy revisions;
+- policy revisions, including the exact aggregation-policy version selected for repeated comparisons;
 - dataset/suite/case versions where stored by the runner;
 - node/environment metadata.
 
@@ -125,11 +128,9 @@ Regression thresholds are explicit versioned data represented by `RegressionPoli
 
 The same rules also report corresponding recoveries/improvements where a baseline permits that conclusion.
 
-Baseline matching is performed per `(case_id, evaluator_id)`. Results produced by different evaluators for the same case therefore cannot overwrite or masquerade as one another. Multiple unaggregated results for the same case/evaluator pair are rejected explicitly. This matters for repeated/stochastic evaluations: repetition metadata is already canonical, but an aggregation policy must define how samples become one comparable baseline value before automatic regression comparison is allowed.
+Baseline matching is performed per `(case_id, evaluator_id)`. Results produced by different evaluators for the same case therefore cannot overwrite or masquerade as one another. Multiple unaggregated results for the same case/evaluator pair are rejected explicitly. `RegressionEngine` never silently selects a statistical reduction when repeated samples are present.
 
-Accordingly, the current `EvaluationRunner` allows automatic baseline comparison only with `repetitions=1`. Repeated runs are executable and reproducible now, but stochastic aggregation/comparison remains explicit follow-up work rather than an implicit average hidden in the engine.
-
-The framework now includes strict JSON loaders for checked-in `EvaluationSuite`, `RegressionPolicy` and accepted Evaluation baseline assets. Duplicate JSON keys, unknown fields and invalid field types are rejected rather than silently accepted. Accepted baselines are deserialized through the existing strict canonical `EvaluationRun`/`EvaluationResult` codec and validated against suite/case identity and version.
+The framework includes strict JSON loaders for checked-in `EvaluationSuite`, `RegressionPolicy`, `AggregationPolicy` and accepted Evaluation baseline assets. Duplicate JSON keys, unknown fields and invalid field types are rejected rather than silently accepted. Accepted baselines are deserialized through the existing strict canonical `EvaluationRun`/`EvaluationResult` codec and validated against suite/case identity and version.
 
 The deterministic PR profile is versioned in:
 
@@ -140,6 +141,33 @@ The deterministic PR profile is versioned in:
 The accepted baseline must contain exactly one result for every required `(case_id, evaluator_id)` pair and only passing results. The reference PR profile uses `repetitions=1` and deterministic seed `19`.
 
 The concrete `dispatch_attempts <= 1` threshold belongs to the versioned `MetricRule` in the EvaluationCase and is evaluated by `MetricThresholdEvaluator`. The PR `RegressionPolicy` then classifies deterministic pass-to-fail, score-drop and tagged critical/security regressions. This avoids duplicating thresholds in workflow YAML or evaluator implementation code and avoids applying an unrelated global metric threshold to evaluator results that do not emit that metric.
+
+## Repeated and stochastic aggregation
+
+Repeated runs preserve every raw `EvaluationResult`. Aggregation is an explicit derived layer and never replaces or mutates those samples.
+
+`AggregationPolicy` records:
+
+- exact policy ID and version;
+- score reduction method;
+- metric reduction method;
+- minimum pass rate required for an aggregate to pass;
+- whether any error sample forces aggregate failure;
+- whether current and baseline runs must contain the same number of repetitions.
+
+The reference numeric reductions are `mean`, `median`, `minimum` and `maximum`. `config/evaluation-aggregation.example.json` provides a checked-in example without making one statistical method globally authoritative.
+
+`ResultAggregator` groups samples by `(case_id, evaluator_id)` and emits `AggregatedEvaluationResult`. Each aggregate records its policy ID/version and the complete source sample identity: result IDs, repetition indexes, seeds and outcomes. It also carries the union of Task, Run, Artifact and telemetry references from the source samples so a regression remains traceable to canonical evidence.
+
+Score and metric reductions never invent missing observations. A score is aggregated only from observed scores. Metrics are aggregated only when their required metadata is consistent across the sample group; changing threshold/operator/unit metadata across repetitions is rejected rather than blended into a misleading number. No synthetic `NaN` or zero is introduced.
+
+Aggregate result IDs are deterministic for the run, case, evaluator and exact aggregation policy. Recomputing the same aggregate is therefore an idempotent derived-state operation and can be persisted/reloaded across restarts without changing raw sample identity.
+
+For automatic baseline comparison in `EvaluationRunner`, repeated samples require an explicit `AggregationPolicy`. The runner records the exact policy reference in the current `ConfigurationSnapshot`, derives baseline/current aggregates under that policy, and then passes only those comparable aggregates to `RegressionEngine`. Single-repetition runs continue to compare raw `EvaluationResult` values directly.
+
+`EvaluationService.compare_runs()` applies the same rule to post-hoc comparisons. Existing repeated runs can be compared later, but the caller must select an exact configured aggregation-policy version. Policies that require equal sample counts reject baseline/current repetition-count mismatches explicitly.
+
+Distribution-specific statistical tests remain optional future evaluators/policies; this core does not imply that a mean or any other reducer is universally correct for every stochastic suite.
 
 ## Deterministic no-paid PR CI gate
 
@@ -171,6 +199,8 @@ The repository's main CI runs `Deterministic evaluation gate` after the full Pyt
 
 This narrow reference profile fails explicitly when a case declares fixtures, rubric criteria or resource limits whose semantics the profile does not enforce. Such suites must use the canonical workspace isolation, rubric evaluator or resource-accounting paths rather than having requirements silently ignored.
 
+The mandatory PR gate deliberately remains single-repetition, deterministic and free of paid services. Stochastic aggregation support does not make stochastic/model-based evaluation a mandatory CI dependency.
+
 ## Persistence and historical trends
 
 `EvaluationRepository` is the minimal replaceable storage boundary consumed by the runner. `EvaluationHistoryRepository` extends it with indexed historical queries for runs and case/evaluator results.
@@ -180,16 +210,20 @@ Two reference implementations exist:
 - `InMemoryEvaluationRepository` for deterministic unit/reference execution;
 - `SqliteEvaluationRepository` as the restart-safe stdlib-only durable baseline.
 
-The SQLite repository stores canonical Run, Result and Comparison payloads as strict JSON while retaining indexed columns for suite/version, case/evaluator, outcome, repetition and timestamps. `json.dumps(..., allow_nan=False)` is enforced; non-JSON numeric states are rejected as contract violations instead of entering historical data. A storage-schema metadata record makes incompatible future schema revisions detectable rather than silently mis-decoding them.
+The SQLite repository stores canonical Run, Result, derived Aggregate and Comparison payloads as strict JSON while retaining indexed columns for suite/version, case/evaluator, outcome, repetition and timestamps. `json.dumps(..., allow_nan=False)` is enforced; non-JSON numeric states are rejected as contract violations instead of entering historical data. A storage-schema metadata record makes incompatible future schema revisions detectable rather than silently mis-decoding them.
+
+The aggregate addition uses an additive Evaluation storage schema migration from v1 to v2. Existing run/result/comparison history remains readable; v2 adds durable aggregate storage rather than rewriting the raw evidence model.
 
 Durable behavior includes:
 
 - upserted `EvaluationRun` state so a running record can become completed/failed without changing its public identity;
 - Result persistence attached to an existing run;
+- deterministic aggregate upsert/reload tied to an exact aggregation-policy identity;
 - ComparisonReport persistence only when current and baseline runs exist;
 - `list_runs(...)` filtered by suite identity/version, with the historical default limit retained and an internal `limit=None` mode for complete Control Plane pagination;
 - `list_case_results(...)` filtered by case and optional evaluator identity;
-- restart-safe baseline comparison: a new runner can reopen SQLite and compare against a baseline produced before the process restart.
+- restart-safe baseline comparison: a new runner can reopen SQLite and compare against a baseline produced before the process restart;
+- restart-safe repeated-run aggregation: derived aggregates can be reloaded without losing their source-sample provenance.
 
 `EvaluationHistoryService.case_trend(...)` converts historical case/evaluator results into `EvaluationTrendPoint` records enriched with the corresponding suite and immutable ConfigurationSnapshot identity (`snapshot_id`, platform version and commit). This keeps trend interpretation tied to the configuration that produced each measurement instead of plotting scores without provenance.
 
@@ -197,22 +231,24 @@ Workspace persistence remains owned by the Workspace subsystem. Evaluation persi
 
 ## Control Plane API
 
-`EvaluationService` is the application boundary between northbound surfaces and the canonical runner/history layer. Configured suites and regression policies are addressed by exact versioned references of the form `<id>@<version>`; the service delegates execution to `EvaluationRunner`, comparison to `RegressionEngine` and persistence to `EvaluationHistoryRepository` rather than creating parallel lifecycle state.
+`EvaluationService` is the application boundary between northbound surfaces and the canonical runner/history layer. Configured suites, regression policies and aggregation policies are addressed by exact versioned references of the form `<id>@<version>`; the service delegates execution to `EvaluationRunner`, comparison to `RegressionEngine`, aggregation to `ResultAggregator` and persistence to `EvaluationHistoryRepository` rather than creating parallel lifecycle state.
 
 The initial Control Plane surface registers:
 
 - `evaluation-suites` for configured versioned suite discovery and inspection;
-- `evaluation-runs` for durable run history and single-run detail including evaluator results and a stored comparison report;
-- `evaluation.run` to execute an exact configured suite with an explicit `ConfigurationSnapshot`, repetitions/seed and optional baseline/policy references;
-- `evaluation.compare` to compare two completed single-repetition runs under an exact versioned `RegressionPolicy` and persist the resulting `ComparisonReport`.
+- `evaluation-runs` for durable run history and single-run detail including raw evaluator results, derived aggregates and a stored comparison report;
+- `evaluation.run` to execute an exact configured suite with an explicit `ConfigurationSnapshot`, repetitions/seed and optional baseline/regression-policy/aggregation-policy references;
+- `evaluation.compare` to compare two completed runs under an exact versioned `RegressionPolicy`, requiring an exact `AggregationPolicy` when either run contains repeated samples, and persist the resulting `ComparisonReport`.
+
+The HTTP command contract accepts `aggregation_policy_ref` on both `evaluation.run` and `evaluation.compare`. Repeated automatic comparison without that reference fails explicitly rather than choosing a hidden default. Control Plane tests exercise the repeated-run HTTP path and verify that returned run detail contains the derived aggregate evidence.
 
 Run-list pagination remains owned by the generic Control Plane `PageQuery`/cursor machinery. The Evaluation resource service therefore supplies the complete internal run history to the generic paginator rather than pre-truncating it to the repository's normal 100-run history default. Tests explicitly create 105 runs and verify that the second API page remains reachable. The SQLite implementation separately exercises the unbounded internal read path.
 
-The Control Plane serializes canonical evaluation records through the existing strict evaluation codec. It does not invent a second EvaluationRun/Result wire lifecycle or expose backend-private execution objects.
+The Control Plane serializes canonical evaluation records through the existing strict evaluation codecs. It does not invent a second EvaluationRun/Result/Aggregate wire lifecycle or expose backend-private execution objects.
 
 ## API-first CLI
 
-The canonical CLI exposes the Evaluation API without constructing an `EvaluationRunner` or reading Evaluation persistence directly:
+The canonical CLI exposes the Evaluation API without constructing an `EvaluationRunner`, reading Evaluation persistence directly or aggregating samples locally:
 
 - `platform eval suite list`;
 - `platform eval suite show <suite-ref>`;
@@ -220,13 +256,15 @@ The canonical CLI exposes the Evaluation API without constructing an `Evaluation
 - `platform eval result show <run-id>`;
 - `platform eval compare <current-run-id> --baseline-run-id ... --regression-policy-ref ...`.
 
-Suite reads use `/api/v1/evaluation-suites`; run detail uses `/api/v1/evaluation-runs`; mutations use `/api/v1/commands/evaluation.run` and `/api/v1/commands/evaluation.compare`. The CLI sends explicit immutable snapshot data and versioned suite/policy references and relies on the Control Plane for canonical domain validation and execution semantics.
+Suite reads use `/api/v1/evaluation-suites`; run detail uses `/api/v1/evaluation-runs`; mutations use `/api/v1/commands/evaluation.run` and `/api/v1/commands/evaluation.compare`. The CLI sends explicit immutable snapshot data and exact suite/regression-policy/aggregation-policy references and relies on the Control Plane for canonical domain validation, aggregation and comparison semantics.
 
-CLI contract tests verify URL encoding for versioned suite refs, pagination/filter forwarding, exact mutation payloads, explicit idempotency keys, durable result reads and local rejection of invalid snapshot/repetition input before transport.
+`--aggregation-policy-ref <id>@<version>` is optional for ordinary execution and raw single-repetition comparisons. It is required when an automatic or post-hoc comparison involves repeated samples. `platform eval result show` returns the durable raw results, stored aggregates and comparison exposed by the canonical run resource.
+
+CLI contract tests verify URL encoding for versioned suite refs, pagination/filter forwarding, exact mutation payloads including aggregation-policy forwarding, explicit idempotency keys, durable result reads and local rejection of invalid snapshot/repetition input before transport.
 
 ## Global Search integration
 
-Issue #45 now projects canonical Evaluation discovery into the global Search layer without making Search authoritative for Evaluation state. Search consumes only the registered Control Plane Evaluation resources:
+Issue #45 projects canonical Evaluation discovery into the global Search layer without making Search authoritative for Evaluation state. Search consumes only the registered Control Plane Evaluation resources:
 
 - `evaluation-suites` -> `evaluation-suite` discovery documents;
 - `evaluation-runs` -> `evaluation-run` discovery documents.
@@ -259,19 +297,24 @@ Implemented:
 - explicit no-commit isolation semantics for attempt mutations;
 - Task/Run/output/Artifact/Result/Event/Workspace projection into `EvaluationObservation`;
 - replaceable persistence contract plus in-memory reference store;
-- durable stdlib SQLite run/result/comparison persistence with storage schema marker;
+- durable stdlib SQLite run/result/aggregate/comparison persistence with storage schema marker and additive v1 -> v2 migration;
 - historical run and case/evaluator queries;
 - ConfigurationSnapshot-enriched case trend projection;
 - restart-safe comparison against durable baselines;
 - baseline comparison/regression engine matched by case/evaluator identity;
-- explicit rejection of unaggregated repeated results in baseline comparison;
+- explicit rejection of unaggregated repeated results inside `RegressionEngine`;
 - versioned regression policy model;
-- strict checked-in EvaluationSuite/RegressionPolicy/baseline configuration loading;
+- versioned aggregation policy with explicit score/metric reducers, pass-rate/error semantics and sample-count compatibility;
+- derived stochastic aggregate model retaining raw result/repetition/seed and Task/Run/Artifact/telemetry provenance;
+- automatic repeated-run baseline comparison through explicit aggregation policies;
+- post-hoc aggregation/comparison of existing repeated runs through `EvaluationService`;
+- strict checked-in EvaluationSuite/RegressionPolicy/AggregationPolicy/baseline configuration loading;
 - Control Plane `evaluation-suites` and `evaluation-runs` resources;
-- Control Plane `evaluation.run` and `evaluation.compare` commands backed by `EvaluationService`;
+- Control Plane `evaluation.run` and `evaluation.compare` commands backed by `EvaluationService`, including exact aggregation-policy references for repeated comparisons;
 - complete generic cursor pagination over evaluation-run history without the repository default-limit truncation;
-- API-first `platform eval` suite/run/result/compare CLI surface;
+- API-first `platform eval` suite/run/result/compare CLI surface including aggregation-policy forwarding;
 - checked-in deterministic PR suite, regression policy and accepted canonical baseline;
+- checked-in example stochastic aggregation policy;
 - real no-paid deterministic PR Evaluation gate through the canonical Task/Run reference path;
 - CI integration that blocks the main test job on Evaluation regression;
 - global Search discovery for canonical Evaluation suites/runs with explicit privacy and authorization boundaries;
@@ -279,15 +322,17 @@ Implemented:
 - tests for repetition/seed propagation, isolation ordering, execution-error containment, comparison persistence and real-kernel reference execution;
 - tests proving cross-attempt workspace contamination is prevented and Run workspace binding exists before lifecycle start;
 - tests for strict JSON persistence, SQLite restart/history/trend queries and baseline comparison after repository restart;
-- tests for Control Plane manifest/OpenAPI exposure, HTTP run/compare flow, persisted comparison reads and run-history pagination beyond 100 records;
-- tests for the API-first Evaluation CLI request/payload/validation contract;
+- tests for stochastic reducers, pass-rate semantics, sample provenance, missing/consistent metric handling, sample-count mismatch and deterministic aggregate identity;
+- tests for aggregate SQLite restart persistence and v1 -> v2 schema migration;
+- tests for Control Plane manifest/OpenAPI exposure, HTTP run/compare flow, repeated aggregation flow, persisted aggregate/comparison reads and run-history pagination beyond 100 records;
+- tests for the API-first Evaluation CLI request/payload/validation and aggregation-policy forwarding contract;
 - tests for strict Evaluation configuration loading, real reference CI-gate execution and deliberate baseline regression detection.
 
 Remaining work for full issue completion:
 
-- explicit stochastic aggregation/comparison policies for repeated runs;
 - rubric scorer and optional model-judge adapter implementation;
-- richer telemetry, accounting and log references in observations and stored results.
+- richer telemetry, accounting and log references in observations and stored results;
+- final acceptance audit across all issue #19 requirements and required tests.
 
 ## CI principle
 
