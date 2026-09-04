@@ -7,7 +7,11 @@ from collections.abc import Awaitable, Callable
 
 from ai_multi_agent_platform.backup.integrity import RestoreValidationError
 from ai_multi_agent_platform.conversations import JsonConversationRepository
-from ai_multi_agent_platform.conversations.models import ParticipantKind, ReferenceKind, ResourceReference
+from ai_multi_agent_platform.conversations.models import (
+    ParticipantKind,
+    ReferenceKind,
+    ResourceReference,
+)
 from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.kernel import RecoveryReport
 
@@ -106,7 +110,9 @@ async def _validate_agents(
                     f"{record.team.team_id}@{record.team.revision}"
                 ) from exc
         if record.selected_model_config_id is not None:
-            _require_model(deployment, record.selected_model_config_id, f"agent run {record.agent_run_id}")
+            _require_model(
+                deployment, record.selected_model_config_id, f"agent run {record.agent_run_id}"
+            )
         known_artifacts = set(task.artifact_ids) | set(run.artifact_ids)
         missing_artifacts = set(record.artifact_ids) - known_artifacts
         if missing_artifacts:
@@ -266,7 +272,9 @@ def _validate_scope(
         try:
             deployment.scopes.get_project(project_id)
         except ContractError as exc:
-            raise RestoreValidationError(f"{entity} references missing project {project_id}") from exc
+            raise RestoreValidationError(
+                f"{entity} references missing project {project_id}"
+            ) from exc
     if workspace_id is not None:
         try:
             workspace = deployment.scopes.get_workspace(workspace_id)
