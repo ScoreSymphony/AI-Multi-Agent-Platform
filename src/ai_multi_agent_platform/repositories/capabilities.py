@@ -8,8 +8,7 @@ from ai_multi_agent_platform.capabilities.types import (
     SafetyClassification,
     SideEffectClassification,
 )
-
-from .models import RepositoryCapability, RepositoryOperation
+from ai_multi_agent_platform.repositories.models import RepositoryCapability, RepositoryOperation
 
 
 READ_OPERATIONS = frozenset(
