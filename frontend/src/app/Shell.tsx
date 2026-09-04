@@ -4,6 +4,7 @@ import { BrowserSessionClient } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
 import { ControlPlaneCollectionClient } from "../api/collections";
 import { NotificationClient } from "../api/notifications";
+import { VerificationClient } from "../api/verification";
 import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
 import { LoadingState } from "../components/States";
@@ -27,17 +28,22 @@ import { ModelDetailPage, ModelProviderDetailPage } from "../pages/ModelPages";
 import { ModelsPage } from "../pages/ModelInventoryPage";
 import { NotificationsPage } from "../pages/NotificationsPage";
 import { ObservabilityPage } from "../pages/ObservabilityPage";
-import { OverviewPage, RunDetailPage, UnavailablePage } from "../pages/Pages";
+import { OverviewPage, UnavailablePage } from "../pages/Pages";
 import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ProjectsPage } from "../pages/ProjectListPage";
-import { ReferenceDetailPage, ReferencesPage } from "../pages/ReferencePages";
+import { ReferencesPage } from "../pages/ReferencePages";
 import { RunsPage } from "../pages/RunListPage";
 import { SearchPage } from "../pages/SearchPage";
 import { SettingsPage } from "../pages/SettingsPage";
-import { TaskDetailPage } from "../pages/TaskDetailPage";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
 import { TerminalPage } from "../pages/TerminalPage";
 import { UsagePage } from "../pages/UsagePage";
+import { VerificationDetailPage, VerificationPage } from "../pages/VerificationPage";
+import {
+  VerificationBoundReferenceDetailPage,
+  VerificationBoundRunDetailPage,
+  VerificationBoundTaskDetailPage,
+} from "../pages/VerificationBoundPages";
 
 export type ManifestState = "loading" | "ready" | "unavailable";
 export type ManifestResourceState = "loading" | "available" | "unavailable";
@@ -60,6 +66,10 @@ export function Shell() {
   );
   const notificationClient = useMemo(
     () => new NotificationClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const verificationClient = useMemo(
+    () => new VerificationClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const [manifest, setManifest] = useState<APImanifest | null>(null);
@@ -93,6 +103,7 @@ export function Shell() {
   const modelMatch = matchPath("/models/:modelId", path);
   const automationMatch = matchPath("/automations/:automationId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
+  const verificationMatch = matchPath("/verification/:verificationId", path);
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   let content;
@@ -105,9 +116,25 @@ export function Shell() {
   } else if (path === "/tasks") content = <ManagedTasksPage client={client} />;
   else if (taskManagementMatch) {
     content = <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;
-  } else if (taskMatch) content = <TaskDetailPage client={client} taskId={taskMatch.taskId} />;
+  } else if (taskMatch) {
+    content = (
+      <VerificationBoundTaskDetailPage
+        client={client}
+        verificationClient={verificationClient}
+        taskId={taskMatch.taskId}
+      />
+    );
+  }
   else if (path === "/runs") content = <RunsPage client={client} />;
-  else if (runMatch) content = <RunDetailPage client={client} runId={runMatch.runId} />;
+  else if (runMatch) {
+    content = (
+      <VerificationBoundRunDetailPage
+        client={client}
+        verificationClient={verificationClient}
+        runId={runMatch.runId}
+      />
+    );
+  }
   else if (path === "/agents") {
     content = (
       <ManifestResourcePage
@@ -155,8 +182,9 @@ export function Shell() {
   } else if (path === "/files") content = <ReferencesPage client={client} />;
   else if (referenceMatch) {
     content = (
-      <ReferenceDetailPage
+      <VerificationBoundReferenceDetailPage
         client={client}
+        verificationClient={verificationClient}
         collection={referenceMatch.collection}
         resourceId={referenceMatch.resourceId}
       />
@@ -233,6 +261,31 @@ export function Shell() {
           collections={collections}
           automations={automationClient}
           automationId={automationMatch.automationId}
+        />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/verification") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Verification"
+        resource="verifications"
+      >
+        <VerificationPage client={verificationClient} />
+      </ManifestResourcePage>
+    );
+  } else if (verificationMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Verification"
+        resource="verifications"
+      >
+        <VerificationDetailPage
+          client={verificationClient}
+          verificationId={verificationMatch.verificationId}
         />
       </ManifestResourcePage>
     );
