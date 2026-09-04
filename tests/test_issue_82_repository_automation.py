@@ -36,7 +36,24 @@ from ai_multi_agent_platform.testing import (
 
 def test_verified_repository_event_triggers_canonical_automation_task(tmp_path: Path) -> None:
     async def scenario() -> None:
-        project_id = new_id("project")
+        kernel_repository = InMemoryKernelRepository()
+        kernel = PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=FakeLifecycleBackend(),
+            repository=kernel_repository,
+        )
+        control_plane = ControlPlane(
+            kernel=kernel,
+            events=kernel_repository,
+            authorization=FakeAuthorizationProvider(),
+        )
+        project = control_plane.scopes.create_project(
+            key="issue-82-repository-automation-project",
+            name="Repository automation project",
+            owner_type="user",
+            owner_id="repository-user",
+        )
+        project_id = project.id
         operation = OperationContext(
             correlation_id="issue-82-repository-automation",
             owner_type="user",
@@ -59,18 +76,6 @@ def test_verified_repository_event_triggers_canonical_automation_task(tmp_path: 
         provider = LocalGitRepositoryProvider(tmp_path / "repo", connection)
         repository = await provider.initialize(operation)
         binding = RepositoryBinding(connection, repository, provider)
-
-        kernel_repository = InMemoryKernelRepository()
-        kernel = PlatformKernel(
-            orchestrator=FakeOrchestrator(),
-            lifecycle=FakeLifecycleBackend(),
-            repository=kernel_repository,
-        )
-        control_plane = ControlPlane(
-            kernel=kernel,
-            events=kernel_repository,
-            authorization=FakeAuthorizationProvider(),
-        )
         automation = await control_plane.automation_service.create_automation(
             name="Repository push watcher",
             description="Create a canonical task for one repository push event.",
