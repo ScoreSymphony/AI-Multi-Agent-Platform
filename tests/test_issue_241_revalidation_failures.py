@@ -135,7 +135,7 @@ def test_permanent_revalidation_failure_keeps_invalid_and_updates_safe_reason() 
         assert any(
             event.get("type") == "automation.lifecycle"
             and event.get("action") == "revalidation_failed"
-            and event.get("reason_code") == "revalidation_invalid_configuration"
+            and event.get("invalidation_reason_code") == "revalidation_invalid_configuration"
             for event in events
         )
 
