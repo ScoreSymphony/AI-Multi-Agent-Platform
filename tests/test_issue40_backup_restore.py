@@ -38,6 +38,26 @@ from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrat
 
 PASSWORD = "correct horse battery staple"
 
+_REQUIRED_TEST_SQLITE_STORES = (
+    "scopes.sqlite3",
+    "files.sqlite3",
+    "workspaces.sqlite3",
+    "verification.sqlite3",
+    "authentication.sqlite3",
+    "authorization.sqlite3",
+    "automation.sqlite3",
+)
+
+
+def _ensure_required_sqlite_stores(root: Path) -> None:
+    database_dir = root / "db"
+    for name in _REQUIRED_TEST_SQLITE_STORES:
+        path = database_dir / name
+        if path.exists():
+            continue
+        with sqlite3.connect(path):
+            pass
+
 
 def _source(tmp_path: Path, name: str = "source") -> Path:
     root = tmp_path / name
@@ -54,6 +74,7 @@ def _source(tmp_path: Path, name: str = "source") -> Path:
             "CREATE TABLE auth_sessions (session_id TEXT PRIMARY KEY, token_verifier TEXT)"
         )
         connection.execute("INSERT INTO auth_sessions VALUES ('session-1', 'hashed')")
+    _ensure_required_sqlite_stores(root)
     (root / "db" / "agents.json").write_text('{"agent-1": {}}', encoding="utf-8")
     (root / "files" / "artifact.txt").write_text("artifact", encoding="utf-8")
     (root / "workspaces" / "ws-1" / "notes.txt").write_text("notes", encoding="utf-8")
@@ -339,6 +360,7 @@ def test_active_run_enters_canonical_reconciliation_after_disaster_restore(tmp_p
             task_id=task.task_id,
         )
         assert run.status is RunStatus.RUNNING
+        _ensure_required_sqlite_stores(source)
 
         backup = create_single_node_backup(
             data_dir=source,
