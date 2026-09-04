@@ -100,6 +100,22 @@ Manual retry and automatic retry converge on the same persisted delivery. The re
 durable state under the delivery lock, so a manual attempt that changes status/attempt while an
 automatic retry is pending cannot cause a stale duplicate attempt.
 
+### Overlap interaction
+
+Retries obey the configured Automation overlap policy rather than bypassing it.
+
+- With `skip_while_processing`, a due retry that encounters the Automation processing lock already
+  held by another distinct delivery is suppressed with `retry-suppressed-overlap`. The failed
+  TriggerDelivery remains `FAILED`, its attempt is not incremented and its durable retry deadline is
+  retained. A later runtime tick can therefore retry the same delivery after the competing work has
+  finished.
+- With `allow`, the retry may re-enter canonical Task admission while another distinct delivery for
+  the same Automation is still processing. Delivery-level locking still prevents two concurrent
+  retry attempts from processing the same TriggerDelivery.
+
+This keeps overlap policy orthogonal to retry timing and preserves the same delivery/idempotency
+identity in both modes.
+
 ### Audit outcomes
 
 The Automation subsystem exposes structured outcomes for:
@@ -108,7 +124,8 @@ The Automation subsystem exposes structured outcomes for:
 - retry started;
 - retry succeeded;
 - retry exhausted;
-- retry suppressed by lifecycle state.
+- retry suppressed by lifecycle state;
+- retry suppressed by `skip_while_processing` overlap.
 
 ## Workstream B — `AutomationState.INVALID`
 
@@ -211,8 +228,9 @@ not sufficient completion evidence.
 
 The final #241 test inventory explicitly includes restart-safe retries, manual/automatic retry
 interaction, pause/disable/INVALID suppression, authorization re-checks, retry exhaustion,
-deterministic backoff, zero-delay spin prevention, INVALID migration/revalidation, and matching,
-cross-workspace, unresolved and resolver-failure event-scope cases.
+deterministic backoff, zero-delay spin prevention, both overlap policies for due retries, INVALID
+migration/revalidation, and matching, cross-workspace, unresolved and resolver-failure event-scope
+cases.
 
 CI is evaluated on GitHub's pull-request merge ref rather than the feature head alone, so the final
 acceptance run exercises #241 together with the then-current combined `main`. The completion run
