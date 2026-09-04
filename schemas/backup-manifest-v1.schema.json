@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/AI-Multi-Agent-Platform/schemas/backup-manifest-v1.schema.json",
+  "title": "AI Multi-Agent Platform backup manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "backup_format_version",
+    "manifest_schema_version",
+    "created_at",
+    "platform",
+    "schema_migration",
+    "consistency",
+    "included_components",
+    "entries",
+    "encryption",
+    "external_dependencies",
+    "excluded",
+    "restore_policy"
+  ],
+  "properties": {
+    "backup_format_version": {"const": 1},
+    "manifest_schema_version": {"const": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commit"],
+      "properties": {
+        "version": {"type": "string", "minLength": 1},
+        "commit": {"type": ["string", "null"]}
+      }
+    },
+    "schema_migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sqlite_user_versions"],
+      "properties": {
+        "sqlite_user_versions": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "consistency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "database_snapshot", "file_snapshot"],
+      "properties": {
+        "mode": {"const": "offline-quiesced"},
+        "database_snapshot": {"const": "sqlite-backup-api"},
+        "file_snapshot": {"const": "copy-while-quiesced"}
+      }
+    },
+    "included_components": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "size", "sha256"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1},
+          "size": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "encryption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "plaintext_secret_material_included"],
+      "properties": {
+        "mode": {"type": "string"},
+        "plaintext_secret_material_included": {"const": false}
+      }
+    },
+    "external_dependencies": {"type": "array", "items": {"type": "string"}},
+    "excluded": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "reason"],
+        "properties": {
+          "path": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "restore_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authentication_sessions",
+        "workers_nodes",
+        "stale_leases_reservations",
+        "unfinished_runs",
+        "indexes_caches"
+      ],
+      "properties": {
+        "authentication_sessions": {"const": "invalidate"},
+        "workers_nodes": {"const": "reauthenticate-and-reregister"},
+        "stale_leases_reservations": {"const": "do-not-resurrect"},
+        "unfinished_runs": {"const": "existing-kernel-reconciliation-required"},
+        "indexes_caches": {"const": "rebuild-not-restore"}
+      }
+    }
+  }
+}
