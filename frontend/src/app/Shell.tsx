@@ -6,6 +6,7 @@ import { ControlPlaneCollectionClient } from "../api/collections";
 import { ComputeClient } from "../api/compute";
 import { EvaluationClient } from "../api/evaluations";
 import { IntegrationsClient } from "../api/integrations";
+import { MemoryKnowledgeClient } from "../api/memoryKnowledge";
 import { NotificationClient } from "../api/notifications";
 import { PluginsClient } from "../api/plugins";
 import { VerificationClient } from "../api/verification";
@@ -44,6 +45,12 @@ import {
   ConnectorDefinitionDetailPage,
   IntegrationsPage,
 } from "../pages/IntegrationsPage";
+import {
+  KnowledgeDetailPage,
+  KnowledgePage,
+  MemoryDetailPage,
+  MemoryPage,
+} from "../pages/MemoryKnowledgePages";
 import { ModelDetailPage, ModelProviderDetailPage } from "../pages/ModelPages";
 import { ModelsPage } from "../pages/ModelInventoryPage";
 import { NotificationsPage } from "../pages/NotificationsPage";
@@ -76,6 +83,7 @@ export type ManifestResourceState = "loading" | "available" | "unavailable";
 const EVALUATION_RESOURCES = ["evaluation-suites", "evaluation-runs"] as const;
 const COMPUTE_RESOURCES = ["nodes", "workers", "worker-jobs"] as const;
 const INTEGRATION_RESOURCES = ["connector-definitions", "connections"] as const;
+const KNOWLEDGE_RESOURCES = ["knowledge", "knowledge-results"] as const;
 
 export function Shell() {
   const { path } = useRouter();
@@ -103,6 +111,10 @@ export function Shell() {
   );
   const integrationsClient = useMemo(
     () => new IntegrationsClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const memoryKnowledgeClient = useMemo(
+    () => new MemoryKnowledgeClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const notificationClient = useMemo(
@@ -146,6 +158,8 @@ export function Shell() {
   const capabilityMatch = matchPath("/tools/:capabilityId", path);
   const connectorDefinitionMatch = matchPath("/integrations/definitions/:definitionId", path);
   const connectionMatch = matchPath("/integrations/connections/:connectionId", path);
+  const memoryMatch = matchPath("/memory/:memoryId", path);
+  const knowledgeMatch = matchPath("/knowledge/:sourceId", path);
   const providerMatch = matchPath("/models/providers/:providerId", path);
   const modelMatch = matchPath("/models/:modelId", path);
   const evaluationSuiteMatch = matchPath("/evaluations/suites/:suiteRef", path);
@@ -223,6 +237,40 @@ export function Shell() {
         collection={referenceMatch.collection}
         resourceId={referenceMatch.resourceId}
       />
+    );
+  } else if (path === "/memory") {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory">
+        <MemoryPage client={memoryKnowledgeClient} />
+      </ManifestResourcePage>
+    );
+  } else if (memoryMatch) {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Memory" resource="memory">
+        <MemoryDetailPage client={memoryKnowledgeClient} memoryId={memoryMatch.memoryId} />
+      </ManifestResourcePage>
+    );
+  } else if (path === "/knowledge") {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Knowledge"
+        resources={KNOWLEDGE_RESOURCES}
+      >
+        <KnowledgePage client={memoryKnowledgeClient} />
+      </ManifestResourcesPage>
+    );
+  } else if (knowledgeMatch) {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Knowledge"
+        resources={KNOWLEDGE_RESOURCES}
+      >
+        <KnowledgeDetailPage client={memoryKnowledgeClient} sourceId={knowledgeMatch.sourceId} />
+      </ManifestResourcesPage>
     );
   } else if (path === "/search") content = <SearchPage client={client} />;
   else if (path === "/tools") {
