@@ -194,6 +194,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         workspace_provider=workspaces,
         health_providers=(orchestrator, lifecycle, files),
         automation_state_path=database_dir / "automation.sqlite3",
+        notification_state_path=database_dir / "notifications.sqlite3",
     )
     register_agent_control_plane(control_plane, agents)
     register_standard_agent_control_plane(control_plane, agents)
