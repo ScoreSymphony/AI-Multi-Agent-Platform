@@ -18,7 +18,11 @@ from ai_multi_agent_platform.connectors import (
     connector_definition_id,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import HealthStatus, OperationContext, ProviderDescriptor
+from ai_multi_agent_platform.contracts.types import (
+    HealthStatus,
+    OperationContext,
+    ProviderDescriptor,
+)
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.repositories import ConnectorRepositoryProvider, RepositoryConnection
 
