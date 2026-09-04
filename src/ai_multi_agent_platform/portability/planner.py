@@ -265,11 +265,11 @@ def _default_id_allocator(
     resource: PortableResource,
     attempt: int,
 ) -> str:
-    """Stable package-local clone ID while preserving canonical prefix shape when present."""
+    """Stable package-local clone ID while preserving the full canonical ID prefix."""
 
     seed = f"{package.checksum}:{resource.resource_type}:{resource.resource_id}:{attempt}"
     generated = uuid5(NAMESPACE_URL, seed)
-    prefix, separator, _ = resource.resource_id.partition("_")
+    prefix, separator, _ = resource.resource_id.rpartition("_")
     if separator and prefix:
         return f"{prefix}_{generated}"
     normalized_type = resource.resource_type.replace(".", "-").replace(":", "-")
