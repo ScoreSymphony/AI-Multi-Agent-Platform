@@ -10,6 +10,7 @@ from ai_multi_agent_platform.search import (
     SEARCH_INDEX_SCHEMA_VERSION,
     LocalSearchProvider,
     SearchDocument,
+    SearchIndexCheckpoint,
 )
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
@@ -33,7 +34,10 @@ class CountingLocalSearchProvider(LocalSearchProvider):
 
 
 class CheckpointlessSearchProvider(CountingLocalSearchProvider):
-    async def index_checkpoint(self, context: OperationContext):  # type: ignore[no-untyped-def]
+    async def index_checkpoint(
+        self,
+        context: OperationContext,
+    ) -> SearchIndexCheckpoint | None:
         del context
         return None
 
