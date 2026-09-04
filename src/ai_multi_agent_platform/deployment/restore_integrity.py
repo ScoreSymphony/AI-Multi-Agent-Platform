@@ -6,13 +6,13 @@ import sqlite3
 from collections.abc import Awaitable, Callable
 
 from ai_multi_agent_platform.backup.integrity import RestoreValidationError
+from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.conversations import JsonConversationRepository
 from ai_multi_agent_platform.conversations.models import (
     ParticipantKind,
     ReferenceKind,
     ResourceReference,
 )
-from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.kernel import RecoveryReport
 
 from .single_node import SingleNodeDeployment
