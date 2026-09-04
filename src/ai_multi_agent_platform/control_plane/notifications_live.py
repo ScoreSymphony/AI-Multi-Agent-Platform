@@ -32,13 +32,13 @@ from .notifications_composition import (
     NOTIFICATION_COLLECTION,
     _recipient_from_context,
 )
-from .notifications_composition import (
+from .notifications_runtime_composition import (
     ControlPlane as _BaseControlPlane,
 )
-from .notifications_composition import (
+from .notifications_runtime_composition import (
     ControlPlaneHTTP as _BaseControlPlaneHTTP,
 )
-from .notifications_composition import (
+from .notifications_runtime_composition import (
     build_openapi as _build_base_openapi,
 )
 
@@ -127,8 +127,14 @@ class ControlPlaneASGI:
     def __init__(self, http: Any) -> None:
         self._http = http
         self._inner = _RuntimeControlPlaneASGI(http)
+        control_plane = getattr(http, "_control_plane", None)
+        self._control_plane = control_plane if isinstance(control_plane, ControlPlane) else None
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") == "lifespan" and self._control_plane is not None:
+            await self._lifespan(receive, send)
+            return
+
         path = str(scope.get("path", "/"))
         if (
             scope.get("type") == "http"
@@ -138,6 +144,50 @@ class ControlPlaneASGI:
             await self._stream_notifications(scope, send)
             return
         await self._inner(scope, receive, send)
+
+    async def _lifespan(self, receive: Any, send: Any) -> None:
+        control_plane = self._control_plane
+        if control_plane is None:
+            raise RuntimeError("notification runtime is unavailable")
+        while True:
+            message = await receive()
+            message_type = message.get("type")
+            if message_type == "lifespan.startup":
+                automation_started = False
+                try:
+                    await control_plane.start_automation_runtime()
+                    automation_started = True
+                    await control_plane.start_notification_runtime()
+                except Exception as exc:
+                    if automation_started:
+                        try:
+                            await control_plane.stop_automation_runtime()
+                        except Exception:
+                            pass
+                    await send({"type": "lifespan.startup.failed", "message": str(exc)})
+                    return
+                await send({"type": "lifespan.startup.complete"})
+                continue
+            if message_type == "lifespan.shutdown":
+                failures: list[Exception] = []
+                try:
+                    await control_plane.stop_notification_runtime()
+                except Exception as exc:
+                    failures.append(exc)
+                try:
+                    await control_plane.stop_automation_runtime()
+                except Exception as exc:
+                    failures.append(exc)
+                if failures:
+                    await send(
+                        {
+                            "type": "lifespan.shutdown.failed",
+                            "message": "; ".join(str(exc) for exc in failures),
+                        }
+                    )
+                    return
+                await send({"type": "lifespan.shutdown.complete"})
+                return
 
     async def _stream_notifications(self, scope: dict[str, Any], send: ASGISend) -> None:
         path = str(scope.get("path", "/"))
