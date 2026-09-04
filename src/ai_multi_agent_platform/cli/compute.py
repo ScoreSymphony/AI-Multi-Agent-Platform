@@ -6,6 +6,8 @@ import argparse
 from collections.abc import Callable
 from urllib.parse import quote
 
+from ai_multi_agent_platform.contracts.types import JsonValue
+
 from .client import ClientResponse, ControlPlaneClient
 from .profiles import ProfileError
 
@@ -63,6 +65,79 @@ def execute_compute(
     raise ProfileError(f"unsupported compute command area: {args.area}")
 
 
+def doctor_compute(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
+    """Inspect optional canonical compute resources for `platform doctor`."""
+
+    responses = {
+        "node": client.get("/nodes", query={"limit": "200"}, raise_for_status=False),
+        "worker": client.get("/workers", query={"limit": "200"}, raise_for_status=False),
+    }
+    if all(response.status == 404 for response in responses.values()):
+        return "healthy", []
+
+    overall = "healthy"
+    checks: list[JsonValue] = []
+    for kind, response in responses.items():
+        if response.status == 404:
+            overall = "degraded"
+            checks.append(
+                {
+                    "name": f"{kind}_health",
+                    "status": "degraded",
+                    "message": f"canonical {kind} collection is missing while compute is partially available",
+                }
+            )
+            continue
+        if response.status >= 400:
+            overall = "degraded"
+            checks.append(
+                {
+                    "name": f"{kind}_health",
+                    "status": "degraded",
+                    "http_status": response.status,
+                }
+            )
+            continue
+
+        items = _page_items(response.body)
+        if items is None:
+            overall = "degraded"
+            checks.append(
+                {
+                    "name": f"{kind}_health",
+                    "status": "degraded",
+                    "message": f"canonical {kind} collection returned an invalid page",
+                }
+            )
+            continue
+        if not items:
+            overall = "degraded"
+            checks.append(
+                {
+                    "name": f"{kind}_health",
+                    "status": "degraded",
+                    "message": f"no canonical {kind} resources are registered",
+                }
+            )
+            continue
+
+        for item in items:
+            item_status = _compute_item_status(kind, item)
+            if item_status == "degraded":
+                overall = "degraded"
+            checks.append(
+                {
+                    "name": f"{kind}_health",
+                    "status": item_status,
+                    "resource_id": item.get("id"),
+                    "resource_status": item.get("status"),
+                    "draining": item.get("draining", False),
+                    "maintenance": item.get("maintenance", False) if kind == "node" else False,
+                }
+            )
+    return overall, checks
+
+
 def _execute_node(
     args: argparse.Namespace,
     client: ControlPlaneClient,
@@ -109,6 +184,25 @@ def _execute_worker_job(args: argparse.Namespace, client: ControlPlaneClient) ->
     if args.command == "show":
         return client.get(f"/worker-jobs/{_segment(args.worker_job_id)}")
     raise ProfileError(f"unsupported worker-job command: {args.command}")
+
+
+def _page_items(body: JsonValue) -> list[dict[str, JsonValue]] | None:
+    if not isinstance(body, dict):
+        return None
+    raw_items = body.get("items")
+    if not isinstance(raw_items, list) or not all(isinstance(item, dict) for item in raw_items):
+        return None
+    return [item for item in raw_items if isinstance(item, dict)]
+
+
+def _compute_item_status(kind: str, item: dict[str, JsonValue]) -> str:
+    status = item.get("status")
+    draining = item.get("draining") is True
+    if kind == "node":
+        healthy = status == "online" and not draining and item.get("maintenance") is not True
+    else:
+        healthy = status == "healthy" and not draining
+    return "healthy" if healthy else "degraded"
 
 
 def _add_list_parser(
