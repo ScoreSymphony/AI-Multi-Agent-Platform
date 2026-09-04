@@ -88,12 +88,8 @@ jobs:
               'from .gate import TaskVerificationRequirement, VerificationCompletionAuthority',
               1,
           )
-          old = '''        policy_version: int,
-    ):
-        return self._completion.require_task('''
-          new = '''        policy_version: int,
-    ) -> TaskVerificationRequirement:
-        return self._completion.require_task('''
+          old = '        policy_version: int,\n    ):\n        return self._completion.require_task('
+          new = '        policy_version: int,\n    ) -> TaskVerificationRequirement:\n        return self._completion.require_task('
           if old not in text:
               raise SystemExit('CanonicalVerificationRuntime.require_task annotation anchor missing')
           evidence.write_text(text.replace(old, new, 1), encoding='utf-8')
