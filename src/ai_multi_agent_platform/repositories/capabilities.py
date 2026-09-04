@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from ai_multi_agent_platform.capabilities import (
-    CapabilitySpec,
-    CredentialRequirement,
-    SafetyClassification,
-    SideEffectClassification,
-)
+from ai_multi_agent_platform.capabilities import CapabilitySpec
+from ai_multi_agent_platform.capabilities import CredentialRequirement
+from ai_multi_agent_platform.capabilities import SafetyClassification
+from ai_multi_agent_platform.capabilities import SideEffectClassification
 
 from .models import RepositoryCapability, RepositoryOperation
 
