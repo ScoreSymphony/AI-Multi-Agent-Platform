@@ -315,6 +315,8 @@ def test_active_run_enters_canonical_reconciliation_after_disaster_restore(tmp_p
         source = tmp_path / "active-source"
         database_dir = source / "db"
         database_dir.mkdir(parents=True)
+        (source / "files").mkdir()
+        (source / "workspaces").mkdir()
         first_lifecycle = FakeLifecycleBackend()
         first = PlatformKernel(
             orchestrator=FakeOrchestrator(),

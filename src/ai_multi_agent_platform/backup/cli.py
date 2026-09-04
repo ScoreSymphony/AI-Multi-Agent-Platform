@@ -51,6 +51,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 backup_dir=Path(args.backup),
                 target_data_dir=Path(args.target_data_dir),
                 expected_platform_version=__version__,
+                expected_platform_commit=args.expected_platform_commit,
             )
             print(
                 json.dumps(
@@ -78,12 +79,22 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="confirm that all writers to the deployment data root are stopped",
     )
-    create.add_argument("--platform-commit")
+    create.add_argument(
+        "--platform-commit",
+        help="record the exact source build commit in the backup manifest",
+    )
 
-    verify = commands.add_parser("verify", help="verify manifest, file set, sizes and checksums")
+    verify = commands.add_parser(
+        "verify",
+        help="verify manifest schema, scope, checksums and SQLite integrity/schema metadata",
+    )
     verify.add_argument("backup")
 
     restore = commands.add_parser("restore", help="restore into a clean replacement data root")
     restore.add_argument("backup")
     restore.add_argument("--target-data-dir", required=True)
+    restore.add_argument(
+        "--expected-platform-commit",
+        help="optionally require an exact source build commit in addition to platform version",
+    )
     return parser

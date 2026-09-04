@@ -1,22 +1,9 @@
 """Canonical Agent definitions, versioning and runtime services."""
 
+# ruff: noqa: I001
+
 from collections.abc import Mapping
 
-from .control_plane import (
-    AGENT_COLLECTION,
-    AGENT_COMMANDS,
-    AGENT_RUN_COLLECTION,
-    AGENT_TEAM_COLLECTION,
-    AgentCommandHandlers,
-    AgentExecutionEnvironment,
-    AgentExecutionEnvironmentResolver,
-    AgentResourceService,
-    AgentRunResourceService,
-    AgentTeamResourceService,
-    register_agent_control_plane,
-)
-from .control_plane import _profile_from_json as _agent_profile_from_json
-from .control_plane import _team_profile_from_json as _agent_team_profile_from_json
 from .models import (
     AgentCapabilityPolicy,
     AgentDataAccess,
@@ -49,6 +36,25 @@ from .persistence import AGENT_REPOSITORY_SCHEMA_VERSION, JsonAgentRepository
 from .repository import AgentRepository, InMemoryAgentRepository
 from .runtime import AgentOrchestratorMapper, AgentRuntime, ReferenceOrchestratorMapper
 from .service import AgentService
+
+# AgentService must be initialized before control_plane imports. Real Forge/Hermes
+# compatibility exercises import this package through execution adapters and otherwise
+# expose a package-level cycle while control_plane resolves AgentService.
+from .control_plane import (
+    AGENT_COLLECTION,
+    AGENT_COMMANDS,
+    AGENT_RUN_COLLECTION,
+    AGENT_TEAM_COLLECTION,
+    AgentCommandHandlers,
+    AgentExecutionEnvironment,
+    AgentExecutionEnvironmentResolver,
+    AgentResourceService,
+    AgentRunResourceService,
+    AgentTeamResourceService,
+    register_agent_control_plane,
+)
+from .control_plane import _profile_from_json as _agent_profile_from_json
+from .control_plane import _team_profile_from_json as _agent_team_profile_from_json
 from .standards import (
     STANDARD_AGENT_IDS,
     STANDARD_AGENT_TEMPLATES,
