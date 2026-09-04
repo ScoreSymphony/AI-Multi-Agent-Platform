@@ -202,10 +202,7 @@ class RepositoryStatus:
     @property
     def clean(self) -> bool:
         return not (
-            self.staged_paths
-            or self.modified_paths
-            or self.deleted_paths
-            or self.untracked_paths
+            self.staged_paths or self.modified_paths or self.deleted_paths or self.untracked_paths
         )
 
 
