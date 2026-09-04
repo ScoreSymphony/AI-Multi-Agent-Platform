@@ -238,8 +238,8 @@ def test_global_unowned_event_is_visible_only_to_service_owned_automation() -> N
         deliveries = await service.deliver_canonical_platform_event(
             Event(
                 event_type="platform.maintenance",
-                subject_type="service",
-                subject_id="automation-runtime",
+                subject_type="task",
+                subject_id=new_id("task"),
                 correlation_id="issue-241-global-event",
                 occurred_at=now + timedelta(seconds=1),
             )
