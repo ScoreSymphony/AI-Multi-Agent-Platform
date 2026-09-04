@@ -120,36 +120,18 @@ def test_single_node_human_review_rejects_forged_subject_and_unknown_evidence(
             revision=canonical.revision,
             digest="sha256:forged",
         )
-        forged_request = deployment.verification_completion.request_verification(
-            task_id=task.task_id,
-            policy_id=policy.policy_id,
-            policy_version=policy.version,
-            stage_id="review",
-            subject=forged,
-            correlation_id=task.task_id,
-            run_id=run.run_id,
-            result_id=result_id,
-        )
-        context = RequestContext(
-            request_id="canonical-review-forged",
-            correlation_id=task.task_id,
-            idempotency_key="canonical-review-forged",
-            actor=ActorContext(
-                principal_ref=admin.user_id,
-                owner_type="user",
-                owner_id=admin.user_id,
-                actor_type="human",
-            ),
-        )
         with pytest.raises(ContractError) as forged_error:
-            await deployment.control_plane.execute_command(
-                context,
-                "verification.accept",
-                forged_request.verification_id,
-                {},
+            deployment.verification.request_verification(
+                task_id=task.task_id,
+                policy_id=policy.policy_id,
+                policy_version=policy.version,
+                stage_id="review",
+                subject=forged,
+                correlation_id=task.task_id,
+                run_id=run.run_id,
+                result_id=result_id,
             )
-        assert forged_error.value.code is ErrorCode.CONTRACT_VIOLATION
-        assert deployment.verification.result_for(forged_request.verification_id) is None
+        assert forged_error.value.code is ErrorCode.FORBIDDEN
 
         canonical_request = await deployment.verification_runtime.request_verification(
             task_id=task.task_id,
@@ -159,14 +141,18 @@ def test_single_node_human_review_rejects_forged_subject_and_unknown_evidence(
             subject_type="result",
             subject_id=result_id,
             correlation_id=task.task_id,
-            run_id=run.run_id,
         )
         unknown_artifact = new_id("artifact")
         evidence_context = RequestContext(
             request_id="canonical-review-evidence",
             correlation_id=task.task_id,
             idempotency_key="canonical-review-evidence",
-            actor=context.actor,
+            actor=ActorContext(
+                principal_ref=admin.user_id,
+                owner_type="user",
+                owner_id=admin.user_id,
+                actor_type="human",
+            ),
         )
         with pytest.raises(ContractError) as evidence_error:
             await deployment.control_plane.execute_command(

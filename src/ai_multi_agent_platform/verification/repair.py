@@ -111,7 +111,12 @@ class VerificationRepairRuntime:
                 "waiting task is not canonically blocked for verification repair",
             )
 
-        key = f"verification-repair:{verification_id}:{repair_attempt}:{idempotency_key}"
+        key = f"verification-repair:{verification_id}:{repair_attempt}"
+        existing = await self._existing_execution(
+            request.task_id, verification_id, repair_attempt, key
+        )
+        if existing is not None:
+            return existing
         planned = await self._kernel.plan_task(
             idempotency_key=f"{key}:plan",
             task_id=request.task_id,
@@ -181,5 +186,44 @@ class VerificationRepairRuntime:
             plan_id=planned.plan_ref,
             step_id=selected_step,
             run_id=started.run_id,
+            repair_attempt=repair_attempt,
+        )
+
+    async def _existing_execution(
+        self,
+        task_id: str,
+        verification_id: str,
+        repair_attempt: int,
+        key: str,
+    ) -> VerificationRepairExecution | None:
+        matches = [
+            event
+            for event in await self._kernel.history(task_id)
+            if event.event_type == "run.created"
+            and event.provenance is not None
+            and event.provenance.source == _REPAIR_SOURCE
+            and event.causation_id == f"{key}:create-run"
+        ]
+        if len(matches) > 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "one verification repair round has multiple canonical repair runs",
+            )
+        if not matches:
+            return None
+        event = matches[0]
+        plan_id = event.payload.get("plan_ref")
+        step_id = event.payload.get("subject_id")
+        if not isinstance(plan_id, str) or not isinstance(step_id, str):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical repair run is missing plan/step provenance",
+            )
+        return VerificationRepairExecution(
+            source_verification_id=verification_id,
+            task_id=task_id,
+            plan_id=plan_id,
+            step_id=step_id,
+            run_id=event.subject_id,
             repair_attempt=repair_attempt,
         )

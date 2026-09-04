@@ -5,6 +5,7 @@ from .deterministic import DeterministicCheck, ReferenceDeterministicVerifier
 from .evidence import (
     CanonicalVerificationRuntime,
     KernelFileVerificationEvidenceResolver,
+    VerificationEvidenceContext,
     VerificationEvidenceResolver,
 )
 from .gate import (
@@ -58,6 +59,7 @@ __all__ = [
     "VerificationAuditEventType",
     "VerificationCompletionAuthority",
     "VerificationError",
+    "VerificationEvidenceContext",
     "VerificationEvidenceResolver",
     "VerificationFailurePolicy",
     "VerificationFinding",
