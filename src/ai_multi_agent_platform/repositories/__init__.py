@@ -8,6 +8,7 @@ from .capabilities import (
     repository_capability,
     repository_capability_specs,
 )
+from .connector_repository import ConnectorRepositoryProvider
 from .contracts import RepositoryProvider
 from .events import RepositoryEventBridge, repository_platform_event_id, repository_resource_payload
 from .local_git import LocalGitRepositoryProvider
@@ -37,6 +38,7 @@ from .service import (
 from .workspace import RepositoryWorkspaceSourceResolver
 
 __all__ = [
+    "ConnectorRepositoryProvider",
     "EXTERNAL_SIDE_EFFECT_OPERATIONS",
     "LOCAL_GIT_CAPABILITIES",
     "LOCAL_WRITE_OPERATIONS",
