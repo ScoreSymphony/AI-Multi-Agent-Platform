@@ -9,6 +9,7 @@ from .capabilities import (
     repository_capability_specs,
 )
 from .contracts import RepositoryProvider
+from .events import RepositoryEventBridge, repository_platform_event_id, repository_resource_payload
 from .local_git import LocalGitRepositoryProvider
 from .models import (
     RepositoryCapability,
@@ -46,6 +47,7 @@ __all__ = [
     "RepositoryCommit",
     "RepositoryConnection",
     "RepositoryDiff",
+    "RepositoryEventBridge",
     "RepositoryOperation",
     "RepositoryProvenanceStore",
     "RepositoryProvider",
@@ -61,5 +63,7 @@ __all__ = [
     "RepositoryWorkspaceSourceResolver",
     "repository_capability",
     "repository_capability_specs",
+    "repository_platform_event_id",
+    "repository_resource_payload",
     "validate_git_revision",
 ]
