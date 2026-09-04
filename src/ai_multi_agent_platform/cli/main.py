@@ -21,6 +21,7 @@ from .client import (
     HTTPTransport,
     TransportError,
 )
+from .evaluation import add_evaluation_parser, execute_evaluation
 from .plugins import add_plugin_parser, execute_plugin
 from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
@@ -127,6 +128,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     add_search_parser(areas)
     add_plugin_parser(areas)
+    add_evaluation_parser(areas)
 
     profile = areas.add_parser("profile", help="manage non-secret target profiles")
     profile.set_defaults(area="profile")
@@ -398,6 +400,8 @@ def _execute(
         return CommandResult(execute_search(args, client))
     if args.area == "plugin":
         return CommandResult(execute_plugin(args, client, _require_confirmation))
+    if args.area == "evaluation":
+        return CommandResult(execute_evaluation(args, client))
     if args.area == "project":
         return _project_command(args, client, profile)
     if args.area == "workspace":

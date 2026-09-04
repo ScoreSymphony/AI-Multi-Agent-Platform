@@ -30,7 +30,7 @@ This first #38 slice provides the CLI foundation that can be implemented solely 
 - task create/list/show/queue/start/cancel/retry/timeline commands;
 - run list/show/cancel commands.
 
-The foundation intentionally does not invent commands for Agents, Approvals, Nodes, Workers, Automations, Plugins, Search, or other domains before their canonical APIs exist. Those are progressive #38 integrations.
+The foundation intentionally did not invent commands for domains before their canonical APIs existed. Progressive integrations now add those surfaces while preserving the same API-first client boundary.
 
 ## Installation and entry point
 
@@ -79,7 +79,7 @@ platform profile use remote
 platform status
 ```
 
-Profiles are deliberately non-secret. Accepted fields are only endpoint, principal reference, owner type, and owner ID. Endpoint URLs containing username/password credentials are rejected, and unknown profile fields are rejected. Authentication credentials/tokens belong to the future #36 authentication integration and its approved credential storage path, not this file.
+Profiles are deliberately non-secret. Accepted fields are only endpoint, principal reference, owner type, and owner ID. Endpoint URLs containing username/password credentials are rejected, and unknown profile fields are rejected. Authentication credentials/tokens belong to the authentication integration and its approved credential storage path, not this file.
 
 ## Output contract
 
@@ -155,6 +155,53 @@ platform run cancel run_... --task-id task_...
 
 List commands support the Control Plane conventions `--limit`, `--cursor`, `--sort`, `--direction`, `--q`, repeatable `--filter FIELD=VALUE`, and `--fields`.
 
+## Evaluation and regression commands (#19)
+
+Evaluation commands are a thin northbound adapter over the canonical Evaluation Control Plane resources and commands. The CLI never constructs an `EvaluationRunner`, reads the evaluation repository directly, or introduces a second evaluation lifecycle.
+
+Configured suites are addressed by exact versioned references:
+
+```bash
+platform eval suite list
+platform eval suite show suite_id@version
+```
+
+Execute a suite with an explicit immutable `ConfigurationSnapshot`:
+
+```bash
+platform eval run suite_id@version \
+  --snapshot-json '{"platform_version":"0.0.1","platform_commit":"abc123","references":[],"environment":[]}' \
+  --seed 41 \
+  --idempotency-key eval-run-001
+```
+
+`--snapshot-json` must be a JSON object with a non-blank `platform_version`. The Control Plane remains authoritative for the complete snapshot schema, including canonical version references and environment values. `--repetitions` defaults to `1`; repeated runs can be executed now, while automatic stochastic aggregation/comparison remains separate #19 work.
+
+Optional run arguments are:
+
+- `--baseline-run-id`;
+- `--regression-policy-ref` using an exact versioned policy reference;
+- `--repetitions`;
+- `--seed`;
+- `--idempotency-key`.
+
+Inspect the durable run detail, including evaluator results and any stored comparison:
+
+```bash
+platform eval result show evaluation_run_...
+```
+
+Persist a comparison for a completed current run:
+
+```bash
+platform eval compare evaluation_run_current \
+  --baseline-run-id evaluation_run_baseline \
+  --regression-policy-ref policy_id@version \
+  --idempotency-key eval-compare-001
+```
+
+Both mutations call `/api/v1/commands/evaluation.*`; reads use `/api/v1/evaluation-suites` and `/api/v1/evaluation-runs`.
+
 ## Shell completion
 
 The package also installs a dependency-free `platform-completion` helper. It introspects the same `argparse` command tree as `platform`; it does not read CLI profiles, contact the Control Plane, or resolve secrets.
@@ -183,8 +230,8 @@ The diagnostic vocabulary is `healthy`, `degraded`, and `blocking`. Provider/wor
 
 ## Verification
 
-CLI changes are covered by the repository's normal quality gates (`ruff format --check`, `ruff check`, strict `mypy`, `pytest`, and package build). The integration tests use an in-process HTTP transport so the exercised path is still the real versioned Control Plane boundary rather than direct kernel or repository access.
+CLI changes are covered by the repository's normal quality gates (`ruff format --check`, `ruff check`, strict `mypy`, `pytest`, and package build). Integration/contract tests exercise HTTP-style transports so the CLI remains on the real versioned Control Plane boundary rather than direct kernel or repository access.
 
 ## Progressive #38 work still open
 
-This slice does not close #38. Later work should extend the same client with canonical APIs from the owning issues, including Agents/Teams, Models/Tools, Nodes/Workers, approvals, observability logs/metrics, automation, plugins, evaluation, search, deployment/update operations, and secure authentication/session handling.
+This document does not close #38. Later work should continue extending the same client when owning canonical APIs require additional CLI surfaces. Evaluation is now integrated through #19 and must remain API-first.
