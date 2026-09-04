@@ -12,7 +12,7 @@ from ai_multi_agent_platform.agents import (
     InMemoryAgentRepository,
     InstructionSource,
 )
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.templates import (
     AgentTeamTemplateExporter,
     ContextualTemplateHandlerRegistry,
@@ -36,16 +36,17 @@ def test_agent_team_export_builds_portable_published_agent_dependencies() -> Non
     async def scenario() -> None:
         source_owner = OwnerRef(type="user", id="source-owner")
         destination_owner = OwnerRef(type="user", id="destination-owner")
+        source_project_id = new_id("project")
         agents = AgentService(InMemoryAgentRepository())
         first = agents.create_agent(
             _profile("Planner"),
             owner_ref=source_owner,
-            project_id="project_source",
+            project_id=source_project_id,
         )
         second = agents.create_agent(
             _profile("Reviewer"),
             owner_ref=source_owner,
-            project_id="project_source",
+            project_id=source_project_id,
         )
         team = agents.create_team(
             AgentTeamProfile(
@@ -66,7 +67,7 @@ def test_agent_team_export_builds_portable_published_agent_dependencies() -> Non
                 max_parallel_agents=2,
             ),
             owner_ref=source_owner,
-            project_id="project_source",
+            project_id=source_project_id,
         )
 
         registry = ContextualTemplateHandlerRegistry()
@@ -93,7 +94,7 @@ def test_agent_team_export_builds_portable_published_agent_dependencies() -> Non
         assert payload is not None
         assert first.agent_id not in repr(payload)
         assert second.agent_id not in repr(payload)
-        assert "project_source" not in repr(payload)
+        assert source_project_id not in repr(payload)
         profile = payload["profile"]
         assert isinstance(profile, dict)
         members = profile["members"]
