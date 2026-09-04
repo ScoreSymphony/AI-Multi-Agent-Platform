@@ -384,8 +384,14 @@ def test_control_plane_exposes_and_authorizes_invalid_lifecycle_commands() -> No
         )
         assert queried["invalidation_reason_code"] == "operator_invalidated"
 
+        revalidation_context = RequestContext(
+            request_id="request-revalidate-lifecycle",
+            correlation_id="correlation-invalid-lifecycle",
+            actor=context.actor,
+            idempotency_key="issue-241-revalidate-lifecycle",
+        )
         recovered = await control_plane.execute_command(
-            context,
+            revalidation_context,
             "automation.revalidate",
             automation.id,
             {},
