@@ -61,6 +61,8 @@ class AuthorizationAction(StrEnum):
     TEMPLATE_CREATE = "template.create"
     TEMPLATE_CREATE_FROM_AGENT = "template.create-from-agent"
     TEMPLATE_CREATE_FROM_AUTOMATION = "template.create-from-automation"
+    TEMPLATE_CREATE_FROM_PROJECT = "template.create-from-project"
+    TEMPLATE_CREATE_FROM_WORKSPACES = "template.create-from-workspaces"
     TEMPLATE_REVISE = "template.revise"
     TEMPLATE_PUBLISH = "template.publish"
     TEMPLATE_CLONE = "template.clone"
