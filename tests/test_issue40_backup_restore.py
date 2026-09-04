@@ -79,6 +79,11 @@ def test_single_node_backup_restore_preserves_canonical_state_on_new_data_root(
             deployment_metadata={"profile": "single-node"},
             quiesced=True,
         )
+        payload_db = backup / "payload" / "db"
+        assert not list(payload_db.glob("*-wal"))
+        assert not list(payload_db.glob("*-shm"))
+        assert not list(payload_db.glob("*-journal"))
+
         restored_root = restore_single_node_backup(
             backup_dir=backup,
             target_data_dir=tmp_path / "replacement-host" / "data",
@@ -119,6 +124,30 @@ def test_manifest_matches_versioned_json_schema(tmp_path: Path) -> None:
     schema = json.loads(Path("schemas/backup-manifest-v1.schema.json").read_text(encoding="utf-8"))
     Draft202012Validator(schema).validate(manifest)
     assert manifest["schema_migration"]["sqlite_user_versions"]["db/kernel.sqlite3"] == 7
+
+
+def test_wal_sqlite_snapshot_is_self_contained(tmp_path: Path) -> None:
+    source = _source(tmp_path)
+    source_db = source / "db" / "kernel.sqlite3"
+    with sqlite3.connect(source_db) as connection:
+        assert connection.execute("PRAGMA journal_mode=WAL").fetchone() == ("wal",)
+        connection.execute("INSERT INTO tasks VALUES ('task-wal', 'survives checkpoint')")
+
+    backup = create_single_node_backup(
+        data_dir=source,
+        destination=tmp_path / "backup",
+        platform_version=__version__,
+        quiesced=True,
+    )
+    snapshot = backup / "payload" / "db" / "kernel.sqlite3"
+    assert snapshot.is_file()
+    assert not snapshot.with_name(snapshot.name + "-wal").exists()
+    assert not snapshot.with_name(snapshot.name + "-shm").exists()
+
+    with sqlite3.connect(f"file:{snapshot}?mode=ro&immutable=1", uri=True) as connection:
+        assert connection.execute(
+            "SELECT title FROM tasks WHERE task_id = 'task-wal'"
+        ).fetchone() == ("survives checkpoint",)
 
 
 def test_backup_requires_quiescence_and_excludes_ephemeral_executor(tmp_path: Path) -> None:
