@@ -19,7 +19,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Apply issue 86 hardening
-        run: python .github/scripts/issue86_hardening_patch.py
+        run: |
+          python .github/scripts/issue86_hardening_patch.py
+          python .github/scripts/issue86_hardening_fix_style.py
       - name: Install toolchain
         run: python -m pip install -e ".[dev]"
       - name: Normalize hardening slice
