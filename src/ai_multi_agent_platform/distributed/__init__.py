@@ -12,6 +12,12 @@ from .control_plane import (
     register_distributed_control_plane,
 )
 from .disaster_recovery import prepare_registry_disaster_recovery
+from .failover import (
+    FailoverError,
+    FailoverFenceReceipt,
+    FailoverRejectionCode,
+    WorkerOwnershipFencer,
+)
 from .models import (
     WORKER_PROTOCOL_VERSION,
     AcceleratorResource,
@@ -93,6 +99,9 @@ __all__ = [
     "DistributedStateStore",
     "DistributedTelemetry",
     "DistributedWorkerProvider",
+    "FailoverError",
+    "FailoverFenceReceipt",
+    "FailoverRejectionCode",
     "Heartbeat",
     "JobRequirements",
     "JobResultStatus",
@@ -120,6 +129,7 @@ __all__ = [
     "WorkerJobRequest",
     "WorkerJobResourceService",
     "WorkerJobResult",
+    "WorkerOwnershipFencer",
     "WorkerProtocolAuthorizationError",
     "WorkerProtocolError",
     "WorkerProtocolReceipt",
