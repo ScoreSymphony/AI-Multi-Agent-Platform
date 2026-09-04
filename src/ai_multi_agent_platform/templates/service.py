@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -479,9 +479,10 @@ class TemplateService:
         for item in dependency_order:
             handler = self.handlers.get(item.content.template_type)
             if handler is None:
+                handler_type = item.content.template_type.value
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    f"template handler disappeared during apply: {item.content.template_type.value}",
+                    f"template handler disappeared during apply: {handler_type}",
                 )
             provenance = TemplateInstantiationProvenance(source=item.ref, applied_by=applied_by)
             resource_refs.extend(handler.instantiate(item, provenance))
