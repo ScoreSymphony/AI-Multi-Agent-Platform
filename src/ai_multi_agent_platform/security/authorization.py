@@ -48,6 +48,7 @@ class AuthorizationAction(StrEnum):
     RESULT_READ = "result:read"
     ONBOARDING_CONFIGURE_MODEL = "onboarding.configure-model"
     ONBOARDING_RUN_FIRST_TASK = "onboarding.run-first-task"
+    WORKSPACE_CREATE = "workspace:create"
     VERIFICATION_LIST = "verification:list"
     VERIFICATION_READ = "verification:read"
     VERIFICATION_REVIEW_LIST = "verification-review:list"
