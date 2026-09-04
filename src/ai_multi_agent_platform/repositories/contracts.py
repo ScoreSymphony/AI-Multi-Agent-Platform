@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
+from ai_multi_agent_platform.contracts.interfaces import ProviderContract
 from ai_multi_agent_platform.contracts.types import OperationContext
 
 from .models import (
@@ -17,12 +18,14 @@ from .models import (
 )
 
 
-class RepositoryProvider(ABC):
-    """Canonical repository seam implemented by local Git or provider connector bridges."""
+class RepositoryProvider(ProviderContract):
+    """Canonical repository seam implemented by local Git or connector-backed providers."""
 
     @property
-    @abstractmethod
-    def provider_id(self) -> str: ...
+    def provider_id(self) -> str:
+        """Compatibility shorthand for the common provider descriptor identity."""
+
+        return self.descriptor.provider_id
 
     @abstractmethod
     async def discover(
