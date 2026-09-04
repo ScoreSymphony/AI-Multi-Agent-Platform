@@ -42,6 +42,17 @@ from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
 from .scheduler import DeterministicScheduler, NoEligibleWorkerError, ScheduledPlacement
 from .telemetry import DistributedTelemetry
+from .transport import (
+    WORKER_COMMAND_TOPIC_PREFIX,
+    WORKER_REPLY_TOPIC_PREFIX,
+    WORKER_TRANSPORT_SCHEMA_VERSION,
+    RemoteWorkerTransportError,
+    TransportWorkerDispatcher,
+    WorkerResultProvider,
+    WorkerTransportCodec,
+    WorkerTransportEndpoint,
+    worker_command_topic,
+)
 from .worker import LocalWorker, WorkerDispatcher
 from .worker_protocol import (
     WorkerHeartbeatRequest,
@@ -65,7 +76,10 @@ __all__ = [
     "NODE_COLLECTION",
     "WORKER_COLLECTION",
     "WORKER_JOB_COLLECTION",
+    "WORKER_COMMAND_TOPIC_PREFIX",
     "WORKER_PROTOCOL_VERSION",
+    "WORKER_REPLY_TOPIC_PREFIX",
+    "WORKER_TRANSPORT_SCHEMA_VERSION",
     "AcceleratorResource",
     "CandidateEvaluation",
     "DeterministicScheduler",
@@ -93,11 +107,13 @@ __all__ = [
     "RegistrySnapshot",
     "RejectionCode",
     "RejectionReason",
+    "RemoteWorkerTransportError",
     "Reservation",
     "ReservationStatus",
     "ResourceSnapshot",
     "ScheduledPlacement",
     "SchedulingDecision",
+    "TransportWorkerDispatcher",
     "WorkerDispatcher",
     "WorkerHeartbeatRequest",
     "WorkerJobRequest",
@@ -111,9 +127,13 @@ __all__ = [
     "WorkerRequestAuthenticator",
     "WorkerRequestCredentials",
     "WorkerResourceService",
+    "WorkerResultProvider",
     "WorkerStatus",
+    "WorkerTransportCodec",
+    "WorkerTransportEndpoint",
     "WorkerWorkspaceResolver",
     "WorkspaceDispatchEvidence",
     "WorkspaceJobMaterializationResolver",
     "register_distributed_control_plane",
+    "worker_command_topic",
 ]
