@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import sqlite3
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,23 @@ from ai_multi_agent_platform.kernel import PlatformKernel, RecoveryReport
 from .service import BackupError, verify_restored_single_node_data_root
 
 HealthProbe = Callable[[], Awaitable[dict[str, JsonValue]]]
+
+
+@dataclass(frozen=True, slots=True)
+class RestoreIntegrityContext:
+    """Read-only context supplied to subsystem-owned post-restore validators."""
+
+    data_dir: Path
+    kernel: PlatformKernel
+    scopes: ScopeStore
+    reports: tuple[RecoveryReport, ...]
+
+
+type RestoreIntegrityResult = str | tuple[str, ...]
+type RestoreIntegrityValidator = Callable[
+    [RestoreIntegrityContext],
+    RestoreIntegrityResult | Awaitable[RestoreIntegrityResult],
+]
 
 
 class RestoreValidationError(RuntimeError):
@@ -30,8 +49,14 @@ async def validate_restored_single_node(
     reports: tuple[RecoveryReport, ...],
     restore_metadata: dict[str, Any],
     health_probe: HealthProbe,
+    additional_validators: tuple[RestoreIntegrityValidator, ...] = (),
 ) -> tuple[str, ...]:
-    """Validate durable stores, canonical references, file bytes, and provider readiness."""
+    """Validate durable stores, canonical references, file bytes, and provider readiness.
+
+    Platform-wide invariants remain here. Subsystems with additional durable references register
+    validators through ``additional_validators`` so backup/restore does not need to duplicate every
+    domain model and new durable components cannot silently fall outside the readiness gate.
+    """
 
     sqlite_versions = _sqlite_versions_from_restore_metadata(restore_metadata)
     try:
@@ -51,20 +76,45 @@ async def validate_restored_single_node(
     workspace_count = _validate_workspace_references(scopes=scopes, project_ids=project_ids)
     file_count = _validate_file_store(data_dir=data_dir, project_ids=project_ids)
 
+    checks: list[str] = [
+        "durable-state-layout-and-sqlite-integrity",
+        f"canonical-task-run-references:{task_count}:{run_count}",
+        f"workspace-project-references:{workspace_count}",
+        f"durable-file-metadata-and-bytes:{file_count}",
+    ]
+    context = RestoreIntegrityContext(
+        data_dir=data_dir.expanduser().resolve(),
+        kernel=kernel,
+        scopes=scopes,
+        reports=reports,
+    )
+    for validator in additional_validators:
+        try:
+            result = validator(context)
+            if inspect.isawaitable(result):
+                result = await result
+        except RestoreValidationError:
+            raise
+        except Exception as exc:
+            name = getattr(validator, "__name__", validator.__class__.__name__)
+            raise RestoreValidationError(
+                f"restored subsystem integrity validator failed: {name}: {exc}"
+            ) from exc
+        labels = (result,) if isinstance(result, str) else result
+        if not labels or any(not label.strip() for label in labels):
+            raise RestoreValidationError(
+                "restored subsystem integrity validator returned an empty check label"
+            )
+        checks.extend(labels)
+
     health = await health_probe()
     if health.get("status") != "healthy" or health.get("ready") is not True:
         raise RestoreValidationError(
             "restored control-plane health/readiness check failed: "
             f"status={health.get('status')!r} ready={health.get('ready')!r}"
         )
-
-    return (
-        "durable-state-layout-and-sqlite-integrity",
-        f"canonical-task-run-references:{task_count}:{run_count}",
-        f"workspace-project-references:{workspace_count}",
-        f"durable-file-metadata-and-bytes:{file_count}",
-        "control-plane-provider-health-ready",
-    )
+    checks.append("control-plane-provider-health-ready")
+    return tuple(checks)
 
 
 def _sqlite_versions_from_restore_metadata(value: dict[str, Any]) -> dict[str, int]:
