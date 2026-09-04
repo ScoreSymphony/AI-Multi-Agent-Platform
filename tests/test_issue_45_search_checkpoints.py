@@ -65,8 +65,8 @@ def _stack(
         events=repository,
         authorization=FakeAuthorizationProvider(),
         search_provider=provider,
-        search_rebuild_before_query=rebuild_before_query,
     )
+    control_plane.configure_search_refresh(rebuild_before_query=rebuild_before_query)
     return control_plane, ControlPlaneHTTP(control_plane), kernel
 
 
