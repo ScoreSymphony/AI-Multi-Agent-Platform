@@ -57,6 +57,16 @@ class ConnectorSearchAuthorization(FakeAuthorizationProvider):
         return AuthorizationDecision(allowed=True, reason="connector-visible")
 
 
+def _headers() -> dict[str, str]:
+    return {
+        "X-Request-Id": "request-search-connector",
+        "X-Correlation-Id": "correlation-search-connector",
+        "X-Principal-Ref": "user:connector-search",
+        "X-Owner-Type": "user",
+        "X-Owner-Id": "alice",
+    }
+
+
 async def _stack(
     authorization: FakeAuthorizationProvider | None = None,
 ) -> tuple[
@@ -82,7 +92,9 @@ async def _stack(
 
 
 async def _search(http: ControlPlaneHTTP, **query: str) -> dict[str, object]:
-    response = await http.handle(HTTPRequest(method="GET", path="/api/v1/search", query=query))
+    response = await http.handle(
+        HTTPRequest(method="GET", path="/api/v1/search", query=query, headers=_headers())
+    )
     assert response.status == 200, response.body
     assert isinstance(response.body, dict)
     return response.body
@@ -162,13 +174,19 @@ async def _seed(repository: InMemoryConnectorRepository) -> tuple[str, str, str,
     return definition.id, visible.id, hidden.id, hidden_project
 
 
-def test_connector_definitions_and_connections_are_discoverable_without_sensitive_metadata() -> None:
+def test_connector_definitions_and_connections_are_discoverable_without_sensitive_metadata() -> (
+    None
+):
     async def scenario() -> None:
         _, http, repository = await _stack()
         definition_id, visible_id, _, _ = await _seed(repository)
 
         definitions = await http.handle(
-            HTTPRequest(method="GET", path="/api/v1/connector-definitions")
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/connector-definitions",
+                headers=_headers(),
+            )
         )
         assert definitions.status == 200
         assert isinstance(definitions.body, dict)
@@ -176,7 +194,11 @@ def test_connector_definitions_and_connections_are_discoverable_without_sensitiv
         assert definition_resource["type"] == "connector-definition"
 
         connection = await http.handle(
-            HTTPRequest(method="GET", path=f"/api/v1/connections/{visible_id}")
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/connections/{visible_id}",
+                headers=_headers(),
+            )
         )
         assert connection.status == 200
         assert isinstance(connection.body, dict)
@@ -190,7 +212,10 @@ def test_connector_definitions_and_connections_are_discoverable_without_sensitiv
         assert exact_definition["total"] == 1
         definition_item = _items(exact_definition)[0]
         assert definition_item["title"] == "Local reference connector"
-        assert definition_item["summary"] == "Deterministic local connector for Search integration tests"
+        assert (
+            definition_item["summary"]
+            == "Deterministic local connector for Search integration tests"
+        )
         assert definition_item["canonical_ref"] == (
             f"/api/v1/connector-definitions/{definition_id}"
         )
