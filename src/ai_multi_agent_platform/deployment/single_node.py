@@ -16,6 +16,7 @@ from ai_multi_agent_platform.control_plane import (
     ControlPlaneASGI,
 )
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
+from ai_multi_agent_platform.conversations import ConversationService, JsonConversationRepository
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
@@ -69,6 +70,7 @@ class SingleNodeDeployment:
     files: LocalFileProvider
     workspaces: SqliteWorkspaceProvider
     agents: AgentService
+    conversations: ConversationService
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     verification: SqliteVerificationService
@@ -177,6 +179,9 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         database_dir / "workspaces.sqlite3",
     )
     agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
+    conversations = ConversationService(
+        JsonConversationRepository(database_dir / "conversations.json")
+    )
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
@@ -214,6 +219,9 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         workspace_provider=workspaces,
         health_providers=(orchestrator, lifecycle, files),
         automation_state_path=database_dir / "automation.sqlite3",
+        conversation_service=conversations,
+        conversation_agent_service=agents,
+        conversation_file_provider=files,
     )
     register_agent_control_plane(control_plane, agents)
     register_standard_agent_control_plane(control_plane, agents)
@@ -239,6 +247,7 @@ def build_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployme
         files=files,
         workspaces=workspaces,
         agents=agents,
+        conversations=conversations,
         authentication=authentication,
         authorization=authorization,
         verification=verification,
