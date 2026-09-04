@@ -52,6 +52,11 @@ from .service import (
     TemplateService,
     validate_template_configuration,
 )
+from .workspace_structure_handler import (
+    WorkspaceStructureTemplateExporter,
+    WorkspaceStructureTemplateHandler,
+    register_workspace_structure_template_handler,
+)
 
 __all__ = [
     "AgentTeamTemplateHandler",
@@ -92,8 +97,11 @@ __all__ = [
     "TemplateService",
     "TemplateTrust",
     "TemplateType",
+    "WorkspaceStructureTemplateExporter",
+    "WorkspaceStructureTemplateHandler",
     "register_agent_template_handlers",
     "register_automation_template_handler",
     "register_project_template_handler",
+    "register_workspace_structure_template_handler",
     "validate_template_configuration",
 ]
