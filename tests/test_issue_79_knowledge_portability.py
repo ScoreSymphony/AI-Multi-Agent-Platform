@@ -114,6 +114,7 @@ def test_knowledge_source_round_trip_rebuilds_destination_index(tmp_path: Path) 
         (KNOWLEDGE_SOURCE_RESOURCE_TYPE, snapshot.source.source_id)
     ]
     assert target_source_id != snapshot.source.source_id
+    assert target_source_id.startswith("knowledge_source_")
     assert result.resources[0].target_id == target_source_id
 
     index = asyncio.run(target_provider.get_index_status(target_source_id, context))
