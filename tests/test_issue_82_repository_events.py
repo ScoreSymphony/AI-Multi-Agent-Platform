@@ -111,14 +111,14 @@ def test_repository_event_bridge_deduplicates_by_connector_dedupe_key(tmp_path: 
         )
 
         assert first.id == duplicate.id == repository_platform_event_id(first_external)
+        assert first.provenance is not None
+        assert first.external_refs[0].system == "local-git"
         stored = await events.read("repository-webhooks")
         assert len(stored) == 1
         assert stored[0].subject_type == "project"
         assert stored[0].subject_id == project_id
         assert stored[0].payload["repository_id"] == repository.id
         assert stored[0].payload["dedupe_key"] == "delivery-123"
-        assert stored[0].provenance is not None
-        assert stored[0].external_refs[0].system == "local-git"
 
     asyncio.run(scenario())
 
