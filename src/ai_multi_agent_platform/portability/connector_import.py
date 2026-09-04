@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from ai_multi_agent_platform.connectors.models import ConnectionStatus
+from ai_multi_agent_platform.connectors.models import Connection, ConnectionStatus
 from ai_multi_agent_platform.connectors.service import ConnectorService
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import HealthStatus, OperationContext
@@ -118,7 +118,7 @@ class ConnectionImportMutationHandler:
         del resource, context
         snapshot = _require_snapshot(value)
         connection = snapshot.connection
-        created = None
+        created: Connection | None = None
         try:
             created = await self._service.create_connection(
                 connection,
