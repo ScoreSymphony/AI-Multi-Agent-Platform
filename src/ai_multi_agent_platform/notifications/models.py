@@ -209,7 +209,8 @@ class NotificationPreference:
         if start is not None or end is not None or timezone is not None:
             if start is None or end is None or timezone is None:
                 raise ValueError(
-                    "quiet_hours_start, quiet_hours_end and quiet_hours_timezone must be set together"
+                    "quiet_hours_start, quiet_hours_end and quiet_hours_timezone "
+                    "must be set together"
                 )
             if _validate_clock(start, "quiet_hours_start") == _validate_clock(
                 end, "quiet_hours_end"
