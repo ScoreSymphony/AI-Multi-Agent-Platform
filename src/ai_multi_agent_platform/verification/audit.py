@@ -36,6 +36,7 @@ class VerificationAuditEventType(StrEnum):
     REQUESTED = "verification.requested"
     REVERIFICATION_REQUESTED = "verification.reverification_requested"
     REQUEST_EXPIRED = "verification.request_expired"
+    REQUEST_CANCELLED = "verification.request_cancelled"
     RESULT_RECORDED = "verification.result_recorded"
 
 

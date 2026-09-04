@@ -2,6 +2,11 @@
 
 from .audit import VerificationAuditEvent, VerificationAuditEventType
 from .deterministic import DeterministicCheck, ReferenceDeterministicVerifier
+from .evidence import (
+    CanonicalVerificationRuntime,
+    KernelFileVerificationEvidenceResolver,
+    VerificationEvidenceResolver,
+)
 from .gate import (
     CompletionAuthority,
     CompletionGateDecision,
@@ -39,7 +44,9 @@ __all__ = [
     "CompletionAuthority",
     "CompletionGateDecision",
     "CompletionState",
+    "CanonicalVerificationRuntime",
     "DeterministicCheck",
+    "KernelFileVerificationEvidenceResolver",
     "ProducerIdentity",
     "ReferenceDeterministicVerifier",
     "ReviewerIndependence",
@@ -51,6 +58,7 @@ __all__ = [
     "VerificationAuditEventType",
     "VerificationCompletionAuthority",
     "VerificationError",
+    "VerificationEvidenceResolver",
     "VerificationFailurePolicy",
     "VerificationFinding",
     "VerificationOutcome",
