@@ -132,6 +132,27 @@ The registry prevents a second Worker from claiming the same canonical Worker Jo
 
 Duplicate delivery of the same exact `worker_job_id` is idempotent. Reusing that ID with a different payload is rejected.
 
+## #35 replaceable Worker message transport
+
+`TransportWorkerDispatcher` and `WorkerTransportEndpoint` adapt the transport-neutral Worker contract to the existing #35 `MessageTransport` abstraction. They do not introduce a second broker contract and do not select Redis, NATS, Kafka, RabbitMQ or another permanent transport.
+
+Worker operations are carried as versioned command/reply envelopes for:
+
+- `dispatch`;
+- `get`;
+- `cancel`;
+- terminal `result` retrieval including canonical artifact and evidence references.
+
+The identity layers remain distinct:
+
+- `worker_job_id` is the canonical Worker execution/idempotency identity;
+- transport `message_id` is only one delivery identity;
+- correlation/causation, Task, Run, project and idempotency metadata are propagated through the #35 envelope.
+
+#35 is explicitly at-least-once. The distributed runtime therefore does not claim exactly-once messaging. A lost dispatch reply can be retried with a new transport message ID and the same Worker Job identity; the Worker executes the canonical Run only once. Likewise, a lost terminal result reply is recovered by repeating result retrieval, not by redispatching the execution. Tests prove that Artifact/Evidence references survive that retry while the lifecycle start count remains unchanged.
+
+Only portable secret references may appear in Worker job envelopes. Plaintext secret material is resolved at the execution boundary and is not copied into transport payloads, persistence, telemetry or Control Plane projections.
+
 ## Failure and reconciliation
 
 `DistributedRuntime` records dispatch ownership and reconciles active work.
@@ -144,7 +165,8 @@ Current reference behavior:
 - once the Worker is reachable again the pending cancellation is applied;
 - terminal execution releases the active capacity reservation;
 - a lost acknowledgement preserves dispatch ownership and capacity until reconciliation instead of making unsafe parallel redispatch possible;
-- Worker dispatch remains idempotent by Worker Job ID.
+- Worker dispatch remains idempotent by Worker Job ID;
+- lost transport replies are retried against the same Worker Job identity rather than interpreted as proof that execution did not happen.
 
 This deliberately avoids both an unsafe "still running forever" assumption and an unsafe immediate duplicate dispatch after loss of an acknowledgement.
 
@@ -221,14 +243,17 @@ The distributed runtime consumes the existing #37 remote materialization contrac
 
 A lost dispatch acknowledgement does not trigger premature cleanup or a second workspace materialization. The wrapper retains the original materialization receipt and reuses it when the same idempotent Worker Job is retried/reconciled. Remote result artifact IDs are folded into `WorkerJobResult` without exposing a host path.
 
+## #34 scoped secret delivery
+
+`SecretDeliveringWorkerDispatcher` resolves canonical `SecretReference` objects only at the exact Worker execution boundary. Resolution uses the existing #34 `SecretProvider` / `SecretAccessContext` contracts and therefore composes with the established #15 authorization boundary rather than creating a second distributed secret system.
+
+`WorkerJobRequest` stores only opaque secret references. Plaintext `SecretMaterial` exists only in the ephemeral per-dispatch bundle passed to a secret-aware execution adapter and is not stored in distributed JSON persistence, Worker Job Control Plane resources, #16 telemetry or #35 transport envelopes.
+
 ## Remaining #14 integration work
 
-The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration, authenticated/authorized Worker registration-heartbeat, #5 Node/Worker provider adapters, #16 telemetry integration and #37 remote workspace materialization/result/cleanup composition.
+The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration, authenticated/authorized Worker registration-heartbeat, #5 Node/Worker provider adapters, #16 telemetry integration, #37 remote workspace materialization/result/cleanup composition, #34 scoped secret delivery and a #35-backed replaceable Worker command/result transport with lost-reply recovery tests.
 
-Full issue completion still requires the remaining composition work, especially:
+After the remote-transport slice, full issue completion is intentionally narrowed to:
 
-- scoped secret-resolution/delivery at the Worker execution boundary without putting plaintext secrets into `WorkerJobRequest` persistence, diagnostics or telemetry;
-- a real replaceable remote transport fixture while keeping local/single-node operation on the same abstractions;
-- explicit transport-level remote result/evidence return and terminal reconciliation semantics;
-- controlled failover/re-dispatch policy for work proven safe to retry after Worker loss;
-- remaining acceptance/security/recovery tests and final cross-issue integration review.
+- controlled cross-Worker failover/re-dispatch policy only for work whose previous ownership is proven released/fenced and safe to retry;
+- the remaining failover-specific recovery/acceptance tests and final cross-issue integration review.
