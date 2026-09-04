@@ -119,6 +119,8 @@ def test_repository_event_bridge_deduplicates_by_connector_dedupe_key(tmp_path: 
         assert stored[0].subject_id == project_id
         assert stored[0].payload["repository_id"] == repository.id
         assert stored[0].payload["dedupe_key"] == "delivery-123"
+        assert stored[0].payload["payload"] == {"ref": "refs/heads/main"}
+        assert stored[0].payload["provenance"] == {"transport": "fixture"}
 
     asyncio.run(scenario())
 
