@@ -19,14 +19,22 @@ from .config import (
 )
 from .context import EvaluationExecutionContext
 from .contracts import (
+    AsyncEvaluator,
     EvaluationCaseExecutor,
     EvaluationHistoryRepository,
     EvaluationIsolation,
     EvaluationRepository,
     Evaluator,
+    EvaluatorLike,
 )
-from .evaluators import DeterministicAssertionEvaluator, MetricThresholdEvaluator, SafeEvaluator
+from .evaluators import (
+    DeterministicAssertionEvaluator,
+    MetricThresholdEvaluator,
+    SafeEvaluator,
+    evaluate_safely,
+)
 from .history import EvaluationHistoryService, EvaluationTrendPoint
+from .model_judge import ModelJudgeEvaluator
 from .models import (
     EVALUATION_SCHEMA_VERSION,
     AssertionResult,
@@ -58,6 +66,7 @@ from .models import (
 from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
+from .rubric import ObservationRubricEvaluator
 from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolation
 from .service import (
     EvaluationRunDetail,
@@ -82,6 +91,7 @@ __all__ = [
     "AggregationPolicy",
     "AggregationSampleRef",
     "AssertionResult",
+    "AsyncEvaluator",
     "ComparisonFinding",
     "ComparisonKind",
     "ComparisonOperator",
@@ -115,12 +125,15 @@ __all__ = [
     "Evaluator",
     "EvaluatorDescriptor",
     "EvaluatorKind",
+    "EvaluatorLike",
     "InMemoryEvaluationRepository",
     "KernelEvaluationCaseExecutor",
     "MetricResult",
     "MetricRule",
     "MetricThresholdEvaluator",
+    "ModelJudgeEvaluator",
     "NoopEvaluationIsolation",
+    "ObservationRubricEvaluator",
     "RegressionEngine",
     "RegressionPolicy",
     "RegressionRule",
@@ -135,6 +148,7 @@ __all__ = [
     "VersionReference",
     "WorkspaceEvaluationIsolation",
     "aggregation_policy_ref",
+    "evaluate_safely",
     "evaluation_suite_ref",
     "load_aggregation_policy",
     "load_evaluation_baseline",
