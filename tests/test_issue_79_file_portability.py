@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ContractError, OperationContext
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, FileState, LocalFileProvider
 from ai_multi_agent_platform.domain import Artifact, ExternalRef, OwnerRef, new_id
 from ai_multi_agent_platform.portability import (
@@ -152,7 +152,7 @@ def test_file_materialization_rolls_back_when_artifact_link_fails(
         _context: DataAccessContext,
     ) -> object:
         raise ContractError(
-            code="backend_error",  # type: ignore[arg-type]
+            code=ErrorCode.BACKEND_ERROR,
             message="simulated artifact-link failure",
         )
 
