@@ -97,7 +97,10 @@ def test_connection_round_trip_excludes_runtime_and_remaps_canonical_scope() -> 
 
     registry = ResourceSerializerRegistry()
     register_connector_portability_codec(registry)
-    resource = registry.serialize(snapshot_connection(source, definition))
+    resource = registry.serialize(
+        CONNECTION_RESOURCE_TYPE,
+        snapshot_connection(source, definition),
+    )
 
     assert resource.resource_type == CONNECTION_RESOURCE_TYPE
     assert resource.payload["source_enabled"] is True
@@ -162,7 +165,10 @@ def test_connection_plaintext_endpoint_secret_is_rejected() -> None:
     register_connector_portability_codec(registry)
 
     with pytest.raises(ContractError) as exc_info:
-        registry.serialize(snapshot_connection(source, ReferenceConnectorProvider().definition))
+        registry.serialize(
+            CONNECTION_RESOURCE_TYPE,
+            snapshot_connection(source, ReferenceConnectorProvider().definition),
+        )
     assert exc_info.value.code is ErrorCode.INVALID_REQUEST
 
 
@@ -184,7 +190,10 @@ def test_connection_import_validates_provider_and_stores_non_running_state() -> 
         source = _source_connection(actor, context, secret_ref)
         codec_registry = ResourceSerializerRegistry()
         register_connector_portability_codec(codec_registry)
-        resource = codec_registry.serialize(snapshot_connection(source, provider.definition))
+        resource = codec_registry.serialize(
+            CONNECTION_RESOURCE_TYPE,
+            snapshot_connection(source, provider.definition),
+        )
         import_context = ImportContext(
             {
                 ("connection", source.id): source.id,
@@ -237,7 +246,8 @@ def test_connection_import_rejects_missing_connector_before_mutation() -> None:
         registry = ResourceSerializerRegistry()
         register_connector_portability_codec(registry)
         resource = registry.serialize(
-            snapshot_connection(source, ReferenceConnectorProvider().definition)
+            CONNECTION_RESOURCE_TYPE,
+            snapshot_connection(source, ReferenceConnectorProvider().definition),
         )
         import_context = ImportContext(
             {
@@ -270,7 +280,10 @@ def test_connection_import_rejects_implicit_owner_transfer_before_mutation() -> 
         provider = ReferenceConnectorProvider()
         registry = ResourceSerializerRegistry()
         register_connector_portability_codec(registry)
-        resource = registry.serialize(snapshot_connection(source, provider.definition))
+        resource = registry.serialize(
+            CONNECTION_RESOURCE_TYPE,
+            snapshot_connection(source, provider.definition),
+        )
         import_context = ImportContext(
             {
                 ("connection", source.id): source.id,
