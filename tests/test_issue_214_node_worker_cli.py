@@ -236,7 +236,9 @@ def test_cli_inspects_nodes_workers_and_worker_jobs_through_control_plane(tmp_pa
     assert "secret:must-not-leak" not in json.dumps(worker_job)
 
 
-def test_cli_compute_admin_requires_confirmation_and_uses_canonical_commands(tmp_path: Path) -> None:
+def test_cli_compute_admin_requires_confirmation_and_uses_canonical_commands(
+    tmp_path: Path,
+) -> None:
     config = tmp_path / "cli.json"
     transport, runtime, _, node, worker = _stack()
 
@@ -262,15 +264,9 @@ def test_cli_compute_admin_requires_confirmation_and_uses_canonical_commands(tmp
     assert _invoke(config, transport, "--yes", "node", "undrain", node.node_id)[0] == 0
     assert runtime.registry.get_node(node.node_id).draining is False
 
-    assert (
-        _invoke(config, transport, "--yes", "node", "maintenance-enable", node.node_id)[0]
-        == 0
-    )
+    assert _invoke(config, transport, "--yes", "node", "maintenance-enable", node.node_id)[0] == 0
     assert runtime.registry.get_node(node.node_id).maintenance is True
-    assert (
-        _invoke(config, transport, "--yes", "node", "maintenance-disable", node.node_id)[0]
-        == 0
-    )
+    assert _invoke(config, transport, "--yes", "node", "maintenance-disable", node.node_id)[0] == 0
     assert runtime.registry.get_node(node.node_id).maintenance is False
 
     assert _invoke(config, transport, "--yes", "worker", "drain", worker.worker_id)[0] == 0
