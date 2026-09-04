@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 from ai_multi_agent_platform.contracts import (
@@ -28,6 +28,7 @@ from .authorization import (
 )
 
 type AuthorizationAuditSink = Callable[[AuthorizationAuditRecord], None]
+type ApprovalEventSink = Callable[[str, ApprovalRecord], Awaitable[None]]
 
 
 class AuthorizationGate:
@@ -39,10 +40,12 @@ class AuthorizationGate:
         *,
         approvals: ApprovalService | None = None,
         audit_sink: AuthorizationAuditSink | None = None,
+        approval_event_sink: ApprovalEventSink | None = None,
     ) -> None:
         self.provider = provider
         self.approvals = approvals or ApprovalService()
         self._audit_sink = audit_sink
+        self._approval_event_sink = approval_event_sink
         self._audit_records: list[AuthorizationAuditRecord] = []
 
     @property
@@ -83,6 +86,7 @@ class AuthorizationGate:
                 return allowed
 
             pending = self.approvals.pending_for(action)
+            created = pending is None
             if pending is None:
                 pending = self.approvals.request(
                     action,
@@ -90,6 +94,8 @@ class AuthorizationGate:
                     policy_id=decision.policy_id or "authorization:unspecified",
                     risk=risk,
                 )
+            if created:
+                await self._emit_approval("required", pending)
             gated = AuthorizationDecision(
                 AuthorizationOutcome.REQUIRE_APPROVAL,
                 reason=decision.reason,
@@ -185,12 +191,14 @@ class AuthorizationGate:
                     "approval_id": approval_id,
                 },
             )
-        return self.approvals._decide_authorized(
+        updated = self.approvals._decide_authorized(
             approval_id,
             approver_ref=approver.actor_id,
             approve=approve,
             comment=comment,
         )
+        await self._emit_approval("resolved", updated)
+        return updated
 
     async def cancel_approval(
         self,
@@ -242,7 +250,9 @@ class AuthorizationGate:
                 provider_id=self.provider.descriptor.provider_id,
                 details={"approval_id": approval_id},
             )
-        return self.approvals._cancel_authorized(approval_id, actor_ref=actor.actor_id)
+        updated = self.approvals._cancel_authorized(approval_id, actor_ref=actor.actor_id)
+        await self._emit_approval("resolved", updated)
+        return updated
 
     def ensure_pending_approval(
         self,
@@ -258,6 +268,10 @@ class AuthorizationGate:
             policy_id=policy_id,
             risk=risk,
         )
+
+    async def _emit_approval(self, event: str, record: ApprovalRecord) -> None:
+        if self._approval_event_sink is not None:
+            await self._approval_event_sink(event, record)
 
     def _audit(
         self,
