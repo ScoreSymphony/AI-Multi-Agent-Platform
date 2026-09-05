@@ -154,7 +154,16 @@ class ControlPlane(_BaseControlPlane):
             if budget is None or budget.owner_type is None or budget.owner_id is None:
                 return
             recipient = RecipientRef(RecipientType(budget.owner_type), budget.owner_id)
-            self._source_attention_queue.put(budget_threshold_candidate(event, recipient=recipient))
+            generation = accounting.store.get_threshold_generation(event.budget_id)
+            if generation < 1:
+                return
+            self._source_attention_queue.put(
+                budget_threshold_candidate(
+                    event,
+                    recipient=recipient,
+                    threshold_generation=generation,
+                )
+            )
         except Exception:
             # Accounting already owns and committed the budget/usage state. Invalid or missing
             # recipient metadata must not make accounting ingestion fail.
@@ -168,10 +177,11 @@ class ControlPlane(_BaseControlPlane):
     ) -> tuple[tuple[Notification, ...], bool]:
         """Reconstruct lost #76 attention from durable budget/threshold state after restart.
 
-        Accounting persists the threshold level before its synchronous observer runs. If a process
-        dies in that gap, no in-memory queue item survives. The first Notification runtime pass
-        therefore projects the currently persisted threshold state once. Existing historical
-        attention with the same deterministic aggregation identity suppresses restart duplicates.
+        Accounting persists threshold level and episode generation before its synchronous observer
+        runs. If a process dies in that gap, no in-memory queue item survives. The first
+        Notification runtime pass therefore projects the currently persisted episode once.
+        Existing historical attention with the same episode identity suppresses restart duplicates,
+        while a later fresh crossing after recovery below threshold has a new generation.
         Transient projection failures keep recovery pending for the next runtime tick.
         """
 
@@ -189,6 +199,9 @@ class ControlPlane(_BaseControlPlane):
                     # Rolling/current usage no longer supports the persisted attention state.
                     # Notifications must not resurrect stale accounting truth.
                     continue
+                generation = accounting.store.get_threshold_generation(budget.id)
+                if generation < 1:
+                    continue
                 recipient = RecipientRef(RecipientType(budget.owner_type), budget.owner_id)
                 event = BudgetThresholdEvent(
                     budget_id=budget.id,
@@ -202,7 +215,11 @@ class ControlPlane(_BaseControlPlane):
                     action=budget.action,
                     budget_version=budget.version,
                 )
-                candidate = budget_threshold_candidate(event, recipient=recipient)
+                candidate = budget_threshold_candidate(
+                    event,
+                    recipient=recipient,
+                    threshold_generation=generation,
+                )
                 if await self._has_notification_history(candidate):
                     continue
                 notification = await self.notification_service.create_once(candidate, now=now)
