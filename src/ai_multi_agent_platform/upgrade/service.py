@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
+
+from ai_multi_agent_platform.plugins.models import PluginManifest
 
 from .migrations import MigrationContext, MigrationRegistry, MigrationRunner, MigrationStep
 from .models import CheckSeverity, MigrationStatus, RollbackMode, UpgradeResult, VersionSnapshot
 from .preflight import PreflightRequest, UpgradePreflight
 from .versioning import JsonVersionStateStore, version_snapshot_from_dict
+
+PluginStateMigrationHook = Callable[[tuple[PluginManifest, ...]], None]
 
 
 class UpgradeError(RuntimeError):
@@ -23,6 +28,7 @@ class MaintenanceState:
     source: VersionSnapshot
     target: VersionSnapshot
     planned_revisions: tuple[str, ...]
+    plugin_state_migrations: tuple[str, ...] = ()
     backup_dir: str | None = None
 
 
@@ -54,6 +60,7 @@ class MaintenanceStateStore:
         source = raw.get("source_versions")
         target = raw.get("target_versions")
         planned = raw.get("planned_revisions")
+        plugin_state_migrations = raw.get("plugin_state_migrations", [])
         backup_dir = raw.get("backup_dir")
         if not isinstance(started_at, str) or not started_at:
             raise UpgradeError("upgrade maintenance marker has invalid started_at")
@@ -63,6 +70,10 @@ class MaintenanceStateStore:
             not isinstance(item, str) or not item for item in planned
         ):
             raise UpgradeError("upgrade maintenance marker has invalid planned revisions")
+        if not isinstance(plugin_state_migrations, list) or any(
+            not isinstance(item, str) or not item for item in plugin_state_migrations
+        ):
+            raise UpgradeError("upgrade maintenance marker has invalid plugin state migrations")
         if backup_dir is not None and (not isinstance(backup_dir, str) or not backup_dir):
             raise UpgradeError("upgrade maintenance marker has invalid backup directory")
         return MaintenanceState(
@@ -70,6 +81,7 @@ class MaintenanceStateStore:
             source=version_snapshot_from_dict(source),
             target=version_snapshot_from_dict(target),
             planned_revisions=tuple(planned),
+            plugin_state_migrations=tuple(plugin_state_migrations),
             backup_dir=backup_dir,
         )
 
@@ -93,6 +105,7 @@ class MaintenanceStateStore:
             "source_versions": state.source.to_dict(),
             "target_versions": state.target.to_dict(),
             "planned_revisions": list(state.planned_revisions),
+            "plugin_state_migrations": list(state.plugin_state_migrations),
             "backup_dir": state.backup_dir,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,6 +179,7 @@ class UpgradeService:
         version_state: JsonVersionStateStore,
         maintenance: MaintenanceStateStore,
         history: JsonUpgradeHistoryStore,
+        plugin_state_migration_hook: PluginStateMigrationHook | None = None,
     ) -> None:
         self.migrations = migrations
         self.runner = runner
@@ -173,6 +187,7 @@ class UpgradeService:
         self.version_state = version_state
         self.maintenance = maintenance
         self.history = history
+        self.plugin_state_migration_hook = plugin_state_migration_hook
 
     def apply(
         self,
@@ -192,7 +207,11 @@ class UpgradeService:
 
         installed = self.version_state.read()
         maintenance_state = self.maintenance.read()
-        effective_request = replace(request, resume_failed=resume_failed)
+        effective_request = replace(
+            request,
+            resume_failed=resume_failed,
+            plugin_state_migration_hook_available=self.plugin_state_migration_hook is not None,
+        )
 
         if maintenance_state is not None:
             if not resume_failed:
@@ -241,6 +260,9 @@ class UpgradeService:
                     source=effective_request.current,
                     target=effective_request.target,
                     planned_revisions=report.planned_revisions,
+                    plugin_state_migrations=tuple(
+                        sorted(effective_request.plugin_state_migration_required)
+                    ),
                     backup_dir=(
                         str(effective_request.backup_dir)
                         if effective_request.backup_dir is not None
@@ -255,6 +277,7 @@ class UpgradeService:
             migration_context,
             resume_failed=resume_failed,
         )
+        self._migrate_plugin_state(effective_request)
 
         result = UpgradeResult(
             started_at=started_at,
@@ -267,7 +290,12 @@ class UpgradeService:
                 if effective_request.backup_dir is not None
                 else None
             ),
-            rollback_mode=_rollback_mode(steps),
+            rollback_mode=_rollback_mode(
+                steps,
+                plugin_state_migration_required=bool(
+                    effective_request.plugin_state_migration_required
+                ),
+            ),
         )
 
         # Persist the completed-attempt record before activating the target version vector. If
@@ -279,22 +307,51 @@ class UpgradeService:
         self.maintenance.clear()
         return result
 
+    def _migrate_plugin_state(self, request: PreflightRequest) -> None:
+        required = request.plugin_state_migration_required
+        if not required:
+            return
+        hook = self.plugin_state_migration_hook
+        if hook is None:
+            raise UpgradeError("plugin state migration hook became unavailable after preflight")
+        manifests = tuple(
+            manifest for manifest in request.plugins if manifest.plugin_id in required
+        )
+        try:
+            # The deployment wrapper must call the deterministic #20 PluginStateMigrator. That
+            # migrator is version-aware and therefore safe to invoke again during explicit resume.
+            hook(manifests)
+        except Exception as exc:
+            raise UpgradeError(f"plugin-owned state migration failed: {exc}") from exc
+
     def _resume_request(
         self,
         request: PreflightRequest,
         state: MaintenanceState,
     ) -> PreflightRequest:
+        recorded_plugins = frozenset(state.plugin_state_migrations)
+        if request.plugin_state_migration_required and (
+            request.plugin_state_migration_required != recorded_plugins
+        ):
+            raise UpgradeError(
+                "resume must use the same plugin state migration set recorded for the upgrade"
+            )
+        resumed = replace(
+            request,
+            plugin_state_migration_required=recorded_plugins,
+            plugin_state_migration_hook_available=self.plugin_state_migration_hook is not None,
+        )
         if state.backup_dir is None:
-            return request
+            return resumed
         recorded_backup = Path(state.backup_dir).expanduser().resolve()
         if request.backup_dir is None:
-            return replace(request, backup_dir=recorded_backup)
+            return replace(resumed, backup_dir=recorded_backup)
         supplied_backup = request.backup_dir.expanduser().resolve()
         if supplied_backup != recorded_backup:
             raise UpgradeError(
                 "resume must use the same verified backup recorded for the active upgrade attempt"
             )
-        return request
+        return resumed
 
     def _finalize_interrupted_activation(
         self,
@@ -309,6 +366,12 @@ class UpgradeService:
             )
         if request.target != state.target:
             raise UpgradeError("active maintenance marker targets a different platform release")
+        if request.plugin_state_migration_required and (
+            request.plugin_state_migration_required != frozenset(state.plugin_state_migrations)
+        ):
+            raise UpgradeError(
+                "active maintenance marker has a different plugin state migration set"
+            )
         steps = self.migrations.plan(state.source.domain_schema, state.target.domain_schema)
         revisions = tuple(step.revision for step in steps)
         if revisions != state.planned_revisions:
@@ -333,14 +396,23 @@ class UpgradeService:
             current=state.target,
             applied_revisions=state.planned_revisions,
             backup_dir=state.backup_dir,
-            rollback_mode=_rollback_mode(steps),
+            rollback_mode=_rollback_mode(
+                steps,
+                plugin_state_migration_required=bool(state.plugin_state_migrations),
+            ),
         )
         self.history.append(result)
         self.maintenance.clear()
         return result
 
 
-def _rollback_mode(steps: tuple[MigrationStep, ...]) -> RollbackMode:
+def _rollback_mode(
+    steps: tuple[MigrationStep, ...],
+    *,
+    plugin_state_migration_required: bool = False,
+) -> RollbackMode:
+    if plugin_state_migration_required:
+        return RollbackMode.RESTORE_REQUIRED
     modes = [step.rollback_mode for step in steps]
     if any(mode is RollbackMode.RESTORE_REQUIRED for mode in modes):
         return RollbackMode.RESTORE_REQUIRED
