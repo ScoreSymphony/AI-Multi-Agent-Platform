@@ -139,6 +139,24 @@ class SqliteNotificationRepository(NotificationRepository):
             return tuple(items[query.offset :])
         return tuple(items[query.offset : query.offset + query.limit])
 
+    async def list_all(self) -> tuple[Notification, ...]:
+        """Enumerate canonical rows for internal rebuildable derived projections."""
+
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT payload FROM notifications
+                    ORDER BY updated_at DESC, id DESC
+                    """
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to enumerate notifications",
+            ) from exc
+        return tuple(_decode_notification(cast(str, row["payload"])) for row in rows)
+
     async def find_active_aggregate(
         self,
         *,
