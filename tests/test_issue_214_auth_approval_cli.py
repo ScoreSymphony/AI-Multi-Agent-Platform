@@ -329,9 +329,9 @@ def test_approval_cli_approves_exact_action_idempotently_without_payload_leak(
     assert repeated == {}
     assert "approval is not pending: approved" in error["message"]
 
-    # The canonical command itself remains idempotent even after the CLI preflight sees
-    # the terminal state, which protects transport retries between POST and response.
-    client_call = transport.calls[-2]
+    # The repeated CLI invocation observes the terminal Approval via GET and sends no
+    # second mutation once the CLI preflight sees the terminal state.
+    client_call = transport.calls[-1]
     assert client_call[0:2] == ("GET", f"/api/v1/approvals/{approval_id}")
 
 
