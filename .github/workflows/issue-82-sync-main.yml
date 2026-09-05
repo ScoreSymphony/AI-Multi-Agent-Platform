@@ -15,13 +15,24 @@ jobs:
         with:
           ref: feat/issue-82-operational-completion
           fetch-depth: 0
-      - name: Merge current main into issue 82 branch
+      - name: Inspect current main merge conflicts
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main
+          set +e
           git merge --no-ff --no-commit origin/main
-          git rm .github/workflows/issue-82-sync-main.yml
-          git commit -m "chore: sync issue #82 with current main"
-          git push origin HEAD:feat/issue-82-operational-completion
+          merge_status=$?
+          set -e
+          if [ "$merge_status" -eq 0 ]; then
+            git rm .github/workflows/issue-82-sync-main.yml
+            git commit -m "chore: sync issue #82 with current main"
+            git push origin HEAD:feat/issue-82-operational-completion
+            exit 0
+          fi
+          echo "--- Shell.tsx conflict hunks ---"
+          grep -n -B 35 -A 70 '<<<<<<<' frontend/src/app/Shell.tsx || true
+          echo "--- deployment/single_node.py conflict hunks ---"
+          grep -n -B 55 -A 110 '<<<<<<<' src/ai_multi_agent_platform/deployment/single_node.py || true
+          exit "$merge_status"
