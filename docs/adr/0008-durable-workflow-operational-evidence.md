@@ -4,6 +4,7 @@
 - **Issue:** #21
 - **Implementation follow-up:** #384
 - **Evidence reviewed:** 2026-09-05
+- **Post-close hardening:** PR #405
 - **Decision impact:** None. ADR 0008 remains Accepted with Outcome 2.
 
 ## Purpose
