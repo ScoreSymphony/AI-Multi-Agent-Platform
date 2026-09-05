@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from ai_multi_agent_platform.agents import STARTER_CATALOG_SOURCE, AgentService
+from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
-from ai_multi_agent_platform.control_plane.models import RequestContext, WorkspaceIdentity
+from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.control_plane.service import ScopeStore
-from ai_multi_agent_platform.domain import Project, RunStatus, TaskStatus
+from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.kernel import PlatformKernel
 
 from .agent_lifecycle import (
@@ -62,29 +62,15 @@ class FirstRunTaskService:
             )
 
         objective = _required_string(payload, "objective")
-        project = self._project(
-            owner_type,
-            owner_id,
-            _optional_string(payload, "project_id"),
+        path = self.onboarding.resolve_first_run_path(
+            context,
+            project_id=_optional_string(payload, "project_id"),
+            workspace_id=_optional_string(payload, "workspace_id"),
+            agent_id=_optional_string(payload, "agent_id"),
         )
-        workspace = self._workspace(
-            owner_type,
-            owner_id,
-            project.id,
-            _optional_string(payload, "workspace_id"),
-        )
-        agent_id = self._general_assistant(
-            owner_type,
-            owner_id,
-            project.id,
-            workspace.id,
-            _optional_string(payload, "agent_id"),
-        )
-        self.onboarding.preflight_general_assistant(
-            agent_id,
-            project_id=project.id,
-            workspace_id=workspace.id,
-        )
+        project = self.scopes.get_project(path.project_id)
+        workspace = self.scopes.get_workspace(path.workspace_id)
+        agent_id = path.agent_id
 
         task = await self.kernel.create_task(
             idempotency_key=f"{key}:create-task",
@@ -163,95 +149,6 @@ class FirstRunTaskService:
             "result_id": result_id,
             "output": dict(persisted_run.output),
         }
-
-    def _project(
-        self,
-        owner_type: str,
-        owner_id: str,
-        project_id: str | None,
-    ) -> Project:
-        owned = tuple(
-            project
-            for project in self.scopes.list_projects()
-            if project.owner_ref.type == owner_type and project.owner_ref.id == owner_id
-        )
-        if project_id is not None:
-            project = self.scopes.get_project(project_id)
-            if project not in owned:
-                raise ContractError(ErrorCode.FORBIDDEN, "Project is not owned by the caller")
-            return project
-        if len(owned) != 1:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "project_id is required when first-run onboarding has more than one Project",
-            )
-        return owned[0]
-
-    def _workspace(
-        self,
-        owner_type: str,
-        owner_id: str,
-        project_id: str,
-        workspace_id: str | None,
-    ) -> WorkspaceIdentity:
-        owned = tuple(
-            workspace
-            for workspace in self.scopes.list_workspaces()
-            if workspace.owner_type == owner_type
-            and workspace.owner_id == owner_id
-            and workspace.project_id == project_id
-        )
-        if workspace_id is not None:
-            workspace = self.scopes.get_workspace(workspace_id)
-            if workspace not in owned:
-                raise ContractError(
-                    ErrorCode.FORBIDDEN,
-                    "Workspace is not owned by the caller or does not belong to the selected "
-                    "Project",
-                )
-            return workspace
-        if len(owned) != 1:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "workspace_id is required when the selected Project has more than one Workspace",
-            )
-        return owned[0]
-
-    def _general_assistant(
-        self,
-        owner_type: str,
-        owner_id: str,
-        project_id: str,
-        workspace_id: str,
-        agent_id: str | None,
-    ) -> str:
-        candidates: list[str] = []
-        for definition in self.agents.repository.list_agents():
-            revision = self.agents.get_agent_revision(definition.agent_id)
-            if (
-                revision.owner_ref.type == owner_type
-                and revision.owner_ref.id == owner_id
-                and revision.project_id == project_id
-                and revision.workspace_id == workspace_id
-                and revision.profile.metadata.get("starter_key") == "general_assistant"
-                and revision.profile.metadata.get("starter_catalog_source")
-                == STARTER_CATALOG_SOURCE
-                and revision.profile.enabled
-            ):
-                candidates.append(revision.agent_id)
-        if agent_id is not None:
-            if agent_id not in candidates:
-                raise ContractError(
-                    ErrorCode.FORBIDDEN,
-                    "selected Agent is not an enabled owned General Assistant for this Workspace",
-                )
-            return agent_id
-        if len(candidates) != 1:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "agent_id is required when the Workspace has more than one General Assistant",
-            )
-        return candidates[0]
 
 
 def _required_string(payload: dict[str, JsonValue], key: str) -> str:

@@ -6,7 +6,12 @@ from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
-from .models import TemplateDefinition, TemplateInstantiation, TemplateRevision
+from .models import (
+    TemplateDefinition,
+    TemplateInstantiation,
+    TemplateRevision,
+    TemplateTrust,
+)
 
 
 class TemplateRepository(Protocol):
@@ -75,6 +80,8 @@ class InMemoryTemplateRepository:
                     "new_revision": revision.revision,
                 },
             )
+        previous = self.get_revision(definition.template_id, current.current_revision)
+        self._validate_trust_transition(previous, revision)
         self._validate_pair(definition, revision)
         key = (revision.template_id, revision.revision)
         if key in self._revisions:
@@ -149,6 +156,42 @@ class InMemoryTemplateRepository:
         for key in tuple(self._revisions):
             if key[0] == template_id:
                 del self._revisions[key]
+
+    @staticmethod
+    def _validate_trust_transition(
+        previous: TemplateRevision,
+        revision: TemplateRevision,
+    ) -> None:
+        """Forbid implicit promotion of an untrusted Template lineage.
+
+        Publishing or otherwise appending another untrusted revision is valid. The only
+        transition away from untrusted is the explicit append-only activation revision,
+        which must point back to the exact immediately preceding source revision.
+        """
+
+        if previous.content.provenance.trust is not TemplateTrust.UNTRUSTED:
+            return
+        provenance = revision.content.provenance
+        if provenance.trust is TemplateTrust.UNTRUSTED:
+            return
+        is_explicit_activation = (
+            provenance.trust is TemplateTrust.TRUSTED
+            and provenance.source_template == previous.ref
+            and provenance.source == f"activation:{previous.template_id}@{previous.revision}"
+            and provenance.metadata.get("activated_from_trust") == TemplateTrust.UNTRUSTED.value
+        )
+        if is_explicit_activation:
+            return
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "untrusted Template trust can only be promoted by explicit activation",
+            details={
+                "template_id": previous.template_id,
+                "previous_revision": previous.revision,
+                "attempted_revision": revision.revision,
+                "attempted_trust": provenance.trust.value,
+            },
+        )
 
     @staticmethod
     def _validate_pair(definition: TemplateDefinition, revision: TemplateRevision) -> None:

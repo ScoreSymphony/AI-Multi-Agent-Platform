@@ -4,6 +4,7 @@ import asyncio
 
 from ai_multi_agent_platform.accounting import (
     AccountingService,
+    AggregationMode,
     BudgetAction,
     MeasurementQuality,
     SQLiteUsageStore,
@@ -96,6 +97,7 @@ def test_persisted_threshold_recovers_notification_after_process_restart(tmp_pat
         assert recovered[0].category is NotificationCategory.RESOURCE
         assert recovered[0].summary["budget_id"] == budget.id
         assert recovered[0].summary["level"] == ThresholdLevel.WARNING.value
+        assert recovered[0].summary["threshold_generation"] == 1
 
         # Recovery is historical/idempotent, not a per-tick poll notification. Even a
         # dismissed item must not be resurrected simply because the process restarts.
@@ -116,5 +118,84 @@ def test_persisted_threshold_recovers_notification_after_process_restart(tmp_pat
         assert second_tick.reminder_notifications == 0
         assert len(history) == 1
         assert history[0].state is NotificationState.DISMISSED
+
+    asyncio.run(scenario())
+
+
+def test_fresh_threshold_recross_creates_new_attention_but_restart_does_not_duplicate(
+    tmp_path,
+) -> None:
+    async def scenario() -> None:
+        accounting_path = tmp_path / "recross-accounting.sqlite3"
+        notification_path = tmp_path / "recross-notifications.sqlite3"
+        recipient = RecipientRef(RecipientType.USER, new_id("user"))
+        project_id = new_id("project")
+        accounting = AccountingService(SQLiteUsageStore(accounting_path))
+        budget = UsageBudget(
+            metric_type="storage.bytes.current",
+            unit="bytes",
+            scope_type="project",
+            scope_id=project_id,
+            limit=100.0,
+            warning_fraction=0.8,
+            action=BudgetAction.NOTIFY,
+            owner_type=recipient.type.value,
+            owner_id=recipient.id,
+        )
+        accounting.put_budget(budget)
+        kernel, events = _kernel()
+        control_plane = ControlPlane(
+            kernel=kernel,
+            events=events,
+            accounting_service=accounting,
+            notification_state_path=notification_path,
+        )
+
+        def current(quantity: float) -> UsageRecord:
+            return UsageRecord(
+                metric_type="storage.bytes.current",
+                unit="bytes",
+                quality=MeasurementQuality.MEASURED,
+                source="storage-provider",
+                quantity=quantity,
+                scope=UsageScope(project_id=project_id),
+                aggregation_mode=AggregationMode.LATEST,
+            )
+
+        accounting.record(current(100.0))
+        first_tick = await control_plane.run_notification_runtime_once()
+        first_history = await control_plane.notification_service.list(
+            NotificationQuery(recipient=recipient, include_archived=True)
+        )
+        assert first_tick.reminder_notifications == 1
+        assert len(first_history) == 1
+        assert first_history[0].summary["threshold_generation"] == 1
+
+        accounting.record(current(0.0))
+        assert accounting.store.get_threshold_level(budget.id) is None
+        accounting.record(current(100.0))
+        second_tick = await control_plane.run_notification_runtime_once()
+        second_history = await control_plane.notification_service.list(
+            NotificationQuery(recipient=recipient, include_archived=True)
+        )
+        assert second_tick.reminder_notifications == 1
+        assert len(second_history) == 2
+        assert {item.summary["threshold_generation"] for item in second_history} == {1, 2}
+        assert len({item.aggregation_key for item in second_history}) == 2
+
+        restarted_accounting = AccountingService(SQLiteUsageStore(accounting_path))
+        restarted_kernel, restarted_events = _kernel()
+        restarted = ControlPlane(
+            kernel=restarted_kernel,
+            events=restarted_events,
+            accounting_service=restarted_accounting,
+            notification_state_path=notification_path,
+        )
+        restart_tick = await restarted.run_notification_runtime_once()
+        after_restart = await restarted.notification_service.list(
+            NotificationQuery(recipient=recipient, include_archived=True)
+        )
+        assert restart_tick.reminder_notifications == 0
+        assert len(after_restart) == 2
 
     asyncio.run(scenario())

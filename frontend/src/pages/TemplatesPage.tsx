@@ -277,6 +277,11 @@ export function TemplateDetailPage({
     await mutate(() => client.publish(template.id, template.current_revision));
   };
 
+  const activateUntrusted = async () => {
+    if (!template) return;
+    await mutate(() => client.activateUntrusted(template.id, template.current_revision));
+  };
+
   const revise = async (event: FormEvent) => {
     event.preventDefault();
     if (!template) return;
@@ -305,6 +310,7 @@ export function TemplateDetailPage({
     if (
       !template
       || template.revision.state !== "published"
+      || template.revision.content.provenance.trust === "untrusted"
       || !preview?.applicable
       || preview.source.revision !== template.revision.revision
     ) {
@@ -345,6 +351,7 @@ export function TemplateDetailPage({
   const requirements = revision.content.requirements;
   const canApplyPreview =
     revision.state === "published"
+    && revision.content.provenance.trust !== "untrusted"
     && preview?.applicable === true
     && preview.source.revision === revision.revision;
 
@@ -379,9 +386,23 @@ export function TemplateDetailPage({
           <Detail label="Provider agnostic">{revision.content.compatibility.provider_agnostic ? "yes" : "no"}</Detail>
           <Detail label="Orchestrator agnostic">{revision.content.compatibility.orchestrator_agnostic ? "yes" : "no"}</Detail>
         </dl>
+        {revision.state === "published" && revision.content.provenance.trust === "untrusted" ? (
+          <div className="state state-warning" role="status">
+            <strong>Explicit activation required</strong>
+            <p>
+              This published revision is untrusted. Review it, then activate it to create a new
+              trusted revision before normal apply is enabled.
+            </p>
+          </div>
+        ) : null}
         <div className="button-row">
           {revision.state === "draft" ? (
             <button disabled={busy} onClick={() => void publish()}>Publish revision</button>
+          ) : null}
+          {revision.state === "published" && revision.content.provenance.trust === "untrusted" ? (
+            <button disabled={busy} onClick={() => void activateUntrusted()}>
+              Validate and activate revision
+            </button>
           ) : null}
           <button disabled={busy} onClick={() => void cloneOrFork("clone")}>Clone</button>
           <button disabled={busy} onClick={() => void cloneOrFork("fork")}>Fork</button>
@@ -426,6 +447,9 @@ export function TemplateDetailPage({
         </div>
         {revision.state === "draft" ? (
           <small>Drafts can be previewed, but must be published before they can be applied.</small>
+        ) : null}
+        {revision.content.provenance.trust === "untrusted" ? (
+          <small>Untrusted revisions may be previewed but must be activated before apply.</small>
         ) : null}
         {preview ? <PreviewReport preview={preview} /> : null}
       </Card>
@@ -505,9 +529,13 @@ function TemplateTable({ templates }: { templates: CanonicalTemplate[] }) {
   );
 }
 
-function PreviewReport({ preview }: { preview: TemplatePreview }) {
+export function PreviewReport({ preview }: { preview: TemplatePreview }) {
   const blockers = [
     ["Required capabilities", preview.missing_required_capability_ids],
+    ["Required capability versions", preview.incompatible_capability_versions],
+    ["Platform version", preview.incompatible_platform_versions],
+    ["Missing contract versions", preview.missing_contract_versions],
+    ["Contract versions", preview.incompatible_contract_versions],
     ["Plugins", preview.missing_plugin_ids],
     ["Connectors", preview.missing_connector_ids],
     ["Model policies", preview.missing_model_policy_refs],
@@ -538,6 +566,12 @@ function PreviewReport({ preview }: { preview: TemplatePreview }) {
       ) : null)}
       {preview.missing_optional_capability_ids.length ? (
         <p><strong>Optional capabilities unavailable:</strong> {preview.missing_optional_capability_ids.join(", ")}</p>
+      ) : null}
+      {preview.incompatible_optional_capability_versions.length ? (
+        <p>
+          <strong>Optional capability versions incompatible:</strong>{" "}
+          {preview.incompatible_optional_capability_versions.join(", ")}
+        </p>
       ) : null}
       {preview.missing_optional_dependencies.length ? (
         <p><strong>Optional dependencies unavailable:</strong> {preview.missing_optional_dependencies.join(", ")}</p>

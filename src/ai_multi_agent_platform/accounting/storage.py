@@ -23,7 +23,12 @@ FILE_STORAGE_METRIC = "storage.file.bytes.current"
 
 
 class FileStorageAccounting:
-    """Reconcile current durable FileProvider bytes into a point-in-time gauge."""
+    """Reconcile current durable FileProvider bytes into a project-level physical gauge.
+
+    Workspace snapshots reference canonical File records and can share the same physical
+    bytes. This reconciler therefore refuses Workspace attribution; #171 exposes separate
+    logical Workspace/Snapshot footprint metrics instead of duplicating physical storage.
+    """
 
     def __init__(self, accounting: AccountingService, provider: FileProvider) -> None:
         self._accounting = accounting
@@ -95,6 +100,7 @@ class FileStorageAccounting:
                 "provider_type": self._provider.descriptor.provider_type,
                 "ready_file_count": len(ready),
                 "listed_file_count": len(files),
+                "storage_semantics": "physical_project_bytes",
             },
         )
         self._accounting.record(usage)
@@ -103,6 +109,11 @@ class FileStorageAccounting:
 
 def _storage_scope(context: DataAccessContext, scope: UsageScope | None) -> UsageScope:
     resolved = scope or UsageScope()
+    if resolved.workspace_id is not None:
+        raise ValueError(
+            "FileProvider physical storage cannot be attributed to a Workspace; "
+            "use logical Workspace/Snapshot accounting instead"
+        )
     if resolved.project_id is not None and resolved.project_id != context.project_id:
         raise ValueError("storage accounting scope must match the FileProvider project scope")
     if context.project_id is None:

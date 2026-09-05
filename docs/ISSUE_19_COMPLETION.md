@@ -1,8 +1,8 @@
 # Issue #19 completion audit — evaluation and regression framework
 
-This document records the hardened final acceptance audit for issue #19. The original completion audit from PR #312 established the framework-level contract; PR #338 re-opened the issue and audited it against the actually composed product, then closed the remaining integration gaps.
+This document records the hardened final acceptance audit for issue #19. The original completion audit from PR #312 established the framework-level contract. PR #338 hardened the actually composed product, and the later strict post-completion audit reopened #19. PR #367 addresses the remaining exact-target, server-owned snapshot, workspace/evidence and portability gaps.
 
-The hardened implementation is provider-neutral, orchestrator-neutral and executor-neutral. The mandatory path remains deterministic and requires no paid model or evaluator service. Optional portability/distribution remains a separate concern even though the platform can now compose portability and Evaluation in the same single-node product.
+The hardened implementation is provider-neutral, orchestrator-neutral and executor-neutral. The mandatory path remains deterministic and requires no paid model or evaluator service. Distribution remains optional: EvaluationSuite assets can now use the existing #79 portability workflow, while Evaluation execution and result persistence remain independently owned.
 
 ## Hardened completion result
 
@@ -12,7 +12,7 @@ The hardened implementation is provider-neutral, orchestrator-neutral and execut
 - **Product composition: PASS**
 - **Durability/restore participation: PASS**
 - **Canonical authorization integration: PASS**
-- **Definition of Done: PASS**
+- **Definition of Done: PASS at implementation scope; merge remains gated by current-head Required Checks**
 
 ## Acceptance criteria
 
@@ -27,7 +27,7 @@ The hardened implementation is provider-neutral, orchestrator-neutral and execut
 | 7 | Results link to underlying tasks/runs/artifacts/telemetry. | PASS | `EvaluationObservation`/`EvaluationResult` retain canonical Task/Run/Artifact/telemetry evidence. First-party adapters additionally project plan/steps/events, Agent/model/provider/capability/model-call/tool-call evidence, Approval state and Distributed node/worker placement. Source-owned IDs are retained; evidence is not fabricated. |
 | 8 | Evaluators are replaceable. | PASS | Sync/async `EvaluatorLike` boundaries, safe evaluator containment and the deterministic/metric/rubric/model-judge implementations all emit the same canonical result contract. |
 | 9 | Optional model judging records evaluator identity/configuration explicitly. | PASS | `ModelJudgeEvaluator` uses canonical `ModelRuntime`; evaluator/model/provider/configuration identities are persisted explicitly and the evaluator is marked non-deterministic. |
-| 10 | Distribution/import/export is optional and separate from evaluation execution. | PASS | Evaluation has no portability dependency. The current single-node composition can host both subsystems, but Evaluation execution, persistence, CI and APIs remain independently owned. |
+| 10 | Distribution/import/export is optional and separate from evaluation execution. | PASS | Evaluation execution has no portability dependency. When portability is composed, exact EvaluationSuite versions use the existing #79 package/preview/remapping/import pipeline and mutate only through the Evaluation-owned suite service/repository. |
 
 ## Required tests
 
@@ -44,9 +44,9 @@ The hardened implementation is provider-neutral, orchestrator-neutral and execut
 | optional model-evaluator metadata | PASS | model-judge descriptor/runtime tests |
 | local/reference CI suite | PASS | `tests/test_evaluation_ci_gate.py` and the mandatory deterministic CI gate |
 
-## Product-composition hardening delivered by PR #338
+## Product-composition hardening delivered by PR #338 and PR #367
 
-The stricter product audit found that the framework contracts were complete but several capabilities were not yet fully connected to the shipped single-node product. PR #338 resolves those gaps without adding a parallel architecture.
+The stricter product audits found that the framework contracts were complete but several capabilities were not yet fully connected to the shipped single-node product. PR #338 established the durable/authenticated product foundation; PR #367 closes the later exact-target, server-owned snapshot, evidence, fixture-isolation and portability gaps without adding a parallel architecture.
 
 ### Durable single-node Evaluation
 
@@ -87,6 +87,26 @@ Canonical domain events intentionally deep-freeze nested mappings/sequences. Eva
 
 The runner adds runtime-owned exact suite/evaluator/component references to each `ConfigurationSnapshot` and can require deployment-relevant component kinds before executing a suite. Compatible caller-provided references with a more precise revision are retained; conflicting versions/revisions are rejected.
 
+### Deployment-owned custom assets and exact product targets
+
+Single-node Evaluation loads deployment-owned suite, regression-policy, aggregation-policy and optional model-judge configuration from `SingleNodeConfig.evaluation_dir` instead of exposing only the built-in reference suite. Directory fixtures are materialized as canonical File records into a fresh isolated Workspace for every attempt, and durable Run -> Workspace bindings make that isolation inspectable across restart.
+
+Agent-target cases encode an exact canonical Agent revision, selected model configuration and requested capability set into Task metadata. The normal `FirstRunAgentLifecycleBackend`/`AgentRuntime`/`ModelRuntime` path executes that binding. `AgentTargetValidatingCaseExecutor` fails closed unless the recorded AgentRun proves the declared Agent revision, model/provider and capabilities actually ran.
+
+`EvaluationTargetSnapshotEnricher` derives target configuration server-side before execution. Agent, model, provider and capability references are resolved from their owning registries, while prompt/config identity is fingerprinted from the resolved immutable Agent instructions as a SHA-256 revision. Clients therefore cannot manufacture the target snapshot by echoing arbitrary prompt/config references.
+
+### Product evidence composition
+
+Single-node Evaluation composes evidence from the same source owners used by the product. AgentRun evidence is always available when Agents are composed; Approval evidence reads the product `AuthorizationGate` approval service; Distributed evidence reads the supplied `DistributedRuntime`; Accounting and Observability evidence are attached only when their source-owned services/exporters are supplied. Evaluation never invents empty shadow authorities merely to satisfy assertions.
+
+### Canonical mutable EvaluationSuite ownership and #79 portability
+
+`EvaluationSuiteAssetRepository` is now the owning-domain mutation/persistence seam for imported exact suite versions. `SqliteEvaluationSuiteAssetRepository` stores them in the existing `evaluation.sqlite3`, while configured/built-in suites remain immutable deployment inputs. `EvaluationService` presents both sets through one suite lookup/list boundary.
+
+The existing #79 workflow now has an `evaluation_suite` codec and mutation handler. The portability resource identity is the exact `<suite_id>@<version>` reference; Agent targets are dependency-ordered and remapped through `ImportContext`; model/capability requirements remain explicit dependencies. Apply/rollback call `EvaluationService.create_suite(...)` / `delete_suite(...)` rather than writing storage directly. Existing versions conflict during preview, imported suites survive restart, compensation is checksum-bound, and a suite version referenced by durable EvaluationRun history cannot be deleted.
+
+Fixture references are represented as explicit `evaluation_fixture` dependencies. Because no canonical portable EvaluationFixture owner is currently composed, fixture-bearing cross-deployment imports fail closed rather than creating portability-private fixture persistence. This does not affect local product fixture execution through the deployment-owned fixture directory.
+
 ## End-to-end product verification
 
 `tests/test_issue_19_single_node_evaluation.py` exercises the actual authenticated single-node Control Plane rather than an isolated service fixture. It verifies that Evaluation resources are discoverable, runs the built-in deterministic reference suite through `evaluation.run`, reads the produced run/results and reconstructs the deployment to prove the Evaluation history survives restart through SQLite.
@@ -99,20 +119,17 @@ Additional hardened tests cover:
 - Agent/model/provider/capability/tool/model-call evidence;
 - Approval evidence;
 - Distributed node/worker placement evidence;
-- plan/step/event projection.
+- plan/step/event projection;
+- deployment-owned custom suite/policy loading and real Directory fixture isolation;
+- exact Agent/model/capability product targeting with server-owned prompt/config fingerprinting;
+- canonical EvaluationSuite persistence across restart;
+- #79 EvaluationSuite export/preview/import with Agent remapping, conflict detection and guarded rollback.
 
 ## CI verification
 
-The hardened implementation was tested by GitHub Actions against the then-current PR merge result containing `main@7ca49de6c6cce4ed80d52218505757b3c017735e` before the final documentation-only update. Workflow run `33980564693` passed the main `test` job with:
+PR #367 remains merge-gated by the repository's normal current-head Required Checks: Ruff format/lint, strict Mypy, full Pytest, the deterministic no-paid-service Evaluation gate, package build, single-node install smoke, frontend checks, pinned LiteLLM compatibility, CodeQL and dependency review. This audit intentionally does not freeze an older workflow-run number as final evidence while `main` is moving under parallel issue work; the PR's final GitHub checks and closure comment are authoritative for the exact merge head.
 
-- Ruff format: PASS;
-- Ruff lint: PASS;
-- strict Mypy: PASS;
-- full Pytest: **1374 passed, 3 skipped**;
-- deterministic Evaluation gate: PASS with **0 regressions**;
-- package build: PASS.
-
-The same run also passed the single-node install smoke, frontend and pinned LiteLLM compatibility checks; downstream required compatibility/security checks remain governed by normal branch protection. The branch was then explicitly merged with `main@7ca49de6c6cce4ed80d52218505757b3c017735e` so the final PR history contains the tested Portability/Security state rather than relying only on GitHub's ephemeral merge ref.
+During the final product hardening, the previous #19 Agent/model E2E blocker was isolated to the canonical Task metadata deep-freeze boundary: JSON capability lists become tuples, while the decoder originally accepted only lists. The decoder now accepts both the wire JSON list and canonical frozen tuple while preserving strict element/duplicate validation, with a regression test covering encode -> canonical Task freeze -> decode. Subsequent full-suite testing advanced past that #19 E2E; unrelated failures introduced by parallel issues are not counted as #19 acceptance failures and are revalidated again after every `main` synchronization.
 
 ## Deliverables audit
 
@@ -133,7 +150,11 @@ All declared deliverables are present:
 - canonical authorization vocabulary;
 - Task/Run/Artifact/Workspace/telemetry/accounting provenance;
 - Agent/model/provider/capability/tool/model-call, Approval, plan/event and Distributed placement evidence;
-- strict-JSON-safe persistence of canonical immutable evidence.
+- strict-JSON-safe persistence of canonical immutable evidence;
+- deployment-owned configurable suite/regression/aggregation/model-judge assets and Directory fixtures;
+- exact Agent/model/capability product targets with fail-closed runtime identity validation and server-owned prompt/config fingerprints;
+- Evaluation-owned durable exact-version Suite asset persistence/mutation;
+- existing-#79 EvaluationSuite package/preview/remapping/import integration with guarded compensation.
 
 ## Definition of Done
 
@@ -141,4 +162,4 @@ All declared deliverables are present:
 
 Significant platform, agent, model, orchestration, tool and execution changes can be measured against repeatable versioned scenarios through the canonical Evaluation runner and Control Plane/CLI surfaces. The mandatory CI profile remains deterministic and free of paid services. Product deployment can run and persist Evaluation through the authenticated single-node Control Plane, the resulting database participates in backup/restore, and source-owned behavioral evidence can be asserted without creating evaluator-private ownership of those domains.
 
-Optional model judging, portability/distribution and more advanced statistical policies remain additive capabilities and do not block the #19 framework.
+Optional model judging, portability/distribution and more advanced statistical policies remain additive capabilities and do not block Evaluation execution. The portability-audit follow-ups recorded directly on #19 are now implemented: exact EvaluationSuite versions have an Evaluation-owned durable mutation seam and can use the existing #79 package/preview/remapping/import contracts. Fixture portability remains a future owning-domain extension and intentionally fails closed today.

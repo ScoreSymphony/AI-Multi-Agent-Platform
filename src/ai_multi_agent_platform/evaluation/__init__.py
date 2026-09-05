@@ -97,6 +97,13 @@ from .service import (
     regression_policy_ref,
 )
 from .sqlite_repository import SqliteEvaluationRepository
+from .suite_assets import (
+    EvaluationSuiteAssetRepository,
+    SqliteEvaluationSuiteAssetRepository,
+    suite_checksum,
+    suite_payload,
+    suite_ref,
+)
 from .workspace import (
     EvaluationFixture,
     EvaluationFixtureResolver,
@@ -150,6 +157,7 @@ __all__ = [
     "EvaluationRunSummary",
     "EvaluationService",
     "EvaluationSuite",
+    "EvaluationSuiteAssetRepository",
     "EvaluationTrendPoint",
     "Evaluator",
     "EvaluatorDescriptor",
@@ -177,6 +185,7 @@ __all__ = [
     "SafeEvaluator",
     "SnapshotValue",
     "SqliteEvaluationRepository",
+    "SqliteEvaluationSuiteAssetRepository",
     "StaticEvaluationFixtureResolver",
     "VersionReference",
     "WorkspaceEvaluationIsolation",
@@ -194,5 +203,8 @@ __all__ = [
     "parse_regression_policy",
     "regression_policy_ref",
     "run_reference_ci_gate",
+    "suite_checksum",
+    "suite_payload",
+    "suite_ref",
     "validate_snapshot_reference_kinds",
 ]
