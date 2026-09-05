@@ -169,10 +169,10 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT | yes; integrated for #12 |
 | mcp | optional MCP transport + CI integration coverage | `==2.1.1` | `https://github.com/modelcontextprotocol/python-sdk` | MIT | yes; optional adapter recorded above |
 | litellm | optional model gateway SDK / proxy compatibility target | `==1.99.0` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed | yes; optional adapter recorded above |
+| uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause | no |
 | pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT | no |
 | mypy | static type checking | `>=1.17,<3` | `https://github.com/python/mypy` | MIT | no |
-| uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause | no |
 
 The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Architecture-significant #11/#12 dependencies are pinned directly; their transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
 
