@@ -49,8 +49,16 @@ class DoctorTransport:
         elif path.endswith("/api/v1/readiness"):
             payload = self.health
             status = self.readiness_status
+        elif path.endswith("/api/v1/nodes") or path.endswith("/api/v1/workers"):
+            payload = {
+                "error": {
+                    "code": "not_found",
+                    "message": "canonical extension is not registered",
+                }
+            }
+            status = 404
         else:
-            raise AssertionError(f"unexpected doctor path: {path}")
+            raise AssertionError(f"unexpected doctor probe path: {path}")
         return RawResponse(
             status=status,
             body=json.dumps(payload).encode("utf-8"),

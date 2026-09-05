@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from ai_multi_agent_platform.agents import AgentRunStatus, AgentRuntime
+from ai_multi_agent_platform.agents import AgentRevision, AgentRunStatus, AgentRuntime
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     decode_agent_execution_binding,
@@ -32,15 +32,58 @@ FIRST_RUN_EXECUTION_PROFILE_KEY = "onboarding.execution_profile"
 FIRST_RUN_AGENT_EXECUTION_PROFILE = "general_assistant"
 FIRST_RUN_AGENT_ID_KEY = "onboarding.agent_id"
 FIRST_RUN_WORKSPACE_ID_KEY = "onboarding.workspace_id"
+FIRST_RUN_MODEL_REQUIREMENTS = RoutingRequirements(
+    modalities=("text",),
+    self_hosted_only=True,
+)
+
+_PREFLIGHT_TASK_ID = "task_00000000-0000-4000-8000-000000000250"
+_PREFLIGHT_RUN_ID = "run_00000000-0000-4000-8000-000000000250"
+
+
+def preflight_first_run_agent(
+    agents: AgentRuntime,
+    agent_id: str,
+    *,
+    project_id: str | None,
+    workspace_id: str | None,
+) -> AgentRevision:
+    """Validate one General Assistant against the exact first-run execution requirements.
+
+    This method is deliberately side-effect-free. It uses ``AgentRuntime.prepare_agent`` so
+    readiness and execution share model/capability/task-override policy, then adds the one
+    reference-profile requirement that lives at the lifecycle seam: inline role instructions.
+    """
+
+    revision = agents.service.get_agent_revision(agent_id)
+    if revision.profile.instructions.role.content is None:
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "first-run General Assistant requires inline role instructions in the reference "
+            "execution profile",
+        )
+    agents.prepare_agent(
+        task_id=_PREFLIGHT_TASK_ID,
+        run_id=_PREFLIGHT_RUN_ID,
+        agent_id=agent_id,
+        revision=revision.revision,
+        task_model_override=FIRST_RUN_MODEL_REQUIREMENTS,
+        task_context={"objective": "first-run execution preflight"},
+        project_context={
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+        },
+    )
+    return revision
 
 
 class FirstRunAgentLifecycleBackend(LifecycleBackend):
-    """Route explicitly marked Tasks through AgentRuntime + ModelRuntime.
+    """Route first-run and explicitly bound Agent Tasks through AgentRuntime + ModelRuntime.
 
-    The original first-run onboarding profile remains backward-compatible. The same
-    backend now also consumes the generic Agent execution metadata contract so normal
-    platform features such as Evaluation can bind an exact Agent/model execution
-    without inventing a second lifecycle implementation.
+    The first-run onboarding profile keeps its stricter local/self-hosted requirements.
+    The generic Agent execution binding is platform-owned and lets features such as
+    Evaluation select an exact Agent/model/capability configuration without introducing a
+    second lifecycle implementation. Unmarked Runs are delegated unchanged.
     """
 
     def __init__(
@@ -98,12 +141,15 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                     ErrorCode.INVALID_CONFIGURATION,
                     "first-run Agent task has an invalid Workspace ID",
                 )
-            agent_revision = None
-            requested_capability_ids: tuple[str, ...] = ()
-            task_model_override: RoutingRequirements | None = RoutingRequirements(
-                modalities=("text",),
-                self_hosted_only=True,
+            revision = preflight_first_run_agent(
+                self._agents,
+                agent_id,
+                project_id=task.task.project_id,
+                workspace_id=workspace_id,
             )
+            agent_revision: int | None = revision.revision
+            requested_capability_ids: tuple[str, ...] = ()
+            task_model_override: RoutingRequirements | None = FIRST_RUN_MODEL_REQUIREMENTS
             available_capability_ids: frozenset[str] = frozenset()
             self_hosted_only = True
         else:
@@ -145,11 +191,11 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         result_id = new_id("result")
 
         try:
-            revision = self._agents.service.get_agent_revision(
+            resolved_revision = self._agents.service.get_agent_revision(
                 agent_run.agent.agent_id,
                 agent_run.agent.revision,
             )
-            instruction = revision.profile.instructions.role.content
+            instruction = resolved_revision.profile.instructions.role.content
             if instruction is None:
                 raise ContractError(
                     ErrorCode.UNSUPPORTED_CAPABILITY,

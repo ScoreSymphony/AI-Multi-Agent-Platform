@@ -49,8 +49,31 @@ class CapabilityRegistry:
                     provider_id=provider_id,
                 )
 
+        pending: dict[tuple[str, str], CapabilityRegistration] = {}
         for registration in registrations:
             key = (registration.capability.capability_id, registration.capability.version)
+            duplicate = pending.get(key)
+            if duplicate is not None:
+                if duplicate.capability != registration.capability:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        (
+                            "conflicting capability definitions returned by provider "
+                            f"{provider_id!r} for {registration.capability.capability_id!r} "
+                            f"version {registration.capability.version!r}"
+                        ),
+                        provider_id=provider_id,
+                    )
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    (
+                        "duplicate capability registration returned by provider "
+                        f"{provider_id!r} for {registration.capability.capability_id!r} "
+                        f"version {registration.capability.version!r}"
+                    ),
+                    provider_id=provider_id,
+                )
+            pending[key] = registration
             for existing in self._registrations[key]:
                 if existing.capability != registration.capability:
                     raise ContractError(
