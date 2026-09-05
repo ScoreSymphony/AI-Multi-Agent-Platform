@@ -97,10 +97,7 @@ def test_existing_automation_export_roundtrips_without_runtime_identity_or_sourc
         assert draft.content.requirements.workspace_prerequisites == ()
         assert draft.content.provenance.metadata["source_project_id"] == source_project_id
         assert draft.content.provenance.metadata["source_workspace_id"] == source_workspace_id
-        assert (
-            draft.content.provenance.metadata["source_task_project_id"]
-            == source_task_project_id
-        )
+        assert draft.content.provenance.metadata["source_task_project_id"] == source_task_project_id
         assert (
             draft.content.provenance.metadata["source_task_workspace_id"]
             == source_task_workspace_id
