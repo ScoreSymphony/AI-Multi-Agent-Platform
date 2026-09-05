@@ -59,8 +59,6 @@ def test_runtime_openapi_uses_the_same_project_move_contract() -> None:
         paths = response.body["paths"]
         assert f"/api/v1/commands/{TASK_PROJECT_MOVE_COMMAND}" in paths
         assert f"/api/v1/commands/{TASK_PROJECT_BULK_MOVE_COMMAND}" in paths
-        assert response.body["x-task-project-reassignment"]["event"] == (
-            "task.project_reassigned"
-        )
+        assert response.body["x-task-project-reassignment"]["event"] == ("task.project_reassigned")
 
     asyncio.run(scenario())
