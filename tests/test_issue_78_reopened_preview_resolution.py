@@ -105,9 +105,7 @@ def test_preview_reports_unresolved_placeholder_instead_of_forcing_materializati
                 name="Unresolved target",
                 description="Preview must report the unresolved binding",
                 template_type=TemplateType.AGENT,
-                configuration=TemplateConfiguration(
-                    payload={"project_id": "${target_project}"}
-                ),
+                configuration=TemplateConfiguration(payload={"project_id": "${target_project}"}),
                 requirements=TemplateRequirements(placeholders=("target_project",)),
                 provenance=TemplateProvenance(author="test", source="test"),
             ),
