@@ -25,7 +25,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ".[server]"
           echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
-      - name: Build clean installed deployment
+      - name: Build clean installed deployment after deferred composition fix
         run: |
           python - <<'PY'
           import tempfile
