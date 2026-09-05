@@ -35,7 +35,7 @@ Important fields:
 
 - `enabled`: explicit opt-in;
 - `base_url`: separately deployed Hermes API-server endpoint;
-- `api_key_env`: environment/secret reference only; secret values are not configuration metadata;
+- `api_key_env`: environment/secret reference only; its resolved value is sent in the HTTP Authorization bearer header and is not configuration metadata;
 - `pinned_revision`: expected upstream compatibility target;
 - request/poll/plan timeouts;
 - optional Hermes multiplex `profile`;

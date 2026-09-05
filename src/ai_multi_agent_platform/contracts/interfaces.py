@@ -92,6 +92,16 @@ class LifecycleBackend(ProviderContract):
 
 
 class ModelProvider(ProviderContract):
+    """Provider-neutral model invocation boundary.
+
+    Cancellation is cooperative and transport-neutral: cancelling the in-flight
+    async ``generate``/``stream`` consumer is the canonical cancellation signal.
+    ``ModelRuntime`` normalizes an unhandled ``asyncio.CancelledError`` to the
+    canonical ``ErrorCode.CANCELLED`` category, while adapters may perform their
+    own best-effort backend/transport cancellation before returning that error.
+    Provider-private cancellation handles must never become canonical IDs.
+    """
+
     @abstractmethod
     async def generate(self, request: ModelRequest) -> ModelResponse: ...
 
@@ -100,6 +110,7 @@ class ModelProvider(ProviderContract):
 
         Providers with native incremental output override this method. Existing providers
         remain source-compatible and produce one text delta followed by one completion event.
+        Cancelling the consumer task is the canonical cancellation signal for the stream.
         """
 
         async def iterate() -> AsyncIterator[ModelStreamEvent]:
@@ -120,6 +131,18 @@ class ModelProvider(ProviderContract):
             )
 
         return iterate()
+
+    async def list_native_models(self) -> tuple[str, ...]:
+        """List provider-native model identifiers when discovery is supported.
+
+        Providers that support native inventory discovery advertise
+        ``list_native_models`` in ``descriptor.supported_operations`` and override
+        this method. The returned identifiers remain adapter/provider data and must
+        not be used as canonical model configuration IDs. Providers without native
+        discovery return an empty tuple by default.
+        """
+
+        return ()
 
 
 class ModelRouter(ProviderContract):
