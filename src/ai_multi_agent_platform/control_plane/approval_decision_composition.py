@@ -24,9 +24,11 @@ from .conversation_current_composition import (
     AuthenticatedControlPlaneHTTP,
     ControlPlaneASGI,
     ControlPlaneHTTP,
-    build_openapi as _build_current_openapi,
 )
 from .conversation_current_composition import ControlPlane as _CurrentControlPlane
+from .conversation_current_composition import (
+    build_openapi as _build_current_openapi,
+)
 from .models import RequestContext
 
 APPROVAL_APPROVE_COMMAND = "approval.approve"
