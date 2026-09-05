@@ -138,13 +138,19 @@ class JsonModelRoutingProfileRepository:
                 ErrorCode.CONTRACT_VIOLATION,
                 "routing profile definition/revision identity mismatch",
             )
-        if definition.current_revision != expected_revision or revision.revision != expected_revision:
+        if (
+            definition.current_revision != expected_revision
+            or revision.revision != expected_revision
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "routing profile revision must advance exactly once",
                 details={"expected_revision": expected_revision},
             )
-        if definition.owner_ref != revision.owner_ref or definition.project_id != revision.project_id:
+        if (
+            definition.owner_ref != revision.owner_ref
+            or definition.project_id != revision.project_id
+        ):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "routing profile revision scope must match stable definition scope",
@@ -155,7 +161,9 @@ class JsonModelRoutingProfileRepository:
             return
         raw = cast(object, json.loads(self.path.read_text(encoding="utf-8")))
         if not isinstance(raw, dict):
-            raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile store must be an object")
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION, "routing profile store must be an object"
+            )
         if raw.get("schema_version") != ROUTING_PROFILE_STORE_SCHEMA_VERSION:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
@@ -163,21 +171,29 @@ class JsonModelRoutingProfileRepository:
             )
         profiles = raw.get("profiles")
         if not isinstance(profiles, list):
-            raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile store profiles must be a list")
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION, "routing profile store profiles must be a list"
+            )
         for raw_profile in profiles:
             if not isinstance(raw_profile, dict):
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile entry must be an object")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "routing profile entry must be an object"
+                )
             definition = _definition_from_json(raw_profile.get("definition"))
             raw_revisions = raw_profile.get("revisions")
             if not isinstance(raw_revisions, list) or not raw_revisions:
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile requires revisions")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "routing profile requires revisions"
+                )
             revisions = tuple(_revision_from_json(item) for item in raw_revisions)
             if revisions[-1].revision != definition.current_revision:
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
                     "routing profile current_revision does not match persisted history",
                 )
-            if tuple(item.revision for item in revisions) != tuple(range(1, definition.current_revision + 1)):
+            if tuple(item.revision for item in revisions) != tuple(
+                range(1, definition.current_revision + 1)
+            ):
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
                     "routing profile revisions must be contiguous from revision 1",
@@ -235,10 +251,14 @@ def _owner_to_json(owner: OwnerRef) -> dict[str, JsonValue]:
 
 def _owner_from_json(value: object) -> OwnerRef:
     if not isinstance(value, dict):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile owner_ref must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "routing profile owner_ref must be an object"
+        )
     owner_type = value.get("type")
     owner_id = value.get("id")
-    if owner_type not in {"user", "organization", "team", "service"} or not isinstance(owner_id, str):
+    if owner_type not in {"user", "organization", "team", "service"} or not isinstance(
+        owner_id, str
+    ):
         raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile owner_ref is invalid")
     return OwnerRef(
         type=cast(Literal["user", "organization", "team", "service"], owner_type),
@@ -262,7 +282,9 @@ def _requirements_to_json(value: RoutingRequirements) -> dict[str, JsonValue]:
 
 def _requirements_from_json(value: object) -> RoutingRequirements:
     if not isinstance(value, dict):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing requirements must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "routing requirements must be an object"
+        )
     try:
         return RoutingRequirements(
             explicit_model_id=_optional_string(value, "explicit_model_id"),
@@ -276,7 +298,9 @@ def _requirements_from_json(value: object) -> RoutingRequirements:
             self_hosted_only=_boolean(value, "self_hosted_only"),
         )
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, f"invalid routing requirements: {exc}") from exc
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, f"invalid routing requirements: {exc}"
+        ) from exc
 
 
 def _provenance_to_json(value: Provenance | None) -> JsonValue:
@@ -289,12 +313,20 @@ def _provenance_from_json(value: object) -> Provenance | None:
     if value is None:
         return None
     if not isinstance(value, dict):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile provenance must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "routing profile provenance must be an object"
+        )
     source = value.get("source")
     actor_ref = value.get("actor_ref")
     details = value.get("details", {})
-    if not isinstance(source, str) or (actor_ref is not None and not isinstance(actor_ref, str)) or not isinstance(details, dict):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile provenance is invalid")
+    if (
+        not isinstance(source, str)
+        or (actor_ref is not None and not isinstance(actor_ref, str))
+        or not isinstance(details, dict)
+    ):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "routing profile provenance is invalid"
+        )
     return Provenance(source=source, actor_ref=actor_ref, details=details)
 
 
@@ -313,7 +345,9 @@ def _definition_to_json(value: ModelRoutingProfileDefinition) -> dict[str, JsonV
 
 def _definition_from_json(value: object) -> ModelRoutingProfileDefinition:
     if not isinstance(value, dict):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile definition must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "routing profile definition must be an object"
+        )
     try:
         return ModelRoutingProfileDefinition(
             profile_id=_required_string(value, "profile_id"),
@@ -326,7 +360,9 @@ def _definition_from_json(value: object) -> ModelRoutingProfileDefinition:
             schema_version=_required_string(value, "schema_version"),
         )
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, f"invalid routing profile definition: {exc}") from exc
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, f"invalid routing profile definition: {exc}"
+        ) from exc
 
 
 def _revision_to_json(value: ModelRoutingProfileRevision) -> dict[str, JsonValue]:
@@ -350,10 +386,14 @@ def _revision_to_json(value: ModelRoutingProfileRevision) -> dict[str, JsonValue
 
 def _revision_from_json(value: object) -> ModelRoutingProfileRevision:
     if not isinstance(value, dict):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile revision must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "routing profile revision must be an object"
+        )
     policy = value.get("policy")
     if not isinstance(policy, dict):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "routing profile policy must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "routing profile policy must be an object"
+        )
     try:
         fallback_raw = _required_string(policy, "fallback")
         return ModelRoutingProfileRevision(
@@ -373,7 +413,9 @@ def _revision_from_json(value: object) -> ModelRoutingProfileRevision:
             schema_version=_required_string(value, "schema_version"),
         )
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, f"invalid routing profile revision: {exc}") from exc
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, f"invalid routing profile revision: {exc}"
+        ) from exc
 
 
 def _required_string(value: Mapping[str, object], key: str) -> str:
