@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ai_multi_agent_platform.connectors import Connection
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.security import (
     AuthorizationAction,
@@ -85,6 +85,7 @@ class RepositoryManagementService:
             repository_id,
             context,
             action=AuthorizationAction.CREATE,
+            project_id=operation.project_id,
             side_effect="local_write",
             payload={"managed_name": managed_name, "initialize": initialize},
         )
@@ -148,26 +149,15 @@ class RepositoryManagementService:
     ) -> tuple[RepositoryReference, ...]:
         """Discover repositories from a preconfigured hosted/self-hosted provider connection."""
 
-        resolver = self._discovery_resolver
-        if resolver is None:
-            raise ContractError(
-                ErrorCode.UNAVAILABLE,
-                "repository provider discovery is not configured for this deployment",
-                retryable=True,
-            )
-        connection, provider = await resolver(connection_id, provider_id)
-        if connection.id != connection_id or connection.provider_id != provider_id:
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "repository discovery resolver returned the wrong connection/provider binding",
-            )
-        await self._enforce_management(
+        connection, provider = await self._resolve_discovery(connection_id, provider_id)
+        operation = await self._enforce_management(
             connection_id,
             context,
             action=AuthorizationAction.READ,
+            project_id=connection.connection.project_id,
             payload={"provider_id": provider_id},
         )
-        return await provider.discover(connection, context.operation)
+        return await provider.discover(connection, operation)
 
     async def discover_and_attach(
         self,
@@ -179,25 +169,20 @@ class RepositoryManagementService:
     ) -> tuple[RepositoryReference, ...]:
         """Discover and durably attach all repositories returned by one configured provider."""
 
-        resolver = self._discovery_resolver
-        if resolver is None:
-            raise ContractError(
-                ErrorCode.UNAVAILABLE,
-                "repository provider discovery is not configured for this deployment",
-                retryable=True,
-            )
-        connection, provider = await resolver(connection_id, provider_id)
-        if connection.id != connection_id or connection.provider_id != provider_id:
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "repository discovery resolver returned the wrong connection/provider binding",
-            )
-        references = await provider.discover(connection, context.operation)
+        connection, provider = await self._resolve_discovery(connection_id, provider_id)
+        operation = await self._enforce_management(
+            connection_id,
+            context,
+            action=AuthorizationAction.READ,
+            project_id=connection.connection.project_id,
+            payload={"provider_id": provider_id, "attach": True},
+        )
+        references = await provider.discover(connection, operation)
         attached: list[RepositoryReference] = []
         for reference in references:
             await self.attach_binding(
                 RepositoryBinding(connection, reference, provider),
-                context,
+                replace(context, operation=operation),
                 adapter_configuration=adapter_configuration,
             )
             attached.append(reference)
@@ -216,6 +201,7 @@ class RepositoryManagementService:
             binding.reference.id,
             context,
             action=AuthorizationAction.CREATE,
+            project_id=binding.connection.connection.project_id,
             side_effect="local_write",
             payload={
                 "connection_id": binding.connection.id,
@@ -240,12 +226,38 @@ class RepositoryManagementService:
             repository_id,
             context,
             action=AuthorizationAction.DELETE,
+            project_id=binding.connection.connection.project_id,
             side_effect="local_write",
             payload={"delete_provider_content": False},
         )
         self._catalog.delete(repository_id)
         self._registry.unregister(repository_id)
         return binding.reference
+
+    async def _resolve_discovery(
+        self,
+        connection_id: str,
+        provider_id: str,
+    ) -> tuple[RepositoryConnection, RepositoryProvider]:
+        resolver = self._discovery_resolver
+        if resolver is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "repository provider discovery is not configured for this deployment",
+                retryable=True,
+            )
+        connection, provider = await resolver(connection_id, provider_id)
+        if connection.id != connection_id or connection.provider_id != provider_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "repository discovery resolver returned the wrong connection/provider binding",
+            )
+        if provider.provider_id != provider_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "repository discovery resolver returned a provider with the wrong provider_id",
+            )
+        return connection, provider
 
     def _register_and_persist(
         self,
@@ -271,16 +283,32 @@ class RepositoryManagementService:
         context: RepositoryCallContext,
         *,
         action: AuthorizationAction,
+        project_id: str | None = None,
         side_effect: str | None = None,
         payload: Mapping[str, JsonValue] | None = None,
-    ) -> None:
+    ) -> OperationContext:
+        requested_project_id = context.operation.project_id
+        if (
+            project_id is not None
+            and requested_project_id is not None
+            and project_id != requested_project_id
+        ):
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "repository management project scope does not match configured connection",
+            )
+        operation = (
+            replace(context.operation, project_id=project_id)
+            if project_id is not None and requested_project_id is None
+            else context.operation
+        )
         proposed = ProposedAction(
             AuthorizationContext(
                 actor=infer_actor_identity(context.actor_ref),
                 action=action,
                 resource_type=ResourceType.GENERIC,
                 resource_id=resource_id,
-                operation=context.operation,
+                operation=operation,
                 task_id=context.task_id,
                 run_id=context.run_id,
                 agent_id=context.agent_id,
@@ -298,6 +326,7 @@ class RepositoryManagementService:
                 else RiskClassification.STANDARD
             ),
         )
+        return operation
 
 
 def _managed_name(value: str) -> str:
