@@ -14,7 +14,7 @@ from ai_multi_agent_platform.data.contracts import FileProvider
 from ai_multi_agent_platform.data.models import DataAccessContext, FileState
 from ai_multi_agent_platform.domain import RunStatus, validate_id
 
-from .deterministic import ReferenceDeterministicVerifier
+from .deterministic import DeterministicVerifier
 from .gate import TaskVerificationRequirement, VerificationCompletionAuthority
 from .models import (
     ProducerIdentity,
@@ -403,7 +403,7 @@ class CanonicalVerificationRuntime:
     async def run_deterministic(
         self,
         verification_id: str,
-        verifier: ReferenceDeterministicVerifier,
+        verifier: DeterministicVerifier,
     ) -> VerificationResult:
         request = self._completion.verification.get_request(verification_id)
         return await self.submit_result(verifier.verify(request))
