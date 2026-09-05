@@ -374,8 +374,10 @@ def test_onboarding_secret_wrapper_preserves_native_streaming() -> None:
         ModelStreamEventKind.COMPLETED,
     ]
     assert [event.text_delta for event in events[:-1]] == ["secret ", "stream"]
-    assert transport.stream_headers == [{
-        "Accept": "text/event-stream",
-        "Content-Type": "application/json",
-        "Authorization": "Bearer secret-stream-token",
-    }]
+    assert transport.stream_headers == [
+        {
+            "Accept": "text/event-stream",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer secret-stream-token",
+        }
+    ]
