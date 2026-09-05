@@ -24,6 +24,7 @@ from .models import (
 )
 from .regression import RegressionEngine
 from .runner import EvaluationRunner, EvaluationRunSummary
+from .suite_assets import EvaluationSuiteAssetRepository
 
 
 def evaluation_suite_ref(suite: EvaluationSuite) -> str:
@@ -55,10 +56,13 @@ class EvaluationRunDetail:
 
 
 class EvaluationService:
-    """Configured application boundary used by Control Plane and later CLI surfaces.
+    """Application boundary for configured and durably imported Evaluation assets.
 
-    Suites and policies are deployment/configuration assets. Execution remains owned by
-    ``EvaluationRunner`` and persistence remains owned by ``EvaluationHistoryRepository``.
+    Built-in/deployment suites remain immutable configuration. Optional mutable Suite
+    versions are owned by ``EvaluationSuiteAssetRepository``; callers such as portability
+    must mutate them through this service instead of writing Evaluation-private files.
+    Execution remains owned by ``EvaluationRunner`` and run/result persistence remains
+    owned by ``EvaluationHistoryRepository``.
     """
 
     def __init__(
@@ -71,6 +75,7 @@ class EvaluationService:
         aggregation_policies: tuple[AggregationPolicy, ...] = (),
         regression_engine: RegressionEngine | None = None,
         result_aggregator: ResultAggregator | None = None,
+        suite_assets: EvaluationSuiteAssetRepository | None = None,
     ) -> None:
         self._repository = repository
         self._runner = runner
@@ -79,6 +84,19 @@ class EvaluationService:
         self._suites = self._index_suites(suites)
         self._policies = self._index_policies(policies)
         self._aggregation_policies = self._index_aggregation_policies(aggregation_policies)
+        self._suite_assets = suite_assets
+        self._validate_suite_asset_collisions()
+
+    def attach_suite_assets(self, repository: EvaluationSuiteAssetRepository) -> None:
+        """Bind the owning durable Suite store before the service is exposed northbound."""
+
+        if self._suite_assets is not None and self._suite_assets is not repository:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "evaluation suite asset repository is already configured",
+            )
+        self._suite_assets = repository
+        self._validate_suite_asset_collisions()
 
     @staticmethod
     def _index_suites(suites: tuple[EvaluationSuite, ...]) -> dict[str, EvaluationSuite]:
@@ -114,17 +132,78 @@ class EvaluationService:
             indexed[ref] = policy
         return indexed
 
+    def _validate_suite_asset_collisions(self) -> None:
+        if self._suite_assets is None:
+            return
+        collisions = sorted(
+            evaluation_suite_ref(suite)
+            for suite in self._suite_assets.list_suites()
+            if evaluation_suite_ref(suite) in self._suites
+        )
+        if collisions:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "durable evaluation suite assets shadow configured suite versions",
+                details={"suite_refs": collisions},
+            )
+
     def list_suites(self) -> tuple[EvaluationSuite, ...]:
-        return tuple(self._suites[key] for key in sorted(self._suites))
+        indexed = dict(self._suites)
+        if self._suite_assets is not None:
+            for suite in self._suite_assets.list_suites():
+                ref = evaluation_suite_ref(suite)
+                if ref in indexed:
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        f"durable evaluation suite shadows configured suite: {ref}",
+                    )
+                indexed[ref] = suite
+        return tuple(indexed[key] for key in sorted(indexed))
 
     def get_suite(self, suite_ref: str) -> EvaluationSuite:
-        try:
-            return self._suites[suite_ref]
-        except KeyError as exc:
+        configured = self._suites.get(suite_ref)
+        if configured is not None:
+            return configured
+        if self._suite_assets is not None:
+            durable = self._suite_assets.get_suite(suite_ref)
+            if durable is not None:
+                return durable
+        raise ContractError(
+            ErrorCode.NOT_FOUND,
+            f"evaluation suite not found: {suite_ref}",
+        )
+
+    def create_suite(self, suite: EvaluationSuite) -> str:
+        """Create one immutable durable Suite version and return its content checksum."""
+
+        ref = evaluation_suite_ref(suite)
+        if ref in self._suites:
             raise ContractError(
-                ErrorCode.NOT_FOUND,
-                f"evaluation suite not found: {suite_ref}",
-            ) from exc
+                ErrorCode.CONFLICT,
+                f"configured evaluation suite version already exists: {ref}",
+                details={"suite_ref": ref},
+            )
+        if self._suite_assets is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "durable evaluation suite mutation is not configured",
+            )
+        return self._suite_assets.create_suite(suite)
+
+    def delete_suite(self, suite_ref: str, *, expected_checksum: str | None = None) -> None:
+        """Compensate a durable Suite version without deleting configured or referenced state."""
+
+        if suite_ref in self._suites:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                f"configured evaluation suite cannot be deleted: {suite_ref}",
+            )
+        if self._suite_assets is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "durable evaluation suite mutation is not configured",
+            )
+        self._suite_assets.delete_suite(suite_ref, expected_checksum=expected_checksum)
 
     def get_policy(self, policy_ref: str) -> RegressionPolicy:
         try:
