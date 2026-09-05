@@ -23,7 +23,7 @@ from .behavior_evidence import (
     ApprovalRecordReader,
     DistributedRuntimeEvidenceCaseExecutor,
 )
-from .contracts import EvaluationCaseExecutor
+from .contracts import EvaluationCaseExecutor, EvaluatorLike
 from .evidence import (
     CompositeEvaluationEvidenceProvider,
     EvaluationEvidenceProvider,
@@ -217,7 +217,7 @@ def build_single_node_evaluation(
         case_executor = DistributedRuntimeEvidenceCaseExecutor(case_executor, distributed_runtime)
     case_executor = AgentRunEvidenceCaseExecutor(case_executor, agents)
 
-    evaluators: list[object] = [
+    evaluators: list[EvaluatorLike] = [
         DeterministicAssertionEvaluator(),
         MetricThresholdEvaluator(),
     ]
@@ -230,7 +230,7 @@ def build_single_node_evaluation(
     runner = EvaluationRunner(
         repository=repository,
         executor=case_executor,
-        evaluators=tuple(evaluators),  # type: ignore[arg-type]
+        evaluators=tuple(evaluators),
         isolation=isolation,
         configuration_references=(
             VersionReference(
