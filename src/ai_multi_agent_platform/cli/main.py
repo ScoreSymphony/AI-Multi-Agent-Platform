@@ -29,6 +29,7 @@ from .memory_knowledge import (
 )
 from .onboarding import add_onboarding_parser, execute_onboarding
 from .plugins import add_plugin_parser, execute_plugin
+from .portability import add_portability_parser, execute_portability
 from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
 from .search import add_search_parser, execute_search
@@ -137,6 +138,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_evaluation_parser(areas)
     add_memory_knowledge_parsers(areas)
     add_onboarding_parser(areas)
+    add_portability_parser(areas)
 
     profile = areas.add_parser("profile", help="manage non-secret target profiles")
     profile.set_defaults(area="profile")
@@ -416,6 +418,8 @@ def _execute(
         return CommandResult(execute_memory(args, client, _require_confirmation))
     if args.area == "knowledge":
         return CommandResult(execute_knowledge(args, client, _require_confirmation))
+    if args.area == "portability":
+        return CommandResult(execute_portability(args, client))
     if args.area == "project":
         return _project_command(args, client, profile)
     if args.area == "workspace":

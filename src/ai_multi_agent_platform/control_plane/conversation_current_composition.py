@@ -16,6 +16,7 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.conversations import (
     RESERVED_CONVERSATION_METADATA_KEYS,
+    ContextResolvingConversationResponseProvider,
     Conversation,
     ConversationService,
     ReferenceKind,
@@ -99,6 +100,12 @@ class _KnowledgeConversationCommandHandlers(ConversationCommandHandlers):
     ) -> dict[str, JsonValue]:
         metadata = payload.get("metadata")
         if isinstance(metadata, Mapping):
+            if "target" in metadata:
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    "conversation target metadata is platform-managed; use the top-level target",
+                    details={"field": "target"},
+                )
             reserved = sorted(RESERVED_CONVERSATION_METADATA_KEYS.intersection(metadata))
             if reserved:
                 raise ContractError(
@@ -106,7 +113,38 @@ class _KnowledgeConversationCommandHandlers(ConversationCommandHandlers):
                     "conversation retention metadata is platform-managed",
                     details={"fields": cast(JsonValue, reserved)},
                 )
-        return await super().create_conversation(context, resource_ref, payload)
+        return await super().create_conversation(
+            context,
+            resource_ref,
+            self._pin_agent_revisions(payload),
+        )
+
+    def _pin_agent_revisions(self, payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        """Snapshot omitted Agent/Team revisions before the durable Conversation is created."""
+
+        service = self._agent_service
+        if service is None:
+            return payload
+        normalized = dict(payload)
+        for field_name in ("target", "default_agent"):
+            raw = normalized.get(field_name)
+            if not isinstance(raw, Mapping):
+                continue
+            kind = raw.get("kind")
+            resource_id = raw.get("id")
+            revision = raw.get("revision")
+            if revision is not None or not isinstance(resource_id, str):
+                continue
+            if kind == "agent":
+                revision = service.get_agent_revision(resource_id).revision
+            elif kind == "agent_team":
+                revision = service.get_team_revision(resource_id).revision
+            else:
+                continue
+            resolved = dict(raw)
+            resolved["revision"] = revision
+            normalized[field_name] = cast(JsonValue, resolved)
+        return normalized
 
     async def _validate_reference(
         self,
@@ -176,7 +214,15 @@ class ControlPlane(_ConversationControlPlane, _NotificationControlPlane):
             **kwargs,
         )
         self._conversation_knowledge_provider = conversation_knowledge_provider
-        self.conversation_response_provider = conversation_response_provider
+        self.conversation_response_provider = (
+            ContextResolvingConversationResponseProvider(
+                conversation_response_provider,
+                file_provider=conversation_file_provider,
+                knowledge_provider=conversation_knowledge_provider,
+            )
+            if conversation_response_provider is not None
+            else None
+        )
 
         if conversation_service is not None:
             # The intermediate Conversation composition installs the canonical handlers.
