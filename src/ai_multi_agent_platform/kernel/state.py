@@ -198,6 +198,36 @@ def reduce_task(events: tuple[PlatformEvent, ...], task_id: str) -> TaskState:
             )
             continue
 
+        if event.event_type == "task.project_reassigned" and event.subject_id == task_id:
+            source_project_id = _optional_string(event, "source_project_id")
+            destination_project_id = _optional_string(event, "destination_project_id")
+            if source_project_id != task.project_id:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "task.project_reassigned source does not match projected Task scope",
+                )
+            if event.project_id != source_project_id:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "task.project_reassigned event must remain attributed to its source Project",
+                )
+            if destination_project_id is not None:
+                try:
+                    validate_id(destination_project_id, "project")
+                except ValueError as exc:
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "task.project_reassigned contains an invalid destination Project ID",
+                    ) from exc
+            task = replace(
+                task,
+                project_id=destination_project_id,
+                updated_at=_timestamp(event),
+                causation_id=event.causation_id,
+                provenance=_event_provenance(event),
+            )
+            continue
+
         target = _TASK_EVENT_STATUS.get(event.event_type)
         if target is not None and event.subject_id == task_id:
             task = _transition_task(task, target, event)
