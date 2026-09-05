@@ -45,6 +45,13 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
         "onboarding-commands", "db/onboarding-commands.json", "json", False, "onboarding"
     ),
     DurableStoreSpec("templates", "db/templates.json", "json", False, "templates"),
+    DurableStoreSpec(
+        "capability-assignments",
+        "db/capability-assignments.json",
+        "json",
+        False,
+        "capability-assignments",
+    ),
 )
 
 
