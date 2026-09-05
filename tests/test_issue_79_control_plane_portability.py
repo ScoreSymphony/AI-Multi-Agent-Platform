@@ -122,7 +122,9 @@ def _stack() -> tuple[ControlPlaneHTTP, dict[str, _DemoResource]]:
         try:
             return source[resource_id]
         except KeyError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, f"demo resource not found: {resource_id}") from exc
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"demo resource not found: {resource_id}"
+            ) from exc
 
     sources.register("demo.resource", load_demo)
     mutations = ImportMutationRegistry()
@@ -160,9 +162,7 @@ def test_control_plane_binds_export_preview_and_import_without_client_owned_plan
     async def scenario() -> None:
         http, target = _stack()
 
-        manifest = await http.handle(
-            HTTPRequest(method="GET", path="/api/v1", headers=_headers())
-        )
+        manifest = await http.handle(HTTPRequest(method="GET", path="/api/v1", headers=_headers()))
         assert manifest.status == 200
         assert isinstance(manifest.body, dict)
         resources = manifest.body["resources"]
@@ -184,9 +184,7 @@ def test_control_plane_binds_export_preview_and_import_without_client_owned_plan
                 headers=_headers("portable-export-1"),
                 body={
                     "resource_ref": "portability",
-                    "resources": [
-                        {"resource_type": "demo.resource", "resource_id": "demo_source"}
-                    ],
+                    "resources": [{"resource_type": "demo.resource", "resource_id": "demo_source"}],
                     "metadata": {"purpose": "control-plane-test"},
                 },
             )
@@ -286,9 +284,7 @@ def test_portability_commands_require_normal_idempotency_boundary() -> None:
                 headers=_headers(),
                 body={
                     "resource_ref": "portability",
-                    "resources": [
-                        {"resource_type": "demo.resource", "resource_id": "demo_source"}
-                    ],
+                    "resources": [{"resource_type": "demo.resource", "resource_id": "demo_source"}],
                 },
             )
         )
