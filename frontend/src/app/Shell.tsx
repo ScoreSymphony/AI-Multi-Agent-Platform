@@ -18,6 +18,7 @@ import { LoadingState } from "../components/States";
 import { PermissionHintsProvider } from "../security/permissions";
 import { navigation } from "./navigation";
 import { AppLink, matchPath, useRouter } from "./router";
+import { templateManifestState } from "./templateManifest";
 import {
   AgentDetailPage,
   AgentsPage,
@@ -576,7 +577,9 @@ function ManifestResourcePage({
   resource: string;
   children: ReactNode;
 }) {
-  const resourceState = manifestResourceState(state, manifest, resource);
+  const resourceState = resource === "templates"
+    ? templateManifestState(state, manifest)
+    : manifestResourceState(state, manifest, resource);
   if (resourceState === "loading") return <LoadingState label={`Checking ${label} availability…`} />;
   if (resourceState === "unavailable") {
     return <UnavailablePage item={{ label, apiResource: resource }} manifest={manifest} />;
