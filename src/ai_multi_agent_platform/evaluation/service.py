@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .aggregation import (
     AggregatedEvaluationResult,
@@ -144,7 +146,7 @@ class EvaluationService:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "durable evaluation suite assets shadow configured suite versions",
-                details={"suite_refs": collisions},
+                details={"suite_refs": cast(JsonValue, collisions)},
             )
 
     def list_suites(self) -> tuple[EvaluationSuite, ...]:
