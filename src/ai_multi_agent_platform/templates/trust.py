@@ -28,9 +28,7 @@ def require_trusted_for_apply(revisions: Iterable[TemplateRevision]) -> None:
     """Reject an apply graph containing any exact untrusted revision."""
 
     blocked = tuple(
-        item
-        for item in revisions
-        if item.content.provenance.trust is TemplateTrust.UNTRUSTED
+        item for item in revisions if item.content.provenance.trust is TemplateTrust.UNTRUSTED
     )
     if not blocked:
         return
@@ -38,9 +36,7 @@ def require_trusted_for_apply(revisions: Iterable[TemplateRevision]) -> None:
         ErrorCode.FORBIDDEN,
         "untrusted Template revisions require explicit validation and activation before apply",
         details={
-            "untrusted_templates": [
-                f"{item.template_id}@{item.revision}" for item in blocked
-            ]
+            "untrusted_templates": [f"{item.template_id}@{item.revision}" for item in blocked]
         },
     )
 
