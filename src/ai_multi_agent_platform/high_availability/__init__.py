@@ -18,6 +18,7 @@ from .contracts import (
     ReconciliationResult,
     StaleFencingToken,
 )
+from .reconciliation import DistributedRuntimeFailoverReconciler
 from .reference import InMemoryCoordinationProvider
 from .service import ControlPlaneFailoverService
 
@@ -32,6 +33,7 @@ __all__ = [
     "CoordinationProvider",
     "CoordinationState",
     "CoordinationUnavailable",
+    "DistributedRuntimeFailoverReconciler",
     "FailoverReconciler",
     "FencingToken",
     "InMemoryCoordinationProvider",
