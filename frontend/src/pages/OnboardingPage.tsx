@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { BrowserSessionClient, type AuthenticatedActor } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
 import {
@@ -15,7 +9,12 @@ import {
   type OnboardingState,
   type OnboardingStatus,
 } from "../api/onboarding";
-import type { APImanifest, CanonicalModel, JsonValue } from "../api/types";
+import type {
+  APImanifest,
+  CanonicalModel,
+  CanonicalWorkspaceIdentity,
+  JsonValue,
+} from "../api/types";
 import { AppLink } from "../app/router";
 import {
   CanonicalId,
@@ -37,7 +36,8 @@ const STATE_COPY: Record<OnboardingState, { title: string; detail: string }> = {
   },
   needs_workspace: {
     title: "Create a workspace",
-    detail: "Create a canonical Workspace inside the Project that will contain the first Assistant task.",
+    detail:
+      "Create a canonical Workspace inside the Project that will contain the first Assistant task.",
   },
   needs_general_assistant: {
     title: "Create the editable General Assistant",
@@ -47,7 +47,7 @@ const STATE_COPY: Record<OnboardingState, { title: string; detail: string }> = {
   needs_selection: {
     title: "Choose the execution path",
     detail:
-      "More than one executable canonical path exists. Select the Project, Workspace and General Assistant IDs for this first task.",
+      "More than one executable canonical path exists. Select the General Assistant whose canonical Project/Workspace binding should run the first task.",
   },
   ready_for_task: {
     title: "Run the first task",
@@ -121,10 +121,11 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
   );
 
   if (loading && status === null) return <LoadingState label="Loading first-run state…" />;
-  if (loadError && status === null) return <ErrorState error={loadError} onRetry={() => void load()} />;
+  if (loadError && status === null) {
+    return <ErrorState error={loadError} onRetry={() => void load()} />;
+  }
   if (status === null) return <LoadingState label="Loading first-run state…" />;
 
-  const stateCopy = STATE_COPY[status.state];
   const providerIds = Array.from(
     new Set(
       models
@@ -203,10 +204,11 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
     await perform(
       "clone-agent",
       async () => {
+        const workspace = await client.getWorkspace(requiredText(form, "workspace_id"));
+        const scope = generalAssistantCloneScope(workspace, status);
         const name = optionalText(form, "name");
         await onboarding.cloneGeneralAssistant({
-          project_id: requiredText(form, "project_id"),
-          workspace_id: requiredText(form, "workspace_id"),
+          ...scope,
           ...(name ? { name } : {}),
         });
       },
@@ -262,11 +264,7 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
 
       <Card title="Current first-run state">
         <div className="detail-header">
-          <div>
-            <StatusBadge value={status.state} />
-            <h3>{stateCopy.title}</h3>
-            <p>{stateCopy.detail}</p>
-          </div>
+          <OnboardingStateSummary status={status} />
           <button className="secondary" disabled={loading} onClick={() => void load()}>
             {loading ? "Refreshing…" : "Refresh status"}
           </button>
@@ -275,7 +273,10 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
       </Card>
 
       <div className="metrics">
-        <Metric label="Usable local/self-hosted models" value={status.usable_golden_path_model_count} />
+        <Metric
+          label="Usable local/self-hosted models"
+          value={status.usable_golden_path_model_count}
+        />
         <Metric label="Projects" value={status.project_count} />
         <Metric label="Workspaces" value={status.workspace_count} />
         <Metric label="Executable assistants" value={status.executable_general_assistant_count} />
@@ -386,7 +387,10 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
           {!status.starter_catalog_installed ? (
             <div className="state state-warning">
               <strong>The standard Agent catalog is not installed yet.</strong>
-              <p>Bootstrap installs the bundled canonical definitions; it does not create a user-owned Assistant until you clone it.</p>
+              <p>
+                Bootstrap installs the bundled canonical definitions; it does not create a
+                user-owned Assistant until you clone it.
+              </p>
               <button
                 className="primary"
                 disabled={!bootstrapAvailable || busy === "bootstrap-agents"}
@@ -398,7 +402,6 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
             </div>
           ) : (
             <GeneralAssistantCloneForm
-              projectIds={status.candidate_project_ids}
               workspaceIds={status.candidate_workspace_ids}
               busy={busy === "clone-agent"}
               available={cloneAvailable}
@@ -444,9 +447,18 @@ export function OnboardingPage({ client, onboarding, session, manifest }: Onboar
       <Card title="Safety and provider policy">
         <ul>
           <li>Local and self-hosted model configurations are distinct from remote configurations.</li>
-          <li>Remote/paid provider auto-selection: <strong>{String(status.automatic_paid_provider_selection)}</strong>.</li>
-          <li>Secret values are never entered here; credential-bearing endpoints use only canonical SecretReference metadata.</li>
-          <li>All mutations pass through BrowserSession CSRF handling and Control Plane idempotency keys.</li>
+          <li>
+            Remote/paid provider auto-selection:{" "}
+            <strong>{String(status.automatic_paid_provider_selection)}</strong>.
+          </li>
+          <li>
+            Secret values are never entered here; credential-bearing endpoints use only canonical
+            SecretReference metadata.
+          </li>
+          <li>
+            All mutations pass through BrowserSession CSRF handling and Control Plane idempotency
+            keys.
+          </li>
         </ul>
       </Card>
     </div>
@@ -495,6 +507,19 @@ export function buildConfigureModelInput(form: FormData): ConfigureOnboardingMod
   };
 }
 
+export function generalAssistantCloneScope(
+  workspace: CanonicalWorkspaceIdentity,
+  status: OnboardingStatus,
+): { project_id: string; workspace_id: string } {
+  if (!status.candidate_workspace_ids.includes(workspace.id)) {
+    throw new Error("Workspace must be one of the canonical onboarding candidates.");
+  }
+  if (!status.candidate_project_ids.includes(workspace.project_id)) {
+    throw new Error("Workspace Project must be one of the canonical onboarding candidates.");
+  }
+  return { project_id: workspace.project_id, workspace_id: workspace.id };
+}
+
 export function buildFirstRunTaskInput(form: FormData, status: OnboardingStatus): FirstRunTaskInput {
   const input: FirstRunTaskInput = {
     objective: requiredText(form, "objective"),
@@ -505,7 +530,6 @@ export function buildFirstRunTaskInput(form: FormData, status: OnboardingStatus)
   for (const [field, candidates] of [
     ["project_id", status.candidate_project_ids],
     ["workspace_id", status.candidate_workspace_ids],
-    ["agent_id", status.candidate_agent_ids],
   ] as const) {
     const selected = optionalText(form, field);
     if (selected) {
@@ -515,15 +539,36 @@ export function buildFirstRunTaskInput(form: FormData, status: OnboardingStatus)
       input[field] = selected;
     } else if (candidates.length === 1) {
       input[field] = candidates[0];
-    } else if (status.state === "needs_selection" && candidates.length > 1) {
-      throw new Error(`Select an explicit ${field.replace("_id", "")} before starting the first task.`);
     }
+  }
+
+  const selectedAgent = optionalText(form, "agent_id");
+  if (selectedAgent) {
+    if (!status.candidate_agent_ids.includes(selectedAgent)) {
+      throw new Error("agent_id must be one of the executable onboarding candidates.");
+    }
+    input.agent_id = selectedAgent;
+  } else if (status.candidate_agent_ids.length === 1) {
+    input.agent_id = status.candidate_agent_ids[0];
+  } else if (status.state === "needs_selection" && status.candidate_agent_ids.length > 1) {
+    throw new Error("Select an explicit agent before starting the first task.");
   }
   return input;
 }
 
 export function onboardingStatePresentation(state: OnboardingState) {
   return STATE_COPY[state];
+}
+
+export function OnboardingStateSummary({ status }: { status: OnboardingStatus }) {
+  const stateCopy = STATE_COPY[status.state];
+  return (
+    <div>
+      <StatusBadge value={status.state} />
+      <h3>{stateCopy.title}</h3>
+      <p>{stateCopy.detail}</p>
+    </div>
+  );
 }
 
 function ModelSetupForm({
@@ -578,19 +623,19 @@ function ModelSetupForm({
           <label>Version<input name="secret_version" /></label>
         </div>
       </fieldset>
-      <button className="primary" disabled={busy}>{busy ? "Validating…" : "Validate and save model"}</button>
+      <button className="primary" disabled={busy}>
+        {busy ? "Validating…" : "Validate and save model"}
+      </button>
     </form>
   );
 }
 
 function GeneralAssistantCloneForm({
-  projectIds,
   workspaceIds,
   busy,
   available,
   onSubmit,
 }: {
-  projectIds: string[];
   workspaceIds: string[];
   busy: boolean;
   available: boolean;
@@ -599,15 +644,20 @@ function GeneralAssistantCloneForm({
   if (!available) {
     return <UnavailableAction text="The standard-agent.clone command is unavailable in this deployment." />;
   }
-  if (!projectIds.length || !workspaceIds.length) {
-    return <UnavailableAction text="Onboarding did not return a Project/Workspace scope for the General Assistant clone." />;
+  if (!workspaceIds.length) {
+    return <UnavailableAction text="Onboarding did not return a Workspace scope for the General Assistant clone." />;
   }
   return (
     <form className="form-grid" onSubmit={onSubmit}>
-      <CanonicalSelect label="Project" name="project_id" values={projectIds} />
       <CanonicalSelect label="Workspace" name="workspace_id" values={workspaceIds} />
+      <div className="context-summary">
+        <span>Project binding</span>
+        <strong>derived from the canonical Workspace</strong>
+      </div>
       <label>Name (optional)<input name="name" placeholder="General Assistant" /></label>
-      <button className="primary" disabled={busy}>{busy ? "Creating…" : "Create editable General Assistant"}</button>
+      <button className="primary" disabled={busy}>
+        {busy ? "Creating…" : "Create editable General Assistant"}
+      </button>
     </form>
   );
 }
@@ -625,16 +675,27 @@ function FirstTaskForm({
     <form className="stack" onSubmit={onSubmit}>
       {status.state === "needs_selection" ? (
         <div className="form-grid">
-          <SelectionSelect label="Project" name="project_id" values={status.candidate_project_ids} />
-          <SelectionSelect label="Workspace" name="workspace_id" values={status.candidate_workspace_ids} />
-          <SelectionSelect label="General Assistant" name="agent_id" values={status.candidate_agent_ids} />
+          <SelectionSelect
+            label="Executable General Assistant"
+            name="agent_id"
+            values={status.candidate_agent_ids}
+          />
+          <div className="context-summary">
+            <span>Scope binding</span>
+            <strong>resolved from the selected canonical Agent</strong>
+          </div>
         </div>
       ) : null}
       <div className="form-grid">
         <label>Task title (optional)<input name="title" placeholder="First General Assistant Task" /></label>
-        <label>Objective<input name="objective" required defaultValue="Return one short local response." /></label>
+        <label>
+          Objective
+          <input name="objective" required defaultValue="Return one short local response." />
+        </label>
       </div>
-      <button className="primary" disabled={busy}>{busy ? "Running…" : "Run first canonical Task"}</button>
+      <button className="primary" disabled={busy}>
+        {busy ? "Running…" : "Run first canonical Task"}
+      </button>
     </form>
   );
 }
@@ -644,7 +705,11 @@ function SelectionSelect({ label, name, values }: { label: string; name: string;
   return (
     <label>
       {label}
-      <select name={name} defaultValue={values.length === 1 ? values[0] : ""} required={values.length > 1}>
+      <select
+        name={name}
+        defaultValue={values.length === 1 ? values[0] : ""}
+        required={values.length > 1}
+      >
         {values.length > 1 ? <option value="">Select…</option> : null}
         {values.map((value) => <option key={value} value={value}>{value}</option>)}
       </select>
@@ -679,9 +744,15 @@ function Blockers({ blockers }: { blockers: Array<Record<string, JsonValue>> }) 
       <strong>Existing General Assistant configuration is not executable yet.</strong>
       {blockers.map((blocker, index) => (
         <div key={`${String(blocker.agent_id ?? "agent")}-${index}`}>
-          <p>{typeof blocker.message === "string" ? blocker.message : "Execution preflight failed."}</p>
+          <p>
+            {typeof blocker.message === "string"
+              ? blocker.message
+              : "Execution preflight failed."}
+          </p>
           <small>
-            {typeof blocker.code === "string" ? `Code ${blocker.code}` : "Canonical preflight blocker"}
+            {typeof blocker.code === "string"
+              ? `Code ${blocker.code}`
+              : "Canonical preflight blocker"}
             {typeof blocker.agent_id === "string" ? ` · Agent ${blocker.agent_id}` : ""}
           </small>
         </div>
@@ -691,7 +762,9 @@ function Blockers({ blockers }: { blockers: Array<Record<string, JsonValue>> }) 
 }
 
 function ModelHealthTable({ models }: { models: CanonicalModel[] }) {
-  const local = models.filter((model) => model.location === "local" || model.location === "self_hosted");
+  const local = models.filter(
+    (model) => model.location === "local" || model.location === "self_hosted",
+  );
   if (!local.length) return null;
   return (
     <div className="table-wrap">
@@ -712,7 +785,7 @@ function ModelHealthTable({ models }: { models: CanonicalModel[] }) {
   );
 }
 
-function FirstResult({ result }: { result: FirstRunTaskResult }) {
+export function FirstResult({ result }: { result: FirstRunTaskResult }) {
   return (
     <Card title="First canonical result">
       <div className="metrics">
@@ -759,6 +832,8 @@ function optionalInteger(form: FormData, field: string): number | undefined {
   const value = optionalText(form, field);
   if (value === undefined) return undefined;
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) throw new Error(`${field} must be a positive integer.`);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${field} must be a positive integer.`);
+  }
   return parsed;
 }
