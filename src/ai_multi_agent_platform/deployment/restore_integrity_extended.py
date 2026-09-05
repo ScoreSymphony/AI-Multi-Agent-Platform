@@ -177,7 +177,8 @@ def _validate_workspace_provider(
         base = snapshots.get(base_snapshot_id)
         if base is None or str(base["workspace_id"]) != workspace_id:
             raise RestoreValidationError(
-                f"workspace provider {workspace_id} references missing base snapshot {base_snapshot_id}"
+                f"workspace provider {workspace_id} references missing base snapshot "
+                f"{base_snapshot_id}"
             )
         _validate_workspace_sources(
             _json_array(row["source_refs_json"], f"workspace {workspace_id} source_refs"),
@@ -429,8 +430,8 @@ def _validate_verification(
             )
         if missing_projects:
             raise RestoreValidationError(
-                f"verification policy {policy.policy_id}@{policy.version} references missing projects "
-                f"{sorted(missing_projects)!r}"
+                f"verification policy {policy.policy_id}@{policy.version} references missing "
+                f"projects {sorted(missing_projects)!r}"
             )
         for agent_id in policy.scope.agent_ids:
             _require_agent(
