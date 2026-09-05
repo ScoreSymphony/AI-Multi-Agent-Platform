@@ -60,7 +60,7 @@ def test_output_change_is_not_committed_if_verification_invalidation_fails(
         task = await kernel.create_task(
             idempotency_key=f"crash-safe:{attachment}:create",
             title="Crash-safe verification invalidation",
-            objective="Never commit changed output while an old verification binding remains accepted",
+            objective="Never commit changed output while stale verification remains accepted",
             owner_type="user",
             owner_id="issue-86",
         )
