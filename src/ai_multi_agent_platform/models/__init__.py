@@ -23,6 +23,7 @@ from .routing_profile_repository import (
     JsonModelRoutingProfileRepository,
     ModelRoutingProfileRepository,
 )
+from .routing_profile_resolution import ModelRoutingProfileResolver
 from .routing_profile_service import ModelRoutingProfileService
 from .routing_profiles import (
     MODEL_ROUTING_PROFILE_SCHEMA_VERSION,
@@ -66,6 +67,7 @@ __all__ = [
     "ModelRoutingProfilePolicy",
     "ModelRoutingProfileRef",
     "ModelRoutingProfileRepository",
+    "ModelRoutingProfileResolver",
     "ModelRoutingProfileRevision",
     "ModelRoutingProfileService",
     "ModelRuntime",
