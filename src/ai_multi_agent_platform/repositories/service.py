@@ -70,6 +70,14 @@ class RepositoryRegistry:
             )
         self._bindings[binding.reference.id] = binding
 
+    def unregister(self, repository_id: str) -> RepositoryBinding:
+        """Detach one canonical repository route without deleting provider-owned content."""
+
+        binding = self._bindings.pop(repository_id, None)
+        if binding is None:
+            raise ContractError(ErrorCode.NOT_FOUND, f"repository not found: {repository_id}")
+        return binding
+
     def resolve(self, repository_id: str) -> RepositoryBinding:
         binding = self._bindings.get(repository_id)
         if binding is None:
