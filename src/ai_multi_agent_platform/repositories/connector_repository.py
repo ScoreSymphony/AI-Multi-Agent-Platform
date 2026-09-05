@@ -21,6 +21,7 @@ from .contracts import RepositoryProvider
 from .models import (
     RepositoryCapability,
     RepositoryCommit,
+    RepositoryCommitInfo,
     RepositoryConnection,
     RepositoryDiff,
     RepositoryOperation,
@@ -43,7 +44,7 @@ _ACTIONS: dict[RepositoryOperation, str] = {
     RepositoryOperation.COMMIT: "repository.commit",
     RepositoryOperation.PUSH: "repository.push",
 }
-_REF_ACTIONS = {"repository.branches", "repository.tags"}
+_REF_ACTIONS = {"repository.branches", "repository.tags", "repository.commits"}
 
 
 class ConnectorRepositoryProvider(RepositoryProvider):
@@ -184,6 +185,43 @@ class ConnectorRepositoryProvider(RepositoryProvider):
             context,
         )
         return _strings(output.get("tags"), "repository.tags", "tags")
+
+    async def commits(
+        self,
+        repository: RepositoryReference,
+        context: OperationContext,
+        *,
+        revision: str = "HEAD",
+        limit: int = 50,
+    ) -> tuple[RepositoryCommitInfo, ...]:
+        action = "repository.commits"
+        if limit < 1 or limit > 100:
+            raise ValueError("commit history limit must be between 1 and 100")
+        output = await self._mapping_action(
+            repository,
+            RepositoryOperation.INSPECT_REFS,
+            action,
+            {"revision": _nonblank(revision, "revision"), "limit": limit},
+            context,
+        )
+        raw_commits = output.get("commits")
+        if not isinstance(raw_commits, list):
+            raise _invalid(action, "commits must be an array")
+        commits: list[RepositoryCommitInfo] = []
+        for index, raw in enumerate(raw_commits):
+            if not isinstance(raw, dict):
+                raise _invalid(action, f"commits[{index}] must be an object")
+            commits.append(
+                RepositoryCommitInfo(
+                    repository_id=repository.id,
+                    revision=_revision(raw.get("revision"), action, "revision"),
+                    message=_string(raw, "message", action, allow_empty=True),
+                    parent_revisions=_revisions(
+                        raw.get("parent_revisions"), action, "parent_revisions"
+                    ),
+                )
+            )
+        return tuple(commits)
 
     async def status(
         self,
