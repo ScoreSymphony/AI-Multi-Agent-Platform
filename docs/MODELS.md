@@ -64,6 +64,20 @@ Issue #5 introduced the baseline `ModelRequest.requirements` mapping before the 
 
 This preserves the existing provider contract while #10 incrementally introduces richer canonical request/response structures.
 
+## Streaming
+
+`ModelProvider.stream(...)` yields provider-neutral `ModelResponseChunk` values.
+`ModelRuntime.stream(...)` performs the same deterministic route selection as a
+non-streaming invocation, replaces the provider-native model reference with the
+canonical configuration ID and retains the native reference only in namespaced
+adapter metadata. Providers without native chunk support use the contract's
+single-final-chunk fallback.
+
+The local OpenAI-compatible adapter supports native Server-Sent Events and
+translates them into these chunks. The Conversation response provider forwards
+the chunks to its existing provider-neutral SSE surface without retaining a
+provider-native session or buffering the complete response.
+
 ## Control Plane inventory
 
 The versioned Control Plane exposes the canonical model inventory without turning provider-native APIs into northbound contracts:
@@ -82,6 +96,6 @@ Inventory mutations require the Control Plane idempotency key. Provider construc
 
 ## Issue #10 completion state
 
-The #10 baseline now includes the distinct provider, registry and router contracts; stable canonical model configuration IDs; persistent reference storage; deterministic capability/location/health routing; rich canonical request/response types; local OpenAI-compatible execution; timeout/cancellation/error normalization; configuration examples; model/provider Control Plane inventory; and end-to-end/contract coverage.
+The #10 baseline now includes the distinct provider, registry and router contracts; stable canonical model configuration IDs; persistent reference storage; deterministic capability/location/health routing; rich canonical request/response and streaming types; local OpenAI-compatible execution and streaming; timeout/cancellation/error normalization; configuration examples; model/provider Control Plane inventory; and end-to-end/contract coverage.
 
 The baseline remains local-first and does not require any recurring paid AI/API service. Optional gateways and additional commercial or local providers remain replaceable follow-up adapters.

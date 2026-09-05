@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from time import perf_counter, time
 from types import MappingProxyType
@@ -28,6 +28,7 @@ from ai_multi_agent_platform.contracts import (
     ModelProvider,
     ModelRequest,
     ModelResponse,
+    ModelResponseChunk,
     ProviderDescriptor,
 )
 
@@ -39,6 +40,14 @@ class HttpJsonResponse:
     status_code: int
     payload: JsonValue
     headers: Mapping[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class HttpSseEvent:
+    """One decoded Server-Sent Event from an OpenAI-compatible endpoint."""
+
+    status_code: int
+    data: str
 
 
 class OpenAICompatibleTransport(Protocol):
@@ -53,6 +62,16 @@ class OpenAICompatibleTransport(Protocol):
         payload: Mapping[str, JsonValue] | None,
         timeout_seconds: float,
     ) -> HttpJsonResponse: ...
+
+    def stream_sse(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        payload: Mapping[str, JsonValue],
+        timeout_seconds: float,
+    ) -> AsyncIterator[HttpSseEvent]: ...
 
 
 class UrllibOpenAICompatibleTransport:
@@ -75,6 +94,45 @@ class UrllibOpenAICompatibleTransport:
             payload,
             timeout_seconds,
         )
+
+    def stream_sse(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        payload: Mapping[str, JsonValue],
+        timeout_seconds: float,
+    ) -> AsyncIterator[HttpSseEvent]:
+        async def events() -> AsyncIterator[HttpSseEvent]:
+            body = json.dumps(dict(payload), separators=(",", ":")).encode("utf-8")
+            http_request = request.Request(
+                url,
+                data=body,
+                headers=dict(headers),
+                method=method,
+            )
+            try:
+                response = await asyncio.to_thread(
+                    request.urlopen,
+                    http_request,
+                    timeout=timeout_seconds,
+                )
+            except error.HTTPError as exc:
+                raw = exc.read().decode("utf-8", errors="replace")
+                yield HttpSseEvent(status_code=exc.code, data=raw)
+                return
+
+            try:
+                while True:
+                    raw_line = await asyncio.to_thread(response.readline)
+                    if not raw_line:
+                        return
+                    line = raw_line.decode("utf-8", errors="replace").strip()
+                    if line.startswith("data:"):
+                        yield HttpSseEvent(status_code=response.status, data=line[5:].strip())
+            finally:
+                await asyncio.to_thread(response.close)
 
     @staticmethod
     def _request_json_sync(
@@ -171,18 +229,19 @@ class OpenAICompatibleModelProvider(ModelProvider):
         return ProviderDescriptor(
             provider_id=self.config.provider_id,
             provider_type="openai-compatible-model",
-            supported_operations=("generate", "health", "list_native_models"),
+            supported_operations=("generate", "stream", "health", "list_native_models"),
             capabilities=(
                 Capability(
                     name="model.openai-compatible.chat",
                     kind=CapabilityKind.MODEL,
-                    supported_operations=("generate",),
+                    supported_operations=("generate", "stream"),
                     modalities=("text",),
                     features=(
                         "local-first",
                         "self-hosted",
                         "tool-calling",
                         "structured-output",
+                        "streaming",
                     ),
                 ),
             ),
@@ -339,6 +398,134 @@ class OpenAICompatibleModelProvider(ModelProvider):
                 AdapterMetadata(
                     namespace="model-protocol",
                     values=protocol_values,
+                ),
+            ),
+        )
+
+    async def stream(self, request_data: ModelRequest) -> AsyncIterator[ModelResponseChunk]:
+        canonical_model_id = self._canonical_model_id(request_data)
+        try:
+            native_model = self.config.models[canonical_model_id]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.MODEL_UNAVAILABLE,
+                f"model is not configured for provider: {canonical_model_id}",
+                provider_id=self.config.provider_id,
+                details={"model_config_id": canonical_model_id},
+            ) from exc
+
+        payload: dict[str, JsonValue] = {
+            "model": native_model,
+            "messages": self._messages(request_data),
+            "stream": True,
+        }
+        self._copy_generation_parameters(request_data, payload)
+        self._copy_tools(request_data, payload)
+        self._copy_response_expectation(request_data, payload)
+
+        timeout_seconds = request_data.context.control.timeout_seconds or self.config.timeout_seconds
+        emitted_final = False
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async for event in self.transport.stream_sse(
+                    "POST",
+                    f"{self.config.base_url.rstrip('/')}/chat/completions",
+                    headers=self._headers(),
+                    payload=payload,
+                    timeout_seconds=timeout_seconds,
+                ):
+                    self._raise_for_status(HttpJsonResponse(event.status_code, None))
+                    if event.data == "[DONE]":
+                        if not emitted_final:
+                            yield self._stream_chunk(
+                                request_data,
+                                canonical_model_id,
+                                native_model,
+                                "",
+                                is_final=True,
+                            )
+                        return
+
+                    try:
+                        body = json.loads(event.data)
+                    except json.JSONDecodeError as exc:
+                        raise self._invalid_response("stream event is not valid JSON") from exc
+                    if not isinstance(body, dict):
+                        raise self._invalid_response("stream event must be a JSON object")
+                    choices = body.get("choices")
+                    if not isinstance(choices, list) or not choices:
+                        raise self._invalid_response("stream event must contain choices")
+                    first = choices[0]
+                    if not isinstance(first, dict):
+                        raise self._invalid_response("first stream choice must be an object")
+                    delta = first.get("delta", {})
+                    if not isinstance(delta, dict):
+                        raise self._invalid_response("stream choice delta must be an object")
+                    content = delta.get("content", "")
+                    if not isinstance(content, str):
+                        raise self._invalid_response("stream choice content must be text")
+                    finish_reason = first.get("finish_reason")
+                    if finish_reason is not None and not isinstance(finish_reason, str):
+                        raise self._invalid_response("stream finish_reason must be text")
+                    is_final = finish_reason is not None
+                    if content or is_final:
+                        yield self._stream_chunk(
+                            request_data,
+                            canonical_model_id,
+                            native_model,
+                            content,
+                            is_final=is_final,
+                        )
+                    emitted_final = emitted_final or is_final
+        except asyncio.CancelledError as exc:
+            raise ContractError(
+                ErrorCode.CANCELLED,
+                "model stream was cancelled",
+                provider_id=self.config.provider_id,
+            ) from exc
+        except TimeoutError as exc:
+            raise ContractError(
+                ErrorCode.TIMEOUT,
+                "model stream timed out",
+                retryable=True,
+                provider_id=self.config.provider_id,
+            ) from exc
+        except OSError as exc:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "model provider endpoint is unavailable",
+                retryable=True,
+                provider_id=self.config.provider_id,
+                adapter_metadata=(
+                    AdapterMetadata(
+                        namespace="openai-compatible",
+                        values={"exception_type": type(exc).__name__},
+                    ),
+                ),
+            ) from exc
+
+    def _stream_chunk(
+        self,
+        request_data: ModelRequest,
+        canonical_model_id: str,
+        native_model: str,
+        text: str,
+        *,
+        is_final: bool,
+    ) -> ModelResponseChunk:
+        return ModelResponseChunk(
+            request_id=request_data.request_id,
+            text=text,
+            model_ref=canonical_model_id,
+            is_final=is_final,
+            adapter_metadata=(
+                AdapterMetadata(
+                    namespace="openai-compatible",
+                    values={
+                        "provider_native_model": native_model,
+                        "correlation_id": request_data.context.correlation_id,
+                        "status": "success",
+                    },
                 ),
             ),
         )

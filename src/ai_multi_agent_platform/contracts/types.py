@@ -287,6 +287,26 @@ class ModelResponse:
 
 
 @dataclass(frozen=True, slots=True)
+class ModelResponseChunk:
+    """One provider-neutral incremental result from a model invocation."""
+
+    request_id: str
+    text: str
+    model_ref: str
+    is_final: bool = False
+    usage: dict[str, JsonValue] = field(default_factory=dict)
+    adapter_metadata: tuple[AdapterMetadata, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.request_id.strip():
+            raise ValueError("model response chunk request_id must not be blank")
+        if not self.model_ref.strip():
+            raise ValueError("model response chunk model_ref must not be blank")
+        if not self.text and not self.is_final:
+            raise ValueError("only final model response chunks may have empty text")
+
+
+@dataclass(frozen=True, slots=True)
 class ModelSelection:
     """Typed model-router result without exposing provider SDK objects."""
 

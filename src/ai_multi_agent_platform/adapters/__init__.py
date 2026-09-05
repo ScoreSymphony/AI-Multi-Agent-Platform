@@ -26,6 +26,7 @@ from .litellm import (
 )
 from .openai_compatible import (
     HttpJsonResponse,
+    HttpSseEvent,
     OpenAICompatibleModelProvider,
     OpenAICompatibleProviderConfig,
     OpenAICompatibleTransport,
@@ -49,6 +50,7 @@ __all__ = [
     "HermesRuntimeMode",
     "HermesRunSnapshot",
     "HttpJsonResponse",
+    "HttpSseEvent",
     "LiteLLMMode",
     "LiteLLMModelProvider",
     "LiteLLMProviderConfig",

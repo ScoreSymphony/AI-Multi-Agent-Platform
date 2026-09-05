@@ -62,34 +62,35 @@ class ModelRuntimeConversationResponseProvider:
                 agent_requirements,
                 request,
             )
-            response = await self._runtime.generate_canonical(
-                CanonicalModelRequest(
-                    request_id=request.request_id,
-                    context=OperationContext(
-                        correlation_id=request.correlation_id,
-                        causation_id=request.source_message_id,
-                        project_id=request.project_id,
-                    ),
-                    messages=_model_history(request.history),
-                    system_instruction=system_instruction,
-                    model_config_id=model_config_id,
-                    agent_id=agent_id,
-                    routing_requirements=routing_requirements,
-                )
-            )
-            yield ConversationResponseChunk(
-                ConversationResponseChunkKind.ACTIVITY,
-                "Response generated through the canonical model runtime.",
-                model_config_id=response.model_config_id,
+            model_request = CanonicalModelRequest(
+                request_id=request.request_id,
+                context=OperationContext(
+                    correlation_id=request.correlation_id,
+                    causation_id=request.source_message_id,
+                    project_id=request.project_id,
+                ),
+                messages=_model_history(request.history),
+                system_instruction=system_instruction,
+                model_config_id=model_config_id,
+                agent_id=agent_id,
+                routing_requirements=routing_requirements,
             )
             emitted = False
-            for block in response.content:
-                if block.kind is ModelContentKind.TEXT and block.text:
+            announced = False
+            async for chunk in self._runtime.stream(model_request.to_contract_request()):
+                if not announced:
+                    announced = True
+                    yield ConversationResponseChunk(
+                        ConversationResponseChunkKind.ACTIVITY,
+                        "Response streaming through the canonical model runtime.",
+                        model_config_id=chunk.model_ref,
+                    )
+                if chunk.text:
                     emitted = True
                     yield ConversationResponseChunk(
                         ConversationResponseChunkKind.TEXT,
-                        block.text,
-                        model_config_id=response.model_config_id,
+                        chunk.text,
+                        model_config_id=chunk.model_ref,
                     )
             if not emitted:
                 raise ContractError(

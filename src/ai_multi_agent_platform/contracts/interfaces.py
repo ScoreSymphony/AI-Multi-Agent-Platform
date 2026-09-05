@@ -24,6 +24,7 @@ from .types import (
     KnowledgeQuery,
     ModelRequest,
     ModelResponse,
+    ModelResponseChunk,
     ModelSelection,
     NodeDescriptor,
     OperationContext,
@@ -93,6 +94,18 @@ class LifecycleBackend(ProviderContract):
 class ModelProvider(ProviderContract):
     @abstractmethod
     async def generate(self, request: ModelRequest) -> ModelResponse: ...
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelResponseChunk]:
+        """Yield a single final chunk when an adapter lacks native streaming support."""
+        response = await self.generate(request)
+        yield ModelResponseChunk(
+            request_id=response.request_id,
+            text=response.text,
+            model_ref=response.model_ref,
+            is_final=True,
+            usage=response.usage,
+            adapter_metadata=response.adapter_metadata,
+        )
 
 
 class ModelRouter(ProviderContract):
