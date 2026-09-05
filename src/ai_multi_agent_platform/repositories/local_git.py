@@ -16,6 +16,7 @@ from .capabilities import LOCAL_GIT_CAPABILITIES
 from .contracts import RepositoryProvider
 from .models import (
     RepositoryCommit,
+    RepositoryCommitInfo,
     RepositoryConnection,
     RepositoryDiff,
     RepositoryReference,
@@ -189,6 +190,50 @@ class LocalGitRepositoryProvider(RepositoryProvider):
         self._require_repository(repository)
         del context
         return self._lines("tag", "--list")
+
+    async def commits(
+        self,
+        repository: RepositoryReference,
+        context: OperationContext,
+        *,
+        revision: str = "HEAD",
+        limit: int = 50,
+    ) -> tuple[RepositoryCommitInfo, ...]:
+        self._require_repository(repository)
+        del context
+        if not revision.strip():
+            raise ValueError("revision must not be blank")
+        if limit < 1:
+            raise ValueError("commit history limit must be positive")
+        resolved = self._text("rev-parse", "--verify", f"{revision}^{{commit}}").strip()
+        raw = self._run(
+            "log",
+            f"--max-count={limit}",
+            "--format=%H%x00%P%x00%B%x00%x1e",
+            resolved,
+        ).stdout.decode("utf-8", errors="replace")
+        commits: list[RepositoryCommitInfo] = []
+        for record in raw.split("\x1e"):
+            value = record.strip("\n\r\x00")
+            if not value:
+                continue
+            fields = value.split("\x00", 2)
+            if len(fields) != 3:
+                raise ContractError(
+                    ErrorCode.INVALID_PROVIDER_RESPONSE,
+                    "Git commit history returned an invalid record",
+                    provider_id=self.provider_id,
+                )
+            commit_sha, parent_text, message = fields
+            commits.append(
+                RepositoryCommitInfo(
+                    repository_id=repository.id,
+                    revision=commit_sha.strip(),
+                    message=message.rstrip("\n"),
+                    parent_revisions=tuple(parent_text.split()) if parent_text.strip() else (),
+                )
+            )
+        return tuple(commits)
 
     async def status(
         self,
