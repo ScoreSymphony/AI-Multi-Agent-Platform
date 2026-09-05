@@ -398,6 +398,11 @@ def build_single_node_deployment(
             capability.capability_id
             for capability in capabilities.inventory_capabilities(include_unavailable=False)
         ),
+        capability_versions=lambda: (
+            (capability.capability_id, capability.version)
+            for capability in capabilities.inventory_capabilities(include_unavailable=False)
+        ),
+        platform_version=__version__,
     )
     register_template_control_plane(
         control_plane,
