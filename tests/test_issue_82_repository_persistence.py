@@ -2,8 +2,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-import ai_multi_agent_platform.repositories as repositories
-
 
 _INPUT_REVISION = "1" * 40
 _OUTPUT_REVISION = "2" * 40
@@ -14,6 +12,11 @@ def _id(kind: str) -> str:
 
 
 def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path) -> None:
+    from ai_multi_agent_platform.repositories import (
+        RepositoryRunProvenance,
+        SqliteRepositoryProvenanceStore,
+    )
+
     path = tmp_path / "repository-provenance.sqlite3"
     run_id = _id("run")
     task_id = _id("task")
@@ -23,7 +26,7 @@ def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path
     provider_resource_id = _id("external_resource")
     recorded_at = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
-    first = repositories.RepositoryRunProvenance(
+    first = RepositoryRunProvenance(
         run_id=run_id,
         task_id=task_id,
         repository_id=repository_id,
@@ -34,15 +37,15 @@ def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path
         provider_resource_ids=(provider_resource_id,),
         recorded_at=recorded_at,
     )
-    store = repositories.SqliteRepositoryProvenanceStore(path)
+    store = SqliteRepositoryProvenanceStore(path)
     store.record(first)
     store.record(first)
 
-    restarted = repositories.SqliteRepositoryProvenanceStore(path)
+    restarted = SqliteRepositoryProvenanceStore(path)
     assert restarted.get(run_id, repository_id) == first
     assert restarted.for_run(run_id) == (first,)
 
-    updated = repositories.RepositoryRunProvenance(
+    updated = RepositoryRunProvenance(
         run_id=run_id,
         task_id=task_id,
         repository_id=repository_id,
@@ -57,6 +60,6 @@ def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path
     )
     restarted.upsert(updated)
 
-    second_restart = repositories.SqliteRepositoryProvenanceStore(path)
+    second_restart = SqliteRepositoryProvenanceStore(path)
     assert second_restart.get(run_id, repository_id) == updated
     assert second_restart.for_run(run_id) == (updated,)
