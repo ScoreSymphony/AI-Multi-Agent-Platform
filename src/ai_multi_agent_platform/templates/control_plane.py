@@ -8,7 +8,12 @@ from typing import Protocol, cast
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
-from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_object
+from ai_multi_agent_platform.control_plane.models import (
+    OwnerType,
+    PageQuery,
+    RequestContext,
+    json_object,
+)
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.workspaces import WorkspaceProvider
 
@@ -248,12 +253,18 @@ class TemplateCommandHandlers:
         automation_id = _required_string(payload, "automation_id")
         if self.scope_access is not None:
             source = await self.automation_exporter.automations.get_automation(automation_id)
+            owner_type = source.identity.owner_type
+            if owner_type not in {"user", "organization", "team", "service"}:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Automation owner type is not a canonical owner type",
+                )
             await self.scope_access.authorize(
                 context,
                 "template.create-from-automation",
                 source.id,
                 owner_ref=OwnerRef(
-                    type=source.identity.owner_type,
+                    type=cast(OwnerType, owner_type),
                     id=source.identity.owner_id,
                 ),
                 project_id=source.project_id,
