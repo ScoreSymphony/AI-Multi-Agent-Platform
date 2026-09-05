@@ -61,7 +61,7 @@ def _publish(
     application: TemplateApplicationService,
     configuration: TemplateConfiguration,
     *,
-    requirements: TemplateRequirements = TemplateRequirements(),
+    requirements: TemplateRequirements | None = None,
 ) -> TemplateRevision:
     draft = application.templates.create_draft(
         owner_ref=OWNER,
@@ -70,7 +70,7 @@ def _publish(
             description="Reject forbidden fields introduced only during materialization",
             template_type=TemplateType.AGENT,
             configuration=configuration,
-            requirements=requirements,
+            requirements=TemplateRequirements() if requirements is None else requirements,
             provenance=TemplateProvenance(author="test", source="test"),
         ),
     )

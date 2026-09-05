@@ -425,8 +425,10 @@ def build_single_node_deployment(
         models=models,
         scopes=scopes,
         platform_version=__version__,
+        capabilities=capabilities,
         templates=templates.repository,
         evaluation=evaluation_composition.service,
+        evaluation_fixture_exists=evaluation_composition.fixture_exists,
     )
 
     control_plane = ControlPlane(

@@ -20,6 +20,7 @@ from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     encode_agent_execution_binding,
 )
+from ai_multi_agent_platform.agents.models import AgentExecutionSpec
 from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.agents.runtime import AgentRuntime
 from ai_multi_agent_platform.contracts import OperationContext
@@ -27,6 +28,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider, FileRecord
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.models import ModelRegistry, ModelRuntime, RoutingRequirements
+from ai_multi_agent_platform.security import PathSecurityError, resolve_within
 from ai_multi_agent_platform.workspaces import (
     WorkspaceFile,
     WorkspaceSourceKind,
@@ -162,6 +164,31 @@ def parse_agent_evaluation_target(case: EvaluationCase) -> AgentEvaluationTarget
     )
 
 
+def _prepare_agent_evaluation_target(
+    agents: AgentRuntime,
+    target: AgentEvaluationTarget,
+) -> AgentExecutionSpec:
+    override = (
+        None
+        if target.model_config_id is None
+        else RoutingRequirements(
+            explicit_model_id=target.model_config_id,
+            modalities=("text",),
+        )
+    )
+    return agents.prepare_agent(
+        task_id=_EVALUATION_PREFLIGHT_TASK_ID,
+        run_id=_EVALUATION_PREFLIGHT_RUN_ID,
+        agent_id=target.agent_id,
+        revision=target.agent_revision,
+        task_model_override=override,
+        requested_capability_ids=target.capability_ids,
+        available_capability_ids=(
+            frozenset(target.capability_ids) if agents.capability_registry is None else frozenset()
+        ),
+    )
+
+
 def evaluation_task_metadata(
     case: EvaluationCase,
     execution_context: EvaluationExecutionContext,
@@ -189,10 +216,12 @@ class AgentTargetValidatingCaseExecutor:
         self,
         executor: EvaluationCaseExecutor,
         agents: AgentRepository,
+        agent_runtime: AgentRuntime,
         models: ModelRegistry,
     ) -> None:
         self._executor = executor
         self._agents = agents
+        self._agent_runtime = agent_runtime
         self._models = models
 
     async def execute_case(
@@ -202,13 +231,18 @@ class AgentTargetValidatingCaseExecutor:
         attempt: EvaluationAttempt,
         execution_context: EvaluationExecutionContext,
     ) -> EvaluationObservation:
+        target = parse_agent_evaluation_target(case)
+        expected_spec = (
+            None
+            if target is None
+            else _prepare_agent_evaluation_target(self._agent_runtime, target)
+        )
         observation = await self._executor.execute_case(
             case=case,
             attempt=attempt,
             execution_context=execution_context,
         )
-        target = parse_agent_evaluation_target(case)
-        if target is None:
+        if target is None or expected_spec is None:
             return observation
         if observation.run_id is None:
             raise ValueError("agent-target evaluation did not produce a canonical Run ID")
@@ -237,26 +271,20 @@ class AgentTargetValidatingCaseExecutor:
             raise ValueError(
                 "AgentRun provider evidence conflicts with the selected model configuration"
             )
-        missing_capabilities = set(target.capability_ids) - set(record.capability_ids)
-        if missing_capabilities:
+        if record.selected_model_config_id != expected_spec.selected_model_config_id:
             raise ValueError(
-                "evaluated AgentRun is missing declared target capabilities: "
-                + ", ".join(sorted(missing_capabilities))
+                "evaluated model configuration differs from the server-resolved target"
             )
-        declared_versions = {
-            reference.ref_id: reference.version
-            for reference in target.snapshot_references
-            if reference.kind == "capability"
-        }
-        for capability_id in target.capability_ids:
-            if capability_id not in declared_versions:
-                continue
-            actual_version = record.capability_versions.get(capability_id)
-            if actual_version != declared_versions[capability_id]:
-                raise ValueError(
-                    "evaluated capability version differs from the declared target: "
-                    f"{capability_id}"
-                )
+        if record.selected_provider_id != expected_spec.selected_provider_id:
+            raise ValueError("evaluated provider differs from the server-resolved target")
+        if tuple(record.capability_ids) != tuple(expected_spec.capability_ids):
+            raise ValueError(
+                "evaluated AgentRun capability set differs from the server-resolved target"
+            )
+        if dict(record.capability_versions) != dict(expected_spec.capability_versions):
+            raise ValueError(
+                "evaluated AgentRun capability versions differ from the server-resolved target"
+            )
         return observation
 
 
@@ -282,27 +310,7 @@ class EvaluationTargetSnapshotEnricher:
             target = parse_agent_evaluation_target(case)
             if target is None:
                 continue
-            override = (
-                None
-                if target.model_config_id is None
-                else RoutingRequirements(
-                    explicit_model_id=target.model_config_id,
-                    modalities=("text",),
-                )
-            )
-            spec = self._agents.prepare_agent(
-                task_id=_EVALUATION_PREFLIGHT_TASK_ID,
-                run_id=_EVALUATION_PREFLIGHT_RUN_ID,
-                agent_id=target.agent_id,
-                revision=target.agent_revision,
-                task_model_override=override,
-                requested_capability_ids=target.capability_ids,
-                available_capability_ids=(
-                    frozenset(target.capability_ids)
-                    if self._agents.capability_registry is None
-                    else frozenset()
-                ),
-            )
+            spec = _prepare_agent_evaluation_target(self._agents, target)
             instructions = spec.agent_revision.profile.instructions
             prompt_config_payload = {
                 "role": {
@@ -432,6 +440,15 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
         self._project_id = project_id
         self._owner_ref = owner_ref
 
+    def fixture_exists(self, fixture_id: str) -> bool:
+        """Return whether a fixture is a real directory confined beneath the configured root."""
+
+        try:
+            self._fixture_directory(fixture_id)
+        except ValueError:
+            return False
+        return True
+
     async def resolve_fixtures(
         self,
         *,
@@ -441,15 +458,28 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
         workspace_files: list[WorkspaceFile] = []
         source_refs: list[WorkspaceSourceRef] = []
         for fixture_id in case.fixtures:
-            fixture_dir = self._root / fixture_id
-            if not fixture_dir.is_dir():
-                raise ValueError(f"evaluation fixture directory not found: {fixture_id}")
-            fixture_paths = tuple(sorted(path for path in fixture_dir.rglob("*") if path.is_file()))
+            fixture_dir = self._fixture_directory(fixture_id)
+            fixture_paths: list[tuple[str, Path]] = []
+            for path in sorted(fixture_dir.rglob("*")):
+                if not path.is_file():
+                    continue
+                relative_path = path.relative_to(fixture_dir).as_posix()
+                try:
+                    resolved_path = resolve_within(
+                        fixture_dir,
+                        relative_path,
+                        must_exist=True,
+                    )
+                except (FileNotFoundError, PathSecurityError) as exc:
+                    raise ValueError(
+                        "evaluation fixture contains a path outside its configured directory: "
+                        f"{fixture_id}/{relative_path}"
+                    ) from exc
+                fixture_paths.append((relative_path, resolved_path))
             if not fixture_paths:
                 raise ValueError(f"evaluation fixture directory is empty: {fixture_id}")
             digest = hashlib.sha256()
-            for path in fixture_paths:
-                relative_path = path.relative_to(fixture_dir).as_posix()
+            for relative_path, path in fixture_paths:
                 data = path.read_bytes()
                 file_digest = hashlib.sha256(data).hexdigest()
                 digest.update(relative_path.encode("utf-8"))
@@ -485,6 +515,17 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
             files=tuple(workspace_files),
             source_refs=tuple(source_refs),
         )
+
+    def _fixture_directory(self, fixture_id: str) -> Path:
+        try:
+            fixture_dir = resolve_within(self._root, fixture_id, must_exist=True)
+        except (FileNotFoundError, PathSecurityError) as exc:
+            raise ValueError(
+                f"invalid or missing evaluation fixture directory: {fixture_id}"
+            ) from exc
+        if not fixture_dir.is_dir():
+            raise ValueError(f"evaluation fixture directory not found: {fixture_id}")
+        return fixture_dir
 
     async def _canonical_file(
         self,
