@@ -104,7 +104,7 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                 modalities=("text",),
                 self_hosted_only=True,
             )
-            available_capability_ids = frozenset()
+            available_capability_ids: frozenset[str] = frozenset()
             self_hosted_only = True
         else:
             agent_id = generic_binding.agent_id
