@@ -3,11 +3,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ai_multi_agent_platform import repositories
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.repositories import (
-    RepositoryRunProvenance,
-    SqliteRepositoryProvenanceStore,
-)
 
 
 _INPUT_REVISION = "1" * 40
@@ -24,7 +21,7 @@ def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path
     provider_resource_id = new_id("external_resource")
     recorded_at = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
-    first = RepositoryRunProvenance(
+    first = repositories.RepositoryRunProvenance(
         run_id=run_id,
         task_id=task_id,
         repository_id=repository_id,
@@ -35,15 +32,15 @@ def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path
         provider_resource_ids=(provider_resource_id,),
         recorded_at=recorded_at,
     )
-    store = SqliteRepositoryProvenanceStore(path)
+    store = repositories.SqliteRepositoryProvenanceStore(path)
     store.record(first)
     store.record(first)
 
-    restarted = SqliteRepositoryProvenanceStore(path)
+    restarted = repositories.SqliteRepositoryProvenanceStore(path)
     assert restarted.get(run_id, repository_id) == first
     assert restarted.for_run(run_id) == (first,)
 
-    updated = RepositoryRunProvenance(
+    updated = repositories.RepositoryRunProvenance(
         run_id=run_id,
         task_id=task_id,
         repository_id=repository_id,
@@ -58,6 +55,6 @@ def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path
     )
     restarted.upsert(updated)
 
-    second_restart = SqliteRepositoryProvenanceStore(path)
+    second_restart = repositories.SqliteRepositoryProvenanceStore(path)
     assert second_restart.get(run_id, repository_id) == updated
     assert second_restart.for_run(run_id) == (updated,)
