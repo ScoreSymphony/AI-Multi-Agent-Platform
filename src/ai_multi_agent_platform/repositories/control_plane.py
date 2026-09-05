@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
@@ -18,7 +20,7 @@ from .models import (
     RepositoryRevision,
 )
 from .references import collaboration_reference_from_json
-from .service import RepositoryCallContext, RepositoryService
+from .service import RepositoryBinding, RepositoryCallContext, RepositoryService
 
 REPOSITORY_COLLECTION = "repositories"
 REPOSITORY_COMMANDS = (
@@ -63,6 +65,22 @@ class RepositoryResourceService(ResourceService):
             connection_id=connection_id,
         )
         return tuple(_repository_resource(value) for value in values)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate privacy-minimized repository metadata for derived global Search.
+
+        A Search rebuild cannot invent a privileged actor. The repository registry is the
+        canonical attached-resource inventory, so rebuilding from its current bindings makes
+        detach/replacement reconstructable without invoking provider APIs or exposing adapter
+        state. Per-result Control Plane authorization is still applied by Search before counts,
+        snippets or exact existence are returned.
+        """
+
+        # RepositoryResourceService and RepositoryService are one domain boundary. Reading the
+        # internal registry here mirrors the connector search-rebuild seam while deliberately
+        # avoiding provider reads and synthetic authorization identities.
+        bindings = self._repositories._registry.list()  # noqa: SLF001
+        return tuple(_repository_search_resource(binding) for binding in bindings)
 
     async def get_resource(
         self,
@@ -453,6 +471,94 @@ def _call_context(
 
 def _repository_resource(reference: RepositoryReference) -> dict[str, JsonValue]:
     return reference.to_dict()
+
+
+def _repository_search_resource(binding: RepositoryBinding) -> dict[str, JsonValue]:
+    """Return safe canonical Repository metadata suitable for the derived Search index."""
+
+    reference = binding.reference
+    connection = binding.connection.connection
+    host = _repository_url_host(reference.external_resource.canonical_url)
+    name = _repository_search_name(binding, host)
+    revision = (
+        reference.resolved_revision
+        or reference.external_resource.revision
+        or reference.target_revision
+    )
+    aliases = tuple(
+        value
+        for value in (
+            host,
+            reference.default_branch,
+            reference.target_revision,
+            reference.resolved_revision,
+        )
+        if value is not None
+    )
+    operations = tuple(
+        capability.operation.value
+        for capability in reference.capabilities
+        if capability.supported
+    )
+    summary_parts = [f"{reference.visibility.value} repository"]
+    if host is not None:
+        summary_parts.append(f"host {host}")
+    if reference.default_branch is not None:
+        summary_parts.append(f"default branch {reference.default_branch}")
+    if revision is not None:
+        summary_parts.append(f"revision {revision}")
+
+    return {
+        "id": reference.id,
+        "type": "repository",
+        "name": name,
+        "summary": "; ".join(summary_parts),
+        "owner_type": connection.owner_type,
+        "owner_id": connection.owner_id,
+        "project_id": connection.project_id,
+        "organization_id": connection.organization_id,
+        "status": reference.visibility.value,
+        "revision": revision,
+        "aliases": list(dict.fromkeys(aliases)),
+        "capabilities": list(dict.fromkeys(operations)),
+    }
+
+
+def _repository_search_name(binding: RepositoryBinding, host: str | None) -> str:
+    connection = binding.connection.connection
+    reference = binding.reference
+    if binding.connection.local:
+        return connection.display_name
+
+    canonical_url = reference.external_resource.canonical_url
+    if canonical_url is not None and host is not None:
+        parsed = urlsplit(canonical_url)
+        path = parsed.path.rstrip("/")
+        if path:
+            candidate = path.rsplit("/", 1)[-1]
+            if candidate.endswith(".git"):
+                candidate = candidate[:-4]
+            if candidate:
+                return candidate
+
+    return connection.display_name
+
+
+def _repository_url_host(canonical_url: str | None) -> str | None:
+    if canonical_url is None:
+        return None
+    parsed = urlsplit(canonical_url)
+    if parsed.hostname is not None:
+        return parsed.hostname.lower()
+
+    # Support the common SCP-like Git form (git@host:owner/repository.git) without
+    # retaining the path or user portion. Local/file URLs intentionally produce no host.
+    if "://" not in canonical_url and "@" in canonical_url:
+        host_and_path = canonical_url.rsplit("@", 1)[-1]
+        host, separator, _ = host_and_path.partition(":")
+        if separator and host.strip():
+            return host.strip().lower()
+    return None
 
 
 def _revision_resource(revision: RepositoryRevision) -> dict[str, JsonValue]:
