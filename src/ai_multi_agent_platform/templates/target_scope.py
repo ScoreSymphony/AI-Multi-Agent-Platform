@@ -43,8 +43,11 @@ async def authorize_template_target_scopes(
     scopes encoded by reusable configuration. Scope extraction is performed from ephemeral,
     server-materialized revisions so external configuration references and bound placeholders
     cannot bypass the same canonical Project/Workspace checks as literal payload values.
-    Materialization completes for the entire graph before any authorization-dependent handler
-    can create a resource.
+
+    When a graph still has genuinely unresolved binding/reference requirements, materialization
+    is intentionally deferred so Preview can report those blockers through its canonical
+    compatibility fields. Apply remains blocked by that Preview result before any side effect.
+    Once the requirements are reported as resolved, a missing actual binding fails closed here.
     """
 
     if scope_access is None:
@@ -56,6 +59,8 @@ async def authorize_template_target_scopes(
         published_only=not allow_draft,
     )
     dependency_order, _ = application._resolve_dependency_order(root)
+    if _has_unresolved_materialization_requirements(dependency_order, environment):
+        return
     materialized_order = tuple(
         materialize_template_revision(item, environment) for item in dependency_order
     )
@@ -102,6 +107,25 @@ async def authorize_template_target_scopes(
             project_id=workspace.project_id,
             request_payload_digest=request_payload_digest,
         )
+
+
+def _has_unresolved_materialization_requirements(
+    revisions: tuple[TemplateRevision, ...],
+    environment: TemplateEnvironment,
+) -> bool:
+    for revision in revisions:
+        requirements = revision.content.requirements
+        if set(requirements.placeholders) - environment.resolved_placeholders:
+            return True
+        if (
+            set(requirements.secret_reference_placeholders)
+            - environment.resolved_secret_reference_placeholders
+        ):
+            return True
+        reference = revision.content.configuration.reference
+        if reference is not None and reference not in environment.validated_configuration_refs:
+            return True
+    return False
 
 
 def _target_scope_refs(revision: TemplateRevision) -> tuple[set[str], set[str]]:
