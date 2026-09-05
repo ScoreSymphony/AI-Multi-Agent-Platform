@@ -180,7 +180,11 @@ class UpgradePreflight:
             planned_revisions=tuple(step.revision for step in steps),
             checks=tuple(checks),
             backup_required=backup_required,
-            maintenance_required=bool(steps or request.plugin_state_migration_required),
+            maintenance_required=(
+                request.current.platform_release != request.target.platform_release
+                or bool(steps)
+                or bool(request.plugin_state_migration_required)
+            ),
         )
 
 
