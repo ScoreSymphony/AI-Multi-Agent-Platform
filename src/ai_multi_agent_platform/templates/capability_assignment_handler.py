@@ -120,9 +120,9 @@ def _configuration(revision: TemplateRevision) -> _Configuration:
             ErrorCode.INVALID_CONFIGURATION,
             "canonical capability-assignment handler requires an inline Template payload",
         )
-    data = cast(Mapping[str, object], payload)
-    _reject_unknown(data, {"target", "required", "allowed", "denied"}, "configuration")
     try:
+        data = _mapping(payload, "configuration")
+        _reject_unknown(data, {"target", "required", "allowed", "denied"}, "configuration")
         return _Configuration(
             target=_target_spec(_required_mapping(data, "target")),
             required=_rules(data, "required"),
