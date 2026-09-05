@@ -86,6 +86,7 @@ def test_authorization_uses_persisted_scope_not_caller_claim() -> None:
         assert await service.get(revision.workflow_id, context=alice) == base.get(
             revision.workflow_id
         )
+        assert await service.list_revisions(revision.workflow_id, context=alice) == (revision,)
 
         bob = WorkflowCallContext(
             operation=OperationContext(
@@ -97,6 +98,10 @@ def test_authorization_uses_persisted_scope_not_caller_claim() -> None:
         with pytest.raises(ContractError) as exc_info:
             await service.get(revision.workflow_id, context=bob)
         assert exc_info.value.code is ErrorCode.FORBIDDEN
+
+        with pytest.raises(ContractError) as revision_exc_info:
+            await service.list_revisions(revision.workflow_id, context=bob)
+        assert revision_exc_info.value.code is ErrorCode.FORBIDDEN
 
     asyncio.run(scenario())
 
