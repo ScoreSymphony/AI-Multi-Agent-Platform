@@ -126,9 +126,7 @@ class CredentialStore:
     def save(self) -> None:
         payload = {
             "version": _CREDENTIAL_STORE_VERSION,
-            "profiles": {
-                name: state.to_json() for name, state in sorted(self.profiles.items())
-            },
+            "profiles": {name: state.to_json() for name, state in sorted(self.profiles.items())},
         }
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
