@@ -158,7 +158,8 @@ def _validate_notifications(deployment: SingleNodeDeployment, index: _CurrentInd
                 "ORDER BY recipient_type, recipient_id"
             ).fetchall()
             delivery_rows = connection.execute(
-                "SELECT id, notification_id, payload FROM notification_delivery_attempts ORDER BY id"
+                "SELECT id, notification_id, payload FROM notification_delivery_attempts "
+                "ORDER BY id"
             ).fetchall()
             cursor_rows = connection.execute(
                 "SELECT event_id FROM notification_processed_events ORDER BY event_id"
