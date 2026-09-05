@@ -8,6 +8,7 @@ request; secret material is never copied into ordinary model or onboarding confi
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
+from typing import cast
 
 from ai_multi_agent_platform.configuration import SecretAccessContext, SecretProvider
 from ai_multi_agent_platform.contracts import (
@@ -98,18 +99,20 @@ class _SecretResolvingOpenAICompatibleStreamingTransport(
     def __init__(
         self,
         *,
-        delegate: OpenAICompatibleStreamingTransport,
+        delegate: OpenAICompatibleTransport,
         secret_provider: SecretProvider,
         reference: SecretReference,
         provider_id: str,
     ) -> None:
+        if not isinstance(delegate, OpenAICompatibleStreamingTransport):
+            raise TypeError("streaming secret transport requires a streaming delegate")
         super().__init__(
             delegate=delegate,
             secret_provider=secret_provider,
             reference=reference,
             provider_id=provider_id,
         )
-        self.streaming_delegate = delegate
+        self.streaming_delegate = cast(OpenAICompatibleStreamingTransport, delegate)
 
     def stream_json(
         self,
