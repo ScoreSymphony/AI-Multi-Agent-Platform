@@ -23,7 +23,7 @@ export function OnboardingCallout({ client }: { client: OnboardingClient }) {
   if (status === null || status.state === "ready_for_task") return null;
 
   return (
-    <aside className="state state-warning" aria-label="First-run onboarding">
+    <aside className="state state-warning onboarding-callout" aria-label="First-run onboarding">
       <strong>First-run setup is incomplete.</strong>
       <p>
         Current state: <code>{status.state}</code>. Continue the guided local/self-hosted setup
