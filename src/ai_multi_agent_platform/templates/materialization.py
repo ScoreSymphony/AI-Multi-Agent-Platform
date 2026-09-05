@@ -12,7 +12,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
-from typing import Protocol, cast
+from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue
@@ -22,12 +22,6 @@ from .models import TemplateConfiguration, TemplateRevision
 from .service import TemplateEnvironment
 
 _PLACEHOLDER = re.compile(r"\$\{([^{}]+)\}")
-
-
-class TemplateBindingEnvironment(Protocol):
-    placeholder_bindings: Mapping[str, FrozenJsonValue]
-    secret_reference_bindings: Mapping[str, SecretReference]
-    configuration_payloads: Mapping[str, Mapping[str, FrozenJsonValue]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,7 +66,7 @@ class MaterializingTemplateEnvironment(TemplateEnvironment):
 
 def materialize_template_revision(
     revision: TemplateRevision,
-    environment: TemplateBindingEnvironment,
+    environment: TemplateEnvironment,
 ) -> TemplateRevision:
     """Return an ephemeral revision whose configuration is ready for a canonical handler.
 
@@ -82,9 +76,13 @@ def materialize_template_revision(
     this keeps plaintext outside Template state and downstream handler inputs.
     """
 
+    placeholder_bindings = _placeholder_bindings(environment)
+    secret_reference_bindings = _secret_reference_bindings(environment)
+    configuration_payloads = _configuration_payloads(environment)
+
     configuration = revision.content.configuration
     if configuration.reference is not None:
-        payload = environment.configuration_payloads.get(configuration.reference)
+        payload = configuration_payloads.get(configuration.reference)
         if payload is None:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
@@ -103,7 +101,8 @@ def materialize_template_revision(
     secret = set(revision.content.requirements.secret_reference_placeholders)
     materialized = _materialize_value(
         source_payload,
-        environment,
+        placeholder_bindings=placeholder_bindings,
+        secret_reference_bindings=secret_reference_bindings,
         ordinary=ordinary,
         secret=secret,
         path="configuration",
@@ -125,8 +124,9 @@ def materialize_template_revision(
 
 def _materialize_value(
     value: FrozenJsonValue | Mapping[str, FrozenJsonValue],
-    environment: TemplateBindingEnvironment,
     *,
+    placeholder_bindings: Mapping[str, FrozenJsonValue],
+    secret_reference_bindings: Mapping[str, SecretReference],
     ordinary: set[str],
     secret: set[str],
     path: str,
@@ -137,7 +137,8 @@ def _materialize_value(
             {
                 str(key): _materialize_value(
                     item,
-                    environment,
+                    placeholder_bindings=placeholder_bindings,
+                    secret_reference_bindings=secret_reference_bindings,
                     ordinary=ordinary,
                     secret=secret,
                     path=f"{path}.{key}",
@@ -149,7 +150,8 @@ def _materialize_value(
         return tuple(
             _materialize_value(
                 item,
-                environment,
+                placeholder_bindings=placeholder_bindings,
+                secret_reference_bindings=secret_reference_bindings,
                 ordinary=ordinary,
                 secret=secret,
                 path=f"{path}[{index}]",
@@ -176,7 +178,7 @@ def _materialize_value(
     if exact is not None:
         name = exact.group(1)
         if name in secret:
-            reference = environment.secret_reference_bindings.get(name)
+            reference = secret_reference_bindings.get(name)
             if reference is None:
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
@@ -184,13 +186,13 @@ def _materialize_value(
                     details={"placeholder": name, "path": path},
                 )
             return cast(FrozenJsonValue, reference.to_dict())
-        if name not in environment.placeholder_bindings:
+        if name not in placeholder_bindings:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 "Template placeholder has no materialized binding",
                 details={"placeholder": name, "path": path},
             )
-        return environment.placeholder_bindings[name]
+        return placeholder_bindings[name]
 
     for match in matches:
         name = match.group(1)
@@ -200,7 +202,7 @@ def _materialize_value(
                 "SecretReference placeholders cannot be interpolated into strings",
                 details={"placeholder": name, "path": path},
             )
-        replacement = environment.placeholder_bindings.get(name)
+        replacement = placeholder_bindings.get(name)
         if not isinstance(replacement, str):
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
@@ -209,3 +211,22 @@ def _materialize_value(
             )
         value = value.replace(match.group(0), replacement)
     return value
+
+
+def _placeholder_bindings(environment: TemplateEnvironment) -> Mapping[str, FrozenJsonValue]:
+    values = getattr(environment, "placeholder_bindings", None)
+    return values if isinstance(values, Mapping) else {}
+
+
+def _secret_reference_bindings(
+    environment: TemplateEnvironment,
+) -> Mapping[str, SecretReference]:
+    values = getattr(environment, "secret_reference_bindings", None)
+    return values if isinstance(values, Mapping) else {}
+
+
+def _configuration_payloads(
+    environment: TemplateEnvironment,
+) -> Mapping[str, Mapping[str, FrozenJsonValue]]:
+    values = getattr(environment, "configuration_payloads", None)
+    return values if isinstance(values, Mapping) else {}
