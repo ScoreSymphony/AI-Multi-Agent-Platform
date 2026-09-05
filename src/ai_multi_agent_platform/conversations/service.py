@@ -225,6 +225,20 @@ class ConversationService:
             message_id=message_id,
         )
 
+    async def link_result(
+        self,
+        *,
+        conversation_id: str,
+        result_id: str,
+        message_id: str | None = None,
+    ) -> Conversation:
+        validate_id(result_id, "result")
+        return await self._link_resource(
+            conversation_id=conversation_id,
+            reference=ResourceReference(kind=ReferenceKind.RESULT, id=result_id),
+            message_id=message_id,
+        )
+
     async def _link_resource(
         self,
         *,
@@ -249,6 +263,12 @@ class ConversationService:
             updated = replace(
                 conversation,
                 artifact_ids=tuple(dict.fromkeys((*conversation.artifact_ids, reference.id))),
+                updated_at=datetime.now(UTC),
+            )
+        elif reference.kind is ReferenceKind.RESULT:
+            updated = replace(
+                conversation,
+                result_ids=tuple(dict.fromkeys((*conversation.result_ids, reference.id))),
                 updated_at=datetime.now(UTC),
             )
         else:
