@@ -5,6 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ai_multi_agent_platform.agents.repository import AgentRepository
+from ai_multi_agent_platform.capabilities import (
+    CapabilityCompatibilityRequest,
+    CapabilityRegistry,
+)
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.evaluation.service import EvaluationService
@@ -47,6 +51,7 @@ def build_agent_portability_workflow(
     models: ModelRegistry,
     scopes: ScopeStore,
     platform_version: str,
+    capabilities: CapabilityRegistry | None = None,
     templates: TemplateRepository | None = None,
     evaluation: EvaluationService | None = None,
     evaluation_fixture_exists: Callable[[str], bool] | None = None,
@@ -144,6 +149,12 @@ def build_agent_portability_workflow(
             return resource_exists(reference.resource_type, reference.resource_id)
         if requirement.kind is DependencyKind.MODEL:
             return _canonical_exists(lambda: models.get_model(requirement.identifier))
+        if requirement.kind is DependencyKind.CAPABILITY:
+            return (
+                False
+                if capabilities is None
+                else _capability_dependency_available(capabilities, requirement)
+            )
         return False
 
     preview = ImportPreviewService(
@@ -158,6 +169,77 @@ def build_agent_portability_workflow(
         platform_version=platform_version,
         source_instance_id=source_instance_id,
     )
+
+
+def _capability_dependency_available(
+    capabilities: CapabilityRegistry,
+    requirement: DependencyRequirement,
+) -> bool:
+    inventory = tuple(
+        capability
+        for capability in capabilities.inventory_capabilities()
+        if capability.capability_id == requirement.identifier
+    )
+    if not inventory:
+        return False
+
+    exact_version: str | None = None
+    minimum_version: str | None = None
+    maximum_version: str | None = None
+    if requirement.version_constraint is not None:
+        for raw_clause in requirement.version_constraint.split(","):
+            clause = raw_clause.strip()
+            if clause.startswith("==") and len(clause) > 2:
+                if (
+                    exact_version is not None
+                    or minimum_version is not None
+                    or maximum_version is not None
+                ):
+                    return False
+                exact_version = clause[2:]
+            elif clause.startswith(">=") and len(clause) > 2:
+                if exact_version is not None or minimum_version is not None:
+                    return False
+                minimum_version = clause[2:]
+            elif clause.startswith("<=") and len(clause) > 2:
+                if exact_version is not None or maximum_version is not None:
+                    return False
+                maximum_version = clause[2:]
+            else:
+                return False
+
+    compatibility = (
+        None
+        if minimum_version is None and maximum_version is None
+        else CapabilityCompatibilityRequest(
+            minimum_version=minimum_version,
+            maximum_version=maximum_version,
+        )
+    )
+    granted_permissions = frozenset(
+        permission for capability in inventory for permission in capability.required_permissions
+    )
+    worker_capabilities = frozenset(
+        worker for capability in inventory for worker in capability.required_worker_capabilities
+    )
+    try:
+        capabilities.resolve(
+            requirement.identifier,
+            version=exact_version,
+            compatibility=compatibility,
+            granted_permissions=granted_permissions,
+            available_worker_capabilities=worker_capabilities,
+        )
+    except ContractError as exc:
+        if exc.code in {
+            ErrorCode.CONFLICT,
+            ErrorCode.FORBIDDEN,
+            ErrorCode.UNAVAILABLE,
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+        }:
+            return False
+        raise
+    return True
 
 
 def _canonical_exists(loader: Callable[[], object]) -> bool:
