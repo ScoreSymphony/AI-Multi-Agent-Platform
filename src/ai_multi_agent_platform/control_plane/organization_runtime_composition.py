@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -113,7 +114,7 @@ class ControlPlane(_CurrentControlPlane):
         accounting = self._accounting_service
         if accounting is None:
             return
-        services: dict[str, ResourceService]
+        services: Mapping[str, ResourceService]
         if self._organization_service is None:
             from ai_multi_agent_platform.accounting.control_plane import (
                 accounting_resource_services,
