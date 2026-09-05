@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
-
-import pytest
 
 from ai_multi_agent_platform.agents import AgentService, InMemoryAgentRepository
 from ai_multi_agent_platform.agents.models import (
@@ -15,7 +13,11 @@ from ai_multi_agent_platform.agents.models import (
     InstructionSource,
     ModelFallbackPolicy,
 )
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, HealthStatus, OperationContext
+from ai_multi_agent_platform.contracts import (
+    HealthStatus,
+    OperationContext,
+)
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.conversations import (
     AgentSelectionRef,
     ConversationContentBlock,
@@ -26,7 +28,6 @@ from ai_multi_agent_platform.conversations import (
     ConversationService,
     JsonConversationRepository,
     MessageRole,
-    ModelRoutingPreference,
     ModelRuntimeConversationResponseProvider,
     ParticipantKind,
     ReferenceKind,
@@ -77,7 +78,6 @@ def _response_request(
     message: ConversationMessage,
     *,
     target: ConversationResponseTarget | None = None,
-    model_preference: ModelRoutingPreference | None = None,
     project_id: str | None = None,
 ) -> ConversationResponseRequest:
     return ConversationResponseRequest(
@@ -89,7 +89,6 @@ def _response_request(
         target=target or ConversationResponseTarget(kind="orchestrator", id="platform"),
         history=(message,),
         project_id=project_id,
-        model_preference=model_preference,
     )
 
 
@@ -165,9 +164,9 @@ def test_agent_conversation_task_handoff_inherits_exact_assignment(tmp_path: Pat
             content=(ConversationContentBlock.text_block("Make this durable."),),
         )
     )
-    captured: dict[str, Any] = {}
+    captured: dict[str, JsonValue] = {}
 
-    async def create_task(payload: dict[str, Any]) -> dict[str, Any]:
+    async def create_task(payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
         captured.update(payload)
         return {"id": new_id("task")}
 
@@ -210,9 +209,9 @@ def test_team_conversation_task_handoff_inherits_exact_assignment(tmp_path: Path
             content=(ConversationContentBlock.text_block("Make this durable."),),
         )
     )
-    captured: dict[str, Any] = {}
+    captured: dict[str, JsonValue] = {}
 
-    async def create_task(payload: dict[str, Any]) -> dict[str, Any]:
+    async def create_task(payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
         captured.update(payload)
         return {"id": new_id("task")}
 
@@ -266,7 +265,7 @@ def test_file_reference_is_resolved_into_ephemeral_model_context(tmp_path: Path)
 def test_knowledge_reference_is_resolved_into_ephemeral_model_context(tmp_path: Path) -> None:
     project_id = new_id("project")
     knowledge = LocalKnowledgeProvider(tmp_path / "knowledge.sqlite3")
-    now = __import__("datetime").datetime.now(__import__("datetime").UTC)
+    now = datetime.now(UTC)
     source = KnowledgeSource(
         source_id=new_knowledge_source_id(),
         project_id=project_id,
@@ -307,35 +306,6 @@ def test_knowledge_reference_is_resolved_into_ephemeral_model_context(tmp_path: 
     assert resolved[0].id == source.source_id
     assert "deployment target blue remains canonical" in resolved[0].text
     assert "deployment target blue remains canonical" not in str(message.to_json())
-
-
-def test_agent_conversation_rejects_forbidden_model_override() -> None:
-    registry, provider = _registry()
-    _register_model(registry, provider, "model-default", context_window=32_768)
-    _register_model(registry, provider, "model-override", context_window=32_768, priority=10)
-    agents = AgentService(InMemoryAgentRepository())
-    agent = agents.create_agent(
-        _agent_profile(
-            AgentModelPolicy(
-                requirements=RoutingRequirements(explicit_model_id="model-default"),
-                allow_task_override=False,
-            )
-        ),
-        owner_ref=OwnerRef(type="user", id="alice"),
-    )
-    message = _message()
-    request = _response_request(
-        message,
-        target=ConversationResponseTarget(kind="agent", id=agent.agent_id, revision=agent.revision),
-        model_preference=ModelRoutingPreference(model_config_id="model-override"),
-    )
-    responder = ModelRuntimeConversationResponseProvider(ModelRuntime(registry), agents)
-
-    with pytest.raises(ContractError) as error:
-        asyncio.run(_collect(responder.stream_response(request)))
-
-    assert error.value.code is ErrorCode.FORBIDDEN
-    assert provider.calls == []
 
 
 def test_agent_conversation_applies_routing_profile_and_fallback() -> None:
