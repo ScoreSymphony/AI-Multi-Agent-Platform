@@ -14,7 +14,7 @@ from .models import (
     WorkflowStage,
     new_workflow_id,
 )
-from .persistence import JsonWorkflowRepository, WORKFLOW_REPOSITORY_SCHEMA_VERSION
+from .persistence import WORKFLOW_REPOSITORY_SCHEMA_VERSION, JsonWorkflowRepository
 from .repository import InMemoryWorkflowRepository, WorkflowRepository
 from .service import WorkflowAdmission, WorkflowService, validate_workflow_content
 
