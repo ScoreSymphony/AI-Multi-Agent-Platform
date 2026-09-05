@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
 from .audit import VerificationAuditEvent, VerificationAuditEventType
-from .deterministic import ReferenceDeterministicVerifier
+from .deterministic import DeterministicVerifier
 from .models import (
     CompletionAssessment,
     CompletionState,
@@ -363,9 +363,14 @@ class VerificationService:
     def run_deterministic(
         self,
         verification_id: str,
-        verifier: ReferenceDeterministicVerifier,
+        verifier: DeterministicVerifier,
     ) -> VerificationResult:
         request = self.get_request(verification_id)
+        if request.requested_verifier_kind is not VerifierKind.DETERMINISTIC:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "verification request does not require deterministic verification",
+            )
         return self.submit_result(verifier.verify(request))
 
     def record_human_review(

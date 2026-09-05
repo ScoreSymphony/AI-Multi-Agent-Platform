@@ -1,9 +1,10 @@
-"""Deterministic reference verifier for canonical runtime verification."""
+"""Deterministic verifier contract and reference implementation."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
 from .models import (
     VerificationFinding,
@@ -13,6 +14,13 @@ from .models import (
     VerifierIdentity,
     VerifierKind,
 )
+
+
+@runtime_checkable
+class DeterministicVerifier(Protocol):
+    """Provider-neutral contract for one deterministic verification implementation."""
+
+    def verify(self, request: VerificationRequest) -> VerificationResult: ...
 
 
 @dataclass(frozen=True, slots=True)
