@@ -58,6 +58,7 @@ class ControlPlaneFailoverService:
             if mode is AvailabilityMode.SINGLE_NODE
             else ControlPlaneRole.STANDBY
         )
+        self._reconciling = False
         self._promotion_count = 0
         self._last_promotion_reason: str | None = None
         self._last_reconciliation: ReconciliationResult | None = None
@@ -113,6 +114,8 @@ class ControlPlaneFailoverService:
         if already_owned:
             return True
 
+        self._role = ControlPlaneRole.PROMOTING
+        self._reconciling = True
         try:
             reconciliation = await self._reconcile(
                 token=lease.token,
@@ -126,6 +129,8 @@ class ControlPlaneFailoverService:
             raise PromotionReconciliationError(
                 "promotion reconciliation failed; leadership was released"
             ) from exc
+        finally:
+            self._reconciling = False
 
         self._last_reconciliation = reconciliation
         self._promotion_count += 1
@@ -162,19 +167,27 @@ class ControlPlaneFailoverService:
             )
         if self._role is not ControlPlaneRole.ACTIVE or self._lease is None:
             raise NotLeaderError("Control Plane instance is not the active leader")
+        return await self._grant_current_lease_authority()
 
-        coordinator = self._required_coordinator()
-        try:
-            await coordinator.assert_fence(self._lease.token)
-        except (CoordinationUnavailable, StaleFencingToken):
-            self._lease = None
-            self._role = ControlPlaneRole.FENCED
-            raise
-        return AuthorityGrant(
-            instance_id=self.instance_id,
-            mode=self.mode,
-            fencing_token=self._lease.token,
-        )
+    async def require_reconciliation_authority(self) -> AuthorityGrant:
+        """Validate the narrow authority available only inside the promotion barrier.
+
+        This grant exists so reconciliation may query/cancel stale Worker ownership after the
+        candidate has acquired a fencing epoch but before public write/dispatch authority is
+        enabled. It must not be used for ordinary API commands, Automation ticks or new dispatch.
+        """
+
+        if self.mode is AvailabilityMode.SINGLE_NODE:
+            return await self.require_authority()
+        if self._role is ControlPlaneRole.ACTIVE:
+            return await self.require_authority()
+        if (
+            self._role is not ControlPlaneRole.PROMOTING
+            or not self._reconciling
+            or self._lease is None
+        ):
+            raise NotLeaderError("reconciliation authority is not currently available")
+        return await self._grant_current_lease_authority()
 
     async def step_down(self) -> None:
         """Relinquish leadership; stale or unavailable coordination still fails closed."""
@@ -192,7 +205,6 @@ class ControlPlaneFailoverService:
         try:
             await coordinator.release(token)
         except StaleFencingToken:
-            # Another epoch already owns authority. This instance is safely non-authoritative.
             return
         except CoordinationUnavailable:
             self._role = ControlPlaneRole.FENCED
@@ -219,7 +231,7 @@ class ControlPlaneFailoverService:
         try:
             state = await coordinator.inspect()
         except CoordinationUnavailable:
-            if self._role is ControlPlaneRole.ACTIVE:
+            if self._role in {ControlPlaneRole.ACTIVE, ControlPlaneRole.PROMOTING}:
                 self._role = ControlPlaneRole.FENCED
                 self._lease = None
             return ControlPlaneHAStatus(
@@ -236,7 +248,7 @@ class ControlPlaneFailoverService:
             )
 
         if (
-            self._role is ControlPlaneRole.ACTIVE
+            self._role in {ControlPlaneRole.ACTIVE, ControlPlaneRole.PROMOTING}
             and self._lease is not None
             and (
                 state.owner_instance_id != self.instance_id
@@ -257,6 +269,23 @@ class ControlPlaneFailoverService:
             promotion_count=self._promotion_count,
             last_promotion_reason=self._last_promotion_reason,
             last_reconciliation=self._last_reconciliation,
+        )
+
+    async def _grant_current_lease_authority(self) -> AuthorityGrant:
+        lease = self._lease
+        if lease is None:
+            raise NotLeaderError("Control Plane instance has no current leadership lease")
+        coordinator = self._required_coordinator()
+        try:
+            await coordinator.assert_fence(lease.token)
+        except (CoordinationUnavailable, StaleFencingToken):
+            self._lease = None
+            self._role = ControlPlaneRole.FENCED
+            raise
+        return AuthorityGrant(
+            instance_id=self.instance_id,
+            mode=self.mode,
+            fencing_token=lease.token,
         )
 
     async def _reconcile(
