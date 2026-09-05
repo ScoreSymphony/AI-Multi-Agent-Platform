@@ -1,25 +1,36 @@
 # Backup, restore, and disaster recovery
 
-This document defines the first production-shaped backup boundary for the single-node deployment profile introduced by issue #39. It is vendor-neutral and relocatable.
+This document defines the production-shaped backup boundary for the single-node deployment profile introduced by issue #39. It is vendor-neutral and relocatable.
 
 ## Consistency model
 
 Backup format v1 is **offline/quiesced**. All processes that can write to the deployment data root must be stopped before `create` is invoked, and the operator must pass `--quiesced`. This is a deliberate correctness boundary: the platform currently has independent SQLite, file, and workspace providers and therefore does not have a cross-provider transaction manager.
 
-Within that boundary, each SQLite database is copied with the SQLite backup API and checked with `PRAGMA integrity_check`; durable files/workspaces are copied while writers remain stopped. SQLite WAL state is checkpointed into each snapshot and WAL/SHM/journal sidecars are not required by the resulting backup. The backup is first assembled under a `.partial` sibling directory, verified, and only then atomically renamed to its final directory name. A failed/incomplete assembly is not a healthy backup.
+Within that boundary, each SQLite database is copied with the SQLite backup API and checked with both `PRAGMA integrity_check` and `PRAGMA foreign_key_check`; durable files/workspaces are copied while writers remain stopped. SQLite WAL state is checkpointed into each snapshot and WAL/SHM/journal sidecars are not required by the resulting backup. The backup is first assembled under a `.partial` sibling directory, verified, and only then atomically renamed to its final directory name. A failed/incomplete assembly is not a healthy backup.
 
-The single-node source must contain the durable `db/`, `files/`, and `workspaces/` components plus the canonical `db/kernel.sqlite3` anchor. A path that merely exists but does not have the required deployment layout is rejected rather than producing a formally valid but incomplete backup.
+The single-node source must contain the durable `db/`, `files/`, and `workspaces/` components plus every store marked required by `ai_multi_agent_platform.backup.inventory`. The current initialized SQLite inventory is:
+
+- `db/kernel.sqlite3`
+- `db/scopes.sqlite3`
+- `db/files.sqlite3`
+- `db/workspaces.sqlite3`
+- `db/verification.sqlite3`
+- `db/authentication.sqlite3`
+- `db/authorization.sqlite3`
+- `db/automation.sqlite3`
+
+Lazy JSON stores remain inside the durable `db/` scope and are included whenever present. A path that merely exists but does not have the required deployment layout is rejected rather than producing a formally valid but incomplete backup.
 
 ## V1 scope
 
 Included:
 
 - all SQLite state under `data_dir/db`, including canonical kernel/event history and the other configured single-node stores;
-- non-SQLite durable state under `data_dir/db`, such as agent definitions;
+- non-SQLite durable state under `data_dir/db`, including Agent, Conversation, model and onboarding configuration stores when present;
 - durable files under `data_dir/files`;
 - durable workspace data under `data_dir/workspaces`;
 - non-secret deployment metadata needed to identify the deployment profile;
-- per-SQLite `PRAGMA user_version`, platform version/commit, checksums, exclusions, and restore policy in the manifest.
+- per-SQLite `PRAGMA user_version`, platform version/commit, checksums, exclusions, restore policy and structured external-dependency metadata in the manifest.
 
 Excluded:
 
@@ -29,6 +40,21 @@ Excluded:
 - plaintext secret material.
 
 The current local secret provider is not a durable production secret backend. Secret-provider key material must therefore be backed up through the selected provider's protected mechanism, independently from the generic platform backup. Secret references/metadata may be restored; plaintext credentials must not be added to generic deployment metadata. The backup service rejects secret-looking metadata keys and refuses symlinks in the backup scope.
+
+## Structured external dependencies
+
+New v1 backups record actual recoverable dependencies as structured manifest entries instead of generic prose. Each entry identifies:
+
+- a stable `dependency_id` and `kind`;
+- whether the feature dependency is required;
+- whether its absence blocks restoration of canonical state;
+- the durable metadata source from which it was discovered;
+- the operator recovery action;
+- value-safe identifying metadata.
+
+The current single-node discovery path reads persisted model-provider setup records and their value-free `SecretReference` metadata, plus explicitly declared optional adapter runtimes. Provider endpoints and credential values are not copied into this inventory. A configured model provider may therefore be marked required for model execution while `restore_blocking=false`: canonical state remains recoverable and inspectable even if that runtime is temporarily unavailable. Secret-provider entries likewise describe which protected backend must be re-provisioned without copying `secret_id` values or plaintext material into the generic dependency inventory.
+
+The v1 JSON Schema continues to accept the legacy string form so existing v1 backups remain verifiable. Newly created backups emit the structured form.
 
 ## Format and runtime verification
 
@@ -46,16 +72,16 @@ backup/
 
 `schemas/backup-manifest-v1.schema.json` is the normative manifest schema. The same schema is packaged with `ai_multi_agent_platform.backup` so an installed `platform-backup verify` validates the manifest at runtime rather than relying only on repository tests. Repository tests require the packaged schema and the normative schema to remain byte-equivalent as parsed JSON.
 
-`manifest.json` records format/schema version, platform version/commit, SQLite migration/user versions, consistency mode, included components, every payload file's size and SHA-256, external dependencies, exclusions, and restore policy.
+`manifest.json` records format/schema version, platform version/commit, SQLite migration/user versions, consistency mode, included components, every payload file's size and SHA-256, structured external dependencies, exclusions, and restore policy.
 
 Verification is deliberately layered:
 
 1. reject incompatible backup-format or manifest-schema versions;
 2. validate the complete manifest against JSON Schema, including date-time format checks;
-3. require the single-node component scope and canonical kernel entry;
+3. require the complete initialized single-node durable-store inventory;
 4. verify that every manifest entry exists and has the declared size and SHA-256;
 5. reject unmanifested payload files;
-6. run `PRAGMA integrity_check` on every SQLite payload database;
+6. run `PRAGMA integrity_check` and `PRAGMA foreign_key_check` on every SQLite payload database;
 7. require an exact one-to-one match between SQLite payload files and recorded `PRAGMA user_version` metadata;
 8. reject secret-looking deployment metadata and a deployment profile other than `single-node`.
 
@@ -114,10 +140,15 @@ The recovery sequence is:
 1. run the kernel's existing `recover_all()` over every canonical Task stream;
 2. classify unresolved active Runs;
 3. if no unresolved Run remains, verify the restored durable SQLite layout against the backup's recorded schema versions;
-4. reconstruct every recovered Task and referenced Run and validate Task→Project, Run→Task/Step, and Workspace→Project relationships;
+4. reconstruct every recovered Task and referenced Run and validate Task→Project and Run→Task/Step relationships;
 5. verify READY file metadata against durable file bytes, file size, SHA-256, and Project references;
-6. run the composed Control Plane provider health probe and require `status=healthy` and `ready=true`;
-7. write `recovery/restore-report.json` with the reconciliation result, validation checks and `ready_for_service` decision.
+6. validate Agent/Team/AgentRun and Conversation/Message canonical references;
+7. validate the actual `SqliteWorkspaceProvider` state, including Workspace→Project, head/base/parent snapshots, snapshot File references/checksums, Artifact references and snapshot-source references;
+8. validate cross-store Authorization policy, Automation, Authentication credential-owner and Verification references wherever the current single-node composition owns the corresponding canonical registry;
+9. run the composed Control Plane provider health probe and require `status=healthy` and `ready=true`;
+10. write `recovery/restore-report.json` with the reconciliation result, validation checks and `ready_for_service` decision.
+
+The cross-store gate deliberately does not invent authority for identities or resources that the current single-node composition does not own. For example, opaque service/worker identities are not rejected merely because there is no single-node service/worker registry, and optional runtime-provider availability is not confused with integrity of persisted canonical model configuration.
 
 A report with `ready_for_service=false` is a persistent safe-mode gate. This remains true even after the one-shot `restore-pending.json` marker has been consumed. Both `platform-server serve` and `platform-server recover-restore` retry a blocked report on later invocations. Consequently, a failed validation or unresolved restored Run cannot be bypassed simply by restarting the server.
 
@@ -131,15 +162,32 @@ The kernel's existing semantics remain authoritative:
 - RUNNING Runs whose former backend no longer exists remain canonically RUNNING but gain `run.recovery_required` with reason `canonical_running_backend_not_found`;
 - no canonical RUNNING Run is blindly redispatched merely because the replacement host lacks the old execution process.
 
+### Resolving an orphaned restored Run
+
+An orphaned restored `RUNNING` Run is intentionally not guessed to have succeeded. It keeps the deployment blocked until an operator records a canonical failure or cancellation. Use the offline recovery command shown below; there is deliberately no force-success option.
+
+```bash
+platform-server resolve-restore-run \
+  --task-id <task_id> \
+  --run-id <run_id> \
+  --resolution failed \
+  --reason "execution backend was lost with the original host"
+```
+
+`--resolution cancelled` is also supported when cancellation is the correct canonical outcome.
+
+The command is accepted only when `recovery/restore-report.json` is currently non-ready, lists that exact Run in `unresolved_run_ids`, and records the exact Task/Run pair as `orphaned_reconciliation_required`. The terminal transition goes through the normal kernel `record_run_outcome()` path with a deterministic idempotency key. The complete reconciliation/integrity/readiness gate then runs again automatically. Arbitrary Runs cannot be terminalized through this recovery command.
+
 After restoring:
 
-1. re-provision secret-provider key material/credentials using the selected secret backend;
-2. install any optional adapters/providers required by the deployment; unavailable optional adapters do not prevent canonical state from being restored and inspected;
-3. run `platform-server recover-restore` or start through `platform-server serve`; both use the same persistent readiness gate;
-4. workers/nodes authenticate and register again; never recreate stale live reservations from the old host;
-5. inspect unresolved Run IDs in `recovery/restore-report.json` and reconcile them through the normal kernel/operator flow;
-6. rebuild disposable indexes/caches;
-7. after the automated gate passes, run a reference smoke as an operational end-to-end confirmation before returning a migrated installation to users.
+1. inspect the manifest's structured external dependency inventory;
+2. re-provision secret-provider key material/credentials using each selected secret backend's protected recovery mechanism;
+3. reinstall/reconnect optional adapters/providers when their features are required; unavailable optional runtimes do not prevent canonical state from being restored and inspected;
+4. run `platform-server recover-restore` or start through `platform-server serve`; both use the same persistent readiness gate;
+5. workers/nodes authenticate and register again; never recreate stale live reservations from the old host;
+6. for every orphaned Run named by a blocked report, decide the correct canonical outcome and use `platform-server resolve-restore-run` with an explicit reason;
+7. rebuild disposable indexes/caches;
+8. after the automated gate passes, run a reference smoke as an operational end-to-end confirmation before returning a migrated installation to users.
 
 ## Distributed runtime disaster recovery
 
@@ -155,13 +203,13 @@ For host/control-plane disaster recovery, pass the persisted registry snapshot t
 
 A Worker becomes schedulable again only after a fresh `RegistrationRequest`/authentication path reports its current state. This prevents old reservations from being treated as proof that a lost process or machine is still executing work.
 
-The fully packaged heterogeneous/multi-device deployment profiles remain owned by #240. #40 owns the durable-state relocation and disaster semantics they must consume: machine-local liveness/reservations are not canonical identity, durable IDs survive relocation, and replacement Workers must re-register. End-to-end tests involving different host/resource/device layouts should therefore be added alongside #240 without weakening the single-node recovery guarantees defined here.
+The fully packaged heterogeneous/multi-device deployment profiles remain owned by #240. #40 owns the durable-state relocation and disaster semantics they must consume: machine-local liveness/reservations are not canonical identity, durable IDs survive relocation, and replacement Workers must re-register. #240 must exercise the #40 contract when it adds real multi-host reference profiles: restore the durable Control Plane state onto a replacement topology, reauthenticate/re-register replacement Workers, and prove that canonical Task/Run history remains unchanged while new work can execute on the replacement resources.
 
 ## Disaster-recovery scenarios
 
 ### Total control-plane host loss
 
-Provision a replacement host, install a compatible platform version, restore to a new data root, recover secrets separately, run post-restore recovery, re-register workers, inspect unresolved runs, then run the reference smoke.
+Provision a replacement host, install a compatible platform version, restore to a new data root, recover protected dependencies/secrets separately, run post-restore recovery, resolve any orphaned Runs explicitly, re-register workers, then run the reference smoke.
 
 ### Database corruption
 
@@ -197,25 +245,27 @@ A practical starting policy is daily verified backups plus a backup immediately 
 
 The v1 implementation covers:
 
-- full backup/restore relocation onto a different data root;
-- canonical Task/Project/user ID preservation;
+- full backup/restore relocation onto a different clean data root;
+- canonical user/Task/Run history preservation on the replacement installation;
 - SQLite WAL checkpoint/self-contained snapshot behavior;
 - runtime JSON-Schema validation using the schema included in installed packages;
-- required single-node scope and canonical-kernel completeness checks;
+- authoritative initialized durable-store completeness checks;
 - checksum corruption and missing-file detection;
-- SQLite `PRAGMA integrity_check` plus payload/manifest/restored `user_version` agreement;
+- SQLite `PRAGMA integrity_check`, `PRAGMA foreign_key_check` and payload/manifest/restored `user_version` agreement;
 - manifest/schema/platform compatibility rejection and optional exact-commit pinning;
+- structured, non-secret external dependency inventory with backward-compatible v1 schema validation;
 - clean-target restore and interrupted-restore retry;
 - authentication-session invalidation;
 - secret-metadata rejection and symlink escape rejection;
 - ephemeral executor exclusion;
 - active-Run reconciliation after disaster restore;
 - persistent blocked-report retry when unresolved Runs remain;
-- post-restore canonical Task/Run/Project/Workspace reference validation;
-- post-restore durable file metadata/byte/checksum validation;
+- safe offline failure/cancellation resolution for Runs explicitly named as orphaned by the blocked restore report;
+- post-restore Task/Run/Project/File/Agent/Team/Conversation reference validation;
+- post-restore `SqliteWorkspaceProvider`, Authorization, Automation, Authentication-owner and Verification cross-store reference validation;
 - provider health/readiness gating before normal serving;
-- distributed stale-reservation removal and Worker re-registration;
+- distributed stale-reservation removal and Worker re-registration semantics;
 - restore while an optional adapter/runtime is unavailable;
 - restored single-node reference smoke.
 
-For #40 itself, heterogeneous topology packaging is not duplicated here: the remaining cross-device deployment-profile acceptance belongs to #240, while #40 defines and tests the durable relocation/recovery contract that those profiles must use.
+For #40 itself, heterogeneous topology packaging is not duplicated here: the cross-device deployment-profile acceptance belongs to #240, which consumes this durable relocation/recovery contract. Cross-version upgrade/migration remains #41.
