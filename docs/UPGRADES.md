@@ -207,8 +207,10 @@ marker would falsely resurrect the interrupted upgrade attempt after a source re
 
 ## Maintenance and drain
 
-A schema-changing or plugin-state-changing upgrade requires an explicit quiesced/drained assertion.
-The deployment layer is responsible for implementing the actual policy appropriate to that topology:
+Every platform-release change, schema-changing upgrade or plugin-state-changing upgrade requires an
+explicit quiesced/drained assertion in the single-node baseline. Mixed-version operation is not
+inferred merely because schemas or protocol numbers happen to match. The deployment layer is
+responsible for implementing the actual policy appropriate to that topology:
 
 - stop accepting/dispatching new work;
 - pause Automation-triggered task creation where applicable;
@@ -216,9 +218,10 @@ The deployment layer is responsible for implementing the actual policy appropria
 - ensure no old process continues to mutate stores during migration;
 - stop/restart mixed-version Workers when the Worker protocol policy requires it.
 
-The upgrade service writes `db/upgrade-maintenance.json` before the first state-changing phase. The
-marker contains the exact source/target version vectors, planned migration revisions, plugin-state
-migration set and verified backup path. A resume request must match that recorded attempt.
+The upgrade service writes `db/upgrade-maintenance.json` before release activation or the first
+state-changing phase. The marker contains the exact source/target version vectors, planned migration
+revisions, plugin-state migration set and verified backup path. A resume request must match that
+recorded attempt.
 
 Completion metadata is written in restart-safe order: completed upgrade history, activated target
 version vector, then maintenance-marker removal. If a process dies between those writes, the marker
