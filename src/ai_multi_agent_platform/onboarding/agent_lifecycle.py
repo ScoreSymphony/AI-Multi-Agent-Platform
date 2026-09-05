@@ -1,8 +1,14 @@
-"""Canonical first-run Agent execution layered behind the replaceable Run lifecycle seam."""
+"""Canonical first-run and explicitly bound Agent execution over the Run lifecycle seam."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from ai_multi_agent_platform.agents import AgentRevision, AgentRunStatus, AgentRuntime
+from ai_multi_agent_platform.agents.execution_profile import (
+    AgentExecutionBinding,
+    decode_agent_execution_binding,
+)
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,
@@ -17,6 +23,7 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
     ProviderDescriptor,
 )
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import TaskRepository
 from ai_multi_agent_platform.models import ModelRuntime, RoutingRequirements
@@ -71,11 +78,12 @@ def preflight_first_run_agent(
 
 
 class FirstRunAgentLifecycleBackend(LifecycleBackend):
-    """Route explicitly marked first-run Tasks through AgentRuntime + ModelRuntime.
+    """Route first-run and explicitly bound Agent Tasks through AgentRuntime + ModelRuntime.
 
-    Unmarked Runs are delegated unchanged to the normal single-node lifecycle backend. This
-    keeps onboarding composition out of canonical Task/Run contracts while ensuring that the
-    golden-path Run output is produced by the selected canonical Agent and model route.
+    The first-run onboarding profile keeps its stricter local/self-hosted requirements.
+    The generic Agent execution binding is platform-owned and lets features such as
+    Evaluation select an exact Agent/model/capability configuration without introducing a
+    second lifecycle implementation. Unmarked Runs are delegated unchanged.
     """
 
     def __init__(
@@ -106,46 +114,72 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
 
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
         task = await self._tasks.get_task(request.context.correlation_id)
-        if (
+        generic_binding = self._generic_binding(task.task.metadata)
+        first_run = (
             task.task.metadata.get(FIRST_RUN_EXECUTION_PROFILE_KEY)
-            != FIRST_RUN_AGENT_EXECUTION_PROFILE
-        ):
+            == FIRST_RUN_AGENT_EXECUTION_PROFILE
+        )
+        if generic_binding is None and not first_run:
             return await self._delegate.start(request)
 
         existing = self._snapshots.get(request.run_id)
         if existing is not None:
             return self._handle(request.run_id)
 
-        agent_id = task.task.metadata.get(FIRST_RUN_AGENT_ID_KEY)
-        if not isinstance(agent_id, str) or not agent_id.strip():
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                "first-run Agent task is missing its canonical Agent ID",
+        if generic_binding is None:
+            agent_id = task.task.metadata.get(FIRST_RUN_AGENT_ID_KEY)
+            if not isinstance(agent_id, str) or not agent_id.strip():
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "first-run Agent task is missing its canonical Agent ID",
+                )
+            workspace_id = task.task.metadata.get(FIRST_RUN_WORKSPACE_ID_KEY)
+            if workspace_id is not None and (
+                not isinstance(workspace_id, str) or not workspace_id.strip()
+            ):
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "first-run Agent task has an invalid Workspace ID",
+                )
+            revision = preflight_first_run_agent(
+                self._agents,
+                agent_id,
+                project_id=task.task.project_id,
+                workspace_id=workspace_id,
             )
-        workspace_id = task.task.metadata.get(FIRST_RUN_WORKSPACE_ID_KEY)
-        if workspace_id is not None and (
-            not isinstance(workspace_id, str) or not workspace_id.strip()
-        ):
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                "first-run Agent task has an invalid Workspace ID",
+            agent_revision: int | None = revision.revision
+            requested_capability_ids: tuple[str, ...] = ()
+            task_model_override: RoutingRequirements | None = FIRST_RUN_MODEL_REQUIREMENTS
+            available_capability_ids: frozenset[str] = frozenset()
+            self_hosted_only = True
+        else:
+            agent_id = generic_binding.agent_id
+            workspace_id = generic_binding.workspace_id
+            agent_revision = generic_binding.agent_revision
+            requested_capability_ids = generic_binding.capability_ids
+            task_model_override = (
+                None
+                if generic_binding.model_config_id is None
+                else RoutingRequirements(
+                    explicit_model_id=generic_binding.model_config_id,
+                    modalities=("text",),
+                )
             )
-
-        revision = preflight_first_run_agent(
-            self._agents,
-            agent_id,
-            project_id=task.task.project_id,
-            workspace_id=workspace_id,
-        )
-        instruction = revision.profile.instructions.role.content
-        assert instruction is not None
+            available_capability_ids = (
+                frozenset(requested_capability_ids)
+                if self._agents.capability_registry is None
+                else frozenset()
+            )
+            self_hosted_only = False
 
         agent_run = await self._agents.start_agent(
             task_id=task.task_id,
             run_id=request.run_id,
             agent_id=agent_id,
-            revision=revision.revision,
-            task_model_override=FIRST_RUN_MODEL_REQUIREMENTS,
+            revision=agent_revision,
+            task_model_override=task_model_override,
+            requested_capability_ids=requested_capability_ids,
+            available_capability_ids=available_capability_ids,
             task_context={"objective": task.task.description},
             project_context={
                 "project_id": task.task.project_id,
@@ -157,21 +191,34 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         result_id = new_id("result")
 
         try:
+            resolved_revision = self._agents.service.get_agent_revision(
+                agent_run.agent.agent_id,
+                agent_run.agent.revision,
+            )
+            instruction = resolved_revision.profile.instructions.role.content
+            if instruction is None:
+                raise ContractError(
+                    ErrorCode.UNSUPPORTED_CAPABILITY,
+                    "Agent execution requires inline role instructions in the reference "
+                    "execution profile",
+                )
             if agent_run.selected_model_config_id is None:
                 raise ContractError(
                     ErrorCode.NO_COMPATIBLE_ROUTE,
-                    "first-run General Assistant did not resolve a canonical model route",
+                    "Agent execution did not resolve a canonical model route",
                 )
+            requirements: dict[str, JsonValue] = {
+                "model_config_id": agent_run.selected_model_config_id,
+                "modalities": ["text"],
+            }
+            if self_hosted_only:
+                requirements["self_hosted_only"] = True
             response = await self._models.generate(
                 ModelRequest(
                     request_id=f"{request.run_id}:model",
                     messages=(instruction, task.task.description),
                     context=request.context,
-                    requirements={
-                        "model_config_id": agent_run.selected_model_config_id,
-                        "self_hosted_only": FIRST_RUN_MODEL_REQUIREMENTS.self_hosted_only,
-                        "modalities": list(FIRST_RUN_MODEL_REQUIREMENTS.modalities),
-                    },
+                    requirements=requirements,
                 )
             )
         except ContractError as exc:
@@ -239,3 +286,13 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                 values={"agent_run_id": agent_run_id},
             ),
         )
+
+    @staticmethod
+    def _generic_binding(metadata: Mapping[str, JsonValue]) -> AgentExecutionBinding | None:
+        try:
+            return decode_agent_execution_binding(metadata)
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"invalid canonical Agent execution binding: {exc}",
+            ) from exc

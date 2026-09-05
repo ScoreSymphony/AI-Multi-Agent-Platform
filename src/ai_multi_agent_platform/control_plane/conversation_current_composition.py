@@ -24,6 +24,7 @@ from ai_multi_agent_platform.conversations import (
 )
 from ai_multi_agent_platform.conversations.responses import ConversationResponseProvider
 from ai_multi_agent_platform.data import FileProvider, KnowledgeProvider
+from ai_multi_agent_platform.search import SearchResult
 
 from .conversation_api import CONVERSATION_COLLECTIONS, ConversationCommandHandlers
 from .conversation_composition import (
@@ -44,6 +45,10 @@ from .conversation_retention import (
     augment_conversation_retention_openapi,
     register_conversation_retention_control_plane,
     rewrite_conversation_retention_request,
+)
+from .conversation_search import (
+    conversation_search_result_allowed,
+    install_conversation_search_services,
 )
 from .conversation_streaming import ConversationEventASGI
 from .conversation_streaming_http import (
@@ -225,6 +230,7 @@ class ControlPlane(_ConversationControlPlane, _NotificationControlPlane):
         )
 
         if conversation_service is not None:
+            install_conversation_search_services(self, conversation_service)
             # The intermediate Conversation composition installs the canonical handlers.
             # Replace only handlers that need current-domain extensions; the underlying
             # Conversation lifecycle and persistence path remains the same.
@@ -242,6 +248,18 @@ class ControlPlane(_ConversationControlPlane, _NotificationControlPlane):
                 register_conversation_retention_control_plane(self, conversation_service)
             finally:
                 self._installing_conversation_retention = False
+
+    async def _search_result_allowed(
+        self,
+        context: RequestContext,
+        result: SearchResult,
+    ) -> bool:
+        service = self.conversation_service
+        if service is not None:
+            allowed = await conversation_search_result_allowed(self, service, context, result)
+            if allowed is not None:
+                return allowed
+        return await super()._search_result_allowed(context, result)
 
     async def execute_command(
         self,

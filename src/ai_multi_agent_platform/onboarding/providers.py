@@ -21,7 +21,15 @@ class OnboardingModelEndpoint:
 
 
 class OnboardingModelAdapter(Protocol):
-    """Adapter-owned bridge from safe endpoint metadata to a canonical ModelProvider."""
+    """Adapter-owned bridge from safe endpoint metadata to a canonical ModelProvider.
+
+    ``build_provider`` participates in first-run readiness, so a routable ``provider.health()``
+    result must mean that the endpoint is reachable *and* that every provider-native model mapped
+    by ``endpoint.models`` is still available for invocation. This invariant is especially
+    important after restart: the ordinary canonical ``model-provider:refresh-health`` path must
+    not restore ``ready_for_task`` merely because an endpoint answers while its configured model
+    has disappeared.
+    """
 
     @property
     def adapter_id(self) -> str: ...
