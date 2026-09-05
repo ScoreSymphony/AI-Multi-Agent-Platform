@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApprovalClient,
   type CanonicalApproval,
 } from "../api/approvals";
+import { BrowserSessionClient } from "../api/browserSession";
+import { ControlPlaneClient } from "../api/client";
+import { ControlPlaneCollectionClient } from "../api/collections";
 import type { Page } from "../api/types";
-import type { ApprovalDecisionManifestState } from "../app/approvalManifest";
+import {
+  approvalDecisionManifestState,
+  type ApprovalDecisionManifestState,
+} from "../app/approvalManifest";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
 import { PaginationControls } from "../components/Pagination";
@@ -18,13 +24,8 @@ import {
   StatusBadge,
 } from "../components/States";
 
-export function ApprovalsPage({
-  client,
-  decisionState,
-}: {
-  client: ApprovalClient;
-  decisionState: ApprovalDecisionManifestState;
-}) {
+export function ApprovalsPage({ client }: { client: ControlPlaneCollectionClient }) {
+  const { approvalClient, decisionState } = useApprovalWebBoundary(client);
   const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState<Page<CanonicalApproval> | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -33,7 +34,7 @@ export function ApprovalsPage({
   const load = useCallback(async () => {
     try {
       setPage(
-        await client.listApprovals({
+        await approvalClient.listApprovals({
           limit: 50,
           cursor: pagination.cursor,
           sort: "id",
@@ -45,7 +46,7 @@ export function ApprovalsPage({
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client, pagination.cursor, showAll]);
+  }, [approvalClient, pagination.cursor, showAll]);
 
   useEffect(() => {
     void load();
@@ -115,12 +116,11 @@ export function ApprovalsPage({
 export function ApprovalDetailPage({
   client,
   approvalId,
-  decisionState,
 }: {
-  client: ApprovalClient;
+  client: ControlPlaneCollectionClient;
   approvalId: string;
-  decisionState: ApprovalDecisionManifestState;
 }) {
+  const { approvalClient, decisionState } = useApprovalWebBoundary(client);
   const [approval, setApproval] = useState<CanonicalApproval | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [decisionError, setDecisionError] = useState<unknown>(null);
@@ -130,12 +130,12 @@ export function ApprovalDetailPage({
 
   const load = useCallback(async () => {
     try {
-      setApproval(await client.getApproval(approvalId));
+      setApproval(await approvalClient.getApproval(approvalId));
       setError(null);
     } catch (nextError) {
       setError(nextError);
     }
-  }, [approvalId, client]);
+  }, [approvalId, approvalClient]);
 
   useEffect(() => {
     void load();
@@ -148,8 +148,8 @@ export function ApprovalDetailPage({
     try {
       const options = comment.trim() ? { comment } : {};
       const updated = decision === "approve"
-        ? await client.approve(approval.id, approval.requested_action_digest, options)
-        : await client.deny(approval.id, approval.requested_action_digest, options);
+        ? await approvalClient.approve(approval.id, approval.requested_action_digest, options)
+        : await approvalClient.deny(approval.id, approval.requested_action_digest, options);
       setApproval(updated);
       setComment("");
       setConfirmed(false);
@@ -251,6 +251,43 @@ export function ApprovalDetailPage({
       </Card>
     </div>
   );
+}
+
+function useApprovalWebBoundary(client: ControlPlaneCollectionClient): {
+  approvalClient: ApprovalClient;
+  decisionState: ApprovalDecisionManifestState;
+} {
+  const session = useMemo(
+    () => new BrowserSessionClient({ baseUrl: client.baseUrl }),
+    [client.baseUrl],
+  );
+  const approvalClient = useMemo(
+    () => new ApprovalClient({ baseUrl: client.baseUrl, fetchImpl: session.fetch }),
+    [client.baseUrl, session],
+  );
+  const manifestClient = useMemo(
+    () => new ControlPlaneClient({ baseUrl: client.baseUrl, fetchImpl: session.fetch }),
+    [client.baseUrl, session],
+  );
+  const [decisionState, setDecisionState] = useState<ApprovalDecisionManifestState>("loading");
+
+  useEffect(() => {
+    let active = true;
+    setDecisionState("loading");
+    void manifestClient.manifest().then(
+      (manifest) => {
+        if (active) setDecisionState(approvalDecisionManifestState("ready", manifest));
+      },
+      () => {
+        if (active) setDecisionState("unavailable");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [manifestClient]);
+
+  return { approvalClient, decisionState };
 }
 
 function ApprovalDecisionPanel({
