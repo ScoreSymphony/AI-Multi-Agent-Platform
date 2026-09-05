@@ -204,7 +204,10 @@ class AgentTeamTemplateExporter:
         if failures:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
-                "Agent Team Template export failed and partial Templates could not be fully compensated",
+                (
+                    "Agent Team Template export failed and partial Templates could not be "
+                    "fully compensated"
+                ),
                 details={
                     "export_error_type": type(export_error).__name__,
                     "export_error": str(export_error),
