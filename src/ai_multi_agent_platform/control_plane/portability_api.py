@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.portability import (
+from ai_multi_agent_platform.portability.workflow import (
     ExportSelection,
     PortabilityWorkflowService,
     import_preview_to_dict,
