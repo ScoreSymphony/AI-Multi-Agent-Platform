@@ -65,7 +65,13 @@ class TaskProjectCompatibilityPolicy(Protocol):
 
 
 class DefaultTaskProjectCompatibilityPolicy:
-    """Fail-closed ownership boundary with optional #87 collaboration semantics."""
+    """Fail-closed ownership boundary with optional #87 collaboration semantics.
+
+    Membership is directional: it can establish that a personal user/service scope
+    may enter an active Organization/Team scope. It does not make that actor's
+    personal resources interchangeable with Organization-owned resources in the
+    reverse direction. Other owner changes require explicit Project sharing.
+    """
 
     def __init__(self, organizations: OrganizationService | None = None) -> None:
         self._organizations = organizations
@@ -89,13 +95,24 @@ class DefaultTaskProjectCompatibilityPolicy:
             self._raise_incompatible(source_owner, destination_owner)
 
         assert organizations is not None
-        source_orgs = await self._collaboration_organizations(source_owner)
-        destination_orgs = await self._collaboration_organizations(destination_owner)
-        structured_boundary = (
-            source_owner.type in {"organization", "team"}
-            or destination_owner.type in {"organization", "team"}
-        )
-        if structured_boundary and source_orgs.intersection(destination_orgs):
+        source_organization = await self._structured_organization(source_owner)
+        destination_organization = await self._structured_organization(destination_owner)
+
+        if (
+            source_organization is not None
+            and destination_organization is not None
+            and source_organization == destination_organization
+        ):
+            return
+
+        if (
+            source_owner.type in {"user", "service"}
+            and destination_organization is not None
+            and await self._has_active_membership(
+                source_owner.id,
+                destination_organization,
+            )
+        ):
             return
 
         if source_project is not None and destination_project is not None:
@@ -108,28 +125,33 @@ class DefaultTaskProjectCompatibilityPolicy:
 
         self._raise_incompatible(source_owner, destination_owner)
 
-    async def _collaboration_organizations(self, owner: OwnerRef) -> set[str]:
+    async def _structured_organization(self, owner: OwnerRef) -> str | None:
         organizations = self._organizations
         assert organizations is not None
         if owner.type == "organization":
             organization = await organizations.repository.get_organization(owner.id)
             if organization.status is not OrganizationStatus.ACTIVE:
-                return set()
-            return {organization.id}
+                return None
+            return organization.id
         if owner.type == "team":
             team = await organizations.repository.get_team(owner.id)
             if team.status is not TeamStatus.ACTIVE:
-                return set()
+                return None
             organization = await organizations.repository.get_organization(team.organization_id)
             if organization.status is not OrganizationStatus.ACTIVE:
-                return set()
-            return {team.organization_id}
-        memberships = await organizations.repository.list_memberships(actor_id=owner.id)
-        return {
-            membership.organization_id
+                return None
+            return team.organization_id
+        return None
+
+    async def _has_active_membership(self, actor_id: str, organization_id: str) -> bool:
+        organizations = self._organizations
+        assert organizations is not None
+        memberships = await organizations.repository.list_memberships(actor_id=actor_id)
+        return any(
+            membership.organization_id == organization_id
+            and membership.status is MembershipStatus.ACTIVE
             for membership in memberships
-            if membership.status is MembershipStatus.ACTIVE
-        }
+        )
 
     async def _project_shared_to(self, project_id: str, target: OwnerRef) -> bool:
         organizations = self._organizations
