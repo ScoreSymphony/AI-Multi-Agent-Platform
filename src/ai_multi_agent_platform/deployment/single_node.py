@@ -16,9 +16,9 @@ from ai_multi_agent_platform.agents import (
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
-    ControlPlane,
     ControlPlaneASGI,
 )
+from ai_multi_agent_platform.control_plane.portability_api import ControlPlane
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
     ConversationService,

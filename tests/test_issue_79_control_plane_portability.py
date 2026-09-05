@@ -4,7 +4,8 @@ import asyncio
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
+from ai_multi_agent_platform.control_plane import ControlPlaneHTTP, HTTPRequest
+from ai_multi_agent_platform.control_plane.portability_api import ControlPlane
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.portability import (
     ExportSourceRegistry,
