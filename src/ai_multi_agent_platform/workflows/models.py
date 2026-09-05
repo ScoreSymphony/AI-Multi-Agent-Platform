@@ -103,6 +103,8 @@ class WorkflowStage:
         _unique_nonblank(self.depends_on, "workflow dependency")
         _unique_nonblank(self.parameter_refs, "workflow parameter reference")
         _unique_nonblank(self.tool_ids, "workflow tool ID")
+        for tool_id in self.tool_ids:
+            validate_id(tool_id, "tool")
         _unique_nonblank(self.permission_actions, "workflow permission action")
         if self.stage_id in self.depends_on:
             raise ValueError("workflow stage cannot depend on itself")
