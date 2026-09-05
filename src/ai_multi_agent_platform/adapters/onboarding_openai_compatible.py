@@ -14,6 +14,7 @@ from ai_multi_agent_platform.configuration import SecretAccessContext, SecretPro
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
+    HealthStatus,
     JsonValue,
     ModelProvider,
 )
@@ -137,6 +138,26 @@ class _SecretResolvingOpenAICompatibleStreamingTransport(
         return iterate()
 
 
+class _InventoryValidatedOpenAICompatibleModelProvider(OpenAICompatibleModelProvider):
+    """Treat configured-model disappearance as provider unavailability for onboarding routes."""
+
+    async def health(self) -> HealthStatus:
+        health = await super().health()
+        if health not in {HealthStatus.HEALTHY, HealthStatus.DEGRADED}:
+            return health
+
+        try:
+            native_models = await self.list_native_models()
+        except ContractError:
+            self._health = HealthStatus.UNAVAILABLE
+            return self._health
+
+        configured_native_models = frozenset(self.config.models.values())
+        if not configured_native_models.issubset(native_models):
+            self._health = HealthStatus.UNAVAILABLE
+        return self._health
+
+
 class OpenAICompatibleOnboardingAdapter(OnboardingModelAdapter):
     """Construct and validate the installed OpenAI-compatible ModelProvider adapter."""
 
@@ -175,7 +196,7 @@ class OpenAICompatibleOnboardingAdapter(OnboardingModelAdapter):
                     reference=endpoint.credential_ref,
                     provider_id=endpoint.provider_id,
                 )
-        return OpenAICompatibleModelProvider(
+        return _InventoryValidatedOpenAICompatibleModelProvider(
             OpenAICompatibleProviderConfig(
                 provider_id=endpoint.provider_id,
                 base_url=endpoint.base_url,
