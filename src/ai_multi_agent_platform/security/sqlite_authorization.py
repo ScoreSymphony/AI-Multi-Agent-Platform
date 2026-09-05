@@ -71,12 +71,7 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
             return frozenset()
         if canonical_actor_type not in policy.actor_types:
             return frozenset()
-        if (
-            policy.project_ids
-            or policy.organization_ids
-            or policy.team_ids
-            or policy.workspace_ids
-        ):
+        if policy.project_ids or policy.organization_ids or policy.team_ids or policy.workspace_ids:
             return frozenset()
         if policy.administrator:
             return frozenset(AuthorizationAction)
