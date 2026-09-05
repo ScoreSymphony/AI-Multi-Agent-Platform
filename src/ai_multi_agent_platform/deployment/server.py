@@ -6,7 +6,7 @@ import argparse
 import asyncio
 import getpass
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 
 from ai_multi_agent_platform.backup import (
@@ -17,8 +17,10 @@ from ai_multi_agent_platform.backup import (
 )
 from ai_multi_agent_platform.kernel import RecoveryReport
 
-from .config import load_single_node_config
+from .config import SingleNodeConfig, load_single_node_config
 from .single_node import SingleNodeDeployment, build_single_node_deployment
+
+DeploymentBuilder = Callable[[SingleNodeConfig], SingleNodeDeployment]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -51,10 +53,14 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    deployment_builder: DeploymentBuilder = build_single_node_deployment,
+) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     config = load_single_node_config()
-    deployment = build_single_node_deployment(config)
+    deployment = deployment_builder(config)
 
     if args.command == "bootstrap-admin":
         password = _read_password(password_stdin=bool(args.password_stdin))

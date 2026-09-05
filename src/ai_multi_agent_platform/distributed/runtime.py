@@ -6,10 +6,17 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from time import perf_counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from ai_multi_agent_platform.contracts import ExecutionHandle, ExecutionSnapshot, RetryMode
+from ai_multi_agent_platform.contracts import (
+    AuthorizationProvider,
+    ExecutionHandle,
+    ExecutionSnapshot,
+    RetryMode,
+)
+from ai_multi_agent_platform.contracts.authorization import AuthorizationRequest
 from ai_multi_agent_platform.domain import RunStatus
+from ai_multi_agent_platform.security.authorization import infer_actor_identity
 
 from .failover import (
     FailoverError,
@@ -23,6 +30,7 @@ from .models import (
     Reservation,
     ReservationStatus,
     WorkerJobRequest,
+    WorkerJobResult,
     WorkerRecord,
     WorkerStatus,
     utc_now,
@@ -46,6 +54,17 @@ class DispatchState(StrEnum):
     TERMINAL = "terminal"
 
 
+class DispatchAuthorizationError(RegistryError):
+    """Raised when canonical #15 policy rejects an exact-Worker dispatch."""
+
+
+@runtime_checkable
+class WorkerResultProvider(Protocol):
+    """Optional terminal-result surface implemented by local/remote Worker adapters."""
+
+    async def result(self, worker_job_id: str) -> WorkerJobResult | None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class DispatchRecord:
     job: WorkerJobRequest
@@ -54,6 +73,7 @@ class DispatchRecord:
     state: DispatchState
     handle: ExecutionHandle | None = None
     snapshot: ExecutionSnapshot | None = None
+    result: WorkerJobResult | None = None
     last_error: str | None = None
 
 
@@ -68,6 +88,7 @@ class DistributedRuntime:
         state_store: DistributedStateStore | None = None,
         telemetry: DistributedTelemetry | None = None,
         ownership_fencer: WorkerOwnershipFencer | None = None,
+        authorization: AuthorizationProvider | None = None,
     ) -> None:
         self.registry = registry
         self.telemetry = telemetry
@@ -76,6 +97,7 @@ class DistributedRuntime:
         self._records: dict[str, DispatchRecord] = {}
         self._state_store = state_store
         self._ownership_fencer = ownership_fencer
+        self._authorization = authorization
         if self._state_store is not None:
             self._state_store.restore(self.registry, self)
 
@@ -190,6 +212,32 @@ class DistributedRuntime:
         timestamp = now or utc_now()
         placement = self.scheduler.schedule_to_worker(job, worker_id, now=timestamp)
         return await self._dispatch_placement(job, placement, timestamp=timestamp)
+
+    async def result(self, worker_job_id: str) -> WorkerJobResult | None:
+        """Retrieve and durably retain one terminal Worker result without re-dispatching work."""
+
+        record = self.get_record(worker_job_id)
+        if record.result is not None:
+            return record.result
+        dispatcher = self._dispatchers.get(record.worker_id)
+        if dispatcher is None:
+            raise RegistryError(f"worker result is not currently reachable: {record.worker_id}")
+        if not isinstance(dispatcher, WorkerResultProvider):
+            raise RegistryError(
+                f"worker dispatcher does not expose terminal results: {record.worker_id}"
+            )
+
+        result = await dispatcher.result(worker_job_id)
+        if result is None:
+            return None
+        self._validate_result(record, result)
+        updated = record
+        if result.execution is not None:
+            updated = self._apply_snapshot(record, result.execution, now=utc_now())
+        updated = replace(updated, result=result)
+        self._records[worker_job_id] = updated
+        self._persist()
+        return result
 
     async def fence_for_failover(
         self,
@@ -461,6 +509,23 @@ class DistributedRuntime:
             self._persist()
             raise RegistryError(f"selected worker has no attached dispatcher: {worker_id}")
 
+        try:
+            await self._authorize_dispatch(
+                job,
+                worker_id,
+                node_id=placement.reservation.node_id,
+            )
+        except Exception:
+            self.registry.release_reservation(placement.reservation.reservation_id)
+            if self.telemetry is not None:
+                self.telemetry.reservation(
+                    job,
+                    placement.reservation,
+                    event="released_unauthorized",
+                )
+            self._persist()
+            raise
+
         # Persist ownership before the external dispatch boundary. If acknowledgement is lost or
         # the control process restarts after the worker accepted the job, recovery must reconcile
         # this exact worker before another worker can claim the same canonical worker job.
@@ -512,6 +577,60 @@ class DistributedRuntime:
         self._records[job.worker_job_id] = dispatched
         self._persist()
         return dispatched
+
+    async def _authorize_dispatch(
+        self,
+        job: WorkerJobRequest,
+        worker_id: str,
+        *,
+        node_id: str,
+    ) -> None:
+        if self._authorization is None:
+            return
+        operation = job.execution.context
+        principal_ref = job.actor_ref or operation.owner_id or "service:distributed-runtime"
+        actor_identity_ref = principal_ref
+        if (
+            job.actor_ref is None
+            and operation.owner_id is not None
+            and operation.owner_type == "user"
+        ):
+            actor_identity_ref = f"user:{operation.owner_id}"
+        actor_type = infer_actor_identity(actor_identity_ref).actor_type.value
+        task_id = job.execution.subject_id if job.execution.subject_type == "task" else None
+        capability_ref = (
+            job.requirements.capability_refs[0]
+            if len(job.requirements.capability_refs) == 1
+            else None
+        )
+        decision = await self._authorization.authorize(
+            AuthorizationRequest(
+                principal_ref=principal_ref,
+                action="execute",
+                resource_ref=worker_id,
+                context=operation,
+                actor_type=actor_type,
+                resource_type="worker",
+                workspace_id=job.workspace_ref,
+                task_id=task_id,
+                run_id=job.execution.run_id,
+                capability_ref=capability_ref,
+                side_effect="worker.dispatch",
+                node_id=node_id,
+            )
+        )
+        if not decision.allowed:
+            raise DispatchAuthorizationError(
+                decision.reason or "worker dispatch denied by canonical authorization policy"
+            )
+
+    def _validate_result(self, record: DispatchRecord, result: WorkerJobResult) -> None:
+        if result.worker_job_id != record.job.worker_job_id:
+            raise RegistryError("Worker result belongs to a different Worker Job")
+        if result.worker_id != record.worker_id:
+            raise RegistryError("Worker result belongs to a different Worker")
+        if result.execution is not None and result.execution.run_id != record.job.execution.run_id:
+            raise RegistryError("Worker result belongs to a different canonical Run")
 
     def _apply_snapshot(
         self,

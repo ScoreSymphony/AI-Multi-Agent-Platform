@@ -9,9 +9,9 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.organizations import OrganizationService, ResourceOwnership
 
+from .conversation_current_composition import ControlPlane as _CurrentControlPlane
 from .extensions import CommandHandler, ResourceService
 from .models import OwnerType, RequestContext
-from .notifications_plugin_composition import ControlPlane as _CurrentControlPlane
 from .organization_api import (
     ORGANIZATION_COLLECTIONS,
     ORGANIZATION_COMMANDS,

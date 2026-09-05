@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import validate_id
 
-from .models import Connection, ConnectorDefinition, SyncCheckpoint
+from .models import Connection, ConnectionStatus, ConnectorDefinition, SyncCheckpoint
 
 
 class ConnectorRepository(ABC):
@@ -33,6 +33,11 @@ class ConnectorRepository(ABC):
 
     @abstractmethod
     async def delete_connection(self, connection_id: str) -> None: ...
+
+    @abstractmethod
+    async def remove_connection_if_unused(self, connection_id: str) -> None:
+        """Compensate a fresh import without deleting live/synchronized Connection state."""
+        ...
 
     @abstractmethod
     async def save_checkpoint(self, checkpoint: SyncCheckpoint) -> SyncCheckpoint: ...
@@ -105,6 +110,28 @@ class InMemoryConnectorRepository(ConnectorRepository):
         for key in tuple(self._checkpoints):
             if key[0] == connection_id:
                 del self._checkpoints[key]
+
+    async def remove_connection_if_unused(self, connection_id: str) -> None:
+        validate_id(connection_id, "connection")
+        try:
+            connection = self._connections[connection_id]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"connection not found: {connection_id}"
+            ) from exc
+        if connection.enabled or connection.status is not ConnectionStatus.DISABLED:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "cannot compensate a Connection that has entered active lifecycle state",
+                details={"connection_id": connection_id},
+            )
+        if any(key[0] == connection_id for key in self._checkpoints):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "cannot compensate a Connection with synchronization history",
+                details={"connection_id": connection_id},
+            )
+        del self._connections[connection_id]
 
     async def save_checkpoint(self, checkpoint: SyncCheckpoint) -> SyncCheckpoint:
         self._checkpoints[(checkpoint.connection_id, checkpoint.stream)] = checkpoint

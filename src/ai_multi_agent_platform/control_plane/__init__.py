@@ -6,6 +6,18 @@ from .automation_api import (
     DELIVERY_COLLECTION,
 )
 from .automation_runtime_composition import AUTOMATION_STATE_ENV
+from .conversation_api import (
+    CONVERSATION_COLLECTION,
+    CONVERSATION_COLLECTIONS,
+    CONVERSATION_COMMANDS,
+    CONVERSATION_MESSAGE_COLLECTION,
+)
+from .conversation_current_composition import (
+    AuthenticatedControlPlaneHTTP,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
+)
 from .evaluation_contract import (
     EVALUATION_COLLECTIONS,
     EVALUATION_COMMANDS,
@@ -41,12 +53,6 @@ from .notifications_composition import (
     NOTIFICATION_COMMANDS,
     NOTIFICATION_PREFERENCE_COLLECTION,
 )
-from .notifications_plugin_composition import (
-    AuthenticatedControlPlaneHTTP,
-    ControlPlaneASGI,
-    ControlPlaneHTTP,
-    build_openapi,
-)
 from .organization_api import (
     EXTERNAL_GROUP_MAPPING_COLLECTION,
     INVITATION_COLLECTION,
@@ -79,9 +85,10 @@ from .task_management_contract import (
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
 
+# Conversations remain optional runtime resources. Notifications are always-composed
+# canonical domains and therefore remain part of this static compatibility inventory.
 # Organization collections are optional and are registered only when an
-# OrganizationService is configured. Always-present notification resources remain
-# part of the static current composition.
+# OrganizationService is configured.
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (
     AUTOMATION_COLLECTION,
     DELIVERY_COLLECTION,
@@ -98,6 +105,10 @@ __all__ = [
     "AUTOMATION_STATE_ENV",
     "ActorContext",
     "AuthenticatedControlPlaneHTTP",
+    "CONVERSATION_COLLECTION",
+    "CONVERSATION_COLLECTIONS",
+    "CONVERSATION_COMMANDS",
+    "CONVERSATION_MESSAGE_COLLECTION",
     "CURRENT_COLLECTIONS",
     "CommandHandler",
     "ControlPlane",
