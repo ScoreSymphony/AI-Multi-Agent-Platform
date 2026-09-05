@@ -1,0 +1,52 @@
+name: issue-79-doc-status-fix
+
+on:
+  push:
+    branches:
+      - "docs/issue-79-completion-status"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Align portability completion status
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          portability = Path("docs/PORTABILITY.md")
+          text = portability.read_text(encoding="utf-8")
+          old = "Template and Project round trips, canonical dependency/reference remapping, guarded compensation, replay-safe import reports and Control Plane/CLI workflows are covered by the current #79 implementation. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. Remaining resource-family integrations are intentionally dependency-gated: durable model-routing-policy portability waits for #309, reusable authorization-policy portability for #310, and Evaluation suite/result portability for #19. #79 must consume those canonical contracts rather than inventing shadow persistence."
+          new = "#79 is complete and closed. Agent/Team, Template and Project round trips, canonical dependency/reference remapping, guarded compensation, replay-safe import reports and the Control Plane/CLI workflow form the completed portability surface. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. #309 and #310 remain independent follow-up domain work for durable model-routing and authorization-policy resources; they are not blockers to the completed #79 Definition of Done. #19 is also complete, but configured EvaluationSuite assets currently remain deployment/configuration inputs rather than a mutable canonical repository. Any future cross-deployment Evaluation-suite import must first consume an owning-domain mutation seam instead of introducing portability-specific shadow persistence."
+          if old not in text:
+              raise SystemExit("stale PORTABILITY.md status paragraph not found")
+          portability.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          control_plane = Path("docs/PORTABILITY_CONTROL_PLANE.md")
+          text = control_plane.read_text(encoding="utf-8")
+          old = "Project portability is no longer blocked: #308 is complete and its canonical persistence seam is now consumed by #79. Durable model-routing-policy portability remains blocked on #309, authorization-policy portability on #310, and Evaluation asset portability on #19. #79 does not create shadow persistence to bypass those domain owners."
+          new = "#79 is complete and closed. Project portability consumes the canonical #308 persistence seam. #309 and #310 remain independent follow-up domain work if durable model-routing or authorization-policy profiles are later added to the portability surface; they do not block #79's completed status. #19 is complete, but EvaluationSuite assets are currently deployment/configuration inputs without a canonical suite-import mutation seam. Portability must not create shadow persistence to manufacture one."
+          if old not in text:
+              raise SystemExit("stale PORTABILITY_CONTROL_PLANE.md status paragraph not found")
+          control_plane.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Verify stale status text is gone
+        run: |
+          grep -Fq '#79 is complete and closed.' docs/PORTABILITY.md
+          grep -Fq '#79 is complete and closed.' docs/PORTABILITY_CONTROL_PLANE.md
+          ! grep -Fq 'Evaluation suite/result portability for #19' docs/PORTABILITY.md
+          ! grep -Fq 'Evaluation asset portability on #19' docs/PORTABILITY_CONTROL_PLANE.md
+      - name: Commit docs and remove helper
+        run: |
+          git rm .github/workflows/issue-79-doc-status-fix.yml
+          git add docs/PORTABILITY.md docs/PORTABILITY_CONTROL_PLANE.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs(portability): align completed #79 status"
+          git push origin HEAD:docs/issue-79-completion-status
