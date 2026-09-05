@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from ai_multi_agent_platform.connectors import ExternalNativeReference, ExternalResourceReference
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -18,14 +16,14 @@ def collaboration_reference_from_json(
 
     if not isinstance(value, dict):
         raise _invalid("collaboration resource must be an object")
-    data = cast(dict[str, JsonValue], value)
+    data = value
     resource_type = _required_string(data, "resource_type")
     if resource_type != expected_resource_type:
         raise _invalid(f"collaboration resource must have type {expected_resource_type}")
     native = data.get("native_reference")
     if not isinstance(native, dict):
         raise _invalid("collaboration resource native_reference must be an object")
-    native_data = cast(dict[str, JsonValue], native)
+    native_data = native
     provenance = _optional_mapping(data.get("provenance"), "provenance")
     metadata = _optional_mapping(data.get("metadata"), "metadata")
     try:
