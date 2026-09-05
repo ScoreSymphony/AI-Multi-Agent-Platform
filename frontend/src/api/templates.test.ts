@@ -133,4 +133,21 @@ describe("TemplateClient", () => {
       },
     ]);
   });
+
+  it("activates an untrusted Template through the canonical publish command", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("/api/v1/commands/template.publish");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        resource_ref: "template-untrusted",
+        expected_revision: 4,
+        activate_untrusted: true,
+      });
+      const headers = new Headers(init?.headers);
+      expect(headers.get("Idempotency-Key")).toBe("activate-template-key");
+      return jsonResponse({ id: "template-untrusted", current_revision: 5 });
+    });
+    const client = new TemplateClient({ fetchImpl });
+
+    await client.activateUntrusted("template-untrusted", 4, "activate-template-key");
+  });
 });

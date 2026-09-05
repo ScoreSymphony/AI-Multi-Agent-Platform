@@ -9,6 +9,7 @@ from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import OwnerRef, new_id
+from ai_multi_agent_platform.security import SecretReference
 from ai_multi_agent_platform.templates.environment import PlatformTemplateEnvironmentResolver
 from ai_multi_agent_platform.workspaces import LocalWorkspaceProvider, WorkspaceType
 
@@ -58,6 +59,11 @@ def test_environment_resolver_uses_only_matching_server_owned_inventory(tmp_path
                 owner_id=owner.id,
             ),
         )
+        secret_reference = SecretReference(
+            provider="local",
+            secret_id="model-credential",
+            scope="model-provider",
+        )
         resolver = PlatformTemplateEnvironmentResolver(
             workspaces=workspaces,
             capabilities=lambda: ("capability.alpha",),
@@ -68,9 +74,13 @@ def test_environment_resolver_uses_only_matching_server_owned_inventory(tmp_path
                 "files.read",
                 f"owner:{request.actor.owner_id}",
             ),
-            placeholders=lambda _: ("project_name",),
-            secret_reference_placeholders=lambda _: ("model_credential_ref",),
-            validated_configuration_refs=lambda _: ("config://approved",),
+            placeholder_bindings=lambda _: {"project_name": "Project Alpha"},
+            secret_reference_bindings=lambda _: {
+                "model_credential_ref": secret_reference,
+            },
+            configuration_payloads=lambda _: {
+                "config://approved": {"name": "Approved configuration"},
+            },
         )
 
         environment = await resolver.resolve(context)
@@ -87,6 +97,11 @@ def test_environment_resolver_uses_only_matching_server_owned_inventory(tmp_path
             {"model_credential_ref"}
         )
         assert environment.validated_configuration_refs == frozenset({"config://approved"})
+        assert environment.placeholder_bindings["project_name"] == "Project Alpha"
+        assert environment.secret_reference_bindings["model_credential_ref"] == secret_reference
+        assert environment.configuration_payloads["config://approved"] == {
+            "name": "Approved configuration"
+        }
 
     asyncio.run(scenario())
 
@@ -107,6 +122,9 @@ def test_environment_resolver_is_conservative_for_unconfigured_inventories() -> 
         assert environment.model_policy_refs == frozenset()
         assert environment.grantable_permissions == frozenset()
         assert environment.workspace_prerequisites == frozenset()
+        assert environment.resolved_placeholders == frozenset()
+        assert environment.resolved_secret_reference_placeholders == frozenset()
+        assert environment.validated_configuration_refs == frozenset()
 
     asyncio.run(scenario())
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue, OperationContext
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.security import (
@@ -107,10 +108,16 @@ class AuthorizedWorkflowService:
         *,
         context: WorkflowCallContext,
     ) -> tuple[WorkflowDefinition, ...]:
-        definitions = self.workflows.list()
-        for definition in definitions:
-            await self._enforce_definition(definition, AuthorizationAction.READ, context)
-        return definitions
+        visible: list[WorkflowDefinition] = []
+        for definition in self.workflows.list():
+            try:
+                await self._enforce_definition(definition, AuthorizationAction.READ, context)
+            except ContractError as exc:
+                if exc.code is ErrorCode.FORBIDDEN:
+                    continue
+                raise
+            visible.append(definition)
+        return tuple(visible)
 
     async def resolve(
         self,
