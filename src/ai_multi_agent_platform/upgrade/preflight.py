@@ -113,7 +113,10 @@ class UpgradePreflight:
                     message=(
                         f"{state_name} migration {unresolved.revision} will be explicitly resumed"
                         if resumable
-                        else f"unresolved {state_name} migration {unresolved.revision} blocks upgrade"
+                        else (
+                            f"unresolved {state_name} migration {unresolved.revision} "
+                            "blocks upgrade"
+                        )
                     ),
                     details={
                         "status": unresolved.status.value,
@@ -195,9 +198,10 @@ def _migration_precondition_checks(
 ) -> tuple[PreflightCheck, ...]:
     """Evaluate read-only invariants before any new migration mutation starts.
 
-    A step precondition is deliberately an upgrade-source invariant, not an assertion that depends on
-    mutations from an earlier step in the same plan. Intermediate expectations belong in the earlier
-    step's post-validation. Already-started/applied revisions are not re-preflighted during recovery.
+    A step precondition is deliberately an upgrade-source invariant, not an assertion that
+    depends on mutations from an earlier step in the same plan. Intermediate expectations
+    belong in the earlier step's post-validation. Already-started/applied revisions are not
+    re-preflighted during recovery.
     """
 
     context = MigrationContext(data_dir=data_dir)
@@ -300,7 +304,10 @@ def _plugin_state_migration_checks(request: PreflightRequest) -> tuple[Preflight
             PreflightCheck(
                 code="plugin.state_migration.hook_missing",
                 severity=CheckSeverity.ERROR,
-                message="plugin-owned state requires migration but no controlled #20 hook is available",
+                message=(
+                    "plugin-owned state requires migration but no controlled #20 hook "
+                    "is available"
+                ),
                 details={"plugin_ids": sorted(required)},
             ),
         )
@@ -441,7 +448,10 @@ def _configuration_checks(
                 message=(
                     f"configuration {name} schema remains {current}"
                     if current == target
-                    else f"configuration {name} schema {current} -> {target} needs an explicit translator"
+                    else (
+                        f"configuration {name} schema {current} -> {target} "
+                        "needs an explicit translator"
+                    )
                 ),
             )
         )
