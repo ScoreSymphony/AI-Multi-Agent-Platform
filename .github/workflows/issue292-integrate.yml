@@ -1,0 +1,51 @@
+name: Issue 292 integration validator
+
+on:
+  push:
+    branches: [feat/issue-292-external-resource-search]
+    paths:
+      - .github/workflows/issue292-integrate.yml
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-292-external-resource-search
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Apply integration edits
+        run: python tools/issue292_integrate.py
+      - name: Bootstrap
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Format and lint
+        run: |
+          ruff format src tests
+          ruff check src tests
+      - name: Type check
+        run: mypy
+      - name: Existing connector regressions
+        run: pytest -q tests/test_connectors.py tests/test_connector_control_plane.py tests/test_issue_45_connector_search.py tests/test_portability_connectors.py
+      - name: Commit validated integration
+        shell: bash
+        run: |
+          git config user.name "Score Symphony"
+          git config user.email "scoresymphony@gmail.com"
+          git add src
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: wire durable external resources into sync and Search (#292)"
+            git push origin HEAD:feat/issue-292-external-resource-search
+          fi
