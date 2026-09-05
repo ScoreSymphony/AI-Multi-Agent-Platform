@@ -1,5 +1,6 @@
 name: Issue 292 integration validator
 
+# Validation-only workflow; removed before final PR review.
 on:
   push:
     branches: [feat/issue-292-external-resource-search]
