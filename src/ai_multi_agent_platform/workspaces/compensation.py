@@ -31,9 +31,7 @@ class CompensatingLocalWorkspaceProvider(LocalWorkspaceProvider):
                     "workspace compensation refused while canonical Task/Run references exist",
                     details={"workspace_id": workspace_id},
                 )
-            if any(
-                item.workspace_id == workspace_id for item in self._materializations.values()
-            ):
+            if any(item.workspace_id == workspace_id for item in self._materializations.values()):
                 raise ContractError(
                     ErrorCode.CONFLICT,
                     "workspace compensation refused while a materialization exists",
