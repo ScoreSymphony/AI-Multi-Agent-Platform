@@ -2,23 +2,27 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from ai_multi_agent_platform import repositories
-from ai_multi_agent_platform.domain import new_id
 
 
 _INPUT_REVISION = "1" * 40
 _OUTPUT_REVISION = "2" * 40
 
 
+def _id(kind: str) -> str:
+    return f"{kind}_{uuid4()}"
+
+
 def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path) -> None:
     path = tmp_path / "repository-provenance.sqlite3"
-    run_id = new_id("run")
-    task_id = new_id("task")
-    repository_id = new_id("external_resource")
-    agent_id = new_id("agent")
-    artifact_id = new_id("artifact")
-    provider_resource_id = new_id("external_resource")
+    run_id = _id("run")
+    task_id = _id("task")
+    repository_id = _id("external_resource")
+    agent_id = _id("agent")
+    artifact_id = _id("artifact")
+    provider_resource_id = _id("external_resource")
     recorded_at = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
     first = repositories.RepositoryRunProvenance(
