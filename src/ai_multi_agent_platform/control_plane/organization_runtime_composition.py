@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, cast
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -33,6 +34,9 @@ from .organization_ownership_integration import (
 )
 from .organization_visibility import AdministrativeOwnershipVisibility
 from .service import _resolve_owner
+
+if TYPE_CHECKING:
+    from ai_multi_agent_platform.accounting.service import AccountingService
 
 ORGANIZATION_RUNTIME_COMMANDS = ORGANIZATION_COMMANDS + ORGANIZATION_MANAGEMENT_COMMANDS
 
@@ -74,13 +78,19 @@ class ControlPlane(_CurrentControlPlane):
         self,
         *args: Any,
         organization_service: OrganizationService | None = None,
+        accounting_service: AccountingService | None = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(*args, **kwargs)
+        # #75 already consumes the same AccountingService for threshold attention. Keep that
+        # single canonical instance flowing down the composition chain instead of constructing
+        # another usage authority at the Organization layer.
+        super().__init__(*args, accounting_service=accounting_service, **kwargs)
         self._organization_service = organization_service
+        self._accounting_service = accounting_service
         self._ownership_mirror = (
             None if organization_service is None else CanonicalOwnershipMirror(organization_service)
         )
+        self._register_accounting_resources()
         if organization_service is None:
             return
         for collection, resource_service in organization_resource_services(
@@ -100,9 +110,39 @@ class ControlPlane(_CurrentControlPlane):
         ).items():
             super().register_command(command, handler)
 
+    def _register_accounting_resources(self) -> None:
+        accounting = self._accounting_service
+        if accounting is None:
+            return
+        services: Mapping[str, ResourceService]
+        if self._organization_service is None:
+            from ai_multi_agent_platform.accounting.control_plane import (
+                accounting_resource_services,
+            )
+
+            services = accounting_resource_services(accounting)
+        else:
+            # Local import keeps organizations.__init__ free from the control_plane/accounting
+            # cycle while still making the completed #76/#87 integration part of the real
+            # current runtime composition.
+            from ai_multi_agent_platform.organizations.accounting import (
+                organization_accounting_resource_services,
+            )
+
+            services = organization_accounting_resource_services(
+                accounting,
+                self._organization_service,
+            )
+        for collection, service in services.items():
+            super().register_resource_service(collection, service)
+
     @property
     def organization_service(self) -> OrganizationService | None:
         return self._organization_service
+
+    @property
+    def accounting_service(self) -> AccountingService | None:
+        return self._accounting_service
 
     @property
     def ownership_mirror(self) -> CanonicalOwnershipMirror | None:

@@ -36,6 +36,14 @@ from .connector_codecs import (
 )
 from .connector_import import ConnectionImportMutationHandler, ConnectionImportPolicy
 from .dependencies import ResourceDependencyRef, parse_resource_dependency, resource_dependency
+from .evaluation_codecs import (
+    EVALUATION_FIXTURE_RESOURCE_TYPE,
+    EVALUATION_SUITE_PORTABLE_SCHEMA_VERSION,
+    EVALUATION_SUITE_RESOURCE_TYPE,
+    EvaluationSuitePortableCodec,
+    register_evaluation_suite_portability_codec,
+)
+from .evaluation_import import EvaluationSuiteImportMutationHandler, EvaluationSuiteImportToken
 from .executor import (
     AppliedImportResource,
     ImportExecutionResult,
@@ -164,6 +172,9 @@ __all__ = [
     "AUTOMATION_RESOURCE_TYPE",
     "CONNECTION_PORTABLE_SCHEMA_VERSION",
     "CONNECTION_RESOURCE_TYPE",
+    "EVALUATION_FIXTURE_RESOURCE_TYPE",
+    "EVALUATION_SUITE_PORTABLE_SCHEMA_VERSION",
+    "EVALUATION_SUITE_RESOURCE_TYPE",
     "FILE_PORTABLE_SCHEMA_VERSION",
     "FILE_RESOURCE_TYPE",
     "KNOWLEDGE_PORTABLE_SCHEMA_VERSION",
@@ -199,6 +210,9 @@ __all__ = [
     "ConnectorRequirementMetadata",
     "DependencyKind",
     "DependencyRequirement",
+    "EvaluationSuiteImportMutationHandler",
+    "EvaluationSuiteImportToken",
+    "EvaluationSuitePortableCodec",
     "ExcludedState",
     "ExclusionCategory",
     "ExportSelection",
@@ -266,6 +280,7 @@ __all__ = [
     "register_agent_portability_codecs",
     "register_automation_portability_codec",
     "register_connector_portability_codec",
+    "register_evaluation_suite_portability_codec",
     "register_file_portability_codecs",
     "register_knowledge_portability_codec",
     "register_memory_portability_codec",

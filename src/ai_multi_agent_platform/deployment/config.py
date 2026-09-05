@@ -84,6 +84,28 @@ class SingleNodeConfig:
     def executor_dir(self) -> Path:
         return self.data_dir / "executor"
 
+    @property
+    def evaluation_dir(self) -> Path:
+        """Deployment-owned Evaluation assets; independent from optional portability."""
+
+        return self.data_dir / "evaluation"
+
+    @property
+    def evaluation_suites_dir(self) -> Path:
+        return self.evaluation_dir / "suites"
+
+    @property
+    def evaluation_regression_policies_dir(self) -> Path:
+        return self.evaluation_dir / "regression-policies"
+
+    @property
+    def evaluation_aggregation_policies_dir(self) -> Path:
+        return self.evaluation_dir / "aggregation-policies"
+
+    @property
+    def evaluation_fixtures_dir(self) -> Path:
+        return self.evaluation_dir / "fixtures"
+
     def prepare_directories(self) -> None:
         for path in (
             self.data_dir,
@@ -91,6 +113,11 @@ class SingleNodeConfig:
             self.files_dir,
             self.workspaces_dir,
             self.executor_dir,
+            self.evaluation_dir,
+            self.evaluation_suites_dir,
+            self.evaluation_regression_policies_dir,
+            self.evaluation_aggregation_policies_dir,
+            self.evaluation_fixtures_dir,
         ):
             try:
                 path.mkdir(parents=True, exist_ok=True)

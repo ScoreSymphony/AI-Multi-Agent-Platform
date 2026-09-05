@@ -6,6 +6,7 @@ from ai_multi_agent_platform.contracts import JsonValue, ProviderDescriptor
 from ai_multi_agent_platform.data.contracts import KnowledgeProvider, MemoryProvider
 from ai_multi_agent_platform.data.models import (
     DataAccessContext,
+    KnowledgeDocument,
     KnowledgeSource,
     MemoryEntry,
     MemoryQuery,
@@ -52,6 +53,11 @@ class AuthorizedDataMemoryProvider(_BaseAuthorizedDataMemoryProvider):
             )
         )
         return await self._lifecycle_inner.write_entry(entry, context)
+
+    async def list_entries_for_discovery(self) -> tuple[MemoryEntry, ...]:
+        """Forward the internal snapshot; Search performs per-result authorization."""
+
+        return await self._lifecycle_inner.list_entries_for_discovery()
 
     async def expire_entry(
         self,
@@ -112,6 +118,16 @@ class AuthorizedDataKnowledgeProvider(_BaseAuthorizedDataKnowledgeProvider):
             )
         )
         return await self._lifecycle_inner.list_sources(context)
+
+    async def list_sources_for_discovery(self) -> tuple[KnowledgeSource, ...]:
+        """Forward canonical metadata only; Search authorizes every projected result."""
+
+        return await self._lifecycle_inner.list_sources_for_discovery()
+
+    async def list_documents_for_discovery(self) -> tuple[KnowledgeDocument, ...]:
+        """Forward canonical documents to the privacy-minimizing Search projector."""
+
+        return await self._lifecycle_inner.list_documents_for_discovery()
 
     async def update_source(
         self,
