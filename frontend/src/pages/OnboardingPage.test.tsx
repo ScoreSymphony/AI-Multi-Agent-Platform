@@ -86,7 +86,7 @@ describe("guided first-run onboarding", () => {
       <OnboardingStateSummary status={status({ state: "needs_model" })} />,
     );
 
-    expect(html).toContain("needs model");
+    expect(html).toContain("needs_model");
     expect(html).toContain("Connect a local or self-hosted model");
     expect(html).toContain("Remote or paid providers are never selected automatically");
   });
