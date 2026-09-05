@@ -54,7 +54,9 @@ def _recover(restored_root: Path, monkeypatch) -> int:
     return server_main(["recover-restore"])
 
 
-def test_restore_blocks_workspace_snapshot_missing_file_reference(tmp_path: Path, monkeypatch) -> None:
+def test_restore_blocks_workspace_snapshot_missing_file_reference(
+    tmp_path: Path, monkeypatch
+) -> None:
     async def prepare() -> tuple[SingleNodeConfig, str]:
         config, deployment = _deployment(tmp_path, "workspace-source")
         admin = deployment.bootstrap_admin("admin", PASSWORD)
