@@ -3,13 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import suppress
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.deployment import (
+    AdvancedDeploymentProfile,
     AdvancedDeploymentProfileError,
     load_advanced_deployment_profile,
     load_single_node_config,
@@ -17,6 +19,7 @@ from ai_multi_agent_platform.deployment import (
 )
 from ai_multi_agent_platform.distributed import (
     DeterministicScheduler,
+    DispatchState,
     DistributedRegistry,
     DistributedRuntime,
     Heartbeat,
@@ -50,7 +53,7 @@ PROFILES = Path("deploy/distributed/profiles")
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
 
-def _profile(name: str):
+def _profile(name: str) -> AdvancedDeploymentProfile:
     return load_advanced_deployment_profile(PROFILES / name)
 
 
@@ -135,9 +138,7 @@ def test_required_reference_profiles_are_valid_and_keep_identity_separate() -> N
         "heterogeneous-three-node",
     ]
     for profile in profiles:
-        canonical_ids = {
-            item.node.node_id for item in profile.nodes
-        } | {
+        canonical_ids = {item.node.node_id for item in profile.nodes} | {
             worker.worker_id for item in profile.nodes for worker in item.workers
         }
         assert not canonical_ids.intersection(item.binding.host_ref for item in profile.nodes)
@@ -151,22 +152,30 @@ def test_profile_rejects_plaintext_credential_material() -> None:
         parse_advanced_deployment_profile(raw)
 
 
-def test_multi_local_workers_use_canonical_registration_and_scheduler() -> None:
+def test_multi_local_workers_register_and_dispatch_through_canonical_scheduler() -> None:
     profile = _profile("multi-local-workers.json")
     runtime = _registered_runtime("multi-local-workers.json")
+    workers = profile.nodes[0].workers
+    for worker in workers:
+        runtime.attach_worker(LocalWorker(worker.worker_id, FakeLifecycleBackend()))
 
-    assert len(profile.nodes) == 1
+    async def scenario() -> None:
+        records = [await runtime.dispatch(_job(), now=NOW) for _ in range(3)]
+        expected_first = min(worker.worker_id for worker in workers)
+        expected_second = max(worker.worker_id for worker in workers)
+
+        assert records[0].worker_id == expected_first
+        assert records[1].worker_id == expected_first
+        assert records[2].worker_id == expected_second
+        assert all(record.state is DispatchState.DISPATCHED for record in records)
+
     assert len(runtime.registry.list_nodes()) == 1
     assert len(runtime.registry.list_workers()) == 2
-
-    decision = DeterministicScheduler(runtime.registry).evaluate(_job())
-    worker_ids = tuple(worker.worker_id for worker in profile.nodes[0].workers)
-    assert decision.selected_worker_id == min(worker_ids)
+    asyncio.run(scenario())
 
 
 def test_remote_profile_requires_tls_and_canonical_secret_reference() -> None:
-    profile = _profile("remote-worker.json")
-    remote = profile.nodes[0]
+    remote = _profile("remote-worker.json").nodes[0]
 
     assert remote.binding.connection_mode == "remote"
     assert remote.binding.tls_required is True
@@ -217,18 +226,31 @@ def test_authenticated_remote_registration_reregistration_and_heartbeat() -> Non
         assert first.reporter_worker_id == second.reporter_worker_id == reporter_id
         assert len(runtime.registry.list_nodes()) == 1
         assert len(runtime.registry.list_workers()) == 1
-        assert runtime.registry.get_worker(reporter_id).last_heartbeat_at == NOW + timedelta(seconds=2)
+        heartbeat_at = runtime.registry.get_worker(reporter_id).last_heartbeat_at
+        assert heartbeat_at == NOW + timedelta(seconds=2)
 
     asyncio.run(scenario())
 
 
-def test_remote_profile_dispatches_through_transport_neutral_worker_contract() -> None:
+def test_authenticated_remote_profile_dispatches_through_transport_contract() -> None:
     remote = _profile("remote-worker.json").nodes[0]
+    reporter_id = remote.reporter_worker_id
+    assert reporter_id is not None
     worker = remote.workers[0]
+    authentication, authorization, secret = _worker_security(reporter_id)
     runtime = DistributedRuntime(DistributedRegistry())
-    runtime.register(remote.registration_request(), now=NOW)
+    service = WorkerProtocolService(
+        runtime,
+        authentication=authentication,
+        authorization=authorization,
+    )
 
     async def scenario() -> None:
+        await service.register(
+            remote.registration_request(),
+            _credentials(secret, "dispatch-register"),
+            now=NOW,
+        )
         transport = InProcessMessageTransport(provider_id="issue-240-network-adapter-fixture")
         endpoint = WorkerTransportEndpoint(
             LocalWorker(worker.worker_id, FakeLifecycleBackend()),
@@ -249,6 +271,31 @@ def test_remote_profile_dispatches_through_transport_neutral_worker_contract() -
             with suppress(asyncio.CancelledError):
                 await endpoint_task
             await transport.close(graceful=False)
+
+    asyncio.run(scenario())
+
+
+def test_worker_loss_marks_active_remote_job_lost_and_reregistration_recovers() -> None:
+    remote = _profile("remote-worker.json").nodes[0]
+    registry = DistributedRegistry(heartbeat_timeout=timedelta(seconds=30))
+    runtime = DistributedRuntime(registry)
+    runtime.register(remote.registration_request(), now=NOW)
+    lifecycle = FakeLifecycleBackend()
+    runtime.attach_worker(LocalWorker(remote.workers[0].worker_id, lifecycle))
+
+    async def scenario() -> None:
+        job = _job()
+        dispatched = await runtime.dispatch(job, now=NOW)
+        assert dispatched.state is DispatchState.DISPATCHED
+
+        lost = await runtime.reconcile(now=NOW + timedelta(seconds=31))
+        assert lost[0].state is DispatchState.LOST
+        assert lost[0].last_error == "worker_unreachable"
+
+        runtime.register(remote.registration_request(), now=NOW + timedelta(seconds=32))
+        recovered = await runtime.reconcile(now=NOW + timedelta(seconds=33))
+        assert recovered[0].state is DispatchState.DISPATCHED
+        assert recovered[0].worker_id == remote.workers[0].worker_id
 
     asyncio.run(scenario())
 
@@ -281,38 +328,47 @@ def test_cpu_control_plus_accelerator_worker_places_gpu_required_job_remotely() 
     decision = DeterministicScheduler(runtime.registry).evaluate(job)
 
     assert decision.selected_worker_id == accelerated.worker_id
+    cpu_worker_id = profile.nodes[0].workers[0].worker_id
     cpu_evaluation = next(
-        item for item in decision.evaluations if item.worker_id == profile.nodes[0].workers[0].worker_id
+        item for item in decision.evaluations if item.worker_id == cpu_worker_id
     )
-    assert RejectionCode.GPU_REQUIRED in {reason.code for reason in cpu_evaluation.reasons}
-    assert RejectionCode.MODEL_UNAVAILABLE in {reason.code for reason in cpu_evaluation.reasons}
+    rejection_codes = {reason.code for reason in cpu_evaluation.reasons}
+    assert RejectionCode.GPU_REQUIRED in rejection_codes
+    assert RejectionCode.MODEL_UNAVAILABLE in rejection_codes
 
 
-def test_draining_accelerator_worker_is_excluded() -> None:
+def test_draining_and_maintenance_exclude_accelerator_worker() -> None:
     profile = _profile("cpu-control-gpu-worker.json")
-    runtime = _registered_runtime("cpu-control-gpu-worker.json")
-    accelerated = profile.nodes[1].workers[0]
-    runtime.set_worker_draining(accelerated.worker_id, draining=True)
+    accelerated_node = profile.nodes[1]
+    requirements = JobRequirements(
+        executor_type="reference",
+        gpu="required",
+        vram_min_bytes=1,
+    )
 
+    draining_runtime = _registered_runtime("cpu-control-gpu-worker.json")
+    draining_runtime.set_worker_draining(accelerated_node.workers[0].worker_id, draining=True)
     with pytest.raises(NoEligibleWorkerError):
-        DeterministicScheduler(runtime.registry).schedule(
-            _job(
-                requirements=JobRequirements(
-                    executor_type="reference",
-                    gpu="required",
-                    vram_min_bytes=1,
-                )
-            ),
+        DeterministicScheduler(draining_runtime.registry).schedule(
+            _job(requirements=requirements),
+            now=NOW,
+        )
+
+    maintenance_runtime = _registered_runtime("cpu-control-gpu-worker.json")
+    maintenance_runtime.set_node_maintenance(accelerated_node.node.node_id, maintenance=True)
+    with pytest.raises(NoEligibleWorkerError):
+        DeterministicScheduler(maintenance_runtime.registry).schedule(
+            _job(requirements=requirements),
             now=NOW,
         )
 
 
-def test_heterogeneous_selection_uses_capability_and_locality_not_host_role() -> None:
+def test_heterogeneous_selection_uses_capability_locality_and_os_not_host_role() -> None:
     profile = _profile("heterogeneous-three-node.json")
     runtime = _registered_runtime("heterogeneous-three-node.json")
     data_local = profile.nodes[2].workers[0]
 
-    decision = DeterministicScheduler(runtime.registry).evaluate(
+    locality_decision = DeterministicScheduler(runtime.registry).evaluate(
         _job(
             requirements=JobRequirements(
                 executor_type="reference",
@@ -321,8 +377,14 @@ def test_heterogeneous_selection_uses_capability_and_locality_not_host_role() ->
             )
         )
     )
+    windows_decision = DeterministicScheduler(runtime.registry).evaluate(
+        _job(requirements=JobRequirements(executor_type="reference", os_name="windows"))
+    )
 
-    assert decision.selected_worker_id == data_local.worker_id
+    assert locality_decision.selected_worker_id == data_local.worker_id
+    assert windows_decision.selected_worker_id == profile.nodes[1].workers[0].worker_id
+    assert profile.nodes[2].node.architecture == "aarch64"
+    assert isinstance(profile.nodes[1].binding.workspace_root, PureWindowsPath)
 
 
 def test_workspace_root_is_local_only_and_refs_survive_transport_codec() -> None:
@@ -339,6 +401,38 @@ def test_workspace_root_is_local_only_and_refs_survive_transport_codec() -> None
     assert decoded.snapshot_ref == job.snapshot_ref
     assert decoded.artifact_refs == job.artifact_refs
     assert str(remote.binding.workspace_root) not in repr(encoded)
+
+
+def test_optional_model_service_degradation_does_not_break_general_execution() -> None:
+    profile = _profile("cpu-control-gpu-worker.json")
+    runtime = _registered_runtime("cpu-control-gpu-worker.json")
+    accelerated = profile.nodes[1]
+    degraded_workers = tuple(replace(worker, model_refs=()) for worker in accelerated.workers)
+    runtime.heartbeat(
+        Heartbeat(
+            node_id=accelerated.node.node_id,
+            sequence=1,
+            observed_at=NOW + timedelta(seconds=1),
+            resources=accelerated.node.resources,
+            workers=degraded_workers,
+            model_refs=(),
+        ),
+        now=NOW + timedelta(seconds=1),
+    )
+
+    model_decision = DeterministicScheduler(runtime.registry).evaluate(
+        _job(
+            requirements=JobRequirements(
+                executor_type="reference",
+                gpu="required",
+                model_ref="model:local-large",
+            )
+        )
+    )
+    general_decision = DeterministicScheduler(runtime.registry).evaluate(_job())
+
+    assert model_decision.selected_worker_id is None
+    assert general_decision.selected_worker_id is not None
 
 
 def test_optional_services_can_all_be_absent_without_invalidating_workers() -> None:
