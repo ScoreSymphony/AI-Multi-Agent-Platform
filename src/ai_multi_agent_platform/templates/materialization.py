@@ -28,9 +28,9 @@ _PLACEHOLDER = re.compile(r"\$\{([^{}]+)\}")
 class MaterializingTemplateEnvironment(TemplateEnvironment):
     """TemplateEnvironment carrying server-owned values required for apply materialization.
 
-    The inherited resolved-ID sets remain the compatibility-reporting surface. These mappings
-    are the actual ephemeral values consumed only while applying a Template. Secret bindings are
-    references, never secret material.
+    Concrete binding mappings are authoritative. The inherited resolved-name/reference sets are
+    derived from those mappings so Preview cannot claim materializability from names alone.
+    Secret bindings are references, never secret material.
     """
 
     placeholder_bindings: Mapping[str, FrozenJsonValue] = field(default_factory=dict)
@@ -53,6 +53,17 @@ class MaterializingTemplateEnvironment(TemplateEnvironment):
             raise ValueError("Template secret-reference binding names must be non-blank")
         if any(not reference.strip() for reference in configuration_payloads):
             raise ValueError("Template configuration reference bindings must be non-blank")
+        object.__setattr__(self, "resolved_placeholders", frozenset(placeholders))
+        object.__setattr__(
+            self,
+            "resolved_secret_reference_placeholders",
+            frozenset(secret_references),
+        )
+        object.__setattr__(
+            self,
+            "validated_configuration_refs",
+            frozenset(configuration_payloads),
+        )
         object.__setattr__(self, "placeholder_bindings", MappingProxyType(placeholders))
         object.__setattr__(
             self,
