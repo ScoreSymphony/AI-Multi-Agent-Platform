@@ -350,9 +350,7 @@ def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
         assert any(
             kind == "provider" and ref_id == "local-evaluation-provider" for kind, ref_id, _ in refs
         )
-        prompt_refs = [
-            item for item in snapshot["references"] if item["kind"] == "prompt_config"
-        ]
+        prompt_refs = [item for item in snapshot["references"] if item["kind"] == "prompt_config"]
         assert len(prompt_refs) == 1
         assert prompt_refs[0]["ref_id"] == f"{assistant.agent_id}:instructions"
         assert prompt_refs[0]["version"] == str(assistant.revision)
