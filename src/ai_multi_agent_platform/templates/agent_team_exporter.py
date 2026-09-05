@@ -8,7 +8,7 @@ from ai_multi_agent_platform.agents import AgentProfile, AgentService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
 from ai_multi_agent_platform.control_plane.models import json_value
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, new_id
 
 from .agent_handlers import portable_agent_profile_payload
 from .models import (
@@ -72,87 +72,144 @@ class AgentTeamTemplateExporter:
         for _, _, content in child_contents:
             validate_template_configuration(content.configuration)
 
-        published_agents: dict[str, TemplateRevision] = {}
-        for agent_id, _, content in child_contents:
-            draft = self.templates.create_draft(owner_ref=owner_ref, content=content)
-            published_agents[agent_id] = self.templates.publish(
-                draft.template_id,
-                expected_revision=draft.revision,
-            )
+        created_template_ids: list[str] = []
+        try:
+            published_agents: dict[str, TemplateRevision] = {}
+            for agent_id, _, content in child_contents:
+                child_template_id = new_id("template")
+                # Register the planned identity before persistence so a repository that mutates
+                # state and then raises can still be compensated deterministically.
+                created_template_ids.append(child_template_id)
+                draft = self.templates.create_draft(
+                    owner_ref=owner_ref,
+                    content=content,
+                    template_id=child_template_id,
+                )
+                published_agents[agent_id] = self.templates.publish(
+                    draft.template_id,
+                    expected_revision=draft.revision,
+                )
 
-        portable_members: tuple[FrozenJsonValue, ...] = tuple(
-            {
-                "agent_template_id": published_agents[member.agent.agent_id].template_id,
-                "agent_template_revision": published_agents[member.agent.agent_id].revision,
-                "role": member.role,
-                "required": member.required,
-                "can_delegate_to_template_ids": tuple(
-                    published_agents[agent_id].template_id for agent_id in member.can_delegate_to
-                ),
-            }
-            for member in source.profile.members
-        )
-        leader_template_id = (
-            None
-            if source.profile.leader_agent_id is None
-            else published_agents[source.profile.leader_agent_id].template_id
-        )
-        profile: dict[str, FrozenJsonValue] = {
-            "name": source.profile.name,
-            "description": source.profile.description or None,
-            "members": portable_members,
-            "coordination_policy_ref": None,
-            "leader_agent_template_id": leader_template_id,
-            "shared_capability_ids": source.profile.shared_capability_ids,
-            "shared_resource_refs": (),
-            "max_parallel_agents": source.profile.max_parallel_agents,
-            "max_steps": source.profile.max_steps,
-            "unavailable_member_policy": source.profile.unavailable_member_policy.value,
-            "enabled": source.profile.enabled,
-            "metadata": _freeze_json(json_value(source.profile.metadata)),
-        }
-        dependencies = tuple(
-            TemplateDependency(
-                template_id=published_agents[member.agent.agent_id].template_id,
-                revision=published_agents[member.agent.agent_id].revision,
-            )
-            for member in source.profile.members
-        )
-        requirements = TemplateRequirements(
-            capabilities=tuple(
-                CapabilityRequirement(capability_id=capability_id)
-                for capability_id in source.profile.shared_capability_ids
-            )
-        )
-        content = TemplateContent(
-            name=name or source.profile.name,
-            description=f"Template exported from Agent Team {source.team_id}@{source.revision}",
-            template_type=TemplateType.AGENT_TEAM,
-            configuration=TemplateConfiguration(
-                payload={
-                    "profile": profile,
-                    "project_id": None,
-                    "workspace_id": None,
+            portable_members: tuple[FrozenJsonValue, ...] = tuple(
+                {
+                    "agent_template_id": published_agents[member.agent.agent_id].template_id,
+                    "agent_template_revision": published_agents[member.agent.agent_id].revision,
+                    "role": member.role,
+                    "required": member.required,
+                    "can_delegate_to_template_ids": tuple(
+                        published_agents[agent_id].template_id for agent_id in member.can_delegate_to
+                    ),
                 }
-            ),
-            dependencies=dependencies,
-            requirements=requirements,
-            provenance=TemplateProvenance(
-                author=author,
-                source="canonical-agent-team-export",
-                trust=TemplateTrust.LOCAL,
-                metadata={
-                    "source_resource_type": "agent_team",
-                    "source_resource_id": source.team_id,
-                    "source_resource_revision": source.revision,
-                    "source_project_id": source.project_id,
-                    "source_workspace_id": source.workspace_id,
+                for member in source.profile.members
+            )
+            leader_template_id = (
+                None
+                if source.profile.leader_agent_id is None
+                else published_agents[source.profile.leader_agent_id].template_id
+            )
+            profile: dict[str, FrozenJsonValue] = {
+                "name": source.profile.name,
+                "description": source.profile.description or None,
+                "members": portable_members,
+                "coordination_policy_ref": None,
+                "leader_agent_template_id": leader_template_id,
+                "shared_capability_ids": source.profile.shared_capability_ids,
+                "shared_resource_refs": (),
+                "max_parallel_agents": source.profile.max_parallel_agents,
+                "max_steps": source.profile.max_steps,
+                "unavailable_member_policy": source.profile.unavailable_member_policy.value,
+                "enabled": source.profile.enabled,
+                "metadata": _freeze_json(json_value(source.profile.metadata)),
+            }
+            dependencies = tuple(
+                TemplateDependency(
+                    template_id=published_agents[member.agent.agent_id].template_id,
+                    revision=published_agents[member.agent.agent_id].revision,
+                )
+                for member in source.profile.members
+            )
+            requirements = TemplateRequirements(
+                capabilities=tuple(
+                    CapabilityRequirement(capability_id=capability_id)
+                    for capability_id in source.profile.shared_capability_ids
+                )
+            )
+            content = TemplateContent(
+                name=name or source.profile.name,
+                description=f"Template exported from Agent Team {source.team_id}@{source.revision}",
+                template_type=TemplateType.AGENT_TEAM,
+                configuration=TemplateConfiguration(
+                    payload={
+                        "profile": profile,
+                        "project_id": None,
+                        "workspace_id": None,
+                    }
+                ),
+                dependencies=dependencies,
+                requirements=requirements,
+                provenance=TemplateProvenance(
+                    author=author,
+                    source="canonical-agent-team-export",
+                    trust=TemplateTrust.LOCAL,
+                    metadata={
+                        "source_resource_type": "agent_team",
+                        "source_resource_id": source.team_id,
+                        "source_resource_revision": source.revision,
+                        "source_project_id": source.project_id,
+                        "source_workspace_id": source.workspace_id,
+                    },
+                ),
+                tags=("agent-team", "exported"),
+            )
+            validate_template_configuration(content.configuration)
+            parent_template_id = new_id("template")
+            created_template_ids.append(parent_template_id)
+            return self.templates.create_draft(
+                owner_ref=owner_ref,
+                content=content,
+                template_id=parent_template_id,
+            )
+        except Exception as export_error:
+            self._compensate_partial_export(created_template_ids, export_error)
+            raise
+
+    def _compensate_partial_export(
+        self,
+        created_template_ids: list[str],
+        export_error: Exception,
+    ) -> None:
+        failures: list[dict[str, JsonValue]] = []
+        for template_id in reversed(created_template_ids):
+            try:
+                self.templates.repository.delete_template(template_id)
+            except ContractError as cleanup_error:
+                if cleanup_error.code is ErrorCode.NOT_FOUND:
+                    continue
+                failures.append(
+                    {
+                        "template_id": template_id,
+                        "error_type": type(cleanup_error).__name__,
+                        "error": str(cleanup_error),
+                    }
+                )
+            except Exception as cleanup_error:
+                failures.append(
+                    {
+                        "template_id": template_id,
+                        "error_type": type(cleanup_error).__name__,
+                        "error": str(cleanup_error),
+                    }
+                )
+        if failures:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "Agent Team Template export failed and partial Templates could not be fully compensated",
+                details={
+                    "export_error_type": type(export_error).__name__,
+                    "export_error": str(export_error),
+                    "cleanup_failures": failures,
                 },
-            ),
-            tags=("agent-team", "exported"),
-        )
-        validate_template_configuration(content.configuration)
-        return self.templates.create_draft(owner_ref=owner_ref, content=content)
+            ) from export_error
 
 
 def _agent_template_content(
