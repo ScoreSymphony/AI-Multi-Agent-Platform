@@ -169,8 +169,7 @@ class AuthorizationPolicyProfileContent:
             raise ValueError("approval_required_actions must not contain duplicates")
         if len(resources) != len(set(resources)):
             raise ValueError("resource_types must not contain duplicates")
-        overlap = set(allowed).intersection(approval)
-        if overlap:
+        if set(allowed).intersection(approval):
             raise ValueError("an action cannot be both directly allowed and approval-required")
         if not (allowed or approval):
             raise ValueError("policy profile must allow or approval-gate at least one action")
@@ -291,6 +290,14 @@ class AuthorizationPolicyProfileRepository(Protocol):
         revision: AuthorizationPolicyProfileRevision,
     ) -> None: ...
 
+    def import_profile(
+        self,
+        definition: AuthorizationPolicyProfileDefinition,
+        revisions: tuple[AuthorizationPolicyProfileRevision, ...],
+    ) -> None: ...
+
+    def delete_profile(self, policy_profile_id: str) -> None: ...
+
     def set_enabled(self, definition: AuthorizationPolicyProfileDefinition) -> None: ...
 
     def get_profile(self, policy_profile_id: str) -> AuthorizationPolicyProfileDefinition: ...
@@ -366,6 +373,44 @@ class InMemoryAuthorizationPolicyProfileRepository:
             raise ContractError(ErrorCode.CONFLICT, "policy profile revision already exists")
         self._revisions[key] = revision
         self._profiles[definition.policy_profile_id] = definition
+
+    def import_profile(
+        self,
+        definition: AuthorizationPolicyProfileDefinition,
+        revisions: tuple[AuthorizationPolicyProfileRevision, ...],
+    ) -> None:
+        """Atomically insert a validated complete immutable history."""
+
+        profile_id = definition.policy_profile_id
+        if profile_id in self._profiles:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"authorization policy profile already exists: {profile_id}",
+            )
+        self._validate_history(definition, revisions)
+        keys = tuple((profile_id, item.revision) for item in revisions)
+        if any(key in self._revisions for key in keys):
+            raise ContractError(ErrorCode.CONFLICT, "policy profile revision already exists")
+
+        # Mutate only after the complete history has been validated.
+        self._profiles[profile_id] = definition
+        for revision in revisions:
+            self._revisions[(profile_id, revision.revision)] = revision
+
+    def delete_profile(self, policy_profile_id: str) -> None:
+        self.get_profile(policy_profile_id)
+        if any(
+            item.profile_ref.policy_profile_id == policy_profile_id
+            for item in self._assignments.values()
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "policy profile with assignments cannot be deleted",
+            )
+        self._profiles.pop(policy_profile_id)
+        for key in tuple(self._revisions):
+            if key[0] == policy_profile_id:
+                self._revisions.pop(key)
 
     def set_enabled(self, definition: AuthorizationPolicyProfileDefinition) -> None:
         current = self.get_profile(definition.policy_profile_id)
@@ -464,6 +509,38 @@ class InMemoryAuthorizationPolicyProfileRepository:
             )
         return tuple(sorted(values, key=lambda item: (item.created_at, item.assignment_id)))
 
+    @classmethod
+    def _validate_history(
+        cls,
+        definition: AuthorizationPolicyProfileDefinition,
+        revisions: tuple[AuthorizationPolicyProfileRevision, ...],
+    ) -> None:
+        if not revisions:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "policy profile import requires revision history",
+            )
+        expected = tuple(range(1, definition.current_revision + 1))
+        if tuple(item.revision for item in revisions) != expected:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "policy profile import revision history must be contiguous",
+            )
+        for revision in revisions:
+            if revision.policy_profile_id != definition.policy_profile_id:
+                raise ContractError(ErrorCode.CONTRACT_VIOLATION, "policy profile ID mismatch")
+            if (
+                revision.owner_ref != definition.owner_ref
+                or revision.project_id != definition.project_id
+                or revision.organization_id != definition.organization_id
+                or revision.team_id != definition.team_id
+            ):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "policy profile imported revision ownership scope is inconsistent",
+                )
+        cls._validate_pair(definition, revisions[-1])
+
     @staticmethod
     def _validate_pair(
         definition: AuthorizationPolicyProfileDefinition,
@@ -505,7 +582,7 @@ class AuthorizationPolicyProfileCallContext:
 
 
 class AuthorizationPolicyProfileService:
-    """Canonical lifecycle boundary; every read/mutation is enforced through issue #15."""
+    """Canonical lifecycle boundary; every user-visible mutation passes issue #15."""
 
     def __init__(
         self,
@@ -558,6 +635,59 @@ class AuthorizationPolicyProfileService:
         )
         self._repository.create_profile(definition, revision)
         return definition
+
+    async def import_profile(
+        self,
+        *,
+        definition: AuthorizationPolicyProfileDefinition,
+        revisions: tuple[AuthorizationPolicyProfileRevision, ...],
+        context: AuthorizationPolicyProfileCallContext,
+    ) -> AuthorizationPolicyProfileDefinition:
+        """Authorize and atomically persist dormant, untrusted imported configuration."""
+
+        self._validate_import_candidate(definition, revisions)
+        await self._enforce(
+            action=AuthorizationAction.CREATE,
+            resource_id=definition.policy_profile_id,
+            context=context,
+            project_id=definition.project_id,
+            organization_id=definition.organization_id,
+            team_id=definition.team_id,
+            payload_ref=f"{definition.policy_profile_id}@import:{definition.current_revision}",
+            side_effect="policy_profile_import",
+            risk=RiskClassification.CRITICAL,
+        )
+        self._repository.import_profile(definition, revisions)
+        return definition
+
+    def compensate_import(self, policy_profile_id: str) -> None:
+        """Rollback only a dormant, unassigned, untrusted imported profile.
+
+        This is an internal transaction-compensation seam for #79. It intentionally does
+        not act as a general policy-profile deletion API.
+        """
+
+        definition = self._repository.get_profile(policy_profile_id)
+        revisions = self._repository.list_revisions(policy_profile_id)
+        if definition.enabled:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "enabled policy profile cannot be import-compensated",
+            )
+        if self._repository.list_assignments(policy_profile_id=policy_profile_id):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "assigned policy profile cannot be import-compensated",
+            )
+        if not revisions or any(
+            not item.content.provenance.imported or item.content.provenance.trusted
+            for item in revisions
+        ):
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "only untrusted imported policy profiles may be import-compensated",
+            )
+        self._repository.delete_profile(policy_profile_id)
 
     async def get(
         self,
@@ -656,6 +786,27 @@ class AuthorizationPolicyProfileService:
         self._repository.set_enabled(updated)
         return updated
 
+    async def enable(
+        self,
+        policy_profile_id: str,
+        context: AuthorizationPolicyProfileCallContext,
+    ) -> AuthorizationPolicyProfileDefinition:
+        """Explicitly activate dormant configuration through the normal admin gate."""
+
+        current = self._repository.get_profile(policy_profile_id)
+        if current.enabled:
+            return current
+        await self._enforce_definition(
+            AuthorizationAction.ADMINISTER,
+            current,
+            context,
+            side_effect="policy_profile_enable",
+            risk=RiskClassification.CRITICAL,
+        )
+        updated = replace(current, enabled=True, updated_at=utc_now())
+        self._repository.set_enabled(updated)
+        return updated
+
     async def assign(
         self,
         *,
@@ -690,6 +841,26 @@ class AuthorizationPolicyProfileService:
         )
         self._repository.create_assignment(assignment)
         return assignment
+
+    @staticmethod
+    def _validate_import_candidate(
+        definition: AuthorizationPolicyProfileDefinition,
+        revisions: tuple[AuthorizationPolicyProfileRevision, ...],
+    ) -> None:
+        if definition.enabled:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "imported policy profile must be dormant until explicitly enabled",
+            )
+        InMemoryAuthorizationPolicyProfileRepository._validate_history(definition, revisions)
+        if any(
+            not item.content.provenance.imported or item.content.provenance.trusted
+            for item in revisions
+        ):
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "imported policy profile revisions must be marked imported and untrusted",
+            )
 
     async def _enforce_definition(
         self,
