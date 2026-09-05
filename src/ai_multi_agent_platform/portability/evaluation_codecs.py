@@ -47,10 +47,8 @@ class EvaluationSuitePortableCodec:
 
     def deserialize(self, resource: PortableResource, context: ImportContext) -> object:
         if resource.resource_type != self.resource_type:
-            message = (
-                "EvaluationSuite codec cannot deserialize resource type "
-                f"{resource.resource_type!r}"
-            )
+            resource_type = resource.resource_type
+            message = f"EvaluationSuite codec cannot deserialize resource type {resource_type!r}"
             raise ContractError(ErrorCode.INVALID_REQUEST, message)
         if resource.id_policy is not IdPolicy.PRESERVE:
             raise ContractError(
