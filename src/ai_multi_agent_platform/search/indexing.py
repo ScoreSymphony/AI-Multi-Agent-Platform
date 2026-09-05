@@ -347,6 +347,11 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
     for field in (
         "provider_id",
         "provider_type",
+        "connection_id",
+        "native_namespace",
+        "native_id",
+        "external_version",
+        "external_revision",
         "organization_id",
         "team_id",
         "actor_id",
