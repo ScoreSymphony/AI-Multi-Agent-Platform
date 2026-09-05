@@ -73,6 +73,7 @@ def test_budget_notification_honors_preferences_and_recipient_isolation() -> Non
         assert created.recipient == recipient
         assert created.category is NotificationCategory.RESOURCE
         assert created.summary["measurement_quality"] == "reported"
+        assert created.summary["threshold_generation"] == 1
         assert set(created.summary) == {
             "budget_id",
             "level",
@@ -84,6 +85,7 @@ def test_budget_notification_honors_preferences_and_recipient_isolation() -> Non
             "scope_id",
             "budget_version",
             "measurement_quality",
+            "threshold_generation",
         }
 
         with pytest.raises(ContractError) as caught:
