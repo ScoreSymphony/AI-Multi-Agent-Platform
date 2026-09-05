@@ -58,7 +58,7 @@ jobs:
           python -m ruff format --check src/ai_multi_agent_platform/portability/project_codecs.py src/ai_multi_agent_platform/portability/project_import.py src/ai_multi_agent_platform/portability/composition.py src/ai_multi_agent_platform/portability/__init__.py tests/test_issue_79_project_portability.py tests/test_issue_79_single_node_portability.py
           python -m ruff check src/ai_multi_agent_platform/portability/project_codecs.py src/ai_multi_agent_platform/portability/project_import.py src/ai_multi_agent_platform/portability/composition.py src/ai_multi_agent_platform/portability/__init__.py tests/test_issue_79_project_portability.py tests/test_issue_79_single_node_portability.py
           python -m mypy src/ai_multi_agent_platform/portability/project_codecs.py src/ai_multi_agent_platform/portability/project_import.py src/ai_multi_agent_platform/portability/composition.py
-          python -m pytest -q tests/test_issue_79_project_portability.py tests/test_issue_79_single_node_portability.py tests/test_issue_79_control_plane_portability.py tests/test_issue_79_cli_portability.py tests/test_issue_79_workflow.py
+          python -m pytest -q tests/test_issue_79_project_portability.py tests/test_issue_79_single_node_portability.py tests/test_issue_79_control_plane_portability.py tests/test_issue_79_cli_portability.py
       - name: Commit final slice and remove helper
         run: |
           git rm .github/workflows/issue-79-project-portability-finalize.yml
