@@ -107,11 +107,12 @@ def register_repository_control_plane(
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         _reject_unknown(payload, {"revision", "limit", "approval_id"})
+        limit = _optional_int(payload.get("limit"), "limit")
         values = await repositories.commits(
             resource_ref,
             _call_context(context, payload),
             revision=_optional_string(payload.get("revision"), "revision") or "HEAD",
-            limit=_optional_int(payload.get("limit"), "limit") or 50,
+            limit=50 if limit is None else limit,
         )
         return {
             "repository_id": resource_ref,
