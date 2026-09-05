@@ -36,23 +36,24 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
 
     def __init__(self, db_path: str | Path) -> None:
         super().__init__(db_path)
+        added_operations = ("expire_entry", "list_entries_for_discovery")
         capabilities = tuple(
             replace(
                 capability,
                 supported_operations=tuple(
-                    dict.fromkeys((*capability.supported_operations, "expire_entry"))
+                    dict.fromkeys((*capability.supported_operations, *added_operations))
                 ),
                 features=tuple(
                     feature for feature in capability.features if feature != "six_scopes"
                 )
-                + ("seven_scopes", "memory_origin", "exact_scoped_expiry"),
+                + ("seven_scopes", "memory_origin", "exact_scoped_expiry", "discovery_snapshot"),
             )
             for capability in self._descriptor.capabilities
         )
         self._descriptor = replace(
             self._descriptor,
             supported_operations=tuple(
-                dict.fromkeys((*self._descriptor.supported_operations, "expire_entry"))
+                dict.fromkeys((*self._descriptor.supported_operations, *added_operations))
             ),
             capabilities=capabilities,
         )
@@ -191,13 +192,43 @@ class LocalMemoryProvider(_BaseLocalMemoryProvider):
             ) from exc
         return entry
 
+    async def list_entries_for_discovery(self) -> tuple[MemoryEntry, ...]:
+        """Return current canonical entries without exposing SQLite/provider identity."""
+
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT * FROM data_memory WHERE deleted = 0 ORDER BY created_at, memory_id"
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to enumerate memory discovery snapshot",
+            ) from exc
+        now = datetime.now(UTC)
+        entries: list[MemoryEntry] = []
+        for row in rows:
+            entry = self._memory_from_row(row)
+            if entry.expires_at is not None and entry.expires_at <= now:
+                continue
+            if entry.superseded_by_memory_id is not None:
+                continue
+            entries.append(entry)
+        return tuple(entries)
+
 
 class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
     """#13 local Knowledge provider with canonical #251 source management."""
 
     def __init__(self, db_path: str | Path) -> None:
         super().__init__(db_path)
-        added_operations = ("get_source", "list_sources", "update_source")
+        added_operations = (
+            "get_source",
+            "list_sources",
+            "update_source",
+            "list_sources_for_discovery",
+            "list_documents_for_discovery",
+        )
         capabilities = tuple(
             replace(
                 capability,
@@ -211,6 +242,7 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
                             "source_discovery",
                             "metadata_update",
                             "explicit_failure_state",
+                            "discovery_snapshot",
                         )
                     )
                 ),
@@ -237,6 +269,43 @@ class LocalKnowledgeProvider(_BaseLocalKnowledgeProvider):
         context: DataAccessContext,
     ) -> tuple[KnowledgeSource, ...]:
         return await self._list_sources(context)
+
+    async def list_sources_for_discovery(self) -> tuple[KnowledgeSource, ...]:
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT * FROM data_knowledge_sources ORDER BY created_at, source_id"
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to enumerate knowledge source discovery snapshot",
+            ) from exc
+        return tuple(self._source_from_row(row) for row in rows)
+
+    async def list_documents_for_discovery(self) -> tuple[KnowledgeDocument, ...]:
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    "SELECT * FROM data_knowledge_documents ORDER BY created_at, document_id"
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to enumerate knowledge document discovery snapshot",
+            ) from exc
+        return tuple(
+            KnowledgeDocument(
+                document_id=cast(str, row["document_id"]),
+                source_id=cast(str, row["source_id"]),
+                revision=cast(str, row["revision"]),
+                content=cast(str, row["content"]),
+                location=cast(str, row["location"]),
+                checksum=cast(str, row["checksum"]),
+                created_at=datetime.fromisoformat(cast(str, row["created_at"])),
+            )
+            for row in rows
+        )
 
     async def update_source(
         self,
