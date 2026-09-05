@@ -9,6 +9,7 @@ from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.agents import (
     AgentRuntime,
     AgentService,
+    DurableRoutingProfileAgentRuntime,
     JsonAgentRepository,
     register_agent_control_plane,
     register_standard_agent_control_plane,
@@ -25,8 +26,8 @@ from ai_multi_agent_platform.control_plane.approval_portability_composition impo
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
     ConversationService,
+    DurableRoutingProfileConversationResponseProvider,
     JsonConversationRepository,
-    ModelRuntimeConversationResponseProvider,
 )
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
@@ -38,7 +39,14 @@ from ai_multi_agent_platform.kernel import (
     PlatformKernel,
     SqliteKernelRepository,
 )
-from ai_multi_agent_platform.models import JsonModelRegistryStore, ModelRegistry, ModelRuntime
+from ai_multi_agent_platform.models import (
+    JsonModelRegistryStore,
+    JsonModelRoutingProfileRepository,
+    ModelRegistry,
+    ModelRoutingProfileRef,
+    ModelRoutingProfileService,
+    ModelRuntime,
+)
 from ai_multi_agent_platform.onboarding import (
     FirstRunAgentLifecycleBackend,
     FirstRunTaskService,
@@ -129,6 +137,8 @@ class SingleNodeDeployment:
     agent_runtime: AgentRuntime
     capabilities: CapabilityRegistry
     models: ModelRegistry
+    routing_profile_repository: JsonModelRoutingProfileRepository
+    routing_profiles: ModelRoutingProfileService
     model_runtime: ModelRuntime
     onboarding: OnboardingService
     first_task: FirstRunTaskService
@@ -254,8 +264,12 @@ def build_single_node_deployment(
     )
     capabilities = CapabilityRegistry()
     models = ModelRegistry()
-    agent_runtime = AgentRuntime(
+    routing_profile_repository = JsonModelRoutingProfileRepository(
+        database_dir / "model-routing-profiles.json"
+    )
+    agent_runtime = DurableRoutingProfileAgentRuntime(
         agents,
+        routing_profile_repository=routing_profile_repository,
         model_registry=models,
         capability_registry=capabilities,
     )
@@ -271,10 +285,10 @@ def build_single_node_deployment(
     )
     onboarding.restore()
     model_runtime = ModelRuntime(models)
-    conversation_response_provider = ModelRuntimeConversationResponseProvider(
+    conversation_response_provider = DurableRoutingProfileConversationResponseProvider(
         model_runtime,
         agents,
-        routing_profiles=agent_runtime.routing_profiles,
+        routing_profile_repository=routing_profile_repository,
     )
 
     template_handlers = ContextualTemplateHandlerRegistry()
@@ -350,6 +364,10 @@ def build_single_node_deployment(
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
+    routing_profiles = ModelRoutingProfileService(
+        routing_profile_repository,
+        authorization=authorization,
+    )
 
     portability_workflow = build_agent_portability_workflow(
         agents=agents.repository,
@@ -357,6 +375,7 @@ def build_single_node_deployment(
         scopes=scopes,
         platform_version=__version__,
         templates=templates.repository,
+        routing_profiles=routing_profile_repository,
     )
 
     control_plane = ControlPlane(
@@ -397,6 +416,11 @@ def build_single_node_deployment(
         capabilities=lambda: (
             capability.capability_id
             for capability in capabilities.inventory_capabilities(include_unavailable=False)
+        ),
+        model_policies=lambda: (
+            ModelRoutingProfileRef(definition.profile_id, definition.current_revision).canonical_ref
+            for definition in routing_profile_repository.list_definitions()
+            if definition.enabled
         ),
     )
     register_template_control_plane(
@@ -448,6 +472,8 @@ def build_single_node_deployment(
         agent_runtime=agent_runtime,
         capabilities=capabilities,
         models=models,
+        routing_profile_repository=routing_profile_repository,
+        routing_profiles=routing_profiles,
         model_runtime=model_runtime,
         onboarding=onboarding,
         first_task=first_task,

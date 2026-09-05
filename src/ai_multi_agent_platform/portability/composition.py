@@ -8,6 +8,9 @@ from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.models.routing_profile_repository import (
+    ModelRoutingProfileRepository,
+)
 from ai_multi_agent_platform.templates import TemplateRepository
 
 from .agent_codecs import (
@@ -20,11 +23,21 @@ from .agent_codecs import (
 from .agent_import import AgentImportMutationHandler, AgentTeamImportMutationHandler
 from .dependencies import parse_resource_dependency
 from .executor import ImportExecutor, ImportMutationRegistry
+from .model_routing_profile_codecs import (
+    MODEL_ROUTING_PROFILE_RESOURCE_TYPE,
+    register_model_routing_profile_portability_codec,
+    snapshot_model_routing_profile,
+)
+from .model_routing_profile_import import ModelRoutingProfileImportMutationHandler
 from .models import DependencyKind, DependencyRequirement, IdPolicy
 from .planner import ImportPreviewService
 from .project_codecs import PROJECT_RESOURCE_TYPE, register_project_portability_codec
 from .project_import import ProjectDependencyAudit, ProjectImportMutationHandler
 from .registry import ResourceSerializerRegistry
+from .routing_profile_reference_codecs import (
+    register_routing_profile_aware_agent_portability_codecs,
+    register_routing_profile_aware_template_portability_codec,
+)
 from .template_codecs import (
     TEMPLATE_RESOURCE_TYPE,
     register_template_portability_codec,
@@ -41,29 +54,45 @@ def build_agent_portability_workflow(
     scopes: ScopeStore,
     platform_version: str,
     templates: TemplateRepository | None = None,
+    routing_profiles: ModelRoutingProfileRepository | None = None,
     source_instance_id: str | None = None,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
     project_dependency_audit: ProjectDependencyAudit | None = None,
 ) -> PortabilityWorkflowService:
     """Compose production-safe portability against supplied canonical stores.
 
-    Agent, Agent Team and Project are always available. Template portability is enabled
-    only when the canonical #78 repository is supplied. Project rollback deliberately
-    fails closed unless the caller supplies a cross-domain dependency audit that can
-    prove removal is safe. Dependencies without a supplied destination registry remain
-    unavailable so import preview fails closed rather than making optimistic assumptions
-    about target state.
+    Agent, Agent Team and Project are always available. Template and model-routing-profile
+    portability are enabled only when their canonical repositories are supplied. Project
+    rollback deliberately fails closed unless the caller supplies a cross-domain dependency
+    audit that can prove removal is safe. Dependencies without a supplied destination
+    registry remain unavailable so import preview fails closed rather than making optimistic
+    assumptions about target state.
     """
 
     serializers = ResourceSerializerRegistry()
-    register_agent_portability_codecs(
-        serializers,
-        agent_id_policy=id_policy,
-        team_id_policy=id_policy,
-    )
+    if routing_profiles is None:
+        register_agent_portability_codecs(
+            serializers,
+            agent_id_policy=id_policy,
+            team_id_policy=id_policy,
+        )
+    else:
+        register_routing_profile_aware_agent_portability_codecs(
+            serializers,
+            agent_id_policy=id_policy,
+            team_id_policy=id_policy,
+        )
     register_project_portability_codec(serializers, id_policy=id_policy)
     if templates is not None:
-        register_template_portability_codec(serializers, id_policy=id_policy)
+        if routing_profiles is None:
+            register_template_portability_codec(serializers, id_policy=id_policy)
+        else:
+            register_routing_profile_aware_template_portability_codec(
+                serializers,
+                id_policy=id_policy,
+            )
+    if routing_profiles is not None:
+        register_model_routing_profile_portability_codec(serializers, id_policy=id_policy)
 
     export_sources = ExportSourceRegistry()
 
@@ -85,6 +114,12 @@ def build_agent_portability_workflow(
             return snapshot_template(templates, resource_id)
 
         export_sources.register(TEMPLATE_RESOURCE_TYPE, load_template)
+    if routing_profiles is not None:
+
+        async def load_routing_profile(resource_id: str) -> object:
+            return snapshot_model_routing_profile(routing_profiles, resource_id)
+
+        export_sources.register(MODEL_ROUTING_PROFILE_RESOURCE_TYPE, load_routing_profile)
 
     mutations = ImportMutationRegistry()
     mutations.register(AgentImportMutationHandler(agents))
@@ -97,6 +132,8 @@ def build_agent_portability_workflow(
     )
     if templates is not None:
         mutations.register(TemplateImportMutationHandler(templates))
+    if routing_profiles is not None:
+        mutations.register(ModelRoutingProfileImportMutationHandler(routing_profiles))
 
     def resource_exists(resource_type: str, resource_id: str) -> bool:
         if resource_type == AGENT_RESOURCE_TYPE:
@@ -105,6 +142,8 @@ def build_agent_portability_workflow(
             return _canonical_exists(lambda: agents.get_team(resource_id))
         if resource_type == TEMPLATE_RESOURCE_TYPE and templates is not None:
             return _canonical_exists(lambda: templates.get_template(resource_id))
+        if resource_type == MODEL_ROUTING_PROFILE_RESOURCE_TYPE and routing_profiles is not None:
+            return _canonical_exists(lambda: routing_profiles.get_definition(resource_id))
         if resource_type == PROJECT_RESOURCE_TYPE:
             return _canonical_exists(lambda: scopes.get_project(resource_id))
         if resource_type == "workspace":

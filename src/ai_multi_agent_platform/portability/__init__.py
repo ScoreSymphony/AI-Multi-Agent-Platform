@@ -93,6 +93,15 @@ from .memory_import import (
     MemoryImportMutationHandler,
     MemoryImportPrivacyPolicy,
 )
+from .model_routing_profile_codecs import (
+    MODEL_ROUTING_PROFILE_PORTABLE_SCHEMA_VERSION,
+    MODEL_ROUTING_PROFILE_RESOURCE_TYPE,
+    ModelRoutingProfilePortableCodec,
+    ModelRoutingProfilePortableSnapshot,
+    register_model_routing_profile_portability_codec,
+    snapshot_model_routing_profile,
+)
+from .model_routing_profile_import import ModelRoutingProfileImportMutationHandler
 from .models import (
     PORTABLE_FORMAT_VERSION,
     PORTABLE_INTEGRITY_ALGORITHM,
@@ -170,6 +179,8 @@ __all__ = [
     "KNOWLEDGE_SOURCE_RESOURCE_TYPE",
     "MEMORY_PORTABLE_SCHEMA_VERSION",
     "MEMORY_RESOURCE_TYPE",
+    "MODEL_ROUTING_PROFILE_PORTABLE_SCHEMA_VERSION",
+    "MODEL_ROUTING_PROFILE_RESOURCE_TYPE",
     "PORTABLE_FORMAT_VERSION",
     "PORTABLE_INTEGRITY_ALGORITHM",
     "PORTABLE_PACKAGE_SCHEMA_V1",
@@ -230,6 +241,9 @@ __all__ = [
     "MemoryPortableCodec",
     "MemoryPortableSnapshot",
     "MissingDependency",
+    "ModelRoutingProfileImportMutationHandler",
+    "ModelRoutingProfilePortableCodec",
+    "ModelRoutingProfilePortableSnapshot",
     "PackageInspection",
     "PackageProvenance",
     "PlannedResource",
@@ -269,6 +283,7 @@ __all__ = [
     "register_file_portability_codecs",
     "register_knowledge_portability_codec",
     "register_memory_portability_codec",
+    "register_model_routing_profile_portability_codec",
     "register_project_portability_codec",
     "register_task_history_portability_codec",
     "register_template_portability_codec",
@@ -281,6 +296,7 @@ __all__ = [
     "snapshot_connection",
     "snapshot_file",
     "snapshot_memory",
+    "snapshot_model_routing_profile",
     "snapshot_task_history",
     "snapshot_template",
     "validate_package_document",
