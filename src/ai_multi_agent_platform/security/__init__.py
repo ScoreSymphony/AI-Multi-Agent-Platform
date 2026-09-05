@@ -60,6 +60,12 @@ from .data_enforcement_lifecycle import (
 from .enforcement import AuthorizationAuditSink, AuthorizationGate
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
+from .policy_profile_import_service import (
+    AuthorizationPolicyProfileImportService,
+    PortableInMemoryAuthorizationPolicyProfileRepository,
+    PortableJsonAuthorizationPolicyProfileRepository,
+    RollbackCapableAuthorizationPolicyProfileRepository,
+)
 from .policy_profile_persistence import (
     POLICY_PROFILE_REPOSITORY_SCHEMA_VERSION,
     JsonAuthorizationPolicyProfileRepository,
@@ -117,6 +123,7 @@ __all__ = [
     "AuthorizationPolicyProfileCallContext",
     "AuthorizationPolicyProfileContent",
     "AuthorizationPolicyProfileDefinition",
+    "AuthorizationPolicyProfileImportService",
     "AuthorizationPolicyProfileRef",
     "AuthorizationPolicyProfileRepository",
     "AuthorizationPolicyProfileRevision",
@@ -147,10 +154,13 @@ __all__ = [
     "LocalUserAccount",
     "LoginResult",
     "PathSecurityError",
+    "PortableInMemoryAuthorizationPolicyProfileRepository",
+    "PortableJsonAuthorizationPolicyProfileRepository",
     "ProposedAction",
     "ReplayProtector",
     "ResourceType",
     "RiskClassification",
+    "RollbackCapableAuthorizationPolicyProfileRepository",
     "ScryptPasswordHasher",
     "SecretReference",
     "SecurityAuditEvent",
