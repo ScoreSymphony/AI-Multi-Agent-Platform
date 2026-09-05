@@ -1,4 +1,4 @@
-# ADR 0008 — Control Plane active/passive high availability and fencing
+# ADR 0009 — Control Plane active/passive high availability and fencing
 
 - **Status:** Accepted
 - **Issue:** #89
@@ -6,143 +6,95 @@
 
 ## Context
 
-The platform already owns canonical Task/Run/Event state and recovery independently from
-Hermes, Forge and deployment infrastructure. Single-node operation is a first-class production
-topology. Advanced deployments also need to survive loss or replacement of the active Control
-Plane process without making a hostname, VPS, Kubernetes object or one coordination product the
-canonical lifecycle authority.
+The platform owns canonical Task/Run/Event state independently from one Control Plane process. Single-node operation is a first-class production topology, while advanced deployments need optional failover without making a hostname, VPS, Kubernetes object, load balancer, or one coordination product canonical.
 
-Running two HTTP processes does not by itself provide safe high availability. Concurrent
-authority can duplicate dispatch, Automation firing or lifecycle commands even when individual
-commands are idempotent. The platform therefore needs an explicit single-writer authority model
-before it can claim Control Plane failover.
+Running multiple HTTP processes is not sufficient: concurrent authority can duplicate lifecycle commands, Worker dispatch, Automation firing, or external side effects. Idempotency reduces duplicate effects but does not by itself prove that arbitrary concurrent writers are safe.
 
 ## Decision
 
-### 1. Initial HA support is active/passive
+### Active/passive is the initial HA model
 
-The first supported HA semantics are single-writer active/passive. A warm standby is the same
-authority model with operator-driven rather than automatic promotion. Active/active lifecycle
-writers are **not supported** until persistence and command concurrency can prove correctness.
+The supported HA semantics are single-writer active/passive. Warm standby uses the same authority model with operator-driven promotion. Active/active lifecycle writers are not supported until persistence and command concurrency semantics can prove correctness.
 
-The ordinary single-node profile does not construct or depend on HA coordination.
+The ordinary single-node profile constructs no HA coordination components.
 
-### 2. Process identity is operational, not canonical
+### Process identity is operational
 
-Every Control Plane process receives an operational `instance_id`. It identifies one process
-lifetime for coordination and observability only. It must never become a canonical Task, Run,
-Agent, Artifact, Worker or Project identity.
+Each Control Plane process has an operational `instance_id` for coordination and observability. It is never a canonical Task, Run, Agent, Artifact, Worker, Project, or other platform resource identity.
 
-### 3. Leadership is a replaceable lease with a monotonic fencing epoch
+### Leadership uses a replaceable coordination contract
 
-`CoordinationProvider` is a platform-owned boundary with `acquire`, `renew`, `release`, `inspect`
-and `assert_fence` operations. A successful acquisition returns a `FencingToken(instance_id,
-epoch)`.
+`CoordinationProvider` is a platform-owned interface with acquire, renew, release, inspect, and fence-validation operations. Successful acquisition returns a `FencingToken(instance_id, epoch)`. Epochs advance monotonically when authority transfers.
 
-The epoch is monotonically increasing whenever authority transfers after release or expiry.
-Authority-bearing operations in HA mode must validate the current fencing token immediately before
-they mutate canonical state or emit a side effect whose ownership matters.
+No concrete backend such as etcd, Consul, Redis, Kubernetes Lease, or one database product is canonical. The in-memory provider is a deterministic fixture only and is not a production multi-host HA backend.
 
-No concrete backend such as etcd, Consul, Redis, a Kubernetes Lease or one database product is
-canonical. The in-memory implementation is only a deterministic contract/integration fixture and
-is not a multi-host HA backend.
+### Authority is fenced at side-effect boundaries
 
-### 4. The coordination backend owns lease-time truth
+An HA instance may mutate canonical state, dispatch work, or run autonomous side-effect loops only while it can prove current authority. A stale epoch remains invalid even if an old process resumes after a pause or partition.
 
-Lease timestamps are observational. A Control Plane process must not decide that it is still
-leader merely from its local wall clock. The coordination provider is the authority that validates
-expiry and fencing. If that validation is unavailable, authority fails closed.
+The coordination backend owns lease-time truth. Local wall-clock comparison cannot establish leadership. If authority cannot be validated, the instance fails closed and becomes fenced.
 
-This avoids relying on synchronized application clocks for split-brain prevention.
-
-### 5. Promotion has a reconciliation barrier
+### Promotion requires reconciliation
 
 Promotion order is:
 
-1. inspect the last known coordination epoch;
-2. acquire a new/current lease;
-3. reconcile durable unfinished work and stale runtime ownership against that epoch;
-4. become `active` only after reconciliation succeeds.
+1. inspect prior coordination state;
+2. acquire the current/new fencing epoch;
+3. reconcile durable unfinished work and stale runtime ownership;
+4. become active only after reconciliation succeeds.
 
-If reconciliation fails, the service releases leadership on a best-effort basis and enters the
-`fenced` role. It must not accept authority-bearing work merely to restore availability quickly.
+A reconciliation failure must not be bypassed to restore availability. The candidate releases leadership on a best-effort basis and remains fenced.
 
-### 6. Coordination loss fences authority
+### Backend capability determines safe profiles
 
-An active instance that cannot validate or renew its token becomes `fenced`. A stale old instance
-cannot regain authority using its old epoch after another instance is promoted. Standby instances
-remain able to expose non-authoritative health/status according to deployment policy, but must not
-perform writes or dispatch solely because the previous leader appears unreachable locally.
+A production HA composition must provide the consistency properties required by the chosen profile, including atomic single-owner acquisition, durable monotonic fencing generation, stale-token rejection, defined partition/failover behavior, migration compatibility, and safe backup/restore treatment.
 
-### 7. Backend capabilities define which HA profile is safe
+A backend that lacks these properties may remain valid for the single-node profile but must not be advertised as a safe HA coordination backend.
 
-A production coordination/persistence composition that claims HA must provide, as applicable:
+### Routing and streams are deployment concerns
 
-- durable shared or correctly replicated state;
-- atomic compare-and-set/transactional single-owner acquisition;
-- monotonic fencing generation;
-- consistency strong enough that stale leaders cannot successfully validate old authority;
-- defined behavior during network partitions and backend failover;
-- migration compatibility with multiple deployed instances;
-- backup/restore behavior that does not blindly resurrect stale live leases.
+Clients address a logical Control Plane service. Reverse proxies, DNS/service discovery, endpoint lists, or load balancers may route to the active instance, but none becomes canonical platform identity. SSE/WebSocket connections are ephemeral and may reconnect after failover.
 
-A backend that lacks those properties remains valid for the single-node profile and must not be
-advertised as a safe HA coordination backend.
+### HA does not replace backup/restore
 
-### 8. Routing is deployment metadata
-
-Clients address a logical Control Plane service. Reverse proxies, load balancers, DNS/service
-discovery or endpoint lists may route to the active instance, but none is part of canonical Task or
-Run identity. Client streams may reconnect after failover.
-
-### 9. HA does not replace backup/restore
-
-Replication can replicate corruption. Backup/restore remains independently required. Restored HA
-installations reconcile or recreate coordination state; they do not blindly restore an old active
-lease as live authority.
+Replication can replicate corruption. Backup/restore remains independently required. Restored installations must reconcile or recreate coordination state instead of reviving stale live leases.
 
 ## Consequences
 
-- The canonical Task/Run/Event kernel stays the only lifecycle authority.
-- Single-node operation keeps its current architecture and dependencies.
-- Authority-bearing integrations need an explicit HA gate rather than scattered `is_leader` flags.
-- Worker dispatch, Worker callbacks, Automation scheduling and other external side effects must
-  eventually propagate/check the fencing epoch where stale ownership could otherwise survive.
-- A coordination outage can reduce availability by design; it cannot silently trade consistency
-  for split-brain writes.
-- Operational instance/epoch metadata can be projected into readiness and observability without
-  contaminating canonical resource identity.
+- The canonical kernel remains the lifecycle authority.
+- Single-node behavior and dependencies remain unchanged.
+- Authority checks belong at real mutation/dispatch/runtime side-effect seams rather than in routing alone.
+- Worker dispatch must eventually carry enough fencing generation information for stale Control Plane ownership to be rejected beyond the initiating process.
+- Automation scheduling/firing must be leadership-gated.
+- Readiness may be false while an HA instance is standby, promoting, or fenced.
+- A coordination outage can intentionally reduce availability rather than permitting split-brain writes.
 
 ## Alternatives considered
 
-### Active/active Control Plane writers now
+### Active/active writers now
 
-Rejected. Existing idempotency protects repeatable commands but does not prove arbitrary concurrent
-writers, scheduler loops and external side effects are exactly-once or conflict-free.
+Rejected because current idempotency does not prove arbitrary concurrent writers and autonomous loops safe.
 
-### Make Kubernetes/etcd/Redis/Consul canonical
+### Make one HA technology canonical
 
-Rejected. It would violate provider and deployment neutrality and make HA technology part of the
-platform domain.
+Rejected because it violates deployment/provider neutrality and replacement strategy.
 
-### Use only health checks and a load balancer
+### Rely only on health checks and routing
 
-Rejected. Routing does not fence a paused or partitioned old leader and therefore cannot prevent
-split brain.
+Rejected because routing cannot fence a paused or partitioned old leader.
 
-### Use local process time to decide leadership
+### Infer leadership from local time
 
-Rejected. Clock skew and pauses make local lease inference insufficient. The coordinator must
-validate authority.
+Rejected because clock skew and process pauses make local lease inference insufficient.
 
 ## Affected issues and contracts
 
 - #89 owns this decision and Control Plane HA integration.
 - #14 consumes fencing generation for Worker ownership/re-registration where needed.
-- #16 projects HA health, leadership and failover telemetry.
-- #18/#241 must gate Automation scheduler authority across leadership changes.
-- #40 restore must reconcile HA coordination state rather than restore stale live leases.
-- #41 must coordinate migrations/maintenance with multiple instances.
-- #43 threat-models split brain, impersonation and failover attacks.
-- #46 adds the optional HA acceptance profile.
-- #240 owns deployment packaging for distributed/heterogeneous profiles; HA remains optional.
+- #16 projects HA health/failover telemetry.
+- #18/#241 gate Automation scheduler authority across leadership changes.
+- #40 restore reconciles HA coordination rather than restoring stale leases.
+- #41 coordinates migrations/maintenance with multiple instances.
+- #43 threat-models split brain, impersonation, and failover attacks.
+- #46 adds optional HA acceptance scenarios.
+- #240 owns distributed/heterogeneous deployment packaging; HA remains optional.
