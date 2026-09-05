@@ -55,6 +55,8 @@ from .service import EvaluationService
 from .workspace import EvaluationFixtureResolver, ResolvedEvaluationFixtures
 
 EVALUATION_TARGET_KEY = "evaluation_target"
+_EVALUATION_PREFLIGHT_TASK_ID = "task_00000000-0000-4000-8000-000000000019"
+_EVALUATION_PREFLIGHT_RUN_ID = "run_00000000-0000-4000-8000-000000000019"
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,8 +291,8 @@ class EvaluationTargetSnapshotEnricher:
                 )
             )
             spec = self._agents.prepare_agent(
-                task_id="task_evaluation_preflight",
-                run_id="run_evaluation_preflight",
+                task_id=_EVALUATION_PREFLIGHT_TASK_ID,
+                run_id=_EVALUATION_PREFLIGHT_RUN_ID,
                 agent_id=target.agent_id,
                 revision=target.agent_revision,
                 task_model_override=override,
