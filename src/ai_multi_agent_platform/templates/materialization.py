@@ -19,7 +19,7 @@ from ai_multi_agent_platform.contracts.types import FrozenJsonValue
 from ai_multi_agent_platform.security import SecretReference
 
 from .models import TemplateConfiguration, TemplateRevision
-from .service import TemplateEnvironment
+from .service import TemplateEnvironment, validate_template_configuration
 
 _PLACEHOLDER = re.compile(r"\$\{([^{}]+)\}")
 
@@ -121,6 +121,7 @@ def materialize_template_revision(
             payload=cast(Mapping[str, FrozenJsonValue], materialized)
         ),
     )
+    validate_template_configuration(content.configuration)
     return replace(revision, content=content)
 
 
