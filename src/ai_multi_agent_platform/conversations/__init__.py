@@ -1,5 +1,9 @@
 """Canonical durable conversation interaction shell (issue #72)."""
 
+from .model_runtime_response import (
+    ConversationInstructionResolver,
+    ModelRuntimeConversationResponseProvider,
+)
 from .models import (
     AgentSelectionRef,
     ContentKind,
@@ -42,6 +46,7 @@ __all__ = [
     "ContentKind",
     "Conversation",
     "ConversationContentBlock",
+    "ConversationInstructionResolver",
     "ConversationMessage",
     "ConversationNotFoundError",
     "ConversationParticipant",
@@ -60,6 +65,7 @@ __all__ = [
     "MessageRole",
     "MessageStatus",
     "ModelRoutingPreference",
+    "ModelRuntimeConversationResponseProvider",
     "ParticipantKind",
     "RESERVED_CONVERSATION_METADATA_KEYS",
     "RETENTION_METADATA_KEY",
