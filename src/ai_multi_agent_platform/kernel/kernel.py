@@ -1027,6 +1027,7 @@ class PlatformKernel:
             await self.get_run(task_id, run_id)
             subject_type = "run"
             subject_id = run_id
+        self._invalidate_completion_subject(task_id)
         await self._commit_task_command(
             task=task,
             key=idempotency_key,
@@ -1044,7 +1045,6 @@ class PlatformKernel:
             actor_ref=actor_ref,
             source=source,
         )
-        self._invalidate_completion_subject(task_id)
         return await self.get_task(task_id)
 
     async def attach_result(
@@ -1067,6 +1067,7 @@ class PlatformKernel:
             await self.get_run(task_id, run_id)
             subject_type = "run"
             subject_id = run_id
+        self._invalidate_completion_subject(task_id)
         await self._commit_task_command(
             task=task,
             key=idempotency_key,
@@ -1084,7 +1085,6 @@ class PlatformKernel:
             actor_ref=actor_ref,
             source=source,
         )
-        self._invalidate_completion_subject(task_id)
         return await self.get_task(task_id)
 
     def _invalidate_completion_subject(self, task_id: str) -> None:
