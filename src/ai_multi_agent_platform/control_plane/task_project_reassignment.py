@@ -45,8 +45,7 @@ class ControlPlane(_CurrentControlPlane):
             conflicts = sorted(set(supplied_commands).intersection(TASK_PROJECT_MOVE_COMMANDS))
             if conflicts:
                 raise ValueError(
-                    "command_handlers conflict with canonical Task Project commands: "
-                    f"{conflicts!r}"
+                    f"command_handlers conflict with canonical Task Project commands: {conflicts!r}"
                 )
         super().__init__(*args, **kwargs)
         self._task_project_reassignment = (
@@ -268,9 +267,7 @@ def _move_request(
             "destination_project_id is required and may be null for personal scope",
         )
     destination = payload.get("destination_project_id")
-    if destination is not None and (
-        not isinstance(destination, str) or not destination.strip()
-    ):
+    if destination is not None and (not isinstance(destination, str) or not destination.strip()):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "destination_project_id must be a canonical Project ID or null",
