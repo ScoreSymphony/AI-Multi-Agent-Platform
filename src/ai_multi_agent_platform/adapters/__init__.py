@@ -26,10 +26,14 @@ from .litellm import (
 )
 from .openai_compatible import (
     HttpJsonResponse,
-    OpenAICompatibleModelProvider,
     OpenAICompatibleProviderConfig,
     OpenAICompatibleTransport,
     UrllibOpenAICompatibleTransport,
+)
+from .openai_compatible_streaming import (
+    OpenAICompatibleModelProvider,
+    OpenAICompatibleStreamingTransport,
+    UrllibOpenAICompatibleStreamingTransport,
 )
 
 __all__ = [
@@ -55,7 +59,9 @@ __all__ = [
     "LiteLLMTelemetryMode",
     "OpenAICompatibleModelProvider",
     "OpenAICompatibleProviderConfig",
+    "OpenAICompatibleStreamingTransport",
     "OpenAICompatibleTransport",
     "UrllibHermesHttpTransport",
+    "UrllibOpenAICompatibleStreamingTransport",
     "UrllibOpenAICompatibleTransport",
 ]

@@ -14,7 +14,6 @@ from .conversation_api import (
 )
 from .conversation_current_composition import (
     AuthenticatedControlPlaneHTTP,
-    ControlPlane,
     ControlPlaneASGI,
     ControlPlaneHTTP,
     build_openapi,
@@ -54,6 +53,24 @@ from .notifications_composition import (
     NOTIFICATION_COMMANDS,
     NOTIFICATION_PREFERENCE_COLLECTION,
 )
+from .organization_api import (
+    EXTERNAL_GROUP_MAPPING_COLLECTION,
+    INVITATION_COLLECTION,
+    MEMBERSHIP_COLLECTION,
+    ORGANIZATION_COLLECTION,
+    ORGANIZATION_COLLECTIONS,
+    ORGANIZATION_COMMANDS,
+    RESOURCE_OWNERSHIP_COLLECTION,
+    RESOURCE_SHARE_COLLECTION,
+    TEAM_COLLECTION,
+    organization_command_handlers,
+    organization_resource_services,
+)
+from .organization_audit_api import (
+    ORGANIZATION_AUDIT_COLLECTION,
+    ControlPlane,
+    OrganizationAuditLog,
+)
 from .plugin_api import (
     PLUGIN_CANDIDATE_COLLECTION,
     PLUGIN_COLLECTION,
@@ -70,6 +87,8 @@ from .task_management_contract import (
 
 # Conversations remain optional runtime resources. Notifications are always-composed
 # canonical domains and therefore remain part of this static compatibility inventory.
+# Organization collections are optional and are registered only when an
+# OrganizationService is configured.
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (
     AUTOMATION_COLLECTION,
     DELIVERY_COLLECTION,
@@ -100,16 +119,24 @@ __all__ = [
     "EVALUATION_COMMANDS",
     "EVALUATION_RUN_COLLECTION",
     "EVALUATION_SUITE_COLLECTION",
+    "EXTERNAL_GROUP_MAPPING_COLLECTION",
     "EvaluationRunResourceService",
     "EvaluationSuiteResourceService",
     "FOUNDATION_COLLECTIONS",
     "HTTPRequest",
     "HTTPResponse",
     "IMPLEMENTED_DOMAIN_COLLECTIONS",
+    "INVITATION_COLLECTION",
     "InMemoryResourceService",
+    "MEMBERSHIP_COLLECTION",
     "NOTIFICATION_COLLECTION",
     "NOTIFICATION_COMMANDS",
     "NOTIFICATION_PREFERENCE_COLLECTION",
+    "ORGANIZATION_AUDIT_COLLECTION",
+    "ORGANIZATION_COLLECTION",
+    "ORGANIZATION_COLLECTIONS",
+    "ORGANIZATION_COMMANDS",
+    "OrganizationAuditLog",
     "PLATFORM_COLLECTIONS",
     "PLUGIN_CANDIDATE_COLLECTION",
     "PLUGIN_COLLECTION",
@@ -118,6 +145,8 @@ __all__ = [
     "PageQuery",
     "PluginPermissionResolver",
     "REQUIRED_COMMANDS",
+    "RESOURCE_OWNERSHIP_COLLECTION",
+    "RESOURCE_SHARE_COLLECTION",
     "RequestContext",
     "ResourceService",
     "SUPPORTED_API_VERSIONS",
@@ -125,8 +154,11 @@ __all__ = [
     "TASK_MANAGEMENT_BULK_UPDATE_COMMAND",
     "TASK_MANAGEMENT_COMMANDS",
     "TASK_MANAGEMENT_UPDATE_COMMAND",
+    "TEAM_COLLECTION",
     "WorkspaceIdentity",
     "build_openapi",
     "evaluation_command_handlers",
     "evaluation_resource_services",
+    "organization_command_handlers",
+    "organization_resource_services",
 ]
