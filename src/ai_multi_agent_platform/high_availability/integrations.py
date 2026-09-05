@@ -8,12 +8,12 @@ from datetime import datetime
 from typing import Any, Protocol
 
 from ai_multi_agent_platform.automation.runtime import AutomationRuntimeTick
-from ai_multi_agent_platform.distributed import DistributedRegistry
+from ai_multi_agent_platform.distributed.models import WorkerJobRequest
+from ai_multi_agent_platform.distributed.registry import DistributedRegistry
 from ai_multi_agent_platform.distributed.runtime import DispatchRecord, DistributedRuntime
 from ai_multi_agent_platform.distributed.scheduler import ScheduledPlacement
-from ai_multi_agent_platform.distributed.models import WorkerJobRequest
 
-from .contracts import AuthorityGrant, CoordinationError
+from .contracts import AuthorityGrant
 
 AuthorityCheck = Callable[[], Awaitable[AuthorityGrant]]
 
@@ -73,8 +73,6 @@ class AuthorityGatedAutomationLoop:
         while not self._stop_event.is_set():
             try:
                 await self.run_once()
-            except CoordinationError as exc:
-                self._last_error = exc
             except Exception as exc:
                 self._last_error = exc
 
