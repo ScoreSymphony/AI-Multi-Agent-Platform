@@ -98,9 +98,7 @@ class InMemoryWorkflowRepository:
     def list_revisions(self, workflow_id: str) -> tuple[WorkflowRevision, ...]:
         self.get_workflow(workflow_id)
         revisions = [
-            item
-            for (current_id, _), item in self._revisions.items()
-            if current_id == workflow_id
+            item for (current_id, _), item in self._revisions.items() if current_id == workflow_id
         ]
         return tuple(sorted(revisions, key=lambda item: item.revision))
 
