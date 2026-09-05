@@ -85,7 +85,7 @@ class JsonVersionStateStore:
         versions = raw.get("versions")
         if not isinstance(versions, dict):
             raise VersionStateError("upgrade version state is missing versions")
-        return _snapshot_from_dict(versions)
+        return version_snapshot_from_dict(versions)
 
     def initialize(self, snapshot: VersionSnapshot | None = None) -> VersionSnapshot:
         if self.path.exists():
@@ -108,7 +108,9 @@ class JsonVersionStateStore:
         temporary.replace(self.path)
 
 
-def _snapshot_from_dict(value: Mapping[object, object]) -> VersionSnapshot:
+def version_snapshot_from_dict(value: Mapping[object, object]) -> VersionSnapshot:
+    """Decode one persisted version vector using the same validation as the state store."""
+
     def required(name: str) -> str:
         raw = value.get(name)
         if not isinstance(raw, str) or not raw:
