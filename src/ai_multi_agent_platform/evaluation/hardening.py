@@ -134,22 +134,40 @@ def merge_snapshot_references(
     snapshot: ConfigurationSnapshot,
     references: tuple[VersionReference, ...],
 ) -> ConfigurationSnapshot:
-    """Add exact runtime-owned references while rejecting identity/version conflicts."""
+    """Add runtime-owned identities without discarding richer compatible revisions.
+
+    A caller may already have recorded the same component at the same exact version with
+    a more specific commit/revision. That is compatible and is retained. Different
+    versions, or two conflicting explicit revisions, are rejected.
+    """
 
     merged = list(snapshot.references)
-    by_identity = {(item.kind, item.ref_id): item for item in merged}
+    positions = {(item.kind, item.ref_id): index for index, item in enumerate(merged)}
     for reference in references:
         identity = (reference.kind, reference.ref_id)
-        existing = by_identity.get(identity)
-        if existing is not None:
-            if existing != reference:
-                raise ValueError(
-                    "configuration snapshot reference conflicts with runtime-owned identity: "
-                    f"{reference.kind}/{reference.ref_id}"
-                )
+        index = positions.get(identity)
+        if index is None:
+            positions[identity] = len(merged)
+            merged.append(reference)
             continue
-        merged.append(reference)
-        by_identity[identity] = reference
+
+        existing = merged[index]
+        if existing.version != reference.version:
+            raise ValueError(
+                "configuration snapshot reference conflicts with runtime-owned version: "
+                f"{reference.kind}/{reference.ref_id}"
+            )
+        if (
+            existing.revision is not None
+            and reference.revision is not None
+            and existing.revision != reference.revision
+        ):
+            raise ValueError(
+                "configuration snapshot reference conflicts with runtime-owned revision: "
+                f"{reference.kind}/{reference.ref_id}"
+            )
+        if existing.revision is None and reference.revision is not None:
+            merged[index] = reference
     return replace(snapshot, references=tuple(merged))
 
 
