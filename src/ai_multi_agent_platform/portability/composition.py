@@ -156,6 +156,7 @@ def build_agent_portability_workflow(
         mutations.register(
             AuthorizationPolicyProfileImportMutationHandler(
                 policy_profile_service,
+                policy_profiles,
                 import_context=policy_profile_import_context,
                 target_owner_ref=policy_profile_target_owner,
             )
