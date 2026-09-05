@@ -1,0 +1,427 @@
+name: Temporary issue 291 port finalizer
+
+on:
+  push:
+    branches: [feat/issue-291-verification-search]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[issue-291-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/issue-291-verification-search
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Port and complete verification search integration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one match, found {count}: {old[:80]!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          auth = "src/ai_multi_agent_platform/security/authorization.py"
+          replace_once(
+              auth,
+              '    VERIFICATION_LIST = "verification:list"\n    VERIFICATION_READ = "verification:read"\n',
+              '    VERIFICATION_POLICY_LIST = "verification-policy:list"\n'
+              '    VERIFICATION_POLICY_READ = "verification-policy:read"\n'
+              '    VERIFICATION_LIST = "verification:list"\n'
+              '    VERIFICATION_READ = "verification:read"\n',
+          )
+
+          control = "src/ai_multi_agent_platform/verification/control_plane.py"
+          replace_once(
+              control,
+              '    VerificationOutcome,\n    VerificationRequest,\n',
+              '    VerificationOutcome,\n    VerificationPolicy,\n    VerificationRequest,\n',
+          )
+          replace_once(
+              control,
+              'VERIFICATION_COLLECTION = "verifications"\nVERIFICATION_REVIEW_COLLECTION = "verification-reviews"\n',
+              'VERIFICATION_POLICY_COLLECTION = "verification-policies"\n'
+              'VERIFICATION_COLLECTION = "verifications"\n'
+              'VERIFICATION_REVIEW_COLLECTION = "verification-reviews"\n',
+          )
+          replace_once(
+              control,
+              '\n\nclass VerificationResourceService(ResourceService):\n',
+              '''\n\nclass VerificationPolicyResourceService(ResourceService):
+    """Versioned policy discovery with explicit collection-level authorization."""
+
+    def __init__(self, verification: VerificationService) -> None:
+        self._verification = verification
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del context, query
+        return tuple(_policy_resource(policy) for policy in _verification_policies(self._verification))
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate safe policy projections for actor-independent Search rebuild."""
+
+        return tuple(_policy_resource(policy) for policy in _verification_policies(self._verification))
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        del context
+        return _policy_resource(_policy_from_ref(self._verification, resource_id))
+
+
+class VerificationResourceService(ResourceService):
+''',
+          )
+          replace_once(
+              control,
+              '    control_plane.register_resource_service(\n        VERIFICATION_COLLECTION,\n        VerificationResourceService(control_plane, verification),\n    )\n',
+              '    control_plane.register_resource_service(\n'
+              '        VERIFICATION_POLICY_COLLECTION,\n'
+              '        VerificationPolicyResourceService(verification),\n'
+              '    )\n'
+              '    control_plane.register_resource_service(\n'
+              '        VERIFICATION_COLLECTION,\n'
+              '        VerificationResourceService(control_plane, verification),\n'
+              '    )\n',
+          )
+          replace_once(
+              control,
+              '\n\ndef _verification_resource(\n',
+              '''\n\ndef _verification_policies(
+    verification: VerificationService,
+) -> tuple[VerificationPolicy, ...]:
+    refs = {
+        (event.policy_id, event.policy_version)
+        for event in verification.audit_history()
+        if event.policy_id is not None and event.policy_version is not None
+    }
+    return tuple(
+        verification.get_policy(policy_id, version)
+        for policy_id, version in sorted(refs)
+    )
+
+
+def _policy_ref(policy: VerificationPolicy) -> str:
+    return f"{policy.policy_id}@{policy.version}"
+
+
+def _policy_from_ref(
+    verification: VerificationService,
+    resource_id: str,
+) -> VerificationPolicy:
+    policy_id, separator, raw_version = resource_id.rpartition("@")
+    if not separator or not policy_id or not raw_version:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found")
+    try:
+        version = int(raw_version)
+    except ValueError as exc:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found") from exc
+    if version < 1:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found")
+    return verification.get_policy(policy_id, version)
+
+
+def _policy_resource(policy: VerificationPolicy) -> dict[str, JsonValue]:
+    return {
+        "id": _policy_ref(policy),
+        "type": "verification_policy",
+        "policy_id": policy.policy_id,
+        "version": policy.version,
+        "name": policy.name,
+        "scope": {
+            "task_ids": list(policy.scope.task_ids),
+            "project_ids": list(policy.scope.project_ids),
+            "agent_ids": list(policy.scope.agent_ids),
+            "capability_ids": list(policy.scope.capability_ids),
+        },
+        "stages": [
+            {
+                "stage_id": stage.stage_id,
+                "verifier_kind": stage.verifier_kind.value,
+                "minimum_results": stage.minimum_results,
+                "accepted_outcomes": [outcome.value for outcome in stage.accepted_outcomes],
+                "capability_ref": stage.capability_ref,
+                "critical": stage.critical,
+            }
+            for stage in policy.stages
+        ],
+        "max_repair_attempts": policy.max_repair_attempts,
+        "request_timeout_seconds": policy.request_timeout_seconds,
+        "result_expiry_seconds": policy.result_expiry_seconds,
+        "failure_policy": policy.failure_policy.value,
+        "timeout_failure_policy": policy.timeout_failure_policy.value,
+        "created_at": policy.created_at.isoformat(),
+    }
+
+
+def _verification_resource(
+''',
+          )
+
+          indexing = "src/ai_multi_agent_platform/search/indexing.py"
+          replace_once(
+              indexing,
+              '    if resource_type == "verification":\n        result = _nested_mapping(resource, "verification_result")\n',
+              '    if resource_type == "verification_policy":\n'
+              '        return _optional_string(resource, "created_at")\n'
+              '    if resource_type == "verification":\n'
+              '        result = _nested_mapping(resource, "verification_result")\n',
+          )
+          replace_once(
+              indexing,
+              '    if resource_type == "evaluation-suite":\n        return _optional_string(resource, "version")\n    return None\n',
+              '    if resource_type == "evaluation-suite":\n'
+              '        return _optional_string(resource, "version")\n'
+              '    if resource_type == "verification_policy":\n'
+              '        value = resource.get("version")\n'
+              '        return str(value) if isinstance(value, int | str) else None\n'
+              '    return None\n',
+          )
+          replace_once(
+              indexing,
+              '        "baseline_run_id",\n        "result_id",\n',
+              '        "baseline_run_id",\n'
+              '        "policy_id",\n'
+              '        "failure_policy",\n'
+              '        "timeout_failure_policy",\n'
+              '        "result_id",\n',
+          )
+
+          old_verification_keywords = '''def _verification_keywords(
+    resource_type: str,
+    resource: Mapping[str, JsonValue],
+) -> tuple[str, ...]:
+    """Return explicit safe nested Verification metadata, never free-form evidence."""
+
+    values: list[str] = []
+    if resource_type == "verification":
+        result = _nested_mapping(resource, "verification_result")
+        if result is not None:
+            outcome = _optional_string(result, "outcome")
+            if outcome is not None:
+                values.append(outcome)
+    elif resource_type == "verification_requirement":
+        completion = _nested_mapping(resource, "completion")
+        if completion is not None:
+            state = _optional_string(completion, "state")
+            if state is not None:
+                values.append(state)
+            values.extend(_string_sequence(completion, "blocking_verification_ids"))
+    return _deduplicate_strings(tuple(values))
+'''
+          new_verification_keywords = '''def _verification_keywords(
+    resource_type: str,
+    resource: Mapping[str, JsonValue],
+) -> tuple[str, ...]:
+    """Return explicit safe nested Verification metadata, never findings/evidence/digests."""
+
+    values: list[str] = []
+
+    def add_scalar(mapping: Mapping[str, JsonValue] | None, *fields: str) -> None:
+        if mapping is None:
+            return
+        for field in fields:
+            value = mapping.get(field)
+            if isinstance(value, str) and value.strip():
+                values.append(value)
+            elif isinstance(value, int):
+                values.append(str(value))
+
+    def add_subject(mapping: Mapping[str, JsonValue]) -> None:
+        subject = _nested_mapping(mapping, "subject")
+        add_scalar(subject, "type", "id", "revision")
+        # Exact digests are deliberately retained only behind the canonical resource read.
+
+    if resource_type == "verification":
+        add_scalar(_nested_mapping(resource, "policy"), "id", "version")
+        add_subject(resource)
+        result = _nested_mapping(resource, "verification_result")
+        if result is not None:
+            add_scalar(result, "id", "outcome")
+            verifier = _nested_mapping(result, "verifier")
+            # Arbitrary verifier refs (especially human identities) stay out of global text.
+            add_scalar(verifier, "kind", "agent_id", "model_config_id", "provider_id")
+    elif resource_type == "verification_requirement":
+        add_scalar(_nested_mapping(resource, "policy"), "id", "version")
+        add_subject(resource)
+        completion = _nested_mapping(resource, "completion")
+        if completion is not None:
+            add_scalar(completion, "state")
+            values.extend(_string_sequence(completion, "blocking_verification_ids"))
+    elif resource_type == "verification_policy":
+        add_scalar(
+            resource,
+            "policy_id",
+            "version",
+            "failure_policy",
+            "timeout_failure_policy",
+        )
+        scope = _nested_mapping(resource, "scope")
+        if scope is not None:
+            for field in ("task_ids", "project_ids", "agent_ids", "capability_ids"):
+                values.extend(_string_sequence(scope, field))
+        raw_stages = resource.get("stages")
+        if isinstance(raw_stages, Sequence) and not isinstance(
+            raw_stages, str | bytes | bytearray
+        ):
+            for raw_stage in raw_stages:
+                if not isinstance(raw_stage, Mapping):
+                    continue
+                add_scalar(raw_stage, "stage_id", "verifier_kind", "capability_ref")
+                values.extend(_string_sequence(raw_stage, "accepted_outcomes"))
+    return _deduplicate_strings(tuple(values))
+'''
+          replace_once(indexing, old_verification_keywords, new_verification_keywords)
+
+          old_test = Path("tests/test_issue_45_verification_search.py")
+          new_test = Path("tests/test_issue_291_verification_search.py")
+          if not old_test.exists():
+              raise SystemExit("legacy verification search test was not found")
+          old_test.rename(new_test)
+          text = new_test.read_text()
+          text = text.replace(
+              '    VERIFICATION_COLLECTION,\n',
+              '    VERIFICATION_COLLECTION,\n    VERIFICATION_POLICY_COLLECTION,\n',
+              1,
+          )
+          text = text.replace(
+              '        if request.action in {"verification:list", "verification-requirement:list"}:\n',
+              '        if request.action in {\n'
+              '            "verification-policy:list",\n'
+              '            "verification:list",\n'
+              '            "verification-requirement:list",\n'
+              '        }:\n',
+              1,
+          )
+          text = text.replace(
+              '        result = verification.record_human_review(\n',
+              '        policy = verification.get_policy(request.policy_id, request.policy_version)\n'
+              '        result = verification.record_human_review(\n',
+              1,
+          )
+          text = text.replace(
+              '            request.result_id,\n            artifact_id,\n',
+              '            request.result_id,\n            result.verification_result_id,\n            policy.policy_id,\n            str(policy.version),\n            artifact_id,\n',
+              1,
+          )
+          policy_assertions = '''
+        policy_ref = f"{policy.policy_id}@{policy.version}"
+        policy_page = await _search(http, type="verification_policy", id=policy_ref)
+        assert policy_page["total"] == 1
+        policy_item = _items(policy_page)[0]
+        assert policy_item["resource_id"] == policy_ref
+        assert policy_item["title"] == policy.name
+        assert policy_item["version"] == str(policy.version)
+        assert policy_item["canonical_ref"] == (
+            f"/api/v1/{VERIFICATION_POLICY_COLLECTION}/{policy_ref}"
+        )
+        for query_value in (
+            policy.policy_id,
+            policy.name,
+            requested_capability_ref,
+            "human",
+            "pass",
+        ):
+            page = await _search(http, type="verification_policy", q=str(query_value))
+            assert page["total"] == 1, (query_value, page)
+
+'''
+          marker = '        requirement = await _search(\n'
+          if marker not in text:
+              raise SystemExit("policy assertion insertion point not found")
+          text = text.replace(marker, policy_assertions + marker, 1)
+          text = text.replace(
+              '        serialized = json.dumps({"verification": exact, "requirement": requirement}, sort_keys=True)\n',
+              '        serialized = json.dumps(\n'
+              '            {"verification": exact, "policy": policy_page, "requirement": requirement},\n'
+              '            sort_keys=True,\n'
+              '        )\n',
+              1,
+          )
+          text = text.replace(
+              '            and call.action in {"verification:list", "verification-requirement:list"}\n',
+              '            and call.action in {\n'
+              '                "verification-policy:list",\n'
+              '                "verification:list",\n'
+              '                "verification-requirement:list",\n'
+              '            }\n',
+              1,
+          )
+          new_test.write_text(text)
+
+          docs = Path("docs/SEARCH_VERIFICATION.md")
+          docs.write_text('''# Verification discovery in global Search (#291)
+
+The Verification integration layers on the canonical Search foundation from #45 and the canonical Verification authority from #86.
+
+## Searchable resources
+
+Global Search derives safe documents for:
+
+- versioned Verification Policies (`verification_policy`);
+- Verification Requests together with the presence and safe outcome metadata of their canonical Verification Result (`verification`);
+- task-scoped Verification Requirements (`verification_requirement`).
+
+The pending human-review queue is deliberately not indexed because it is a filtered navigation view over the same canonical Verification Requests and would create a second Search identity.
+
+## Authority boundary
+
+Search is discovery-only. It cannot certify a result, accept a task, or replace `VerificationCompletionAuthority`. Search documents are rebuilt from canonical Verification resources and can be discarded and reconstructed.
+
+## Privacy and evidence boundary
+
+Search indexes only explicitly safe nested metadata. It may include canonical Task/Run/Result/Artifact relationships, policy/version, stage, outcome, requested verifier kind, machine-verifier Agent/model/provider identifiers, exact subject type/id/revision, and policy scope/stage metadata.
+
+It deliberately excludes:
+
+- exact subject digests from global text;
+- free-form findings and review comments;
+- evidence payloads and evidence-artifact contents;
+- arbitrary verifier references, including human reviewer identities;
+- policy metadata, provenance payloads, and creator references.
+
+Exact subject digest/revision provenance remains available only through the authorized canonical Verification resource read. Authorization is enforced again before Search results, counts, exact-ID existence, snippets, or facets become caller-visible.
+
+## Policy discovery
+
+Versioned Verification Policies use the stable northbound reference `<policy_id>@<version>`, matching the versioned-resource pattern already used by Evaluation suites. Policy Search visibility is controlled by the canonical `verification-policy:list` action, while direct reads use `verification-policy:read`.
+''')
+          PY
+
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          ruff format src/ai_multi_agent_platform/security/authorization.py src/ai_multi_agent_platform/verification/control_plane.py src/ai_multi_agent_platform/search/indexing.py tests/test_issue_291_verification_search.py
+          ruff check src/ai_multi_agent_platform/security/authorization.py src/ai_multi_agent_platform/verification/control_plane.py src/ai_multi_agent_platform/search/indexing.py tests/test_issue_291_verification_search.py
+          pytest -q tests/test_issue_291_verification_search.py
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ai_multi_agent_platform/security/authorization.py \
+                  src/ai_multi_agent_platform/verification/control_plane.py \
+                  src/ai_multi_agent_platform/search/indexing.py \
+                  tests/test_issue_291_verification_search.py \
+                  docs/SEARCH_VERIFICATION.md
+          git add -u tests/test_issue_45_verification_search.py
+          git rm .github/workflows/tmp_issue_291_port.yml
+          git commit -m "feat: complete privacy-safe verification discovery (#291) [issue-291-patched]"
+          git push origin HEAD:feat/issue-291-verification-search
