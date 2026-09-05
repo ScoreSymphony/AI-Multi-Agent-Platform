@@ -40,9 +40,9 @@ def single_node_current_restore_integrity_validators(
 
     async def current(reports: tuple[RecoveryReport, ...]) -> tuple[str, ...]:
         index = await _build_index(deployment, reports)
-        notification_count = _validate_notifications(deployment, index)
-        template_count = _validate_templates(deployment, index)
-        return (f"notification-template-references:{notification_count}:{template_count}",)
+        _validate_notifications(deployment, index)
+        _validate_templates(deployment, index)
+        return ()
 
     return (current,)
 
