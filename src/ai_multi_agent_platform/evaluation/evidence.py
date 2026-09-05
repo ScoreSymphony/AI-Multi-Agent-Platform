@@ -7,11 +7,9 @@ from dataclasses import dataclass, field, replace
 from math import isfinite
 from typing import Protocol
 
-from ai_multi_agent_platform.accounting import (
+from ai_multi_agent_platform.accounting.models import UsageQuery, UsageRecord, UsageScope
+from ai_multi_agent_platform.accounting.service import (
     AccountingService,
-    UsageQuery,
-    UsageRecord,
-    UsageScope,
     aggregate_usage_records,
 )
 from ai_multi_agent_platform.contracts.types import JsonValue

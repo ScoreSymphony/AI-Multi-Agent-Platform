@@ -2,20 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
 from dataclasses import replace
 
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,
     ErrorCode,
+    ModelProvider,
     ModelRequest,
     ModelResponse,
     ModelSelection,
+    ModelStreamEvent,
 )
 
 from .protocol import CanonicalModelRequest, CanonicalModelResponse
 from .registry import ModelRegistry
 from .router import DeterministicModelRouter
+from .types import ModelConfiguration
 
 
 class ModelRuntime:
@@ -33,6 +38,73 @@ class ModelRuntime:
         return await self.router.select_provider(request)
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
+        config, provider, routed_request = await self._resolve_target(request)
+        try:
+            provider_response = await provider.generate(routed_request)
+        except asyncio.CancelledError as exc:
+            raise self._cancelled_error(request, config) from exc
+        return self._normalize_response(request, config, provider_response)
+
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
+        """Route once and expose canonical incremental provider events."""
+
+        async def iterate() -> AsyncIterator[ModelStreamEvent]:
+            config, provider, routed_request = await self._resolve_target(request)
+            try:
+                async for event in provider.stream(routed_request):
+                    if event.request_id != request.request_id:
+                        raise ContractError(
+                            ErrorCode.CONTRACT_VIOLATION,
+                            "model provider stream event request_id does not match request",
+                            provider_id=config.provider_id,
+                            details={
+                                "expected_request_id": request.request_id,
+                                "reported_request_id": event.request_id,
+                            },
+                        )
+
+                    provider_reported_model_ref = event.model_ref
+                    response = event.response
+                    if response is not None:
+                        response = self._normalize_response(request, config, response)
+
+                    runtime_metadata = self._runtime_metadata(
+                        request,
+                        config,
+                        provider_reported_model_ref,
+                    )
+                    yield replace(
+                        event,
+                        model_ref=config.config_id,
+                        response=response,
+                        adapter_metadata=event.adapter_metadata + (runtime_metadata,),
+                    )
+            except asyncio.CancelledError as exc:
+                raise self._cancelled_error(request, config) from exc
+
+        return iterate()
+
+    async def generate_canonical(
+        self,
+        request: CanonicalModelRequest,
+    ) -> CanonicalModelResponse:
+        """Execute the rich issue-#10 request shape through the stable provider seam."""
+
+        response = await self.generate(request.to_contract_request())
+        return CanonicalModelResponse.from_contract_response(response)
+
+    def stream_canonical(
+        self,
+        request: CanonicalModelRequest,
+    ) -> AsyncIterator[ModelStreamEvent]:
+        """Stream a rich request through the same canonical routing/runtime seam."""
+
+        return self.stream(request.to_contract_request())
+
+    async def _resolve_target(
+        self,
+        request: ModelRequest,
+    ) -> tuple[ModelConfiguration, ModelProvider, ModelRequest]:
         selection = await self.select(request)
         if selection.model_ref is None:
             raise ContractError(
@@ -57,16 +129,28 @@ class ModelRuntime:
         requirements = dict(request.requirements)
         requirements["model_config_id"] = config.config_id
         routed_request = replace(request, requirements=requirements)
-        provider_response = await provider.generate(routed_request)
+        return config, provider, routed_request
 
-        runtime_metadata = AdapterMetadata(
-            namespace="platform-model-runtime",
-            values={
-                "model_config_id": config.config_id,
-                "provider_id": config.provider_id,
-                "provider_reported_model_ref": provider_response.model_ref,
-                "correlation_id": request.context.correlation_id,
-            },
+    def _normalize_response(
+        self,
+        request: ModelRequest,
+        config: ModelConfiguration,
+        provider_response: ModelResponse,
+    ) -> ModelResponse:
+        if provider_response.request_id != request.request_id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "model provider response request_id does not match request",
+                provider_id=config.provider_id,
+                details={
+                    "expected_request_id": request.request_id,
+                    "reported_request_id": provider_response.request_id,
+                },
+            )
+        runtime_metadata = self._runtime_metadata(
+            request,
+            config,
+            provider_response.model_ref,
         )
         return replace(
             provider_response,
@@ -74,11 +158,33 @@ class ModelRuntime:
             adapter_metadata=provider_response.adapter_metadata + (runtime_metadata,),
         )
 
-    async def generate_canonical(
+    def _runtime_metadata(
         self,
-        request: CanonicalModelRequest,
-    ) -> CanonicalModelResponse:
-        """Execute the rich issue-#10 request shape through the stable provider seam."""
+        request: ModelRequest,
+        config: ModelConfiguration,
+        provider_reported_model_ref: str,
+    ) -> AdapterMetadata:
+        return AdapterMetadata(
+            namespace="platform-model-runtime",
+            values={
+                "model_config_id": config.config_id,
+                "provider_id": config.provider_id,
+                "provider_reported_model_ref": provider_reported_model_ref,
+                "correlation_id": request.context.correlation_id,
+            },
+        )
 
-        response = await self.generate(request.to_contract_request())
-        return CanonicalModelResponse.from_contract_response(response)
+    @staticmethod
+    def _cancelled_error(
+        request: ModelRequest,
+        config: ModelConfiguration,
+    ) -> ContractError:
+        return ContractError(
+            ErrorCode.CANCELLED,
+            "model request was cancelled",
+            provider_id=config.provider_id,
+            details={
+                "request_id": request.request_id,
+                "model_config_id": config.config_id,
+            },
+        )

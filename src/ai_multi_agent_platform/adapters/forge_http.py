@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -97,6 +98,20 @@ class ForgeHttpClientConfig:
     def __post_init__(self) -> None:
         if not self.base_url.strip():
             raise ValueError("base_url must not be blank")
+        parsed = parse.urlparse(self.base_url)
+        if (
+            parsed.scheme != "http"
+            or parsed.username is not None
+            or parsed.password is not None
+            or not parsed.hostname
+        ):
+            raise ValueError("base_url must be an unauthenticated loopback HTTP URL")
+        try:
+            is_loopback = ipaddress.ip_address(parsed.hostname).is_loopback
+        except ValueError:
+            is_loopback = False
+        if not is_loopback:
+            raise ValueError("base_url must target a loopback address")
         if not self.executor_type.strip():
             raise ValueError("executor_type must not be blank")
         if self.poll_interval_seconds <= 0:
@@ -346,6 +361,8 @@ class ForgeHttpClient:
             raise RuntimeError("Forge sidecar returned the wrong run_id")
         if snapshot.get("step_id") != request_data.step_id:
             raise RuntimeError("Forge sidecar returned the wrong step_id")
+        if self._required_string(snapshot, "correlation_id") != request_data.correlation_id:
+            raise RuntimeError("Forge sidecar returned the wrong correlation_id")
 
     @staticmethod
     def _artifacts(value: JsonValue | None) -> tuple[ForgeArtifact, ...]:

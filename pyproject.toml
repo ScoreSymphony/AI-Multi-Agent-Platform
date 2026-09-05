@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-platform = "ai_multi_agent_platform.cli.main:main"
+platform = "ai_multi_agent_platform.cli.issue_214:main"
 platform-completion = "ai_multi_agent_platform.cli.completion:main"
 platform-server = "ai_multi_agent_platform.adapters.single_node_app:main"
 platform-backup = "ai_multi_agent_platform.backup.cli:main"
@@ -54,6 +54,9 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/ai_multi_agent_platform/control_plane/organization_api.py" = ["UP047"]
 
 [tool.mypy]
 python_version = "3.12"

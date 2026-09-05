@@ -10,6 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
+from .model_stream import ModelStreamEvent, ModelStreamEventKind
 from .types import (
     AuthorizationDecision,
     AuthorizationRequest,
@@ -91,8 +92,57 @@ class LifecycleBackend(ProviderContract):
 
 
 class ModelProvider(ProviderContract):
+    """Provider-neutral model invocation boundary.
+
+    Cancellation is cooperative and transport-neutral: cancelling the in-flight
+    async ``generate``/``stream`` consumer is the canonical cancellation signal.
+    ``ModelRuntime`` normalizes an unhandled ``asyncio.CancelledError`` to the
+    canonical ``ErrorCode.CANCELLED`` category, while adapters may perform their
+    own best-effort backend/transport cancellation before returning that error.
+    Provider-private cancellation handles must never become canonical IDs.
+    """
+
     @abstractmethod
     async def generate(self, request: ModelRequest) -> ModelResponse: ...
+
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
+        """Stream provider-neutral model events with a compatible generate fallback.
+
+        Providers with native incremental output override this method. Existing providers
+        remain source-compatible and produce one text delta followed by one completion event.
+        Cancelling the consumer task is the canonical cancellation signal for the stream.
+        """
+
+        async def iterate() -> AsyncIterator[ModelStreamEvent]:
+            response = await self.generate(request)
+            if response.text:
+                yield ModelStreamEvent(
+                    kind=ModelStreamEventKind.TEXT_DELTA,
+                    request_id=response.request_id,
+                    model_ref=response.model_ref,
+                    text_delta=response.text,
+                )
+            yield ModelStreamEvent(
+                kind=ModelStreamEventKind.COMPLETED,
+                request_id=response.request_id,
+                model_ref=response.model_ref,
+                usage=dict(response.usage),
+                response=response,
+            )
+
+        return iterate()
+
+    async def list_native_models(self) -> tuple[str, ...]:
+        """List provider-native model identifiers when discovery is supported.
+
+        Providers that support native inventory discovery advertise
+        ``list_native_models`` in ``descriptor.supported_operations`` and override
+        this method. The returned identifiers remain adapter/provider data and must
+        not be used as canonical model configuration IDs. Providers without native
+        discovery return an empty tuple by default.
+        """
+
+        return ()
 
 
 class ModelRouter(ProviderContract):

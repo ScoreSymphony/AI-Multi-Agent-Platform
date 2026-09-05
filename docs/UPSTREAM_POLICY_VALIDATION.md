@@ -46,7 +46,7 @@ The policy produces a clear answer: **use as a separately deployed, replaceable 
 
 **Upstream:** `python-jsonschema/jsonschema`
 
-**Repository use at validation time:** the development dependency manifest contains `jsonschema>=4.25,<5`.
+**Repository use at validation time:** the runtime dependency manifest pins `jsonschema==4.26.0` as a required production dependency for canonical capability schema validation.
 
 ### Classification
 

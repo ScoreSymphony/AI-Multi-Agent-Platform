@@ -88,6 +88,9 @@ def document_from_resource(
     resource_provider_id = _optional_string(resource, "provider_id")
     if resource_provider_id is not None:
         provenance["resource_provider_id"] = resource_provider_id
+    organization_id = _optional_string(resource, "organization_id")
+    if organization_id is not None:
+        provenance["organization_id"] = organization_id
     return SearchDocument(
         resource_type=resource_type,
         resource_id=resource_id,
@@ -344,6 +347,11 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
     for field in (
         "provider_id",
         "provider_type",
+        "organization_id",
+        "team_id",
+        "actor_id",
+        "actor_type",
+        "parent_team_id",
         "location",
         "health",
         "effective_health",

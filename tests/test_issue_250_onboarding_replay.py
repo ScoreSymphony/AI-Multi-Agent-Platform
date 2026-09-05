@@ -11,7 +11,7 @@ from ai_multi_agent_platform.adapters import HttpJsonResponse
 from ai_multi_agent_platform.adapters.onboarding_openai_compatible import (
     OpenAICompatibleOnboardingAdapter,
 )
-from ai_multi_agent_platform.agents import AgentService, InMemoryAgentRepository
+from ai_multi_agent_platform.agents import AgentRuntime, AgentService, InMemoryAgentRepository
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
 from ai_multi_agent_platform.control_plane import ActorContext, RequestContext, ScopeStore
 from ai_multi_agent_platform.models import JsonModelRegistryStore, ModelRegistry
@@ -80,13 +80,16 @@ def _payload(**overrides: JsonValue) -> dict[str, JsonValue]:
 
 
 def _service(tmp_path: Path, transport: ReplayTransport) -> OnboardingService:
+    models = ModelRegistry()
+    agents = AgentService(InMemoryAgentRepository())
     service = OnboardingService(
-        models=ModelRegistry(),
+        models=models,
         model_store=JsonModelRegistryStore(tmp_path / "models.json"),
         provider_store=JsonModelProviderSetupStore(tmp_path / "model-providers.json"),
         command_store=JsonOnboardingCommandStore(tmp_path / "onboarding-commands.json"),
         scopes=ScopeStore(),
-        agents=AgentService(InMemoryAgentRepository()),
+        agents=agents,
+        agent_runtime=AgentRuntime(agents, model_registry=models),
         model_adapters=(OpenAICompatibleOnboardingAdapter(transport=transport),),
     )
     service.restore()

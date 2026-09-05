@@ -50,6 +50,7 @@ class TemplateScopeAccess:
         *,
         owner_ref: OwnerRef,
         project_id: str | None = None,
+        request_payload_digest: str | None = None,
     ) -> None:
         scoped = cast(_ScopedControlPlane, self.control_plane)
         await scoped._authorize(
@@ -59,6 +60,7 @@ class TemplateScopeAccess:
             owner_type=owner_ref.type,
             owner_id=owner_ref.id,
             project_id=project_id,
+            request_payload_digest=request_payload_digest,
         )
 
     async def allowed(
@@ -69,6 +71,7 @@ class TemplateScopeAccess:
         *,
         owner_ref: OwnerRef,
         project_id: str | None = None,
+        request_payload_digest: str | None = None,
     ) -> bool:
         scoped = cast(_ScopedControlPlane, self.control_plane)
         return await scoped._allowed(
@@ -78,4 +81,5 @@ class TemplateScopeAccess:
             owner_type=owner_ref.type,
             owner_id=owner_ref.id,
             project_id=project_id,
+            request_payload_digest=request_payload_digest,
         )
