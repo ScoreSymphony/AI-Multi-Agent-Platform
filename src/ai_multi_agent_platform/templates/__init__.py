@@ -19,6 +19,7 @@ from .automation_handler import (
     AutomationTemplateHandler,
     register_automation_template_handler,
 )
+from .control_plane import register_template_control_plane
 from .environment import PlatformTemplateEnvironmentResolver
 from .models import (
     CapabilityRequirement,
@@ -106,6 +107,7 @@ __all__ = [
     "register_agent_template_handlers",
     "register_automation_template_handler",
     "register_project_template_handler",
+    "register_template_control_plane",
     "register_workspace_structure_template_handler",
     "validate_template_configuration",
 ]
