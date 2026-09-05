@@ -43,42 +43,42 @@ async def _validate_agents(
     repository = deployment.agents.repository
     checked = 0
 
-    for definition in repository.list_agents():
+    for agent_definition in repository.list_agents():
         _validate_scope(
             deployment,
-            entity=f"agent {definition.agent_id}",
-            project_id=definition.project_id,
-            workspace_id=definition.workspace_id,
+            entity=f"agent {agent_definition.agent_id}",
+            project_id=agent_definition.project_id,
+            workspace_id=agent_definition.workspace_id,
         )
-        for revision in repository.list_agent_revisions(definition.agent_id):
+        for agent_revision in repository.list_agent_revisions(agent_definition.agent_id):
             _validate_scope(
                 deployment,
-                entity=f"agent {definition.agent_id}@{revision.revision}",
-                project_id=revision.project_id,
-                workspace_id=revision.workspace_id,
+                entity=f"agent {agent_definition.agent_id}@{agent_revision.revision}",
+                project_id=agent_revision.project_id,
+                workspace_id=agent_revision.workspace_id,
             )
             checked += 1
 
-    for definition in repository.list_teams():
+    for team_definition in repository.list_teams():
         _validate_scope(
             deployment,
-            entity=f"agent team {definition.team_id}",
-            project_id=definition.project_id,
-            workspace_id=definition.workspace_id,
+            entity=f"agent team {team_definition.team_id}",
+            project_id=team_definition.project_id,
+            workspace_id=team_definition.workspace_id,
         )
-        for revision in repository.list_team_revisions(definition.team_id):
+        for team_revision in repository.list_team_revisions(team_definition.team_id):
             _validate_scope(
                 deployment,
-                entity=f"agent team {definition.team_id}@{revision.revision}",
-                project_id=revision.project_id,
-                workspace_id=revision.workspace_id,
+                entity=f"agent team {team_definition.team_id}@{team_revision.revision}",
+                project_id=team_revision.project_id,
+                workspace_id=team_revision.workspace_id,
             )
-            for member in revision.profile.members:
+            for member in team_revision.profile.members:
                 _require_agent_revision(
                     deployment,
                     member.agent.agent_id,
                     member.agent.revision,
-                    entity=f"agent team {definition.team_id}@{revision.revision}",
+                    entity=f"agent team {team_definition.team_id}@{team_revision.revision}",
                 )
             checked += 1
 
