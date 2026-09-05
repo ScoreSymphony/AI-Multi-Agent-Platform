@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApprovalClient, type CanonicalApproval } from "./approvals";
 import { BrowserSessionClient } from "./browserSession";
-import { ControlPlaneError } from "./client";
 
 const pendingApproval: CanonicalApproval = {
   id: "approval_123e4567-e89b-42d3-a456-426614174000",
@@ -29,6 +28,12 @@ const pendingApproval: CanonicalApproval = {
   decision_at: null,
   decision_comment: null,
 };
+
+const rejectedDecisions: Array<[number, string, string]> = [
+  [403, "forbidden", "actor may not approve"],
+  [409, "conflict", "requested action digest changed"],
+  [409, "conflict", "approval is expired or not pending"],
+];
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -88,7 +93,7 @@ describe("ApprovalClient", () => {
     });
     const client = new ApprovalClient({ fetchImpl });
 
-    await client.approve(
+    const approved = await client.approve(
       pendingApproval.id,
       pendingApproval.requested_action_digest,
       {
@@ -97,7 +102,7 @@ describe("ApprovalClient", () => {
         correlationId: "approve-correlation",
       },
     );
-    await client.deny(
+    const denied = await client.deny(
       pendingApproval.id,
       pendingApproval.requested_action_digest,
       {
@@ -106,6 +111,8 @@ describe("ApprovalClient", () => {
       },
     );
 
+    expect(approved.status).toBe("approved");
+    expect(denied.status).toBe("denied");
     expect(calls.map((call) => call.url)).toEqual([
       "/api/v1/commands/approval.approve",
       "/api/v1/commands/approval.deny",
@@ -159,11 +166,7 @@ describe("ApprovalClient", () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    [403, "forbidden", "actor may not approve"],
-    [409, "conflict", "requested action digest changed"],
-    [409, "conflict", "approval is expired or not pending"],
-  ])(
+  it.each(rejectedDecisions)(
     "propagates canonical decision rejection HTTP %i without a fallback",
     async (status, code, message) => {
       const fetchImpl = vi.fn(async () => canonicalError(status, code, message));
@@ -175,7 +178,7 @@ describe("ApprovalClient", () => {
           pendingApproval.requested_action_digest,
           { idempotencyKey: `rejection-${status}`, correlationId: `correlation-${status}` },
         ),
-      ).rejects.toMatchObject<Partial<ControlPlaneError>>({
+      ).rejects.toMatchObject({
         status,
         body: expect.objectContaining({ code, message }),
       });
