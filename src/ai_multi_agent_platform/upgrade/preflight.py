@@ -35,6 +35,8 @@ class PreflightRequest:
     plugins: tuple[PluginManifest, ...] = ()
     required_plugin_ids: frozenset[str] = frozenset()
     expected_plugin_interfaces: Mapping[str, str] = field(default_factory=dict)
+    plugin_state_migration_required: frozenset[str] = frozenset()
+    plugin_state_migration_hook_available: bool = False
     adapters: tuple[ExtensionCompatibilitySpec, ...] = ()
     config_schema_versions: Mapping[str, tuple[str, str]] = field(default_factory=dict)
     historical_event_schema_versions: frozenset[str] = frozenset()
@@ -110,6 +112,7 @@ class UpgradePreflight:
                 required_plugin_ids=request.required_plugin_ids,
             )
         )
+        checks.extend(_plugin_state_migration_checks(request))
         checks.extend(
             extension_compatibility_checks(
                 request.adapters,
@@ -154,7 +157,7 @@ class UpgradePreflight:
             planned_revisions=tuple(step.revision for step in steps),
             checks=tuple(checks),
             backup_required=backup_required,
-            maintenance_required=bool(steps),
+            maintenance_required=bool(steps or request.plugin_state_migration_required),
         )
 
 
@@ -205,6 +208,40 @@ def _version_checks(current: VersionSnapshot, target: VersionSnapshot) -> tuple[
             )
         )
     return tuple(checks)
+
+
+def _plugin_state_migration_checks(request: PreflightRequest) -> tuple[PreflightCheck, ...]:
+    required = request.plugin_state_migration_required
+    if not required:
+        return ()
+    known = {manifest.plugin_id for manifest in request.plugins}
+    unknown = sorted(required - known)
+    if unknown:
+        return (
+            PreflightCheck(
+                code="plugin.state_migration.unknown",
+                severity=CheckSeverity.ERROR,
+                message="plugin state migration was requested for unknown plugin manifests",
+                details={"plugin_ids": unknown},
+            ),
+        )
+    if not request.plugin_state_migration_hook_available:
+        return (
+            PreflightCheck(
+                code="plugin.state_migration.hook_missing",
+                severity=CheckSeverity.ERROR,
+                message="plugin-owned state requires migration but no controlled #20 hook is available",
+                details={"plugin_ids": sorted(required)},
+            ),
+        )
+    return (
+        PreflightCheck(
+            code="plugin.state_migration.ready",
+            severity=CheckSeverity.INFO,
+            message="required plugin-owned state migrations have a controlled #20 hook",
+            details={"plugin_ids": sorted(required)},
+        ),
+    )
 
 
 def _storage_checks(data_dir: Path, minimum_free_bytes: int) -> tuple[PreflightCheck, ...]:
