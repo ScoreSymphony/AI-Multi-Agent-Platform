@@ -9,6 +9,7 @@ from typing import cast
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .contracts import Evaluator, EvaluatorLike
+from .hardening import observation_assertion_payload
 from .models import (
     AssertionResult,
     ComparisonOperator,
@@ -144,8 +145,9 @@ class DeterministicAssertionEvaluator:
         observation: EvaluationObservation,
     ) -> EvaluationResult:
         results: list[AssertionResult] = []
+        assertion_payload = observation_assertion_payload(observation)
         for assertion in case.assertions:
-            actual = _resolve_path(observation.data, assertion.path)
+            actual = _resolve_path(assertion_payload, assertion.path)
             passed = _compare(actual, assertion.operator, assertion.expected)
             results.append(
                 AssertionResult(
