@@ -7,6 +7,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
+from .management import RepositoryManagementService
 from .models import RepositoryCommit, RepositoryDiff, RepositoryReference, RepositoryRevision
 from .service import RepositoryCallContext, RepositoryService
 
@@ -19,6 +20,11 @@ REPOSITORY_COMMANDS = (
     "repository.checkout",
     "repository.commit",
     "repository.push",
+)
+REPOSITORY_MANAGEMENT_COMMANDS = (
+    "repository.local.attach",
+    "repository.discover",
+    "repository.detach",
 )
 
 
@@ -53,11 +59,14 @@ class RepositoryResourceService(ResourceService):
 def register_repository_control_plane(
     control_plane: ControlPlane,
     repositories: RepositoryService,
+    *,
+    management: RepositoryManagementService | None = None,
 ) -> None:
-    """Register repository resources and policy-enforced Git commands.
+    """Register repository resources and policy-enforced repository commands.
 
-    Every command delegates to ``RepositoryService`` so northbound clients cannot bypass the
-    repository authorization/approval boundary by invoking provider adapters directly.
+    Every command delegates to ``RepositoryService`` or ``RepositoryManagementService`` so
+    northbound clients cannot bypass the repository authorization/approval boundary by invoking
+    provider adapters directly.
     """
 
     control_plane.register_resource_service(
@@ -175,10 +184,81 @@ def register_repository_control_plane(
     control_plane.register_command("repository.commit", commit)
     control_plane.register_command("repository.push", push)
 
+    if management is None:
+        return
+
+    async def attach_local(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(
+            payload,
+            {"name", "initialize", "default_branch", "approval_id"},
+        )
+        reference = await management.attach_local(
+            _required_string(payload, "name"),
+            _call_context(context, payload, project_id=resource_ref),
+            initialize=_optional_bool(payload.get("initialize"), "initialize") or False,
+            default_branch=_optional_string(payload.get("default_branch"), "default_branch")
+            or "main",
+        )
+        return _repository_resource(reference)
+
+    async def discover(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"provider_id", "attach", "approval_id"})
+        provider_id = _required_string(payload, "provider_id")
+        attach = _optional_bool(payload.get("attach"), "attach") or False
+        call_context = _call_context(context, payload)
+        if attach:
+            references = await management.discover_and_attach(
+                resource_ref,
+                provider_id,
+                call_context,
+            )
+        else:
+            references = await management.discover(
+                resource_ref,
+                provider_id,
+                call_context,
+            )
+        return {
+            "connection_id": resource_ref,
+            "provider_id": provider_id,
+            "attached": attach,
+            "repositories": [_repository_resource(reference) for reference in references],
+        }
+
+    async def detach(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"approval_id"})
+        reference = await management.detach(
+            resource_ref,
+            _call_context(context, payload),
+        )
+        return {
+            "repository_id": reference.id,
+            "detached": True,
+            "provider_content_deleted": False,
+        }
+
+    control_plane.register_command("repository.local.attach", attach_local)
+    control_plane.register_command("repository.discover", discover)
+    control_plane.register_command("repository.detach", detach)
+
 
 def _call_context(
     request: RequestContext,
     payload: dict[str, JsonValue] | None = None,
+    *,
+    project_id: str | None = None,
 ) -> RepositoryCallContext:
     approval_id = None
     if payload is not None:
@@ -188,6 +268,7 @@ def _call_context(
             correlation_id=request.correlation_id,
             owner_type=request.actor.owner_type,
             owner_id=request.actor.owner_id,
+            project_id=project_id,
         ),
         actor_ref=request.actor.principal_ref,
         approval_id=approval_id,
