@@ -146,9 +146,10 @@ def main(
             )
             return 3
 
-    # Do not construct the deployment while upgrade maintenance is active or while executable and
-    # durable version vectors disagree: store constructors may initialize or inspect durable schemas,
-    # which must remain exclusively owned by the offline upgrade process until activation succeeds.
+    # Do not construct the deployment while upgrade maintenance is active or while executable
+    # and durable version vectors disagree: store constructors may initialize or inspect durable
+    # schemas, which must remain exclusively owned by the offline upgrade process until activation
+    # succeeds.
     deployment = deployment_builder(config)
 
     if args.command == "bootstrap-admin":
