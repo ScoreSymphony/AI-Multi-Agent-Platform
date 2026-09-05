@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, ContextManager, Mapping
-from contextlib import nullcontext
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +14,7 @@ from .models import MigrationRecord, MigrationStatus, RollbackMode
 
 MigrationAction = Callable[["MigrationContext"], None]
 MigrationValidator = Callable[["MigrationContext"], None]
-TransactionFactory = Callable[[], ContextManager[object]]
+TransactionFactory = Callable[[], AbstractContextManager[object]]
 
 
 class MigrationError(RuntimeError):
@@ -25,7 +25,7 @@ class MigrationError(RuntimeError):
 class MigrationContext:
     data_dir: Path
     metadata: Mapping[str, object] = field(default_factory=dict)
-    transaction_factory: TransactionFactory = nullcontext
+    transaction_factory: TransactionFactory | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +37,7 @@ class MigrationStep:
     description: str
     apply: MigrationAction
     validate: MigrationValidator | None = None
-    transactional: bool = True
+    transactional: bool = False
     restart_safe: bool = False
     backup_required: bool = False
     rollback_mode: RollbackMode = RollbackMode.CODE_ONLY_BEFORE_MIGRATION
@@ -194,6 +194,10 @@ class MigrationRunner:
                         raise MigrationError(
                             f"migration {step.revision!r} is not restart-safe; restore from backup"
                         )
+            if step.transactional and context.transaction_factory is None:
+                raise MigrationError(
+                    f"migration {step.revision!r} requires a transaction context from persistence"
+                )
             started_at = _now()
             self.history.put(
                 MigrationRecord(
@@ -206,7 +210,11 @@ class MigrationRunner:
                 )
             )
             try:
-                manager = context.transaction_factory() if step.transactional else nullcontext()
+                manager = (
+                    context.transaction_factory()
+                    if step.transactional and context.transaction_factory is not None
+                    else nullcontext()
+                )
                 with manager:
                     step.apply(context)
                     if step.validate is not None:
