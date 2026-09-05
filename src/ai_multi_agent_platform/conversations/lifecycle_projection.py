@@ -31,7 +31,7 @@ async def project_conversation_lifecycle_event(
     """Materialize safe canonical links and attention from an authoritative Task event.
 
     The source event remains the authority. This helper never creates or mutates a Task/Run,
-    never interprets model text and only stores already-canonical Run/Artifact links in the
+    never interprets model text and only stores already-canonical Run/Artifact/Result links in the
     Conversation repository.
     """
 
@@ -58,7 +58,7 @@ async def project_conversation_lifecycle_event(
         artifact_id = _required_string(payload, "artifact_id")
         validate_id(artifact_id, "artifact")
         if artifact_id not in conversation.artifact_ids:
-            await service.link_artifact(
+            conversation = await service.link_artifact(
                 conversation_id=conversation_id,
                 artifact_id=artifact_id,
             )
@@ -67,6 +67,11 @@ async def project_conversation_lifecycle_event(
     if event_type == "result.attached":
         result_id = _required_string(payload, "result_id")
         validate_id(result_id, "result")
+        if result_id not in conversation.result_ids:
+            await service.link_result(
+                conversation_id=conversation_id,
+                result_id=result_id,
+            )
         references.append(ResourceReference(kind=ReferenceKind.RESULT, id=result_id))
 
     attention = _waiting_attention(task_id, event_type, payload)
@@ -105,7 +110,9 @@ def _payload(event: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
     if value is None:
         return {}
     if not isinstance(value, Mapping):
-        raise ContractError(ErrorCode.CONTRACT_VIOLATION, "canonical event payload is not an object")
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION, "canonical event payload is not an object"
+        )
     return value
 
 
