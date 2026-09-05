@@ -50,6 +50,17 @@ from ai_multi_agent_platform.onboarding import (
 )
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
+from ai_multi_agent_platform.repositories import (
+    RepositoryManagementService,
+    RepositoryRegistry,
+    RepositoryRunIntegration,
+    RepositoryService,
+    RepositoryWorkspaceSourceResolver,
+    SqliteRepositoryBindingCatalog,
+    SqliteRepositoryProvenanceStore,
+    restore_managed_local_repositories,
+)
+from ai_multi_agent_platform.repositories.control_plane import register_repository_control_plane
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthorizationGate,
@@ -93,6 +104,7 @@ from ai_multi_agent_platform.verification import (
 )
 from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
+from ai_multi_agent_platform.workspaces import SqliteRunWorkspaceBindingRepository
 from ai_multi_agent_platform.workspaces.compensation import CompensatingSqliteWorkspaceProvider
 
 from .config import SingleNodeConfig
@@ -124,6 +136,13 @@ class SingleNodeDeployment:
     scopes: SqliteScopeStore
     files: LocalFileProvider
     workspaces: CompensatingSqliteWorkspaceProvider
+    run_workspace_bindings: SqliteRunWorkspaceBindingRepository
+    repository_registry: RepositoryRegistry
+    repository_catalog: SqliteRepositoryBindingCatalog
+    repository_provenance: SqliteRepositoryProvenanceStore
+    repositories: RepositoryService
+    repository_management: RepositoryManagementService
+    repository_run_integration: RepositoryRunIntegration
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
@@ -248,6 +267,18 @@ def build_single_node_deployment(
         files,
         database_dir / "workspaces.sqlite3",
     )
+    run_workspace_bindings = SqliteRunWorkspaceBindingRepository(
+        database_dir / "run-workspace-bindings.sqlite3"
+    )
+    repository_catalog = SqliteRepositoryBindingCatalog(
+        database_dir / "repository-bindings.sqlite3"
+    )
+    repository_registry = RepositoryRegistry()
+    restore_managed_local_repositories(repository_catalog, repository_registry)
+    repository_provenance = SqliteRepositoryProvenanceStore(
+        database_dir / "repository-provenance.sqlite3"
+    )
+
     agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
     conversations = ConversationService(
         JsonConversationRepository(database_dir / "conversations.json")
@@ -350,6 +381,21 @@ def build_single_node_deployment(
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
+    authorization_gate = AuthorizationGate(authorization)
+    repositories = RepositoryService(repository_registry, authorization_gate)
+    repository_management = RepositoryManagementService(
+        repository_registry,
+        repository_catalog,
+        authorization_gate,
+        managed_local_root=config.repositories_dir,
+    )
+    repository_run_integration = RepositoryRunIntegration(
+        repository_registry,
+        repository_provenance,
+        workspaces,
+        files,
+        kernel,
+    )
 
     portability_workflow = build_agent_portability_workflow(
         agents=agents.repository,
@@ -365,6 +411,7 @@ def build_single_node_deployment(
         scopes=scopes,
         authorization=authorization,
         workspace_provider=workspaces,
+        run_workspace_bindings=run_workspace_bindings,
         health_providers=(orchestrator, lifecycle, files),
         model_registry=models,
         automation_state_path=database_dir / "automation.sqlite3",
@@ -375,6 +422,18 @@ def build_single_node_deployment(
         conversation_response_provider=conversation_response_provider,
         portability_workflow=portability_workflow,
         approval_gate=AuthorizationGate(authorization),
+    )
+    resolvers = control_plane.workspace_source_resolvers
+    if resolvers is None:
+        raise RuntimeError(
+            "single-node Control Plane did not initialize Workspace source resolvers"
+        )
+    resolvers.register(RepositoryWorkspaceSourceResolver(repository_registry, files))
+    control_plane.configure_repository_run_integration(repository_run_integration)
+    register_repository_control_plane(
+        control_plane,
+        repositories,
+        management=repository_management,
     )
     for collection, service in evaluation_resource_services(evaluation_composition.service).items():
         control_plane.register_resource_service(collection, service)
@@ -443,6 +502,13 @@ def build_single_node_deployment(
         scopes=scopes,
         files=files,
         workspaces=workspaces,
+        run_workspace_bindings=run_workspace_bindings,
+        repository_registry=repository_registry,
+        repository_catalog=repository_catalog,
+        repository_provenance=repository_provenance,
+        repositories=repositories,
+        repository_management=repository_management,
+        repository_run_integration=repository_run_integration,
         agents=agents,
         conversations=conversations,
         agent_runtime=agent_runtime,

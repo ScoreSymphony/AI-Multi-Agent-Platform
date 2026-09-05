@@ -4,13 +4,20 @@ from __future__ import annotations
 
 from abc import abstractmethod
 
+from ai_multi_agent_platform.connectors import ExternalResourceReference
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import ProviderContract
 from ai_multi_agent_platform.contracts.types import OperationContext, ProviderDescriptor
 
 from .models import (
+    RepositoryChangeRequest,
+    RepositoryChangeRequestState,
     RepositoryCommit,
+    RepositoryCommitInfo,
     RepositoryConnection,
     RepositoryDiff,
+    RepositoryIssue,
+    RepositoryIssueState,
     RepositoryReference,
     RepositoryRevision,
     RepositoryStatus,
@@ -78,6 +85,87 @@ class RepositoryProvider(ProviderContract):
         context: OperationContext,
     ) -> tuple[str, ...]: ...
 
+    async def commits(
+        self,
+        repository: RepositoryReference,
+        context: OperationContext,
+        *,
+        revision: str = "HEAD",
+        limit: int = 50,
+    ) -> tuple[RepositoryCommitInfo, ...]:
+        """Inspect commit history when the concrete repository provider supports it."""
+
+        del repository, context, revision, limit
+        raise self._unsupported("commit history inspection")
+
+    async def read_issue(
+        self,
+        repository: RepositoryReference,
+        issue: ExternalResourceReference,
+        context: OperationContext,
+    ) -> RepositoryIssue:
+        del repository, issue, context
+        raise self._unsupported("issue reads")
+
+    async def open_issue(
+        self,
+        repository: RepositoryReference,
+        title: str,
+        context: OperationContext,
+        *,
+        body: str | None = None,
+    ) -> RepositoryIssue:
+        del repository, title, context, body
+        raise self._unsupported("issue creation")
+
+    async def update_issue(
+        self,
+        repository: RepositoryReference,
+        issue: ExternalResourceReference,
+        context: OperationContext,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: RepositoryIssueState | None = None,
+    ) -> RepositoryIssue:
+        del repository, issue, context, title, body, state
+        raise self._unsupported("issue updates")
+
+    async def read_change_request(
+        self,
+        repository: RepositoryReference,
+        change_request: ExternalResourceReference,
+        context: OperationContext,
+    ) -> RepositoryChangeRequest:
+        del repository, change_request, context
+        raise self._unsupported("change-request reads")
+
+    async def open_change_request(
+        self,
+        repository: RepositoryReference,
+        title: str,
+        head_ref: str,
+        base_ref: str,
+        context: OperationContext,
+        *,
+        body: str | None = None,
+    ) -> RepositoryChangeRequest:
+        del repository, title, head_ref, base_ref, context, body
+        raise self._unsupported("change-request creation")
+
+    async def update_change_request(
+        self,
+        repository: RepositoryReference,
+        change_request: ExternalResourceReference,
+        context: OperationContext,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: RepositoryChangeRequestState | None = None,
+    ) -> RepositoryChangeRequest:
+        del repository, change_request, context, title, body, state
+        raise self._unsupported("change-request updates")
+
     @abstractmethod
     async def status(
         self,
@@ -140,3 +228,10 @@ class RepositoryProvider(ProviderContract):
         remote: str = "origin",
         refspec: str | None = None,
     ) -> RepositoryRevision: ...
+
+    def _unsupported(self, operation: str) -> ContractError:
+        return ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            f"repository provider does not support {operation}",
+            provider_id=self.provider_id,
+        )
