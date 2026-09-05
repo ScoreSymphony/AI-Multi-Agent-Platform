@@ -366,6 +366,11 @@ class VerificationService:
         verifier: DeterministicVerifier,
     ) -> VerificationResult:
         request = self.get_request(verification_id)
+        if request.requested_verifier_kind is not VerifierKind.DETERMINISTIC:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "verification request does not require deterministic verification",
+            )
         return self.submit_result(verifier.verify(request))
 
     def record_human_review(

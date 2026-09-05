@@ -21,6 +21,7 @@ from .models import (
     VerificationRequest,
     VerificationResult,
     VerificationSubject,
+    VerifierKind,
 )
 from .service import _CANONICAL_RESULT_TOKEN
 
@@ -406,6 +407,11 @@ class CanonicalVerificationRuntime:
         verifier: DeterministicVerifier,
     ) -> VerificationResult:
         request = self._completion.verification.get_request(verification_id)
+        if request.requested_verifier_kind is not VerifierKind.DETERMINISTIC:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "verification request does not require deterministic verification",
+            )
         return await self.submit_result(verifier.verify(request))
 
     async def request_reverification_after_repair(
