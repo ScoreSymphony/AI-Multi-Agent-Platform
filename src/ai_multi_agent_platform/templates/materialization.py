@@ -38,7 +38,7 @@ class MaterializingTemplateEnvironment(TemplateEnvironment):
     configuration_payloads: Mapping[str, Mapping[str, FrozenJsonValue]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        super().__post_init__()
+        TemplateEnvironment.__post_init__(self)
         placeholders = dict(self.placeholder_bindings)
         secret_references = dict(self.secret_reference_bindings)
         configuration_payloads = {
