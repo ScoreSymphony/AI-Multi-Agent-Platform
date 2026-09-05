@@ -24,6 +24,8 @@ from .conversation_current_composition import (
     AuthenticatedControlPlaneHTTP,
     ControlPlaneASGI,
     ControlPlaneHTTP,
+)
+from .conversation_current_composition import (
     build_openapi as _build_current_openapi,
 )
 from .models import RequestContext
