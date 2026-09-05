@@ -9,6 +9,7 @@ This hardening pass keeps #76 as the sole accounting authority and adds direct r
 - Agent/Team trace identity surviving a Worker transport boundary and reaching #76 attribution;
 - real #87 Organization aggregate visibility and Team-scoped grants without cross-scope widening;
 - aggregate projections removing person-level Task/Run/Agent identifiers;
+- raw `usage-records` remaining exact-owner isolated even when `accounting.aggregate.read` grants Organization/Team aggregate visibility;
 - budget-threshold Notification preferences, minimal accounting summaries and recipient isolation;
 - Workspace archive/latest-snapshot/deletion current-gauge semantics;
 - the current Control Plane automatically exposing canonical #76 usage resources when an `accounting_service` is configured and replacing only the read projection with #87 membership-aware visibility when an `organization_service` is also configured.
