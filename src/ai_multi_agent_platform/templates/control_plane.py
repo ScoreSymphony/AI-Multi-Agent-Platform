@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import replace
 from typing import Protocol, cast
 
@@ -193,6 +195,17 @@ class TemplateCommandHandlers:
         _require_collection(resource_ref, TEMPLATE_COLLECTION)
         organization_id = _optional_string(payload, "organization_id")
         _validate_requested_organization_scope(context, organization_id)
+        project_id = _optional_string(payload, "project_id")
+        if project_id is not None and self.scope_access is not None:
+            project = self.scope_access.control_plane.scopes.get_project(project_id)
+            await self.scope_access.authorize(
+                context,
+                "template.create",
+                project.id,
+                owner_ref=project.owner_ref,
+                project_id=project.id,
+                request_payload_digest=_command_payload_digest(payload),
+            )
         content = _authored_content(
             template_content_from_json(_required(payload, "content")),
             context,
@@ -201,7 +214,7 @@ class TemplateCommandHandlers:
         revision = self.application.templates.create_draft(
             owner_ref=_actor_owner(context),
             content=content,
-            project_id=_optional_string(payload, "project_id"),
+            project_id=project_id,
             organization_id=organization_id,
         )
         return _template_resource(self.application.repository, revision.template_id)
@@ -228,6 +241,7 @@ class TemplateCommandHandlers:
                 source.agent_id,
                 owner_ref=source.owner_ref,
                 project_id=source.project_id,
+                request_payload_digest=_command_payload_digest(payload),
             )
         revision = self.agent_exporter.create_from_agent(
             agent_id,
@@ -268,6 +282,7 @@ class TemplateCommandHandlers:
                     id=source.identity.owner_id,
                 ),
                 project_id=source.project_id,
+                request_payload_digest=_command_payload_digest(payload),
             )
         revision = await self.automation_exporter.create_from_automation(
             automation_id,
@@ -283,7 +298,12 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(context, "template.revise", resource_ref)
+        await self._authorize_template(
+            context,
+            "template.revise",
+            resource_ref,
+            request_payload_digest=_command_payload_digest(payload),
+        )
         content = _authored_content(
             template_content_from_json(_required(payload, "content")),
             context,
@@ -302,7 +322,12 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(context, "template.publish", resource_ref)
+        await self._authorize_template(
+            context,
+            "template.publish",
+            resource_ref,
+            request_payload_digest=_command_payload_digest(payload),
+        )
         revision = self.application.templates.publish(
             resource_ref,
             expected_revision=_required_positive_int(payload, "expected_revision"),
@@ -315,7 +340,12 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(context, "template.clone", resource_ref)
+        await self._authorize_template(
+            context,
+            "template.clone",
+            resource_ref,
+            request_payload_digest=_command_payload_digest(payload),
+        )
         revision = self.application.templates.clone_template(
             resource_ref,
             owner_ref=_actor_owner(context),
@@ -331,7 +361,12 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(context, "template.fork", resource_ref)
+        await self._authorize_template(
+            context,
+            "template.fork",
+            resource_ref,
+            request_payload_digest=_command_payload_digest(payload),
+        )
         revision = self.application.templates.fork_template(
             resource_ref,
             owner_ref=_actor_owner(context),
@@ -347,7 +382,12 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(context, "template.preview", resource_ref)
+        await self._authorize_template(
+            context,
+            "template.preview",
+            resource_ref,
+            request_payload_digest=_command_payload_digest(payload),
+        )
         _reject_server_resolved_environment(payload)
         preview = self.application.preview(
             resource_ref,
@@ -366,7 +406,12 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(context, "template.apply", resource_ref)
+        await self._authorize_template(
+            context,
+            "template.apply",
+            resource_ref,
+            request_payload_digest=_command_payload_digest(payload),
+        )
         _reject_server_resolved_environment(payload)
         instantiation = await self.application.apply(
             resource_ref,
@@ -382,7 +427,12 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(context, "template.reapply", resource_ref)
+        await self._authorize_template(
+            context,
+            "template.reapply",
+            resource_ref,
+            request_payload_digest=_command_payload_digest(payload),
+        )
         _reject_server_resolved_environment(payload)
         instantiation = await self.application.reapply(
             resource_ref,
@@ -402,6 +452,8 @@ class TemplateCommandHandlers:
         context: RequestContext,
         action: str,
         template_id: str,
+        *,
+        request_payload_digest: str | None = None,
     ) -> None:
         if self.scope_access is None:
             return
@@ -412,6 +464,7 @@ class TemplateCommandHandlers:
             template_id,
             owner_ref=definition.owner_ref,
             project_id=definition.project_id,
+            request_payload_digest=request_payload_digest,
         )
 
 
@@ -576,6 +629,17 @@ def _validate_requested_organization_scope(
             ErrorCode.FORBIDDEN,
             "organization-scoped Templates must be created under the matching organization owner",
         )
+
+
+def _command_payload_digest(payload: dict[str, JsonValue]) -> str:
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _reject_server_resolved_environment(payload: dict[str, JsonValue]) -> None:
