@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
+from ai_multi_agent_platform.automation.runtime import AutomationRuntimeTick
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.high_availability.contracts import CoordinationError
+from ai_multi_agent_platform.high_availability.contracts import (
+    AuthorityGrant,
+    ControlPlaneRole,
+    CoordinationError,
+)
 from ai_multi_agent_platform.high_availability.integrations import AuthorityGatedAutomationLoop
 from ai_multi_agent_platform.high_availability.service import ControlPlaneFailoverService
 
@@ -51,7 +55,7 @@ class ControlPlane(_BaseControlPlane):
     async def health(self) -> dict[str, JsonValue]:
         health = await super().health()
         status = await self._failover.status()
-        ha_ready = status.role.value == "active" and status.coordination_available
+        ha_ready = status.role is ControlPlaneRole.ACTIVE and status.coordination_available
         health["ready"] = health.get("ready") is True and ha_ready
         health["high_availability"] = {
             "instance_id": status.instance_id,
@@ -74,7 +78,7 @@ class ControlPlane(_BaseControlPlane):
     async def stop_automation_runtime(self) -> None:
         await self._ha_automation_runtime.stop()
 
-    async def run_automation_runtime_once(self) -> Any:
+    async def run_automation_runtime_once(self) -> AutomationRuntimeTick:
         return await self._ha_automation_runtime.run_once()
 
     async def _authorize(
@@ -108,7 +112,7 @@ class ControlPlane(_BaseControlPlane):
             return False
         return context.idempotency_key is not None
 
-    async def _require_ha_authority(self) -> Any:
+    async def _require_ha_authority(self) -> AuthorityGrant:
         try:
             return await self._failover.require_authority()
         except CoordinationError as exc:
