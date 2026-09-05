@@ -14,7 +14,7 @@ from typing import Protocol
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, Project, TaskStatus, validate_id
-from ai_multi_agent_platform.kernel import PlatformKernel, TERMINAL_RUN_STATUSES, TaskState
+from ai_multi_agent_platform.kernel import TERMINAL_RUN_STATUSES, PlatformKernel, TaskState
 from ai_multi_agent_platform.organizations import (
     MembershipStatus,
     OrganizationService,
@@ -235,7 +235,10 @@ class TaskProjectReassignmentService:
             if task.status in {TaskStatus.RUNNING, TaskStatus.WAITING}:
                 raise ContractError(
                     ErrorCode.CONFLICT,
-                    f"Task {request.task_id} cannot move while lifecycle state is {task.status.value}",
+                    (
+                        f"Task {request.task_id} cannot move while lifecycle state "
+                        f"is {task.status.value}"
+                    ),
                 )
             for run_id in task.run_ids:
                 run = await self._kernel.get_run(task.task_id, run_id)
