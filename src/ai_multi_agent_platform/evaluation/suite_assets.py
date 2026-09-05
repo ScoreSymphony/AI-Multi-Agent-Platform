@@ -266,15 +266,24 @@ class SqliteEvaluationSuiteAssetRepository:
                         "evaluation suite asset changed before compensation",
                         details={"suite_ref": suite_ref_value},
                     )
-                dependent = connection.execute(
+                history_table = connection.execute(
                     """
-                    SELECT run_id
-                    FROM evaluation_runs
-                    WHERE suite_id = ? AND suite_version = ?
-                    LIMIT 1
-                    """,
-                    (str(row["suite_id"]), str(row["suite_version"])),
+                    SELECT 1
+                    FROM sqlite_master
+                    WHERE type = 'table' AND name = 'evaluation_runs'
+                    """
                 ).fetchone()
+                dependent = None
+                if history_table is not None:
+                    dependent = connection.execute(
+                        """
+                        SELECT run_id
+                        FROM evaluation_runs
+                        WHERE suite_id = ? AND suite_version = ?
+                        LIMIT 1
+                        """,
+                        (str(row["suite_id"]), str(row["suite_version"])),
+                    ).fetchone()
                 if dependent is not None:
                     raise ContractError(
                         ErrorCode.CONFLICT,

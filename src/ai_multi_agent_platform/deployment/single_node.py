@@ -408,6 +408,7 @@ def build_single_node_deployment(
         scopes=scopes,
         platform_version=__version__,
         templates=templates.repository,
+        evaluation=evaluation_composition.service,
     )
 
     control_plane = ControlPlane(
