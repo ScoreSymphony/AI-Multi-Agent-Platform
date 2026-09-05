@@ -129,7 +129,9 @@ def test_verified_repository_event_enters_normal_single_node_automation_runtime(
 
         tick = await deployment.control_plane.automation_runtime.run_once()
         assert canonical.id in tick.processed_event_ids
-        deliveries = await deployment.control_plane.automation_service.list_deliveries(automation.id)
+        deliveries = await deployment.control_plane.automation_service.list_deliveries(
+            automation.id
+        )
         assert len(deliveries) == 1
         delivery = deliveries[0]
         assert delivery.status is DeliveryStatus.SUCCEEDED

@@ -214,7 +214,9 @@ def test_repository_cli_updates_issue_without_exposing_provider_specific_command
     assert "project_path" not in body
 
 
-def test_repository_cli_change_request_open_and_update_use_canonical_commands(tmp_path: Path) -> None:
+def test_repository_cli_change_request_open_and_update_use_canonical_commands(
+    tmp_path: Path,
+) -> None:
     config = tmp_path / "cli.json"
     _profile(config)
     transport = _RecordingTransport()
