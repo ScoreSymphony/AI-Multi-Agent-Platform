@@ -219,28 +219,26 @@ class CapturePolicy:
     capture_tool_outputs: bool = False
     capture_file_contents: bool = False
     capture_auth_session_values: bool = False
-
-    _CONTENT_KEYS = frozenset(
+    replacement: str = "[REDACTED]"
+    sensitive_keys: frozenset[str] = frozenset(
         {
-            "content",
-            "prompt",
-            "response",
-            "body",
-            "text",
-            "file_content",
-            "tool_input",
-            "tool_output",
-            "auth_session",
+            "api_key",
+            "apikey",
             "authorization",
             "cookie",
+            "credential",
+            "credentials",
             "password",
             "secret",
-            "token",
-            "api_key",
+            "session",
+            "session_id",
+            "access_token",
+            "refresh_token",
+            "id_token",
         }
     )
 
-    def allows(self, kind: CaptureKind) -> bool:
+    def permits(self, kind: CaptureKind) -> bool:
         if kind is CaptureKind.GENERIC:
             return True
         return {
@@ -254,26 +252,31 @@ class CapturePolicy:
 
     def redact(
         self,
-        attributes: Mapping[str, JsonValue],
+        values: Mapping[str, JsonValue],
         *,
         kind: CaptureKind = CaptureKind.GENERIC,
     ) -> dict[str, JsonValue]:
-        if not self.allows(kind):
-            return {"capture": "disabled"}
-        return {key: self._redact_value(key, value) for key, value in attributes.items()}
+        if not self.permits(kind):
+            return {"capture": self.replacement}
+        return {key: self._redact_value(key, value) for key, value in values.items()}
 
     def _redact_value(self, key: str, value: JsonValue) -> JsonValue:
-        if key.lower() in self._CONTENT_KEYS:
-            return "[redacted]"
+        normalized = key.strip().lower().replace("-", "_")
+        if normalized in self.sensitive_keys or normalized.endswith("_secret"):
+            return self.replacement
+        if normalized.endswith("_password") or normalized.endswith("_credential"):
+            return self.replacement
+        if normalized.endswith("_token") and normalized != "token_count":
+            return self.replacement
         if isinstance(value, dict):
-            return {nested: self._redact_value(nested, item) for nested, item in value.items()}
+            return {child: self._redact_value(child, item) for child, item in value.items()}
         if isinstance(value, list):
-            return [self._redact_list_item(item) for item in value]
+            return [self._redact_nested(item) for item in value]
         return value
 
-    def _redact_list_item(self, value: JsonValue) -> JsonValue:
+    def _redact_nested(self, value: JsonValue) -> JsonValue:
         if isinstance(value, dict):
             return {key: self._redact_value(key, item) for key, item in value.items()}
         if isinstance(value, list):
-            return [self._redact_list_item(item) for item in value]
+            return [self._redact_nested(item) for item in value]
         return value
