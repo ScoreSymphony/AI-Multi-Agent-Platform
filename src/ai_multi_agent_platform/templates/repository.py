@@ -35,6 +35,9 @@ class TemplateRepository(Protocol):
         template_id: str | None = None,
     ) -> tuple[TemplateInstantiation, ...]: ...
 
+    def delete_template(self, template_id: str) -> None:
+        """Delete an uninstantiated Template for transaction compensation only.""" ...
+
 
 class InMemoryTemplateRepository:
     """Reference repository preserving every immutable Template revision and instance."""
@@ -130,6 +133,24 @@ class InMemoryTemplateRepository:
             self.get_template(template_id)
             values = tuple(item for item in values if item.source.template_id == template_id)
         return tuple(sorted(values, key=lambda item: (item.created_at, item.instance_id)))
+
+    def delete_template(self, template_id: str) -> None:
+        """Compensate a newly imported Template only while it has no instances."""
+
+        self.get_template(template_id)
+        if any(
+            item.source.template_id == template_id
+            for item in self._instantiations.values()
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "cannot compensate Template after an instantiation has been recorded",
+                details={"template_id": template_id},
+            )
+        del self._templates[template_id]
+        for key in tuple(self._revisions):
+            if key[0] == template_id:
+                del self._revisions[key]
 
     @staticmethod
     def _validate_pair(definition: TemplateDefinition, revision: TemplateRevision) -> None:
