@@ -74,7 +74,7 @@ export function OrganizationResourcesPanel({
     const form = new FormData(event.currentTarget);
     const resourceType = required(form, "resource_type");
     const resourceId = required(form, "resource_id");
-    const ownerType = ownerType(form, "owner_type");
+    const selectedOwnerType = ownerType(form, "owner_type");
     const ownerId = required(form, "owner_id");
     if (MIRRORED_TYPES.has(resourceType)) {
       setError(new Error(`${resourceType} ownership is managed by its canonical resource API.`));
@@ -84,7 +84,7 @@ export function OrganizationResourcesPanel({
       await client.setOwnership({
         resource_type: resourceType,
         resource_id: resourceId,
-        owner_ref: { type: ownerType, id: ownerId },
+        owner_ref: { type: selectedOwnerType, id: ownerId },
         organization_id: organizationId,
       });
       event.currentTarget.reset();
