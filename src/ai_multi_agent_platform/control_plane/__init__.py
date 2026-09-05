@@ -14,7 +14,6 @@ from .conversation_api import (
 )
 from .conversation_current_composition import (
     AuthenticatedControlPlaneHTTP,
-    ControlPlane,
     ControlPlaneASGI,
     ControlPlaneHTTP,
     build_openapi,
@@ -61,6 +60,14 @@ from .plugin_api import (
     PLUGIN_COMMANDS,
     PluginPermissionResolver,
 )
+from .portability_api import (
+    PORTABILITY_COLLECTIONS,
+    PORTABILITY_COMMANDS,
+    PORTABILITY_PACKAGE_COLLECTION,
+    PORTABILITY_PREVIEW_COLLECTION,
+    PORTABILITY_REPORT_COLLECTION,
+    ControlPlane,
+)
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
@@ -68,8 +75,8 @@ from .task_management_contract import (
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
 
-# Conversations remain optional runtime resources. Notifications are always-composed
-# canonical domains and therefore remain part of this static compatibility inventory.
+# Conversations and portability remain optional runtime resources. Notifications are
+# always-composed canonical domains and therefore remain part of this static inventory.
 CURRENT_COLLECTIONS = PLATFORM_COLLECTIONS + (
     AUTOMATION_COLLECTION,
     DELIVERY_COLLECTION,
@@ -115,6 +122,11 @@ __all__ = [
     "PLUGIN_COLLECTION",
     "PLUGIN_COLLECTIONS",
     "PLUGIN_COMMANDS",
+    "PORTABILITY_COLLECTIONS",
+    "PORTABILITY_COMMANDS",
+    "PORTABILITY_PACKAGE_COLLECTION",
+    "PORTABILITY_PREVIEW_COLLECTION",
+    "PORTABILITY_REPORT_COLLECTION",
     "PageQuery",
     "PluginPermissionResolver",
     "REQUIRED_COMMANDS",
