@@ -120,6 +120,7 @@ def test_restore_blocks_authorization_policy_missing_project(tmp_path: Path, mon
             (json.dumps([missing_project]), admin.user_id),
         )
         connection.commit()
+        connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
 
     assert _recover(restored_root, monkeypatch) == 3
 
