@@ -31,6 +31,12 @@ from .service import (
 )
 from .storage import FileStorageAccounting
 from .store import InMemoryUsageStore, SQLiteUsageStore, UsageStore
+from .workspaces import (
+    WORKSPACE_FILE_REFERENCES_METRIC,
+    WORKSPACE_LOGICAL_BYTES_METRIC,
+    WorkspaceSnapshotAccounting,
+    WorkspaceSnapshotMeasurementError,
+)
 
 __all__ = [
     "AccountingService",
@@ -58,6 +64,10 @@ __all__ = [
     "UsageRecordResourceService",
     "UsageScope",
     "UsageStore",
+    "WORKSPACE_FILE_REFERENCES_METRIC",
+    "WORKSPACE_LOGICAL_BYTES_METRIC",
+    "WorkspaceSnapshotAccounting",
+    "WorkspaceSnapshotMeasurementError",
     "accounting_resource_services",
     "aggregate_usage_records",
     "usage_from_metric",
