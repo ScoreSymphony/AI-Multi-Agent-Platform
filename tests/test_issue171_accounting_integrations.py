@@ -316,6 +316,7 @@ def test_threshold_generation_survives_restart_and_allows_later_recross(tmp_path
     events = []
     accounting = AccountingService(store, threshold_event_sink=events.append)
     project_id = new_id("project")
+    recipient = RecipientRef(RecipientType.USER, new_id("user"))
     budget = UsageBudget(
         metric_type="storage.file.bytes.current",
         unit="bytes",
@@ -346,7 +347,7 @@ def test_threshold_generation_survives_restart_and_allows_later_recross(tmp_path
     assert store.get_threshold_generation(budget.id) == 1
     first = budget_threshold_candidate(
         events[-1],
-        recipient=RecipientRef(RecipientType.USER, "alice"),
+        recipient=recipient,
         threshold_generation=store.get_threshold_generation(budget.id),
     )
 
@@ -361,7 +362,7 @@ def test_threshold_generation_survives_restart_and_allows_later_recross(tmp_path
     assert store.get_threshold_generation(budget.id) == 2
     second = budget_threshold_candidate(
         events[-1],
-        recipient=RecipientRef(RecipientType.USER, "alice"),
+        recipient=recipient,
         threshold_generation=store.get_threshold_generation(budget.id),
     )
     assert first.aggregation_key != second.aggregation_key
@@ -369,7 +370,7 @@ def test_threshold_generation_survives_restart_and_allows_later_recross(tmp_path
     restarted_again = SQLiteUsageStore(path)
     recovered = budget_threshold_candidate(
         events[-1],
-        recipient=RecipientRef(RecipientType.USER, "alice"),
+        recipient=recipient,
         threshold_generation=restarted_again.get_threshold_generation(budget.id),
     )
     assert recovered.aggregation_key == second.aggregation_key
