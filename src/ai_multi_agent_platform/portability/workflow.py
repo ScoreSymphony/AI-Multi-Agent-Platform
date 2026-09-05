@@ -156,6 +156,7 @@ class PortabilityWorkflowService:
         self._packages: dict[str, PackageInspection] = {}
         self._previews: dict[str, StoredImportPreview] = {}
         self._reports: dict[str, ImportReport] = {}
+        self._reports_by_preview: dict[str, ImportReport] = {}
 
     @property
     def export_resource_types(self) -> tuple[str, ...]:
@@ -243,6 +244,9 @@ class PortabilityWorkflowService:
         return tuple(self._previews[key] for key in sorted(self._previews))
 
     async def execute_import(self, preview_id: str) -> ImportReport:
+        completed = self._reports_by_preview.get(preview_id)
+        if completed is not None:
+            return completed
         stored = self.preview(preview_id)
         if not stored.compatible:
             raise ContractError(
@@ -269,6 +273,7 @@ class PortabilityWorkflowService:
             result=result,
         )
         self._reports[report_id] = report
+        self._reports_by_preview[stored.preview_id] = report
         return report
 
     def report(self, report_id: str) -> ImportReport:
