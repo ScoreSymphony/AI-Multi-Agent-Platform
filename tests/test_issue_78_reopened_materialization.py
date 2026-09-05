@@ -111,7 +111,6 @@ def test_apply_materializes_ordinary_placeholder_values_without_mutating_templat
             ),
         )
         environment = MaterializingTemplateEnvironment(
-            resolved_placeholders=frozenset({"suffix", "retry_limit"}),
             placeholder_bindings={"suffix": "Alpha", "retry_limit": 3},
         )
 
@@ -141,7 +140,7 @@ def test_apply_materializes_ordinary_placeholder_values_without_mutating_templat
     asyncio.run(scenario())
 
 
-def test_apply_requires_real_binding_even_when_preview_name_is_marked_resolved() -> None:
+def test_materializing_environment_does_not_trust_name_only_placeholder_claims() -> None:
     async def scenario() -> None:
         application, handler = _application()
         published = _publish(
@@ -155,14 +154,13 @@ def test_apply_requires_real_binding_even_when_preview_name_is_marked_resolved()
         environment = MaterializingTemplateEnvironment(
             resolved_placeholders=frozenset({"agent_name"})
         )
-        assert (
-            application.preview(
-                published.template_id,
-                applied_by=OWNER,
-                environment=environment,
-            ).applicable
-            is True
+        preview = application.preview(
+            published.template_id,
+            applied_by=OWNER,
+            environment=environment,
         )
+        assert preview.applicable is False
+        assert preview.unresolved_placeholders == ("agent_name",)
 
         with pytest.raises(ContractError) as exc_info:
             await application.apply(
@@ -171,7 +169,7 @@ def test_apply_requires_real_binding_even_when_preview_name_is_marked_resolved()
                 environment=environment,
             )
         assert exc_info.value.code is ErrorCode.INVALID_CONFIGURATION
-        assert exc_info.value.details["placeholder"] == "agent_name"
+        assert exc_info.value.details["unresolved_placeholders"] == ["agent_name"]
         assert handler.revisions == []
 
     asyncio.run(scenario())
@@ -199,7 +197,6 @@ def test_secret_placeholder_materializes_only_canonical_secret_reference_metadat
             version="7",
         )
         environment = MaterializingTemplateEnvironment(
-            resolved_secret_reference_placeholders=frozenset({"model_credential"}),
             secret_reference_bindings={"model_credential": reference},
         )
 
@@ -230,7 +227,6 @@ def test_secret_reference_placeholder_cannot_be_embedded_into_plaintext_string()
             ),
         )
         environment = MaterializingTemplateEnvironment(
-            resolved_secret_reference_placeholders=frozenset({"credential"}),
             secret_reference_bindings={
                 "credential": SecretReference(
                     provider="local",
@@ -266,8 +262,6 @@ def test_configuration_reference_materializes_payload_and_then_applies_placehold
             ),
         )
         environment = MaterializingTemplateEnvironment(
-            validated_configuration_refs=frozenset({reference}),
-            resolved_placeholders=frozenset({"agent_name"}),
             configuration_payloads={reference: {"name": "${agent_name}", "mode": "referenced"}},
             placeholder_bindings={"agent_name": "Resolved from reference"},
         )
@@ -289,7 +283,7 @@ def test_configuration_reference_materializes_payload_and_then_applies_placehold
     asyncio.run(scenario())
 
 
-def test_validated_configuration_reference_without_payload_blocks_before_handler() -> None:
+def test_name_only_configuration_reference_claim_is_not_applicable() -> None:
     async def scenario() -> None:
         application, handler = _application()
         reference = "config://templates/missing"
@@ -303,14 +297,13 @@ def test_validated_configuration_reference_without_payload_blocks_before_handler
         environment = MaterializingTemplateEnvironment(
             validated_configuration_refs=frozenset({reference})
         )
-        assert (
-            application.preview(
-                published.template_id,
-                applied_by=OWNER,
-                environment=environment,
-            ).applicable
-            is True
+        preview = application.preview(
+            published.template_id,
+            applied_by=OWNER,
+            environment=environment,
         )
+        assert preview.applicable is False
+        assert preview.unvalidated_configuration_refs == (reference,)
 
         with pytest.raises(ContractError) as exc_info:
             await application.apply(
@@ -319,7 +312,7 @@ def test_validated_configuration_reference_without_payload_blocks_before_handler
                 environment=environment,
             )
         assert exc_info.value.code is ErrorCode.INVALID_CONFIGURATION
-        assert exc_info.value.details["configuration_reference"] == reference
+        assert exc_info.value.details["unvalidated_configuration_refs"] == [reference]
         assert handler.revisions == []
 
     asyncio.run(scenario())
