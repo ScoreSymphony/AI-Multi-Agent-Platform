@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from ai_multi_agent_platform.capabilities import CapabilityRegistration, CapabilityToolProvider
+from ai_multi_agent_platform.capabilities import (
+    CapabilityRegistration,
+    CapabilitySpec,
+    CapabilityToolProvider,
+)
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
     Capability,
@@ -71,23 +75,23 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
         )
 
     async def capability_registrations(self) -> tuple[CapabilityRegistration, ...]:
+        operations = {operation.value for operation in _TOOL_OPERATIONS}
         specs = {
             spec.capability_id: spec
             for spec in repository_capability_specs()
-            if spec.capability_id in {operation.value for operation in _TOOL_OPERATIONS}
+            if spec.capability_id in operations
         }
         registrations: list[CapabilityRegistration] = []
         for operation in sorted(_TOOL_OPERATIONS, key=lambda value: value.value):
             spec = specs[operation.value]
-            schema = _input_schema(operation)
             registrations.append(
                 CapabilityRegistration(
-                    capability=type(spec)(
+                    capability=CapabilitySpec(
                         capability_id=spec.capability_id,
                         name=spec.name,
                         version=spec.version,
                         description=spec.description,
-                        input_schema=schema,
+                        input_schema=_input_schema(operation),
                         output_schema=spec.output_schema,
                         tags=spec.tags,
                         safety=spec.safety,
