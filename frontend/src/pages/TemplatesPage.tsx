@@ -261,7 +261,7 @@ export function TemplateDetailPage({
     try {
       setPreview(
         await client.preview(template.id, {
-          revision: previewRevision(template),
+          revision: template.revision.revision,
           allow_draft: template.revision.state === "draft",
         }),
       );
@@ -291,8 +291,8 @@ export function TemplateDetailPage({
     setActionError(null);
     try {
       const created = mode === "clone"
-        ? await client.clone(template.id, { revision: previewRevision(template) })
-        : await client.fork(template.id, { revision: previewRevision(template) });
+        ? await client.clone(template.id, { revision: template.revision.revision })
+        : await client.fork(template.id, { revision: template.revision.revision });
       navigate(`/templates/${encodeURIComponent(created.id)}`);
     } catch (nextError) {
       setActionError(nextError);
@@ -302,7 +302,14 @@ export function TemplateDetailPage({
   };
 
   const apply = async () => {
-    if (!template || !preview?.applicable) return;
+    if (
+      !template
+      || template.revision.state !== "published"
+      || !preview?.applicable
+      || preview.source.revision !== template.revision.revision
+    ) {
+      return;
+    }
     setBusy(true);
     setActionError(null);
     try {
@@ -336,6 +343,10 @@ export function TemplateDetailPage({
 
   const revision = template.revision;
   const requirements = revision.content.requirements;
+  const canApplyPreview =
+    revision.state === "published"
+    && preview?.applicable === true
+    && preview.source.revision === revision.revision;
 
   return (
     <div className="stack">
@@ -408,18 +419,21 @@ export function TemplateDetailPage({
           permission, plugin, connector, model-policy or Workspace availability claims.
         </p>
         <div className="button-row">
-          <button disabled={busy} onClick={() => void runPreview()}>Preview application</button>
-          <button disabled={busy || !preview?.applicable} onClick={() => void apply()}>
+          <button disabled={busy} onClick={() => void runPreview()}>Preview current revision</button>
+          <button disabled={busy || !canApplyPreview} onClick={() => void apply()}>
             Apply previewed revision
           </button>
         </div>
+        {revision.state === "draft" ? (
+          <small>Drafts can be previewed, but must be published before they can be applied.</small>
+        ) : null}
         {preview ? <PreviewReport preview={preview} /> : null}
       </Card>
 
       <Card title="Edit as a new draft revision">
         <p>
-          Revising appends a new immutable history entry. Published revisions and prior instances
-          are never silently mutated.
+          Saving appends a new draft revision to the same Template. A published current revision
+          can be edited this way without changing the already-published revision or prior instances.
         </p>
         <form className="stack" onSubmit={(event) => void revise(event)}>
           <label>
@@ -432,13 +446,8 @@ export function TemplateDetailPage({
             />
           </label>
           <div className="button-row">
-            <button disabled={busy || revision.state !== "draft"} type="submit">
-              Save new draft revision
-            </button>
+            <button disabled={busy} type="submit">Save new draft revision</button>
           </div>
-          {revision.state !== "draft" ? (
-            <small>Clone or fork this published revision before editing it.</small>
-          ) : null}
         </form>
       </Card>
 
@@ -621,12 +630,6 @@ function parseTemplateContent(value: string): TemplateContent {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function previewRevision(template: CanonicalTemplate): number {
-  return template.revision.state === "published"
-    ? template.revision.revision
-    : template.latest_published_revision ?? template.revision.revision;
 }
 
 function optionalText(value: string): string | undefined {
