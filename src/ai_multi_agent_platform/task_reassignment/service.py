@@ -117,9 +117,7 @@ class DefaultTaskProjectCompatibilityPolicy:
 
         if source_project is not None and destination_project is not None:
             source_shared = await self._project_shared_to(source_project.id, destination_owner)
-            destination_shared = await self._project_shared_to(
-                destination_project.id, source_owner
-            )
+            destination_shared = await self._project_shared_to(destination_project.id, source_owner)
             if source_shared and destination_shared:
                 return
 
@@ -274,9 +272,7 @@ class TaskProjectReassignmentService:
         source: str = "task-project-reassignment",
     ) -> TaskState:
         destination_id = prepared.destination_project_id
-        if await self._existing_move(
-            prepared.task.task_id, idempotency_key, destination_id
-        ):
+        if await self._existing_move(prepared.task.task_id, idempotency_key, destination_id):
             return await self._kernel.get_task(prepared.task.task_id)
 
         retained_history: dict[str, JsonValue] = {
