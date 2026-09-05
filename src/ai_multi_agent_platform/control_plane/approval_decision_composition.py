@@ -48,7 +48,7 @@ class ControlPlane(_CurrentControlPlane):
         super().__init__(*args, **kwargs)
         self.approval_gate = approval_gate
         self._approval_decision_results: dict[
-            tuple[str, str],
+            tuple[str, str, str],
             tuple[tuple[bool, str, str | None], dict[str, JsonValue]],
         ] = {}
         if approval_gate is not None and "approvals" not in self.registered_collections:
@@ -127,7 +127,7 @@ class ControlPlane(_CurrentControlPlane):
                 details={"approval_id": approval_id, "binding": "requested_action_digest"},
             )
 
-        key = (approval_id, context.idempotency_key)
+        key = (approval_id, context.actor.principal_ref, context.idempotency_key)
         signature = (approve, requested_digest, comment)
         previous = self._approval_decision_results.get(key)
         if previous is not None:
