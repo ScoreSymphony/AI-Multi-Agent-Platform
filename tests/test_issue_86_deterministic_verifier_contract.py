@@ -108,6 +108,7 @@ def test_service_accepts_independent_deterministic_verifier() -> None:
         policy_version=policy.version,
         stage_id="checks",
         subject=subject,
+        result_id=subject.subject_id,
         correlation_id="deterministic-contract-service",
     )
     verifier = _IndependentDeterministicVerifier()
