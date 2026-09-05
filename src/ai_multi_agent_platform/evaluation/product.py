@@ -12,10 +12,9 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
-from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
@@ -25,16 +24,20 @@ from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.agents.runtime import AgentRuntime
 from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.data import DataAccessContext, FileProvider
+from ai_multi_agent_platform.data import DataAccessContext, FileProvider, FileRecord
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.models import ModelRegistry, ModelRuntime, RoutingRequirements
-from ai_multi_agent_platform.workspaces import WorkspaceFile, WorkspaceSourceKind, WorkspaceSourceRef
+from ai_multi_agent_platform.workspaces import (
+    WorkspaceFile,
+    WorkspaceSourceKind,
+    WorkspaceSourceRef,
+)
 
-from .aggregation import AggregationPolicy
+from .aggregation import AggregationPolicy, ResultAggregator
 from .aggregation_config import load_aggregation_policy
 from .config import load_evaluation_suite, load_regression_policy
 from .context import EvaluationExecutionContext
-from .contracts import EvaluationCaseExecutor
+from .contracts import EvaluationCaseExecutor, EvaluationHistoryRepository
 from .hardening import merge_snapshot_references
 from .model_judge import ModelJudgeEvaluator
 from .models import (
@@ -46,7 +49,9 @@ from .models import (
     RegressionPolicy,
     VersionReference,
 )
-from .service import EvaluationRunSummary, EvaluationService
+from .regression import RegressionEngine
+from .runner import EvaluationRunner, EvaluationRunSummary
+from .service import EvaluationService
 from .workspace import EvaluationFixtureResolver, ResolvedEvaluationFixtures
 
 EVALUATION_TARGET_KEY = "evaluation_target"
@@ -127,7 +132,9 @@ def parse_agent_evaluation_target(case: EvaluationCase) -> AgentEvaluationTarget
     agent_id = _required_string(raw, "agent_id", "evaluation_target")
     revision = _required_positive_int(raw, "agent_revision", "evaluation_target")
     model_config_id = _optional_string(raw, "model_config_id", "evaluation_target")
-    capability_ids = _string_tuple(raw.get("capability_ids", []), "evaluation_target.capability_ids")
+    capability_ids = _string_tuple(
+        raw.get("capability_ids", []), "evaluation_target.capability_ids"
+    )
     raw_references = raw.get("snapshot_references", [])
     if not isinstance(raw_references, list):
         raise ValueError("evaluation_target.snapshot_references must be an array")
@@ -214,13 +221,20 @@ class AgentTargetValidatingCaseExecutor:
             target.agent_revision,
         ):
             raise ValueError("evaluated Agent identity differs from the declared target")
-        if target.model_config_id is not None and record.selected_model_config_id != target.model_config_id:
+        if (
+            target.model_config_id is not None
+            and record.selected_model_config_id != target.model_config_id
+        ):
             raise ValueError("evaluated model configuration differs from the declared target")
         if record.selected_model_config_id is None:
-            raise ValueError("agent-target evaluation did not record a selected model configuration")
+            raise ValueError(
+                "agent-target evaluation did not record a selected model configuration"
+            )
         model = self._models.get_model(record.selected_model_config_id)
         if record.selected_provider_id != model.provider_id:
-            raise ValueError("AgentRun provider evidence conflicts with the selected model configuration")
+            raise ValueError(
+                "AgentRun provider evidence conflicts with the selected model configuration"
+            )
         missing_capabilities = set(target.capability_ids) - set(record.capability_ids)
         if missing_capabilities:
             raise ValueError(
@@ -327,8 +341,27 @@ class EvaluationTargetSnapshotEnricher:
 class TargetAwareEvaluationService(EvaluationService):
     """EvaluationService that server-enriches exact target configuration before execution."""
 
-    def __init__(self, *args: object, target_enricher: EvaluationTargetSnapshotEnricher, **kwargs: object) -> None:
-        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+    def __init__(
+        self,
+        *,
+        repository: EvaluationHistoryRepository,
+        runner: EvaluationRunner,
+        suites: tuple[EvaluationSuite, ...],
+        target_enricher: EvaluationTargetSnapshotEnricher,
+        policies: tuple[RegressionPolicy, ...] = (),
+        aggregation_policies: tuple[AggregationPolicy, ...] = (),
+        regression_engine: RegressionEngine | None = None,
+        result_aggregator: ResultAggregator | None = None,
+    ) -> None:
+        super().__init__(
+            repository=repository,
+            runner=runner,
+            suites=suites,
+            policies=policies,
+            aggregation_policies=aggregation_policies,
+            regression_engine=regression_engine,
+            result_aggregator=result_aggregator,
+        )
         self._target_enricher = target_enricher
 
     async def run_suite(
@@ -434,7 +467,7 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
         data: bytes,
         attempt: EvaluationAttempt,
         content_type: str | None,
-    ):
+    ) -> FileRecord:
         context = DataAccessContext(
             operation=OperationContext(
                 correlation_id=attempt.attempt_id,
@@ -518,16 +551,22 @@ def _load_model_judge(path: Path) -> EvaluationModelJudgeConfiguration:
         raise ValueError(
             "evaluation model judge contains unknown fields: " + ", ".join(sorted(unknown))
         )
+    evaluator_id = raw.get("evaluator_id", "reference.model-judge")
+    version = raw.get("version", "1.0")
+    if not isinstance(evaluator_id, str) or not evaluator_id.strip():
+        raise ValueError("evaluation model judge.evaluator_id must be a non-blank string")
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError("evaluation model judge.version must be a non-blank string")
     return EvaluationModelJudgeConfiguration(
         model_config_id=_required_string(raw, "model_config_id", "evaluation model judge"),
         configuration_ref=_required_string(raw, "configuration_ref", "evaluation model judge"),
-        evaluator_id=cast(str, raw.get("evaluator_id", "reference.model-judge")),
-        version=cast(str, raw.get("version", "1.0")),
+        evaluator_id=evaluator_id,
+        version=version,
     )
 
 
-def _require_unique(values: object, label: str) -> None:
-    pairs = list(cast(object, values))  # type: ignore[arg-type]
+def _require_unique(values: Iterable[tuple[str, str]], label: str) -> None:
+    pairs = list(values)
     if len(pairs) != len(set(pairs)):
         raise ValueError(f"duplicate configured {label} identity/version")
 
