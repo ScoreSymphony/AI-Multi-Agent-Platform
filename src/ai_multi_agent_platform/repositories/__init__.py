@@ -21,9 +21,11 @@ from .connector_repository import ConnectorRepositoryProvider
 from .contracts import RepositoryProvider
 from .events import RepositoryEventBridge, repository_platform_event_id, repository_resource_payload
 from .local_git import LocalGitRepositoryProvider
+from .management import RepositoryDiscoveryResolver, RepositoryManagementService
 from .models import (
     RepositoryCapability,
     RepositoryCommit,
+    RepositoryCommitInfo,
     RepositoryConnection,
     RepositoryDiff,
     RepositoryOperation,
@@ -61,9 +63,12 @@ __all__ = [
     "RepositoryCapability",
     "RepositoryCapabilityProvider",
     "RepositoryCommit",
+    "RepositoryCommitInfo",
     "RepositoryConnection",
     "RepositoryDiff",
+    "RepositoryDiscoveryResolver",
     "RepositoryEventBridge",
+    "RepositoryManagementService",
     "RepositoryOperation",
     "RepositoryProvenanceStore",
     "RepositoryProvider",
