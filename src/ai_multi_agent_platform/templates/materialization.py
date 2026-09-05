@@ -1,8 +1,8 @@
 """Safe materialization of portable Template configuration intent.
 
 Template definitions remain immutable and portable. Values from the applying environment are
-bound only into ephemeral revision copies immediately before preview/apply handlers consume
-them. Secret placeholders become canonical SecretReference metadata and are never resolved to
+bound only into ephemeral revision copies immediately before canonical handlers consume them.
+Secret placeholders become canonical SecretReference metadata and are never resolved to
 plaintext here.
 """
 
@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -18,6 +19,7 @@ from ai_multi_agent_platform.contracts.types import FrozenJsonValue
 from ai_multi_agent_platform.security import SecretReference
 
 from .models import TemplateConfiguration, TemplateRevision
+from .service import TemplateEnvironment
 
 _PLACEHOLDER = re.compile(r"\$\{([^{}]+)\}")
 
@@ -26,6 +28,46 @@ class TemplateBindingEnvironment(Protocol):
     placeholder_bindings: Mapping[str, FrozenJsonValue]
     secret_reference_bindings: Mapping[str, SecretReference]
     configuration_payloads: Mapping[str, Mapping[str, FrozenJsonValue]]
+
+
+@dataclass(frozen=True, slots=True)
+class MaterializingTemplateEnvironment(TemplateEnvironment):
+    """TemplateEnvironment carrying server-owned values required for apply materialization.
+
+    The inherited resolved-ID sets remain the compatibility-reporting surface. These mappings
+    are the actual ephemeral values consumed only while applying a Template. Secret bindings are
+    references, never secret material.
+    """
+
+    placeholder_bindings: Mapping[str, FrozenJsonValue] = field(default_factory=dict)
+    secret_reference_bindings: Mapping[str, SecretReference] = field(default_factory=dict)
+    configuration_payloads: Mapping[str, Mapping[str, FrozenJsonValue]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        placeholders = dict(self.placeholder_bindings)
+        secret_references = dict(self.secret_reference_bindings)
+        configuration_payloads = {
+            reference: MappingProxyType(dict(payload))
+            for reference, payload in self.configuration_payloads.items()
+        }
+        if any(not name.strip() for name in placeholders):
+            raise ValueError("Template placeholder binding names must be non-blank")
+        if any(not name.strip() for name in secret_references):
+            raise ValueError("Template secret-reference binding names must be non-blank")
+        if any(not reference.strip() for reference in configuration_payloads):
+            raise ValueError("Template configuration reference bindings must be non-blank")
+        object.__setattr__(self, "placeholder_bindings", MappingProxyType(placeholders))
+        object.__setattr__(
+            self,
+            "secret_reference_bindings",
+            MappingProxyType(secret_references),
+        )
+        object.__setattr__(
+            self,
+            "configuration_payloads",
+            MappingProxyType(configuration_payloads),
+        )
 
 
 def materialize_template_revision(
