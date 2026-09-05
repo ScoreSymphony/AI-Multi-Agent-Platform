@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 from queue import Empty, SimpleQueue
 from typing import Any, cast
 
-from ai_multi_agent_platform.accounting import AccountingService
 from ai_multi_agent_platform.accounting.models import BudgetThresholdEvent
+from ai_multi_agent_platform.accounting.service import AccountingService
 from ai_multi_agent_platform.automation import AutomationEventSink
 from ai_multi_agent_platform.connectors.models import Connection
 from ai_multi_agent_platform.contracts.types import JsonValue
