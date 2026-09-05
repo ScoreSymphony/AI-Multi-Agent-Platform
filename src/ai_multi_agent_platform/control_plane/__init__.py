@@ -1,14 +1,20 @@
 """Versioned platform-owned northbound Control Plane."""
 
-from .approval_decision_composition import (
-    APPROVAL_APPROVE_COMMAND,
-    APPROVAL_DECISION_COMMANDS,
-    APPROVAL_DENY_COMMAND,
+from .task_project_reassignment import (
+    TASK_PROJECT_BULK_MOVE_COMMAND,
+    TASK_PROJECT_MOVE_ACTION,
+    TASK_PROJECT_MOVE_COMMAND,
+    TASK_PROJECT_MOVE_COMMANDS,
     AuthenticatedControlPlaneHTTP,
     ControlPlane,
     ControlPlaneASGI,
     ControlPlaneHTTP,
     build_openapi,
+)
+from .approval_decision_composition import (
+    APPROVAL_APPROVE_COMMAND,
+    APPROVAL_DECISION_COMMANDS,
+    APPROVAL_DENY_COMMAND,
 )
 from .automation_api import (
     AUTOMATION_COLLECTION,
@@ -160,6 +166,10 @@ __all__ = [
     "TASK_MANAGEMENT_BULK_UPDATE_COMMAND",
     "TASK_MANAGEMENT_COMMANDS",
     "TASK_MANAGEMENT_UPDATE_COMMAND",
+    "TASK_PROJECT_BULK_MOVE_COMMAND",
+    "TASK_PROJECT_MOVE_ACTION",
+    "TASK_PROJECT_MOVE_COMMAND",
+    "TASK_PROJECT_MOVE_COMMANDS",
     "TEAM_COLLECTION",
     "WorkspaceIdentity",
     "build_openapi",
