@@ -155,11 +155,14 @@ def test_apply_requires_real_binding_even_when_preview_name_is_marked_resolved()
         environment = MaterializingTemplateEnvironment(
             resolved_placeholders=frozenset({"agent_name"})
         )
-        assert application.preview(
-            published.template_id,
-            applied_by=OWNER,
-            environment=environment,
-        ).applicable is True
+        assert (
+            application.preview(
+                published.template_id,
+                applied_by=OWNER,
+                environment=environment,
+            ).applicable
+            is True
+        )
 
         with pytest.raises(ContractError) as exc_info:
             await application.apply(
@@ -223,9 +226,7 @@ def test_secret_reference_placeholder_cannot_be_embedded_into_plaintext_string()
                 configuration=TemplateConfiguration(
                     payload={"authorization": "Bearer ${credential}"}
                 ),
-                requirements=TemplateRequirements(
-                    secret_reference_placeholders=("credential",)
-                ),
+                requirements=TemplateRequirements(secret_reference_placeholders=("credential",)),
             ),
         )
         environment = MaterializingTemplateEnvironment(
@@ -267,9 +268,7 @@ def test_configuration_reference_materializes_payload_and_then_applies_placehold
         environment = MaterializingTemplateEnvironment(
             validated_configuration_refs=frozenset({reference}),
             resolved_placeholders=frozenset({"agent_name"}),
-            configuration_payloads={
-                reference: {"name": "${agent_name}", "mode": "referenced"}
-            },
+            configuration_payloads={reference: {"name": "${agent_name}", "mode": "referenced"}},
             placeholder_bindings={"agent_name": "Resolved from reference"},
         )
 
@@ -304,11 +303,14 @@ def test_validated_configuration_reference_without_payload_blocks_before_handler
         environment = MaterializingTemplateEnvironment(
             validated_configuration_refs=frozenset({reference})
         )
-        assert application.preview(
-            published.template_id,
-            applied_by=OWNER,
-            environment=environment,
-        ).applicable is True
+        assert (
+            application.preview(
+                published.template_id,
+                applied_by=OWNER,
+                environment=environment,
+            ).applicable
+            is True
+        )
 
         with pytest.raises(ContractError) as exc_info:
             await application.apply(
