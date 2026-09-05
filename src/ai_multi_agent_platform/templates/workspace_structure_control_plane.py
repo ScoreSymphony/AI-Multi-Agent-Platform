@@ -9,6 +9,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import RequestContext
 
+from .access import TemplateScopeAccess
 from .control_plane import (
     TEMPLATE_COLLECTION,
     _actor_owner,
@@ -29,6 +30,7 @@ WORKSPACE_STRUCTURE_TEMPLATE_EXPORT_COMMAND = "template.create-from-workspaces"
 class WorkspaceStructureTemplateCommandHandler:
     repository: TemplateRepository
     exporter: WorkspaceStructureTemplateExporter
+    scope_access: TemplateScopeAccess
 
     async def create_from_workspaces(
         self,
@@ -38,16 +40,38 @@ class WorkspaceStructureTemplateCommandHandler:
     ) -> dict[str, JsonValue]:
         _require_collection(resource_ref, TEMPLATE_COLLECTION)
         workspace_ids = _workspace_ids(_required(payload, "workspace_ids"))
+        for workspace_id in workspace_ids:
+            source = await self.exporter.provider.get_workspace(workspace_id)
+            await self.scope_access.authorize(
+                context,
+                WORKSPACE_STRUCTURE_TEMPLATE_EXPORT_COMMAND,
+                source.id,
+                owner_ref=source.owner_ref,
+                project_id=source.project_id,
+            )
+
+        project_template_id = _optional_string(payload, "project_template_id")
+        project_template_revision = _optional_positive_int(
+            payload,
+            "project_template_revision",
+        )
+        if project_template_id is not None:
+            definition = self.repository.get_template(project_template_id)
+            await self.scope_access.authorize(
+                context,
+                WORKSPACE_STRUCTURE_TEMPLATE_EXPORT_COMMAND,
+                project_template_id,
+                owner_ref=definition.owner_ref,
+                project_id=definition.project_id,
+            )
+
         revision = await self.exporter.create_from_workspaces(
             workspace_ids,
             owner_ref=_actor_owner(context),
             author=context.actor.principal_ref,
             name=_required_string(payload, "name"),
-            project_template_id=_optional_string(payload, "project_template_id"),
-            project_template_revision=_optional_positive_int(
-                payload,
-                "project_template_revision",
-            ),
+            project_template_id=project_template_id,
+            project_template_revision=project_template_revision,
         )
         return _template_resource(self.repository, revision.template_id)
 
@@ -57,7 +81,11 @@ def register_workspace_structure_template_control_plane(
     repository: TemplateRepository,
     exporter: WorkspaceStructureTemplateExporter,
 ) -> None:
-    handler = WorkspaceStructureTemplateCommandHandler(repository, exporter)
+    handler = WorkspaceStructureTemplateCommandHandler(
+        repository,
+        exporter,
+        TemplateScopeAccess(control_plane),
+    )
     control_plane.register_command(
         WORKSPACE_STRUCTURE_TEMPLATE_EXPORT_COMMAND,
         handler.create_from_workspaces,
