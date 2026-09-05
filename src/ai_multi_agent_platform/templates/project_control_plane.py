@@ -8,6 +8,7 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import RequestContext
 
+from .access import TemplateScopeAccess
 from .control_plane import (
     TEMPLATE_COLLECTION,
     _actor_owner,
@@ -26,6 +27,7 @@ PROJECT_TEMPLATE_EXPORT_COMMAND = "template.create-from-project"
 class ProjectTemplateCommandHandler:
     repository: TemplateRepository
     exporter: ProjectTemplateExporter
+    scope_access: TemplateScopeAccess
 
     async def create_from_project(
         self,
@@ -34,8 +36,17 @@ class ProjectTemplateCommandHandler:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         _require_collection(resource_ref, TEMPLATE_COLLECTION)
+        project_id = _required_string(payload, "project_id")
+        source = self.exporter.scopes.get_project(project_id)
+        await self.scope_access.authorize(
+            context,
+            PROJECT_TEMPLATE_EXPORT_COMMAND,
+            source.id,
+            owner_ref=source.owner_ref,
+            project_id=source.id,
+        )
         revision = self.exporter.create_from_project(
-            _required_string(payload, "project_id"),
+            project_id,
             owner_ref=_actor_owner(context),
             author=context.actor.principal_ref,
             name=_optional_string(payload, "name"),
@@ -50,7 +61,11 @@ def register_project_template_control_plane(
 ) -> None:
     """Register the exact Project-to-Template export command."""
 
-    handler = ProjectTemplateCommandHandler(repository, exporter)
+    handler = ProjectTemplateCommandHandler(
+        repository,
+        exporter,
+        TemplateScopeAccess(control_plane),
+    )
     control_plane.register_command(
         PROJECT_TEMPLATE_EXPORT_COMMAND,
         handler.create_from_project,
