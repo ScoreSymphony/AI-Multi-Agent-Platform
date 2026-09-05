@@ -5,7 +5,9 @@ from collections.abc import AsyncIterator
 
 import pytest
 
-from ai_multi_agent_platform.adapters import OpenAICompatibleOnboardingAdapter
+from ai_multi_agent_platform.adapters.onboarding_openai_compatible import (
+    OpenAICompatibleOnboardingAdapter,
+)
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
