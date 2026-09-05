@@ -230,7 +230,7 @@ def _reject_unknown(payload: dict[str, JsonValue], allowed: set[str]) -> None:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "repository command payload contains unsupported fields",
-            details={"fields": unexpected},
+            details={"fields": ",".join(unexpected)},
         )
 
 
