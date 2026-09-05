@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { BrowserSessionClient } from "./browserSession";
 import { TemplateClient, emptyTemplateContent } from "./templates";
 
 function jsonResponse(body: unknown): Response {
@@ -41,6 +42,31 @@ describe("TemplateClient", () => {
     const client = new TemplateClient({ fetchImpl });
 
     await client.create(emptyTemplateContent(), {}, "template-create-key");
+  });
+
+  it("uses the shared BrowserSession CSRF boundary plus Template idempotency", async () => {
+    const csrfStorage = new Map<string, string>([
+      ["ai-agent-platform.csrf-token", "csrf-template-test"],
+    ]);
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("/api/v1/commands/template.create");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("X-CSRF-Token")).toBe("csrf-template-test");
+      expect(headers.get("Idempotency-Key")).toBe("template-browser-key");
+      expect(init?.credentials).toBe("include");
+      return jsonResponse({ id: "template-created" });
+    });
+    const session = new BrowserSessionClient({
+      fetchImpl,
+      storage: {
+        getItem: (key) => csrfStorage.get(key) ?? null,
+        setItem: (key, value) => void csrfStorage.set(key, value),
+        removeItem: (key) => void csrfStorage.delete(key),
+      },
+    });
+    const client = new TemplateClient({ fetchImpl: session.fetch });
+
+    await client.create(emptyTemplateContent(), {}, "template-browser-key");
   });
 
   it("uses the exact canonical create-from-existing commands", async () => {
