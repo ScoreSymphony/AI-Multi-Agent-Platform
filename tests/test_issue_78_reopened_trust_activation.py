@@ -197,9 +197,10 @@ def test_untrusted_dependency_blocks_whole_graph_before_any_handler_runs() -> No
                 revision=root.revision,
             )
         assert exc_info.value.code is ErrorCode.FORBIDDEN
-        assert f"{dependency.template_id}@{dependency.revision}" in exc_info.value.details[
-            "untrusted_templates"
-        ]
+        assert (
+            f"{dependency.template_id}@{dependency.revision}"
+            in exc_info.value.details["untrusted_templates"]
+        )
         assert handler.calls == []
 
     asyncio.run(scenario())
@@ -266,9 +267,12 @@ def test_portable_template_import_downgrades_source_trust_without_losing_provena
         assert imported.content.provenance.source == "portable-source"
         assert imported.content.provenance.metadata["source_marker"] == "preserved"
         assert imported.content.provenance.metadata["imported_source_trust"] == "local"
-        assert source.get_revision(
-            published.template_id,
-            published.revision,
-        ).content.provenance.trust is TemplateTrust.LOCAL
+        assert (
+            source.get_revision(
+                published.template_id,
+                published.revision,
+            ).content.provenance.trust
+            is TemplateTrust.LOCAL
+        )
 
     asyncio.run(scenario())
