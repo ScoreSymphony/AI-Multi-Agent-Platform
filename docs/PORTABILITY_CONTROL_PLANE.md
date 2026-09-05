@@ -65,7 +65,7 @@ Preview checks Model dependencies against the canonical `ModelRegistry`, Project
 
 Capability, plugin, connector and secret requirements remain fail-closed in this composition until their corresponding canonical production registries are explicitly wired. This is intentional: preview must not claim a dependency is available merely because its resource type exists somewhere in the codebase.
 
-#79 is complete and closed. Project portability consumes the canonical #308 persistence seam. #309 and #310 remain independent follow-up domain work if durable model-routing or authorization-policy profiles are later added to the portability surface; they do not block #79's completed status. #19 is complete, but EvaluationSuite assets are currently deployment/configuration inputs without a canonical suite-import mutation seam. Portability must not create shadow persistence to manufacture one.
+#79 is complete and closed. Project portability consumes the canonical #308 persistence seam. #309 and #310 remain independent follow-up domain work if durable model-routing or authorization-policy profiles are later added to the portability surface; they do not block #79's completed status. #19 is currently reopened for its own outstanding Evaluation-framework acceptance work. EvaluationSuite assets remain deployment/configuration inputs without a canonical suite-import mutation seam, so portability must not create shadow persistence to manufacture one.
 
 ## Execution boundary
 
