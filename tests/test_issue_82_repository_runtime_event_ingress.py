@@ -27,7 +27,6 @@ from ai_multi_agent_platform.repositories import (
     LocalGitRepositoryProvider,
     RepositoryBinding,
     RepositoryConnection,
-    RepositoryEventRuntimeIngress,
 )
 
 
@@ -87,10 +86,7 @@ def test_verified_repository_event_enters_normal_single_node_automation_runtime(
             ),
             project_id=project.id,
         )
-        ingress = RepositoryEventRuntimeIngress(
-            deployment.repository_registry,
-            deployment.kernel_repository,
-        )
+        ingress = deployment.repository_event_ingress
 
         def connector_event(*, verified: bool, native_id: str) -> ConnectorEvent:
             return ConnectorEvent(
