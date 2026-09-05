@@ -20,7 +20,7 @@ A repository is represented by `RepositoryReference`, which wraps the connector-
 
 ## Provider seam
 
-`RepositoryProvider` is the replaceable repository contract. It covers repository discovery/read, exact revision resolution, tree reads, branch/tag inspection, status/diff, branch creation, checkout, commit, fetch and push.
+`RepositoryProvider` is the replaceable repository contract. It covers repository discovery/read, exact revision resolution, tree reads, branch/tag/commit inspection, status/diff, branch creation, checkout, commit, fetch and push. Provider-neutral issue and change-request operations are exposed where a concrete provider advertises them.
 
 Two provider paths are available:
 
@@ -29,7 +29,7 @@ Two provider paths are available:
 
 The bridge is intentionally forge-neutral. Adding a GitHub, GitLab, Gitea or another connector does not change Agent, Task, Run or Workspace contracts.
 
-## Capability model
+## Capability model and Agent runtime
 
 `RepositoryOperation` and `repository_capability_specs()` define #12-compatible capability contracts for:
 
@@ -41,6 +41,8 @@ The bridge is intentionally forge-neutral. Adding a GitHub, GitLab, Gitea or ano
 - repository event receipt.
 
 Not every provider must implement every operation. Repository references advertise the operations supported by the concrete adapter, while the global capability definitions provide the provider-neutral contract for optional collaboration features.
+
+The shipped Single-Node profile registers `RepositoryCapabilityProvider` as `platform.repository-bridge` in the same `CapabilityRegistry` used by `AgentRuntime`. Repository capability invocations therefore travel through the canonical capability seam and then through `RepositoryService`; they do not call provider adapters directly. The bridge resolves authorization identity from canonical `OperationContext.owner_id` and fails closed when ownership metadata is absent.
 
 Side effects are classified independently of provider identity:
 
@@ -58,7 +60,8 @@ The service maps operations onto #15 authorization/approval semantics:
 - read/status/diff: standard read;
 - fetch: external read plus local write;
 - create branch/checkout/commit: elevated local mutation;
-- push: high-risk external mutation.
+- push: high-risk external mutation;
+- issue/change-request writes: external side effects.
 
 A denied operation fails before the provider adapter is invoked. Approval IDs can be propagated through the Control Plane command surface.
 
@@ -113,33 +116,38 @@ The Local Git bootstrap factory keeps its checkout root in adapter-private confi
 
 ## Events and automations
 
-`RepositoryEventBridge` converts verified #44 `ConnectorEvent` evidence into canonical platform events.
+`RepositoryEventBridge` remains the direct provider-neutral normalization seam for verified #44 `ConnectorEvent` evidence. `repository_platform_event(...)` centralizes Connection binding, project scoping, verification and canonical event projection.
 
-Repository events are scoped to their canonical Project and preserve repository ID, connection ID, external-resource references and connector provenance. The canonical event ID is deterministic over connection, connector type and connector `dedupe_key`, so repeated webhook deliveries are idempotent.
+For the normal Single-Node automation path, `RepositoryEventRuntimeIngress` resolves the registered canonical Repository binding and commits the resulting `PlatformEvent` to the same durable kernel `EventRepository` consumed by #18 `AutomationRuntime`.
 
-Unverified connector events are rejected by default.
+The operational path is therefore:
 
-The integration test exercises the complete path:
+`verified repository ConnectorEvent -> RepositoryEventRuntimeIngress -> canonical EventRepository -> AutomationRuntime -> AutomationService -> canonical Task`
 
-`verified repository ConnectorEvent -> RepositoryEventBridge -> canonical PlatformEvent -> AutomationService -> canonical Task`
+Repository events are scoped to their canonical Project and preserve repository ID, connection ID, external-resource references and connector provenance. The canonical event ID is deterministic over connection, connector type and connector `dedupe_key`. Runtime ingress also records a canonical idempotency command, so retried provider deliveries do not create a second Event or Automation delivery.
 
-Duplicate deliveries preserve the same canonical event/delivery identity and do not generate duplicate Tasks.
+Unverified connector events, missing bindings, cross-Connection references and ambiguous multi-repository Connection events fail closed before durable event ingress. Repository events remain evidence rather than execution authority; downstream Automation and repository side-effect policy remains authoritative.
 
 ## Control Plane, CLI and frontend hooks
 
-`register_repository_control_plane(...)` registers the canonical `repositories` resource collection and these policy-enforced commands:
+`register_repository_control_plane(...)` registers the canonical `repositories` resource collection and policy-enforced commands for:
 
-- `repository.status`
-- `repository.diff`
-- `repository.fetch`
-- `repository.branch.create`
-- `repository.checkout`
-- `repository.commit`
-- `repository.push`
+- branch, tag and commit inspection;
+- issue read/open/update;
+- change-request read/open/update;
+- status and diff;
+- fetch;
+- branch creation and checkout;
+- commit and push;
+- local attach;
+- provider discovery/attach;
+- detach without provider-content deletion.
 
-Every command delegates to `RepositoryService`; the Control Plane does not call adapters directly.
+Every command delegates through the repository service/management boundary; the Control Plane does not call provider adapters directly.
 
-The platform CLI consumes the same registered extension contract. Repository resources are inspectable through the generic canonical extension commands, for example:
+The practical CLI uses the same Control Plane contracts through `platform repository ...`. It supports repository listing/showing, Git inspection and mutation, local attach, provider discovery/attach/detach, and provider-neutral issue/change-request operations. Commands with local or external side effects require explicit global `--yes`; approval IDs and idempotency keys remain available for protected operations. Canonical collaboration-reference JSON is used instead of exposing GitHub/GitLab-specific command shapes.
+
+The generic extension seam remains available for canonical collection inspection, for example:
 
 ```text
 platform extension list repositories
@@ -147,17 +155,15 @@ platform extension show repositories <external_resource_id>
 platform extension commands
 ```
 
-The frontend uses the existing extension-collection seam rather than a provider-specific endpoint. `RepositoryCollectionClient` is a typed read hook built on `ControlPlaneCollectionClient` and therefore reads only `/api/v1/repositories` resources exposed by the running Control Plane.
+The frontend exposes `/repositories` and `/repositories/:repositoryId` through the normal platform navigation and Shell. `RepositoryCollectionClient` uses `/api/v1/repositories` plus canonical repository command endpoints to show canonical identity, visibility, branch/revision state, capability metadata, status, branches, tags, commits and diff, with supported actions routed back through the Control Plane. Provider-specific URLs, APIs, SDKs, local clone paths and credentials are not northbound identity.
 
-Provider-specific URLs, APIs and SDKs are never used by these northbound clients.
+## Local Git and conformance baseline
 
-## Local Git baseline
-
-The deterministic Local Git coverage includes:
+The deterministic repository coverage includes:
 
 - initialize and reopen;
 - branch creation and checkout;
-- branch/tag inspection;
+- branch/tag/commit inspection;
 - status and diff;
 - commit;
 - exact revision lookup and exact tree reads;
@@ -165,11 +171,15 @@ The deterministic Local Git coverage includes:
 - missing-Git/provider-unavailable handling;
 - exact-revision Workspace materialization;
 - changed-file and manifest Artifact return;
+- input and output revision Run provenance;
 - provider replacement without canonical type/identity changes;
 - `SecretReference` and clone-path isolation;
 - authorization-denied push before side effect;
 - canonical external-resource serialization;
-- verified event normalization and deterministic deduplication.
+- verified event normalization and deterministic deduplication;
+- verified EventRepository ingress through the normal AutomationRuntime path;
+- shipped CapabilityRegistry/AgentRuntime repository capability composition;
+- canonical Control Plane, CLI and frontend repository paths.
 
 ## Hosted/self-hosted provider behavior
 
@@ -185,6 +195,7 @@ The integration preserves these invariants:
 2. Moving refs are resolved to immutable commit SHAs before Workspace/Run provenance is recorded.
 3. Credential material remains behind `SecretReference` and canonical Connection boundaries.
 4. Side effects are authorized by operation semantics, not by provider brand.
-5. Repository events are verified and deduplicated before entering automation flows.
+5. Repository events are verified, canonicalized and deduplicated before entering the normal Automation runtime.
 6. Provider replacement cannot change canonical repository identity or leak provider-native model types into Agent/Task/Workspace contracts.
 7. Run provenance and durable repository registration survive process restart without serializing live adapters or secrets.
+8. Agent repository operations use the shared platform CapabilityRegistry and cannot invent a privileged actor identity.
