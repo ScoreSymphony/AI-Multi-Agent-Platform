@@ -1,0 +1,79 @@
+name: issue-308-implement-v2
+
+on:
+  push:
+    branches:
+      - feat/issue-308-project-persistence
+
+permissions:
+  contents: write
+
+jobs:
+  implement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Re-run Project persistence generator with safe dedent
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          helper = Path('.github/workflows/issue-308-implement.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = helper.index(marker) + len(marker)
+          end = helper.index("\n          PY\n", start)
+          lines = helper[start:end].splitlines()
+          script = "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
+          script = script.replace(
+              'from pathlib import Path\n',
+              'from pathlib import Path\nfrom textwrap import dedent\n',
+              1,
+          )
+          script = script.replace(
+              'scope_block = "\\n".join(line[10:] if line.startswith("          ") else line for line in scope_block.splitlines())',
+              'scope_block = dedent(scope_block)',
+              1,
+          )
+          script = script.replace(
+              "sqlite_path.write_text('''",
+              "sqlite_path.write_text(dedent('''",
+              1,
+          )
+          script = script.replace(
+              "'''.replace(\"          \", \"\"), encoding=\"utf-8\")",
+              "'''), encoding=\"utf-8\")",
+              1,
+          )
+          script = script.replace(
+              "tests_path.write_text('''",
+              "tests_path.write_text(dedent('''",
+              1,
+          )
+          script = script.replace(
+              "'''.replace(\"          \", \"\"), encoding=\"utf-8\")",
+              "'''), encoding=\"utf-8\")",
+              1,
+          )
+          exec(compile(script, '<issue-308-generator>', 'exec'))
+          PY
+      - name: Install development dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Format and validate
+        run: |
+          python -m ruff format src/ai_multi_agent_platform/control_plane/service.py src/ai_multi_agent_platform/control_plane/sqlite_scope.py tests/test_issue_308_project_persistence.py
+          python -m ruff check src/ai_multi_agent_platform/control_plane/service.py src/ai_multi_agent_platform/control_plane/sqlite_scope.py tests/test_issue_308_project_persistence.py
+          python -m mypy src/ai_multi_agent_platform/control_plane/service.py src/ai_multi_agent_platform/control_plane/sqlite_scope.py
+          python -m pytest -q tests/test_issue_308_project_persistence.py
+      - name: Commit implementation and remove helpers
+        run: |
+          git rm .github/workflows/issue-308-implement.yml .github/workflows/issue-308-implement-v2.yml
+          git add src/ai_multi_agent_platform/control_plane/service.py src/ai_multi_agent_platform/control_plane/sqlite_scope.py tests/test_issue_308_project_persistence.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat(projects): preserve complete canonical snapshots (#308)"
+          git push origin HEAD:feat/issue-308-project-persistence
