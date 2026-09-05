@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
-from .migrations import MigrationContext, MigrationRegistry, MigrationRunner
-from .models import RollbackMode, UpgradeResult
+from .migrations import MigrationContext, MigrationRegistry, MigrationRunner, MigrationStep
+from .models import CheckSeverity, RollbackMode, UpgradeResult
 from .preflight import PreflightRequest, UpgradePreflight
 from .versioning import JsonVersionStateStore
 
@@ -130,10 +130,16 @@ class UpgradeService:
         operator tooling cannot mistake a partially migrated deployment for a healthy one.
         """
 
-        report = self.preflight.run(request)
+        installed = self.version_state.read()
+        if installed != request.current:
+            raise UpgradeError(
+                "installed version state changed since the upgrade request was prepared; rerun preflight"
+            )
+        effective_request = replace(request, resume_failed=resume_failed)
+        report = self.preflight.run(effective_request)
         if not report.ok:
             failures = "; ".join(
-                check.message for check in report.checks if check.severity.value == "error"
+                check.message for check in report.checks if check.severity is CheckSeverity.ERROR
             )
             raise UpgradeError(f"upgrade preflight failed: {failures}")
         if report.maintenance_required and not quiesced:
@@ -178,8 +184,8 @@ class UpgradeService:
         return result
 
 
-def _rollback_mode(steps: tuple[object, ...]) -> RollbackMode:
-    modes = [getattr(step, "rollback_mode", RollbackMode.CODE_ONLY_BEFORE_MIGRATION) for step in steps]
+def _rollback_mode(steps: tuple[MigrationStep, ...]) -> RollbackMode:
+    modes = [step.rollback_mode for step in steps]
     if any(mode is RollbackMode.RESTORE_REQUIRED for mode in modes):
         return RollbackMode.RESTORE_REQUIRED
     if modes and all(mode is RollbackMode.REVERSIBLE for mode in modes):
