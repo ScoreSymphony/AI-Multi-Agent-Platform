@@ -1,5 +1,6 @@
 """Canonical reusable workflow-definition domain."""
 
+from .authorization import AuthorizedWorkflowService, WorkflowCallContext
 from .models import (
     WORKFLOW_SCHEMA_VERSION,
     WorkflowCapabilityRequirement,
@@ -20,9 +21,11 @@ from .service import WorkflowAdmission, WorkflowService, validate_workflow_conte
 __all__ = [
     "WORKFLOW_REPOSITORY_SCHEMA_VERSION",
     "WORKFLOW_SCHEMA_VERSION",
+    "AuthorizedWorkflowService",
     "InMemoryWorkflowRepository",
     "JsonWorkflowRepository",
     "WorkflowAdmission",
+    "WorkflowCallContext",
     "WorkflowCapabilityRequirement",
     "WorkflowCompatibility",
     "WorkflowContent",
