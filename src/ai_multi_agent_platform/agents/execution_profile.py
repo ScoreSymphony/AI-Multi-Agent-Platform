@@ -36,7 +36,12 @@ class AgentExecutionBinding:
 def decode_agent_execution_binding(
     metadata: Mapping[str, JsonValue],
 ) -> AgentExecutionBinding | None:
-    """Decode the generic Agent execution profile, returning ``None`` when absent."""
+    """Decode the generic Agent execution profile, returning ``None`` when absent.
+
+    Canonical domain metadata recursively freezes JSON arrays into tuples. The decoder
+    therefore accepts both the ingress JSON representation (``list``) and the immutable
+    canonical representation (``tuple``) while keeping element validation strict.
+    """
 
     if metadata.get(AGENT_EXECUTION_PROFILE_KEY) != AGENT_EXECUTION_PROFILE:
         return None
@@ -44,8 +49,8 @@ def decode_agent_execution_binding(
     revision = _optional_positive_int(metadata, AGENT_EXECUTION_AGENT_REVISION_KEY)
     model_config_id = _optional_string(metadata, AGENT_EXECUTION_MODEL_CONFIG_ID_KEY)
     workspace_id = _optional_string(metadata, AGENT_EXECUTION_WORKSPACE_ID_KEY)
-    raw_capabilities = metadata.get(AGENT_EXECUTION_CAPABILITY_IDS_KEY, [])
-    if not isinstance(raw_capabilities, list):
+    raw_capabilities: object = metadata.get(AGENT_EXECUTION_CAPABILITY_IDS_KEY, [])
+    if not isinstance(raw_capabilities, list | tuple):
         raise ValueError(f"{AGENT_EXECUTION_CAPABILITY_IDS_KEY} must be an array")
     capability_ids: list[str] = []
     for value in raw_capabilities:
