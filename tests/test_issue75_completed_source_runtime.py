@@ -90,7 +90,7 @@ def test_authorization_gate_required_and_resolved_events_project_into_notificati
                 action=AuthorizationAction.EXECUTE,
                 resource_type=ResourceType.TASK,
                 resource_id=task_id,
-                operation=OperationContext(),
+                operation=OperationContext(correlation_id="issue75-approval-required"),
                 task_id=task_id,
             ),
             payload={"operation": "issue75-fixture"},
@@ -112,7 +112,7 @@ def test_authorization_gate_required_and_resolved_events_project_into_notificati
             approval_id,
             approver=ActorIdentity(approver.id, ActorType.HUMAN),
             approve=True,
-            operation=OperationContext(),
+            operation=OperationContext(correlation_id="issue75-approval-resolved"),
         )
         projected = await control_plane.notification_service.list(
             NotificationQuery(recipient=approver)
@@ -193,7 +193,7 @@ def test_notification_observer_failure_does_not_fail_authoritative_approval_tran
                 action=AuthorizationAction.EXECUTE,
                 resource_type=ResourceType.TASK,
                 resource_id=task_id,
-                operation=OperationContext(),
+                operation=OperationContext(correlation_id="issue75-observer-required"),
                 task_id=task_id,
             ),
             payload={},
@@ -206,7 +206,7 @@ def test_notification_observer_failure_does_not_fail_authoritative_approval_tran
             approval_id,
             approver=ActorIdentity(new_id("user"), ActorType.HUMAN),
             approve=True,
-            operation=OperationContext(),
+            operation=OperationContext(correlation_id="issue75-observer-resolved"),
         )
 
         assert resolved.status.value == "approved"
