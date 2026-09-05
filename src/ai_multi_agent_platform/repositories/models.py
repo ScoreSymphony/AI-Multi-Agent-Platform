@@ -215,6 +215,25 @@ class RepositoryCommit:
 
 
 @dataclass(frozen=True, slots=True)
+class RepositoryCommitInfo:
+    """Provider-neutral read model for an existing commit in repository history."""
+
+    repository_id: str
+    revision: str
+    message: str
+    parent_revisions: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        validate_id(self.repository_id, "external_resource")
+        object.__setattr__(self, "revision", validate_git_revision(self.revision))
+        object.__setattr__(
+            self,
+            "parent_revisions",
+            tuple(validate_git_revision(value) for value in self.parent_revisions),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RepositoryTreeEntry:
     relative_path: str
     data: bytes
