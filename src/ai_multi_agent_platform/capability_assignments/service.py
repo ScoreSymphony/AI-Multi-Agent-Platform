@@ -92,9 +92,7 @@ class CapabilityAssignmentService:
         )
 
         resolved_scope = self.targets.resolve(content.target)
-        canonical_project_id = (
-            project_id if project_id is not None else resolved_scope.project_id
-        )
+        canonical_project_id = project_id if project_id is not None else resolved_scope.project_id
         canonical_organization_id = (
             organization_id if organization_id is not None else resolved_scope.organization_id
         )
@@ -346,14 +344,8 @@ class CapabilityAssignmentService:
             "revision": revision.revision,
             "target_type": revision.content.target.subject_type.value,
             "target_id": revision.content.target.subject_id,
-            "required_capability_ids": [
-                item.capability_id for item in revision.content.required
-            ],
-            "allowed_capability_ids": [
-                item.capability_id for item in revision.content.allowed
-            ],
-            "denied_capability_ids": [
-                item.capability_id for item in revision.content.denied
-            ],
+            "required_capability_ids": [item.capability_id for item in revision.content.required],
+            "allowed_capability_ids": [item.capability_id for item in revision.content.allowed],
+            "denied_capability_ids": [item.capability_id for item in revision.content.denied],
         }
         return ProposedAction(context=context, payload=payload)
