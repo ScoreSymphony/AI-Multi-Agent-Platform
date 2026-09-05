@@ -31,6 +31,7 @@ from .memory_knowledge import (
 from .onboarding import add_onboarding_parser, execute_onboarding
 from .plugins import add_plugin_parser, execute_plugin
 from .portability import add_portability_parser, execute_portability
+from .repositories import add_repository_parser, execute_repository
 from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default_config_path
 from .render import Renderer
 from .search import add_search_parser, execute_search
@@ -142,6 +143,7 @@ def _build_parser() -> argparse.ArgumentParser:
         platform_command.set_defaults(area="platform", command=name)
 
     add_search_parser(areas)
+    add_repository_parser(areas)
     add_plugin_parser(areas)
     add_evaluation_parser(areas)
     add_memory_knowledge_parsers(areas)
@@ -417,6 +419,8 @@ def _execute(
         return _platform_command(args, client)
     if args.area == "search":
         return CommandResult(execute_search(args, client))
+    if args.area == "repository":
+        return CommandResult(execute_repository(args, client, _require_confirmation))
     if args.area == "plugin":
         return CommandResult(execute_plugin(args, client, _require_confirmation))
     if args.area == "evaluation":

@@ -1,0 +1,76 @@
+name: Wire issue 82 repository CLI
+
+on:
+  push:
+    branches:
+      - feat/issue-82-cli-surface
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository CLI branch
+        uses: actions/checkout@v7
+        with:
+          ref: feat/issue-82-cli-surface
+
+      - name: Wire repository CLI into canonical command hierarchy
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/ai_multi_agent_platform/cli/main.py')
+          text = path.read_text(encoding='utf-8')
+          import_anchor = 'from .portability import add_portability_parser, execute_portability\n'
+          import_line = 'from .repositories import add_repository_parser, execute_repository\n'
+          if import_line not in text:
+              if import_anchor not in text:
+                  raise SystemExit('repository CLI import anchor not found')
+              text = text.replace(import_anchor, import_anchor + import_line, 1)
+
+          parser_anchor = '    add_search_parser(areas)\n'
+          parser_line = '    add_repository_parser(areas)\n'
+          if parser_line not in text:
+              if parser_anchor not in text:
+                  raise SystemExit('repository CLI parser anchor not found')
+              text = text.replace(parser_anchor, parser_anchor + parser_line, 1)
+
+          dispatch_anchor = '    if args.area == "search":\n        return CommandResult(execute_search(args, client))\n'
+          dispatch = (
+              '    if args.area == "repository":\n'
+              '        return CommandResult(execute_repository(args, client, _require_confirmation))\n'
+          )
+          if dispatch not in text:
+              if dispatch_anchor not in text:
+                  raise SystemExit('repository CLI dispatch anchor not found')
+              text = text.replace(dispatch_anchor, dispatch_anchor + dispatch, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Install Ruff
+        run: python -m pip install 'ruff==0.16.6'
+
+      - name: Format repository CLI changes
+        run: |
+          ruff format \
+            src/ai_multi_agent_platform/cli/main.py \
+            src/ai_multi_agent_platform/cli/repositories.py
+
+      - name: Commit wiring
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            src/ai_multi_agent_platform/cli/main.py \
+            src/ai_multi_agent_platform/cli/repositories.py
+          if git diff --cached --quiet; then
+            echo 'No CLI wiring or formatting changes required.'
+            exit 0
+          fi
+          git commit -m 'feat(cli): wire repository commands into platform CLI (#82)'
+          git push origin HEAD:feat/issue-82-cli-surface
