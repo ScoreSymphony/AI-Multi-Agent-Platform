@@ -168,7 +168,7 @@ export class OnboardingClient {
     });
   }
 
-  private command<T>(path: string, body: Record<string, JsonValue | undefined>): Promise<T> {
+  private command<T>(path: string, body: Record<string, unknown>): Promise<T> {
     return this.request<T>(path, {
       method: "POST",
       body: stripUndefined(body),
@@ -202,12 +202,8 @@ export class OnboardingClient {
   }
 }
 
-function stripUndefined(
-  value: Record<string, JsonValue | undefined>,
-): Record<string, JsonValue> {
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, JsonValue] => entry[1] !== undefined),
-  );
+function stripUndefined(value: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
 }
 
 function safeJson(text: string): unknown {
