@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform import __version__
+from ai_multi_agent_platform.accounting import AccountingService
 from ai_multi_agent_platform.agents import (
     AgentRuntime,
     AgentService,
@@ -29,8 +30,15 @@ from ai_multi_agent_platform.conversations import (
     ModelRuntimeConversationResponseProvider,
 )
 from ai_multi_agent_platform.data import LocalFileProvider
+from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
-from ai_multi_agent_platform.evaluation import EvaluationService, SqliteEvaluationRepository
+from ai_multi_agent_platform.evaluation import (
+    AccountingEvaluationEvidenceProvider,
+    EvaluationEvidenceProvider,
+    EvaluationService,
+    InMemoryObservabilityEvaluationEvidenceProvider,
+    SqliteEvaluationRepository,
+)
 from ai_multi_agent_platform.evaluation.single_node import build_single_node_evaluation
 from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
 from ai_multi_agent_platform.kernel import (
@@ -39,6 +47,7 @@ from ai_multi_agent_platform.kernel import (
     SqliteKernelRepository,
 )
 from ai_multi_agent_platform.models import JsonModelRegistryStore, ModelRegistry, ModelRuntime
+from ai_multi_agent_platform.observability import InMemoryExporter
 from ai_multi_agent_platform.onboarding import (
     FirstRunAgentLifecycleBackend,
     FirstRunTaskService,
@@ -116,6 +125,8 @@ _SMOKE_TASK_KEY = "deployment-smoke-task-v1"
 _SMOKE_READY_KEY = "deployment-smoke-ready-v1"
 _SMOKE_START_KEY = "deployment-smoke-start-v1"
 _SMOKE_REFRESH_KEY = "deployment-smoke-refresh-v1"
+_EVALUATION_PROJECT_KEY = "evaluation-system-project-v1"
+_EVALUATION_OWNER_ID = "evaluation-single-node"
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,8 +168,12 @@ class SingleNodeDeployment:
     templates: TemplateApplicationService
     evaluation_repository: SqliteEvaluationRepository
     evaluation: EvaluationService
+    accounting_service: AccountingService | None
+    observability_exporter: InMemoryExporter | None
+    distributed_runtime: DistributedRuntime | None
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
+    approval_gate: AuthorizationGate
     verification: SqliteVerificationService
     verification_runtime: CanonicalVerificationRuntime
     kernel: PlatformKernel
@@ -255,6 +270,9 @@ def build_single_node_deployment(
     *,
     onboarding_model_adapters: Iterable[OnboardingModelAdapter] = (),
     secret_provider: SecretProvider | None = None,
+    accounting_service: AccountingService | None = None,
+    observability_exporter: InMemoryExporter | None = None,
+    distributed_runtime: DistributedRuntime | None = None,
 ) -> SingleNodeDeployment:
     """Build the durable Stage-1 profile without optional external services."""
 
@@ -286,7 +304,12 @@ def build_single_node_deployment(
         repository_provenance,
         fallback_workspace=_REFERENCE_EXECUTION_WORKSPACE,
     )
-
+    evaluation_project = scopes.create_project(
+        key=_EVALUATION_PROJECT_KEY,
+        name="Platform Evaluation",
+        owner_type="service",
+        owner_id=_EVALUATION_OWNER_ID,
+    )
     agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
     conversations = ConversationService(
         JsonConversationRepository(database_dir / "conversations.json")
@@ -380,23 +403,16 @@ def build_single_node_deployment(
         scopes=scopes,
         agents=agents,
     )
-    evaluation_composition = build_single_node_evaluation(
-        database_path=database_dir / "evaluation.sqlite3",
-        kernel=kernel,
-        agents=agents.repository,
-        orchestrator=orchestrator,
-        executor=reference_executor,
-    )
 
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
-    authorization_gate = AuthorizationGate(authorization)
-    repositories = RepositoryService(repository_registry, authorization_gate)
+    approval_gate = AuthorizationGate(authorization)
+    repositories = RepositoryService(repository_registry, approval_gate)
     repository_management = RepositoryManagementService(
         repository_registry,
         repository_catalog,
-        authorization_gate,
+        approval_gate,
         managed_local_root=config.repositories_dir,
     )
     repository_run_integration = RepositoryRunIntegration(
@@ -408,12 +424,41 @@ def build_single_node_deployment(
     )
     repository_workspace_execution.configure_run_integration(repository_run_integration)
 
+    evaluation_evidence_providers: list[EvaluationEvidenceProvider] = []
+    if accounting_service is not None:
+        evaluation_evidence_providers.append(
+            AccountingEvaluationEvidenceProvider(accounting_service)
+        )
+    if observability_exporter is not None:
+        evaluation_evidence_providers.append(
+            InMemoryObservabilityEvaluationEvidenceProvider(observability_exporter)
+        )
+    evaluation_composition = build_single_node_evaluation(
+        database_path=database_dir / "evaluation.sqlite3",
+        asset_dir=config.evaluation_dir,
+        kernel=kernel,
+        agents=agents.repository,
+        agent_runtime=agent_runtime,
+        models=models,
+        model_runtime=model_runtime,
+        orchestrator=orchestrator,
+        executor=reference_executor,
+        files=files,
+        workspaces=workspaces,
+        project_id=evaluation_project.id,
+        run_workspace_bindings=run_workspace_bindings,
+        evidence_providers=tuple(evaluation_evidence_providers),
+        approval_reader=approval_gate.approvals,
+        distributed_runtime=distributed_runtime,
+    )
+
     portability_workflow = build_agent_portability_workflow(
         agents=agents.repository,
         models=models,
         scopes=scopes,
         platform_version=__version__,
         templates=templates.repository,
+        evaluation=evaluation_composition.service,
     )
 
     control_plane = ControlPlane(
@@ -432,7 +477,7 @@ def build_single_node_deployment(
         conversation_file_provider=files,
         conversation_response_provider=conversation_response_provider,
         portability_workflow=portability_workflow,
-        approval_gate=AuthorizationGate(authorization),
+        approval_gate=approval_gate,
     )
     resolvers = control_plane.workspace_source_resolvers
     if resolvers is None:
@@ -533,8 +578,12 @@ def build_single_node_deployment(
         templates=templates,
         evaluation_repository=evaluation_composition.repository,
         evaluation=evaluation_composition.service,
+        accounting_service=accounting_service,
+        observability_exporter=observability_exporter,
+        distributed_runtime=distributed_runtime,
         authentication=authentication,
         authorization=authorization,
+        approval_gate=approval_gate,
         verification=verification,
         verification_runtime=verification_runtime,
         kernel=kernel,
