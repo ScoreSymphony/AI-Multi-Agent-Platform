@@ -264,7 +264,7 @@ def _move_request(
     if "destination_project_id" not in payload:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
-            "destination_project_id is required and may be null for personal scope",
+            "destination_project_id is required and may be null for a no-Project scope",
         )
     destination = payload.get("destination_project_id")
     if destination is not None and (not isinstance(destination, str) or not destination.strip()):
