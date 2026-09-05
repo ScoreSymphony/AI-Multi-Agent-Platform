@@ -1,22 +1,31 @@
-import { useCallback, useEffect, useState } from "react";
-import type { CanonicalApproval } from "../api/approvals";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ApprovalClient,
+  type CanonicalApproval,
+} from "../api/approvals";
+import { BrowserSessionClient } from "../api/browserSession";
+import { ControlPlaneClient } from "../api/client";
 import { ControlPlaneCollectionClient } from "../api/collections";
 import type { Page } from "../api/types";
+import {
+  approvalDecisionManifestState,
+  type ApprovalDecisionManifestState,
+} from "../app/approvalManifest";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
 import { PaginationControls } from "../components/Pagination";
 import {
   Card,
   CanonicalId,
+  DegradedState,
   EmptyState,
   ErrorState,
   LoadingState,
   StatusBadge,
 } from "../components/States";
 
-const APPROVAL_COLLECTION = "approvals";
-
 export function ApprovalsPage({ client }: { client: ControlPlaneCollectionClient }) {
+  const { approvalClient, decisionState } = useApprovalWebBoundary(client);
   const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState<Page<CanonicalApproval> | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -25,7 +34,7 @@ export function ApprovalsPage({ client }: { client: ControlPlaneCollectionClient
   const load = useCallback(async () => {
     try {
       setPage(
-        await client.list<CanonicalApproval>(APPROVAL_COLLECTION, {
+        await approvalClient.listApprovals({
           limit: 50,
           cursor: pagination.cursor,
           sort: "id",
@@ -37,7 +46,7 @@ export function ApprovalsPage({ client }: { client: ControlPlaneCollectionClient
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client, pagination.cursor, showAll]);
+  }, [approvalClient, pagination.cursor, showAll]);
 
   useEffect(() => {
     void load();
@@ -52,10 +61,21 @@ export function ApprovalsPage({ client }: { client: ControlPlaneCollectionClient
         <p className="eyebrow">Canonical security approvals</p>
         <h1>Approvals</h1>
         <p>
-          Read-only inspection of exact-action approval records. Proposed action payload values are
-          not exposed by the Control Plane, and this UI does not invent approve or deny mutations.
+          Inspect exact-action approval records without exposing proposed payload values. Approve
+          and Deny are offered only when the Control Plane advertises the shared canonical decision
+          commands; otherwise this surface remains explicitly read-only.
         </p>
       </header>
+
+      {decisionState === "unavailable" ? (
+        <DegradedState
+          title="Approval decisions unavailable"
+          detail="The canonical Approval collection remains available for inspection, but the Control Plane does not advertise both safe decision commands. No private or client-side fallback is used."
+        />
+      ) : null}
+      {decisionState === "loading" ? (
+        <LoadingState label="Checking Approval decision capability…" />
+      ) : null}
 
       <div className="metrics">
         <Metric label={showAll ? "Approvals" : "Pending approvals"} value={page?.total ?? "—"} />
@@ -100,21 +120,45 @@ export function ApprovalDetailPage({
   client: ControlPlaneCollectionClient;
   approvalId: string;
 }) {
+  const { approvalClient, decisionState } = useApprovalWebBoundary(client);
   const [approval, setApproval] = useState<CanonicalApproval | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [decisionError, setDecisionError] = useState<unknown>(null);
+  const [comment, setComment] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setApproval(await client.get<CanonicalApproval>(APPROVAL_COLLECTION, approvalId));
+      setApproval(await approvalClient.getApproval(approvalId));
       setError(null);
     } catch (nextError) {
       setError(nextError);
     }
-  }, [approvalId, client]);
+  }, [approvalId, approvalClient]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const decide = async (decision: "approve" | "deny") => {
+    if (approval === null || approval.status !== "pending" || decisionState !== "available") return;
+    setBusy(true);
+    setDecisionError(null);
+    try {
+      const options = comment.trim() ? { comment } : {};
+      const updated = decision === "approve"
+        ? await approvalClient.approve(approval.id, approval.requested_action_digest, options)
+        : await approvalClient.deny(approval.id, approval.requested_action_digest, options);
+      setApproval(updated);
+      setComment("");
+      setConfirmed(false);
+    } catch (nextError) {
+      setDecisionError(nextError);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (error && approval === null) return <ErrorState error={error} onRetry={() => void load()} />;
   if (approval === null) return <LoadingState />;
@@ -139,13 +183,15 @@ export function ApprovalDetailPage({
         <Card title="Exact action binding">
           <DefinitionList
             values={{
+              approval_id: approval.id,
               action: approval.action,
               resource_type: approval.resource_type,
               resource_id: approval.resource_id,
               subject_type: approval.subject_type,
               subject_id: approval.subject_id,
-              digest: approval.requested_action_digest,
+              requested_action_digest: approval.requested_action_digest,
               policy: approval.policy_id,
+              risk: approval.risk,
             }}
           />
         </Card>
@@ -183,14 +229,164 @@ export function ApprovalDetailPage({
         </Card>
       </div>
 
+      <ApprovalDecisionPanel
+        approval={approval}
+        decisionState={decisionState}
+        comment={comment}
+        confirmed={confirmed}
+        busy={busy}
+        error={decisionError}
+        onComment={setComment}
+        onConfirmed={setConfirmed}
+        onDecision={decide}
+      />
+
       <Card title="Security boundary">
         <p>
-          The canonical approval projection deliberately exposes the action digest and references,
-          not proposed payload values. Decision authority remains inside #15; this page is
-          inspection-only until an exact canonical decision route is available.
+          The browser receives the canonical Approval projection only: action/resource/risk/policy
+          context, references and the immutable requested-action digest. It never reconstructs or
+          sends hidden proposed payload values. Decision authorization, actor validation, expiry,
+          terminal-state checks, exact-action binding and audit enforcement remain server-side.
         </p>
       </Card>
     </div>
+  );
+}
+
+function useApprovalWebBoundary(client: ControlPlaneCollectionClient): {
+  approvalClient: ApprovalClient;
+  decisionState: ApprovalDecisionManifestState;
+} {
+  const session = useMemo(
+    () => new BrowserSessionClient({ baseUrl: client.baseUrl }),
+    [client.baseUrl],
+  );
+  const approvalClient = useMemo(
+    () => new ApprovalClient({ baseUrl: client.baseUrl, fetchImpl: session.fetch }),
+    [client.baseUrl, session],
+  );
+  const manifestClient = useMemo(
+    () => new ControlPlaneClient({ baseUrl: client.baseUrl, fetchImpl: session.fetch }),
+    [client.baseUrl, session],
+  );
+  const [decisionState, setDecisionState] = useState<ApprovalDecisionManifestState>("loading");
+
+  useEffect(() => {
+    let active = true;
+    setDecisionState("loading");
+    void manifestClient.manifest().then(
+      (manifest) => {
+        if (active) setDecisionState(approvalDecisionManifestState("ready", manifest));
+      },
+      () => {
+        if (active) setDecisionState("unavailable");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [manifestClient]);
+
+  return { approvalClient, decisionState };
+}
+
+function ApprovalDecisionPanel({
+  approval,
+  decisionState,
+  comment,
+  confirmed,
+  busy,
+  error,
+  onComment,
+  onConfirmed,
+  onDecision,
+}: {
+  approval: CanonicalApproval;
+  decisionState: ApprovalDecisionManifestState;
+  comment: string;
+  confirmed: boolean;
+  busy: boolean;
+  error: unknown;
+  onComment: (value: string) => void;
+  onConfirmed: (value: boolean) => void;
+  onDecision: (decision: "approve" | "deny") => Promise<void>;
+}) {
+  if (decisionState === "loading") {
+    return (
+      <Card title="Decision">
+        <LoadingState label="Checking canonical Approval decision commands…" />
+      </Card>
+    );
+  }
+  if (decisionState === "unavailable") {
+    return (
+      <Card title="Decision">
+        <DegradedState
+          title="Read-only Approval surface"
+          detail="The Control Plane does not advertise both approval.approve and approval.deny. The browser will not call a private Approval service or invent a fallback mutation."
+        />
+      </Card>
+    );
+  }
+  if (approval.status !== "pending") {
+    return (
+      <Card title="Decision">
+        <DegradedState
+          title={`Approval is ${approval.status}`}
+          detail="Only canonical pending Approvals can be decided. The server remains authoritative for expiry and lifecycle state."
+        />
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Decision">
+      <div className="stack">
+        <p>
+          Review the exact canonical context below before deciding. Frontend controls are not an
+          authorization boundary; the Control Plane will independently authorize the authenticated
+          approver and validate this digest again.
+        </p>
+        <DefinitionList
+          values={{
+            approval_id: approval.id,
+            action: approval.action,
+            resource: `${approval.resource_type}:${approval.resource_id}`,
+            risk: approval.risk,
+            policy: approval.policy_id,
+            requested_action_digest: approval.requested_action_digest,
+            expires: formatDate(approval.expires_at),
+          }}
+        />
+        <label className="field field-wide">
+          <span>Decision comment (optional)</span>
+          <textarea
+            rows={4}
+            value={comment}
+            disabled={busy}
+            onChange={(event) => onComment(event.target.value)}
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={confirmed}
+            disabled={busy}
+            onChange={(event) => onConfirmed(event.target.checked)}
+          />
+          I confirm this exact Approval ID, action, resource, policy, risk and requested-action digest.
+        </label>
+        {error ? <ErrorState error={error} /> : null}
+        <div className="actions">
+          <button disabled={!confirmed || busy} onClick={() => void onDecision("approve")}>
+            {busy ? "Submitting…" : "Approve"}
+          </button>
+          <button disabled={!confirmed || busy} onClick={() => void onDecision("deny")}>
+            {busy ? "Submitting…" : "Deny"}
+          </button>
+        </div>
+      </div>
+    </Card>
   );
 }
 

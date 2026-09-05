@@ -188,6 +188,11 @@ class DistributedTelemetry:
                 float(worker.active_jobs),
                 context=worker_context,
             )
+            self.telemetry.metric(
+                "platform.worker.concurrency_limit",
+                float(worker.concurrency_limit),
+                context=worker_context,
+            )
         self.telemetry.timeline(
             event_name="node.heartbeat",
             component=FailureComponent.SCHEDULER_WORKER_NODE,
@@ -283,21 +288,38 @@ class DistributedTelemetry:
 
     def _node_resources(self, node: NodeRecord, *, context: TelemetryContext) -> None:
         resources = node.resources
+        accelerator_total = sum(item.memory_total_bytes for item in resources.accelerators)
+        accelerator_available = sum(item.memory_available_bytes for item in resources.accelerators)
         for name, value, unit in (
+            ("platform.node.cpu_cores_total", resources.cpu_cores_total, "cores"),
             ("platform.node.cpu_cores_available", resources.cpu_cores_available, "cores"),
+            ("platform.node.ram_total_bytes", resources.ram_total_bytes, "bytes"),
             ("platform.node.ram_available_bytes", resources.ram_available_bytes, "bytes"),
+            ("platform.node.storage_total_bytes", resources.storage_total_bytes, "bytes"),
             (
                 "platform.node.storage_available_bytes",
                 resources.storage_available_bytes,
                 "bytes",
             ),
+            ("platform.node.accelerator_memory_total_bytes", accelerator_total, "bytes"),
             (
-                "platform.node.accelerator_memory_available_bytes",
-                resources.max_available_accelerator_memory_bytes,
+                "platform.node.accelerator_memory_available_total_bytes",
+                accelerator_available,
                 "bytes",
             ),
         ):
             self.telemetry.metric(name, float(value), context=context, unit=unit)
+
+        # Keep the pre-existing scheduler-oriented max-single-accelerator gauge explicit.
+        # Accounting intentionally consumes the summed *_available_total_bytes metric above,
+        # not this placement-oriented maximum.
+        self.telemetry.metric(
+            "platform.node.accelerator_memory_available_bytes",
+            float(resources.max_available_accelerator_memory_bytes),
+            context=context,
+            unit="bytes",
+            attributes={"aggregation": "max_single_accelerator"},
+        )
 
 
 def _job_context(
