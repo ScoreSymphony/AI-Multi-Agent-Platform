@@ -8,7 +8,9 @@ from ai_multi_agent_platform.connectors import (
     ExternalNativeReference,
     ExternalResourceReference,
 )
+from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.repositories import (
     RepositoryBinding,
     RepositoryConnection,
@@ -22,6 +24,11 @@ from ai_multi_agent_platform.repositories import (
 from ai_multi_agent_platform.repositories.control_plane import RepositoryResourceService
 from ai_multi_agent_platform.search import document_from_resource
 from ai_multi_agent_platform.security import AuthorizationGate, LocalAuthorizationProvider
+from ai_multi_agent_platform.testing import (
+    FakeAuthorizationProvider,
+    FakeLifecycleBackend,
+    FakeOrchestrator,
+)
 
 
 class _RepositoryProviderStub:
@@ -142,5 +149,48 @@ def test_repository_search_projection_is_safe_searchable_and_reconstructable() -
 
         registry.unregister(binding.reference.id)
         assert await resources.list_search_resources() == ()
+
+    asyncio.run(scenario())
+
+
+def test_repository_search_rechecks_domain_policy_before_count_or_exact_id_disclosure() -> None:
+    async def scenario() -> None:
+        _, resources, binding, native_id = _fixture()
+        events = InMemoryKernelRepository()
+        kernel = PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=FakeLifecycleBackend(),
+            repository=events,
+        )
+        control_plane = ControlPlane(
+            kernel=kernel,
+            events=events,
+            authorization=FakeAuthorizationProvider(),
+            resource_services={"repositories": resources},
+        )
+        http = ControlPlaneHTTP(control_plane)
+
+        rebuilt = await control_plane.rebuild_search_index()
+        assert rebuilt == 1
+
+        exact = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/search",
+                query={"type": "repository", "id": binding.reference.id},
+                headers={
+                    "X-Principal-Ref": "user:repository-searcher",
+                    "X-Owner-Type": "user",
+                    "X-Owner-Id": "repository-searcher",
+                },
+            )
+        )
+        assert exact.status == 200
+        assert isinstance(exact.body, dict)
+        assert exact.body["total"] == 0
+        serialized = repr(exact.body)
+        assert binding.reference.id not in serialized
+        assert native_id not in serialized
+        assert "searchable-repository" not in serialized
 
     asyncio.run(scenario())
