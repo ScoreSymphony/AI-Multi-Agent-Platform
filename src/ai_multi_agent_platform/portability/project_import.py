@@ -74,9 +74,7 @@ class ProjectImportMutationHandler:
                 ErrorCode.CONTRACT_VIOLATION,
                 "portable Project rollback token must be the imported Project ID",
             )
-        dependencies = (
-            None if self._dependency_audit is None else self._dependency_audit(token)
-        )
+        dependencies = None if self._dependency_audit is None else self._dependency_audit(token)
         self._scopes.compensate_project(
             token,
             external_dependencies=dependencies,
