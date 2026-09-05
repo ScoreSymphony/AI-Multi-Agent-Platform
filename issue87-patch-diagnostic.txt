@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/runner/work/AI-Multi-Agent-Platform/AI-Multi-Agent-Platform/tools/issue87_finalize.py", line 102, in <module>
+    replace_once(
+  File "/home/runner/work/AI-Multi-Agent-Platform/AI-Multi-Agent-Platform/tools/issue87_finalize.py", line 11, in replace_once
+    raise RuntimeError(f"{path}: expected one match, found {count}: {old[:100]!r}")
+RuntimeError: src/ai_multi_agent_platform/control_plane/organization_api.py: expected one match, found 0: '    def __init__(self, service: OrganizationService, collection: str) -> None:\n        self._service'
