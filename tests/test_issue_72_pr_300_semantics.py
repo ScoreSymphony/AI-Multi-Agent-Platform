@@ -202,6 +202,35 @@ def test_conversation_creation_pins_omitted_agent_and_team_revisions(tmp_path: P
     assert persisted_target["revision"] == agent.revision
 
 
+def test_client_cannot_inject_canonical_target_through_free_metadata(tmp_path: Path) -> None:
+    agents, conversations, _, http, _ = _stack(tmp_path)
+    owner = OwnerRef(type="user", id=ACTOR.owner_id)
+    agent = agents.create_agent(_profile("Protected Agent"), owner_ref=owner)
+
+    response = _run(
+        http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/conversations",
+                headers={
+                    "content-type": "application/json",
+                    "idempotency-key": "metadata-target-bypass",
+                },
+                body={
+                    "title": "Metadata target bypass",
+                    "metadata": {
+                        "target": {"kind": "agent", "id": agent.agent_id},
+                    },
+                },
+                trusted_actor=ACTOR,
+            )
+        )
+    )
+
+    assert response.status == 400
+    assert _run(conversations.list_conversations(owner_ref=ACTOR.principal_ref)) == ()
+
+
 def test_authenticated_operation_context_reaches_model_runtime(tmp_path: Path) -> None:
     agents, conversations, control_plane, _, models = _stack(tmp_path)
     provider = FakeModelProvider(response_text="Operation context preserved")
