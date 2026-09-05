@@ -120,9 +120,6 @@ class OpenAICompatibleOnboardingAdapter(OnboardingModelAdapter):
         )
 
     async def list_native_models(self, provider: ModelProvider) -> tuple[str, ...]:
-        if not isinstance(provider, OpenAICompatibleModelProvider):
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "OpenAI-compatible onboarding adapter received the wrong ModelProvider type",
-            )
+        """Use the canonical optional ModelProvider discovery seam."""
+
         return await provider.list_native_models()
