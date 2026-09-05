@@ -22,6 +22,8 @@ from ai_multi_agent_platform.contracts.types import (
 )
 
 from .capabilities import RepositoryOperation, repository_capability_specs
+from .models import RepositoryChangeRequestState, RepositoryIssueState
+from .references import collaboration_reference_from_json
 from .service import RepositoryCallContext, RepositoryService
 
 RepositoryActorResolver = Callable[[OperationContext], str]
@@ -37,6 +39,10 @@ _TOOL_OPERATIONS = frozenset(
         RepositoryOperation.CHECKOUT,
         RepositoryOperation.COMMIT,
         RepositoryOperation.PUSH,
+        RepositoryOperation.ISSUE_READ,
+        RepositoryOperation.ISSUE_WRITE,
+        RepositoryOperation.CHANGE_REQUEST_READ,
+        RepositoryOperation.CHANGE_REQUEST_WRITE,
     }
 )
 
@@ -148,41 +154,29 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
         if operation is RepositoryOperation.READ:
             return (await self._repositories.read(repository_id, context)).to_dict()
         if operation is RepositoryOperation.INSPECT_REFS:
-            kind = _required_string(arguments, "kind")
-            if kind == "branches":
-                return {
-                    "repository_id": repository_id,
-                    "branches": list(await self._repositories.branches(repository_id, context)),
-                }
-            if kind == "tags":
-                return {
-                    "repository_id": repository_id,
-                    "tags": list(await self._repositories.tags(repository_id, context)),
-                }
-            if kind == "commits":
-                limit = _optional_int(arguments, "limit")
-                commits = await self._repositories.commits(
-                    repository_id,
-                    context,
-                    revision=_optional_string(arguments, "revision") or "HEAD",
-                    limit=50 if limit is None else limit,
-                )
-                return {
-                    "repository_id": repository_id,
-                    "commits": [
-                        {
-                            "repository_id": commit.repository_id,
-                            "revision": commit.revision,
-                            "message": commit.message,
-                            "parent_revisions": list(commit.parent_revisions),
-                        }
-                        for commit in commits
-                    ],
-                }
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "repository inspect_refs kind must be branches, tags or commits",
+            return await self._inspect_refs(repository_id, arguments, context)
+        if operation is RepositoryOperation.ISSUE_READ:
+            issue = collaboration_reference_from_json(
+                arguments.get("resource"),
+                expected_resource_type="repository_issue",
             )
+            return (await self._repositories.read_issue(repository_id, issue, context)).to_dict()
+        if operation is RepositoryOperation.ISSUE_WRITE:
+            return await self._write_issue(repository_id, arguments, context)
+        if operation is RepositoryOperation.CHANGE_REQUEST_READ:
+            change_request = collaboration_reference_from_json(
+                arguments.get("resource"),
+                expected_resource_type="repository_change_request",
+            )
+            return (
+                await self._repositories.read_change_request(
+                    repository_id,
+                    change_request,
+                    context,
+                )
+            ).to_dict()
+        if operation is RepositoryOperation.CHANGE_REQUEST_WRITE:
+            return await self._write_change_request(repository_id, arguments, context)
         if operation is RepositoryOperation.STATUS:
             status = await self._repositories.status(repository_id, context)
             return {
@@ -267,6 +261,118 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
             provider_id=self._provider_id,
         )
 
+    async def _inspect_refs(
+        self,
+        repository_id: str,
+        arguments: dict[str, JsonValue],
+        context: RepositoryCallContext,
+    ) -> dict[str, JsonValue]:
+        kind = _required_string(arguments, "kind")
+        if kind == "branches":
+            return {
+                "repository_id": repository_id,
+                "branches": list(await self._repositories.branches(repository_id, context)),
+            }
+        if kind == "tags":
+            return {
+                "repository_id": repository_id,
+                "tags": list(await self._repositories.tags(repository_id, context)),
+            }
+        if kind == "commits":
+            limit = _optional_int(arguments, "limit")
+            commits = await self._repositories.commits(
+                repository_id,
+                context,
+                revision=_optional_string(arguments, "revision") or "HEAD",
+                limit=50 if limit is None else limit,
+            )
+            return {
+                "repository_id": repository_id,
+                "commits": [
+                    {
+                        "repository_id": commit.repository_id,
+                        "revision": commit.revision,
+                        "message": commit.message,
+                        "parent_revisions": list(commit.parent_revisions),
+                    }
+                    for commit in commits
+                ],
+            }
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "repository inspect_refs kind must be branches, tags or commits",
+        )
+
+    async def _write_issue(
+        self,
+        repository_id: str,
+        arguments: dict[str, JsonValue],
+        context: RepositoryCallContext,
+    ) -> dict[str, JsonValue]:
+        action = _required_string(arguments, "action")
+        if action == "open":
+            issue = await self._repositories.open_issue(
+                repository_id,
+                _required_string(arguments, "title"),
+                context,
+                body=_optional_text(arguments, "body"),
+            )
+            return issue.to_dict()
+        if action == "update":
+            resource = collaboration_reference_from_json(
+                arguments.get("resource"),
+                expected_resource_type="repository_issue",
+            )
+            issue = await self._repositories.update_issue(
+                repository_id,
+                resource,
+                context,
+                title=_optional_string(arguments, "title"),
+                body=_optional_text(arguments, "body"),
+                state=_optional_issue_state(arguments, "state"),
+            )
+            return issue.to_dict()
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "repository issue write action must be open or update",
+        )
+
+    async def _write_change_request(
+        self,
+        repository_id: str,
+        arguments: dict[str, JsonValue],
+        context: RepositoryCallContext,
+    ) -> dict[str, JsonValue]:
+        action = _required_string(arguments, "action")
+        if action == "open":
+            change_request = await self._repositories.open_change_request(
+                repository_id,
+                _required_string(arguments, "title"),
+                _required_string(arguments, "head_ref"),
+                _required_string(arguments, "base_ref"),
+                context,
+                body=_optional_text(arguments, "body"),
+            )
+            return change_request.to_dict()
+        if action == "update":
+            resource = collaboration_reference_from_json(
+                arguments.get("resource"),
+                expected_resource_type="repository_change_request",
+            )
+            change_request = await self._repositories.update_change_request(
+                repository_id,
+                resource,
+                context,
+                title=_optional_string(arguments, "title"),
+                body=_optional_text(arguments, "body"),
+                state=_optional_change_request_state(arguments, "state"),
+            )
+            return change_request.to_dict()
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "repository change-request write action must be open or update",
+        )
+
 
 def _input_schema(operation: RepositoryOperation) -> dict[str, JsonValue]:
     properties: dict[str, JsonValue] = {"repository_id": {"type": "string"}}
@@ -280,6 +386,39 @@ def _input_schema(operation: RepositoryOperation) -> dict[str, JsonValue]:
             }
         )
         required.append("kind")
+    elif operation in {
+        RepositoryOperation.ISSUE_READ,
+        RepositoryOperation.CHANGE_REQUEST_READ,
+    }:
+        properties["resource"] = {"type": "object"}
+        required.append("resource")
+    elif operation is RepositoryOperation.ISSUE_WRITE:
+        properties.update(
+            {
+                "action": {"type": "string", "enum": ["open", "update"]},
+                "resource": {"type": "object"},
+                "title": {"type": "string"},
+                "body": {"type": "string"},
+                "state": {"type": "string", "enum": ["open", "closed"]},
+            }
+        )
+        required.append("action")
+    elif operation is RepositoryOperation.CHANGE_REQUEST_WRITE:
+        properties.update(
+            {
+                "action": {"type": "string", "enum": ["open", "update"]},
+                "resource": {"type": "object"},
+                "title": {"type": "string"},
+                "body": {"type": "string"},
+                "state": {
+                    "type": "string",
+                    "enum": ["open", "draft", "closed", "merged"],
+                },
+                "head_ref": {"type": "string"},
+                "base_ref": {"type": "string"},
+            }
+        )
+        required.append("action")
     elif operation is RepositoryOperation.DIFF:
         properties["base_revision"] = {"type": "string"}
     elif operation is RepositoryOperation.CREATE_BRANCH:
@@ -336,6 +475,18 @@ def _optional_string(arguments: dict[str, JsonValue], key: str) -> str | None:
     return value
 
 
+def _optional_text(arguments: dict[str, JsonValue], key: str) -> str | None:
+    value = arguments.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"repository capability argument {key} must be a string or null",
+        )
+    return value
+
+
 def _optional_bool(arguments: dict[str, JsonValue], key: str) -> bool | None:
     value = arguments.get(key)
     if value is None:
@@ -358,6 +509,38 @@ def _optional_int(arguments: dict[str, JsonValue], key: str) -> int | None:
             f"repository capability argument {key} must be integer or null",
         )
     return value
+
+
+def _optional_issue_state(
+    arguments: dict[str, JsonValue],
+    key: str,
+) -> RepositoryIssueState | None:
+    value = _optional_string(arguments, key)
+    if value is None:
+        return None
+    try:
+        return RepositoryIssueState(value)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"repository capability argument {key} is not a valid issue state",
+        ) from exc
+
+
+def _optional_change_request_state(
+    arguments: dict[str, JsonValue],
+    key: str,
+) -> RepositoryChangeRequestState | None:
+    value = _optional_string(arguments, key)
+    if value is None:
+        return None
+    try:
+        return RepositoryChangeRequestState(value)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"repository capability argument {key} is not a valid change-request state",
+        ) from exc
 
 
 def _revision_output(
