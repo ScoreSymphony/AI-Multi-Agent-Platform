@@ -113,8 +113,10 @@ def test_upgrade_from_previous_schema_fixture_records_history(tmp_path: Path) ->
         to_schema="1.0",
         description="fixture migration proving ordered schema evolution",
         apply=lambda context: marker.write_text("migrated\n", encoding="utf-8"),
-        validate=lambda context: marker.read_text(encoding="utf-8") == "migrated\n"
-        or (_ for _ in ()).throw(ValueError("fixture validation failed")),
+        validate=lambda context: (
+            marker.read_text(encoding="utf-8") == "migrated\n"
+            or (_ for _ in ()).throw(ValueError("fixture validation failed"))
+        ),
         transactional=False,
         restart_safe=True,
         rollback_mode=RollbackMode.REVERSIBLE,
@@ -400,9 +402,7 @@ def test_forward_only_migration_requires_matching_verified_backup(tmp_path: Path
         )
 
     preflight = _preflight(data_dir, MigrationRegistry((step,)), backup_verifier=verifier)
-    without_backup = preflight.run(
-        PreflightRequest(data_dir=data_dir, current=old, target=target)
-    )
+    without_backup = preflight.run(PreflightRequest(data_dir=data_dir, current=old, target=target))
     with_backup = preflight.run(
         PreflightRequest(
             data_dir=data_dir,
