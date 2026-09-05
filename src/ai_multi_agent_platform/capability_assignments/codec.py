@@ -116,9 +116,7 @@ def _content(value: object) -> CapabilityAssignmentContent:
     provenance = _object(_required(item, "provenance"), "capability-assignment provenance")
     return CapabilityAssignmentContent(
         target=CapabilityAssignmentTarget(
-            subject_type=CapabilityAssignmentTargetType(
-                _required_string(target, "subject_type")
-            ),
+            subject_type=CapabilityAssignmentTargetType(_required_string(target, "subject_type")),
             subject_id=_required_string(target, "subject_id"),
         ),
         required=tuple(_rule(entry) for entry in _array(item, "required")),
@@ -144,8 +142,7 @@ def _rule(value: object) -> CapabilityAssignmentRule:
             include_minimum=_required_bool(data, "include_minimum"),
             include_maximum=_required_bool(data, "include_maximum"),
             required_features=tuple(
-                _string(entry, "required feature")
-                for entry in _array(data, "required_features")
+                _string(entry, "required feature") for entry in _array(data, "required_features")
             ),
         )
     return CapabilityAssignmentRule(
