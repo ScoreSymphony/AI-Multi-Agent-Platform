@@ -1,0 +1,45 @@
+name: Issue 19 format helper
+
+on:
+  push:
+    branches:
+      - fix/issue-19-final-product-completion
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/issue-19-final-product-completion
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Ruff
+        run: python -m pip install "ruff>=0.12,<1"
+      - name: Format inherited files
+        run: >-
+          ruff format
+          src/ai_multi_agent_platform/accounting/service.py
+          src/ai_multi_agent_platform/organizations/accounting.py
+          tests/test_issue171_accounting_integrations.py
+      - name: Commit deterministic formatting
+        shell: bash
+        run: |
+          if git diff --quiet -- \
+            src/ai_multi_agent_platform/accounting/service.py \
+            src/ai_multi_agent_platform/organizations/accounting.py \
+            tests/test_issue171_accounting_integrations.py; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/ai_multi_agent_platform/accounting/service.py \
+            src/ai_multi_agent_platform/organizations/accounting.py \
+            tests/test_issue171_accounting_integrations.py
+          git commit -m "style: format inherited accounting changes"
+          git push origin HEAD:fix/issue-19-final-product-completion
