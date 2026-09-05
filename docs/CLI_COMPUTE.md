@@ -1,6 +1,6 @@
 # CLI compute administration
 
-Issue: #214, Workstream C. Canonical compute contracts are owned by #14.
+Issue #214 Workstream C consumes the canonical compute contracts owned by #14.
 
 The `platform` CLI accesses Nodes, Workers and WorkerJobs only through the versioned Control Plane. It does not read the distributed registry, scheduler, Worker transports or runtime persistence directly.
 
