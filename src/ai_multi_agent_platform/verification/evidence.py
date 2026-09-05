@@ -14,13 +14,14 @@ from ai_multi_agent_platform.data.contracts import FileProvider
 from ai_multi_agent_platform.data.models import DataAccessContext, FileState
 from ai_multi_agent_platform.domain import RunStatus, validate_id
 
-from .deterministic import ReferenceDeterministicVerifier
+from .deterministic import DeterministicVerifier
 from .gate import TaskVerificationRequirement, VerificationCompletionAuthority
 from .models import (
     ProducerIdentity,
     VerificationRequest,
     VerificationResult,
     VerificationSubject,
+    VerifierKind,
 )
 from .service import _CANONICAL_RESULT_TOKEN
 
@@ -403,9 +404,14 @@ class CanonicalVerificationRuntime:
     async def run_deterministic(
         self,
         verification_id: str,
-        verifier: ReferenceDeterministicVerifier,
+        verifier: DeterministicVerifier,
     ) -> VerificationResult:
         request = self._completion.verification.get_request(verification_id)
+        if request.requested_verifier_kind is not VerifierKind.DETERMINISTIC:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "verification request does not require deterministic verification",
+            )
         return await self.submit_result(verifier.verify(request))
 
     async def request_reverification_after_repair(
