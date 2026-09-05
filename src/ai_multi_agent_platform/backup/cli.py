@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ai_multi_agent_platform import __version__
 
+from .provenance import BuildProvenanceError, require_build_commit
 from .service import (
     BackupError,
     create_single_node_backup,
@@ -22,11 +23,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "create":
+            platform_commit = require_build_commit(args.platform_commit)
             backup_path = create_single_node_backup(
                 data_dir=Path(args.data_dir),
                 destination=Path(args.destination),
                 platform_version=__version__,
-                platform_commit=args.platform_commit,
+                platform_commit=platform_commit,
                 deployment_metadata={"profile": "single-node"},
                 quiesced=args.quiesced,
             )
@@ -47,11 +49,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             return 0
         if args.command == "restore":
+            verification = verify_backup(Path(args.backup))
+            platform = verification.manifest.get("platform")
+            if not isinstance(platform, dict):
+                raise BackupError("backup platform metadata is invalid")
+            backup_commit = platform.get("commit")
+            if backup_commit is None:
+                if not args.allow_unpinned_backup:
+                    raise BuildProvenanceError(
+                        "backup does not contain an exact platform commit; pass "
+                        "--allow-unpinned-backup only for a trusted legacy v1 backup"
+                    )
+                expected_commit = None
+            else:
+                expected_commit = require_build_commit(args.expected_platform_commit)
             restored_data_dir = restore_single_node_backup(
                 backup_dir=Path(args.backup),
                 target_data_dir=Path(args.target_data_dir),
                 expected_platform_version=__version__,
-                expected_platform_commit=args.expected_platform_commit,
+                expected_platform_commit=expected_commit,
             )
             print(
                 json.dumps(
@@ -59,7 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
             )
             return 0
-    except BackupError as exc:
+    except (BackupError, BuildProvenanceError) as exc:
         parser.exit(2, f"backup error: {exc}\n")
     raise AssertionError("unreachable")
 
@@ -81,7 +97,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     create.add_argument(
         "--platform-commit",
-        help="record the exact source build commit in the backup manifest",
+        help=(
+            "exact source/build commit; auto-detected in a Git checkout or from "
+            "AI_MULTI_AGENT_PLATFORM_BUILD_COMMIT"
+        ),
     )
 
     verify = commands.add_parser(
@@ -95,6 +114,14 @@ def _parser() -> argparse.ArgumentParser:
     restore.add_argument("--target-data-dir", required=True)
     restore.add_argument(
         "--expected-platform-commit",
-        help="optionally require an exact source build commit in addition to platform version",
+        help=(
+            "exact running-build commit; auto-detected in a Git checkout or from "
+            "AI_MULTI_AGENT_PLATFORM_BUILD_COMMIT"
+        ),
+    )
+    restore.add_argument(
+        "--allow-unpinned-backup",
+        action="store_true",
+        help="allow restoration of a trusted legacy v1 backup whose platform commit is null",
     )
     return parser
