@@ -1,5 +1,6 @@
 """Canonical evaluation and regression framework."""
 
+from .agent_evidence import AgentRunEvidenceCaseExecutor
 from .aggregation import (
     AggregatedEvaluationResult,
     AggregationMethod,
@@ -8,6 +9,11 @@ from .aggregation import (
     ResultAggregator,
 )
 from .aggregation_config import load_aggregation_policy, parse_aggregation_policy
+from .behavior_evidence import (
+    ApprovalEvidenceCaseExecutor,
+    ApprovalRecordReader,
+    DistributedRuntimeEvidenceCaseExecutor,
+)
 from .ci_gate import EvaluationCIGateReport, run_reference_ci_gate
 from .config import (
     EvaluationBaseline,
@@ -41,6 +47,12 @@ from .evidence import (
     EvidenceEnrichingCaseExecutor,
     InMemoryObservabilityEvaluationEvidenceProvider,
     LogReferenceResolver,
+)
+from .hardening import (
+    ResourceLimitEvaluator,
+    merge_snapshot_references,
+    observation_assertion_payload,
+    validate_snapshot_reference_kinds,
 )
 from .history import EvaluationHistoryService, EvaluationTrendPoint
 from .model_judge import ModelJudgeEvaluator
@@ -96,10 +108,13 @@ from .workspace import (
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
     "AccountingEvaluationEvidenceProvider",
+    "AgentRunEvidenceCaseExecutor",
     "AggregatedEvaluationResult",
     "AggregationMethod",
     "AggregationPolicy",
     "AggregationSampleRef",
+    "ApprovalEvidenceCaseExecutor",
+    "ApprovalRecordReader",
     "AssertionResult",
     "AsyncEvaluator",
     "ComparisonFinding",
@@ -110,6 +125,7 @@ __all__ = [
     "ConfigurationSnapshot",
     "DeterministicAssertion",
     "DeterministicAssertionEvaluator",
+    "DistributedRuntimeEvidenceCaseExecutor",
     "EvaluationAttempt",
     "EvaluationBaseline",
     "EvaluationCIGateReport",
@@ -155,6 +171,7 @@ __all__ = [
     "RegressionRule",
     "RegressionRuleKind",
     "ResolvedEvaluationFixtures",
+    "ResourceLimitEvaluator",
     "ResultAggregator",
     "RubricCriterion",
     "SafeEvaluator",
@@ -170,9 +187,12 @@ __all__ = [
     "load_evaluation_baseline",
     "load_evaluation_suite",
     "load_regression_policy",
+    "merge_snapshot_references",
+    "observation_assertion_payload",
     "parse_aggregation_policy",
     "parse_evaluation_suite",
     "parse_regression_policy",
     "regression_policy_ref",
     "run_reference_ci_gate",
+    "validate_snapshot_reference_kinds",
 ]

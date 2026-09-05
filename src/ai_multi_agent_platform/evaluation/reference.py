@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Literal
+from typing import Literal, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.kernel import TERMINAL_RUN_STATUSES, PlatformKernel
@@ -176,12 +176,28 @@ class KernelEvaluationCaseExecutor:
         artifact_refs = tuple(dict.fromkeys((*task.artifact_ids, *run.artifact_ids)))
         result_refs = tuple(dict.fromkeys((*task.result_ids, *run.result_ids)))
 
+        event_evidence: list[JsonValue] = []
+        for event in events:
+            event_evidence.append(
+                {
+                    "id": event.id,
+                    "event_type": event.event_type,
+                    "subject_type": event.subject_type,
+                    "subject_id": event.subject_id,
+                    "correlation_id": event.correlation_id,
+                    "causation_id": event.causation_id,
+                    "payload": cast(dict[str, JsonValue], dict(event.payload)),
+                }
+            )
+
         data: dict[str, JsonValue] = {
             "input": case.input_template,
             "task": {
                 "id": task.task_id,
                 "status": task.status.value,
                 "revision": task.revision,
+                "plan_ref": task.plan_ref,
+                "step_ids": list(task.step_ids),
             },
             "run": {
                 "id": run.run_id,
@@ -196,6 +212,7 @@ class KernelEvaluationCaseExecutor:
             "artifact_refs": list(artifact_refs),
             "result_refs": list(result_refs),
             "event_types": [event.event_type for event in events],
+            "events": event_evidence,
         }
         if execution_context.has_workspace:
             data["workspace"] = {

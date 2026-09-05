@@ -45,10 +45,5 @@
         }
       ]
     }
-  ],
-  "routing": {
-    "default_requirements": {
-      "self_hosted_only": true
-    }
-  }
+  ]
 }

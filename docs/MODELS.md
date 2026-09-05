@@ -41,7 +41,7 @@ Routing order:
 1. honor a valid explicit canonical model assignment;
 2. load enabled registry candidates;
 3. exclude unavailable or unhealthy provider targets;
-4. filter by context-window, tool-calling, structured-output, streaming and modality requirements;
+4. filter by context-window, tool-calling, structured-output, streaming, modality and reasoning requirements;
 5. enforce local-only or self-hosted-only policy;
 6. sort candidates by descending configured priority and then canonical model ID;
 7. return the selected provider ID and canonical model configuration ID;
@@ -59,10 +59,26 @@ Issue #5 introduced the baseline `ModelRequest.requirements` mapping before the 
 - `structured_output`
 - `streaming`
 - `modalities`
+- `reasoning`
 - `local_only`
 - `self_hosted_only`
 
-This preserves the existing provider contract while #10 incrementally introduces richer canonical request/response structures.
+This keeps the stable #5 request envelope compatible with the richer #10 canonical model request/response layer.
+
+## Durable routing profiles and default policy
+
+The #10 foundation owns canonical model inventory, deterministic selection and request-time `RoutingRequirements`. It does **not** currently define a durable, reusable and versioned routing-profile resource.
+
+Durable routing profiles, reusable default policy, exact profile revisions, persisted fallback semantics and portable routing-policy references are tracked by **#309 — Add durable versioned model-routing profiles and assignment policy configuration**. #309 extends the existing `ModelRouter`; it does not replace #10's routing ownership.
+
+Until #309 lands:
+
+- routing requirements can be supplied through canonical request, Agent and Task integration surfaces;
+- integration-local mappings may resolve routing-profile references where needed;
+- those mappings are not authoritative platform-owned routing-profile persistence;
+- configuration examples must not advertise a generic `routing.default_requirements` block as active platform configuration.
+
+Provider/runtime health remains live registry/runtime state and must not become durable routing-profile identity.
 
 ## Control Plane inventory
 
@@ -82,6 +98,8 @@ Inventory mutations require the Control Plane idempotency key. Provider construc
 
 ## Issue #10 completion state
 
-The #10 baseline now includes the distinct provider, registry and router contracts; stable canonical model configuration IDs; persistent reference storage; deterministic capability/location/health routing; rich canonical request/response types; local OpenAI-compatible execution; timeout/cancellation/error normalization; configuration examples; model/provider Control Plane inventory; and end-to-end/contract coverage.
+The #10 provider/registry/router foundation includes distinct provider, registry and router contracts; stable canonical model configuration IDs; persistent reference storage; deterministic capability/location/health routing; rich canonical request/response types; local OpenAI-compatible execution; provider-neutral streaming with fallback; timeout/cancellation/error normalization; model/provider configuration examples; Control Plane inventory; and end-to-end/contract coverage.
+
+The durable reusable routing-policy/profile layer is intentionally tracked separately in #309. That follow-up does not make the completed #10 provider/registry/router foundation incomplete.
 
 The baseline remains local-first and does not require any recurring paid AI/API service. Optional gateways and additional commercial or local providers remain replaceable follow-up adapters.
