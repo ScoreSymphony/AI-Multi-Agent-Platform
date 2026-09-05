@@ -1,5 +1,6 @@
 """Canonical usage/resource accounting domain for Issue #76."""
 
+from .agent_attribution import AgentRunReader, AgentRunUsageAttributor
 from .control_plane import (
     UsageAggregateResourceService,
     UsageBudgetResourceService,
@@ -24,6 +25,7 @@ from .models import (
 from .service import (
     AccountingService,
     ThresholdEventSink,
+    UsageAttributor,
     aggregate_usage_records,
     usage_from_metric,
 )
@@ -32,6 +34,8 @@ from .store import InMemoryUsageStore, SQLiteUsageStore, UsageStore
 
 __all__ = [
     "AccountingService",
+    "AgentRunReader",
+    "AgentRunUsageAttributor",
     "AggregationMode",
     "BudgetAction",
     "BudgetKind",
@@ -46,6 +50,7 @@ __all__ = [
     "ThresholdLevel",
     "UsageAggregate",
     "UsageAggregateResourceService",
+    "UsageAttributor",
     "UsageBudget",
     "UsageBudgetResourceService",
     "UsageQuery",
