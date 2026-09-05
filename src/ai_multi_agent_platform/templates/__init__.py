@@ -19,6 +19,7 @@ from .automation_handler import (
     AutomationTemplateHandler,
     register_automation_template_handler,
 )
+from .environment import PlatformTemplateEnvironmentResolver
 from .models import (
     CapabilityRequirement,
     TemplateCompatibility,
@@ -72,6 +73,7 @@ __all__ = [
     "ContextualTemplateResourceHandler",
     "InMemoryTemplateRepository",
     "JsonTemplateRepository",
+    "PlatformTemplateEnvironmentResolver",
     "ProjectTemplateExporter",
     "ProjectTemplateHandler",
     "TEMPLATE_REPOSITORY_SCHEMA_VERSION",
