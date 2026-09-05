@@ -13,9 +13,17 @@ def test_single_node_composes_canonical_agent_portability(tmp_path: Path) -> Non
     workflow = deployment.control_plane.portability_workflow
     assert workflow is not None
     assert workflow.export_resource_types == ("agent", "agent_team")
-    assert "portability-packages" in deployment.control_plane.manifest()["resources"]
-    assert "portability-import-previews" in deployment.control_plane.manifest()["resources"]
-    assert "portability-import-reports" in deployment.control_plane.manifest()["resources"]
-    assert "portability.export" in deployment.control_plane.manifest()["commands"]
-    assert "portability.preview" in deployment.control_plane.manifest()["commands"]
-    assert "portability.import" in deployment.control_plane.manifest()["commands"]
+
+    collections = set(deployment.control_plane.registered_collections)
+    commands = set(deployment.control_plane.registered_commands)
+    assert {
+        "portability-packages",
+        "portability-import-previews",
+        "portability-import-reports",
+    }.issubset(collections)
+    assert {
+        "portability.export",
+        "portability.package.validate",
+        "portability.preview",
+        "portability.import",
+    }.issubset(commands)
