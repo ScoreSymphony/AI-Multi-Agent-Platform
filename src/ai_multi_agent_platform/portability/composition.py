@@ -8,6 +8,7 @@ from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.evaluation.service import EvaluationService
 from ai_multi_agent_platform.models import ModelRegistry
 from ai_multi_agent_platform.security.policy_profiles import (
     AuthorizationPolicyProfileCallContext,
@@ -25,6 +26,12 @@ from .agent_codecs import (
 )
 from .agent_import import AgentImportMutationHandler, AgentTeamImportMutationHandler
 from .dependencies import parse_resource_dependency
+from .evaluation_codecs import (
+    EVALUATION_FIXTURE_RESOURCE_TYPE,
+    EVALUATION_SUITE_RESOURCE_TYPE,
+    register_evaluation_suite_portability_codec,
+)
+from .evaluation_import import EvaluationSuiteImportMutationHandler
 from .executor import ImportExecutor, ImportMutationRegistry
 from .models import DependencyKind, DependencyRequirement, IdPolicy, PortableResource
 from .planner import ImportPreviewService, ImportSecurityFinding
@@ -54,6 +61,8 @@ def build_agent_portability_workflow(
     scopes: ScopeStore,
     platform_version: str,
     templates: TemplateRepository | None = None,
+    evaluation: EvaluationService | None = None,
+    evaluation_fixture_exists: Callable[[str], bool] | None = None,
     policy_profiles: AuthorizationPolicyProfileRepository | None = None,
     policy_profile_service: AuthorizationPolicyProfileService | None = None,
     policy_profile_import_context: AuthorizationPolicyProfileCallContext | None = None,
@@ -65,12 +74,13 @@ def build_agent_portability_workflow(
 ) -> PortabilityWorkflowService:
     """Compose production-safe portability against supplied canonical stores.
 
-    Agent, Agent Team and Project are always available. Template portability is enabled
-    only when the canonical #78 repository is supplied. Authorization-policy portability
-    is enabled only when the canonical #310 repository, canonical lifecycle service,
-    explicit import context and explicit destination owner are supplied together. Imported
-    policy profiles are therefore materialized through the normal security domain and
-    never gain assignments or effective authority as an import side effect.
+    Agent, Agent Team and Project are always available. Template and EvaluationSuite
+    portability are enabled only when their owning-domain repositories/services are
+    supplied. Authorization-policy portability is enabled only when the canonical #310
+    repository, canonical lifecycle service, explicit import context and explicit
+    destination owner are supplied together. Imported policy profiles are therefore
+    materialized through the normal security domain and never gain assignments or effective
+    authority as an import side effect.
 
     Project rollback deliberately fails closed unless the caller supplies a cross-domain
     dependency audit that can prove removal is safe. Resource domains not owned directly by
@@ -103,6 +113,8 @@ def build_agent_portability_workflow(
     register_project_portability_codec(serializers, id_policy=id_policy)
     if templates is not None:
         register_template_portability_codec(serializers, id_policy=id_policy)
+    if evaluation is not None:
+        register_evaluation_suite_portability_codec(serializers)
     if policy_profiles is not None:
         register_authorization_policy_profile_portability_codec(
             serializers,
@@ -129,6 +141,12 @@ def build_agent_portability_workflow(
             return snapshot_template(templates, resource_id)
 
         export_sources.register(TEMPLATE_RESOURCE_TYPE, load_template)
+    if evaluation is not None:
+
+        async def load_evaluation_suite(resource_id: str) -> object:
+            return evaluation.get_suite(resource_id)
+
+        export_sources.register(EVALUATION_SUITE_RESOURCE_TYPE, load_evaluation_suite)
     if policy_profiles is not None:
 
         async def load_policy_profile(resource_id: str) -> object:
@@ -150,6 +168,8 @@ def build_agent_portability_workflow(
     )
     if templates is not None:
         mutations.register(TemplateImportMutationHandler(templates))
+    if evaluation is not None:
+        mutations.register(EvaluationSuiteImportMutationHandler(evaluation))
     if (
         policy_profiles is not None
         and policy_profile_service is not None
@@ -179,6 +199,14 @@ def build_agent_portability_workflow(
             return _canonical_exists(lambda: policy_profiles.get_profile(resource_id))
         if resource_type == PROJECT_RESOURCE_TYPE:
             return _canonical_exists(lambda: scopes.get_project(resource_id))
+        if resource_type == EVALUATION_SUITE_RESOURCE_TYPE and evaluation is not None:
+            return _canonical_exists(lambda: evaluation.get_suite(resource_id))
+        if resource_type == EVALUATION_FIXTURE_RESOURCE_TYPE:
+            return (
+                False
+                if evaluation_fixture_exists is None
+                else evaluation_fixture_exists(resource_id)
+            )
         if resource_type == "workspace":
             return _canonical_exists(lambda: scopes.get_workspace(resource_id))
         if additional_resource_exists is not None:
