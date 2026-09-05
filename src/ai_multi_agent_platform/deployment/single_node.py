@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.agents import (
     AgentRuntime,
     AgentService,
@@ -15,11 +16,11 @@ from ai_multi_agent_platform.agents import (
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
-    ControlPlane,
     ControlPlaneASGI,
     evaluation_command_handlers,
     evaluation_resource_services,
 )
+from ai_multi_agent_platform.control_plane.portability_api import ControlPlane
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
     ConversationService,
@@ -47,6 +48,7 @@ from ai_multi_agent_platform.onboarding import (
     register_onboarding_control_plane,
 )
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
+from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
 from ai_multi_agent_platform.security import (
     ActorType,
     LocalAuthenticationService,
@@ -258,7 +260,11 @@ def build_single_node_deployment(
     onboarding.restore()
     model_runtime = ModelRuntime(models)
     agent_runtime = AgentRuntime(agents, model_registry=models)
-    conversation_response_provider = ModelRuntimeConversationResponseProvider(model_runtime, agents)
+    conversation_response_provider = ModelRuntimeConversationResponseProvider(
+        model_runtime,
+        agents,
+        routing_profiles=agent_runtime.routing_profiles,
+    )
 
     template_handlers = ContextualTemplateHandlerRegistry()
     register_agent_template_handlers(template_handlers, agents)
@@ -328,6 +334,14 @@ def build_single_node_deployment(
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
 
+    portability_workflow = build_agent_portability_workflow(
+        agents=agents.repository,
+        models=models,
+        scopes=scopes,
+        platform_version=__version__,
+        templates=templates.repository,
+    )
+
     control_plane = ControlPlane(
         kernel=kernel,
         events=kernel_repository,
@@ -342,6 +356,7 @@ def build_single_node_deployment(
         conversation_agent_service=agents,
         conversation_file_provider=files,
         conversation_response_provider=conversation_response_provider,
+        portability_workflow=portability_workflow,
     )
     for collection, service in evaluation_resource_services(evaluation_composition.service).items():
         control_plane.register_resource_service(collection, service)
