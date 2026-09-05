@@ -163,13 +163,17 @@ def _items(page: dict[str, object]) -> list[dict[str, object]]:
 def test_pending_fail_and_needs_changes_are_discoverable_and_updates_propagate() -> None:
     async def scenario() -> None:
         kernel, verification, completion, _control_plane, http = await _stack()
-        _pending_task, pending_request, _pending_policy, _pending_subject, _ = (
-            await _verification_request(
-                kernel,
-                verification,
-                completion,
-                label="pending",
-            )
+        (
+            _pending_task,
+            pending_request,
+            _pending_policy,
+            _pending_subject,
+            _,
+        ) = await _verification_request(
+            kernel,
+            verification,
+            completion,
+            label="pending",
         )
         _fail_task, fail_request, _fail_policy, _fail_subject, _ = await _verification_request(
             kernel,
@@ -177,13 +181,17 @@ def test_pending_fail_and_needs_changes_are_discoverable_and_updates_propagate()
             completion,
             label="fail",
         )
-        _changes_task, changes_request, _changes_policy, _changes_subject, _ = (
-            await _verification_request(
-                kernel,
-                verification,
-                completion,
-                label="changes",
-            )
+        (
+            _changes_task,
+            changes_request,
+            _changes_policy,
+            _changes_subject,
+            _,
+        ) = await _verification_request(
+            kernel,
+            verification,
+            completion,
+            label="changes",
         )
 
         pending = await _search(http, type="verification", status="pending")
@@ -262,9 +270,7 @@ def test_run_relationship_and_exact_subject_provenance_are_preserved_safely() ->
         )
 
         request_by_run = await _search(http, type="verification", q=run_id)
-        assert {item["resource_id"] for item in _items(request_by_run)} == {
-            request.verification_id
-        }
+        assert {item["resource_id"] for item in _items(request_by_run)} == {request.verification_id}
         result_by_run = await _search(http, type="verification_result", q=run_id)
         assert {item["resource_id"] for item in _items(result_by_run)} == {
             result.verification_result_id
@@ -368,9 +374,7 @@ def test_safe_machine_verifier_metadata_is_discoverable_but_policy_search_can_be
         )
         for query_value in (agent_id, model_config_id, provider_id, "agent"):
             page = await _search(http, type="verification_result", q=query_value)
-            assert result.verification_result_id in {
-                item["resource_id"] for item in _items(page)
-            }
+            assert result.verification_result_id in {item["resource_id"] for item in _items(page)}
 
     async def policy_denial_scenario() -> None:
         authorization = VerificationAcceptanceAuthorization(deny_policy_search=True)
