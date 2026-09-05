@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { TaskProjectReassignmentClient } from "./taskProjectReassignment";
-import type { CanonicalTask } from "./types";
 
 const movedTask = {
   id: "task_01J00000000000000000000000",
@@ -21,7 +20,7 @@ const movedTask = {
   revision: 2,
   created_at: "2026-09-05T20:00:00+00:00",
   updated_at: "2026-09-05T20:01:00+00:00",
-} as CanonicalTask;
+};
 
 describe("TaskProjectReassignmentClient", () => {
   it("posts the canonical task.project.move command with idempotency", async () => {
