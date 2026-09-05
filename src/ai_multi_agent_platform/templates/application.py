@@ -15,6 +15,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 
+from .materialization import materialize_template_revision
 from .models import (
     TemplateDependency,
     TemplateInstantiation,
@@ -34,6 +35,7 @@ from .service import (
     TemplateResourceHandler,
     TemplateService,
 )
+from .trust import require_trusted_for_apply
 
 
 @dataclass(frozen=True, slots=True)
@@ -293,13 +295,19 @@ class TemplateApplicationService:
             published_only=not allow_draft,
         )
         dependency_order, _ = self._resolve_dependency_order(root)
+        # Trust and binding validation both cover the complete graph before any handler can
+        # create a canonical resource.
+        require_trusted_for_apply(dependency_order)
+        materialized_order = tuple(
+            materialize_template_revision(item, environment) for item in dependency_order
+        )
         instance_id = new_id("template_instance")
         created_by_source: dict[TemplateRevisionRef, tuple[TemplateResourceRef, ...]] = {}
         resource_refs: list[TemplateResourceRef] = []
         applied_resources: list[_AppliedResources] = []
 
         try:
-            for item in dependency_order:
+            for item in materialized_order:
                 handler = self.handlers.get(item.content.template_type)
                 if handler is None:
                     handler_type = item.content.template_type.value
@@ -402,11 +410,12 @@ class TemplateApplicationService:
         """Create a new instance; never mutate resources from the previous instance."""
 
         previous = self.repository.get_instantiation(instance_id)
+        selected_revision = previous.source.revision if revision is None else revision
         return await self.apply(
             previous.source.template_id,
             applied_by=applied_by,
             environment=environment,
-            revision=revision,
+            revision=selected_revision,
         )
 
     @staticmethod
@@ -424,6 +433,10 @@ class TemplateApplicationService:
             "Template is not compatible with the target environment",
             details={
                 "missing_capabilities": list(preview.missing_required_capability_ids),
+                "incompatible_capability_versions": list(preview.incompatible_capability_versions),
+                "incompatible_platform_versions": list(preview.incompatible_platform_versions),
+                "missing_contract_versions": list(preview.missing_contract_versions),
+                "incompatible_contract_versions": list(preview.incompatible_contract_versions),
                 "missing_plugins": list(preview.missing_plugin_ids),
                 "missing_connectors": list(preview.missing_connector_ids),
                 "missing_model_policies": list(preview.missing_model_policy_refs),
