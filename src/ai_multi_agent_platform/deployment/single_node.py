@@ -104,6 +104,7 @@ from ai_multi_agent_platform.verification import (
 )
 from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
+from ai_multi_agent_platform.workspaces import SqliteRunWorkspaceBindingRepository
 from ai_multi_agent_platform.workspaces.compensation import CompensatingSqliteWorkspaceProvider
 
 from .config import SingleNodeConfig
@@ -135,6 +136,7 @@ class SingleNodeDeployment:
     scopes: SqliteScopeStore
     files: LocalFileProvider
     workspaces: CompensatingSqliteWorkspaceProvider
+    run_workspace_bindings: SqliteRunWorkspaceBindingRepository
     repository_registry: RepositoryRegistry
     repository_catalog: SqliteRepositoryBindingCatalog
     repository_provenance: SqliteRepositoryProvenanceStore
@@ -264,6 +266,9 @@ def build_single_node_deployment(
         config.workspaces_dir,
         files,
         database_dir / "workspaces.sqlite3",
+    )
+    run_workspace_bindings = SqliteRunWorkspaceBindingRepository(
+        database_dir / "run-workspace-bindings.sqlite3"
     )
     repository_catalog = SqliteRepositoryBindingCatalog(
         database_dir / "repository-bindings.sqlite3"
@@ -406,6 +411,7 @@ def build_single_node_deployment(
         scopes=scopes,
         authorization=authorization,
         workspace_provider=workspaces,
+        run_workspace_bindings=run_workspace_bindings,
         health_providers=(orchestrator, lifecycle, files),
         model_registry=models,
         automation_state_path=database_dir / "automation.sqlite3",
@@ -496,6 +502,7 @@ def build_single_node_deployment(
         scopes=scopes,
         files=files,
         workspaces=workspaces,
+        run_workspace_bindings=run_workspace_bindings,
         repository_registry=repository_registry,
         repository_catalog=repository_catalog,
         repository_provenance=repository_provenance,
