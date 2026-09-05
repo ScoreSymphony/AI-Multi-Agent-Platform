@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import ModelRouter
 from ai_multi_agent_platform.contracts.types import (
@@ -15,11 +17,12 @@ from ai_multi_agent_platform.contracts.types import (
 )
 
 from .registry import ModelRegistry
+from .routing_profiles import ModelRoutingProfileRevision, RoutingProfileFallbackPolicy
 from .types import ModelConfiguration, ModelLocation, ModelRoute, RoutingRequirements
 
 
 class DeterministicModelRouter(ModelRouter):
-    """First-pass explainable routing policy required by issue #10."""
+    """Explainable routing policy over canonical model inventory and profile revisions."""
 
     descriptor = ProviderDescriptor(
         provider_id="platform-model-router",
@@ -30,7 +33,12 @@ class DeterministicModelRouter(ModelRouter):
                 name="model.routing.deterministic",
                 kind=CapabilityKind.MODEL,
                 supported_operations=("select_provider",),
-                features=("capability-filtering", "local-policy", "explicit-assignment"),
+                features=(
+                    "capability-filtering",
+                    "local-policy",
+                    "explicit-assignment",
+                    "versioned-routing-profile",
+                ),
             ),
         ),
         health=HealthStatus.HEALTHY,
@@ -62,6 +70,63 @@ class DeterministicModelRouter(ModelRouter):
                         "correlation_id": request.context.correlation_id,
                     },
                 ),
+            ),
+        )
+
+    def route_profile(self, profile: ModelRoutingProfileRevision) -> ModelRoute:
+        """Route against one exact immutable routing-profile revision.
+
+        The profile contributes policy but never takes over registry or routing ownership.
+        Preferred model references are canonical ``ModelConfiguration`` IDs. Provider-native
+        names and current provider health remain entirely in the registry/provider layer.
+        """
+
+        requirements = profile.policy.requirements
+        preferred_ids: list[str] = []
+        if requirements.explicit_model_id is not None:
+            preferred_ids.append(requirements.explicit_model_id)
+        preferred_ids.extend(
+            model_id
+            for model_id in profile.policy.preferred_model_ids
+            if model_id not in preferred_ids
+        )
+
+        failures: list[str] = []
+        for model_id in preferred_ids:
+            try:
+                route = self.route(replace(requirements, explicit_model_id=model_id))
+            except ContractError as exc:
+                if exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE:
+                    raise
+                failures.append(model_id)
+                continue
+            return replace(
+                route,
+                reason=(
+                    f"routing profile {profile.ref.canonical_ref}: selected ordered "
+                    f"canonical preference {model_id}"
+                ),
+            )
+
+        if preferred_ids and profile.policy.fallback is RoutingProfileFallbackPolicy.FAIL:
+            raise ContractError(
+                ErrorCode.NO_COMPATIBLE_ROUTE,
+                "no configured routing-profile model preference is currently compatible",
+                details={
+                    "routing_profile_ref": profile.ref.canonical_ref,
+                    "preferred_model_ids": preferred_ids,
+                    "failed_preference_ids": failures,
+                    "fallback": profile.policy.fallback.value,
+                },
+            )
+
+        fallback_requirements = replace(requirements, explicit_model_id=None)
+        route = self.route(fallback_requirements)
+        return replace(
+            route,
+            reason=(
+                f"routing profile {profile.ref.canonical_ref}: deterministic registry fallback; "
+                f"{route.reason}"
             ),
         )
 
