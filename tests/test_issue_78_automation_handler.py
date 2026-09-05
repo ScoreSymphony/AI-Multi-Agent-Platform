@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 
 import pytest
 
@@ -89,9 +90,9 @@ def test_existing_automation_export_roundtrips_without_runtime_identity_or_sourc
         assert payload["project_id"] is None
         assert payload["workspace_id"] is None
         task_payload = payload["task_template"]
-        assert isinstance(task_payload, dict | object)
-        assert task_payload["project_id"] is None  # type: ignore[index]
-        assert task_payload["workspace_id"] is None  # type: ignore[index]
+        assert isinstance(task_payload, Mapping)
+        assert task_payload["project_id"] is None
+        assert task_payload["workspace_id"] is None
         assert definition.project_id is None
         assert draft.content.requirements.workspace_prerequisites == ()
         assert draft.content.provenance.metadata["source_project_id"] == source_project_id
