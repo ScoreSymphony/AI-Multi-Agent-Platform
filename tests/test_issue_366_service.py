@@ -139,9 +139,7 @@ class _ReplacementEchoProvider(CapabilityToolProvider):
         )
 
     async def invoke(self, invocation: ToolInvocation) -> ToolResult:
-        raise AssertionError(
-            f"test provider must not be invoked: {invocation.invocation_id}"
-        )
+        raise AssertionError(f"test provider must not be invoked: {invocation.invocation_id}")
 
 
 def _access(
