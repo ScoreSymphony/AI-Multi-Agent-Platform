@@ -19,7 +19,6 @@ from urllib.parse import quote
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from . import main as legacy_main
 from .client import (
     APIClientError,
     ClientOptions,
@@ -36,7 +35,8 @@ from .credentials import (
     CredentialStore,
     session_cookie_from_response,
 )
-from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore
+from .main import run_cli as legacy_run_cli
+from .profiles import CLIProfile, ProfileError, ProfileStore
 from .render import Renderer
 
 
@@ -136,7 +136,7 @@ def _run_legacy_authenticated(
         # Preserve the established parser/configuration error contract.  The legacy CLI
         # will diagnose the invalid input itself rather than this wrapper masking it.
         resolved_transport = base_transport
-    return legacy_main.run_cli(
+    return legacy_run_cli(
         arguments,
         transport=resolved_transport,
         stdout=stdout,
@@ -160,7 +160,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     auth_commands.add_parser("me", help="inspect the authenticated actor/profile")
     auth_commands.add_parser("status", help="inspect local credential state without secrets")
-    auth_commands.add_parser("logout", help="revoke the active browser session or clear local token")
+    auth_commands.add_parser(
+        "logout", help="revoke the active browser session or clear local token"
+    )
 
     session = auth_commands.add_parser("session", help="inspect and manage browser sessions")
     session_commands = session.add_subparsers(dest="session_command", required=True)
@@ -190,7 +192,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="activate or clear an already-issued bearer/service credential",
     )
     token_commands = token.add_subparsers(dest="token_command", required=True)
-    token_activate = token_commands.add_parser("activate", help="read and validate a token from stdin")
+    token_activate = token_commands.add_parser(
+        "activate", help="read and validate a token from stdin"
+    )
     token_activate.add_argument(
         "--token-stdin",
         action="store_true",
