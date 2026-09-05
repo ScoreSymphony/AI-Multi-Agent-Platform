@@ -136,6 +136,11 @@ from .policy_profile_codecs import (
     register_authorization_policy_profile_portability_codec,
     snapshot_authorization_policy_profile,
 )
+from .policy_profile_import import (
+    AuthorizationPolicyProfileImportMutationHandler,
+    load_authorization_policy_profile_snapshot,
+    register_authorization_policy_profile_serializer,
+)
 from .project_codecs import (
     PROJECT_PORTABLE_SCHEMA_VERSION,
     PROJECT_RESOURCE_TYPE,
@@ -201,6 +206,7 @@ __all__ = [
     "AgentTeamPortableSnapshot",
     "AppliedImportResource",
     "ArtifactPortableCodec",
+    "AuthorizationPolicyProfileImportMutationHandler",
     "AuthorizationPolicyProfilePortableCodec",
     "AuthorizationPolicyProfilePortableSnapshot",
     "AutomationImportMutationHandler",
@@ -278,6 +284,7 @@ __all__ = [
     "import_report_to_dict",
     "inspect_authorization_policy_profile_import",
     "knowledge_index_exclusion",
+    "load_authorization_policy_profile_snapshot",
     "materialize_file",
     "package_from_dict",
     "package_inspection_to_dict",
@@ -285,6 +292,7 @@ __all__ = [
     "parse_resource_dependency",
     "register_agent_portability_codecs",
     "register_authorization_policy_profile_portability_codec",
+    "register_authorization_policy_profile_serializer",
     "register_automation_portability_codec",
     "register_connector_portability_codec",
     "register_file_portability_codecs",
