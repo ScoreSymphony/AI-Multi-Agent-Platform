@@ -43,7 +43,11 @@ def build_agent_portability_workflow(
     """
 
     serializers = ResourceSerializerRegistry()
-    register_agent_portability_codecs(serializers, id_policy=id_policy)
+    register_agent_portability_codecs(
+        serializers,
+        agent_id_policy=id_policy,
+        team_id_policy=id_policy,
+    )
 
     export_sources = ExportSourceRegistry()
 
