@@ -52,7 +52,7 @@ describe("TaskProjectReassignmentClient", () => {
     });
   });
 
-  it("uses null to move a Task back to the unprojected personal scope", async () => {
+  it("uses null to move a Task to no Project while preserving canonical ownership", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ...movedTask, project_id: null }), { status: 200 }),
     );
