@@ -1,0 +1,67 @@
+name: issue-79-project-portability-finalize
+
+on:
+  push:
+    branches:
+      - feat/issue-79-project-portability
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Complete Project portability documentation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/PORTABILITY.md")
+          text = path.read_text(encoding="utf-8")
+          marker = "## File and Artifact semantics\n"
+          project_section = '''## Project semantics
+
+Portable `project` resources preserve the complete canonical `Project` snapshot: canonical ID, name, owner reference, creation/update timestamps, schema version, provenance (including nested JSON-safe details), and external references.
+
+Project identity follows the ordinary `IdPolicy`: preserve keeps the canonical Project ID when conflict-free, while regenerate allocates a deterministic destination Project ID through the server-owned preview and rewrites the decoded Project identity through `ImportContext`.
+
+Import uses the canonical `ScopeStore.store_project_snapshot(...)` seam completed by #308. There is no portability-specific Project database or reduced reconstruction path. A destination restart therefore reconstructs the same canonical Project metadata through `SqliteScopeStore`.
+
+Project compensation is intentionally fail-closed. `ScopeStore.compensate_project(...)` refuses deletion when Workspace dependencies exist and also requires an explicit cross-domain dependency audit. If a deployment cannot prove that an imported Project is unreferenced, package rollback reports incomplete compensation rather than risking deletion of referenced canonical state.
+
+'''
+          if project_section not in text:
+              if marker not in text:
+                  raise SystemExit("Project documentation insertion marker not found")
+              text = text.replace(marker, project_section + marker, 1)
+
+          old = "Template full-revision round trip, canonical Template dependency/reference remapping, guarded Template compensation, replay-safe import reports and Control Plane/CLI workflows are covered by the current #79 implementation. Remaining resource-family integrations are intentionally dependency-gated: Project portability waits for #308, durable model-routing-policy portability for #309, reusable authorization-policy portability for #310, and Evaluation suite/result portability for #19. #79 must consume those canonical contracts rather than inventing shadow persistence."
+          new = "Template and Project round trips, canonical dependency/reference remapping, guarded compensation, replay-safe import reports and Control Plane/CLI workflows are covered by the current #79 implementation. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. Remaining resource-family integrations are intentionally dependency-gated: durable model-routing-policy portability waits for #309, reusable authorization-policy portability for #310, and Evaluation suite/result portability for #19. #79 must consume those canonical contracts rather than inventing shadow persistence."
+          if old not in text:
+              raise SystemExit("Stale #308 completion paragraph not found")
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding="utf-8")
+          PY
+      - name: Install development dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Validate Project portability slice
+        run: |
+          python -m ruff format --check src/ai_multi_agent_platform/portability/project_codecs.py src/ai_multi_agent_platform/portability/project_import.py src/ai_multi_agent_platform/portability/composition.py src/ai_multi_agent_platform/portability/__init__.py tests/test_issue_79_project_portability.py tests/test_issue_79_single_node_portability.py
+          python -m ruff check src/ai_multi_agent_platform/portability/project_codecs.py src/ai_multi_agent_platform/portability/project_import.py src/ai_multi_agent_platform/portability/composition.py src/ai_multi_agent_platform/portability/__init__.py tests/test_issue_79_project_portability.py tests/test_issue_79_single_node_portability.py
+          python -m mypy src/ai_multi_agent_platform/portability/project_codecs.py src/ai_multi_agent_platform/portability/project_import.py src/ai_multi_agent_platform/portability/composition.py
+          python -m pytest -q tests/test_issue_79_project_portability.py tests/test_issue_79_single_node_portability.py tests/test_issue_79_control_plane_portability.py tests/test_issue_79_cli_portability.py tests/test_issue_79_workflow.py
+      - name: Commit final slice and remove helper
+        run: |
+          git rm .github/workflows/issue-79-project-portability-finalize.yml
+          git add docs/PORTABILITY.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs(portability): complete Project migration contract (#79)"
+          git push origin HEAD:feat/issue-79-project-portability
