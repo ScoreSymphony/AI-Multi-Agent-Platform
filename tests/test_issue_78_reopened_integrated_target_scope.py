@@ -294,7 +294,7 @@ def test_caller_cannot_supply_new_server_owned_environment_fields() -> None:
         control_plane = _ScopedControlPlane(scopes=_Scopes({}))
         handlers = _handlers(application, control_plane)
 
-        for field, value in (
+        for field_name, value in (
             ("placeholder_bindings", {"name": "caller"}),
             ("secret_reference_bindings", {"credential": {"secret": "caller"}}),
             ("configuration_payloads", {"config://caller": {"project_id": "caller"}}),
@@ -306,9 +306,9 @@ def test_caller_cannot_supply_new_server_owned_environment_fields() -> None:
                 await handlers.preview_template(
                     _context(),
                     published.template_id,
-                    {field: value},  # type: ignore[dict-item]
+                    {field_name: value},  # type: ignore[dict-item]
                 )
             assert exc_info.value.code is ErrorCode.INVALID_REQUEST
-            assert field in exc_info.value.details["fields"]
+            assert field_name in exc_info.value.details["fields"]
 
     asyncio.run(scenario())
