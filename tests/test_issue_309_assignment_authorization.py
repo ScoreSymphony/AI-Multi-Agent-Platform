@@ -79,11 +79,38 @@ async def test_assignment_gate_uses_distinct_assign_authorization_action(tmp_pat
             profile.ref,
             principal_ref=OWNER.id,
             context=_operation(),
+            actor_type="human",
         )
 
     assert caught.value.code is ErrorCode.FORBIDDEN
     assert authorization.calls[-1].action == "model-routing-profile:assign"
     assert authorization.calls[-1].resource_ref == profile.ref.canonical_ref
+    assert authorization.calls[-1].actor_type == "human"
+
+
+@pytest.mark.asyncio
+async def test_assignment_without_authorization_provider_requires_exact_owner_context(
+    tmp_path,
+) -> None:
+    repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
+    profile = await ModelRoutingProfileService(repository).create_profile(
+        name="Owner scoped",
+        policy=ModelRoutingProfilePolicy(),
+        owner_ref=OWNER,
+        principal_ref=OWNER.id,
+        context=_operation(),
+    )
+    gate = ModelRoutingProfileAssignmentGate(repository)
+
+    with pytest.raises(ContractError) as caught:
+        await gate.authorize(
+            profile.ref,
+            principal_ref=OWNER.id,
+            context=OperationContext(correlation_id="corr-missing-owner"),
+            actor_type="human",
+        )
+
+    assert caught.value.code is ErrorCode.FORBIDDEN
 
 
 @pytest.mark.asyncio
@@ -118,3 +145,4 @@ async def test_agent_create_fails_closed_when_profile_assignment_is_denied(tmp_p
     assert caught.value.code is ErrorCode.FORBIDDEN
     assert agents_repository.list_agents() == ()
     assert authorization.calls[-1].action == "model-routing-profile:assign"
+    assert authorization.calls[-1].actor_type == "human"
