@@ -1,5 +1,6 @@
+import type { AnchorHTMLAttributes } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   ConversationResponseActivityEvent,
   ConversationResponseDeltaEvent,
@@ -22,6 +23,12 @@ import {
   conversationReferenceHref,
   upsertMessage,
 } from "./ChatPage";
+
+vi.mock("../app/router", () => ({
+  AppLink: ({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a href={href} {...rest}>{children}</a>
+  ),
+}));
 
 function message(overrides: Partial<CanonicalConversationMessage> = {}): CanonicalConversationMessage {
   return {
