@@ -12,6 +12,7 @@ from ai_multi_agent_platform.conversations import (
     JsonConversationRepository,
     MessageRole,
 )
+from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import (
@@ -69,6 +70,8 @@ def test_global_search_discovers_allowed_chat_and_hides_private_and_denied_proje
 ) -> None:
     async def scenario() -> None:
         repository = InMemoryKernelRepository()
+        visible_project_id = new_id("project")
+        visible_workspace_id = new_id("workspace")
         denied_project_id = new_id("project")
         authorization = _ConversationSearchAuthorization(denied_project_id)
         conversations = ConversationService(
@@ -90,6 +93,8 @@ def test_global_search_discovers_allowed_chat_and_hides_private_and_denied_proje
         visible = await conversations.create_conversation(
             title="Visible canonical conversation",
             owner_ref="user:alice",
+            project_id=visible_project_id,
+            workspace_id=visible_workspace_id,
             metadata={"provider_session_id": "provider-native-hidden"},
         )
         visible_message = await conversations.append_message(
@@ -137,6 +142,22 @@ def test_global_search_discovers_allowed_chat_and_hides_private_and_denied_proje
         assert _items(keyword)[0]["resource_id"] == visible_message.id
         assert _items(keyword)[0]["summary"] == "global-search-visible-needle"
 
+        project_scoped = await _search(
+            http,
+            type="conversation",
+            project_id=visible_project_id,
+        )
+        assert project_scoped["total"] == 1
+        assert _items(project_scoped)[0]["resource_id"] == visible.id
+
+        workspace_scoped = await _search(
+            http,
+            type="conversation-message",
+            workspace_id=visible_workspace_id,
+        )
+        assert workspace_scoped["total"] == 1
+        assert _items(workspace_scoped)[0]["resource_id"] == visible_message.id
+
         visible_message_count = await _search(http, type="conversation-message")
         assert visible_message_count["total"] == 1
         assert _items(visible_message_count)[0]["resource_id"] == visible_message.id
@@ -179,5 +200,63 @@ def test_global_search_discovers_allowed_chat_and_hides_private_and_denied_proje
         assert deleted_message["total"] == 0
         deleted_text = await _search(http, q="global-search-visible-needle")
         assert deleted_text["total"] == 0
+
+    asyncio.run(scenario())
+
+
+def test_single_node_authenticated_http_exposes_conversation_search(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
+        )
+        admin = deployment.bootstrap_admin("admin", "test-only-admin-password-12345")
+        credential = deployment.authentication.create_personal_access_token(
+            admin.user_id,
+            purpose="conversation-search-regression",
+        )
+        assert deployment.control_plane.conversation_service is deployment.conversations
+
+        conversation = await deployment.conversations.create_conversation(
+            title="Single-node searchable conversation",
+            owner_ref=admin.user_id,
+        )
+        message = await deployment.conversations.append_message(
+            conversation_id=conversation.id,
+            sender_ref=admin.user_id,
+            role=MessageRole.USER,
+            content=(ConversationContentBlock.text_block("single-node-search-needle"),),
+        )
+        headers = {"authorization": f"Bearer {credential.secret}"}
+
+        exact = await deployment.http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/search",
+                headers=headers,
+                query={"type": "conversation", "id": conversation.id},
+            )
+        )
+        assert exact.status == 200
+        assert isinstance(exact.body, dict)
+        assert exact.body["total"] == 1
+        exact_items = _items(exact.body)
+        assert exact_items[0]["resource_id"] == conversation.id
+        assert exact_items[0]["canonical_ref"] == f"/api/v1/conversations/{conversation.id}"
+
+        keyword = await deployment.http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/search",
+                headers=headers,
+                query={"type": "conversation-message", "q": "single-node-search-needle"},
+            )
+        )
+        assert keyword.status == 200
+        assert isinstance(keyword.body, dict)
+        assert keyword.body["total"] == 1
+        keyword_items = _items(keyword.body)
+        assert keyword_items[0]["resource_id"] == message.id
+        assert keyword_items[0]["canonical_ref"] == (f"/api/v1/conversation-messages/{message.id}")
+        assert keyword_items[0]["summary"] == "single-node-search-needle"
 
     asyncio.run(scenario())
