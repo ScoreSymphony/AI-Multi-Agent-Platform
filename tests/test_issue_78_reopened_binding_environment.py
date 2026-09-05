@@ -43,9 +43,7 @@ def test_environment_resolver_derives_resolved_ids_from_actual_server_owned_bind
         assert isinstance(environment, MaterializingTemplateEnvironment)
         assert environment.resolved_placeholders == frozenset({"agent_name"})
         assert environment.resolved_secret_reference_placeholders == frozenset({"credential"})
-        assert environment.validated_configuration_refs == frozenset(
-            {"config://agents/researcher"}
-        )
+        assert environment.validated_configuration_refs == frozenset({"config://agents/researcher"})
         assert environment.placeholder_bindings["agent_name"] == "Researcher"
         assert environment.secret_reference_bindings["credential"] == secret_reference
         assert environment.configuration_payloads["config://agents/researcher"] == {
@@ -55,7 +53,9 @@ def test_environment_resolver_derives_resolved_ids_from_actual_server_owned_bind
     asyncio.run(scenario())
 
 
-def test_environment_resolver_preserves_legacy_resolved_inventory_but_apply_bindings_stay_empty() -> None:
+def test_environment_resolver_preserves_legacy_resolved_inventory_but_apply_bindings_stay_empty() -> (
+    None
+):
     async def scenario() -> None:
         resolver = PlatformTemplateEnvironmentResolver(
             placeholders=lambda _: ("legacy-placeholder",),
