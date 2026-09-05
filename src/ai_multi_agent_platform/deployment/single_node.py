@@ -72,6 +72,7 @@ from ai_multi_agent_platform.templates import (
 from ai_multi_agent_platform.templates.agent_team_control_plane import (
     register_agent_team_template_control_plane,
 )
+from ai_multi_agent_platform.templates.compensation import register_template_compensators
 from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
 from ai_multi_agent_platform.templates.project_control_plane import (
     register_project_template_control_plane,
@@ -87,7 +88,7 @@ from ai_multi_agent_platform.verification import (
 )
 from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
-from ai_multi_agent_platform.workspaces import SqliteWorkspaceProvider
+from ai_multi_agent_platform.workspaces.compensation import CompensatingSqliteWorkspaceProvider
 
 from .config import SingleNodeConfig
 
@@ -117,7 +118,7 @@ class SingleNodeDeployment:
     kernel_repository: SqliteKernelRepository
     scopes: SqliteScopeStore
     files: LocalFileProvider
-    workspaces: SqliteWorkspaceProvider
+    workspaces: CompensatingSqliteWorkspaceProvider
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
@@ -235,7 +236,7 @@ def build_single_node_deployment(
     kernel_repository = SqliteKernelRepository(database_dir / "kernel.sqlite3")
     scopes = SqliteScopeStore(database_dir / "scopes.sqlite3")
     files = LocalFileProvider(config.files_dir, database_dir / "files.sqlite3")
-    workspaces = SqliteWorkspaceProvider(
+    workspaces = CompensatingSqliteWorkspaceProvider(
         config.workspaces_dir,
         files,
         database_dir / "workspaces.sqlite3",
@@ -272,6 +273,12 @@ def build_single_node_deployment(
     register_agent_template_handlers(template_handlers, agents)
     register_project_template_handler(template_handlers, scopes)
     register_workspace_structure_template_handler(template_handlers, workspaces, scopes)
+    register_template_compensators(
+        template_handlers,
+        agents=agents,
+        scopes=scopes,
+        workspaces=workspaces,
+    )
     templates = TemplateApplicationService(
         JsonTemplateRepository(database_dir / "templates.json"),
         template_handlers,
@@ -356,6 +363,10 @@ def build_single_node_deployment(
     register_standard_agent_control_plane(control_plane, agents)
     register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
     register_automation_template_handler(template_handlers, control_plane.automation_service)
+    register_template_compensators(
+        template_handlers,
+        automations=control_plane.automation_service,
+    )
     automation_template_exporter = AutomationTemplateExporter(
         control_plane.automation_service,
         templates.templates,
