@@ -84,13 +84,15 @@ For resources that already have a canonical owner, that resource remains the own
 | Memory | canonical string `owner_ref` with explicit Memory scope | strict mirror on create/promote/update; Organization-scoped Memory resolves to Organization ownership |
 | Knowledge Source | canonical string `owner_ref` | strict mirror on register/update; current Knowledge API creates principal-owned sources and has no canonical owner-transfer command |
 | Connection | canonical `owner_type`/`owner_id` plus optional Organization/Project scope | strict mirror on create/enable/disable/health; current Connection API has no canonical owner-transfer command |
-| File | canonical `FileRecord.owner_ref` | canonical owner exists, but there is currently no Control Plane File-create/owner-transfer command for #87 to hook without adding read side effects or a second owner; final integration remains open |
-| Artifact | represented by artifact IDs linked from canonical File records, not a separate owner-bearing resource | ownership follows the backing File; no separate #87 Artifact owner should be invented |
+| File | canonical `FileRecord.owner_ref` | `OrganizationOwnershipFileProvider` mirrors File ownership on write/create without read-side effects |
+| Artifact | artifact IDs linked from canonical File records | ownership is mirrored from the backing File when the artifact link is created; no independent second owner is invented |
 | Evaluation Suite/Run | current Control Plane projection has no owner or Organization/Project owner contract | no separate #87 owner is created until the Evaluation domain defines one |
 | Template | no standalone canonical owner-bearing Template resource currently exposed | not separately applicable yet |
 | Plugin/configuration | current canonical plugin resources are platform installation/configuration resources without per-user/team owner contract | not separately applicable yet; secret/config authorization remains outside #87 |
 
-A resource in the last three categories is intentionally **not** assigned a synthetic #87 owner merely to satisfy a checklist. When those domains gain canonical scope/owner semantics, they should add the same mirror integration rather than mutate `ResourceOwnership` independently.
+Resources without a canonical owner contract are intentionally **not** assigned a synthetic #87 owner merely to satisfy a checklist. When those domains gain canonical scope/owner semantics, they should add the same mirror integration rather than mutate `ResourceOwnership` independently.
+
+Project and Workspace ownership are a deliberate authority boundary: their Scope domain is the canonical owner source, and the current Scope API has no owner-transfer operation. The generic #87 `resource-ownership.transfer` command therefore rejects Project/Workspace mutations instead of creating split-brain ownership. A future canonical Scope owner-transfer operation should update the same mirror; #87 does not bypass that domain boundary.
 
 ## Persistence
 
@@ -165,11 +167,24 @@ Removing a Membership never mutates historical Task/Run/Event records. Regressio
 
 `ExternalGroupMapping` stores provider-owned group IDs as reversible mappings to canonical Organization/Team IDs. External group IDs never become canonical platform IDs. Deactivation preserves mapping history while removing the active provisioning relationship.
 
-## Remaining #87 work
+## Acceptance coverage
 
-The core Organization/Team/Membership model, authorization bridge, persistence, audit, frontend collaboration surface and most reusable-resource mirrors are implemented. Remaining work before #87 can close is intentionally narrow:
+Issue #87 is covered by dedicated domain, Control Plane, persistence, authorization, ownership-integration, audit, provenance and frontend-client tests. The regression matrix includes:
 
-1. finish the File/File-backed Artifact ownership adapter at a mutation boundary without introducing GET side effects or a second owner truth;
-2. run the new Memory/Knowledge, Connection and Organization-owner-transfer tests through the full repository CI;
-3. re-anchor the Organization runtime composition above the **current** `main` Control Plane stack (including later Conversation/Evaluation work) and resolve any resulting compatibility changes;
-4. perform the final acceptance-criteria/required-test audit, update PR #219 and issue checkboxes, and require a full green CI before removing Draft status.
+- personal-only operation without an Organization;
+- Organization create/update/archive and explicit owner transfer;
+- Team create/update/configuration;
+- invitation accept/expire/revoke;
+- Membership add/assignment/suspend/remove/leave and authentication-identity changes;
+- role/policy projection into the canonical #15 authorization path;
+- ownership/share/revoke behavior and default cross-Organization isolation;
+- explicit #15 authorization for requested cross-Organization sharing;
+- historical Task/Event provenance after Membership removal;
+- service and automation Membership identities;
+- reversible external IdP group mappings;
+- restart-safe SQLite Organization persistence;
+- Project/Workspace, Agent/Agent Team/Automation, Memory/Knowledge, Connection and File/Artifact ownership mirrors;
+- administrative ownership-metadata visibility without implicit secret access;
+- typed frontend Organization API behavior.
+
+The Organization runtime is composed above the current Conversation-aware Control Plane rather than an obsolete intermediate stack, so later platform domains remain intact when #87 is enabled.
