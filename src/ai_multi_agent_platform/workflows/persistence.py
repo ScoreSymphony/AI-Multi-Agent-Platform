@@ -304,9 +304,7 @@ def _stage(value: object) -> WorkflowStage:
         description=_required_string(item, "description"),
         depends_on=_string_tuple(item, "depends_on"),
         parameter_refs=_string_tuple(item, "parameter_refs"),
-        capabilities=tuple(
-            _capability(capability) for capability in _array(item, "capabilities")
-        ),
+        capabilities=tuple(_capability(capability) for capability in _array(item, "capabilities")),
         tool_ids=_string_tuple(item, "tool_ids"),
         agent=agent,
         team=team,
