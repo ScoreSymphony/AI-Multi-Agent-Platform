@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .inventory import required_single_node_store_paths
 from .manifest import ManifestSchemaError, validate_backup_manifest_v1
 from .recovery import write_restore_recovery_marker
 
@@ -25,7 +26,9 @@ _SQLITE_SIDECARS = ("-wal", "-shm", "-journal")
 _REQUIRED_SINGLE_NODE_COMPONENTS = frozenset(
     {"db", "files", "workspaces", "configuration-metadata"}
 )
-_REQUIRED_SINGLE_NODE_ENTRIES = frozenset({"db/kernel.sqlite3", "metadata/deployment.json"})
+_REQUIRED_SINGLE_NODE_ENTRIES = frozenset(
+    (*required_single_node_store_paths(), "metadata/deployment.json")
+)
 
 
 class BackupError(RuntimeError):
@@ -375,9 +378,12 @@ def _validate_single_node_layout(root: Path, *, context: str) -> None:
             raise BackupError(f"{context} durable component must not be a symbolic link: {path}")
         if not path.is_dir():
             raise BackupError(f"{context} is missing required durable component: {component}/")
-    kernel_db = root / "db" / "kernel.sqlite3"
-    if not kernel_db.is_file():
-        raise BackupError(f"{context} is missing canonical kernel database: db/kernel.sqlite3")
+    for relative in required_single_node_store_paths():
+        store = root.joinpath(*PurePosixPath(relative).parts)
+        if store.is_symlink():
+            raise BackupError(f"{context} durable store must not be a symbolic link: {relative}")
+        if not store.is_file():
+            raise BackupError(f"{context} is missing required durable store: {relative}")
 
 
 def _verify_required_backup_scope(
@@ -436,6 +442,9 @@ def _sqlite_snapshot(source: Path, destination: Path) -> None:
                 row = dst.execute("PRAGMA integrity_check").fetchone()
                 if row is None or row[0] != "ok":
                     raise BackupError(f"SQLite integrity check failed for {source}")
+                foreign_key_violation = dst.execute("PRAGMA foreign_key_check").fetchone()
+                if foreign_key_violation is not None:
+                    raise BackupError(f"SQLite foreign-key check failed for {source}")
                 _checkpoint_sqlite_wal(dst, destination)
         _remove_sqlite_sidecars(destination)
     except (OSError, sqlite3.Error) as exc:
@@ -446,10 +455,13 @@ def _verify_sqlite_integrity(path: Path) -> None:
     try:
         with sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True) as connection:
             row = connection.execute("PRAGMA integrity_check").fetchone()
+            foreign_key_violation = connection.execute("PRAGMA foreign_key_check").fetchone()
     except sqlite3.Error as exc:
         raise BackupError(f"SQLite database cannot be verified: {path}") from exc
     if row is None or row[0] != "ok":
         raise BackupError(f"SQLite integrity check failed: {path}")
+    if foreign_key_violation is not None:
+        raise BackupError(f"SQLite foreign-key check failed: {path}")
 
 
 def _checkpoint_sqlite_wal(connection: sqlite3.Connection, path: Path) -> None:

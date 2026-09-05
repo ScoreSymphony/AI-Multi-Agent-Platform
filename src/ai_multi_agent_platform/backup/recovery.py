@@ -146,6 +146,45 @@ async def reconcile_restored_single_node(
     )
 
 
+def require_blocked_restore_run(data_dir: Path, *, task_id: str, run_id: str) -> None:
+    """Require that a Run is explicitly blocked by the authoritative restore report.
+
+    This is the safety boundary for offline operator resolution. It prevents the recovery CLI from
+    terminalizing arbitrary live Runs merely because it has direct access to the restored kernel.
+    """
+
+    report_path = data_dir.expanduser().resolve() / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_REPORT
+    payload = _load_report(report_path)
+    if payload.get("ready_for_service") is True:
+        raise RuntimeError("restored deployment is already ready for service")
+
+    unresolved = payload.get("unresolved_run_ids")
+    if not isinstance(unresolved, list) or any(not isinstance(item, str) for item in unresolved):
+        raise RuntimeError("restore recovery report contains invalid unresolved_run_ids")
+    if run_id not in unresolved:
+        raise RuntimeError(f"run {run_id} is not listed as unresolved by restore recovery")
+
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, list):
+        raise RuntimeError("restore recovery report contains invalid task entries")
+    for raw_task in tasks:
+        if not isinstance(raw_task, dict) or raw_task.get("task_id") != task_id:
+            continue
+        entries = raw_task.get("entries")
+        if not isinstance(entries, list):
+            break
+        for entry in entries:
+            if (
+                isinstance(entry, dict)
+                and entry.get("run_id") == run_id
+                and entry.get("disposition")
+                == RecoveryDisposition.ORPHANED_RECONCILIATION_REQUIRED.value
+            ):
+                return
+        break
+    raise RuntimeError(f"run {run_id} is not an orphaned restore-recovery Run for task {task_id}")
+
+
 def _load_marker(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -158,15 +197,22 @@ def _load_marker(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _load_blocked_report_restore(path: Path) -> dict[str, Any] | None:
+def _load_report(path: Path) -> dict[str, Any]:
     if not path.is_file():
-        return None
+        raise RuntimeError("restore recovery report is missing; run recover-restore first")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError("restore recovery report is unreadable or invalid JSON") from exc
     if not isinstance(payload, dict) or payload.get("report_version") != 1:
         raise RuntimeError("restore recovery report version is incompatible")
+    return payload
+
+
+def _load_blocked_report_restore(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    payload = _load_report(path)
     if payload.get("ready_for_service") is True:
         return None
     restore = payload.get("restore")

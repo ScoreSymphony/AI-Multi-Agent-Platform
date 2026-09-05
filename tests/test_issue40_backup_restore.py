@@ -20,6 +20,7 @@ from ai_multi_agent_platform.backup import (
     restore_single_node_backup,
     verify_backup,
 )
+from ai_multi_agent_platform.backup.inventory import required_single_node_store_paths
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.distributed import (
     DistributedRegistry,
@@ -39,6 +40,15 @@ from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrat
 PASSWORD = "correct horse battery staple"
 
 
+def _materialize_required_stores(root: Path) -> None:
+    for relative in required_single_node_store_paths():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            with sqlite3.connect(path):
+                pass
+
+
 def _source(tmp_path: Path, name: str = "source") -> Path:
     root = tmp_path / name
     (root / "db").mkdir(parents=True)
@@ -54,6 +64,7 @@ def _source(tmp_path: Path, name: str = "source") -> Path:
             "CREATE TABLE auth_sessions (session_id TEXT PRIMARY KEY, token_verifier TEXT)"
         )
         connection.execute("INSERT INTO auth_sessions VALUES ('session-1', 'hashed')")
+    _materialize_required_stores(root)
     (root / "db" / "agents.json").write_text('{"agent-1": {}}', encoding="utf-8")
     (root / "files" / "artifact.txt").write_text("artifact", encoding="utf-8")
     (root / "workspaces" / "ws-1" / "notes.txt").write_text("notes", encoding="utf-8")
@@ -339,6 +350,7 @@ def test_active_run_enters_canonical_reconciliation_after_disaster_restore(tmp_p
             task_id=task.task_id,
         )
         assert run.status is RunStatus.RUNNING
+        _materialize_required_stores(source)
 
         backup = create_single_node_backup(
             data_dir=source,
