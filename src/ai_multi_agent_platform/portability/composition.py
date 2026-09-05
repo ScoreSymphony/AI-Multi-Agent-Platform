@@ -34,6 +34,10 @@ from .planner import ImportPreviewService
 from .project_codecs import PROJECT_RESOURCE_TYPE, register_project_portability_codec
 from .project_import import ProjectDependencyAudit, ProjectImportMutationHandler
 from .registry import ResourceSerializerRegistry
+from .routing_profile_reference_codecs import (
+    register_routing_profile_aware_agent_portability_codecs,
+    register_routing_profile_aware_template_portability_codec,
+)
 from .template_codecs import (
     TEMPLATE_RESOURCE_TYPE,
     register_template_portability_codec,
@@ -66,14 +70,27 @@ def build_agent_portability_workflow(
     """
 
     serializers = ResourceSerializerRegistry()
-    register_agent_portability_codecs(
-        serializers,
-        agent_id_policy=id_policy,
-        team_id_policy=id_policy,
-    )
+    if routing_profiles is None:
+        register_agent_portability_codecs(
+            serializers,
+            agent_id_policy=id_policy,
+            team_id_policy=id_policy,
+        )
+    else:
+        register_routing_profile_aware_agent_portability_codecs(
+            serializers,
+            agent_id_policy=id_policy,
+            team_id_policy=id_policy,
+        )
     register_project_portability_codec(serializers, id_policy=id_policy)
     if templates is not None:
-        register_template_portability_codec(serializers, id_policy=id_policy)
+        if routing_profiles is None:
+            register_template_portability_codec(serializers, id_policy=id_policy)
+        else:
+            register_routing_profile_aware_template_portability_codec(
+                serializers,
+                id_policy=id_policy,
+            )
     if routing_profiles is not None:
         register_model_routing_profile_portability_codec(serializers, id_policy=id_policy)
 
