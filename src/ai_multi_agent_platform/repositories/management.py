@@ -23,6 +23,7 @@ from ai_multi_agent_platform.security import (
 
 from .catalog import RepositoryBindingRecord, SqliteRepositoryBindingCatalog
 from .contracts import RepositoryProvider
+from .local_bootstrap import managed_local_connection_metadata
 from .local_git import LocalGitRepositoryProvider
 from .models import RepositoryConnection, RepositoryReference
 from .service import RepositoryBinding, RepositoryCallContext, RepositoryRegistry
@@ -265,14 +266,19 @@ class RepositoryManagementService:
         *,
         adapter_configuration: Mapping[str, JsonValue],
     ) -> None:
+        connection_metadata = dict(binding.connection.metadata)
+        if binding.connection.local:
+            connection_metadata.update(managed_local_connection_metadata(binding.connection))
+        record = RepositoryBindingRecord(
+            reference=binding.reference,
+            provider_id=binding.connection.provider_id,
+            local=binding.connection.local,
+            connection_metadata=connection_metadata,
+            adapter_configuration=adapter_configuration,
+        )
         self._registry.register(binding)
         try:
-            self._catalog.save(
-                RepositoryBindingRecord.from_binding(
-                    binding,
-                    adapter_configuration=adapter_configuration,
-                )
-            )
+            self._catalog.save(record)
         except Exception:
             self._registry.unregister(binding.reference.id)
             raise
