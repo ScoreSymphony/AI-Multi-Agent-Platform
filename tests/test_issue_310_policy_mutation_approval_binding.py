@@ -56,7 +56,10 @@ def _gate(*actions: AuthorizationAction) -> AuthorizationGate:
     )
 
 
-def _content(name: str, action: AuthorizationAction = AuthorizationAction.READ):
+def _content(
+    name: str,
+    action: AuthorizationAction = AuthorizationAction.READ,
+) -> AuthorizationPolicyProfileContent:
     return AuthorizationPolicyProfileContent(
         name=name,
         allowed_actions=(action,),
@@ -90,7 +93,13 @@ def test_create_retry_reuses_approved_generated_id_and_rejects_changed_content()
     owner = OwnerRef(type="user", id="operator")
 
     with pytest.raises(ContractError) as pending:
-        asyncio.run(service.create(owner_ref=owner, content=_content("approved"), context=_context()))
+        asyncio.run(
+            service.create(
+                owner_ref=owner,
+                content=_content("approved"),
+                context=_context(),
+            )
+        )
     assert pending.value.code is ErrorCode.FORBIDDEN
     first = gate.approvals.all()[0]
     _approve(gate, first.approval_id)
@@ -145,7 +154,14 @@ def test_revise_approval_cannot_be_reused_for_changed_revision_content() -> None
     gate = _gate(AuthorizationAction.MODIFY)
     service = AuthorizationPolicyProfileService(repository, gate)
     with pytest.raises(ContractError):
-        asyncio.run(service.revise(created.policy_profile_id, _content("v2-a"), _context(), expected_revision=1))
+        asyncio.run(
+            service.revise(
+                created.policy_profile_id,
+                _content("v2-a"),
+                _context(),
+                expected_revision=1,
+            )
+        )
     first = gate.approvals.all()[0]
     _approve(gate, first.approval_id)
 
