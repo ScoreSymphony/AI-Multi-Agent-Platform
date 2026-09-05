@@ -218,7 +218,11 @@ def _conversation_indexable(
 ) -> bool:
     if conversation.status is ConversationStatus.TOMBSTONED:
         return False
-    policy = retention.policy_for(conversation)
+    try:
+        policy = retention.policy_for(conversation)
+    except ValueError:
+        # Invalid retention state must never make uncertain chat content discoverable.
+        return False
     if (
         policy.mode is ConversationRetentionMode.UNTIL
         and policy.expires_at is not None
@@ -282,11 +286,11 @@ def _message_search_resource(
 
 
 def _permitted_message_text(message: ConversationMessage) -> str:
-    parts = [
-        block.text
-        for block in message.content
-        if block.kind in {ContentKind.TEXT, ContentKind.MARKDOWN} and block.text is not None
-    ]
+    parts: list[str] = []
+    for block in message.content:
+        if block.kind not in {ContentKind.TEXT, ContentKind.MARKDOWN} or block.text is None:
+            continue
+        parts.append(block.text)
     return "\n".join(parts)[:500]
 
 
