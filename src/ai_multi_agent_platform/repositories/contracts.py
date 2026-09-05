@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import ProviderContract
 from ai_multi_agent_platform.contracts.types import OperationContext, ProviderDescriptor
 
@@ -79,7 +80,6 @@ class RepositoryProvider(ProviderContract):
         context: OperationContext,
     ) -> tuple[str, ...]: ...
 
-    @abstractmethod
     async def commits(
         self,
         repository: RepositoryReference,
@@ -87,7 +87,15 @@ class RepositoryProvider(ProviderContract):
         *,
         revision: str = "HEAD",
         limit: int = 50,
-    ) -> tuple[RepositoryCommitInfo, ...]: ...
+    ) -> tuple[RepositoryCommitInfo, ...]:
+        """Inspect commit history when the concrete repository provider supports it."""
+
+        del repository, context, revision, limit
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "repository provider does not support commit history inspection",
+            provider_id=self.provider_id,
+        )
 
     @abstractmethod
     async def status(
