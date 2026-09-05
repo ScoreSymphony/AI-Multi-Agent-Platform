@@ -7,13 +7,12 @@ from collections.abc import Callable
 from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.service import ScopeStore
+from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.models import ModelRegistry
-from ai_multi_agent_platform.security.policy_profile_import_service import (
-    AuthorizationPolicyProfileImportService,
-)
 from ai_multi_agent_platform.security.policy_profiles import (
     AuthorizationPolicyProfileCallContext,
     AuthorizationPolicyProfileRepository,
+    AuthorizationPolicyProfileService,
 )
 from ai_multi_agent_platform.templates import TemplateRepository
 
@@ -56,8 +55,9 @@ def build_agent_portability_workflow(
     platform_version: str,
     templates: TemplateRepository | None = None,
     policy_profiles: AuthorizationPolicyProfileRepository | None = None,
-    policy_profile_import_service: AuthorizationPolicyProfileImportService | None = None,
+    policy_profile_service: AuthorizationPolicyProfileService | None = None,
     policy_profile_import_context: AuthorizationPolicyProfileCallContext | None = None,
+    policy_profile_target_owner: OwnerRef | None = None,
     source_instance_id: str | None = None,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
     project_dependency_audit: ProjectDependencyAudit | None = None,
@@ -66,10 +66,10 @@ def build_agent_portability_workflow(
 
     Agent, Agent Team and Project are always available. Template portability is enabled
     only when the canonical #78 repository is supplied. Authorization-policy portability
-    is enabled only when the canonical #310 repository, its guarded import service and an
-    explicit internal import context are supplied together. Imported policy profiles are
-    therefore materialized through the security domain and never gain assignments or
-    effective authority as an import side effect.
+    is enabled only when the canonical #310 repository, canonical lifecycle service,
+    explicit import context and explicit destination owner are supplied together. Imported
+    policy profiles are therefore materialized through the normal security domain and
+    never gain assignments or effective authority as an import side effect.
 
     Project rollback deliberately fails closed unless the caller supplies a cross-domain
     dependency audit that can prove removal is safe. Dependencies without a supplied
@@ -79,14 +79,16 @@ def build_agent_portability_workflow(
 
     policy_parts = (
         policy_profiles,
-        policy_profile_import_service,
+        policy_profile_service,
         policy_profile_import_context,
+        policy_profile_target_owner,
     )
     if any(item is not None for item in policy_parts) and not all(
         item is not None for item in policy_parts
     ):
         raise ValueError(
-            "policy profile portability requires repository, import service and import context"
+            "policy profile portability requires repository, canonical service, "
+            "import context and target owner"
         )
 
     serializers = ResourceSerializerRegistry()
@@ -147,14 +149,15 @@ def build_agent_portability_workflow(
         mutations.register(TemplateImportMutationHandler(templates))
     if (
         policy_profiles is not None
-        and policy_profile_import_service is not None
+        and policy_profile_service is not None
         and policy_profile_import_context is not None
+        and policy_profile_target_owner is not None
     ):
         mutations.register(
             AuthorizationPolicyProfileImportMutationHandler(
-                policy_profile_import_service,
-                policy_profiles,
+                policy_profile_service,
                 import_context=policy_profile_import_context,
+                target_owner_ref=policy_profile_target_owner,
             )
         )
 
