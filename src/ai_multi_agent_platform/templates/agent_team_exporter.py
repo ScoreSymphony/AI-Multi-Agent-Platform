@@ -10,6 +10,7 @@ from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
 from ai_multi_agent_platform.control_plane.models import json_value
 from ai_multi_agent_platform.domain import OwnerRef
 
+from .agent_handlers import portable_agent_profile_payload
 from .models import (
     CapabilityRequirement,
     TemplateConfiguration,
@@ -160,12 +161,7 @@ def _agent_template_content(
     revision: int,
     author: str,
 ) -> TemplateContent:
-    profile_payload = _freeze_json(json_value(profile))
-    if not isinstance(profile_payload, dict):
-        raise ContractError(
-            ErrorCode.CONTRACT_VIOLATION,
-            "canonical Agent profile did not serialize as an object",
-        )
+    profile_payload = portable_agent_profile_payload(profile)
     return TemplateContent(
         name=profile.name,
         description=f"Template exported from Agent {agent_id}@{revision}",
@@ -193,6 +189,8 @@ def _agent_template_content(
                 "source_resource_type": "agent",
                 "source_resource_id": agent_id,
                 "source_resource_revision": revision,
+                "source_default_project_id": profile.workspace_defaults.project_id,
+                "source_default_workspace_id": profile.workspace_defaults.workspace_id,
             },
         ),
         tags=("agent", "team-member", "exported"),
