@@ -179,6 +179,44 @@ def test_library_adapter_maps_litellm_errors_to_canonical_categories() -> None:
     assert captured.value.details == {"exception_type": "RateLimitError"}
 
 
+@pytest.mark.parametrize(
+    ("exception_name", "expected_code", "retryable"),
+    (
+        ("AuthenticationError", ErrorCode.UNAUTHORIZED, False),
+        ("UnsupportedParamsError", ErrorCode.UNSUPPORTED_CAPABILITY, False),
+        ("TemporaryAPIError", ErrorCode.TRANSIENT_FAILURE, True),
+        ("APIConnectionError", ErrorCode.UNAVAILABLE, True),
+    ),
+)
+def test_library_adapter_maps_common_litellm_error_categories(
+    exception_name: str,
+    expected_code: ErrorCode,
+    retryable: bool,
+) -> None:
+    error_type = type(exception_name, (Exception,), {})
+
+    async def completion(**kwargs: object) -> object:
+        del kwargs
+        raise error_type("provider failure")
+
+    provider = make_library_provider(completion=completion)
+
+    with pytest.raises(ContractError) as captured:
+        asyncio.run(
+            provider.generate(
+                ModelRequest(
+                    request_id=f"req-{exception_name}",
+                    messages=("hello",),
+                    context=CTX,
+                    requirements={"model_config_id": "model-local-coder"},
+                )
+            )
+        )
+
+    assert captured.value.code is expected_code
+    assert captured.value.retryable is retryable
+
+
 def test_library_adapter_maps_timeout_to_canonical_error() -> None:
     async def completion(**kwargs: object) -> object:
         del kwargs
@@ -252,6 +290,53 @@ def test_library_mode_fails_clearly_when_optional_dependency_is_absent(
 
     assert captured.value.code is ErrorCode.INVALID_CONFIGURATION
     assert captured.value.details["install_extra"] == "ai-multi-agent-platform[litellm]"
+
+
+def test_library_adapter_health_reports_missing_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MISSING_LITELLM_KEY", raising=False)
+    provider = LiteLLMModelProvider(
+        LiteLLMProviderConfig(
+            provider_id="litellm-missing-credential",
+            mode=LiteLLMMode.LIBRARY,
+            models={"model-local-coder": "ollama/qwen3-coder"},
+            api_key_env="MISSING_LITELLM_KEY",
+        ),
+        completion=lambda **kwargs: asyncio.sleep(0, result={}),
+    )
+
+    assert asyncio.run(provider.health()) is HealthStatus.UNAVAILABLE
+
+
+def test_library_adapter_generation_rejects_missing_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MISSING_LITELLM_KEY", raising=False)
+    provider = LiteLLMModelProvider(
+        LiteLLMProviderConfig(
+            provider_id="litellm-missing-credential",
+            mode=LiteLLMMode.LIBRARY,
+            models={"model-local-coder": "ollama/qwen3-coder"},
+            api_key_env="MISSING_LITELLM_KEY",
+        ),
+        completion=lambda **kwargs: asyncio.sleep(0, result={}),
+    )
+
+    with pytest.raises(ContractError) as captured:
+        asyncio.run(
+            provider.generate(
+                ModelRequest(
+                    request_id="req-missing-credential",
+                    messages=("hello",),
+                    context=CTX,
+                    requirements={"model_config_id": "model-local-coder"},
+                )
+            )
+        )
+
+    assert captured.value.code is ErrorCode.INVALID_CONFIGURATION
+    assert "credential" in captured.value.message.lower()
 
 
 def test_disabled_adapter_is_unavailable_without_loading_litellm() -> None:
