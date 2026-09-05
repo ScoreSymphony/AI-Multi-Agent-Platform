@@ -19,6 +19,10 @@ from .automation_handler import (
     AutomationTemplateHandler,
     register_automation_template_handler,
 )
+from .capability_assignment_handler import (
+    CapabilityAssignmentTemplateHandler,
+    register_capability_assignment_template_handler,
+)
 from .control_plane import register_template_control_plane
 from .environment import PlatformTemplateEnvironmentResolver
 from .models import (
@@ -69,6 +73,7 @@ __all__ = [
     "AgentTemplateHandler",
     "AutomationTemplateExporter",
     "AutomationTemplateHandler",
+    "CapabilityAssignmentTemplateHandler",
     "CapabilityRequirement",
     "CompositeTemplateHandler",
     "ContextualTemplateHandlerRegistry",
@@ -108,6 +113,7 @@ __all__ = [
     "activate_untrusted_revision",
     "register_agent_template_handlers",
     "register_automation_template_handler",
+    "register_capability_assignment_template_handler",
     "register_project_template_handler",
     "register_template_control_plane",
     "register_workspace_structure_template_handler",

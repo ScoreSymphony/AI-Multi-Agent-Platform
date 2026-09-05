@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 
 import pytest
 
@@ -152,7 +153,7 @@ def test_template_codec_preserves_history_dependencies_and_remaps_canonical_refs
     assert latest.content.requirements.model_policy_refs == ("routing-profile-target",)
 
 
-def test_template_import_restores_exact_history_and_guarded_rollback() -> None:
+def test_template_import_restores_history_as_untrusted_and_guarded_rollback() -> None:
     async def scenario() -> None:
         source = InMemoryTemplateRepository()
         project_id = new_id("project")
@@ -177,7 +178,25 @@ def test_template_import_restores_exact_history_and_guarded_rollback() -> None:
         token = await handler.apply(resource, decoded, context)
 
         assert target.get_template(template_id) == snapshot.definition
-        assert target.list_revisions(template_id) == snapshot.revisions
+        imported_revisions = target.list_revisions(template_id)
+        assert len(imported_revisions) == len(snapshot.revisions)
+        for imported_revision, source_revision in zip(
+            imported_revisions,
+            snapshot.revisions,
+            strict=True,
+        ):
+            assert imported_revision.content.provenance.trust is TemplateTrust.UNTRUSTED
+            assert imported_revision.content.provenance.metadata["imported_source_trust"] == "local"
+            assert (
+                replace(
+                    imported_revision,
+                    content=replace(
+                        imported_revision.content,
+                        provenance=source_revision.content.provenance,
+                    ),
+                )
+                == source_revision
+            )
 
         await handler.rollback(resource, decoded, token, context)
         with pytest.raises(ContractError) as exc_info:
