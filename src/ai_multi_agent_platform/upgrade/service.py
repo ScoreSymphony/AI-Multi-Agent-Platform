@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from .migrations import MigrationContext, MigrationRegistry, MigrationRunner, MigrationStep
-from .models import CheckSeverity, RollbackMode, UpgradeResult
+from .models import CheckSeverity, MigrationStatus, RollbackMode, UpgradeResult, VersionSnapshot
 from .preflight import PreflightRequest, UpgradePreflight
-from .versioning import JsonVersionStateStore
+from .versioning import JsonVersionStateStore, version_snapshot_from_dict
 
 
 class UpgradeError(RuntimeError):
@@ -20,9 +20,10 @@ class UpgradeError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class MaintenanceState:
     started_at: str
-    source_release: str
-    target_release: str
+    source: VersionSnapshot
+    target: VersionSnapshot
     planned_revisions: tuple[str, ...]
+    backup_dir: str | None = None
 
 
 class MaintenanceStateStore:
@@ -40,17 +41,59 @@ class MaintenanceStateStore:
     def active(self) -> bool:
         return self.path.is_file()
 
+    def read(self) -> MaintenanceState | None:
+        if not self.path.is_file():
+            return None
+        try:
+            raw: object = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise UpgradeError(f"cannot read upgrade maintenance marker: {exc}") from exc
+        if not isinstance(raw, dict) or raw.get("schema_version") != self.SCHEMA_VERSION:
+            raise UpgradeError("unsupported upgrade maintenance marker")
+        started_at = raw.get("started_at")
+        source = raw.get("source_versions")
+        target = raw.get("target_versions")
+        planned = raw.get("planned_revisions")
+        backup_dir = raw.get("backup_dir")
+        if not isinstance(started_at, str) or not started_at:
+            raise UpgradeError("upgrade maintenance marker has invalid started_at")
+        if not isinstance(source, dict) or not isinstance(target, dict):
+            raise UpgradeError("upgrade maintenance marker is missing source/target version vectors")
+        if not isinstance(planned, list) or any(
+            not isinstance(item, str) or not item for item in planned
+        ):
+            raise UpgradeError("upgrade maintenance marker has invalid planned revisions")
+        if backup_dir is not None and (not isinstance(backup_dir, str) or not backup_dir):
+            raise UpgradeError("upgrade maintenance marker has invalid backup directory")
+        return MaintenanceState(
+            started_at=started_at,
+            source=version_snapshot_from_dict(source),
+            target=version_snapshot_from_dict(target),
+            planned_revisions=tuple(planned),
+            backup_dir=backup_dir,
+        )
+
     def enter(self, state: MaintenanceState, *, resume_existing: bool = False) -> None:
-        if self.path.exists() and not resume_existing:
-            raise UpgradeError(
-                "upgrade maintenance marker already exists; recover or explicitly resume first"
-            )
+        existing = self.read()
+        if existing is not None:
+            if not resume_existing:
+                raise UpgradeError(
+                    "upgrade maintenance marker already exists; recover or explicitly resume first"
+                )
+            if existing != state:
+                raise UpgradeError(
+                    "existing upgrade maintenance marker belongs to a different upgrade attempt"
+                )
+            return
         document = {
             "schema_version": self.SCHEMA_VERSION,
             "started_at": state.started_at,
-            "source_release": state.source_release,
-            "target_release": state.target_release,
+            "source_release": state.source.platform_release,
+            "target_release": state.target.platform_release,
+            "source_versions": state.source.to_dict(),
+            "target_versions": state.target.to_dict(),
             "planned_revisions": list(state.planned_revisions),
+            "backup_dir": state.backup_dir,
         }
         self.path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.path.with_suffix(f"{self.path.suffix}.tmp")
@@ -76,15 +119,18 @@ class JsonUpgradeHistoryStore:
         return cls(Path(data_dir) / "db" / "upgrade-history.json")
 
     def append(self, result: UpgradeResult) -> None:
-        entries: list[object] = []
-        if self.path.exists():
-            raw: object = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(raw, dict) or raw.get("schema_version") != self.SCHEMA_VERSION:
-                raise UpgradeError("unsupported upgrade-history document")
-            persisted = raw.get("upgrades")
-            if not isinstance(persisted, list):
-                raise UpgradeError("upgrade history must contain an upgrades array")
-            entries = list(persisted)
+        entries = self._entries()
+        for existing in entries:
+            if not isinstance(existing, dict) or existing.get("started_at") != result.started_at:
+                continue
+            if (
+                existing.get("previous") != result.previous.to_dict()
+                or existing.get("current") != result.current.to_dict()
+            ):
+                raise UpgradeError(
+                    "upgrade history contains a conflicting result for this upgrade attempt"
+                )
+            return
         entries.append(result.to_dict())
         document = {"schema_version": self.SCHEMA_VERSION, "upgrades": entries}
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -94,6 +140,20 @@ class JsonUpgradeHistoryStore:
             encoding="utf-8",
         )
         temporary.replace(self.path)
+
+    def _entries(self) -> list[object]:
+        if not self.path.exists():
+            return []
+        try:
+            raw: object = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise UpgradeError(f"cannot read upgrade history: {exc}") from exc
+        if not isinstance(raw, dict) or raw.get("schema_version") != self.SCHEMA_VERSION:
+            raise UpgradeError("unsupported upgrade-history document")
+        persisted = raw.get("upgrades")
+        if not isinstance(persisted, list):
+            raise UpgradeError("upgrade history must contain an upgrades array")
+        return list(persisted)
 
 
 class UpgradeService:
@@ -131,11 +191,35 @@ class UpgradeService:
         """
 
         installed = self.version_state.read()
-        if installed != request.current:
+        maintenance_state = self.maintenance.read()
+        effective_request = replace(request, resume_failed=resume_failed)
+
+        if maintenance_state is not None:
+            if not resume_failed:
+                raise UpgradeError("deployment is already in upgrade maintenance mode")
+            if installed == maintenance_state.target:
+                return self._finalize_interrupted_activation(
+                    maintenance_state,
+                    effective_request,
+                    quiesced=quiesced,
+                )
+            if installed != maintenance_state.source:
+                raise UpgradeError(
+                    "installed version state matches neither source nor target of the active upgrade"
+                )
+            if (
+                request.current != maintenance_state.source
+                or request.target != maintenance_state.target
+            ):
+                raise UpgradeError(
+                    "active maintenance marker belongs to a different source/target upgrade"
+                )
+            effective_request = self._resume_request(effective_request, maintenance_state)
+        elif installed != request.current:
             raise UpgradeError(
                 "installed version state changed since the upgrade request was prepared; rerun preflight"
             )
-        effective_request = replace(request, resume_failed=resume_failed)
+
         report = self.preflight.run(effective_request)
         if not report.ok:
             failures = "; ".join(
@@ -144,39 +228,111 @@ class UpgradeService:
             raise UpgradeError(f"upgrade preflight failed: {failures}")
         if report.maintenance_required and not quiesced:
             raise UpgradeError("migration upgrade requires explicitly quiesced/drained work")
-        if self.maintenance.active() and not resume_failed:
-            raise UpgradeError("deployment is already in upgrade maintenance mode")
 
-        steps = self.migrations.plan(request.current.domain_schema, request.target.domain_schema)
-        started_at = _now()
-        if report.maintenance_required:
+        steps = self.migrations.plan(
+            effective_request.current.domain_schema,
+            effective_request.target.domain_schema,
+        )
+        started_at = maintenance_state.started_at if maintenance_state is not None else _now()
+        if report.maintenance_required and maintenance_state is None:
             self.maintenance.enter(
                 MaintenanceState(
                     started_at=started_at,
-                    source_release=request.current.platform_release,
-                    target_release=request.target.platform_release,
+                    source=effective_request.current,
+                    target=effective_request.target,
                     planned_revisions=report.planned_revisions,
-                ),
-                resume_existing=resume_failed,
+                    backup_dir=(
+                        str(effective_request.backup_dir)
+                        if effective_request.backup_dir is not None
+                        else None
+                    ),
+                )
             )
 
-        migration_context = context or MigrationContext(data_dir=request.data_dir)
-        applied = self.runner.apply(
+        migration_context = context or MigrationContext(data_dir=effective_request.data_dir)
+        self.runner.apply(
             steps,
             migration_context,
             resume_failed=resume_failed,
         )
 
-        # Version-state activation is intentionally after all migration validation. A failed
-        # migration therefore cannot advertise the target release/schema as active.
-        self.version_state.write(request.target)
         result = UpgradeResult(
             started_at=started_at,
             finished_at=_now(),
-            previous=request.current,
-            current=request.target,
-            applied_revisions=applied,
-            backup_dir=str(request.backup_dir) if request.backup_dir is not None else None,
+            previous=effective_request.current,
+            current=effective_request.target,
+            applied_revisions=report.planned_revisions,
+            backup_dir=(
+                str(effective_request.backup_dir)
+                if effective_request.backup_dir is not None
+                else None
+            ),
+            rollback_mode=_rollback_mode(steps),
+        )
+
+        # Persist the completed-attempt record before activating the target version vector. If
+        # either final metadata write is interrupted, the maintenance marker keeps the deployment
+        # fail-closed and a resume can deterministically finish activation without rerunning data
+        # mutations or inventing a second upgrade attempt.
+        self.history.append(result)
+        self.version_state.write(effective_request.target)
+        self.maintenance.clear()
+        return result
+
+    def _resume_request(
+        self,
+        request: PreflightRequest,
+        state: MaintenanceState,
+    ) -> PreflightRequest:
+        if state.backup_dir is None:
+            return request
+        recorded_backup = Path(state.backup_dir).expanduser().resolve()
+        if request.backup_dir is None:
+            return replace(request, backup_dir=recorded_backup)
+        supplied_backup = request.backup_dir.expanduser().resolve()
+        if supplied_backup != recorded_backup:
+            raise UpgradeError(
+                "resume must use the same verified backup recorded for the active upgrade attempt"
+            )
+        return request
+
+    def _finalize_interrupted_activation(
+        self,
+        state: MaintenanceState,
+        request: PreflightRequest,
+        *,
+        quiesced: bool,
+    ) -> UpgradeResult:
+        if not quiesced:
+            raise UpgradeError(
+                "finalizing an interrupted upgrade requires explicitly quiesced/drained work"
+            )
+        if request.target != state.target:
+            raise UpgradeError("active maintenance marker targets a different platform release")
+        steps = self.migrations.plan(state.source.domain_schema, state.target.domain_schema)
+        revisions = tuple(step.revision for step in steps)
+        if revisions != state.planned_revisions:
+            raise UpgradeError(
+                "active maintenance marker no longer matches the immutable migration registry"
+            )
+        records = {record.revision: record for record in self.runner.history.records()}
+        incomplete = [
+            revision
+            for revision in revisions
+            if revision not in records or records[revision].status is not MigrationStatus.APPLIED
+        ]
+        if incomplete:
+            raise UpgradeError(
+                "target version was activated before all planned migrations were recorded as applied: "
+                + ", ".join(incomplete)
+            )
+        result = UpgradeResult(
+            started_at=state.started_at,
+            finished_at=_now(),
+            previous=state.source,
+            current=state.target,
+            applied_revisions=state.planned_revisions,
+            backup_dir=state.backup_dir,
             rollback_mode=_rollback_mode(steps),
         )
         self.history.append(result)
