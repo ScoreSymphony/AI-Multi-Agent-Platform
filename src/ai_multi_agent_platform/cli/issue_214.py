@@ -374,7 +374,10 @@ def _execute_auth(
                     "profile": profile_name,
                     "authenticated": False,
                     "credential_revoked": False,
-                    "message": "local bearer credential cleared; use credential revoke to revoke it",
+                    "message": (
+                        "local bearer credential cleared; use credential revoke "
+                        "to revoke it"
+                    ),
                 }
             )
             return 0
