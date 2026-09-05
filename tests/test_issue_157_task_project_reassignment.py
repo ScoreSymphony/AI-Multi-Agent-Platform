@@ -65,7 +65,14 @@ async def _project(control_plane: ControlPlane, key: str, owner_type: str, owner
     )
 
 
-async def _task(kernel: PlatformKernel, key: str, project_id: str, *, owner_type: str = "user", owner_id: str = "user:alice"):
+async def _task(
+    kernel: PlatformKernel,
+    key: str,
+    project_id: str,
+    *,
+    owner_type: str = "user",
+    owner_id: str = "user:alice",
+):
     return await kernel.create_task(
         idempotency_key=key,
         title=key,
@@ -135,7 +142,9 @@ class _DenyDestination(FakeAuthorizationProvider):
             request.action == TASK_PROJECT_MOVE_ACTION
             and request.context.project_id == self.destination_project_id
         )
-        return AuthorizationDecision(allowed=not denied, reason="destination denied" if denied else None)
+        return AuthorizationDecision(
+            allowed=not denied, reason="destination denied" if denied else None
+        )
 
 
 def test_destination_authorization_is_checked_before_move() -> None:
@@ -164,8 +173,7 @@ def test_destination_authorization_is_checked_before_move() -> None:
             for event in await kernel.history(task.task_id)
         )
         assert any(
-            call.action == TASK_PROJECT_MOVE_ACTION
-            and call.context.project_id == destination.id
+            call.action == TASK_PROJECT_MOVE_ACTION and call.context.project_id == destination.id
             for call in authorization.calls
         )
 
@@ -202,9 +210,7 @@ def test_bidirectional_cross_organization_sharing_makes_projects_compatible() ->
             name="Destination", owner_actor_id="user:destination-owner"
         )
         control_plane, kernel, _ = _stack(organizations=organizations)
-        source = await _project(
-            control_plane, "source", "organization", source_org.id
-        )
+        source = await _project(control_plane, "source", "organization", source_org.id)
         destination = await _project(
             control_plane, "destination", "organization", destination_org.id
         )
@@ -427,7 +433,12 @@ def test_historical_plan_run_artifact_result_scope_is_retained_and_retry_uses_de
 
         history = await kernel.history(task.task_id)
         for event in history:
-            if event.event_type in {"plan.created", "run.created", "artifact.attached", "result.attached"}:
+            if event.event_type in {
+                "plan.created",
+                "run.created",
+                "artifact.attached",
+                "result.attached",
+            }:
                 assert event.project_id == source.id
 
         new_run = await kernel.retry_task(
