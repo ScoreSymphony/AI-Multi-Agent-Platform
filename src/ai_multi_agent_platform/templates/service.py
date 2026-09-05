@@ -119,13 +119,9 @@ class TemplateEnvironment:
             raise ValueError("Template capability version inventory IDs must be non-blank")
         for capability_id, versions in capability_versions.items():
             if any(not version.strip() for version in versions):
-                raise ValueError(
-                    f"Template capability versions must be non-blank: {capability_id}"
-                )
+                raise ValueError(f"Template capability versions must be non-blank: {capability_id}")
             if len(set(versions)) != len(versions):
-                raise ValueError(
-                    f"Template capability versions must be unique: {capability_id}"
-                )
+                raise ValueError(f"Template capability versions must be unique: {capability_id}")
         contracts = dict(self.contract_versions)
         if any(not name.strip() or not version.strip() for name, version in contracts.items()):
             raise ValueError("Template contract version inventory must use non-blank values")
@@ -563,13 +559,9 @@ class TemplateService:
                     "incompatible_capability_versions": list(
                         preview.incompatible_capability_versions
                     ),
-                    "incompatible_platform_versions": list(
-                        preview.incompatible_platform_versions
-                    ),
+                    "incompatible_platform_versions": list(preview.incompatible_platform_versions),
                     "missing_contract_versions": list(preview.missing_contract_versions),
-                    "incompatible_contract_versions": list(
-                        preview.incompatible_contract_versions
-                    ),
+                    "incompatible_contract_versions": list(preview.incompatible_contract_versions),
                     "missing_plugins": list(preview.missing_plugin_ids),
                     "missing_connectors": list(preview.missing_connector_ids),
                     "missing_model_policies": list(preview.missing_model_policy_refs),
