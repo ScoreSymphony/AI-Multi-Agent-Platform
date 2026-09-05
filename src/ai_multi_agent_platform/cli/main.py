@@ -54,6 +54,7 @@ def run_cli(
     transport: HTTPTransport | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    stdin: TextIO | None = None,
 ) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -63,6 +64,9 @@ def run_cli(
         stdout=stdout,
         stderr=stderr,
     )
+    previous_stdin = sys.stdin
+    if stdin is not None:
+        sys.stdin = stdin
     try:
         store = ProfileStore.load(Path(args.config).expanduser())
         if args.area == "profile":
@@ -99,6 +103,9 @@ def run_cli(
     except TransportError as exc:
         renderer.error(exc)
         return 4
+    finally:
+        if stdin is not None:
+            sys.stdin = previous_stdin
 
 
 def _build_parser() -> argparse.ArgumentParser:

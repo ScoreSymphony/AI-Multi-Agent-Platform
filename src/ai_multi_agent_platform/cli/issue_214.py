@@ -60,6 +60,7 @@ def run_cli(
             transport=transport,
             stdout=stdout,
             stderr=stderr,
+            stdin=stdin,
         )
 
     parser = _build_parser()
@@ -123,6 +124,7 @@ def _run_legacy_authenticated(
     transport: HTTPTransport | None,
     stdout: TextIO | None,
     stderr: TextIO | None,
+    stdin: TextIO | None,
 ) -> int:
     base_transport = transport or UrllibTransport()
     try:
@@ -141,6 +143,7 @@ def _run_legacy_authenticated(
         transport=resolved_transport,
         stdout=stdout,
         stderr=stderr,
+        stdin=stdin,
     )
 
 
