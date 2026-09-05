@@ -81,8 +81,8 @@ class FormatTranslatorRegistry:
     ) -> object:
         path = self.path(from_version, to_version)
         translated = payload
-        for source, destination in zip(path, path[1:], strict=True):
-            translated = self._edges[(source, destination)](translated)
+        for index in range(len(path) - 1):
+            translated = self._edges[(path[index], path[index + 1])](translated)
         return translated
 
 
