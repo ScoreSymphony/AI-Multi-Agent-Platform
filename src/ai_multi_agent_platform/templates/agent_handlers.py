@@ -159,8 +159,8 @@ class AgentTemplateExporter:
             configuration=TemplateConfiguration(
                 payload={
                     "profile": profile,
-                    "project_id": source.project_id,
-                    "workspace_id": source.workspace_id,
+                    "project_id": None,
+                    "workspace_id": None,
                 }
             ),
             requirements=requirements,
@@ -172,6 +172,8 @@ class AgentTemplateExporter:
                     "source_resource_type": "agent",
                     "source_resource_id": source.agent_id,
                     "source_resource_revision": source.revision,
+                    "source_project_id": source.project_id,
+                    "source_workspace_id": source.workspace_id,
                 },
             ),
             tags=("agent", "exported"),
@@ -179,7 +181,6 @@ class AgentTemplateExporter:
         return self.templates.create_draft(
             owner_ref=owner_ref,
             content=content,
-            project_id=source.project_id,
         )
 
 
