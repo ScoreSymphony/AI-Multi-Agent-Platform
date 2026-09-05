@@ -200,7 +200,9 @@ async def _knowledge(
             "vector_collection": "provider-private-vector-collection",
         },
     )
-    await provider.register_source(source, _access(owner_id=owner_ref.split(":", 1)[1], project_id=project_id))
+    await provider.register_source(
+        source, _access(owner_id=owner_ref.split(":", 1)[1], project_id=project_id)
+    )
     document = await provider.ingest_source(
         source.source_id,
         "knowledge-private-content-needle that must stay outside global Search",
@@ -261,6 +263,10 @@ def test_memory_and_knowledge_are_discoverable_by_canonical_identity_without_pri
 
         by_title = await _search(http, type="knowledge-document", q="Canonical research notes")
         assert {item["resource_id"] for item in _items(by_title)} == {document_id}
+        by_origin = await _search(http, type="memory", q=MemoryOrigin.USER_AUTHORED.value)
+        assert memory.memory_id in {item["resource_id"] for item in _items(by_origin)}
+        by_source_id = await _search(http, type="knowledge-document", q=source.source_id)
+        assert {item["resource_id"] for item in _items(by_source_id)} == {document_id}
 
         for private_needle in (
             "memory-private-content-needle",
@@ -460,15 +466,15 @@ def test_memory_updates_and_knowledge_detach_or_reindex_replace_search_documents
             _access(project_id=project.id),
         )
         assert (await _search(http, type="knowledge-document", id=document_id))["total"] == 0
-        assert (
-            await _search(http, type="knowledge-document", id=new_document.document_id)
-        )["total"] == 1
+        assert (await _search(http, type="knowledge-document", id=new_document.document_id))[
+            "total"
+        ] == 1
 
         await providers.knowledge.remove_source(source.source_id, _access(project_id=project.id))
         assert (await _search(http, type="knowledge-source", id=source.source_id))["total"] == 0
-        assert (
-            await _search(http, type="knowledge-document", id=new_document.document_id)
-        )["total"] == 0
+        assert (await _search(http, type="knowledge-document", id=new_document.document_id))[
+            "total"
+        ] == 0
 
     asyncio.run(scenario())
 
