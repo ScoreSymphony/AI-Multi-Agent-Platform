@@ -9,6 +9,11 @@ from .aggregation import (
     ResultAggregator,
 )
 from .aggregation_config import load_aggregation_policy, parse_aggregation_policy
+from .behavior_evidence import (
+    ApprovalEvidenceCaseExecutor,
+    ApprovalRecordReader,
+    DistributedRuntimeEvidenceCaseExecutor,
+)
 from .ci_gate import EvaluationCIGateReport, run_reference_ci_gate
 from .config import (
     EvaluationBaseline,
@@ -108,6 +113,8 @@ __all__ = [
     "AggregationMethod",
     "AggregationPolicy",
     "AggregationSampleRef",
+    "ApprovalEvidenceCaseExecutor",
+    "ApprovalRecordReader",
     "AssertionResult",
     "AsyncEvaluator",
     "ComparisonFinding",
@@ -118,6 +125,7 @@ __all__ = [
     "ConfigurationSnapshot",
     "DeterministicAssertion",
     "DeterministicAssertionEvaluator",
+    "DistributedRuntimeEvidenceCaseExecutor",
     "EvaluationAttempt",
     "EvaluationBaseline",
     "EvaluationCIGateReport",
