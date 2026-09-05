@@ -13,7 +13,11 @@ from typing import Any
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext, OperationControl
 from ai_multi_agent_platform.security.approval_control_plane import ApprovalResourceService
-from ai_multi_agent_platform.security.authorization import ActorIdentity, ActorType, infer_actor_identity
+from ai_multi_agent_platform.security.authorization import (
+    ActorIdentity,
+    ActorType,
+    infer_actor_identity,
+)
 from ai_multi_agent_platform.security.enforcement import AuthorizationGate
 
 from .conversation_current_composition import (
