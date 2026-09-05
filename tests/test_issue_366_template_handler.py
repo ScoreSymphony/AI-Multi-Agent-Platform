@@ -131,9 +131,7 @@ def test_capability_assignment_template_uses_canonical_service_without_shadow_st
                     "required": ({"capability_id": "tool.echo"},),
                 }
             ),
-            requirements=TemplateRequirements(
-                capabilities=(CapabilityRequirement("tool.echo"),)
-            ),
+            requirements=TemplateRequirements(capabilities=(CapabilityRequirement("tool.echo"),)),
         ),
     )
     published = application.templates.publish(draft.template_id, expected_revision=1)
