@@ -1,0 +1,117 @@
+name: Issue governance
+
+on:
+  issues:
+    types: [opened, edited, reopened, labeled, unlabeled, milestoned, demilestoned]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate planning metadata and issue structure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const labels = issue.labels.map((label) => label.name);
+            const body = issue.body || '';
+            const errors = [];
+
+            for (const prefix of ['type:', 'area:', 'stage:']) {
+              const matches = labels.filter((label) => label.startsWith(prefix));
+              if (matches.length !== 1) {
+                errors.push(`assign exactly one \`${prefix}*\` label (found ${matches.length})`);
+              }
+            }
+
+            if (!issue.milestone) {
+              errors.push('assign the milestone whose outcome this issue must satisfy');
+            }
+
+            for (const heading of [
+              '## Hard dependencies',
+              '## Acceptance criteria',
+              '## Required tests',
+              '## Definition of Done',
+            ]) {
+              if (!body.includes(heading)) {
+                errors.push(`add the \`${heading}\` section`);
+              }
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = issue.number;
+            const marker = '<!-- issue-governance -->';
+            const governanceLabel = 'needs: metadata';
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.user.type === 'Bot' && comment.body.includes(marker)
+            );
+
+            if (errors.length > 0) {
+              if (!labels.includes(governanceLabel)) {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number,
+                  labels: [governanceLabel],
+                });
+              }
+
+              const message = [
+                marker,
+                'This issue does not yet satisfy the repository planning contract:',
+                '',
+                ...errors.map((error) => `- ${error}`),
+                '',
+                'Update the issue body and metadata; this check will resolve automatically.',
+              ].join('\n');
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body: message,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number,
+                  body: message,
+                });
+              }
+
+              core.setFailed(errors.join('; '));
+              return;
+            }
+
+            if (labels.includes(governanceLabel)) {
+              await github.rest.issues.removeLabel({
+                owner,
+                repo,
+                issue_number,
+                name: governanceLabel,
+              });
+            }
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body: `${marker}\nIssue planning metadata and required sections are complete.`,
+              });
+            }

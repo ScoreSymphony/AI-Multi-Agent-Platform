@@ -71,19 +71,9 @@ A public or open-source repository is not automatically safe to copy. Prefer the
 
 ## Current implementation status
 
-As of 2026-09-03, the completed substantive baseline includes #1–#7, #9–#13, #15–#17, #32, #34, #35, #37, #43, #73, #76 and #88.
+Implementation status is intentionally not duplicated in this file because it changes faster than repository rules. The current GitHub issue state and milestone assignment are authoritative; [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) explains the dependency-driven execution lanes and convergence gates.
 
-The highest-leverage current parallel lanes are:
-
-- #36 Authentication and session management;
-- #33 canonical Agent/AgentTeam runtime;
-- #14 Node/Worker protocol and scheduling;
-- #18 Automations and trigger-driven Task creation;
-- #20 Plugin/extension runtime.
-
-Additional ready work includes #19 Evaluation/Regression, #45 Search and #74 Browser. #38 CLI remains a progressive open client lane and should consume canonical Authentication/Agent/Worker APIs as they land rather than invent temporary private equivalents.
-
-Always re-check [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) and the target issue immediately before assigning an agent, because newly merged work can move the execution frontier without any change in issue numbering.
+Always re-check the roadmap, the target milestone and the target issue immediately before assigning work. Newly merged changes can move the execution frontier without any change in issue numbering.
 
 ## Source layout direction
 
