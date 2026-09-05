@@ -629,10 +629,14 @@ def _metric_mapping(
 
 
 def _aggregation_mode(metric: MetricRecord) -> AggregationMode:
-    if metric.name in {
-        "platform.node.reported_resource",
-        "platform.worker.reported_resource",
-    } | _RUNTIME_GAUGE_METRICS:
+    if (
+        metric.name
+        in {
+            "platform.node.reported_resource",
+            "platform.worker.reported_resource",
+        }
+        | _RUNTIME_GAUGE_METRICS
+    ):
         return AggregationMode.LATEST
     return AggregationMode.ADDITIVE
 
