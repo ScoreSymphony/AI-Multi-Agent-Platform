@@ -195,33 +195,34 @@ def test_custom_suite_and_fixture_are_loaded_into_isolated_product_path(tmp_path
         assert all(result["outcome"] == "passed" for result in results)
         run_id = str(executed.body["id"])
 
-        first_binding_ids = [
-            event.payload["workspace_id"]
-            for event in await deployment.kernel_repository.list_events()
-            if event.event_type == "run.workspace_bound"
-            and event.payload.get("evaluation_run_id") == run_id
-        ]
-        # Workspace isolation is independently evidenced by the Evaluation assertions and
-        # durable Run bindings; repetitions must not reuse one exact workspace target.
-        bindings = [
-            result["assertions"]
+        deterministic_results = [
+            result
             for result in results
             if result["evaluator"]["evaluator_id"] == "reference.deterministic"
         ]
         workspace_ids = {
             assertion["actual"]
-            for assertion_group in bindings
-            for assertion in assertion_group
+            for result in deterministic_results
+            for assertion in result["assertions"]
             if assertion["assertion_id"] == "workspace-bound"
         }
         assert len(workspace_ids) == 2
-        assert first_binding_ids == [] or len(set(first_binding_ids)) == len(first_binding_ids)
+        canonical_run_ids = {str(result["run_id"]) for result in deterministic_results}
+        assert len(canonical_run_ids) == 2
+        bound_workspace_ids = {
+            (await deployment.run_workspace_bindings.get(canonical_run_id)).workspace_id
+            for canonical_run_id in canonical_run_ids
+            if await deployment.run_workspace_bindings.get(canonical_run_id) is not None
+        }
+        assert bound_workspace_ids == workspace_ids
 
         restarted = build_single_node_deployment(config)
         detail = restarted.evaluation.get_run_detail(run_id)
         assert detail.run.status.value == "completed"
         assert len(detail.results) == 4
         assert restarted.evaluation.get_suite("custom.fixture@1.0").suite_id == "custom.fixture"
+        for canonical_run_id in canonical_run_ids:
+            assert await restarted.run_workspace_bindings.get(canonical_run_id) is not None
 
     asyncio.run(scenario())
 
@@ -346,18 +347,23 @@ def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
         assert isinstance(results, list)
         assert all(result["outcome"] == "passed" for result in results)
         snapshot = executed.body["snapshot"]
-        refs = {(item["kind"], item["ref_id"], item["version"]) for item in snapshot["references"]}
+        refs = {
+            (item["kind"], item["ref_id"], item["version"])
+            for item in snapshot["references"]
+        }
         assert ("agent", assistant.agent_id, str(assistant.revision)) in refs
         assert ("model", "model-evaluation-target", "1") in refs
-        assert any(kind == "provider" and ref_id == "local-evaluation-provider" for kind, ref_id, _ in refs)
+        assert any(
+            kind == "provider" and ref_id == "local-evaluation-provider"
+            for kind, ref_id, _ in refs
+        )
         assert ("prompt_config", "evaluation-target-prompt", "1.0") in refs
         assert any(call[1].endswith("/chat/completions") for call in restarted_transport.calls)
-        agent_runs = deployment.agents.repository.list_agent_runs(str(executed.body["run_id"])) if "run_id" in executed.body else ()
-        if not agent_runs:
-            detail = deployment.evaluation.get_run_detail(str(executed.body["id"]))
-            canonical_run_ids = {result.run_id for result in detail.results if result.run_id is not None}
-            assert len(canonical_run_ids) == 1
-            agent_runs = deployment.agents.repository.list_agent_runs(next(iter(canonical_run_ids)))
+
+        detail = deployment.evaluation.get_run_detail(str(executed.body["id"]))
+        canonical_run_ids = {result.run_id for result in detail.results if result.run_id is not None}
+        assert len(canonical_run_ids) == 1
+        agent_runs = deployment.agents.repository.list_agent_runs(next(iter(canonical_run_ids)))
         assert len(agent_runs) == 1
         assert agent_runs[0].agent.agent_id == assistant.agent_id
         assert agent_runs[0].selected_model_config_id == "model-evaluation-target"
