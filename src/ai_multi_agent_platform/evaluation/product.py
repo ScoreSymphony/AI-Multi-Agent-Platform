@@ -303,11 +303,37 @@ class EvaluationTargetSnapshotEnricher:
                     else frozenset()
                 ),
             )
-            references.append(
-                VersionReference(
-                    kind="agent",
-                    ref_id=spec.agent_revision.agent_id,
-                    version=str(spec.agent_revision.revision),
+            instructions = spec.agent_revision.profile.instructions
+            prompt_config_payload = {
+                "role": {
+                    "content": instructions.role.content,
+                    "ref": instructions.role.ref,
+                    "version": instructions.role.version,
+                },
+                "platform_constraint_refs": list(instructions.platform_constraint_refs),
+                "project_instruction_refs": list(instructions.project_instruction_refs),
+            }
+            prompt_config_digest = hashlib.sha256(
+                json.dumps(
+                    prompt_config_payload,
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            references.extend(
+                (
+                    VersionReference(
+                        kind="agent",
+                        ref_id=spec.agent_revision.agent_id,
+                        version=str(spec.agent_revision.revision),
+                    ),
+                    VersionReference(
+                        kind="prompt_config",
+                        ref_id=f"{spec.agent_revision.agent_id}:instructions",
+                        version=str(spec.agent_revision.revision),
+                        revision=f"sha256:{prompt_config_digest}",
+                    ),
                 )
             )
             if spec.selected_model_config_id is None or spec.selected_provider_id is None:
