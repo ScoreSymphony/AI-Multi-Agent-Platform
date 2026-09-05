@@ -448,7 +448,9 @@ def _execute_auth(
                     mode="bearer",
                     bearer_token=secret,
                     credential_id=credential_id,
-                    expires_at=(credential_expires_at if isinstance(credential_expires_at, str) else None),
+                    expires_at=(
+                        credential_expires_at if isinstance(credential_expires_at, str) else None
+                    ),
                 ),
             )
             safe_body = dict(response_body)
