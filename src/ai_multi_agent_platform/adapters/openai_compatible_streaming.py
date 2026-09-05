@@ -25,10 +25,12 @@ from ai_multi_agent_platform.contracts import (
 
 from .openai_compatible import (
     HttpJsonResponse,
-    OpenAICompatibleModelProvider as _BaseOpenAICompatibleModelProvider,
     OpenAICompatibleProviderConfig,
     OpenAICompatibleTransport,
     UrllibOpenAICompatibleTransport,
+)
+from .openai_compatible import (
+    OpenAICompatibleModelProvider as _BaseOpenAICompatibleModelProvider,
 )
 
 
