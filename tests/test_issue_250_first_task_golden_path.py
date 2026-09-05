@@ -214,9 +214,12 @@ def test_first_general_assistant_task_produces_visible_canonical_result_and_surv
             _context(admin.user_id, "restart-provider-health"),
             "local-openai",
         )
-        assert restarted.onboarding.status(
-            _context(admin.user_id, "restart-status-after-health")
-        )["state"] == "ready_for_task"
+        assert (
+            restarted.onboarding.status(_context(admin.user_id, "restart-status-after-health"))[
+                "state"
+            ]
+            == "ready_for_task"
+        )
 
         second = await restarted.control_plane.execute_command(
             _context(admin.user_id, "issue-250-second-task"),
