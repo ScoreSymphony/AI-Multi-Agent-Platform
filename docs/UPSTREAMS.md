@@ -61,7 +61,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 ### Model Context Protocol Python SDK
 
 - **Purpose:** optional concrete MCP transport for stdio subprocess and Streamable HTTP tool providers.
-- **Status:** integrated through #12 (PR #120).
+- **Status:** integrated through #12.
 - **Integration category/categories:** optional adapter/library dependency.
 - **Canonical upstream repository:** `https://github.com/modelcontextprotocol/python-sdk`.
 - **Pinned version/tag/commit or deployed revision:** `2.1.1`.
@@ -172,7 +172,7 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT | no |
 | mypy | static type checking | `>=1.17,<3` | `https://github.com/python/mypy` | MIT | no |
-| uvicorn | ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause | no |
+| uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause | no |
 
 The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Architecture-significant #11/#12 dependencies are pinned directly; their transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
 
