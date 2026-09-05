@@ -55,6 +55,7 @@ from ai_multi_agent_platform.repositories import (
     RepositoryRegistry,
     RepositoryRunIntegration,
     RepositoryService,
+    RepositoryWorkspaceExecutionCoordinator,
     RepositoryWorkspaceSourceResolver,
     SqliteRepositoryBindingCatalog,
     SqliteRepositoryProvenanceStore,
@@ -143,6 +144,7 @@ class SingleNodeDeployment:
     repositories: RepositoryService
     repository_management: RepositoryManagementService
     repository_run_integration: RepositoryRunIntegration
+    repository_workspace_execution: RepositoryWorkspaceExecutionCoordinator
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
@@ -278,6 +280,12 @@ def build_single_node_deployment(
     repository_provenance = SqliteRepositoryProvenanceStore(
         database_dir / "repository-provenance.sqlite3"
     )
+    repository_workspace_execution = RepositoryWorkspaceExecutionCoordinator(
+        run_workspace_bindings,
+        workspaces,
+        repository_provenance,
+        fallback_workspace=_REFERENCE_EXECUTION_WORKSPACE,
+    )
 
     agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
     conversations = ConversationService(
@@ -330,14 +338,16 @@ def build_single_node_deployment(
         templates.templates,
     )
 
-    execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
+    execution_workspace = workspaces.materialization_root / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
     orchestrator = ReferenceOrchestrator()
-    reference_executor = ReferenceExecutor(config.executor_dir)
+    reference_executor = ReferenceExecutor(workspaces.materialization_root)
     reference_lifecycle = ExecutorLifecycleBackend(
         reference_executor,
         workspace=_REFERENCE_EXECUTION_WORKSPACE,
         action="echo",
+        workspace_resolver=repository_workspace_execution.resolve_execution_workspace,
+        terminal_result_observer=repository_workspace_execution.observe_terminal_result,
     )
     lifecycle = FirstRunAgentLifecycleBackend(
         delegate=reference_lifecycle,
@@ -396,6 +406,7 @@ def build_single_node_deployment(
         files,
         kernel,
     )
+    repository_workspace_execution.configure_run_integration(repository_run_integration)
 
     portability_workflow = build_agent_portability_workflow(
         agents=agents.repository,
@@ -509,6 +520,7 @@ def build_single_node_deployment(
         repositories=repositories,
         repository_management=repository_management,
         repository_run_integration=repository_run_integration,
+        repository_workspace_execution=repository_workspace_execution,
         agents=agents,
         conversations=conversations,
         agent_runtime=agent_runtime,
