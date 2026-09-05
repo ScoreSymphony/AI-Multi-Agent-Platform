@@ -1,17 +1,18 @@
 # Connector discovery in global Search
 
-This document defines the issue #45 Search integration for the canonical connector framework from issue #44.
+This document defines the canonical Search integration for the Connector framework from issue #44, including durable `ExternalResourceReference` discovery from issue #292.
 
 ## Canonical source boundary
 
-Search consumes connector resources only through the canonical Connector Control Plane registration. It does not query connector adapters, remote services, provider SDKs or synchronization payloads directly.
+Search consumes connector resources only through canonical Connector Control Plane registrations. It does not query connector adapters, remote services, provider SDKs, transient `list_resources` results or synchronization response payloads directly.
 
-The currently searchable canonical resource types are:
+The searchable canonical resource types are:
 
 - `connector-definition` from `/api/v1/connector-definitions/{id}`;
-- `connection` from `/api/v1/connections/{id}`.
+- `connection` from `/api/v1/connections/{id}`;
+- `external-resource` from `/api/v1/external-resources/{id}` when the wrapper has first been persisted by the Connector domain.
 
-Connector Definitions and Connections now carry explicit canonical `type` fields so they can participate in the generic registered-resource Search contract without Search inferring identity from URL collection names.
+Search remains derived state. Connector Definitions, Connections and durable External Resource References remain authoritative in the Connector domain.
 
 ## Connector Definitions
 
@@ -25,17 +26,9 @@ Nested configuration schemas, health-semantics objects, authentication configura
 
 ## Connections
 
-Normal Connection collection reads remain actor-filtered by `ConnectorService`.
+Normal Connection collection reads remain actor-filtered by `ConnectorService` and the Control Plane authorization boundary.
 
-A Search rebuild needs a complete derived index and cannot invent a privileged synthetic actor. `ConnectionResourceService.list_search_resources()` therefore exposes a dedicated internal rebuild projection containing only:
-
-- canonical Connection ID and type;
-- connector type/version identity;
-- owner and Project scope;
-- display name;
-- requested/granted scope names;
-- enabled/status/health state;
-- update/revision metadata.
+A Search rebuild needs a complete derived index and cannot invent a privileged synthetic actor. `ConnectionResourceService.list_search_resources()` therefore exposes a dedicated internal rebuild projection containing only safe canonical metadata and scope information. Caller-visible Search results are still authorized per result before counts or exact-ID matches are returned.
 
 The rebuild projection intentionally excludes:
 
@@ -43,31 +36,73 @@ The rebuild projection intentionally excludes:
 - endpoint metadata;
 - account/adapter metadata;
 - credential material;
-- provider-native account IDs;
-- arbitrary remote resource payloads.
+- provider-private payloads.
 
-Search authorization is still evaluated per result before result counts or exact-ID matches become caller-visible. The rebuild enumerator is therefore an indexing seam, not an authorization bypass.
+Organization-scoped Connections participate in Search only through the live Organization visibility seam from #87. Suspended or removed Memberships therefore lose future discovery visibility without rewriting canonical Connection ownership.
 
-## Organization-scoped Connections
+## Durable External Resource References
 
-Organization-scoped Connections are intentionally excluded from the Search rebuild in this slice.
+`ExternalResourceReference` is a platform-owned wrapper around provider-native identity. Its canonical `external_resource_*` ID is the only primary platform/Search identity. Provider-native identity remains namespaced metadata (`namespace` + `native_id`) and may be used as safe discovery text without replacing the canonical ID.
 
-Issue #87 owns Organization/Team/Membership visibility, including removed and suspended memberships. Until that authorization context is available to the global Search result check, indexing Organization-scoped Connections would risk treating owner/Project visibility as a substitute for Organization membership.
+Durable wrapper creation/update occurs only at an explicit canonical persistence seam:
 
-After #87 is integrated with Search, Organization-scoped Connections can be added without changing their canonical identity.
+- validated Connector synchronization results are persisted after contract validation;
+- incremental/resync modes upsert returned wrappers;
+- an authoritative `rebuild` replaces the owning Connection's durable wrapper set so disappeared remote resources do not leave stale local discovery state.
 
-## External Resource References
+Live adapter `list_resources`, provider `read_resource` responses and action-returned references are not silently promoted into durable Search resources. A provider result becomes globally discoverable only after the Connector domain persists it canonically.
 
-Issue #44 defines `ExternalResourceReference`, but the current Connector repository persists Connector Definitions, Connections and synchronization checkpoints only. External Resource References currently appear in connector synchronization results and are not exposed as a durable listable canonical `ResourceService` collection.
+### Control Plane projection
 
-Global Search therefore does **not** crawl sync responses, adapter state or remote resources to manufacture an external-resource index. External Resource References become eligible for Search only after their owning domain exposes a durable privacy-aware northbound enumeration contract.
+`/api/v1/external-resources` and `/api/v1/external-resources/{id}` expose a privacy-minimal wrapper projection:
 
-## Rebuild and deletion
+- canonical wrapper ID/type;
+- owning Connection ID;
+- declared external resource type;
+- namespaced provider-native reference;
+- safe version/revision metadata;
+- safe canonical URL only when it contains no userinfo, query or fragment;
+- owner, Project and Organization scope inherited from the canonical Connection.
 
-Connections are derived from the canonical Connector repository on every full Search rebuild. Removing a Connection removes it from the next rebuilt index. Connector Definitions likewise come from the canonical definition repository.
+Arbitrary provider metadata, provenance payloads, adapter metadata, credentials and secret references are deliberately absent from this northbound discovery projection.
 
-The Search index remains derived and reconstructable; connector adapters and Search backends remain replaceable.
+### Search projection
+
+Search indexes only the durable wrapper projection and may use the following safe fields for discovery:
+
+- canonical wrapper ID;
+- Connection ID;
+- external resource type;
+- native namespace and native ID;
+- external version/revision;
+- owner/Project/Organization scope.
+
+Arbitrary remote content, provider-private metadata/provenance, credential material and unsafe URLs are not indexed.
+
+## Authorization and non-disclosure
+
+Direct Control Plane list/read and global Search re-evaluate canonical scope before caller-visible counts or exact-ID existence are returned.
+
+For External Resource References this includes:
+
+- owning Connection visibility;
+- owner/Project authorization through the canonical Control Plane authorization provider;
+- live Organization membership/visibility from #87 when `organization_id` is present.
+
+An unauthorized canonical wrapper therefore does not appear in list totals, exact reads or Search results. Search's actor-independent rebuild enumerator is an indexing seam only; it does not grant access.
+
+## Detach, deletion and rebuild
+
+`external-resource.detach` removes only the platform-owned canonical wrapper. It never deletes or mutates the provider-native remote resource.
+
+Removing a Connection cascades removal of its durable External Resource References. A subsequent Search rebuild therefore cannot retain stale wrappers. `remove_connection_if_unused` also refuses compensation once durable references exist, preserving import/lifecycle safety.
+
+A full Search rebuild reconstructs External Resource Search state solely from `ConnectorRepository.list_external_resources()`. Detach, authoritative Connector rebuild and Connection removal are therefore reflected deterministically without Search becoming lifecycle authority.
+
+## Remote-provider search remains separate
+
+Provider-native or remote search/list operations remain Connector capabilities and may return transient results for the current operation. They are not merged into the local canonical Search index unless their references pass through the explicit durable persistence lifecycle above.
 
 ## Cost and provider constraints
 
-This integration adds no external Search service, vector database, embedding requirement or paid dependency. Connector discovery works with the existing local SearchProvider baseline and remains compatible with optional future Search providers.
+This integration adds no external Search service, vector database, embedding requirement or paid dependency. Connector discovery works with the existing local `SearchProvider` baseline and remains compatible with replaceable future Search providers.

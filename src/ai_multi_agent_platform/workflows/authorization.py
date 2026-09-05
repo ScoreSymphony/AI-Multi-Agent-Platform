@@ -127,21 +127,6 @@ class AuthorizedWorkflowService:
         )
         return self.workflows.resolve(reference)
 
-    async def list_revisions(
-        self,
-        workflow_id: str,
-        *,
-        context: WorkflowCallContext,
-    ) -> tuple[WorkflowRevision, ...]:
-        definition = self.workflows.get(workflow_id)
-        await self._enforce_definition(
-            definition,
-            AuthorizationAction.READ,
-            context,
-            payload={"revision_history": True},
-        )
-        return self.workflows.list_revisions(workflow_id)
-
     async def admit(
         self,
         reference: WorkflowRevisionRef,
