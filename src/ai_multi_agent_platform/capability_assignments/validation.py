@@ -30,7 +30,9 @@ def validate_capability_rules(
 
 
 def assignment_risk(content: CapabilityAssignmentContent) -> RiskClassification:
-    if any(item.privileged or item.approval_required for item in content.required + content.allowed):
+    if any(
+        item.privileged or item.approval_required for item in content.required + content.allowed
+    ):
         return RiskClassification.HIGH
     return RiskClassification.ELEVATED
 
@@ -59,7 +61,10 @@ def _validate_rule(
             ErrorCode.INVALID_CONFIGURATION,
             f"capability {rule.capability_id!r} requires explicit privileged assignment metadata",
         )
-    if any(capability.required_approvals for capability in matches) and not rule.approval_required:
+    if (
+        any(capability.required_approvals for capability in matches)
+        and not rule.approval_required
+    ):
         raise ContractError(
             ErrorCode.INVALID_CONFIGURATION,
             f"capability {rule.capability_id!r} requires explicit approval metadata",
