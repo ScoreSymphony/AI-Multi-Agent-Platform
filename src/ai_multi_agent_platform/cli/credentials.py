@@ -42,7 +42,7 @@ class CredentialState:
             raise ProfileError(f"unsupported CLI authentication mode: {self.mode}")
 
     def to_json(self) -> dict[str, str]:
-        payload = {"mode": self.mode}
+        payload: dict[str, str] = {"mode": self.mode}
         for key, value in (
             ("session_cookie", self.session_cookie),
             ("csrf_token", self.csrf_token),
