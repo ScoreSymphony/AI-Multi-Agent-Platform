@@ -46,6 +46,7 @@ class AuthorizationAction(StrEnum):
     DISPATCH = "dispatch"
     INVOKE_SENSITIVE_CAPABILITY = "invoke_sensitive_capability"
     RESULT_READ = "result:read"
+    MODEL_PROVIDER_REFRESH_HEALTH = "model-provider:refresh-health"
     ONBOARDING_CONFIGURE_MODEL = "onboarding.configure-model"
     ONBOARDING_RUN_FIRST_TASK = "onboarding.run-first-task"
     VERIFICATION_POLICY_LIST = "verification-policy:list"

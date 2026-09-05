@@ -191,7 +191,8 @@ def test_first_general_assistant_task_produces_visible_canonical_result_and_surv
         assert generation_payload is not None
         assert generation_payload["model"] == "qwen-local"
 
-        restarted = _build(data_dir, FirstTaskTransport(answer="unused after restart"))
+        restarted_transport = FirstTaskTransport(answer="second local answer")
+        restarted = _build(data_dir, restarted_transport)
         restarted_task = await restarted.kernel.get_task(task_id)
         restarted_run = await restarted.kernel.get_run(task_id, run_id)
         assert restarted_task.result_ids == (result_id,)
@@ -202,8 +203,67 @@ def test_first_general_assistant_task_produces_visible_canonical_result_and_surv
             result_id,
         )
         assert restarted_result == result_resource
-        assert restarted.onboarding.status(_context(admin.user_id, "restart-status"))["state"] == (
-            "ready_for_task"
+
+        restart_status = restarted.onboarding.status(
+            _context(admin.user_id, "restart-status-before-health")
         )
+        assert restart_status["state"] == "needs_model"
+        assert restart_status["usable_golden_path_model_count"] == 0
+
+        await restarted.control_plane.refresh_model_provider_health(
+            _context(admin.user_id, "restart-provider-health"),
+            "local-openai",
+        )
+        assert (
+            restarted.onboarding.status(_context(admin.user_id, "restart-status-after-health"))[
+                "state"
+            ]
+            == "ready_for_task"
+        )
+
+        second = await restarted.control_plane.execute_command(
+            _context(admin.user_id, "issue-250-second-task"),
+            ONBOARDING_RUN_FIRST_TASK_COMMAND,
+            FIRST_RUN_RESOURCE_ID,
+            {
+                "objective": "Answer with a second short local response.",
+                "project_id": project.id,
+                "workspace_id": workspace.id,
+                "agent_id": assistant.agent_id,
+            },
+        )
+        second_task_id = str(second["task_id"])
+        second_run_id = str(second["run_id"])
+        second_result_id = str(second["result_id"])
+        assert second_task_id != task_id
+        assert second_run_id != run_id
+        assert second_result_id != result_id
+        assert second["task_status"] == "succeeded"
+        assert second["run_status"] == "succeeded"
+        second_output = second["output"]
+        assert isinstance(second_output, dict)
+        assert second_output["text"] == "second local answer"
+        assert second_output["model_ref"] == "model-qwen-local"
+        assert second_output["result_id"] == second_result_id
+
+        persisted_second_task = await restarted.kernel.get_task(second_task_id)
+        persisted_second_run = await restarted.kernel.get_run(second_task_id, second_run_id)
+        assert persisted_second_task.result_ids == (second_result_id,)
+        assert persisted_second_run.output["text"] == "second local answer"
+        second_result_resource = await restarted.control_plane.get_reference(
+            _context(admin.user_id, "read-second-result"),
+            "results",
+            second_result_id,
+        )
+        assert second_result_resource == {
+            "id": second_result_id,
+            "type": "result",
+            "task_id": second_task_id,
+        }
+        restarted_generation_calls = [
+            call for call in restarted_transport.calls if call[1].endswith("/chat/completions")
+        ]
+        assert len(restarted_generation_calls) == 1
+        assert any(call[1].endswith("/models") for call in restarted_transport.calls)
 
     asyncio.run(scenario())
