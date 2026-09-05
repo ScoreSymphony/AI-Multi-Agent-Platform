@@ -3,8 +3,6 @@ name: Issue 87 finalizer
 on:
   push:
     branches: [feat/issue-87-organization-membership]
-    paths:
-      - .github/workflows/issue87-finalize.yml
 
 permissions:
   contents: write
