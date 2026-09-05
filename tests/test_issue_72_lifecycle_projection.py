@@ -106,14 +106,9 @@ def test_lifecycle_stream_materializes_run_artifact_and_result_references(tmp_pa
     )
     projected = _run(_collect(stream))
 
-    by_type = {
-        cast(dict[str, JsonValue], item["event"])["event_type"]: item
-        for item in projected
-    }
+    by_type = {cast(dict[str, JsonValue], item["event"])["event_type"]: item for item in projected}
     run_refs = cast(list[dict[str, JsonValue]], by_type["run.created"]["references"])
-    artifact_refs = cast(
-        list[dict[str, JsonValue]], by_type["artifact.attached"]["references"]
-    )
+    artifact_refs = cast(list[dict[str, JsonValue]], by_type["artifact.attached"]["references"])
     result_refs = cast(list[dict[str, JsonValue]], by_type["result.attached"]["references"])
     assert {"kind": "run", "id": run.run_id, "label": None, "metadata": {}} in run_refs
     assert {
@@ -128,6 +123,7 @@ def test_lifecycle_stream_materializes_run_artifact_and_result_references(tmp_pa
     materialized = _run(conversations.get_conversation(conversation.id))
     assert run.run_id in materialized.run_ids
     assert artifact_id in materialized.artifact_ids
+    assert result_id in materialized.result_ids
 
 
 def test_waiting_task_stream_projects_structured_attention_without_resuming(tmp_path: Path) -> None:
