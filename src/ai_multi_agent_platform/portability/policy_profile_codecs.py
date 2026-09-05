@@ -198,9 +198,7 @@ def inspect_authorization_policy_profile_import(
                     "approval_required_actions",
                 )
             )
-            resource_types.update(
-                _string_array(content.get("resource_types"), "resource_types")
-            )
+            resource_types.update(_string_array(content.get("resource_types"), "resource_types"))
 
         grant_summary = ", ".join(sorted(allowed)) or "none"
         approval_summary = ", ".join(sorted(approval_required)) or "none"
@@ -254,7 +252,9 @@ def _profile_dependencies(
     for revision in snapshot.revisions:
         scope = revision.content.scope_constraints
         for project_id in scope.project_ids:
-            dependencies.add(resource_dependency("project", project_id, purpose="policy project scope"))
+            dependencies.add(
+                resource_dependency("project", project_id, purpose="policy project scope")
+            )
         for organization_id in scope.organization_ids:
             dependencies.add(
                 resource_dependency(
