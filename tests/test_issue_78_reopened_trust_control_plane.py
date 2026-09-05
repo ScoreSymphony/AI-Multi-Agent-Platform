@@ -88,10 +88,13 @@ def test_single_node_requires_explicit_activation_before_untrusted_template_appl
         assert activated_resource["current_revision"] == activated.revision
         assert activated.content.provenance.trust is TemplateTrust.TRUSTED
         assert activated.content.provenance.source_template == published.ref
-        assert deployment.templates.repository.get_revision(
-            published.template_id,
-            published.revision,
-        ).content.provenance.trust is TemplateTrust.UNTRUSTED
+        assert (
+            deployment.templates.repository.get_revision(
+                published.template_id,
+                published.revision,
+            ).content.provenance.trust
+            is TemplateTrust.UNTRUSTED
+        )
 
         instance_resource = await deployment.control_plane.execute_command(
             _context(admin.user_id, "apply-after-activation"),
