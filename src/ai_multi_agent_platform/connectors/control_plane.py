@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -22,6 +22,7 @@ from .models import Connection, ConnectorDefinition, SyncMode
 from .service import ConnectorService
 
 type ConnectorControlPlaneActorResolver = Callable[[RequestContext], ActorIdentity]
+type ConnectorHealthEventSink = Callable[[Connection, Connection], Awaitable[None]]
 
 CONNECTOR_DEFINITION_COLLECTION = "connector-definitions"
 CONNECTOR_DEFINITION_TYPE = "connector-definition"
@@ -79,9 +80,12 @@ class ConnectionResourceService(ResourceService):
         self,
         connectors: ConnectorService,
         actor_resolver: ConnectorControlPlaneActorResolver,
+        *,
+        include_organization_scoped_search: bool = False,
     ) -> None:
         self._connectors = connectors
         self._actor_resolver = actor_resolver
+        self._include_organization_scoped_search = include_organization_scoped_search
 
     async def list_resources(
         self, context: RequestContext, query: PageQuery
@@ -100,15 +104,15 @@ class ConnectionResourceService(ResourceService):
         The normal collection list remains actor-filtered by ``ConnectorService``. A full
         Search rebuild instead enumerates canonical repository records and relies on the
         Control Plane's per-result authorization before counts or results become visible.
-        Organization-scoped Connections remain excluded until #87 membership visibility
-        is available to the Search authorization contract.
+        Organization-scoped Connections are enumerated only when the composed Control
+        Plane advertises the #87 live membership visibility guard.
         """
 
         connections = await self._connectors.repository.list_connections()
         return tuple(
             _connection_search_resource(connection)
             for connection in connections
-            if connection.organization_id is None
+            if connection.organization_id is None or self._include_organization_scoped_search
         )
 
     async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
@@ -125,18 +129,33 @@ def register_connector_control_plane(
     connectors: ConnectorService,
     *,
     actor_resolver: ConnectorControlPlaneActorResolver = default_actor_resolver,
+    health_event_sink: ConnectorHealthEventSink | None = None,
 ) -> None:
     """Expose connector lifecycle without creating an action-invocation bypass.
 
     External actions intentionally are not registered as generic Control Plane commands.
-    They remain available only through the canonical #12 capability pipeline.
+    They remain available only through the canonical #12 capability pipeline. A Control Plane
+    may expose ``connector_health_event_sink`` as a provider-neutral best-effort observer; this
+    keeps #44 authoritative while allowing #75 to project health attention without a hard import.
     """
+
+    if health_event_sink is None:
+        discovered_sink = getattr(control_plane, "connector_health_event_sink", None)
+        if callable(discovered_sink):
+            health_event_sink = cast(ConnectorHealthEventSink, discovered_sink)
 
     control_plane.register_resource_service(
         CONNECTOR_DEFINITION_COLLECTION, ConnectorDefinitionResourceService(connectors)
     )
     control_plane.register_resource_service(
-        CONNECTION_COLLECTION, ConnectionResourceService(connectors, actor_resolver)
+        CONNECTION_COLLECTION,
+        ConnectionResourceService(
+            connectors,
+            actor_resolver,
+            include_organization_scoped_search=bool(
+                getattr(control_plane, "organization_search_visibility_available", False)
+            ),
+        ),
     )
 
     async def create_connection(
@@ -211,6 +230,15 @@ def register_connector_control_plane(
             actor=actor_resolver(context),
             context=_operation_context(context, existing.project_id),
         )
+        if health_event_sink is not None and (
+            checked.health != existing.health or checked.status != existing.status
+        ):
+            try:
+                await health_event_sink(existing, checked)
+            except Exception:
+                # #44 already owns and persisted the authoritative Connection health transition.
+                # Downstream attention must never falsify a successful health check.
+                pass
         return _connection_resource(checked)
 
     async def synchronize(
@@ -347,6 +375,7 @@ def _connection_search_resource(connection: Connection) -> dict[str, JsonValue]:
         "owner_id": connection.owner_id,
         "display_name": connection.display_name,
         "project_id": connection.project_id,
+        "organization_id": connection.organization_id,
         "requested_scopes": list(connection.requested_scopes),
         "granted_scopes": list(connection.granted_scopes),
         "enabled": connection.enabled,

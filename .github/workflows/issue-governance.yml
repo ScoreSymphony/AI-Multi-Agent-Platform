@@ -13,18 +13,155 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate planning metadata and issue structure
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
-            const issue = context.payload.issue;
-            const labels = issue.labels.map((label) => label.name);
-            const body = issue.body || '';
+            const payloadIssue = context.payload.issue;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = payloadIssue.number;
+            const body = payloadIssue.body || '';
             const errors = [];
+            const marker = '<!-- issue-governance -->';
+            const governanceLabel = 'needs: metadata';
+            const taxonomy = {
+              type: [
+                'type: architecture',
+                'type: feature',
+                'type: integration',
+                'type: operations',
+                'type: quality',
+              ],
+              area: [
+                'area: core',
+                'area: runtime',
+                'area: agents',
+                'area: data',
+                'area: clients',
+                'area: integrations',
+                'area: operations',
+                'area: security',
+              ],
+            };
+            const stageByMilestone = {
+              'M1 - Architecture Foundation': 'stage: foundation',
+              'M2 - Usable Single-Node Prototype': 'stage: prototype',
+              'M3 - Operational v1': 'stage: v1',
+              'M4 - Distributed & Ecosystem': 'stage: optional',
+            };
+
+            function escapeRegExp(value) {
+              return value.replace(/[|\\{}()[\]^$+*?.]/g, '\\$&');
+            }
+
+            function formValue(heading) {
+              const match = body.match(
+                new RegExp(
+                  '^### ' + escapeRegExp(heading) + '\\s*\\n+([\\s\\S]*?)(?=\\n### |$)',
+                  'm',
+                ),
+              );
+              return match ? match[1].trim() : null;
+            }
+
+            function hasRequiredHeading(heading) {
+              return new RegExp(
+                '^#{2,3} ' + escapeRegExp(heading) + '\\s*$',
+                'm',
+              ).test(body);
+            }
+
+            const selected = {
+              type: formValue('Type'),
+              area: formValue('Area'),
+              milestone: formValue('Target milestone'),
+            };
+            const selectionCount = Object.values(selected).filter(Boolean).length;
+            if (selectionCount > 0 && selectionCount !== 3) {
+              errors.push('complete all Type, Area and Target milestone form selections');
+            }
+            for (const key of ['type', 'area']) {
+              if (selected[key] && !taxonomy[key].includes(selected[key])) {
+                errors.push('select a recognized ' + key + ' value in the issue form');
+              }
+            }
+            if (selected.milestone && !stageByMilestone[selected.milestone]) {
+              errors.push('select a recognized open target milestone in the issue form');
+            }
+
+            const current = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber,
+            });
+            const currentLabels = current.data.labels.map((label) =>
+              typeof label === 'string' ? label : label.name,
+            );
+            const desiredByPrefix = {
+              'type:': selected.type || null,
+              'area:': selected.area || null,
+              'stage:': selected.milestone
+                ? stageByMilestone[selected.milestone]
+                : null,
+            };
+            const prefixes = Object.keys(desiredByPrefix);
+            const synchronizedLabels = [
+              ...currentLabels.filter(
+                (label) =>
+                  !prefixes.some(
+                    (prefix) => desiredByPrefix[prefix] && label.startsWith(prefix),
+                  ),
+              ),
+              ...prefixes
+                .map((prefix) => desiredByPrefix[prefix])
+                .filter(Boolean),
+            ];
+            const labelsChanged =
+              synchronizedLabels.length !== currentLabels.length ||
+              synchronizedLabels.some((label) => !currentLabels.includes(label));
+            if (labelsChanged) {
+              await github.rest.issues.setLabels({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                labels: synchronizedLabels,
+              });
+            }
+
+            if (selected.milestone) {
+              const milestones = await github.paginate(
+                github.rest.issues.listMilestones,
+                { owner, repo, state: 'open', per_page: 100 },
+              );
+              const targetMilestone = milestones.find(
+                (milestone) => milestone.title === selected.milestone,
+              );
+              if (targetMilestone && current.data.milestone?.number !== targetMilestone.number) {
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  milestone: targetMilestone.number,
+                });
+              }
+            }
+
+            const refreshed = await github.rest.issues.get({
+              owner,
+              repo,
+              issue_number: issueNumber,
+            });
+            const issue = refreshed.data;
+            const labels = issue.labels.map((label) =>
+              typeof label === 'string' ? label : label.name,
+            );
 
             for (const prefix of ['type:', 'area:', 'stage:']) {
               const matches = labels.filter((label) => label.startsWith(prefix));
               if (matches.length !== 1) {
-                errors.push(`assign exactly one \`${prefix}*\` label (found ${matches.length})`);
+                errors.push(
+                  'assign exactly one ' + prefix + '* label (found ' + matches.length + ')',
+                );
               }
             }
 
@@ -33,30 +170,24 @@ jobs:
             }
 
             for (const heading of [
-              '## Hard dependencies',
-              '## Acceptance criteria',
-              '## Required tests',
-              '## Definition of Done',
+              'Hard dependencies',
+              'Acceptance criteria',
+              'Required tests',
+              'Definition of Done',
             ]) {
-              if (!body.includes(heading)) {
-                errors.push(`add the \`${heading}\` section`);
+              if (!hasRequiredHeading(heading)) {
+                errors.push('add the ## ' + heading + ' section');
               }
             }
-
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const issue_number = issue.number;
-            const marker = '<!-- issue-governance -->';
-            const governanceLabel = 'needs: metadata';
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
               repo,
-              issue_number,
+              issue_number: issueNumber,
               per_page: 100,
             });
-            const existing = comments.find((comment) =>
-              comment.user.type === 'Bot' && comment.body.includes(marker)
+            const existing = comments.find(
+              (comment) => comment.user.type === 'Bot' && comment.body.includes(marker),
             );
 
             if (errors.length > 0) {
@@ -64,7 +195,7 @@ jobs:
                 await github.rest.issues.addLabels({
                   owner,
                   repo,
-                  issue_number,
+                  issue_number: issueNumber,
                   labels: [governanceLabel],
                 });
               }
@@ -73,7 +204,7 @@ jobs:
                 marker,
                 'This issue does not yet satisfy the repository planning contract:',
                 '',
-                ...errors.map((error) => `- ${error}`),
+                ...errors.map((error) => '- ' + error),
                 '',
                 'Update the issue body and metadata; this check will resolve automatically.',
               ].join('\n');
@@ -89,7 +220,7 @@ jobs:
                 await github.rest.issues.createComment({
                   owner,
                   repo,
-                  issue_number,
+                  issue_number: issueNumber,
                   body: message,
                 });
               }
@@ -102,7 +233,7 @@ jobs:
               await github.rest.issues.removeLabel({
                 owner,
                 repo,
-                issue_number,
+                issue_number: issueNumber,
                 name: governanceLabel,
               });
             }
@@ -112,6 +243,6 @@ jobs:
                 owner,
                 repo,
                 comment_id: existing.id,
-                body: `${marker}\nIssue planning metadata and required sections are complete.`,
+                body: marker + '\nIssue planning metadata and required sections are complete.',
               });
             }

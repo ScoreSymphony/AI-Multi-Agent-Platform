@@ -23,6 +23,11 @@ class NotificationRepository(ABC):
     async def list(self, query: NotificationQuery) -> tuple[Notification, ...]: ...
 
     @abstractmethod
+    async def list_all(self) -> tuple[Notification, ...]:
+        """Enumerate canonical rows for internal rebuildable derived projections."""
+        ...
+
+    @abstractmethod
     async def find_active_aggregate(
         self,
         *,
@@ -79,6 +84,11 @@ class InMemoryNotificationRepository(NotificationRepository):
         if query.limit is None:
             return tuple(items[query.offset :])
         return tuple(items[query.offset : query.offset + query.limit])
+
+    async def list_all(self) -> tuple[Notification, ...]:
+        items = list(self._items.values())
+        items.sort(key=lambda item: (item.updated_at, item.created_at, item.id), reverse=True)
+        return tuple(items)
 
     async def find_active_aggregate(
         self,

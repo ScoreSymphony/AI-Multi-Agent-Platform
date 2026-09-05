@@ -29,6 +29,7 @@ from ai_multi_agent_platform.workspaces import (
 from .authorization_hardening import AuthorizationBoundaryHardeningMixin
 from .extensions import CommandHandler, ResourceService
 from .models import PageQuery, RequestContext
+from .repository_run_provenance import RepositoryRunProvenanceMixin
 from .run_workspace_contract import ControlPlane as _RunWorkspaceControlPlane
 from .run_workspace_contract import ControlPlaneHTTP as _RunWorkspaceControlPlaneHTTP
 from .run_workspace_contract import _augment_run_workspace_openapi
@@ -42,6 +43,7 @@ INSECURE_CONTROL_PLANE_ENV = "AI_MULTI_AGENT_PLATFORM_ALLOW_INSECURE_CONTROL_PLA
 
 
 class ControlPlane(
+    RepositoryRunProvenanceMixin,
     AuthorizationBoundaryHardeningMixin,
     _RunWorkspaceControlPlane,
     _TaskManagementControlPlane,

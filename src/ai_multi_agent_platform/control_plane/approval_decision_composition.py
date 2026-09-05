@@ -25,7 +25,7 @@ from .conversation_current_composition import (
     ControlPlaneASGI,
     ControlPlaneHTTP,
 )
-from .conversation_current_composition import ControlPlane as _CurrentControlPlane
+from .organization_audit_api import ControlPlane as _CurrentControlPlane
 from .conversation_current_composition import (
     build_openapi as _build_current_openapi,
 )

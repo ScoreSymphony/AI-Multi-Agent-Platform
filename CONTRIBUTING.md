@@ -11,7 +11,7 @@
 7. Format changed code with `ruff format .`.
 8. Run the local validation commands before opening a pull request.
 9. Open a pull request that references the relevant numbered issue.
-10. Prefer squash merges for focused work packages unless preserving commit history is materially useful.
+10. Use the repository's squash-merge strategy; the pull-request title becomes the permanent main history entry.
 
 Repository decision-making, ownership, triage and release responsibilities are defined in [`GOVERNANCE.md`](GOVERNANCE.md). The release checklist is maintained in [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
 
@@ -26,6 +26,12 @@ When a branch has diverged because equivalent or newer work landed through anoth
 5. Never use conflict resolution to reintroduce superseded architecture, security fixes, tests or provider-specific assumptions.
 
 A reconciliation commit may preserve branch ancestry, but the resulting tree must be reviewed against current architecture and CI rather than accepted merely because Git reports the conflict as resolved.
+
+Pull requests follow the lifecycle in [GOVERNANCE.md](GOVERNANCE.md): inactive drafts receive a status request after 14 days, work may be marked stale after 30 days, and abandoned work may be closed after 45 days. Security fixes, release candidates and explicitly dependency-blocked work are exempt while their status remains documented. Superseded pull requests must link their replacement and account for any unique remaining diff before closure.
+
+## Requesting work or support
+
+Use the structured GitHub Work item form for actionable repository work. Its Type, Area and Target milestone selections are synchronized to repository metadata by the issue-governance workflow. Use [SUPPORT.md](SUPPORT.md) for support boundaries and [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
 ## Local validation
 

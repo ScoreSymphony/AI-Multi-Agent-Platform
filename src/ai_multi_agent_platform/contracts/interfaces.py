@@ -10,6 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 
+from .model_stream import ModelStreamEvent, ModelStreamEventKind
 from .types import (
     AuthorizationDecision,
     AuthorizationRequest,
@@ -93,6 +94,32 @@ class LifecycleBackend(ProviderContract):
 class ModelProvider(ProviderContract):
     @abstractmethod
     async def generate(self, request: ModelRequest) -> ModelResponse: ...
+
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
+        """Stream provider-neutral model events with a compatible generate fallback.
+
+        Providers with native incremental output override this method. Existing providers
+        remain source-compatible and produce one text delta followed by one completion event.
+        """
+
+        async def iterate() -> AsyncIterator[ModelStreamEvent]:
+            response = await self.generate(request)
+            if response.text:
+                yield ModelStreamEvent(
+                    kind=ModelStreamEventKind.TEXT_DELTA,
+                    request_id=response.request_id,
+                    model_ref=response.model_ref,
+                    text_delta=response.text,
+                )
+            yield ModelStreamEvent(
+                kind=ModelStreamEventKind.COMPLETED,
+                request_id=response.request_id,
+                model_ref=response.model_ref,
+                usage=dict(response.usage),
+                response=response,
+            )
+
+        return iterate()
 
 
 class ModelRouter(ProviderContract):

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 
@@ -44,6 +45,28 @@ class ConversationResponseTarget:
 
 
 @dataclass(frozen=True, slots=True)
+class ConversationResolvedContext:
+    """Authorized provider-neutral context materialized only for one response operation.
+
+    Resolved context is deliberately not persisted into Conversation history. It lets
+    replaceable response providers consume canonical File/Knowledge content while the
+    durable Conversation continues to store only canonical references.
+    """
+
+    kind: str
+    id: str
+    text: str
+
+    def __post_init__(self) -> None:
+        if self.kind not in {"file", "knowledge"}:
+            raise ValueError("unsupported resolved conversation context kind")
+        if not self.id.strip():
+            raise ValueError("resolved conversation context id must not be blank")
+        if not self.text.strip():
+            raise ValueError("resolved conversation context text must not be blank")
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationResponseRequest:
     """Canonical input for one explicit conversational response operation."""
 
@@ -54,8 +77,10 @@ class ConversationResponseRequest:
     source_message_id: str
     target: ConversationResponseTarget
     history: tuple[ConversationMessage, ...]
+    operation: OperationContext | None = None
     project_id: str | None = None
     model_preference: ModelRoutingPreference | None = None
+    resolved_context: tuple[ConversationResolvedContext, ...] = ()
 
     def __post_init__(self) -> None:
         for value, name in (
@@ -73,6 +98,13 @@ class ConversationResponseRequest:
             raise ValueError("conversation response requires durable message history")
         if self.history[-1].id != self.source_message_id:
             raise ValueError("conversation response source message must be the latest history item")
+        if self.operation is not None:
+            if self.operation.correlation_id != self.correlation_id:
+                raise ValueError(
+                    "conversation response operation correlation_id must match request"
+                )
+            if self.operation.project_id != self.project_id:
+                raise ValueError("conversation response operation project_id must match request")
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +138,7 @@ class ConversationResponseProvider(Protocol):
 
 
 __all__ = [
+    "ConversationResolvedContext",
     "ConversationResponseChunk",
     "ConversationResponseChunkKind",
     "ConversationResponseProvider",

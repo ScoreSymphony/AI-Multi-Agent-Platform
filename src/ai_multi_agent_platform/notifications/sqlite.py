@@ -139,6 +139,24 @@ class SqliteNotificationRepository(NotificationRepository):
             return tuple(items[query.offset :])
         return tuple(items[query.offset : query.offset + query.limit])
 
+    async def list_all(self) -> tuple[Notification, ...]:
+        """Enumerate canonical rows for internal rebuildable derived projections."""
+
+        try:
+            with self._connect() as connection:
+                rows = connection.execute(
+                    """
+                    SELECT payload FROM notifications
+                    ORDER BY updated_at DESC, id DESC
+                    """
+                ).fetchall()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to enumerate notifications",
+            ) from exc
+        return tuple(_decode_notification(cast(str, row["payload"])) for row in rows)
+
     async def find_active_aggregate(
         self,
         *,
@@ -509,6 +527,12 @@ def _preference_json(preference: NotificationPreference) -> dict[str, JsonValue]
         "in_app_enabled": preference.in_app_enabled,
         "external_channels": _json_string_list(sorted(preference.external_channels)),
         "aggregate_duplicates": preference.aggregate_duplicates,
+        "deadline_reminders_enabled": preference.deadline_reminders_enabled,
+        "deadline_reminder_lead_seconds": preference.deadline_reminder_lead_seconds,
+        "overdue_reminders_enabled": preference.overdue_reminders_enabled,
+        "quiet_hours_start": preference.quiet_hours_start,
+        "quiet_hours_end": preference.quiet_hours_end,
+        "quiet_hours_timezone": preference.quiet_hours_timezone,
     }
 
 
@@ -529,6 +553,16 @@ def _decode_preference(encoded: str) -> NotificationPreference:
         in_app_enabled=_required_bool(raw, "in_app_enabled"),
         external_channels=frozenset(_required_string_list(raw, "external_channels")),
         aggregate_duplicates=_required_bool(raw, "aggregate_duplicates"),
+        deadline_reminders_enabled=_optional_bool(raw, "deadline_reminders_enabled", True),
+        deadline_reminder_lead_seconds=_optional_int(
+            raw,
+            "deadline_reminder_lead_seconds",
+            24 * 60 * 60,
+        ),
+        overdue_reminders_enabled=_optional_bool(raw, "overdue_reminders_enabled", True),
+        quiet_hours_start=_optional_string(raw.get("quiet_hours_start")),
+        quiet_hours_end=_optional_string(raw.get("quiet_hours_end")),
+        quiet_hours_timezone=_optional_string(raw.get("quiet_hours_timezone")),
     )
 
 
@@ -567,11 +601,23 @@ def _required_int(raw: dict[str, Any], name: str) -> int:
     return value
 
 
+def _optional_int(raw: dict[str, Any], name: str, default: int) -> int:
+    if name not in raw:
+        return default
+    return _required_int(raw, name)
+
+
 def _required_bool(raw: dict[str, Any], name: str) -> bool:
     value = raw.get(name)
     if not isinstance(value, bool):
         raise ContractError(ErrorCode.CONTRACT_VIOLATION, f"invalid notification {name}")
     return value
+
+
+def _optional_bool(raw: dict[str, Any], name: str, default: bool) -> bool:
+    if name not in raw:
+        return default
+    return _required_bool(raw, name)
 
 
 def _required_string_list(raw: dict[str, Any], name: str) -> tuple[str, ...]:

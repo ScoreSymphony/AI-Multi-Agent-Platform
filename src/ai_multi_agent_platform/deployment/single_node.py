@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.agents import (
     AgentRuntime,
     AgentService,
@@ -15,9 +16,9 @@ from ai_multi_agent_platform.agents import (
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
-    ControlPlane,
     ControlPlaneASGI,
 )
+from ai_multi_agent_platform.control_plane.portability_api import ControlPlane
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
     ConversationService,
@@ -43,6 +44,7 @@ from ai_multi_agent_platform.onboarding import (
     register_onboarding_control_plane,
 )
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
+from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
 from ai_multi_agent_platform.security import (
     ActorType,
     LocalAuthenticationService,
@@ -51,6 +53,30 @@ from ai_multi_agent_platform.security import (
 )
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
+from ai_multi_agent_platform.templates import (
+    AgentTeamTemplateExporter,
+    AgentTemplateExporter,
+    AutomationTemplateExporter,
+    ContextualTemplateHandlerRegistry,
+    JsonTemplateRepository,
+    ProjectTemplateExporter,
+    TemplateApplicationService,
+    WorkspaceStructureTemplateExporter,
+    register_agent_template_handlers,
+    register_automation_template_handler,
+    register_project_template_handler,
+    register_workspace_structure_template_handler,
+)
+from ai_multi_agent_platform.templates.agent_team_control_plane import (
+    register_agent_team_template_control_plane,
+)
+from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
+from ai_multi_agent_platform.templates.project_control_plane import (
+    register_project_template_control_plane,
+)
+from ai_multi_agent_platform.templates.workspace_structure_control_plane import (
+    register_workspace_structure_template_control_plane,
+)
 from ai_multi_agent_platform.verification import (
     CanonicalVerificationRuntime,
     KernelFileVerificationEvidenceResolver,
@@ -98,6 +124,7 @@ class SingleNodeDeployment:
     onboarding: OnboardingService
     first_task: FirstRunTaskService
     secrets: SecretProvider | None
+    templates: TemplateApplicationService
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     verification: SqliteVerificationService
@@ -185,7 +212,7 @@ class SingleNodeDeployment:
             )
         return SingleNodeSmokeResult(
             task_id=task.task_id,
-            run_id=run.run_id,
+            run_id=refreshed.run_id,
             task_status=persisted_task.status,
             run_status=refreshed.status,
         )
@@ -227,7 +254,27 @@ def build_single_node_deployment(
     onboarding.restore()
     model_runtime = ModelRuntime(models)
     agent_runtime = AgentRuntime(agents, model_registry=models)
-    conversation_response_provider = ModelRuntimeConversationResponseProvider(model_runtime, agents)
+    conversation_response_provider = ModelRuntimeConversationResponseProvider(
+        model_runtime,
+        agents,
+        routing_profiles=agent_runtime.routing_profiles,
+    )
+
+    template_handlers = ContextualTemplateHandlerRegistry()
+    register_agent_template_handlers(template_handlers, agents)
+    register_project_template_handler(template_handlers, scopes)
+    register_workspace_structure_template_handler(template_handlers, workspaces, scopes)
+    templates = TemplateApplicationService(
+        JsonTemplateRepository(database_dir / "templates.json"),
+        template_handlers,
+    )
+    agent_template_exporter = AgentTemplateExporter(agents, templates.templates)
+    agent_team_template_exporter = AgentTeamTemplateExporter(agents, templates.templates)
+    project_template_exporter = ProjectTemplateExporter(scopes, templates.templates)
+    workspace_template_exporter = WorkspaceStructureTemplateExporter(
+        workspaces,
+        templates.templates,
+    )
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
@@ -273,6 +320,14 @@ def build_single_node_deployment(
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
 
+    portability_workflow = build_agent_portability_workflow(
+        agents=agents.repository,
+        models=models,
+        scopes=scopes,
+        platform_version=__version__,
+        templates=templates.repository,
+    )
+
     control_plane = ControlPlane(
         kernel=kernel,
         events=kernel_repository,
@@ -282,14 +337,42 @@ def build_single_node_deployment(
         health_providers=(orchestrator, lifecycle, files),
         model_registry=models,
         automation_state_path=database_dir / "automation.sqlite3",
+        notification_state_path=database_dir / "notifications.sqlite3",
         conversation_service=conversations,
         conversation_agent_service=agents,
         conversation_file_provider=files,
         conversation_response_provider=conversation_response_provider,
+        portability_workflow=portability_workflow,
     )
     register_agent_control_plane(control_plane, agents, runtime=agent_runtime)
     register_standard_agent_control_plane(control_plane, agents)
     register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
+    register_automation_template_handler(template_handlers, control_plane.automation_service)
+    automation_template_exporter = AutomationTemplateExporter(
+        control_plane.automation_service,
+        templates.templates,
+    )
+    register_template_control_plane(
+        control_plane,
+        templates,
+        agent_exporter=agent_template_exporter,
+        automation_exporter=automation_template_exporter,
+    )
+    register_agent_team_template_control_plane(
+        control_plane,
+        templates.repository,
+        agent_team_template_exporter,
+    )
+    register_project_template_control_plane(
+        control_plane,
+        templates.repository,
+        project_template_exporter,
+    )
+    register_workspace_structure_template_control_plane(
+        control_plane,
+        templates.repository,
+        workspace_template_exporter,
+    )
     register_verification_control_plane(
         control_plane,
         verification,
@@ -320,6 +403,7 @@ def build_single_node_deployment(
         onboarding=onboarding,
         first_task=first_task,
         secrets=secret_provider,
+        templates=templates,
         authentication=authentication,
         authorization=authorization,
         verification=verification,

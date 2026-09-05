@@ -65,10 +65,12 @@ Agent service and File provider into the Conversation boundary rather than creat
 chat-private copies.
 
 Conversational generation is also replaceable. The reference single-node composition
-uses `ModelRuntimeConversationResponseProvider` when canonical model runtime support is
+wraps `ModelRuntimeConversationResponseProvider` with
+`ContextResolvingConversationResponseProvider` when canonical model runtime support is
 configured. Agent and AgentTeam targets are resolved to immutable canonical revisions;
 model selection then flows through the platform ModelRuntime/router contracts rather
-than a provider-private chat session.
+than a provider-private chat session. File and Knowledge context is resolved ephemerally
+through the configured canonical providers before the replaceable responder is invoked.
 
 ## Control Plane surface
 
@@ -103,9 +105,17 @@ creator as an injected callable. The service:
 
 1. loads the durable message and conversation;
 2. augments Task metadata with `conversation_id` and `conversation_message_id`;
-3. calls the canonical Task creation path;
-4. validates the returned canonical `task_*` identity;
-5. stores only Task references on the message/conversation.
+3. if the Conversation has a canonical default Agent/AgentTeam and the Task request does
+   not already contain an assignment, copies that exact pinned ID/revision into the
+   canonical Task `agent_assignment`;
+4. calls the canonical Task creation path;
+5. validates the returned canonical `task_*` identity;
+6. stores only Task references on the message/conversation.
+
+When an Agent or AgentTeam target/default selection omits a revision at Conversation
+creation, the Control Plane resolves the current canonical revision once and persists the
+exact revision in the Conversation. Existing conversations therefore do not silently
+follow later Agent/Team revisions.
 
 All Task relationships use the same `Conversation.task_ids` invariant. This includes a
 Task-targeted conversation, creating a Task from a message and attaching a message to an
@@ -179,9 +189,11 @@ stream preparation therefore remain intact rather than being reimplemented by #7
 ## Approval and input attention
 
 Chat does not implement a second Approval lifecycle. Approval requests are projected
-through the platform's canonical Notification/Approval integration. The browser loads the
-authorized notification inventory and selects `approval` and `agent_input` notifications
-whose canonical `task_id` belongs to the current Conversation.
+through the platform's canonical Notification/Approval integration. The browser follows
+the canonical Notification API's opaque pagination cursors across the complete authorized
+inventory and selects `approval` and `agent_input` notifications whose canonical
+`task_id` belongs to the current Conversation. Relevant active requests therefore cannot
+disappear merely because they are older than the newest 100 notifications.
 
 Approval cards link to the existing canonical Approval route and use only safe northbound
 Notification fields/actions. Proposed privileged payloads are not copied into Conversation
@@ -200,14 +212,17 @@ Conversational model/agent output uses a second, deliberately non-authoritative 
 
 The request addresses one already-durable authenticated user Message and requires an
 idempotency key. A replaceable `ConversationResponseProvider` receives only canonical
-Conversation history, target identity and provider-neutral routing preferences. No
-Hermes, Forge or model-provider session object is part of the public contract.
+Conversation history, target identity, the authenticated canonical `OperationContext`
+and provider-neutral routing preferences. No Hermes, Forge or model-provider session
+object is part of the public contract.
 
 For the reference runtime, `ModelRuntimeConversationResponseProvider` resolves Agent and
-AgentTeam targets through `AgentService`, including exact selected revisions, and submits
-a canonical model request through `ModelRuntime`. Project and Task targets remain
-provider-neutral context. No provider-native conversation/session identifier is persisted
-as platform state.
+AgentTeam targets through `AgentService`, including exact selected revisions, applies the
+Agent routing profile/fallback policy plus any explicit Conversation model preference,
+and submits a canonical model request through `ModelRuntime`. The authenticated owner,
+Project, correlation, causation and idempotency-control context is preserved into that
+request. Project and Task targets remain provider-neutral context. No provider-native
+conversation/session identifier is persisted as platform state.
 
 During generation the server emits:
 
@@ -217,6 +232,13 @@ During generation the server emits:
 Both are explicitly `tentative: true` and `authoritative: false`. They are presentation
 state only and cannot queue/start/resume Tasks, invoke privileged tools or mutate the
 canonical lifecycle.
+
+The Conversation response contract is chunk/SSE-capable and replacement providers may
+emit multiple chunks. The current reference `ModelRuntime` adapter still falls back to the
+whole-response `generate` seam because the canonical ModelProvider runtime does not yet
+expose native provider streaming. Native provider streaming is owned by #10; #72 does not
+create a provider-specific streaming/session API to work around that missing lower-level
+seam.
 
 Only after successful completion is one Assistant `ConversationMessage` persisted. The
 stream then emits `conversation.response.committed` with `durable: true`. The committed
@@ -240,11 +262,19 @@ canonical `knowledge_source_*` resource. They are validated through the public,
 replaceable `KnowledgeProvider.get_index_status(...)` boundary with the same authenticated
 owner/project context.
 
-Conversation state stores only the stable Knowledge source identity. It does **not** copy
-Knowledge document text, embeddings, provider-native index identifiers or internal
-retrieval state into chat history. The implementation is covered against both the local
-Knowledge provider and a replacement provider so the Conversation domain does not depend
-on SQLite or private provider methods.
+At response time, File and Knowledge references are re-authorized under the current
+canonical `OperationContext` and materialized only into ephemeral responder context.
+Textual File content is bounded to 128 KiB per File; non-text/binary Files contribute
+safe metadata rather than arbitrary binary prompt data. Knowledge retrieval is
+provider-neutral, restricted to the referenced source, bounded to five results and 64 KiB
+of materialized text. The resolved source content is never written back into Conversation
+history.
+
+Conversation state stores only stable canonical source identities. It does **not** copy
+File bytes, Knowledge document text, embeddings, provider-native index identifiers or
+internal retrieval state into chat history. The implementation is covered against local
+and replacement provider contracts so the Conversation domain does not depend on SQLite
+or private provider methods.
 
 ## Retention, deletion and export
 
@@ -309,21 +339,24 @@ Chat cannot create an alternate approval decision path.
 The #72 implementation covers:
 
 - canonical Conversation/Message contracts;
-- Agent/AgentTeam targets with exact canonical revisions;
+- Agent/AgentTeam targets with exact, creation-time-pinned canonical revisions;
 - Project, Task and canonical orchestrator targeting;
-- provider-neutral model-routing preferences and canonical `ModelRuntime` generation;
+- provider-neutral model-routing preferences, Agent routing profiles/fallback and canonical
+  `ModelRuntime` generation;
+- authenticated canonical OperationContext propagation into model and attachment providers;
 - typed File/Artifact/Knowledge/Task/Run/Result/Agent/Team references;
+- response-time authorized, bounded, ephemeral File/Knowledge context materialization;
 - durable restart-safe Conversation persistence and paginated history;
 - Control Plane resources, commands, HTTP routes, authentication and authorization;
 - authenticated sender binding and cross-project/private isolation;
 - canonical File attachment authorization;
 - canonical `knowledge_source_*` references through a replaceable `KnowledgeProvider`;
-- Task creation/attachment linkage without a second task engine;
+- Task creation/attachment linkage with exact Agent/Team assignment and no second task engine;
 - durable Run, Artifact and Result linkage projected from canonical lifecycle events;
 - normalized, restart-safe `Conversation.task_ids` linkage;
 - explicit waiting-Task input/resume with canonical provenance and kernel lifecycle;
 - structured `task.waiting` attention without implicit resume behavior;
-- canonical Approval/Agent-input attention through the existing Notification subsystem;
+- canonical Approval/Agent-input attention through complete Notification pagination;
 - provider-neutral authoritative Task/Run SSE with opaque multi-Task reconnect cursors;
 - provider-neutral tentative Assistant/Agent response streaming with durable final commit;
 - response idempotency and replacement-provider tests with no private-session leakage;

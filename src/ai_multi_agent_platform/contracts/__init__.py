@@ -28,6 +28,7 @@ from .interfaces import (
     ToolProvider,
     WorkerProvider,
 )
+from .model_stream import ModelStreamEvent, ModelStreamEventKind
 from .types import (
     CONTRACT_VERSION,
     AdapterMetadata,
@@ -90,6 +91,8 @@ __all__ = [
     "ModelResponse",
     "ModelRouter",
     "ModelSelection",
+    "ModelStreamEvent",
+    "ModelStreamEventKind",
     "NodeDescriptor",
     "NodeProvider",
     "OperationContext",

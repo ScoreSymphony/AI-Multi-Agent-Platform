@@ -137,6 +137,7 @@ class ControlPlane(_ObservabilityControlPlane):
                     retryable=True,
                 )
             resolved_sources = await resolvers.resolve_all(source_refs, data_context)
+            source_refs = tuple(resolved.source_ref for resolved in resolved_sources)
             source_files = tuple(entry for resolved in resolved_sources for entry in resolved.files)
             files = _merge_workspace_files(files, source_files)
 

@@ -57,6 +57,35 @@ def test_human_success_redacts_sensitive_response_fields() -> None:
     assert "status: configured" in rendered
 
 
+def test_human_success_recursively_redacts_nested_sensitive_response_fields() -> None:
+    stdout = StringIO()
+    renderer = Renderer(json_mode=False, verbose=False, stdout=stdout)
+
+    renderer.success(
+        ClientResponse(
+            status=200,
+            body={
+                "id": "provider_test",
+                "nested": {
+                    "secret": "plaintext-secret",
+                    "token": "plaintext-token",
+                    "safe": "visible",
+                },
+            },
+            request_id="request_test",
+            correlation_id="corr_test",
+            api_version="v1",
+        )
+    )
+
+    rendered = stdout.getvalue()
+    assert "plaintext-secret" not in rendered
+    assert "plaintext-token" not in rendered
+    assert f'"secret":"{REDACTED}"' in rendered
+    assert f'"token":"{REDACTED}"' in rendered
+    assert '"safe":"visible"' in rendered
+
+
 def test_json_error_redacts_nested_sensitive_details() -> None:
     stderr = StringIO()
     renderer = Renderer(json_mode=True, verbose=False, stderr=stderr)

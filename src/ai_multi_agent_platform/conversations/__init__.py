@@ -1,5 +1,9 @@
 """Canonical durable conversation interaction shell (issue #72)."""
 
+from .context_resolution import (
+    ContextResolvingConversationResponseProvider,
+    resolve_conversation_context,
+)
 from .model_runtime_response import (
     ConversationInstructionResolver,
     ModelRuntimeConversationResponseProvider,
@@ -25,6 +29,7 @@ from .repository import (
     JsonConversationRepository,
 )
 from .responses import (
+    ConversationResolvedContext,
     ConversationResponseChunk,
     ConversationResponseChunkKind,
     ConversationResponseProvider,
@@ -44,6 +49,7 @@ from .service import ConversationService, TaskCreator
 __all__ = [
     "AgentSelectionRef",
     "ContentKind",
+    "ContextResolvingConversationResponseProvider",
     "Conversation",
     "ConversationContentBlock",
     "ConversationInstructionResolver",
@@ -51,6 +57,7 @@ __all__ = [
     "ConversationNotFoundError",
     "ConversationParticipant",
     "ConversationRepository",
+    "ConversationResolvedContext",
     "ConversationResponseChunk",
     "ConversationResponseChunkKind",
     "ConversationResponseProvider",
@@ -73,4 +80,5 @@ __all__ = [
     "ResourceReference",
     "TOMBSTONED_AT_METADATA_KEY",
     "TaskCreator",
+    "resolve_conversation_context",
 ]

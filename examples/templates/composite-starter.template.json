@@ -1,0 +1,44 @@
+{
+  "name": "Composite Starter",
+  "description": "Provider- and orchestrator-neutral starter for composing reusable canonical Template dependencies.",
+  "template_type": "composite",
+  "configuration": {
+    "payload": {},
+    "reference": null
+  },
+  "dependencies": [],
+  "requirements": {
+    "capabilities": [],
+    "plugin_ids": [],
+    "connector_ids": [],
+    "model_policy_refs": [],
+    "permission_actions": [],
+    "workspace_prerequisites": [],
+    "placeholders": [],
+    "secret_reference_placeholders": []
+  },
+  "compatibility": {
+    "platform_version_range": null,
+    "contract_versions": {},
+    "orchestrator_agnostic": true,
+    "provider_agnostic": true,
+    "metadata": {}
+  },
+  "provenance": {
+    "author": "platform-example",
+    "source": "examples/templates/composite-starter.template.json",
+    "trust": "local",
+    "source_template": null,
+    "metadata": {
+      "example": true,
+      "purpose": "starter"
+    }
+  },
+  "tags": [
+    "example",
+    "composite"
+  ],
+  "categories": [
+    "starter"
+  ]
+}
