@@ -402,11 +402,12 @@ class TemplateApplicationService:
         """Create a new instance; never mutate resources from the previous instance."""
 
         previous = self.repository.get_instantiation(instance_id)
+        selected_revision = previous.source.revision if revision is None else revision
         return await self.apply(
             previous.source.template_id,
             applied_by=applied_by,
             environment=environment,
-            revision=revision,
+            revision=selected_revision,
         )
 
     @staticmethod
