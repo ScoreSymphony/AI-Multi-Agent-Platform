@@ -63,9 +63,7 @@ def test_failed_migration_precondition_blocks_preflight_and_runner_before_mutati
         template_translators=FormatTranslatorRegistry(release.template_schema),
     )
 
-    report = preflight.run(
-        PreflightRequest(data_dir=data_dir, current=current, target=target)
-    )
+    report = preflight.run(PreflightRequest(data_dir=data_dir, current=current, target=target))
 
     assert not report.ok
     assert any(check.code == "migration.precondition.failed" for check in report.checks)
