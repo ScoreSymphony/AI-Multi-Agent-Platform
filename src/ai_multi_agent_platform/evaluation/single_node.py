@@ -24,12 +24,12 @@ from .behavior_evidence import (
     DistributedRuntimeEvidenceCaseExecutor,
 )
 from .contracts import EvaluationCaseExecutor, EvaluatorLike
+from .evaluators import DeterministicAssertionEvaluator, MetricThresholdEvaluator
 from .evidence import (
     CompositeEvaluationEvidenceProvider,
     EvaluationEvidenceProvider,
     EvidenceEnrichingCaseExecutor,
 )
-from .evaluators import DeterministicAssertionEvaluator, MetricThresholdEvaluator
 from .models import (
     ComparisonOperator,
     DeterministicAssertion,
