@@ -139,7 +139,9 @@ class OrganizationOwnershipFileProvider(FileProvider):
         actor_ref: str,
     ) -> None:
         try:
-            existing = await self._organizations.repository.get_ownership(resource_type, resource_id)
+            existing = await self._organizations.repository.get_ownership(
+                resource_type, resource_id
+            )
         except LookupError:
             await self._organizations.set_resource_owner(
                 resource_type=resource_type,
