@@ -229,7 +229,10 @@ def inspect_authorization_policy_profile_import(
                 kind=ImportSecurityFindingKind.INVALID_SECURITY_PAYLOAD,
                 resource_type=resource.resource_type,
                 resource_id=target_id,
-                detail=f"authorization policy profile cannot be safely inspected: {type(exc).__name__}",
+                detail=(
+                    "authorization policy profile cannot be safely inspected: "
+                    f"{type(exc).__name__}"
+                ),
                 blocking=True,
             ),
         )
