@@ -16,6 +16,8 @@ This hardening pass keeps #76 as the sole accounting authority and adds direct r
 
 The Control Plane consumes both accounting resource factories through the shared read-only `Mapping[str, ResourceService]` boundary. This keeps the base and Organization-aware projections substitutable without changing either factory's concrete return type.
 
+Budget-threshold notification regressions use the canonical #75 recipient identity vocabulary (`user_<uuid>`, `team_<uuid>`, or `organization_<uuid>`); human-readable owner labels are not substituted for canonical recipient IDs.
+
 The same `AccountingService` instance continues through the existing #75 source composition for threshold attention. The Organization layer does not create another store, budget model, event stream or accounting authority.
 
 Single-node deployment activation of Accounting and Organization services is intentionally not introduced here: the deployment currently constructs neither service. #171 supplies and verifies the canonical combined Control Plane seam without silently changing which optional domains the deployment enables.
