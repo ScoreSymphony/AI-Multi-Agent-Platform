@@ -209,11 +209,11 @@ def test_custom_suite_and_fixture_are_loaded_into_isolated_product_path(tmp_path
         assert len(workspace_ids) == 2
         canonical_run_ids = {str(result["run_id"]) for result in deterministic_results}
         assert len(canonical_run_ids) == 2
-        bound_workspace_ids = {
-            (await deployment.run_workspace_bindings.get(canonical_run_id)).workspace_id
-            for canonical_run_id in canonical_run_ids
-            if await deployment.run_workspace_bindings.get(canonical_run_id) is not None
-        }
+        bound_workspace_ids: set[str] = set()
+        for canonical_run_id in canonical_run_ids:
+            binding = await deployment.run_workspace_bindings.get(canonical_run_id)
+            assert binding is not None
+            bound_workspace_ids.add(binding.workspace_id)
         assert bound_workspace_ids == workspace_ids
 
         restarted = build_single_node_deployment(config)
@@ -227,7 +227,9 @@ def test_custom_suite_and_fixture_are_loaded_into_isolated_product_path(tmp_path
     asyncio.run(scenario())
 
 
-def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(tmp_path: Path) -> None:
+def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         config = SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
         transport = EvaluationTargetTransport()
@@ -347,21 +349,19 @@ def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
         assert isinstance(results, list)
         assert all(result["outcome"] == "passed" for result in results)
         snapshot = executed.body["snapshot"]
-        refs = {
-            (item["kind"], item["ref_id"], item["version"])
-            for item in snapshot["references"]
-        }
+        refs = {(item["kind"], item["ref_id"], item["version"]) for item in snapshot["references"]}
         assert ("agent", assistant.agent_id, str(assistant.revision)) in refs
         assert ("model", "model-evaluation-target", "1") in refs
         assert any(
-            kind == "provider" and ref_id == "local-evaluation-provider"
-            for kind, ref_id, _ in refs
+            kind == "provider" and ref_id == "local-evaluation-provider" for kind, ref_id, _ in refs
         )
         assert ("prompt_config", "evaluation-target-prompt", "1.0") in refs
         assert any(call[1].endswith("/chat/completions") for call in restarted_transport.calls)
 
         detail = deployment.evaluation.get_run_detail(str(executed.body["id"]))
-        canonical_run_ids = {result.run_id for result in detail.results if result.run_id is not None}
+        canonical_run_ids = {
+            result.run_id for result in detail.results if result.run_id is not None
+        }
         assert len(canonical_run_ids) == 1
         agent_runs = deployment.agents.repository.list_agent_runs(next(iter(canonical_run_ids)))
         assert len(agent_runs) == 1
