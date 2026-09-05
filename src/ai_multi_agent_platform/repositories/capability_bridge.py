@@ -160,11 +160,12 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
                     "tags": list(await self._repositories.tags(repository_id, context)),
                 }
             if kind == "commits":
+                limit = _optional_int(arguments, "limit")
                 commits = await self._repositories.commits(
                     repository_id,
                     context,
                     revision=_optional_string(arguments, "revision") or "HEAD",
-                    limit=_optional_int(arguments, "limit") or 50,
+                    limit=50 if limit is None else limit,
                 )
                 return {
                     "repository_id": repository_id,
