@@ -136,9 +136,7 @@ class InMemoryCapabilityAssignmentRepository:
     ) -> tuple[CapabilityAssignmentRevision, ...]:
         self.get(assignment_id)
         revisions = [
-            item
-            for (current_id, _), item in self._revisions.items()
-            if current_id == assignment_id
+            item for (current_id, _), item in self._revisions.items() if current_id == assignment_id
         ]
         return tuple(sorted(revisions, key=lambda item: item.revision))
 
