@@ -319,9 +319,7 @@ def _notification_search_document(notification: Notification) -> SearchDocument:
     return SearchDocument(
         resource_type=_NOTIFICATION_SEARCH_TYPE,
         resource_id=notification.id,
-        title=(
-            f"Notification: {notification.category.value} / {notification.severity.value}"
-        ),
+        title=(f"Notification: {notification.category.value} / {notification.severity.value}"),
         summary="",
         project_id=notification.project_id,
         workspace_id=notification.workspace_id,
