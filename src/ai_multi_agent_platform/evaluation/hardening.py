@@ -8,6 +8,7 @@ validated without weakening their canonical identity.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from math import isfinite
 
@@ -29,17 +30,50 @@ from .models import (
 _BEHAVIOR_KEY = "behavior"
 
 
+def _strict_json_copy(value: object) -> JsonValue:
+    """Copy canonical immutable evidence into strict JSON-compatible containers.
+
+    Domain/event models intentionally deep-freeze nested mappings and sequences. Evaluation
+    results, however, are persisted through a strict JSON codec. The projection boundary must
+    therefore thaw those immutable containers without weakening the source-owned models or
+    silently stringifying unsupported values.
+    """
+
+    if value is None or isinstance(value, str | bool | int):
+        return value
+    if isinstance(value, float):
+        if not isfinite(value):
+            raise ValueError("evaluation assertion evidence must contain finite numbers")
+        return value
+    if isinstance(value, Mapping):
+        normalized: dict[str, JsonValue] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("evaluation assertion evidence object keys must be strings")
+            normalized[key] = _strict_json_copy(item)
+        return normalized
+    if isinstance(value, (list, tuple)):
+        return [_strict_json_copy(item) for item in value]
+    raise TypeError(
+        "evaluation assertion evidence contains a non-JSON value: " f"{type(value).__name__}"
+    )
+
+
 def observation_assertion_payload(observation: EvaluationObservation) -> dict[str, JsonValue]:
     """Expose canonical non-output observation fields to deterministic assertions.
 
     Executor-produced ``data`` remains untouched. Platform-owned behavior metadata is
     available below the reserved ``behavior`` namespace so cases can assert model,
     provider, capability, event and provenance behavior without a second evaluator API.
+
+    The returned projection is a strict-JSON copy. Canonical domain events may retain
+    recursively immutable mapping/tuple containers internally; those are intentionally
+    thawed only at this Evaluation serialization boundary.
     """
 
     if _BEHAVIOR_KEY in observation.data:
         raise ValueError("evaluation observation data must not shadow reserved behavior metadata")
-    payload = dict(observation.data)
+    payload = {key: _strict_json_copy(value) for key, value in observation.data.items()}
     behavior: dict[str, JsonValue] = {
         "task_id": observation.task_id,
         "run_id": observation.run_id,
