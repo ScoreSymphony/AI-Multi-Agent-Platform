@@ -86,6 +86,13 @@ class CompletionAuthority(Protocol):
     def assess_task_completion(self, task_id: str) -> CompletionGateDecision: ...
 
 
+@runtime_checkable
+class OutputChangeAwareCompletionAuthority(Protocol):
+    """Optional hook for authorities whose acceptance binds to produced output."""
+
+    def invalidate_task_subject(self, task_id: str) -> object: ...
+
+
 class VerificationCompletionAuthority(CompletionAuthority):
     """Own Task→policy/subject binding while VerificationService owns review evidence."""
 
@@ -129,6 +136,21 @@ class VerificationCompletionAuthority(CompletionAuthority):
     def requirement_for(self, task_id: str) -> TaskVerificationRequirement | None:
         validate_id(task_id, "task")
         return self._requirements.get(task_id)
+
+    def invalidate_task_subject(
+        self,
+        task_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> TaskVerificationRequirement | None:
+        validate_id(task_id, "task")
+        requirement = self._requirements.get(task_id)
+        if requirement is None or requirement.subject is None:
+            return requirement
+        current = _require_aware(now or _utc_now(), "verification invalidation time")
+        updated = replace(requirement, subject=None, updated_at=current)
+        self._requirements[task_id] = updated
+        return updated
 
     def bind_subject(
         self,

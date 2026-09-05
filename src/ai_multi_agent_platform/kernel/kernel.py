@@ -36,7 +36,11 @@ from ai_multi_agent_platform.domain import (
     validate_id,
     validate_subject_id,
 )
-from ai_multi_agent_platform.verification import CompletionAuthority, CompletionState
+from ai_multi_agent_platform.verification import (
+    CompletionAuthority,
+    CompletionState,
+    OutputChangeAwareCompletionAuthority,
+)
 
 from .models import (
     TERMINAL_RUN_STATUSES,
@@ -1023,6 +1027,7 @@ class PlatformKernel:
             await self.get_run(task_id, run_id)
             subject_type = "run"
             subject_id = run_id
+        self._invalidate_completion_subject(task_id)
         await self._commit_task_command(
             task=task,
             key=idempotency_key,
@@ -1062,6 +1067,7 @@ class PlatformKernel:
             await self.get_run(task_id, run_id)
             subject_type = "run"
             subject_id = run_id
+        self._invalidate_completion_subject(task_id)
         await self._commit_task_command(
             task=task,
             key=idempotency_key,
@@ -1080,6 +1086,11 @@ class PlatformKernel:
             source=source,
         )
         return await self.get_task(task_id)
+
+    def _invalidate_completion_subject(self, task_id: str) -> None:
+        authority = self._completion_authority
+        if isinstance(authority, OutputChangeAwareCompletionAuthority):
+            authority.invalidate_task_subject(task_id)
 
     async def recover_task(self, task_id: str) -> RecoveryReport:
         task = await self.get_task(task_id)

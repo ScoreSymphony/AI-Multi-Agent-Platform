@@ -220,3 +220,7 @@ The current #86 implementation provides:
 - focused regression tests for core, kernel-gate, persistence/recovery, Control Plane authorization, observability, reviewer-Agent, repair and replacement semantics.
 
 The implementation work owned directly by #86 is complete. Follow-up integrations remain intentionally owned by their respective issues, including #19 evaluation consumption, #75 review notifications, #82 repository diff/test evidence and #78 reusable policy templates. Those integrations may consume canonical Verification facts but do not own Verification or Task completion semantics.
+
+## Team reviewer semantics
+
+An Agent Team may coordinate a review, but canonical verifier identity remains a concrete Agent revision. The reviewer runtime can bind that Agent to an exact Team revision and preserves the Team reference on the AgentRun. This keeps N-reviewer independence and model/provider provenance attributable to actual reviewer executions instead of treating a Team as an opaque authority.
