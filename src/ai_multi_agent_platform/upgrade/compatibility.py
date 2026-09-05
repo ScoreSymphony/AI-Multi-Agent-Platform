@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-from ai_multi_agent_platform.plugins.models import PLUGIN_MANIFEST_VERSION, PluginManifest
+from ai_multi_agent_platform.plugins.models import (
+    PLUGIN_MANIFEST_VERSION,
+    PluginManifest,
+)
 
 from .models import CheckSeverity, PreflightCheck
 
