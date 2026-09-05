@@ -192,7 +192,9 @@ class ModelRuntimeConversationResponseProvider:
                 )
             requirements = _merge_requirements(
                 requirements,
-                _preference_requirements(preference.model_config_id, preference.routing_requirements),
+                _preference_requirements(
+                    preference.model_config_id, preference.routing_requirements
+                ),
             )
 
         router = DeterministicModelRouter(self._runtime.registry)
