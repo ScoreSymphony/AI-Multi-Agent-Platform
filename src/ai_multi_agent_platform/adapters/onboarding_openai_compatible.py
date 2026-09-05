@@ -7,7 +7,7 @@ request; secret material is never copied into ordinary model or onboarding confi
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 
 from ai_multi_agent_platform.configuration import SecretAccessContext, SecretProvider
 from ai_multi_agent_platform.contracts import (
@@ -29,6 +29,7 @@ from .openai_compatible import (
 )
 from .openai_compatible_streaming import (
     OpenAICompatibleModelProvider,
+    OpenAICompatibleStreamingTransport,
     UrllibOpenAICompatibleStreamingTransport,
 )
 
@@ -36,7 +37,7 @@ OPENAI_COMPATIBLE_ONBOARDING_ADAPTER_ID = "openai-compatible"
 
 
 class _SecretResolvingOpenAICompatibleTransport(OpenAICompatibleTransport):
-    """Inject one short-lived canonical secret into one outbound adapter request."""
+    """Inject one short-lived canonical secret into outbound adapter requests."""
 
     def __init__(
         self,
@@ -51,15 +52,12 @@ class _SecretResolvingOpenAICompatibleTransport(OpenAICompatibleTransport):
         self.reference = reference
         self.provider_id = provider_id
 
-    async def request_json(
+    async def _authorized_headers(
         self,
         method: str,
-        url: str,
-        *,
         headers: Mapping[str, str],
-        payload: Mapping[str, JsonValue] | None,
         timeout_seconds: float,
-    ) -> HttpJsonResponse:
+    ) -> dict[str, str]:
         material = await self.secret_provider.resolve(
             self.reference,
             SecretAccessContext(
@@ -71,6 +69,18 @@ class _SecretResolvingOpenAICompatibleTransport(OpenAICompatibleTransport):
         )
         request_headers = dict(headers)
         request_headers["Authorization"] = f"Bearer {material.reveal()}"
+        return request_headers
+
+    async def request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        payload: Mapping[str, JsonValue] | None,
+        timeout_seconds: float,
+    ) -> HttpJsonResponse:
+        request_headers = await self._authorized_headers(method, headers, timeout_seconds)
         return await self.delegate.request_json(
             method,
             url,
@@ -78,6 +88,51 @@ class _SecretResolvingOpenAICompatibleTransport(OpenAICompatibleTransport):
             payload=payload,
             timeout_seconds=timeout_seconds,
         )
+
+
+class _SecretResolvingOpenAICompatibleStreamingTransport(
+    _SecretResolvingOpenAICompatibleTransport,
+    OpenAICompatibleStreamingTransport,
+):
+    """Preserve native streaming while resolving credentials at request time."""
+
+    def __init__(
+        self,
+        *,
+        delegate: OpenAICompatibleStreamingTransport,
+        secret_provider: SecretProvider,
+        reference: SecretReference,
+        provider_id: str,
+    ) -> None:
+        super().__init__(
+            delegate=delegate,
+            secret_provider=secret_provider,
+            reference=reference,
+            provider_id=provider_id,
+        )
+        self.streaming_delegate = delegate
+
+    def stream_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        payload: Mapping[str, JsonValue] | None,
+        timeout_seconds: float,
+    ) -> AsyncIterator[HttpJsonResponse]:
+        async def iterate() -> AsyncIterator[HttpJsonResponse]:
+            request_headers = await self._authorized_headers(method, headers, timeout_seconds)
+            async for response in self.streaming_delegate.stream_json(
+                method,
+                url,
+                headers=request_headers,
+                payload=payload,
+                timeout_seconds=timeout_seconds,
+            ):
+                yield response
+
+        return iterate()
 
 
 class OpenAICompatibleOnboardingAdapter(OnboardingModelAdapter):
@@ -104,12 +159,20 @@ class OpenAICompatibleOnboardingAdapter(OnboardingModelAdapter):
                     "installed for this onboarding adapter",
                     provider_id=endpoint.provider_id,
                 )
-            transport = _SecretResolvingOpenAICompatibleTransport(
-                delegate=transport,
-                secret_provider=self.secret_provider,
-                reference=endpoint.credential_ref,
-                provider_id=endpoint.provider_id,
-            )
+            if isinstance(transport, OpenAICompatibleStreamingTransport):
+                transport = _SecretResolvingOpenAICompatibleStreamingTransport(
+                    delegate=transport,
+                    secret_provider=self.secret_provider,
+                    reference=endpoint.credential_ref,
+                    provider_id=endpoint.provider_id,
+                )
+            else:
+                transport = _SecretResolvingOpenAICompatibleTransport(
+                    delegate=transport,
+                    secret_provider=self.secret_provider,
+                    reference=endpoint.credential_ref,
+                    provider_id=endpoint.provider_id,
+                )
         return OpenAICompatibleModelProvider(
             OpenAICompatibleProviderConfig(
                 provider_id=endpoint.provider_id,
