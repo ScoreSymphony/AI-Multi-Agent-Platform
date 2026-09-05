@@ -7,6 +7,7 @@ from collections.abc import Callable
 from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.service import ScopeStore
+from ai_multi_agent_platform.evaluation.service import EvaluationService
 from ai_multi_agent_platform.models import ModelRegistry
 from ai_multi_agent_platform.templates import TemplateRepository
 
@@ -19,6 +20,12 @@ from .agent_codecs import (
 )
 from .agent_import import AgentImportMutationHandler, AgentTeamImportMutationHandler
 from .dependencies import parse_resource_dependency
+from .evaluation_codecs import (
+    EVALUATION_FIXTURE_RESOURCE_TYPE,
+    EVALUATION_SUITE_RESOURCE_TYPE,
+    register_evaluation_suite_portability_codec,
+)
+from .evaluation_import import EvaluationSuiteImportMutationHandler
 from .executor import ImportExecutor, ImportMutationRegistry
 from .models import DependencyKind, DependencyRequirement, IdPolicy
 from .planner import ImportPreviewService
@@ -41,18 +48,20 @@ def build_agent_portability_workflow(
     scopes: ScopeStore,
     platform_version: str,
     templates: TemplateRepository | None = None,
+    evaluation: EvaluationService | None = None,
+    evaluation_fixture_exists: Callable[[str], bool] | None = None,
     source_instance_id: str | None = None,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
     project_dependency_audit: ProjectDependencyAudit | None = None,
 ) -> PortabilityWorkflowService:
     """Compose production-safe portability against supplied canonical stores.
 
-    Agent, Agent Team and Project are always available. Template portability is enabled
-    only when the canonical #78 repository is supplied. Project rollback deliberately
-    fails closed unless the caller supplies a cross-domain dependency audit that can
-    prove removal is safe. Dependencies without a supplied destination registry remain
-    unavailable so import preview fails closed rather than making optimistic assumptions
-    about target state.
+    Agent, Agent Team and Project are always available. Template and EvaluationSuite
+    portability are enabled only when their owning-domain repositories/services are
+    supplied. Project rollback deliberately fails closed unless the caller supplies a
+    cross-domain dependency audit that can prove removal is safe. Dependencies without a
+    supplied destination registry remain unavailable so import preview fails closed rather
+    than making optimistic assumptions about target state.
     """
 
     serializers = ResourceSerializerRegistry()
@@ -64,6 +73,8 @@ def build_agent_portability_workflow(
     register_project_portability_codec(serializers, id_policy=id_policy)
     if templates is not None:
         register_template_portability_codec(serializers, id_policy=id_policy)
+    if evaluation is not None:
+        register_evaluation_suite_portability_codec(serializers)
 
     export_sources = ExportSourceRegistry()
 
@@ -85,6 +96,12 @@ def build_agent_portability_workflow(
             return snapshot_template(templates, resource_id)
 
         export_sources.register(TEMPLATE_RESOURCE_TYPE, load_template)
+    if evaluation is not None:
+
+        async def load_evaluation_suite(resource_id: str) -> object:
+            return evaluation.get_suite(resource_id)
+
+        export_sources.register(EVALUATION_SUITE_RESOURCE_TYPE, load_evaluation_suite)
 
     mutations = ImportMutationRegistry()
     mutations.register(AgentImportMutationHandler(agents))
@@ -97,6 +114,8 @@ def build_agent_portability_workflow(
     )
     if templates is not None:
         mutations.register(TemplateImportMutationHandler(templates))
+    if evaluation is not None:
+        mutations.register(EvaluationSuiteImportMutationHandler(evaluation))
 
     def resource_exists(resource_type: str, resource_id: str) -> bool:
         if resource_type == AGENT_RESOURCE_TYPE:
@@ -107,6 +126,14 @@ def build_agent_portability_workflow(
             return _canonical_exists(lambda: templates.get_template(resource_id))
         if resource_type == PROJECT_RESOURCE_TYPE:
             return _canonical_exists(lambda: scopes.get_project(resource_id))
+        if resource_type == EVALUATION_SUITE_RESOURCE_TYPE and evaluation is not None:
+            return _canonical_exists(lambda: evaluation.get_suite(resource_id))
+        if resource_type == EVALUATION_FIXTURE_RESOURCE_TYPE:
+            return (
+                False
+                if evaluation_fixture_exists is None
+                else evaluation_fixture_exists(resource_id)
+            )
         if resource_type == "workspace":
             return _canonical_exists(lambda: scopes.get_workspace(resource_id))
         return False
