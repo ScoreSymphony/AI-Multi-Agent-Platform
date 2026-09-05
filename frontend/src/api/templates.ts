@@ -311,6 +311,22 @@ export class TemplateClient {
     );
   }
 
+  activateUntrusted(
+    templateId: string,
+    expectedRevision: number,
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<CanonicalTemplate> {
+    return this.command(
+      "template.publish",
+      requireRef(templateId, "Template"),
+      {
+        expected_revision: requirePositiveRevision(expectedRevision),
+        activate_untrusted: true,
+      },
+      idempotencyKey,
+    );
+  }
+
   clone(
     templateId: string,
     options: { revision?: number; name?: string } = {},
