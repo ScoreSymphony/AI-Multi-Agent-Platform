@@ -32,7 +32,12 @@ _FENCED_OPERATIONS = frozenset({"dispatch", "cancel"})
 
 
 class FencedTransportWorkerDispatcher(TransportWorkerDispatcher):
-    """Control-side transport that attaches the current HA fencing token to side effects."""
+    """Control-side transport that attaches the current HA fencing token to side effects.
+
+    Dispatch always requires ordinary active-leader authority. Cancel may use a distinct authority
+    check so the promotion reconciliation barrier can finish a previously durable cancellation
+    without granting the candidate general dispatch/write authority.
+    """
 
     def __init__(
         self,
@@ -41,11 +46,13 @@ class FencedTransportWorkerDispatcher(TransportWorkerDispatcher):
         *,
         authority_check: AuthorityCheck,
         control_plane_instance_id: str,
+        cancel_authority_check: AuthorityCheck | None = None,
         response_timeout_seconds: float = 30.0,
     ) -> None:
         if not control_plane_instance_id.strip():
             raise ValueError("control_plane_instance_id must not be blank")
         self._authority_check = authority_check
+        self._cancel_authority_check = cancel_authority_check or authority_check
         self._control_plane_instance_id = control_plane_instance_id
         super().__init__(
             worker_id,
@@ -55,7 +62,7 @@ class FencedTransportWorkerDispatcher(TransportWorkerDispatcher):
         )
 
     async def dispatch(self, job: WorkerJobRequest) -> ExecutionHandle:
-        fence = await self._fence_payload()
+        fence = await self._fence_payload(self._authority_check)
         reply = await self._request(
             operation="dispatch",
             worker_job_id=job.worker_job_id,
@@ -68,7 +75,7 @@ class FencedTransportWorkerDispatcher(TransportWorkerDispatcher):
         return WorkerTransportCodec.decode_handle(reply["handle"])
 
     async def cancel(self, worker_job_id: str) -> ExecutionSnapshot:
-        fence = await self._fence_payload()
+        fence = await self._fence_payload(self._cancel_authority_check)
         reply = await self._request(
             operation="cancel",
             worker_job_id=worker_job_id,
@@ -76,8 +83,8 @@ class FencedTransportWorkerDispatcher(TransportWorkerDispatcher):
         )
         return WorkerTransportCodec.decode_snapshot(reply["snapshot"])
 
-    async def _fence_payload(self) -> dict[str, JsonValue]:
-        grant = await self._authority_check()
+    async def _fence_payload(self, authority_check: AuthorityCheck) -> dict[str, JsonValue]:
+        grant = await authority_check()
         token = _require_ha_token(grant)
         if grant.instance_id != self._control_plane_instance_id:
             raise StaleFencingToken("authority grant belongs to a different Control Plane instance")
