@@ -48,6 +48,12 @@ class ContextResolvingConversationResponseProvider:
         self._file_provider = file_provider
         self._knowledge_provider = knowledge_provider
 
+    @property
+    def inner(self) -> ConversationResponseProvider:
+        """Return the wrapped replaceable responder for composition inspection/tests."""
+
+        return self._inner
+
     def stream_response(
         self,
         request: ConversationResponseRequest,
@@ -249,15 +255,18 @@ def _source_query(request: ConversationResponseRequest) -> str:
 
 
 def _data_access_context(request: ConversationResponseRequest) -> DataAccessContext:
-    owner_type, owner_id = _owner_from_actor_ref(request.actor_ref)
-    return DataAccessContext(
-        operation=OperationContext(
+    operation = request.operation
+    if operation is None:
+        owner_type, owner_id = _owner_from_actor_ref(request.actor_ref)
+        operation = OperationContext(
             correlation_id=request.correlation_id,
             causation_id=request.source_message_id,
             owner_type=owner_type,
             owner_id=owner_id,
             project_id=request.project_id,
-        ),
+        )
+    return DataAccessContext(
+        operation=operation,
         actor_ref=request.actor_ref,
     )
 
