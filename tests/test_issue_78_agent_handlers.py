@@ -9,7 +9,7 @@ from ai_multi_agent_platform.agents import (
     InMemoryAgentRepository,
     InstructionSource,
 )
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.templates import (
     AgentTemplateExporter,
     ContextualTemplateHandlerRegistry,
@@ -49,7 +49,14 @@ def _application() -> tuple[TemplateApplicationService, AgentService]:
 def test_existing_agent_export_roundtrips_through_canonical_agent_service() -> None:
     async def scenario() -> None:
         application, agents = _application()
-        source = agents.create_agent(_profile("Researcher"), owner_ref=_owner())
+        source_project_id = new_id("project")
+        source_workspace_id = new_id("workspace")
+        source = agents.create_agent(
+            _profile("Researcher"),
+            owner_ref=_owner(),
+            project_id=source_project_id,
+            workspace_id=source_workspace_id,
+        )
         exporter = AgentTemplateExporter(agents, application.templates)
 
         draft = exporter.create_from_agent(
@@ -57,6 +64,15 @@ def test_existing_agent_export_roundtrips_through_canonical_agent_service() -> N
             owner_ref=_owner(),
             author="issue-78-test",
         )
+        definition = application.repository.get_template(draft.template_id)
+        exported_payload = draft.content.configuration.payload
+        assert exported_payload is not None
+        assert exported_payload["project_id"] is None
+        assert exported_payload["workspace_id"] is None
+        assert definition.project_id is None
+        assert draft.content.provenance.metadata["source_project_id"] == source_project_id
+        assert draft.content.provenance.metadata["source_workspace_id"] == source_workspace_id
+
         published = application.templates.publish(
             draft.template_id,
             expected_revision=draft.revision,
@@ -73,6 +89,8 @@ def test_existing_agent_export_roundtrips_through_canonical_agent_service() -> N
         created = agents.get_agent_revision(created_id)
         assert created.profile == source.profile
         assert created.owner_ref == _owner()
+        assert created.project_id is None
+        assert created.workspace_id is None
         assert created.provenance is not None
         assert created.provenance.source == "template"
         assert created.provenance.details["template_id"] == published.template_id
