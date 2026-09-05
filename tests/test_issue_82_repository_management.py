@@ -13,6 +13,7 @@ from ai_multi_agent_platform.repositories import (
     RepositoryManagementService,
     RepositoryRegistry,
     SqliteRepositoryBindingCatalog,
+    restore_managed_local_repositories,
 )
 from ai_multi_agent_platform.security import (
     ActorType,
@@ -24,7 +25,7 @@ from ai_multi_agent_platform.security import (
 )
 
 
-def test_managed_local_repository_attach_persists_and_detaches_without_deleting_content(
+def test_managed_local_repository_attach_persists_restores_and_detaches_without_deleting_content(
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
@@ -79,6 +80,17 @@ def test_managed_local_repository_attach_persists_and_detaches_without_deleting_
             (managed_root / "project-repository").resolve()
         )
         assert "root" not in attached.to_dict()["metadata"]
+
+        restarted = RepositoryRegistry()
+        restored = restore_managed_local_repositories(catalog, restarted)
+        assert len(restored) == 1
+        restored_binding = restarted.resolve(attached.id)
+        assert restored_binding.reference.id == attached.id
+        assert restored_binding.connection.connection.project_id == project_id
+        assert restored_binding.connection.connection.owner_id == owner_id
+        assert restored_binding.provider.provider_id == "local-git"
+        refreshed = await restored_binding.provider.read(restored_binding.reference, operation)
+        assert refreshed.id == attached.id
 
         detached = await service.detach(attached.id, context)
         assert detached.id == attached.id
