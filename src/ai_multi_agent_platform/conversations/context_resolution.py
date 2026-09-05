@@ -92,7 +92,10 @@ async def resolve_conversation_context(
             if knowledge_provider is None:
                 raise ContractError(
                     ErrorCode.UNAVAILABLE,
-                    "conversation knowledge context requires a configured canonical KnowledgeProvider",
+                    (
+                        "conversation knowledge context requires a configured canonical "
+                        "KnowledgeProvider"
+                    ),
                     details={"knowledge_source_id": reference.id},
                 )
             resolved.append(
