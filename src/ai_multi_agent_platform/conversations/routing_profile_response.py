@@ -6,6 +6,7 @@ from dataclasses import replace
 
 from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.agents.models import AgentModelPolicy
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.models import (
     DeterministicModelRouter,
     ModelRoutingProfileRepository,
@@ -49,7 +50,7 @@ class DurableRoutingProfileConversationResponseProvider(
         self,
         agent_policy: AgentModelPolicy | None,
         request: ConversationResponseRequest,
-    ) -> tuple[str | None, dict[str, object]]:
+    ) -> tuple[str | None, dict[str, JsonValue]]:
         if agent_policy is None or agent_policy.routing_profile_ref is None:
             model_id, requirements = super()._effective_routing(agent_policy, request)
             return model_id, requirements
