@@ -32,7 +32,10 @@ class CapabilityAssignmentRepository(Protocol):
         revision: int,
     ) -> CapabilityAssignmentRevision: ...
 
-    def list_revisions(self, assignment_id: str) -> tuple[CapabilityAssignmentRevision, ...]: ...
+    def list_revisions(
+        self,
+        assignment_id: str,
+    ) -> tuple[CapabilityAssignmentRevision, ...]: ...
 
 
 class InMemoryCapabilityAssignmentRepository:
@@ -95,7 +98,10 @@ class InMemoryCapabilityAssignmentRepository:
             )
         key = (revision.assignment_id, revision.revision)
         if key in self._revisions:
-            raise ContractError(ErrorCode.CONFLICT, "capability assignment revision already exists")
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "capability assignment revision already exists",
+            )
         self._revisions[key] = revision
         self._policies[policy.assignment_id] = policy
 
@@ -124,7 +130,10 @@ class InMemoryCapabilityAssignmentRepository:
                 f"capability assignment revision not found: {assignment_id}@{revision}",
             ) from exc
 
-    def list_revisions(self, assignment_id: str) -> tuple[CapabilityAssignmentRevision, ...]:
+    def list_revisions(
+        self,
+        assignment_id: str,
+    ) -> tuple[CapabilityAssignmentRevision, ...]:
         self.get(assignment_id)
         revisions = [
             item
