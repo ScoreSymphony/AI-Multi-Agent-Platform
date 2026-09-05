@@ -15,6 +15,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 
+from .materialization import materialize_template_revision
 from .models import (
     TemplateDependency,
     TemplateInstantiation,
@@ -293,13 +294,18 @@ class TemplateApplicationService:
             published_only=not allow_draft,
         )
         dependency_order, _ = self._resolve_dependency_order(root)
+        # Materialize every revision before the first handler is invoked. A missing or invalid
+        # binding therefore fails before any canonical resource can be created.
+        materialized_order = tuple(
+            materialize_template_revision(item, environment) for item in dependency_order
+        )
         instance_id = new_id("template_instance")
         created_by_source: dict[TemplateRevisionRef, tuple[TemplateResourceRef, ...]] = {}
         resource_refs: list[TemplateResourceRef] = []
         applied_resources: list[_AppliedResources] = []
 
         try:
-            for item in dependency_order:
+            for item in materialized_order:
                 handler = self.handlers.get(item.content.template_type)
                 if handler is None:
                     handler_type = item.content.template_type.value
