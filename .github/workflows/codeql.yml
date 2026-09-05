@@ -1,5 +1,9 @@
 name: CodeQL
 
+env:
+  CODEQL_OVERLAY_DATABASE_MODE: none
+  CODEQL_ACTION_DIFF_INFORMED_QUERIES: false
+
 on:
   push:
     branches: [main, fix/code-scanning-alert-1]
