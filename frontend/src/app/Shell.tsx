@@ -9,12 +9,14 @@ import { EvaluationClient } from "../api/evaluations";
 import { IntegrationsClient } from "../api/integrations";
 import { MemoryKnowledgeClient } from "../api/memoryKnowledge";
 import { NotificationClient } from "../api/notifications";
+import { OnboardingClient } from "../api/onboarding";
 import { OrganizationClient } from "../api/organizations";
 import { PluginsClient } from "../api/plugins";
 import { TemplateClient } from "../api/templates";
 import { VerificationClient } from "../api/verification";
 import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
+import { OnboardingCallout } from "../components/OnboardingCallout";
 import { LoadingState } from "../components/States";
 import { PermissionHintsProvider } from "../security/permissions";
 import { navigation } from "./navigation";
@@ -60,6 +62,7 @@ import { ModelDetailPage, ModelProviderDetailPage } from "../pages/ModelPages";
 import { ModelsPage } from "../pages/ModelInventoryPage";
 import { NotificationsPage } from "../pages/NotificationsPage";
 import { ObservabilityPage } from "../pages/ObservabilityPage";
+import { OnboardingPage } from "../pages/OnboardingPage";
 import { OrganizationsPage } from "../pages/OrganizationsPage";
 import { OverviewPage, UnavailablePage } from "../pages/Pages";
 import {
@@ -98,6 +101,10 @@ export function Shell() {
   const session = useMemo(() => new BrowserSessionClient({ baseUrl }), [baseUrl]);
   const client = useMemo(
     () => new ControlPlaneClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const onboardingClient = useMemo(
+    () => new OnboardingClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const collections = useMemo(
@@ -195,8 +202,26 @@ export function Shell() {
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
+  const onboardingAvailable = manifest?.resources.includes("onboarding") ?? false;
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
+  else if (path === "/onboarding") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="First-run onboarding"
+        resource="onboarding"
+      >
+        <OnboardingPage
+          client={client}
+          onboarding={onboardingClient}
+          session={session}
+          manifest={manifest}
+        />
+      </ManifestResourcePage>
+    );
+  }
   else if (path === "/chat") {
     content = (
       <ManifestResourcePage
@@ -574,7 +599,12 @@ export function Shell() {
               {apiStatusLabel(manifestState, manifest)}
             </div>
           </header>
-          <main id="main" tabIndex={-1}>{content}</main>
+          <main id="main" tabIndex={-1}>
+            {path !== "/onboarding" && onboardingAvailable ? (
+              <OnboardingCallout client={onboardingClient} />
+            ) : null}
+            {content}
+          </main>
         </div>
       </div>
     </PermissionHintsProvider>
