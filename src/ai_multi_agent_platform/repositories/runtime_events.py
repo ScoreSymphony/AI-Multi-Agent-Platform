@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ai_multi_agent_platform.connectors import ConnectorEvent
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import PlatformEvent
@@ -47,7 +49,8 @@ class RepositoryEventRuntimeIngress:
             correlation_id=correlation_id,
             require_verified=self._require_verified,
         )
-        return await self._append_once(canonical)
+        durable = self._bind_to_runtime_stream(canonical, ingress_correlation_id=correlation_id)
+        return await self._append_once(durable)
 
     def _resolve_binding(self, event: ConnectorEvent) -> RepositoryBinding:
         repository_ids: list[str] = []
@@ -85,6 +88,36 @@ class RepositoryEventRuntimeIngress:
                 details={"connection_id": event.connection_id, "candidate_count": len(candidates)},
             )
         return candidates[0]
+
+    @staticmethod
+    def _bind_to_runtime_stream(
+        event: PlatformEvent,
+        *,
+        ingress_correlation_id: str,
+    ) -> PlatformEvent:
+        """Bind one normalized event to the canonical project stream without losing ingress trace."""
+
+        stream_id = event.project_id
+        if stream_id is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "repository runtime event must have project scope",
+            )
+        payload = dict(event.payload)
+        payload["ingress_correlation_id"] = ingress_correlation_id
+        provenance = replace(
+            event.provenance,
+            details={
+                **event.provenance.details,
+                "ingress_correlation_id": ingress_correlation_id,
+            },
+        )
+        return replace(
+            event,
+            correlation_id=stream_id,
+            payload=payload,
+            provenance=provenance,
+        )
 
     async def _append_once(self, event: PlatformEvent) -> PlatformEvent:
         stream_id = event.project_id
