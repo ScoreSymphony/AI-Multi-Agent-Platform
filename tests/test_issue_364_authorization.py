@@ -59,8 +59,8 @@ def test_authorization_uses_persisted_scope_not_caller_claim() -> None:
     async def scenario() -> None:
         project_a = new_id("project")
         project_b = new_id("project")
-        organization_a = "org-a"
-        organization_b = "org-b"
+        organization_a = new_id("organization")
+        organization_b = new_id("organization")
         base = WorkflowService(InMemoryWorkflowRepository())
         revision = base.create(
             owner_ref=OwnerRef(type="user", id="alice"),
@@ -106,10 +106,55 @@ def test_authorization_uses_persisted_scope_not_caller_claim() -> None:
     asyncio.run(scenario())
 
 
+def test_list_filters_workflows_outside_actor_scope() -> None:
+    async def scenario() -> None:
+        project_a = new_id("project")
+        project_b = new_id("project")
+        organization_a = new_id("organization")
+        organization_b = new_id("organization")
+        base = WorkflowService(InMemoryWorkflowRepository())
+        revision_a = base.create(
+            owner_ref=OwnerRef(type="user", id="alice"),
+            content=_content(),
+            project_id=project_a,
+            organization_id=organization_a,
+        )
+        revision_b = base.create(
+            owner_ref=OwnerRef(type="user", id="bob"),
+            content=_content(),
+            project_id=project_b,
+            organization_id=organization_b,
+        )
+        provider = LocalAuthorizationProvider(
+            (
+                _policy("user:alice", project_id=project_a, organization_id=organization_a),
+                _policy("user:bob", project_id=project_b, organization_id=organization_b),
+            )
+        )
+        service = AuthorizedWorkflowService(base, AuthorizationGate(provider))
+
+        alice = WorkflowCallContext(
+            operation=OperationContext(correlation_id="workflow-list-alice"),
+            actor_ref="user:alice",
+        )
+        bob = WorkflowCallContext(
+            operation=OperationContext(correlation_id="workflow-list-bob"),
+            actor_ref="user:bob",
+        )
+
+        alice_visible = await service.list(context=alice)
+        bob_visible = await service.list(context=bob)
+
+        assert {item.workflow_id for item in alice_visible} == {revision_a.workflow_id}
+        assert {item.workflow_id for item in bob_visible} == {revision_b.workflow_id}
+
+    asyncio.run(scenario())
+
+
 def test_create_and_admission_are_authorization_gated() -> None:
     async def scenario() -> None:
         project_id = new_id("project")
-        organization_id = "org-a"
+        organization_id = new_id("organization")
         provider = LocalAuthorizationProvider(
             (_policy("user:alice", project_id=project_id, organization_id=organization_id),)
         )

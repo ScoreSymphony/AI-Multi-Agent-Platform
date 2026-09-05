@@ -86,6 +86,17 @@ def test_create_version_exact_resolution_and_restart(tmp_path) -> None:
     assert tuple(item.revision for item in restored.list_revisions(first.workflow_id)) == (1, 2)
 
 
+def test_workflow_scope_requires_canonical_organization_identity() -> None:
+    service = WorkflowService(InMemoryWorkflowRepository())
+
+    with pytest.raises(ValueError, match="expected canonical organization id"):
+        service.create(
+            owner_ref=_owner(),
+            content=_content(),
+            organization_id="org-a",
+        )
+
+
 def test_dependency_and_placeholder_validation_is_fail_closed() -> None:
     with pytest.raises(ValueError, match="unknown stages"):
         WorkflowContent(
@@ -145,6 +156,37 @@ def test_exact_revision_admission_creates_task_bound_plan_without_mutating_workf
     assert service.resolve(revision.ref) == before
 
 
+def test_provider_orchestrator_replacement_preserves_canonical_revision(tmp_path) -> None:
+    path = tmp_path / "workflows.json"
+    first_runtime = WorkflowService(JsonWorkflowRepository(path))
+    revision = first_runtime.create(owner_ref=_owner(), content=_content())
+    canonical_bytes = path.read_text(encoding="utf-8")
+
+    first_admission = first_runtime.admit(
+        revision.ref,
+        task_id=new_id("task"),
+        owner_ref=_owner(),
+        parameters={"topic": "first runtime"},
+    )
+
+    replacement_runtime = WorkflowService(JsonWorkflowRepository(path))
+    restored_revision = replacement_runtime.resolve(revision.ref)
+    second_admission = replacement_runtime.admit(
+        revision.ref,
+        task_id=new_id("task"),
+        owner_ref=_owner(),
+        parameters={"topic": "replacement runtime"},
+    )
+
+    assert restored_revision == revision
+    assert first_admission.source == second_admission.source == revision.ref
+    assert first_admission.plan.id != second_admission.plan.id
+    assert {step.id for step in first_admission.steps}.isdisjoint(
+        step.id for step in second_admission.steps
+    )
+    assert path.read_text(encoding="utf-8") == canonical_bytes
+
+
 def test_admission_requires_declared_required_parameters() -> None:
     service = WorkflowService(InMemoryWorkflowRepository())
     revision = service.create(owner_ref=_owner(), content=_content())
@@ -169,6 +211,20 @@ def test_runtime_private_and_secret_bearing_metadata_is_rejected() -> None:
 
     with pytest.raises(ContractError) as exc_info:
         service.create(owner_ref=_owner(), content=unsafe)
+    assert exc_info.value.code is ErrorCode.INVALID_CONFIGURATION
+
+
+def test_restart_revalidates_runtime_private_persisted_metadata(tmp_path) -> None:
+    path = tmp_path / "workflows.json"
+    service = WorkflowService(JsonWorkflowRepository(path))
+    service.create(owner_ref=_owner(), content=_content())
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["revisions"][0]["content"]["metadata"]["provider_session_id"] = "injected"
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    with pytest.raises(ContractError) as exc_info:
+        JsonWorkflowRepository(path)
     assert exc_info.value.code is ErrorCode.INVALID_CONFIGURATION
 
 
