@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 
 from ai_multi_agent_platform.contracts.types import AuthorizationDecision, AuthorizationRequest
 from ai_multi_agent_platform.control_plane import ActorContext, ControlPlane, RequestContext
@@ -108,9 +110,7 @@ def test_notification_search_is_recipient_scoped_minimized_and_discoverable() ->
         assert item["owner_type"] == "user"
         assert item["owner_id"] == user_id
         assert item["canonical_ref"] == f"/api/v1/notifications/{created.id}"
-        assert item["provenance"] == {
-            "indexed_from": "canonical-notification-repository"
-        }
+        assert item["provenance"] == {"indexed_from": "canonical-notification-repository"}
 
         serialized = repr(exact)
         assert created.title not in serialized
@@ -158,6 +158,7 @@ def test_notification_search_rechecks_source_visibility_and_retention_state() ->
         recipient = RecipientRef(RecipientType.USER, user_id)
         created = await control_plane.notification_service.create(_candidate(user_id))
         assert created is not None
+        assert await control_plane.rebuild_search_index() >= 1
 
         authorization.deny_task_reads = True
         hidden = await control_plane.search_resources(
@@ -195,5 +196,27 @@ def test_notification_search_rechecks_source_visibility_and_retention_state() ->
         )
         assert archived["total"] == 0
         assert archived["items"] == []
+
+        current = datetime.now(UTC)
+        expired_candidate = replace(
+            _candidate(user_id),
+            aggregation_key=None,
+            expires_at=current - timedelta(hours=1),
+        )
+        expired = await control_plane.notification_service.create(
+            expired_candidate,
+            now=current - timedelta(days=1),
+        )
+        assert expired is not None
+        expired_search = await control_plane.search_resources(
+            _context(user_id),
+            SearchQuery(
+                exact_id=expired.id,
+                resource_types=("notification",),
+                mode=SearchMode.EXACT,
+            ),
+        )
+        assert expired_search["total"] == 0
+        assert expired_search["items"] == []
 
     asyncio.run(scenario())
