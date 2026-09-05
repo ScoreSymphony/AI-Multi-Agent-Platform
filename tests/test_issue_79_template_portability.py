@@ -187,13 +187,16 @@ def test_template_import_restores_history_as_untrusted_and_guarded_rollback() ->
         ):
             assert imported_revision.content.provenance.trust is TemplateTrust.UNTRUSTED
             assert imported_revision.content.provenance.metadata["imported_source_trust"] == "local"
-            assert replace(
-                imported_revision,
-                content=replace(
-                    imported_revision.content,
-                    provenance=source_revision.content.provenance,
-                ),
-            ) == source_revision
+            assert (
+                replace(
+                    imported_revision,
+                    content=replace(
+                        imported_revision.content,
+                        provenance=source_revision.content.provenance,
+                    ),
+                )
+                == source_revision
+            )
 
         await handler.rollback(resource, decoded, token, context)
         with pytest.raises(ContractError) as exc_info:
