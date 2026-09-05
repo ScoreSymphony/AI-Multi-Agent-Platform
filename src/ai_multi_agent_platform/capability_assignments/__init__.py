@@ -1,5 +1,12 @@
 """Canonical reusable capability-assignment policy resources."""
 
+from .contracts import (
+    CapabilityAssignmentAccessContext,
+    CapabilityAssignmentAuthorizationGate,
+    CapabilityAssignmentTargetResolver,
+    CapabilityInventory,
+    ResolvedCapabilityAssignmentTarget,
+)
 from .models import (
     CAPABILITY_ASSIGNMENT_SCHEMA_VERSION,
     CapabilityAssignmentContent,
@@ -15,15 +22,8 @@ from .repository import (
     CapabilityAssignmentRepository,
     InMemoryCapabilityAssignmentRepository,
 )
-from .service import (
-    CallableCapabilityAssignmentTargetResolver,
-    CapabilityAssignmentAccessContext,
-    CapabilityAssignmentAuthorizationGate,
-    CapabilityAssignmentService,
-    CapabilityAssignmentTargetResolver,
-    CapabilityInventory,
-    ResolvedCapabilityAssignmentTarget,
-)
+from .service import CapabilityAssignmentService
+from .target_resolver import CallableCapabilityAssignmentTargetResolver
 
 __all__ = [
     "CAPABILITY_ASSIGNMENT_SCHEMA_VERSION",
