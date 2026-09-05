@@ -193,7 +193,12 @@ export class TemplateClient {
     scope: TemplateScopeInput = {},
     idempotencyKey: string = crypto.randomUUID(),
   ): Promise<CanonicalTemplate> {
-    return this.command("template.create", TEMPLATES, { content, ...scope }, idempotencyKey);
+    return this.command(
+      "template.create",
+      TEMPLATES,
+      { content: templateContentJson(content), ...scope },
+      idempotencyKey,
+    );
   }
 
   createFromAgent(
@@ -280,7 +285,10 @@ export class TemplateClient {
     return this.command(
       "template.revise",
       requireRef(templateId, "Template"),
-      { expected_revision: requirePositiveRevision(expectedRevision), content },
+      {
+        expected_revision: requirePositiveRevision(expectedRevision),
+        content: templateContentJson(content),
+      },
       idempotencyKey,
     );
   }
@@ -428,6 +436,10 @@ export function emptyTemplateContent(): TemplateContent {
     tags: [],
     categories: [],
   };
+}
+
+function templateContentJson(content: TemplateContent): JsonValue {
+  return JSON.parse(JSON.stringify(content)) as JsonValue;
 }
 
 function compact(value: Record<string, JsonValue | undefined>): Record<string, JsonValue> {
