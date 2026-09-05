@@ -13,7 +13,7 @@ Both commands require an `Idempotency-Key`. The single move binds the key to the
 
 A successful move appends `task.project_reassigned` to the Task stream. The event itself keeps `project_id` equal to the **source Project** so that the event remains attributable to the scope in which the mutation occurred. Its payload records both `source_project_id` and `destination_project_id`.
 
-The Task reducer then projects `Task.project_id = destination_project_id`. Every later kernel operation therefore receives the destination Project through the canonical Task context.
+The Task reducer then projects `Task.project_id = destination_project_id`. Every later kernel operation therefore receives the destination Project through the canonical Task context. A `destination_project_id` of `null` removes the Project binding only; it does not rewrite or imply a different canonical `owner_ref`.
 
 ## Historical provenance
 
@@ -41,6 +41,7 @@ The default policy is fail-closed:
 - without organization data, different owners are incompatible;
 - organization/team scopes within the same active organization are compatible;
 - a personal user/service scope may cross into an organization/team scope when that identity has active membership in the organization;
+- membership is directional for compatibility and does not automatically make Organization-owned resources interchangeable with the member's personal resources in the reverse direction;
 - otherwise, two Project scopes require explicit **bidirectional** active Project sharing through the #87 ownership/share model.
 
 Authorization remains authoritative for whether the actor may perform the move; compatibility only prevents structurally unsafe scope changes.
