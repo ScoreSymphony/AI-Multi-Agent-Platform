@@ -188,14 +188,18 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
                 start_revision=_optional_string(arguments, "start_revision") or "HEAD",
                 checkout=_optional_bool(arguments, "checkout") or False,
             )
-            return _revision_output(revision.repository_id, revision.requested_ref, revision.commit_sha)
+            return _revision_output(
+                revision.repository_id, revision.requested_ref, revision.commit_sha
+            )
         if operation is RepositoryOperation.CHECKOUT:
             revision = await self._repositories.checkout(
                 repository_id,
                 _required_string(arguments, "revision"),
                 context,
             )
-            return _revision_output(revision.repository_id, revision.requested_ref, revision.commit_sha)
+            return _revision_output(
+                revision.repository_id, revision.requested_ref, revision.commit_sha
+            )
         if operation is RepositoryOperation.COMMIT:
             commit = await self._repositories.commit(
                 repository_id,
@@ -217,7 +221,9 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
                 remote=_optional_string(arguments, "remote") or "origin",
                 refspec=_optional_string(arguments, "refspec"),
             )
-            return _revision_output(revision.repository_id, revision.requested_ref, revision.commit_sha)
+            return _revision_output(
+                revision.repository_id, revision.requested_ref, revision.commit_sha
+            )
         raise ContractError(
             ErrorCode.UNSUPPORTED_CAPABILITY,
             f"repository capability is not implemented: {operation.value}",
@@ -296,7 +302,9 @@ def _optional_bool(arguments: dict[str, JsonValue], key: str) -> bool | None:
     return value
 
 
-def _revision_output(repository_id: str, requested_ref: str, commit_sha: str) -> dict[str, JsonValue]:
+def _revision_output(
+    repository_id: str, requested_ref: str, commit_sha: str
+) -> dict[str, JsonValue]:
     return {
         "repository_id": repository_id,
         "requested_ref": requested_ref,
