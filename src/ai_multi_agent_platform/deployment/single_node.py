@@ -227,7 +227,11 @@ def build_single_node_deployment(
     onboarding.restore()
     model_runtime = ModelRuntime(models)
     agent_runtime = AgentRuntime(agents, model_registry=models)
-    conversation_response_provider = ModelRuntimeConversationResponseProvider(model_runtime, agents)
+    conversation_response_provider = ModelRuntimeConversationResponseProvider(
+        model_runtime,
+        agents,
+        routing_profiles=agent_runtime.routing_profiles,
+    )
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
