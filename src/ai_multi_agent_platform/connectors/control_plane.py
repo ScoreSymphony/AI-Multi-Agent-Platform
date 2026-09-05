@@ -277,8 +277,7 @@ def register_connector_control_plane(
                 else None
             ),
             "resource_refs": [
-                external_resource_projection(resource, existing)
-                for resource in result.resources
+                external_resource_projection(resource, existing) for resource in result.resources
             ],
             "events": [
                 {

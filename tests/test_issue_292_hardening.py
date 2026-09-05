@@ -142,9 +142,7 @@ def test_sync_reuses_canonical_external_resource_ids_after_provider_recreation()
             actor=_actor(),
             context=_context(project_id),
         )
-        transient_ids = {
-            resource.native_reference.native_id: resource.id for resource in transient
-        }
+        transient_ids = {resource.native_reference.native_id: resource.id for resource in transient}
         assert all(transient_ids[native_id] != first_ids[native_id] for native_id in first_ids)
 
         rebuilt = await service_two.synchronize(
