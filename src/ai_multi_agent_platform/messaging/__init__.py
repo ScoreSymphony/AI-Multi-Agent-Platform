@@ -1,4 +1,4 @@
-"""Replaceable internal message transport contracts and reference implementation."""
+"""Replaceable internal message transport contracts and reference implementations."""
 
 from .conformance import MessageTransportContractSuite
 from .contracts import MessageSubscription, MessageTransport
@@ -18,6 +18,7 @@ from .models import (
     TransportEnvelope,
     TransportSemantics,
 )
+from .network import TcpMessageBroker, TcpMessageTransport
 from .reference import InProcessMessageTransport
 
 __all__ = [
@@ -37,6 +38,8 @@ __all__ = [
     "PublishReceipt",
     "RetryPolicy",
     "Subscription",
+    "TcpMessageBroker",
+    "TcpMessageTransport",
     "TraceContext",
     "TransportEnvelope",
     "TransportSemantics",
