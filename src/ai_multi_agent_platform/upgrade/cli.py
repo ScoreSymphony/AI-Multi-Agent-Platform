@@ -10,7 +10,12 @@ from pathlib import Path
 from typing import TextIO
 
 from .compatibility import FormatTranslatorRegistry
-from .migrations import JsonMigrationHistoryStore, MigrationError, MigrationRegistry, MigrationRunner
+from .migrations import (
+    JsonMigrationHistoryStore,
+    MigrationError,
+    MigrationRegistry,
+    MigrationRunner,
+)
 from .models import VersionSnapshot
 from .preflight import PreflightRequest, UpgradePreflight
 from .service import JsonUpgradeHistoryStore, MaintenanceStateStore, UpgradeError, UpgradeService
@@ -119,7 +124,11 @@ def default_migration_registry() -> MigrationRegistry:
 
 
 def _target_snapshot(current: VersionSnapshot, registry: MigrationRegistry) -> VersionSnapshot:
-    release = current_release_versions(migration_revision=current.migration_revision)
+    release = current_release_versions(
+        migration_revision=current.migration_revision,
+        adapter_versions=current.adapter_versions,
+        plugin_interface_versions=current.plugin_interface_versions,
+    )
     steps = registry.plan(current.domain_schema, release.domain_schema)
     if steps:
         release = replace(release, migration_revision=steps[-1].revision)
