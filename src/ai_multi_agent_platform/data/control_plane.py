@@ -18,10 +18,12 @@ from .contracts import FileProvider, KnowledgeProvider, MemoryProvider
 from .models import (
     DataAccessContext,
     FileRecord,
+    KnowledgeDocument,
     KnowledgeSearchMode,
     KnowledgeSearchRequest,
     KnowledgeSearchResult,
     KnowledgeSource,
+    KnowledgeStatus,
     MemoryEntry,
     MemoryQuery,
     MemoryScope,
@@ -32,8 +34,18 @@ DATA_PROVIDER_COLLECTION = "data-providers"
 FILE_COLLECTION = "files"
 MEMORY_COLLECTION = "memory"
 KNOWLEDGE_COLLECTION = "knowledge"
+KNOWLEDGE_DOCUMENT_COLLECTION = "knowledge-documents"
 KNOWLEDGE_RESULT_COLLECTION = "knowledge-results"
 ProjectIdProvider = Callable[[], tuple[str, ...]]
+
+_DISCOVERY_DEGRADED_CODES = frozenset(
+    {
+        ErrorCode.UNSUPPORTED_CAPABILITY,
+        ErrorCode.UNAVAILABLE,
+        ErrorCode.TRANSIENT_FAILURE,
+        ErrorCode.BACKEND_ERROR,
+    }
+)
 
 
 class DataProviderResourceService:
@@ -147,9 +159,7 @@ class FileResourceService:
 
 
 class MemoryResourceService:
-    """Scoped Memory content projection with fail-closed enumeration semantics."""
-
-    search_indexable = False
+    """Scoped Memory content plus a privacy-minimized global discovery projection."""
 
     def __init__(
         self,
@@ -180,6 +190,17 @@ class MemoryResourceService:
         else:
             entries = await self._memory.query_entries(memory_query, access)
         return tuple(_memory_resource(entry) for entry in entries)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate current canonical Memory without values/private metadata."""
+
+        try:
+            entries = await self._memory.list_entries_for_discovery()
+        except ContractError as exc:
+            if exc.code in _DISCOVERY_DEGRADED_CODES:
+                return ()
+            raise
+        return tuple(_memory_search_resource(entry) for entry in entries)
 
     async def get_resource(
         self,
@@ -238,6 +259,19 @@ class KnowledgeResourceService:
                 resources[source.source_id] = _knowledge_source_resource(source)
         return tuple(resources[source_id] for source_id in sorted(resources))
 
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        try:
+            sources = await self._knowledge.list_sources_for_discovery()
+        except ContractError as exc:
+            if exc.code in _DISCOVERY_DEGRADED_CODES:
+                return ()
+            raise
+        return tuple(
+            _knowledge_source_search_resource(source)
+            for source in sources
+            if source.status is not KnowledgeStatus.REMOVED
+        )
+
     async def get_resource(
         self,
         context: RequestContext,
@@ -262,6 +296,73 @@ class KnowledgeResourceService:
         resource: Mapping[str, JsonValue],
     ) -> tuple[str | None, str | None, str | None]:
         return _owner_project_scope(resource, resource_kind="knowledge source")
+
+
+class KnowledgeDocumentResourceService:
+    """Metadata-only read/discovery view over subordinate canonical Knowledge documents."""
+
+    def __init__(self, knowledge: KnowledgeProvider) -> None:
+        self._knowledge = knowledge
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del context
+        resources = await self._document_resources()
+        requested_project = (query.filters or {}).get("project_id")
+        if requested_project is not None:
+            validate_id(requested_project, "project")
+            resources = tuple(
+                resource
+                for resource in resources
+                if resource.get("project_id") == requested_project
+            )
+        return resources
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        return await self._document_resources()
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        del context
+        validate_id(resource_id, "knowledge_document")
+        for resource in await self._document_resources():
+            if resource.get("id") == resource_id:
+                return resource
+        raise ContractError(ErrorCode.NOT_FOUND, f"knowledge document not found: {resource_id}")
+
+    def authorization_scope(
+        self,
+        resource: Mapping[str, JsonValue],
+    ) -> tuple[str | None, str | None, str | None]:
+        return _owner_project_scope(resource, resource_kind="knowledge document")
+
+    async def _document_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        try:
+            sources = await self._knowledge.list_sources_for_discovery()
+            documents = await self._knowledge.list_documents_for_discovery()
+        except ContractError as exc:
+            if exc.code in _DISCOVERY_DEGRADED_CODES:
+                return ()
+            raise
+        source_by_id = {
+            source.source_id: source
+            for source in sources
+            if source.status is not KnowledgeStatus.REMOVED
+        }
+        resources: list[dict[str, JsonValue]] = []
+        for document in documents:
+            source = source_by_id.get(document.source_id)
+            if source is None or document.revision != source.revision:
+                continue
+            resources.append(_knowledge_document_search_resource(document, source))
+        resources.sort(key=lambda resource: str(resource["id"]))
+        return tuple(resources)
 
 
 class KnowledgeResultResourceService:
@@ -361,6 +462,7 @@ def data_resource_services(
     | FileResourceService
     | MemoryResourceService
     | KnowledgeResourceService
+    | KnowledgeDocumentResourceService
     | KnowledgeResultResourceService,
 ]:
     return {
@@ -371,6 +473,7 @@ def data_resource_services(
             providers.knowledge,
             project_ids=project_ids,
         ),
+        KNOWLEDGE_DOCUMENT_COLLECTION: KnowledgeDocumentResourceService(providers.knowledge),
         KNOWLEDGE_RESULT_COLLECTION: KnowledgeResultResourceService(
             providers.knowledge,
             project_ids=project_ids,
@@ -511,6 +614,34 @@ def _memory_resource(entry: MemoryEntry) -> dict[str, JsonValue]:
     }
 
 
+def _memory_search_resource(entry: MemoryEntry) -> dict[str, JsonValue]:
+    owner_ref = entry.owner_ref
+    if entry.scope is MemoryScope.USER:
+        owner_ref = f"user:{entry.scope_id}"
+    elif entry.scope is MemoryScope.AGENT:
+        owner_ref = f"agent:{entry.scope_id}"
+    elif entry.scope is MemoryScope.ORGANIZATION:
+        owner_ref = f"organization:{entry.scope_id}"
+    project_id = entry.scope_id if entry.scope is MemoryScope.WORKSPACE else None
+    resource: dict[str, JsonValue] = {
+        "id": entry.memory_id,
+        "type": "memory",
+        "scope": entry.scope.value,
+        "scope_id": entry.scope_id,
+        "project_id": project_id,
+        "owner_ref": owner_ref,
+        "created_at": entry.created_at.isoformat(),
+        "origin": entry.origin.value,
+        "retention": entry.retention.value,
+        "expires_at": entry.expires_at.isoformat() if entry.expires_at is not None else None,
+        "provenance_refs": [source.ref for source in entry.provenance],
+        "aliases": [entry.scope.value, entry.origin.value, entry.retention.value],
+    }
+    if entry.scope is MemoryScope.ORGANIZATION:
+        resource["organization_id"] = entry.scope_id
+    return resource
+
+
 def _knowledge_source_resource(source: KnowledgeSource) -> dict[str, JsonValue]:
     return {
         "id": source.source_id,
@@ -525,6 +656,40 @@ def _knowledge_source_resource(source: KnowledgeSource) -> dict[str, JsonValue]:
         "updated_at": source.updated_at.isoformat(),
         "content_checksum": source.content_checksum,
         "metadata": dict(source.metadata),
+    }
+
+
+def _knowledge_source_search_resource(source: KnowledgeSource) -> dict[str, JsonValue]:
+    return {
+        "id": source.source_id,
+        "type": "knowledge-source",
+        "project_id": source.project_id,
+        "owner_ref": source.owner_ref,
+        "title": source.title,
+        "revision": source.revision,
+        "status": source.status.value,
+        "created_at": source.created_at.isoformat(),
+        "updated_at": source.updated_at.isoformat(),
+        "aliases": [source.revision],
+    }
+
+
+def _knowledge_document_search_resource(
+    document: KnowledgeDocument,
+    source: KnowledgeSource,
+) -> dict[str, JsonValue]:
+    return {
+        "id": document.document_id,
+        "type": "knowledge-document",
+        "source_id": document.source_id,
+        "project_id": source.project_id,
+        "owner_ref": source.owner_ref,
+        "title": f"{source.title} — revision {document.revision}",
+        "revision": document.revision,
+        "status": source.status.value,
+        "created_at": document.created_at.isoformat(),
+        "updated_at": source.updated_at.isoformat(),
+        "aliases": [document.source_id, document.revision],
     }
 
 

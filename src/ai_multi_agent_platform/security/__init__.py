@@ -60,6 +60,28 @@ from .data_enforcement_lifecycle import (
 from .enforcement import AuthorizationAuditSink, AuthorizationGate
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
+from .policy_profile_persistence import (
+    POLICY_PROFILE_REPOSITORY_SCHEMA_VERSION,
+    JsonAuthorizationPolicyProfileRepository,
+    policy_profile_revision_from_json,
+    policy_profile_revision_to_json,
+)
+from .policy_profiles import (
+    POLICY_PROFILE_SCHEMA_VERSION,
+    AuthorizationPolicyAssignment,
+    AuthorizationPolicyConditions,
+    AuthorizationPolicyProfileCallContext,
+    AuthorizationPolicyProfileContent,
+    AuthorizationPolicyProfileDefinition,
+    AuthorizationPolicyProfileRef,
+    AuthorizationPolicyProfileRepository,
+    AuthorizationPolicyProfileRevision,
+    AuthorizationPolicyProfileService,
+    AuthorizationPolicyProvenance,
+    AuthorizationPolicyScopeConstraints,
+    InMemoryAuthorizationPolicyProfileRepository,
+    compile_local_principal_policy,
+)
 from .redaction import REDACTED, redact_exception, redact_sensitive, redact_text
 from .types import (
     ExternalSideEffect,
@@ -71,6 +93,8 @@ from .types import (
 from .validation import UntrustedInputError, validate_untrusted_json
 
 __all__ = [
+    "POLICY_PROFILE_REPOSITORY_SCHEMA_VERSION",
+    "POLICY_PROFILE_SCHEMA_VERSION",
     "REDACTED",
     "ActorIdentity",
     "ActorType",
@@ -88,6 +112,17 @@ __all__ = [
     "AuthorizationAuditSink",
     "AuthorizationContext",
     "AuthorizationGate",
+    "AuthorizationPolicyAssignment",
+    "AuthorizationPolicyConditions",
+    "AuthorizationPolicyProfileCallContext",
+    "AuthorizationPolicyProfileContent",
+    "AuthorizationPolicyProfileDefinition",
+    "AuthorizationPolicyProfileRef",
+    "AuthorizationPolicyProfileRepository",
+    "AuthorizationPolicyProfileRevision",
+    "AuthorizationPolicyProfileService",
+    "AuthorizationPolicyProvenance",
+    "AuthorizationPolicyScopeConstraints",
     "AuthorizedDataFileProvider",
     "AuthorizedDataKnowledgeProvider",
     "AuthorizedDataMemoryProvider",
@@ -100,10 +135,12 @@ __all__ = [
     "ExternalSideEffect",
     "IdentityProviderAdapter",
     "InMemoryAuthenticationStore",
+    "InMemoryAuthorizationPolicyProfileRepository",
     "InMemoryFailureRateLimiter",
     "InMemoryReplayProtector",
     "InMemoryRequestRateLimiter",
     "IssuedCredential",
+    "JsonAuthorizationPolicyProfileRepository",
     "LocalAuthenticationService",
     "LocalAuthorizationProvider",
     "LocalPrincipalPolicy",
@@ -125,7 +162,10 @@ __all__ = [
     "VerifiedExternalIdentity",
     "baseline_decision",
     "canonical_control_plane_vocabulary",
+    "compile_local_principal_policy",
     "infer_actor_identity",
+    "policy_profile_revision_from_json",
+    "policy_profile_revision_to_json",
     "redact_exception",
     "redact_sensitive",
     "redact_text",

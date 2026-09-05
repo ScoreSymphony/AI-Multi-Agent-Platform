@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from dataclasses import replace
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import validate_id
@@ -14,6 +15,8 @@ from .models import (
     ExternalResourceReference,
     SyncCheckpoint,
 )
+
+ExternalResourceIdentity = tuple[str, str, str, str]
 
 
 class ConnectorRepository(ABC):
@@ -180,9 +183,9 @@ class InMemoryConnectorRepository(ConnectorRepository):
     async def save_external_resource(
         self, resource: ExternalResourceReference
     ) -> ExternalResourceReference:
-        self._validate_external_resource(resource)
-        self._external_resources[resource.id] = resource
-        return resource
+        canonical = self._canonical_external_resource(resource)
+        self._external_resources[canonical.id] = canonical
+        return canonical
 
     async def replace_external_resources(
         self,
@@ -201,19 +204,31 @@ class InMemoryConnectorRepository(ConnectorRepository):
         if len({resource.id for resource in resources}) != len(resources):
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "external-resource rebuild contains duplicate canonical IDs",
+                "external-resource rebuild contains duplicate proposed canonical IDs",
                 details={"connection_id": connection_id},
             )
-        for resource in resources:
-            self._validate_external_resource(resource)
+        native_identities = tuple(_external_resource_identity(resource) for resource in resources)
+        if len(set(native_identities)) != len(native_identities):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "external-resource rebuild contains duplicate provider-native identities",
+                details={"connection_id": connection_id},
+            )
+        canonical = tuple(self._canonical_external_resource(resource) for resource in resources)
+        if len({resource.id for resource in canonical}) != len(canonical):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "external-resource rebuild resolves multiple wrappers to one canonical ID",
+                details={"connection_id": connection_id},
+            )
         retained = {
             resource_id: resource
             for resource_id, resource in self._external_resources.items()
             if resource.connection_id != connection_id
         }
-        retained.update({resource.id: resource for resource in resources})
+        retained.update({resource.id: resource for resource in canonical})
         self._external_resources = retained
-        return tuple(sorted(resources, key=lambda item: item.id))
+        return tuple(sorted(canonical, key=lambda item: item.id))
 
     async def get_external_resource(self, resource_id: str) -> ExternalResourceReference:
         validate_id(resource_id, "external_resource")
@@ -246,23 +261,29 @@ class InMemoryConnectorRepository(ConnectorRepository):
             )
         del self._external_resources[resource_id]
 
-    def _validate_external_resource(self, resource: ExternalResourceReference) -> None:
+    def _canonical_external_resource(
+        self, resource: ExternalResourceReference
+    ) -> ExternalResourceReference:
         if resource.connection_id not in self._connections:
             raise ContractError(
                 ErrorCode.NOT_FOUND,
                 f"connection not found: {resource.connection_id}",
             )
-        current = self._external_resources.get(resource.id)
-        if current is not None and (
-            current.connection_id != resource.connection_id
-            or current.resource_type != resource.resource_type
-            or current.native_reference != resource.native_reference
-        ):
+        identity = _external_resource_identity(resource)
+        current_by_id = self._external_resources.get(resource.id)
+        if current_by_id is not None and _external_resource_identity(current_by_id) != identity:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "external-resource canonical identity cannot be rebound",
                 details={"external_resource_id": resource.id},
             )
+        for current in self._external_resources.values():
+            if _external_resource_identity(current) != identity:
+                continue
+            if current.id == resource.id:
+                return resource
+            return replace(resource, id=current.id)
+        return resource
 
     async def save_checkpoint(self, checkpoint: SyncCheckpoint) -> SyncCheckpoint:
         self._checkpoints[(checkpoint.connection_id, checkpoint.stream)] = checkpoint
@@ -273,3 +294,12 @@ class InMemoryConnectorRepository(ConnectorRepository):
         if not stream.strip():
             raise ValueError("stream must not be blank")
         return self._checkpoints.get((connection_id, stream))
+
+
+def _external_resource_identity(resource: ExternalResourceReference) -> ExternalResourceIdentity:
+    return (
+        resource.connection_id,
+        resource.resource_type,
+        resource.native_reference.namespace,
+        resource.native_reference.native_id,
+    )

@@ -33,12 +33,42 @@ class ImportConflictKind(StrEnum):
     DEPENDENCY_CYCLE = "dependency_cycle"
 
 
+class ImportSecurityFindingKind(StrEnum):
+    """Stable vocabulary for security-sensitive import preview findings."""
+
+    PERMISSION_ESCALATION = "permission_escalation"
+    UNTRUSTED_CONFIGURATION = "untrusted_configuration"
+    INVALID_SECURITY_PAYLOAD = "invalid_security_payload"
+
+
 @dataclass(frozen=True, slots=True)
 class ImportConflict:
     kind: ImportConflictKind
     resource_type: str
     resource_id: str
     detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImportSecurityFinding:
+    """Mutation-free security impact surfaced by a resource-specific inspector."""
+
+    kind: ImportSecurityFindingKind
+    resource_type: str
+    resource_id: str
+    detail: str
+    blocking: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.resource_type.strip():
+            raise ValueError("security finding resource_type must not be blank")
+        if not self.resource_id.strip():
+            raise ValueError("security finding resource_id must not be blank")
+        if not self.detail.strip():
+            raise ValueError("security finding detail must not be blank")
+
+
+SecurityInspector = Callable[[PortableResource, str], tuple[ImportSecurityFinding, ...]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,8 +98,11 @@ class ImportPreview:
     missing_dependencies: tuple[MissingDependency, ...] = ()
     optional_missing_dependencies: tuple[MissingDependency, ...] = ()
     conflicts: tuple[ImportConflict, ...] = ()
+    security_findings: tuple[ImportSecurityFinding, ...] = ()
 
     def mapping_dict(self) -> dict[tuple[str, str], str]:
+        """Return the deterministic source-to-target ID mapping selected by preview."""
+
         return dict(self.id_mapping)
 
 
@@ -83,6 +116,7 @@ class ImportPreviewService:
         dependency_available: DependencyAvailable,
         name_conflict: NameConflict | None = None,
         id_allocator: IdAllocator | None = None,
+        security_inspector: SecurityInspector | None = None,
         max_id_allocation_attempts: int = 32,
     ) -> None:
         if max_id_allocation_attempts < 1:
@@ -91,15 +125,17 @@ class ImportPreviewService:
         self._dependency_available = dependency_available
         self._name_conflict = name_conflict
         self._id_allocator = id_allocator or _default_id_allocator
+        self._security_inspector = security_inspector
         self._max_id_allocation_attempts = max_id_allocation_attempts
 
     def preview(self, package: PortablePackage) -> ImportPreview:
-        """Return conflicts, missing dependencies, mapping and dependency-safe order."""
+        """Return conflicts, dependencies, mappings, order and security impact."""
 
         verify_package(package)
         mapping: dict[tuple[str, str], str] = {}
         planned: list[PlannedResource] = []
         conflicts: list[ImportConflict] = []
+        security_findings: list[ImportSecurityFinding] = []
         reserved_targets: set[tuple[str, str]] = set()
 
         for resource in package.resources:
@@ -160,6 +196,9 @@ class ImportPreviewService:
                         )
                     )
 
+            if self._security_inspector is not None:
+                security_findings.extend(self._security_inspector(resource, target_id))
+
         package_keys = {(item.resource_type, item.resource_id) for item in package.resources}
         required_missing: list[MissingDependency] = []
         optional_missing: list[MissingDependency] = []
@@ -197,15 +236,17 @@ class ImportPreviewService:
             order = tuple((item.resource_type, item.resource_id) for item in package.resources)
 
         ordered_mapping = tuple(sorted(mapping.items(), key=lambda item: item[0]))
+        blocking_security = any(item.blocking for item in security_findings)
         return ImportPreview(
             package_checksum=package.checksum,
-            ready=not conflicts and not required_missing,
+            ready=not conflicts and not required_missing and not blocking_security,
             resources=tuple(planned),
             import_order=order,
             id_mapping=ordered_mapping,
             missing_dependencies=tuple(required_missing),
             optional_missing_dependencies=tuple(optional_missing),
             conflicts=tuple(conflicts),
+            security_findings=tuple(security_findings),
         )
 
     def _allocate_target_id(

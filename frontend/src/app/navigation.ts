@@ -7,6 +7,7 @@ export interface NavigationItem {
 
 export const navigation: NavigationItem[] = [
   { label: "Home", path: "/", group: "Work" },
+  { label: "First-run onboarding", path: "/onboarding", group: "Work", apiResource: "onboarding" },
   { label: "Chat", path: "/chat", group: "Work" },
   { label: "Projects & Workspaces", path: "/projects", group: "Work", apiResource: "projects" },
   { label: "Tasks", path: "/tasks", group: "Work", apiResource: "tasks" },

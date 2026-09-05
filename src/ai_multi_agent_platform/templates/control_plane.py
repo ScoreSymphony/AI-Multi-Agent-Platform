@@ -28,6 +28,8 @@ from .environment import PlatformTemplateEnvironmentResolver
 from .models import TemplateContent, TemplateProvenance, TemplateTrust
 from .repository import TemplateRepository
 from .service import TemplateEnvironment
+from .target_scope import authorize_template_target_scopes
+from .trust import activate_untrusted_revision
 
 TEMPLATE_COLLECTION = "templates"
 TEMPLATE_INSTANCE_COLLECTION = "template-instances"
@@ -48,6 +50,7 @@ _SERVER_RESOLVED_ENVIRONMENT_FIELDS = frozenset(
     {
         "environment",
         "capability_ids",
+        "capability_versions",
         "plugin_ids",
         "connector_ids",
         "model_policy_refs",
@@ -56,6 +59,11 @@ _SERVER_RESOLVED_ENVIRONMENT_FIELDS = frozenset(
         "resolved_placeholders",
         "resolved_secret_reference_placeholders",
         "validated_configuration_refs",
+        "placeholder_bindings",
+        "secret_reference_bindings",
+        "configuration_payloads",
+        "platform_version",
+        "contract_versions",
     }
 )
 
@@ -322,16 +330,26 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        payload_digest = _command_payload_digest(payload)
         await self._authorize_template(
             context,
             "template.publish",
             resource_ref,
-            request_payload_digest=_command_payload_digest(payload),
+            request_payload_digest=payload_digest,
         )
-        revision = self.application.templates.publish(
-            resource_ref,
-            expected_revision=_required_positive_int(payload, "expected_revision"),
-        )
+        expected_revision = _required_positive_int(payload, "expected_revision")
+        if _optional_bool(payload, "activate_untrusted", default=False):
+            revision = activate_untrusted_revision(
+                self.application.repository,
+                resource_ref,
+                expected_revision=expected_revision,
+                activated_by=_actor_owner(context),
+            )
+        else:
+            revision = self.application.templates.publish(
+                resource_ref,
+                expected_revision=expected_revision,
+            )
         return _template_resource(self.application.repository, revision.template_id)
 
     async def clone_template(
@@ -382,19 +400,36 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(
+        _reject_server_resolved_environment(payload)
+        revision = _optional_positive_int(payload, "revision")
+        allow_draft = _optional_bool(payload, "allow_draft", default=False)
+        payload_digest = _command_payload_digest(payload)
+        await self._authorize_template_graph(
             context,
             "template.preview",
             resource_ref,
-            request_payload_digest=_command_payload_digest(payload),
+            revision=revision,
+            allow_draft=allow_draft,
+            request_payload_digest=payload_digest,
         )
-        _reject_server_resolved_environment(payload)
+        environment = await self._environment(context)
+        await authorize_template_target_scopes(
+            self.application,
+            self.scope_access,
+            context,
+            "template.preview",
+            resource_ref,
+            environment=environment,
+            revision=revision,
+            allow_draft=allow_draft,
+            request_payload_digest=payload_digest,
+        )
         preview = self.application.preview(
             resource_ref,
             applied_by=_actor_owner(context),
-            environment=await self._environment(context),
-            revision=_optional_positive_int(payload, "revision"),
-            allow_draft=_optional_bool(payload, "allow_draft", default=False),
+            environment=environment,
+            revision=revision,
+            allow_draft=allow_draft,
         )
         result = json_object(preview)
         result["applicable"] = preview.applicable
@@ -406,18 +441,34 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(
+        _reject_server_resolved_environment(payload)
+        revision = _optional_positive_int(payload, "revision")
+        payload_digest = _command_payload_digest(payload)
+        await self._authorize_template_graph(
             context,
             "template.apply",
             resource_ref,
-            request_payload_digest=_command_payload_digest(payload),
+            revision=revision,
+            allow_draft=False,
+            request_payload_digest=payload_digest,
         )
-        _reject_server_resolved_environment(payload)
+        environment = await self._environment(context)
+        await authorize_template_target_scopes(
+            self.application,
+            self.scope_access,
+            context,
+            "template.apply",
+            resource_ref,
+            environment=environment,
+            revision=revision,
+            allow_draft=False,
+            request_payload_digest=payload_digest,
+        )
         instantiation = await self.application.apply(
             resource_ref,
             applied_by=_actor_owner(context),
-            environment=await self._environment(context),
-            revision=_optional_positive_int(payload, "revision"),
+            environment=environment,
+            revision=revision,
         )
         return _instance_resource(instantiation)
 
@@ -427,18 +478,44 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        await self._authorize_template(
+        _reject_server_resolved_environment(payload)
+        previous = self.application.repository.get_instantiation(resource_ref)
+        payload_digest = _command_payload_digest(payload)
+        if self.scope_access is not None:
+            await self.scope_access.authorize(
+                context,
+                "template.reapply",
+                previous.instance_id,
+                owner_ref=previous.applied_by,
+                request_payload_digest=payload_digest,
+            )
+        requested_revision = _optional_positive_int(payload, "revision")
+        revision = previous.source.revision if requested_revision is None else requested_revision
+        await self._authorize_template_graph(
             context,
             "template.reapply",
-            resource_ref,
-            request_payload_digest=_command_payload_digest(payload),
+            previous.source.template_id,
+            revision=revision,
+            allow_draft=False,
+            request_payload_digest=payload_digest,
         )
-        _reject_server_resolved_environment(payload)
+        environment = await self._environment(context)
+        await authorize_template_target_scopes(
+            self.application,
+            self.scope_access,
+            context,
+            "template.reapply",
+            previous.source.template_id,
+            environment=environment,
+            revision=revision,
+            allow_draft=False,
+            request_payload_digest=payload_digest,
+        )
         instantiation = await self.application.reapply(
-            resource_ref,
+            previous.instance_id,
             applied_by=_actor_owner(context),
-            environment=await self._environment(context),
-            revision=_optional_positive_int(payload, "revision"),
+            environment=environment,
+            revision=revision,
         )
         return _instance_resource(instantiation)
 
@@ -466,6 +543,37 @@ class TemplateCommandHandlers:
             project_id=definition.project_id,
             request_payload_digest=request_payload_digest,
         )
+
+    async def _authorize_template_graph(
+        self,
+        context: RequestContext,
+        action: str,
+        template_id: str,
+        *,
+        revision: int | None,
+        allow_draft: bool,
+        request_payload_digest: str | None = None,
+    ) -> None:
+        """Authorize every Template revision that preview/apply will resolve before effects."""
+
+        if self.scope_access is None:
+            return
+        root = self.application._get_revision(
+            template_id,
+            revision,
+            published_only=not allow_draft,
+        )
+        dependency_order, _ = self.application._resolve_dependency_order(root)
+        for item in dependency_order:
+            definition = self.application.repository.get_template(item.template_id)
+            await self.scope_access.authorize(
+                context,
+                action,
+                item.template_id,
+                owner_ref=definition.owner_ref,
+                project_id=definition.project_id,
+                request_payload_digest=request_payload_digest,
+            )
 
 
 def register_template_control_plane(

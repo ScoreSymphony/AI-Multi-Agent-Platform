@@ -24,6 +24,13 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
     DurableStoreSpec("scopes", "db/scopes.sqlite3", "sqlite", True, "control-plane"),
     DurableStoreSpec("files", "db/files.sqlite3", "sqlite", True, "data"),
     DurableStoreSpec("workspaces", "db/workspaces.sqlite3", "sqlite", True, "workspaces"),
+    DurableStoreSpec(
+        "run-workspace-bindings",
+        "db/run-workspace-bindings.sqlite3",
+        "sqlite",
+        True,
+        "workspaces",
+    ),
     DurableStoreSpec("verification", "db/verification.sqlite3", "sqlite", True, "verification"),
     DurableStoreSpec("evaluation", "db/evaluation.sqlite3", "sqlite", True, "evaluation"),
     DurableStoreSpec("authentication", "db/authentication.sqlite3", "sqlite", True, "security"),
@@ -38,6 +45,13 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
         "onboarding-commands", "db/onboarding-commands.json", "json", False, "onboarding"
     ),
     DurableStoreSpec("templates", "db/templates.json", "json", False, "templates"),
+    DurableStoreSpec(
+        "capability-assignments",
+        "db/capability-assignments.json",
+        "json",
+        False,
+        "capability-assignments",
+    ),
 )
 
 

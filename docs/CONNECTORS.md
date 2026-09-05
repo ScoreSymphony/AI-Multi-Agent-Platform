@@ -31,6 +31,14 @@ recreation and process restarts. `ConnectorRegistry` rejects a provider that sup
 canonical ID for the same pair; adapters do not get to allocate their own long-lived definition
 identity.
 
+For durable external-resource wrappers, the repository treats `(connection_id, resource_type,
+native_reference.namespace, native_reference.native_id)` as the provider-native identity key. Once
+that key has a canonical `external_resource_*` wrapper, later synchronization results reuse the
+existing canonical ID even when a recreated adapter proposes a different temporary ID. Provider IDs
+therefore cannot fork one remote object into multiple canonical wrapper identities. A future durable
+ConnectorRepository implementation must persist this same mapping rather than weakening the
+invariant.
+
 The external system continues to own repositories, messages, calendar events, files, records,
 tickets and similar objects. A connector reference does not copy those objects into canonical Task,
 File, Knowledge or Agent ownership.
@@ -186,6 +194,11 @@ The returned checkpoint must belong to the same Connection and stream before it 
 makes resume/resync/rebuild behavior explicit without making connector state authoritative for
 canonical Task, File or Knowledge history.
 
+Validated synchronization results pass through the ConnectorRepository canonicalization boundary
+before they are returned to callers. Existing provider-native identities therefore keep their
+platform-owned `external_resource_*` IDs, and `ConnectorEvent.resource_id` values from the same sync
+are remapped to those canonical IDs when necessary.
+
 ## Reference connector
 
 `ReferenceConnectorProvider` is dependency-free apart from platform components and uses no network,
@@ -212,7 +225,8 @@ Control Plane foundation. It registers:
 Resources:
 
 - `connector-definitions`;
-- `connections`.
+- `connections`;
+- `external-resources`.
 
 Lifecycle commands:
 
@@ -221,7 +235,8 @@ Lifecycle commands:
 - `connection.disable`;
 - `connection.remove`;
 - `connection.health`;
-- `connector.sync`.
+- `connector.sync`;
+- `external-resource.detach`.
 
 Mutating commands retain the standard `Idempotency-Key` requirement from the Control Plane.
 Connection creation allocates the canonical Connection ID server-side. Secret values are not
@@ -230,7 +245,13 @@ Connection resources expose safe namespaced adapter/source metadata. Connection 
 resource-specific ConnectorService authorization rather than relying only on collection-level
 routing authorization.
 
-`connector.sync` accepts `mode=incremental|resync|rebuild`, defaulting to `incremental`.
+`connector.sync` accepts `mode=incremental|resync|rebuild`, defaulting to `incremental`. Its returned
+`resource_refs` use the same privacy-minimal projection as `/api/v1/external-resources`; arbitrary
+provider metadata/provenance and unsafe canonical URLs are not reflected northbound through the sync
+response.
+
+`external-resource.detach` removes only the platform-owned wrapper and never mutates the
+provider-native object.
 
 Connector actions are deliberately absent from this command list and remain behind #12. Event
 subscription hooks are provider/service contracts rather than a generic northbound execution bypass.

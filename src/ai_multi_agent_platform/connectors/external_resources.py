@@ -73,7 +73,7 @@ class ExternalResourceResourceService(ResourceService):
             connection_id=connection_id
         )
         return tuple(
-            _external_resource_resource(resource, visible[resource.connection_id])
+            external_resource_projection(resource, visible[resource.connection_id])
             for resource in resources
             if resource.connection_id in visible
             and (resource_type is None or resource.resource_type == resource_type)
@@ -90,7 +90,7 @@ class ExternalResourceResourceService(ResourceService):
             resource,
             action="external-resource:read",
         )
-        return _external_resource_resource(resource, connection)
+        return external_resource_projection(resource, connection)
 
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
         """Enumerate only durable local wrappers for actor-independent Search rebuilds."""
@@ -254,11 +254,11 @@ def _operation_context(request: RequestContext, project_id: str | None) -> Opera
     )
 
 
-def _external_resource_resource(
+def external_resource_projection(
     resource: ExternalResourceReference,
     connection: Connection,
 ) -> dict[str, JsonValue]:
-    """Safe northbound metadata; arbitrary provider metadata/provenance stays private."""
+    """Return the one privacy-minimal northbound wrapper projection used by all APIs."""
 
     return {
         "id": resource.id,
@@ -319,5 +319,6 @@ __all__ = [
     "EXTERNAL_RESOURCE_DETACH_COMMAND",
     "EXTERNAL_RESOURCE_TYPE",
     "ExternalResourceResourceService",
+    "external_resource_projection",
     "register_external_resource_control_plane",
 ]

@@ -1,7 +1,7 @@
 """Narrow adapters from canonical domains into notification candidates.
 
-Completed domains may be referenced directly. Still-open follow-up domains (#86/#87) integrate
-through opaque canonical IDs and attention labels so #75 never becomes their lifecycle authority.
+Completed domains may be referenced directly. Domain integrations preserve canonical source
+identity and attention semantics without making Notifications their lifecycle authority.
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ def verification_attention_candidate(
     """Project an opaque #86 Verification attention signal.
 
     `attention` is intentionally not an enum here: #86 owns Verification vocabulary/lifecycle.
-    Once #86 is complete its adapter can pass the canonical signal through this seam.
+    Its adapter passes the canonical signal through this seam.
     """
 
     validate_id(verification_id, "verification")
@@ -232,9 +232,17 @@ def budget_threshold_candidate(
     *,
     recipient: RecipientRef,
     measurement_quality: str | None = None,
+    threshold_generation: int | None = None,
 ) -> NotificationCandidate:
-    """Project #76 threshold state without becoming the budget/accounting authority."""
+    """Project #76 threshold state without becoming the budget/accounting authority.
 
+    `threshold_generation` distinguishes separate threshold episodes. The same persisted
+    generation is reused during restart recovery, while a fresh crossing after recovery below
+    threshold advances the generation and is therefore allowed to create new attention.
+    """
+
+    if threshold_generation is not None and threshold_generation < 1:
+        raise ValueError("threshold_generation must be >= 1 when provided")
     severity = (
         NotificationSeverity.ERROR
         if event.level is ThresholdLevel.EXCEEDED
@@ -251,7 +259,17 @@ def budget_threshold_candidate(
         "scope_id": event.scope_id,
         "budget_version": event.budget_version,
         "measurement_quality": measurement_quality,
+        "threshold_generation": threshold_generation,
     }
+    legacy_key = f"budget:{event.budget_id}:{event.budget_version}:{event.level.value}"
+    aggregation_key = (
+        legacy_key
+        if threshold_generation is None
+        else (
+            f"budget:{event.budget_id}:{event.budget_version}:"
+            f"{threshold_generation}:{event.level.value}"
+        )
+    )
     return NotificationCandidate(
         category=NotificationCategory.RESOURCE,
         severity=severity,
@@ -263,6 +281,6 @@ def budget_threshold_candidate(
         summary=summary,
         recipient=recipient,
         source=SourceRef(resource_type="budget", resource_id=event.budget_id),
-        aggregation_key=f"budget:{event.budget_id}:{event.budget_version}:{event.level.value}",
+        aggregation_key=aggregation_key,
         causation_id=event.id,
     )
