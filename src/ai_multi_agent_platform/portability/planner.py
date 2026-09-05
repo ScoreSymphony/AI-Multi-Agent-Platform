@@ -100,6 +100,11 @@ class ImportPreview:
     conflicts: tuple[ImportConflict, ...] = ()
     security_findings: tuple[ImportSecurityFinding, ...] = ()
 
+    def mapping_dict(self) -> dict[tuple[str, str], str]:
+        """Return the deterministic source-to-target ID mapping selected by preview."""
+
+        return dict(self.id_mapping)
+
 
 class ImportPreviewService:
     """Validate a portable package against target state before any import mutation."""
@@ -357,18 +362,3 @@ def _dependency_order(package: PortablePackage) -> tuple[tuple[str, str], ...]:
             details={"resources": [f"{kind}:{resource_id}" for kind, resource_id in remaining]},
         )
     return tuple(ordered)
-
-
-__all__ = [
-    "IdAllocator",
-    "ImportConflict",
-    "ImportConflictKind",
-    "ImportPreview",
-    "ImportPreviewService",
-    "ImportSecurityFinding",
-    "ImportSecurityFindingKind",
-    "MissingDependency",
-    "NameConflict",
-    "PlannedResource",
-    "SecurityInspector",
-]
