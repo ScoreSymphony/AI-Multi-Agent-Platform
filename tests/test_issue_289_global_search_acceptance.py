@@ -103,7 +103,7 @@ def test_global_search_discovers_allowed_chat_and_hides_private_and_denied_proje
             title="Private Bob conversation",
             owner_ref="user:bob",
         )
-        await conversations.append_message(
+        private_other_message = await conversations.append_message(
             conversation_id=private_other.id,
             sender_ref="user:bob",
             role=MessageRole.USER,
@@ -114,7 +114,7 @@ def test_global_search_discovers_allowed_chat_and_hides_private_and_denied_proje
             owner_ref="user:alice",
             project_id=denied_project_id,
         )
-        await conversations.append_message(
+        denied_project_message = await conversations.append_message(
             conversation_id=denied_project.id,
             sender_ref="user:alice",
             role=MessageRole.USER,
@@ -125,20 +125,43 @@ def test_global_search_discovers_allowed_chat_and_hides_private_and_denied_proje
         assert exact["total"] == 1
         assert _items(exact)[0]["canonical_ref"] == f"/api/v1/conversations/{visible.id}"
 
+        exact_message = await _search(http, type="conversation-message", id=visible_message.id)
+        assert exact_message["total"] == 1
+        assert _items(exact_message)[0]["resource_id"] == visible_message.id
+        assert _items(exact_message)[0]["canonical_ref"] == (
+            f"/api/v1/conversation-messages/{visible_message.id}"
+        )
+
         keyword = await _search(http, type="conversation-message", q="global-search-visible-needle")
         assert keyword["total"] == 1
         assert _items(keyword)[0]["resource_id"] == visible_message.id
         assert _items(keyword)[0]["summary"] == "global-search-visible-needle"
 
+        visible_message_count = await _search(http, type="conversation-message")
+        assert visible_message_count["total"] == 1
+        assert _items(visible_message_count)[0]["resource_id"] == visible_message.id
+
         private = await _search(http, q="private-bob-secret-needle")
         assert private["total"] == 0
         private_exact = await _search(http, type="conversation", id=private_other.id)
         assert private_exact["total"] == 0
+        private_message_exact = await _search(
+            http,
+            type="conversation-message",
+            id=private_other_message.id,
+        )
+        assert private_message_exact["total"] == 0
 
         project_hidden = await _search(http, q="denied-project-secret-needle")
         assert project_hidden["total"] == 0
         project_exact = await _search(http, type="conversation", id=denied_project.id)
         assert project_exact["total"] == 0
+        project_message_exact = await _search(
+            http,
+            type="conversation-message",
+            id=denied_project_message.id,
+        )
+        assert project_message_exact["total"] == 0
 
         provider_native = await _search(http, q="provider-native-hidden")
         assert provider_native["total"] == 0
