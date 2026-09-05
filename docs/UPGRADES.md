@@ -37,7 +37,9 @@ platform-upgrade --data-dir /srv/ai-map/data initialize
 ```
 
 Baseline adoption records the current release; it does not rewrite canonical application state.
-Future releases must never silently invent an earlier migration history for an untracked data root.
+The adoption release is deliberately pinned to `0.0.1`: future releases reject `initialize` for an
+untracked data root instead of inventing a source migration history. Normal `platform-server`
+startup also rejects an untracked data root once the running release is newer than the baseline.
 
 ## Migration framework
 
@@ -47,19 +49,28 @@ step declares:
 - a stable sequence and revision ID;
 - exact source and target canonical schema versions;
 - description and deterministic metadata checksum;
+- an optional read-only source-invariant precondition checked in preflight and immediately before
+  the step's first mutation attempt;
 - whether the step can run transactionally;
-- whether retry after a recorded failure is safe;
+- whether retry after a recorded failure/interruption is safe;
 - whether a verified source-release backup is mandatory;
 - rollback classification;
 - mutation and optional post-migration validation callbacks.
+
+A migration precondition is an invariant of the upgrade source deployment, not an assertion that
+depends on a previous migration in the same chain. Expectations created by an earlier step belong in
+that step's post-validation. This lets preflight evaluate the full supported path without simulating
+mutations.
 
 `db/migration-history.json` records `started`, `applied` and `failed` state. Re-running an already
 applied migration is a no-op only when the immutable metadata checksum still matches. A changed
 published migration is rejected.
 
-A failed migration is never silently retried. Explicit resume is permitted only when the migration
-was declared restart-safe. Otherwise recovery means restoring the verified pre-upgrade backup and
-starting again from the source release.
+A failed **or process-interrupted `started`** migration is never silently retried. Explicit resume is
+permitted only when the migration was declared restart-safe. Preconditions are not re-applied to a
+step that has already entered mutation because partial restart-safe state may legitimately differ
+from the original source invariant. Otherwise recovery means restoring the verified pre-upgrade
+backup and starting again from the source release.
 
 ### Database neutrality
 
@@ -108,9 +119,14 @@ For plugins, preflight checks:
 
 For adapters, preflight checks their declared platform and interface requirements. An incompatible
 **required** extension blocks activation. An incompatible **optional** extension is reported as a
-warning and must remain disabled until compatible. Plugin-owned state migrations are invoked only
-through controlled plugin lifecycle hooks; they do not bypass the platform migration record or
-security boundaries.
+warning and must remain disabled until compatible. The target `PluginRegistry` validates platform
+and extension-interface compatibility again on `enable()`, so an incompatible optional plugin cannot
+silently reactivate after restart.
+
+Plugin-owned state migrations are invoked only through the controlled #20 lifecycle hook. They are
+included in the durable maintenance attempt, are replayed only through the idempotent/version-aware
+plugin migrator on explicit resume, and are conservatively classified as `restore_required`; preflight
+therefore requires a verified source-release backup whenever plugin-owned state must move forward.
 
 ## Portable import/export compatibility (#79)
 
@@ -159,23 +175,40 @@ Preflight evaluates before mutation:
 
 - installed and target version vectors;
 - existence of one unambiguous migration path;
+- migration source-invariant preconditions;
 - filesystem readability/writability and free space threshold;
 - SQLite `PRAGMA quick_check` for SQLite files in the single-node data root;
-- unresolved migration failures;
+- unresolved failed or interrupted migrations;
 - required/optional plugin and adapter compatibility supplied by the deployment composition;
 - declared configuration-schema transitions;
 - historical Event schema interpretability;
 - portable/template format translator availability;
 - API, Worker and message protocol changes;
-- backup presence and #40 integrity verification when a migration marks backup as mandatory.
+- backup presence and #40 integrity verification when platform or plugin state requires it.
 
 Warnings do not become hidden assumptions: they remain in the report. Errors make `report.ok=false`
 and prevent `UpgradeService` from mutating state.
 
+## Backup/restore integration
+
+The #40 single-node durable-store inventory includes these #41 files whenever they exist:
+
+- `db/platform-upgrade.json` — activated deployment version vector;
+- `db/migration-history.json` — deterministic per-step history;
+- `db/upgrade-history.json` — completed upgrade attempts.
+
+They are optional only for the 0.0.1 transition because pre-#41 deployments must be able to adopt the
+baseline explicitly. Once present, they are recovery evidence and move with the rest of the durable
+data root.
+
+`db/upgrade-maintenance.json` is intentionally **not** a backup payload. A source-release recovery
+backup is created before migration maintenance; restoring an in-progress target-release maintenance
+marker would falsely resurrect the interrupted upgrade attempt after a source restore.
+
 ## Maintenance and drain
 
-A schema-changing upgrade requires an explicit quiesced/drained assertion. The deployment layer is
-responsible for implementing the actual policy appropriate to that topology:
+A schema-changing or plugin-state-changing upgrade requires an explicit quiesced/drained assertion.
+The deployment layer is responsible for implementing the actual policy appropriate to that topology:
 
 - stop accepting/dispatching new work;
 - pause Automation-triggered task creation where applicable;
@@ -183,10 +216,20 @@ responsible for implementing the actual policy appropriate to that topology:
 - ensure no old process continues to mutate stores during migration;
 - stop/restart mixed-version Workers when the Worker protocol policy requires it.
 
-The upgrade service writes `db/upgrade-maintenance.json` before the first migration. It clears that
-marker only after all migrations validate, the target version vector is durably recorded and the
-upgrade result is persisted. A failed/interrupted migration therefore leaves a visible maintenance
-marker and does not advertise the target schema as active.
+The upgrade service writes `db/upgrade-maintenance.json` before the first state-changing phase. The
+marker contains the exact source/target version vectors, planned migration revisions, plugin-state
+migration set and verified backup path. A resume request must match that recorded attempt.
+
+Completion metadata is written in restart-safe order: completed upgrade history, activated target
+version vector, then maintenance-marker removal. If a process dies between those writes, the marker
+keeps the deployment fail-closed and explicit resume finalizes the same attempt idempotently rather
+than inventing a second upgrade.
+
+Normal `platform-server` commands inspect this marker **before** constructing `SingleNodeDeployment`.
+They refuse service while maintenance is active or malformed. They also compare an existing
+`platform-upgrade.json` vector with the running release and refuse startup when executable and durable
+contract dimensions disagree. This blocks both accidental old-code rollback against migrated data
+and new-code startup before the supported upgrade path has activated the target state.
 
 Single-node planned downtime is a supported baseline. Expand/migrate/contract or rolling migration
 patterns can be added later only when the relevant persistence/protocol semantics prove them safe.
@@ -208,8 +251,9 @@ read the new schema.
 
 ### `restore_required`
 
-The transformation is forward-only. Preflight requires a verified #40 backup produced by the source
-release. Recovery is restore-from-backup; the platform never labels this path reversible.
+The transformation is forward-only, or plugin-owned state moved without a proven reverse migration.
+Preflight requires a verified #40 backup produced by the source release. Recovery is
+restore-from-backup; the platform never labels this path reversible.
 
 A backup created under the source release is retained as the recovery artifact even when the target
 release introduces a newer backup format.
@@ -230,9 +274,11 @@ For a real release upgrade:
 10. run canonical Task/Run smoke and inspect `platform-upgrade ... maintenance`;
 11. resume normal work only after validation succeeds and retain the recorded upgrade result.
 
-If apply fails, do not simply restart normal services. Inspect migration history and the maintenance
-marker. Explicit `--resume-failed` is valid only for a migration declared restart-safe; otherwise
-restore the pre-upgrade backup on the source-compatible release.
+If apply fails or is interrupted, do not simply restart normal services. `platform-server` refuses to
+start while the maintenance marker is active. Inspect migration history and the marker. Explicit
+`--resume-failed` is valid only for a migration declared restart-safe; otherwise restore the
+pre-upgrade backup on the source-compatible release. A crash during final activation is also resumed
+explicitly; completed migrations are not rerun merely to finish metadata cleanup.
 
 ## Release author checklist
 
@@ -240,16 +286,17 @@ A release that changes persistent/domain state must:
 
 1. add immutable migration steps to `default_migration_registry()`;
 2. provide an older-release fixture representing the exact supported source state;
-3. test preflight, apply, already-applied behavior and failure recovery;
-4. declare transaction/restart/backup/rollback semantics for every step;
+3. test preflight, apply, already-applied behavior and failure/interruption recovery;
+4. declare source preconditions, transaction/restart/backup/rollback semantics for every step;
 5. update portable/template translators only for versions the release intentionally supports;
 6. update plugin/adapter/API/Worker/message compatibility evidence where those contracts change;
 7. preserve historical Event interpretation or ship an explicit translator/backfill;
 8. document unsupported direct upgrade paths rather than guessing;
-9. run #40 backup/restore and the release acceptance suite before claiming upgrade compatibility.
+9. run #40 backup/restore and the release acceptance suite before claiming upgrade compatibility;
+10. verify `platform-server` rejects both maintenance state and executable/data version mismatch.
 
-The first implementation release (`0.0.1`) contains the migration framework and baseline adoption
-but no fabricated production migration from a schema that was never released. Tests use a controlled
-`0.9 -> 1.0` fixture to prove the cross-release mechanism. The first real schema-changing release
-must replace that proof fixture with an actual previous-release fixture and immutable production
-migration entry.
+The first implementation release (`0.0.1`) contains the migration framework and one-time baseline
+adoption but no fabricated production migration from a schema that was never released. Tests use a
+controlled `0.9 -> 1.0` fixture to prove the cross-release mechanism. The first real schema-changing
+release must replace that proof fixture with an actual previous-release fixture and immutable
+production migration entry.
