@@ -99,6 +99,11 @@ The service is constructed with the existing `AuthorizationGate`, so user-visibl
 management and import application use the normal issue-#15 decision and approval path
 rather than a policy-profile-specific decision engine.
 
+Authorization is evaluated against the canonical policy resource scope. Caller-supplied
+Project, Organization or Team context does not make an otherwise global policy resource
+look scoped for authorization purposes. A scoped administrator therefore cannot use local
+request context to create, revise, enable, disable or assign a global policy resource.
+
 Mutations are treated as privileged operations:
 
 - create/revise: high-risk configuration changes;
@@ -108,11 +113,22 @@ Mutations are treated as privileged operations:
 - assignment: critical administrative change.
 
 If the configured provider returns `require_approval`, the ordinary exact-action approval
-workflow applies. The profile service does not implement a second approval model. Critical
-imports additionally bind that exact action to a SHA-256 fingerprint computed by the
-canonical service over the destination definition and complete revision history. An
-approval for one policy body therefore cannot authorize changed content under the same
-policy ID and revision.
+workflow applies. The profile service does not implement a second approval model.
+Permission-bearing mutations are bound to the exact proposed change:
+
+- create fingerprints owner, policy content and canonical outer scope;
+- revise fingerprints the new revision content and exact target revision;
+- import fingerprints the destination definition and complete revision history;
+- assignment fingerprints the exact profile revision, destination principal and actor types;
+- enable/disable bind to the current exact profile revision.
+
+The fingerprints are calculated by the canonical service and carried through the #15
+`ProposedAction` binding. Reusing an approval after changing policy content, an assignment
+target or the current lifecycle revision therefore produces a different action digest and
+requires a new authorization/approval decision.
+
+When create generated the policy ID before requesting approval, an approved retry recovers
+that exact resource ID from the approval record rather than generating another ID.
 
 ## 6. Assignments are configuration, not authority
 
@@ -181,6 +197,19 @@ The normal #79 `IdPolicy` supports preserving or regenerating the profile identi
 Canonical typed scope references are remapped through `ImportContext`. Opaque exact
 resource IDs are preserved rather than guessed into a resource type.
 
+### Dependency resolution
+
+Project and Workspace dependencies are resolved through the canonical `ScopeStore` already
+owned by the standard portability composition. Other canonical domains can participate
+without becoming portability-owned persistence: `build_agent_portability_workflow()`
+accepts an optional synchronous `additional_resource_exists(resource_type, resource_id)`
+view for resources such as Organization, Team and Node.
+
+The callback is only a destination-existence view. It does not load, serialize, mutate or
+own those resources. Callers backed by asynchronous canonical repositories/providers must
+prepare that synchronous view outside the mutation-free preview. If no such view is
+supplied, unknown resource dependencies remain unavailable and preview fails closed.
+
 ### Preview security inspection
 
 The generic #79 preview supports resource-specific `ImportSecurityFinding` values. Policy
@@ -214,12 +243,14 @@ assigned.
 The production portability composition enables policy-profile transport only when the
 canonical repository, canonical policy service, explicit import authorization context and
 explicit destination owner are supplied together. Partial configuration is rejected.
+External typed dependencies remain fail-closed unless a canonical destination-existence
+view is supplied as described above.
 
 This preserves the invariant:
 
 ```text
 portable configuration
-    -> validation + security preview
+    -> validation + dependency/security preview
     -> canonical dormant/untrusted profile
     -> separately authorized enable
     -> separately authorized assignment/application
