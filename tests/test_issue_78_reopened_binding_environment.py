@@ -53,18 +53,15 @@ def test_environment_resolver_derives_resolved_ids_from_actual_server_owned_bind
     asyncio.run(scenario())
 
 
-def test_environment_resolver_preserves_legacy_names_without_apply_bindings() -> None:
+def test_environment_resolver_without_binding_providers_fails_closed() -> None:
     async def scenario() -> None:
-        resolver = PlatformTemplateEnvironmentResolver(
-            placeholders=lambda _: ("legacy-placeholder",),
-            validated_configuration_refs=lambda _: ("config://validated-only",),
-        )
+        environment = await PlatformTemplateEnvironmentResolver().resolve(_context())
 
-        environment = await resolver.resolve(_context())
-
-        assert environment.resolved_placeholders == frozenset({"legacy-placeholder"})
-        assert environment.validated_configuration_refs == frozenset({"config://validated-only"})
+        assert environment.resolved_placeholders == frozenset()
+        assert environment.resolved_secret_reference_placeholders == frozenset()
+        assert environment.validated_configuration_refs == frozenset()
         assert environment.placeholder_bindings == {}
+        assert environment.secret_reference_bindings == {}
         assert environment.configuration_payloads == {}
 
     asyncio.run(scenario())
