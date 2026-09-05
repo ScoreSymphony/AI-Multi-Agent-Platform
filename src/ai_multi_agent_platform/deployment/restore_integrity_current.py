@@ -6,7 +6,6 @@ import json
 import sqlite3
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import cast
 
 from ai_multi_agent_platform.backup.integrity import RestoreValidationError
