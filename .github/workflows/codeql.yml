@@ -43,6 +43,9 @@ jobs:
           import glob
           import json
 
+          def escape_command(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
           for sarif_path in glob.glob("../results/*.sarif"):
               with open(sarif_path, encoding="utf-8") as handle:
                   sarif = json.load(handle)
@@ -52,12 +55,16 @@ jobs:
                       physical = locations[0].get("physicalLocation", {})
                       artifact = physical.get("artifactLocation", {})
                       region = physical.get("region", {})
+                      rule = result.get("ruleId", "")
+                      path = artifact.get("uri", "")
+                      line = region.get("startLine") or 1
                       message = result.get("message", {}).get("text", "")
                       print(
                           "CODEQL_RESULT "
-                          f"rule={result.get('ruleId', '')} "
-                          f"path={artifact.get('uri', '')} "
-                          f"line={region.get('startLine', '')} "
-                          f"message={message}"
+                          f"rule={rule} path={path} line={line} message={message}"
+                      )
+                      print(
+                          f"::warning file={path},line={line},title=CodeQL {rule}::"
+                          f"{escape_command(message)}"
                       )
           PY
