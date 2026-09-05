@@ -410,11 +410,12 @@ class TemplateApplicationService:
         """Create a new instance; never mutate resources from the previous instance."""
 
         previous = self.repository.get_instantiation(instance_id)
+        selected_revision = previous.source.revision if revision is None else revision
         return await self.apply(
             previous.source.template_id,
             applied_by=applied_by,
             environment=environment,
-            revision=revision,
+            revision=selected_revision,
         )
 
     @staticmethod
@@ -432,6 +433,12 @@ class TemplateApplicationService:
             "Template is not compatible with the target environment",
             details={
                 "missing_capabilities": list(preview.missing_required_capability_ids),
+                "incompatible_capability_versions": list(
+                    preview.incompatible_capability_versions
+                ),
+                "incompatible_platform_versions": list(preview.incompatible_platform_versions),
+                "missing_contract_versions": list(preview.missing_contract_versions),
+                "incompatible_contract_versions": list(preview.incompatible_contract_versions),
                 "missing_plugins": list(preview.missing_plugin_ids),
                 "missing_connectors": list(preview.missing_connector_ids),
                 "missing_model_policies": list(preview.missing_model_policy_refs),
