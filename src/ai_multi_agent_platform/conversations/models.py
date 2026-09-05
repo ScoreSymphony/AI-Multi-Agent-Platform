@@ -272,6 +272,7 @@ class Conversation:
     task_ids: tuple[str, ...] = ()
     run_ids: tuple[str, ...] = ()
     artifact_ids: tuple[str, ...] = ()
+    result_ids: tuple[str, ...] = ()
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     metadata: Mapping[str, JsonValue] = field(default_factory=dict)
@@ -294,6 +295,8 @@ class Conversation:
             validate_id(run_id, "run")
         for artifact_id in self.artifact_ids:
             validate_id(artifact_id, "artifact")
+        for result_id in self.result_ids:
+            validate_id(result_id, "result")
         _require_aware(self.created_at, "created_at")
         _require_aware(self.updated_at, "updated_at")
         if self.updated_at < self.created_at:
@@ -302,6 +305,7 @@ class Conversation:
         object.__setattr__(self, "task_ids", _deduplicate(self.task_ids))
         object.__setattr__(self, "run_ids", _deduplicate(self.run_ids))
         object.__setattr__(self, "artifact_ids", _deduplicate(self.artifact_ids))
+        object.__setattr__(self, "result_ids", _deduplicate(self.result_ids))
         object.__setattr__(self, "created_at", self.created_at.astimezone(UTC))
         object.__setattr__(self, "updated_at", self.updated_at.astimezone(UTC))
         object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))
@@ -323,6 +327,7 @@ class Conversation:
             "task_ids": list(self.task_ids),
             "run_ids": list(self.run_ids),
             "artifact_ids": list(self.artifact_ids),
+            "result_ids": list(self.result_ids),
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "metadata": dict(self.metadata),
@@ -359,6 +364,7 @@ class Conversation:
             task_ids=_string_tuple(raw.get("task_ids", ()), "task_ids"),
             run_ids=_string_tuple(raw.get("run_ids", ()), "run_ids"),
             artifact_ids=_string_tuple(raw.get("artifact_ids", ()), "artifact_ids"),
+            result_ids=_string_tuple(raw.get("result_ids", ()), "result_ids"),
             created_at=_datetime(raw, "created_at"),
             updated_at=_datetime(raw, "updated_at"),
             metadata=cast(Mapping[str, JsonValue], metadata),
