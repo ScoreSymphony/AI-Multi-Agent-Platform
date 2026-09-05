@@ -60,16 +60,6 @@ class FirstRunTaskService:
                 ErrorCode.UNAUTHORIZED,
                 "first-run Task requires an authenticated canonical owner",
             )
-        status = self.onboarding.status(context)
-        if status.get("state") != "ready_for_task":
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                "first-run prerequisites are incomplete",
-                details={
-                    "state": str(status.get("state", "unknown")),
-                    "guidance": status.get("guidance", []),
-                },
-            )
 
         objective = _required_string(payload, "objective")
         project = self._project(
@@ -89,6 +79,11 @@ class FirstRunTaskService:
             project.id,
             workspace.id,
             _optional_string(payload, "agent_id"),
+        )
+        self.onboarding.preflight_general_assistant(
+            agent_id,
+            project_id=project.id,
+            workspace_id=workspace.id,
         )
 
         task = await self.kernel.create_task(

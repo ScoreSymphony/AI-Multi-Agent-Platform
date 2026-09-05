@@ -253,6 +253,11 @@ def build_single_node_deployment(
     )
     capabilities = CapabilityRegistry()
     models = ModelRegistry()
+    agent_runtime = AgentRuntime(
+        agents,
+        model_registry=models,
+        capability_registry=capabilities,
+    )
     onboarding = OnboardingService(
         models=models,
         model_store=JsonModelRegistryStore(database_dir / "models.json"),
@@ -260,15 +265,11 @@ def build_single_node_deployment(
         command_store=JsonOnboardingCommandStore(database_dir / "onboarding-commands.json"),
         scopes=scopes,
         agents=agents,
+        agent_runtime=agent_runtime,
         model_adapters=onboarding_model_adapters,
     )
     onboarding.restore()
     model_runtime = ModelRuntime(models)
-    agent_runtime = AgentRuntime(
-        agents,
-        model_registry=models,
-        capability_registry=capabilities,
-    )
     conversation_response_provider = ModelRuntimeConversationResponseProvider(
         model_runtime,
         agents,

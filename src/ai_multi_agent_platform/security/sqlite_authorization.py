@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from .authorization import (
@@ -51,7 +52,7 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
         return connection
 
     def _initialize_schema(self) -> None:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             connection.executescript(
                 """
                 PRAGMA journal_mode = WAL;
@@ -71,7 +72,7 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
             )
 
     def _load_policies(self) -> tuple[LocalPrincipalPolicy, ...]:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             rows = connection.execute(
                 "SELECT principal_ref, actor_types_json, allowed_actions_json, "
                 "approval_actions_json, resource_types_json, project_ids_json, "
@@ -111,7 +112,7 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
             _strings_json(policy.workspace_ids),
             int(policy.administrator),
         )
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             connection.execute(
                 "INSERT INTO authorization_policies (principal_ref, actor_types_json, "
                 "allowed_actions_json, approval_actions_json, resource_types_json, "
@@ -121,7 +122,7 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
             )
 
     def _delete_policy(self, principal_ref: str) -> None:
-        with self._connect() as connection:
+        with closing(self._connect()) as connection, connection:
             connection.execute(
                 "DELETE FROM authorization_policies WHERE principal_ref = ?",
                 (principal_ref,),
