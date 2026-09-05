@@ -1,0 +1,52 @@
+name: issue-79-evaluation-reopen-doc-fix
+
+on:
+  push:
+    branches:
+      - "docs/issue-79-evaluation-reopen-status"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Align current Evaluation issue status
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/PORTABILITY.md")
+          text = path.read_text(encoding="utf-8")
+          old = "#79 is complete and closed. Agent/Team, Template and Project round trips, canonical dependency/reference remapping, guarded compensation, replay-safe import reports and the Control Plane/CLI workflow form the completed portability surface. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. #309 and #310 remain independent follow-up domain work for durable model-routing and authorization-policy resources; they are not blockers to the completed #79 Definition of Done. #19 is also complete, but configured EvaluationSuite assets currently remain deployment/configuration inputs rather than a mutable canonical repository. Any future cross-deployment Evaluation-suite import must first consume an owning-domain mutation seam instead of introducing portability-specific shadow persistence."
+          new = "#79 is complete and closed. Agent/Team, Template and Project round trips, canonical dependency/reference remapping, guarded compensation, replay-safe import reports and the Control Plane/CLI workflow form the completed portability surface. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. #309 and #310 remain independent follow-up domain work for durable model-routing and authorization-policy resources; they are not blockers to the completed #79 Definition of Done. #19 is currently reopened for its own outstanding Evaluation-framework acceptance work. Configured EvaluationSuite assets currently remain deployment/configuration inputs rather than a mutable canonical repository, so any future cross-deployment Evaluation-suite import must consume a stable owning-domain mutation seam instead of introducing portability-specific shadow persistence."
+          if old not in text:
+              raise SystemExit("PORTABILITY.md #19 status paragraph not found")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          path = Path("docs/PORTABILITY_CONTROL_PLANE.md")
+          text = path.read_text(encoding="utf-8")
+          old = "#79 is complete and closed. Project portability consumes the canonical #308 persistence seam. #309 and #310 remain independent follow-up domain work if durable model-routing or authorization-policy profiles are later added to the portability surface; they do not block #79's completed status. #19 is complete, but EvaluationSuite assets are currently deployment/configuration inputs without a canonical suite-import mutation seam. Portability must not create shadow persistence to manufacture one."
+          new = "#79 is complete and closed. Project portability consumes the canonical #308 persistence seam. #309 and #310 remain independent follow-up domain work if durable model-routing or authorization-policy profiles are later added to the portability surface; they do not block #79's completed status. #19 is currently reopened for its own outstanding Evaluation-framework acceptance work. EvaluationSuite assets remain deployment/configuration inputs without a canonical suite-import mutation seam, so portability must not create shadow persistence to manufacture one."
+          if old not in text:
+              raise SystemExit("PORTABILITY_CONTROL_PLANE.md #19 status paragraph not found")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Verify current status wording
+        run: |
+          grep -Fq '#19 is currently reopened' docs/PORTABILITY.md
+          grep -Fq '#19 is currently reopened' docs/PORTABILITY_CONTROL_PLANE.md
+          ! grep -Fq '#19 is also complete' docs/PORTABILITY.md
+          ! grep -Fq '#19 is complete, but' docs/PORTABILITY_CONTROL_PLANE.md
+      - name: Commit docs and remove helper
+        run: |
+          git rm .github/workflows/issue-79-evaluation-reopen-doc-fix.yml
+          git add docs/PORTABILITY.md docs/PORTABILITY_CONTROL_PLANE.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs(portability): reflect reopened evaluation follow-up"
+          git push origin HEAD:docs/issue-79-evaluation-reopen-status
