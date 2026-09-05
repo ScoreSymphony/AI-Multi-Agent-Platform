@@ -79,9 +79,7 @@ def test_environment_resolver_uses_only_matching_server_owned_inventory(tmp_path
         assert environment.plugin_ids == frozenset({"plugin.alpha"})
         assert environment.connector_ids == frozenset({"connector.alpha"})
         assert environment.model_policy_refs == frozenset({"model-policy.alpha"})
-        assert environment.grantable_permissions == frozenset(
-            {"files.read", f"owner:{owner.id}"}
-        )
+        assert environment.grantable_permissions == frozenset({"files.read", f"owner:{owner.id}"})
         assert environment.workspace_prerequisites == frozenset({owned.id})
         assert foreign.id not in environment.workspace_prerequisites
         assert environment.resolved_placeholders == frozenset({"project_name"})
