@@ -203,7 +203,7 @@ class ControlPlane(_CurrentControlPlane):
                     "portability export resource must be an object",
                     details={"field": f"resources[{index}]"},
                 )
-            _require_only(cast(dict[str, JsonValue], item), {"resource_type", "resource_id"})
+            _require_only(item, {"resource_type", "resource_id"})
             selections.append(
                 ExportSelection(
                     resource_type=_required_string(item, "resource_type"),
@@ -220,7 +220,7 @@ class ControlPlane(_CurrentControlPlane):
         inspection = await self._require_portability().export_package(
             selections,
             author=context.actor.principal_ref,
-            metadata=cast(dict[str, JsonValue] | None, metadata),
+            metadata=metadata,
         )
         return package_inspection_to_dict(inspection)
 
