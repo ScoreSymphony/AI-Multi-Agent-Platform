@@ -182,7 +182,6 @@ class ModelRuntime:
         return ContractError(
             ErrorCode.CANCELLED,
             "model request was cancelled",
-            retryable=True,
             provider_id=config.provider_id,
             details={
                 "request_id": request.request_id,
