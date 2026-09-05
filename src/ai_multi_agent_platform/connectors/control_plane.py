@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -22,6 +22,7 @@ from .models import Connection, ConnectorDefinition, SyncMode
 from .service import ConnectorService
 
 type ConnectorControlPlaneActorResolver = Callable[[RequestContext], ActorIdentity]
+type ConnectorHealthEventSink = Callable[[Connection, Connection], Awaitable[None]]
 
 CONNECTOR_DEFINITION_COLLECTION = "connector-definitions"
 CONNECTOR_DEFINITION_TYPE = "connector-definition"
@@ -125,12 +126,20 @@ def register_connector_control_plane(
     connectors: ConnectorService,
     *,
     actor_resolver: ConnectorControlPlaneActorResolver = default_actor_resolver,
+    health_event_sink: ConnectorHealthEventSink | None = None,
 ) -> None:
     """Expose connector lifecycle without creating an action-invocation bypass.
 
     External actions intentionally are not registered as generic Control Plane commands.
-    They remain available only through the canonical #12 capability pipeline.
+    They remain available only through the canonical #12 capability pipeline. A Control Plane
+    may expose ``connector_health_event_sink`` as a provider-neutral best-effort observer; this
+    keeps #44 authoritative while allowing #75 to project health attention without a hard import.
     """
+
+    if health_event_sink is None:
+        discovered_sink = getattr(control_plane, "connector_health_event_sink", None)
+        if callable(discovered_sink):
+            health_event_sink = cast(ConnectorHealthEventSink, discovered_sink)
 
     control_plane.register_resource_service(
         CONNECTOR_DEFINITION_COLLECTION, ConnectorDefinitionResourceService(connectors)
@@ -211,6 +220,15 @@ def register_connector_control_plane(
             actor=actor_resolver(context),
             context=_operation_context(context, existing.project_id),
         )
+        if health_event_sink is not None and (
+            checked.health != existing.health or checked.status != existing.status
+        ):
+            try:
+                await health_event_sink(existing, checked)
+            except Exception:
+                # #44 already owns and persisted the authoritative Connection health transition.
+                # Downstream attention must never falsify a successful health check.
+                pass
         return _connection_resource(checked)
 
     async def synchronize(

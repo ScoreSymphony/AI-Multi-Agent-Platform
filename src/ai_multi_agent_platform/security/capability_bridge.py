@@ -63,7 +63,7 @@ class CapabilityAuthorizationBridge:
             self._actions[request.invocation_id] = action
         if self._gate.approvals.find_valid_for(action) is not None:
             return True
-        self._gate.ensure_pending_approval(
+        await self._gate.ensure_pending_approval_with_event(
             action,
             reason="capability metadata or authorization policy requires approval",
             policy_id="capability:approval-gate",
