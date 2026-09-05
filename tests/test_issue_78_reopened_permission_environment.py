@@ -91,16 +91,22 @@ def test_sqlite_permission_enumeration_is_conservative_for_scoped_and_approval_p
         )
     )
 
-    assert provider.globally_grantable_actions(
-        scoped_ref,
-        actor_type=ActorType.HUMAN.value,
-    ) == frozenset()
+    assert (
+        provider.globally_grantable_actions(
+            scoped_ref,
+            actor_type=ActorType.HUMAN.value,
+        )
+        == frozenset()
+    )
     assert provider.globally_grantable_actions(
         approval_ref,
         actor_type=ActorType.HUMAN.value,
     ) == frozenset({AuthorizationAction.READ})
     assert provider.globally_grantable_actions(approval_ref, actor_type=None) == frozenset()
-    assert provider.globally_grantable_actions(
-        approval_ref,
-        actor_type=ActorType.SERVICE.value,
-    ) == frozenset()
+    assert (
+        provider.globally_grantable_actions(
+            approval_ref,
+            actor_type=ActorType.SERVICE.value,
+        )
+        == frozenset()
+    )
