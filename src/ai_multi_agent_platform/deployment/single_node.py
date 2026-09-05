@@ -12,8 +12,10 @@ from ai_multi_agent_platform.agents import (
     AgentService,
     DurableRoutingProfileAgentRuntime,
     JsonAgentRepository,
-    register_agent_control_plane,
     register_standard_agent_control_plane,
+)
+from ai_multi_agent_platform.agents.routing_profile_control_plane import (
+    register_routing_profile_aware_agent_control_plane,
 )
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.configuration import SecretProvider
@@ -51,6 +53,7 @@ from ai_multi_agent_platform.models import (
     JsonModelRegistryStore,
     JsonModelRoutingProfileRepository,
     ModelRegistry,
+    ModelRoutingProfileAssignmentGate,
     ModelRoutingProfileRef,
     ModelRoutingProfileService,
     ModelRuntime,
@@ -390,6 +393,10 @@ def build_single_node_deployment(
         routing_profile_repository,
         authorization=authorization,
     )
+    routing_profile_assignment_gate = ModelRoutingProfileAssignmentGate(
+        routing_profile_repository,
+        authorization=authorization,
+    )
     approval_gate = AuthorizationGate(authorization)
 
     evaluation_evidence_providers: list[EvaluationEvidenceProvider] = []
@@ -451,7 +458,12 @@ def build_single_node_deployment(
         control_plane.register_resource_service(collection, service)
     for command, handler in evaluation_command_handlers(evaluation_composition.service).items():
         control_plane.register_command(command, handler)
-    register_agent_control_plane(control_plane, agents, runtime=agent_runtime)
+    register_routing_profile_aware_agent_control_plane(
+        control_plane,
+        agents,
+        routing_profile_assignment_gate,
+        runtime=agent_runtime,
+    )
     register_standard_agent_control_plane(control_plane, agents)
     register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
     register_automation_template_handler(template_handlers, control_plane.automation_service)
