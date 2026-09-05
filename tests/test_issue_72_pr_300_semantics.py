@@ -30,7 +30,6 @@ from ai_multi_agent_platform.control_plane.conversation_response_streaming impor
 )
 from ai_multi_agent_platform.conversations import (
     ConversationContentBlock,
-    ConversationResponseChunk,
     ConversationService,
     JsonConversationRepository,
     MessageRole,
@@ -257,4 +256,5 @@ def test_authenticated_operation_context_reaches_model_runtime(tmp_path: Path) -
     assert operation.owner_type == ACTOR.owner_type
     assert operation.owner_id == ACTOR.owner_id
     assert operation.project_id is None
+    assert operation.control is not None
     assert operation.control.idempotency_key == context.idempotency_key
