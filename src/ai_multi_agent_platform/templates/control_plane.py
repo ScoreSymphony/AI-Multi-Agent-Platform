@@ -10,11 +10,13 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext, json_object
 from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.workspaces import WorkspaceProvider
 
 from .agent_handlers import AgentTemplateExporter
 from .application import TemplateApplicationService
 from .automation_handler import AutomationTemplateExporter
 from .codec import template_content_from_json
+from .environment import PlatformTemplateEnvironmentResolver
 from .models import TemplateContent, TemplateProvenance, TemplateTrust
 from .repository import TemplateRepository
 from .service import TemplateEnvironment
@@ -311,6 +313,12 @@ def register_template_control_plane(
         TEMPLATE_INSTANCE_COLLECTION,
         TemplateInstanceResourceService(repository),
     )
+    if environment_resolver is None:
+        workspace_provider = cast(
+            WorkspaceProvider | None,
+            getattr(control_plane, "workspace_provider", None),
+        )
+        environment_resolver = PlatformTemplateEnvironmentResolver(workspaces=workspace_provider)
     handlers = TemplateCommandHandlers(
         application,
         environment_resolver=environment_resolver,
