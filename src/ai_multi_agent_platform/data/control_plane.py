@@ -315,7 +315,9 @@ class KnowledgeDocumentResourceService:
         if requested_project is not None:
             validate_id(requested_project, "project")
             resources = tuple(
-                resource for resource in resources if resource.get("project_id") == requested_project
+                resource
+                for resource in resources
+                if resource.get("project_id") == requested_project
             )
         return resources
 
@@ -633,6 +635,7 @@ def _memory_search_resource(entry: MemoryEntry) -> dict[str, JsonValue]:
         "retention": entry.retention.value,
         "expires_at": entry.expires_at.isoformat() if entry.expires_at is not None else None,
         "provenance_refs": [source.ref for source in entry.provenance],
+        "aliases": [entry.scope.value, entry.origin.value, entry.retention.value],
     }
     if entry.scope is MemoryScope.ORGANIZATION:
         resource["organization_id"] = entry.scope_id
@@ -667,6 +670,7 @@ def _knowledge_source_search_resource(source: KnowledgeSource) -> dict[str, Json
         "status": source.status.value,
         "created_at": source.created_at.isoformat(),
         "updated_at": source.updated_at.isoformat(),
+        "aliases": [source.revision],
     }
 
 
@@ -685,6 +689,7 @@ def _knowledge_document_search_resource(
         "status": source.status.value,
         "created_at": document.created_at.isoformat(),
         "updated_at": source.updated_at.isoformat(),
+        "aliases": [document.source_id, document.revision],
     }
 
 
