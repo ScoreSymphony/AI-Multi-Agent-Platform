@@ -11,6 +11,7 @@ from typing import TextIO
 
 from .compatibility import FormatTranslatorRegistry
 from .migrations import JsonMigrationHistoryStore, MigrationError, MigrationRegistry, MigrationRunner
+from .models import VersionSnapshot
 from .preflight import PreflightRequest, UpgradePreflight
 from .service import JsonUpgradeHistoryStore, MaintenanceStateStore, UpgradeError, UpgradeService
 from .versioning import JsonVersionStateStore, VersionStateError, current_release_versions
@@ -94,7 +95,7 @@ def run_cli(
                 history=JsonUpgradeHistoryStore.for_data_dir(data_dir),
             )
             result = service.apply(
-                replace(request, resume_failed=args.resume_failed),
+                request,
                 quiesced=args.quiesced,
                 resume_failed=args.resume_failed,
             )
@@ -117,11 +118,7 @@ def default_migration_registry() -> MigrationRegistry:
     return MigrationRegistry()
 
 
-def _target_snapshot(current: object, registry: MigrationRegistry):
-    from .models import VersionSnapshot
-
-    if not isinstance(current, VersionSnapshot):
-        raise TypeError("current version state must be VersionSnapshot")
+def _target_snapshot(current: VersionSnapshot, registry: MigrationRegistry) -> VersionSnapshot:
     release = current_release_versions(migration_revision=current.migration_revision)
     steps = registry.plan(current.domain_schema, release.domain_schema)
     if steps:
