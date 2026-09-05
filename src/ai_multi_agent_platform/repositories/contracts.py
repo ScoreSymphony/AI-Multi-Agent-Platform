@@ -9,6 +9,7 @@ from ai_multi_agent_platform.contracts.types import OperationContext, ProviderDe
 
 from .models import (
     RepositoryCommit,
+    RepositoryCommitInfo,
     RepositoryConnection,
     RepositoryDiff,
     RepositoryReference,
@@ -77,6 +78,16 @@ class RepositoryProvider(ProviderContract):
         repository: RepositoryReference,
         context: OperationContext,
     ) -> tuple[str, ...]: ...
+
+    @abstractmethod
+    async def commits(
+        self,
+        repository: RepositoryReference,
+        context: OperationContext,
+        *,
+        revision: str = "HEAD",
+        limit: int = 50,
+    ) -> tuple[RepositoryCommitInfo, ...]: ...
 
     @abstractmethod
     async def status(
