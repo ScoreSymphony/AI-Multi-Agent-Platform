@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from ai_multi_agent_platform.agents import AgentRevisionRef, AgentTeamRevisionRef
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
@@ -26,6 +26,8 @@ from .models import (
 from .repository import InMemoryWorkflowRepository
 
 WORKFLOW_REPOSITORY_SCHEMA_VERSION = "1"
+OwnerType = Literal["user", "organization", "team", "service"]
+_OWNER_TYPES = frozenset({"user", "organization", "team", "service"})
 
 
 class JsonWorkflowRepository(InMemoryWorkflowRepository):
@@ -329,7 +331,10 @@ def _owner_to_json(item: OwnerRef) -> dict[str, JsonValue]:
 
 def _owner(value: object) -> OwnerRef:
     item = _object(value, "workflow owner")
-    return OwnerRef(type=_required_string(item, "type"), id=_required_string(item, "id"))
+    owner_type = _required_string(item, "type")
+    if owner_type not in _OWNER_TYPES:
+        raise ValueError("workflow owner type is invalid")
+    return OwnerRef(type=cast(OwnerType, owner_type), id=_required_string(item, "id"))
 
 
 def _datetime(value: str) -> datetime:
