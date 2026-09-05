@@ -238,7 +238,7 @@ def test_auth_cli_login_me_logout_keeps_secrets_out_of_profile_and_output(
 
     code, me, error = _invoke(config, transport, "auth", "me")
     assert code == 0 and not error
-    assert me["data"]["id"] == user_id
+    assert me["data"]["actor_id"] == user_id
     me_call = transport.calls[-1]
     assert me_call[0:2] == ("GET", "/api/v1/auth/me")
     assert me_call[3]["cookie"].startswith("amp_session=")
@@ -312,7 +312,7 @@ def test_approval_cli_approves_exact_action_idempotently_without_payload_leak(
     assert code == 0 and not error
     assert output["data"]["status"] == "approved"
     assert output["data"]["requested_action_digest"] == action.digest
-    assert output["data"]["decision_by"] == "user:approver"
+    assert output["data"]["decision_by"] == {"type": "user", "id": "approver"}
 
     serialized = json.dumps(output, sort_keys=True)
     assert "do-not-expose-approval-payload" not in serialized
