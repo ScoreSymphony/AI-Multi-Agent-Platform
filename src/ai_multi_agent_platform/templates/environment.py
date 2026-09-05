@@ -91,8 +91,7 @@ class PlatformTemplateEnvironmentResolver:
             grantable_permissions=_scoped_inventory(self.grantable_permissions, context),
             workspace_prerequisites=workspace_ids,
             resolved_placeholders=(
-                _scoped_inventory(self.placeholders, context)
-                | frozenset(placeholder_bindings)
+                _scoped_inventory(self.placeholders, context) | frozenset(placeholder_bindings)
             ),
             resolved_secret_reference_placeholders=(
                 _scoped_inventory(self.secret_reference_placeholders, context)
