@@ -69,8 +69,7 @@ class AuthorizationPolicyProfileImportMutationHandler:
                 "portable policy profile must remain dormant during import",
             )
         if any(
-            not revision.content.provenance.imported
-            or revision.content.provenance.trusted
+            not revision.content.provenance.imported or revision.content.provenance.trusted
             for revision in snapshot.revisions
         ):
             raise ContractError(
