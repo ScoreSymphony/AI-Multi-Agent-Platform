@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.models.routing_profile_repository import (
@@ -90,17 +91,12 @@ class ModelRoutingProfileImportMutationHandler:
 def _definition_at(
     final_definition: ModelRoutingProfileDefinition,
     revision: int,
-    revision_created_at: object,
+    revision_created_at: datetime,
     *,
     is_final: bool,
 ) -> ModelRoutingProfileDefinition:
     if is_final:
         return final_definition
-    if not hasattr(revision_created_at, "tzinfo"):
-        raise ContractError(
-            ErrorCode.CONTRACT_VIOLATION,
-            "routing profile revision timestamp is invalid during import",
-        )
     return replace(
         final_definition,
         current_revision=revision,
