@@ -224,15 +224,13 @@ def inspect_authorization_policy_profile_import(
             ),
         )
     except (ContractError, KeyError, TypeError, ValueError) as exc:
+        exception_name = type(exc).__name__
         return (
             ImportSecurityFinding(
                 kind=ImportSecurityFindingKind.INVALID_SECURITY_PAYLOAD,
                 resource_type=resource.resource_type,
                 resource_id=target_id,
-                detail=(
-                    "authorization policy profile cannot be safely inspected: "
-                    f"{type(exc).__name__}"
-                ),
+                detail=f"authorization policy profile cannot be safely inspected: {exception_name}",
                 blocking=True,
             ),
         )
