@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import replace
+from typing import cast
 
 from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.agents.models import (
@@ -292,7 +293,7 @@ def _preference_requirements(
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "conversation model preference contains unsupported routing requirements",
-            details={"fields": unknown},
+            details={"fields": cast(JsonValue, unknown)},
         )
 
     def optional_positive_int(key: str) -> int | None:
@@ -313,7 +314,7 @@ def _preference_requirements(
         value = values.get(key, [])
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
             raise ContractError(ErrorCode.INVALID_REQUEST, f"{key} must be a list of strings")
-        return tuple(value)
+        return tuple(cast(str, item) for item in value)
 
     return RoutingRequirements(
         explicit_model_id=model_config_id,
