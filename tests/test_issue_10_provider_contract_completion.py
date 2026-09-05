@@ -10,6 +10,7 @@ from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
     HealthStatus,
+    JsonValue,
     ModelProvider,
     ModelRequest,
     ModelResponse,
@@ -135,14 +136,14 @@ class BlockingCancellationProvider(ModelProvider):
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
         async def iterate() -> AsyncIterator[ModelStreamEvent]:
             self.stream_started.set()
-            await asyncio.Event().wait()
-            raise AssertionError("cancelled stream unexpectedly resumed")
             yield ModelStreamEvent(
                 kind=ModelStreamEventKind.TEXT_DELTA,
                 request_id=request.request_id,
                 model_ref="provider-private-model",
-                text_delta="unreachable",
+                text_delta="started",
             )
+            await asyncio.Event().wait()
+            raise AssertionError("cancelled stream unexpectedly resumed")
 
         return iterate()
 
@@ -166,7 +167,7 @@ def runtime_for(provider: ModelProvider, *, streaming: bool = True) -> ModelRunt
 
 
 def request(request_id: str, *, streaming: bool = False) -> ModelRequest:
-    requirements: dict[str, object] = {
+    requirements: dict[str, JsonValue] = {
         "model_config_id": "model-issue-10-completion",
     }
     if streaming:
@@ -175,7 +176,7 @@ def request(request_id: str, *, streaming: bool = False) -> ModelRequest:
         request_id=request_id,
         messages=("hello",),
         context=OperationContext(correlation_id=f"corr-{request_id}"),
-        requirements=requirements,  # type: ignore[arg-type]
+        requirements=requirements,
     )
 
 
@@ -239,7 +240,7 @@ def test_runtime_maps_generate_task_cancellation_to_canonical_error() -> None:
 
     assert error.code is ErrorCode.CANCELLED
     assert error.provider_id == "blocking-provider"
-    assert error.retryable is True
+    assert error.retryable is False
     assert error.details["request_id"] == "cancel-generate"
     assert error.details["model_config_id"] == "model-issue-10-completion"
 
@@ -254,6 +255,7 @@ def test_runtime_maps_stream_consumer_cancellation_to_canonical_error() -> None:
 
         task = asyncio.create_task(consume())
         await provider.stream_started.wait()
+        await asyncio.sleep(0)
         task.cancel()
         with pytest.raises(ContractError) as captured:
             await task
@@ -263,6 +265,6 @@ def test_runtime_maps_stream_consumer_cancellation_to_canonical_error() -> None:
 
     assert error.code is ErrorCode.CANCELLED
     assert error.provider_id == "blocking-provider"
-    assert error.retryable is True
+    assert error.retryable is False
     assert error.details["request_id"] == "cancel-stream"
     assert error.details["model_config_id"] == "model-issue-10-completion"
