@@ -285,6 +285,8 @@ def _updated_at(resource_type: str, resource: Mapping[str, JsonValue]) -> str | 
         return _optional_string(resource, "completed_at") or _optional_string(
             resource, "started_at"
         )
+    if resource_type == "verification_policy":
+        return _optional_string(resource, "created_at")
     if resource_type == "verification":
         result = _nested_mapping(resource, "verification_result")
         if result is not None:
@@ -302,6 +304,9 @@ def _version(resource_type: str, resource: Mapping[str, JsonValue]) -> str | Non
             return str(value)
     if resource_type == "evaluation-suite":
         return _optional_string(resource, "version")
+    if resource_type == "verification_policy":
+        value = resource.get("version")
+        return str(value) if isinstance(value, int | str) else None
     return None
 
 
@@ -372,6 +377,9 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "suite_id",
         "suite_version",
         "baseline_run_id",
+        "policy_id",
+        "failure_policy",
+        "timeout_failure_policy",
         "result_id",
         "stage_id",
         "requested_verifier_kind",
@@ -418,22 +426,60 @@ def _verification_keywords(
     resource_type: str,
     resource: Mapping[str, JsonValue],
 ) -> tuple[str, ...]:
-    """Return explicit safe nested Verification metadata, never free-form evidence."""
+    """Return explicit safe nested Verification metadata, never findings/evidence/digests."""
 
     values: list[str] = []
+
+    def add_scalar(mapping: Mapping[str, JsonValue] | None, *fields: str) -> None:
+        if mapping is None:
+            return
+        for field in fields:
+            value = mapping.get(field)
+            if isinstance(value, str) and value.strip():
+                values.append(value)
+            elif isinstance(value, int):
+                values.append(str(value))
+
+    def add_subject(mapping: Mapping[str, JsonValue]) -> None:
+        subject = _nested_mapping(mapping, "subject")
+        add_scalar(subject, "type", "id", "revision")
+        # Exact digests are deliberately retained only behind the canonical resource read.
+
     if resource_type == "verification":
+        add_scalar(_nested_mapping(resource, "policy"), "id", "version")
+        add_subject(resource)
         result = _nested_mapping(resource, "verification_result")
         if result is not None:
-            outcome = _optional_string(result, "outcome")
-            if outcome is not None:
-                values.append(outcome)
+            add_scalar(result, "id", "outcome")
+            verifier = _nested_mapping(result, "verifier")
+            # Arbitrary verifier refs (especially human identities) stay out of global text.
+            add_scalar(verifier, "kind", "agent_id", "model_config_id", "provider_id")
     elif resource_type == "verification_requirement":
+        add_scalar(_nested_mapping(resource, "policy"), "id", "version")
+        add_subject(resource)
         completion = _nested_mapping(resource, "completion")
         if completion is not None:
-            state = _optional_string(completion, "state")
-            if state is not None:
-                values.append(state)
+            add_scalar(completion, "state")
             values.extend(_string_sequence(completion, "blocking_verification_ids"))
+    elif resource_type == "verification_policy":
+        add_scalar(
+            resource,
+            "policy_id",
+            "version",
+            "failure_policy",
+            "timeout_failure_policy",
+        )
+        scope = _nested_mapping(resource, "scope")
+        if scope is not None:
+            for field in ("task_ids", "project_ids", "agent_ids", "capability_ids"):
+                values.extend(_string_sequence(scope, field))
+        raw_stages = resource.get("stages")
+        if isinstance(raw_stages, Sequence) and not isinstance(raw_stages, str | bytes | bytearray):
+            for raw_stage in raw_stages:
+                if not isinstance(raw_stage, Mapping):
+                    continue
+                add_scalar(raw_stage, "stage_id", "verifier_kind", "capability_ref")
+                values.extend(_string_sequence(raw_stage, "accepted_outcomes"))
     return _deduplicate_strings(tuple(values))
 
 

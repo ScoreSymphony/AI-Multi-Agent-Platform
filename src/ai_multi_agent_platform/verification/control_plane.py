@@ -17,6 +17,7 @@ from .gate import VerificationCompletionAuthority
 from .models import (
     VerificationFinding,
     VerificationOutcome,
+    VerificationPolicy,
     VerificationRequest,
     VerificationRequestStatus,
     VerificationResult,
@@ -26,6 +27,7 @@ from .models import (
 )
 from .service import VerificationService
 
+VERIFICATION_POLICY_COLLECTION = "verification-policies"
 VERIFICATION_COLLECTION = "verifications"
 VERIFICATION_REVIEW_COLLECTION = "verification-reviews"
 VERIFICATION_REQUIREMENT_COLLECTION = "verification-requirements"
@@ -34,6 +36,38 @@ VERIFICATION_COMMANDS = (
     "verification.reject",
     "verification.request-changes",
 )
+
+
+class VerificationPolicyResourceService(ResourceService):
+    """Versioned policy discovery with explicit collection-level authorization."""
+
+    def __init__(self, verification: VerificationService) -> None:
+        self._verification = verification
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del context, query
+        return tuple(
+            _policy_resource(policy) for policy in _verification_policies(self._verification)
+        )
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate safe policy projections for actor-independent Search rebuild."""
+
+        return tuple(
+            _policy_resource(policy) for policy in _verification_policies(self._verification)
+        )
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        del context
+        return _policy_resource(_policy_from_ref(self._verification, resource_id))
 
 
 class VerificationResourceService(ResourceService):
@@ -404,6 +438,10 @@ def register_verification_control_plane(
     """Register #86 read/review surfaces on the generic #32 extension seam."""
 
     control_plane.register_resource_service(
+        VERIFICATION_POLICY_COLLECTION,
+        VerificationPolicyResourceService(verification),
+    )
+    control_plane.register_resource_service(
         VERIFICATION_COLLECTION,
         VerificationResourceService(control_plane, verification),
     )
@@ -478,6 +516,70 @@ def _search_scoped_resource(
     scoped["owner_id"] = task.task.owner_ref.id
     scoped["project_id"] = task.task.project_id
     return scoped
+
+
+def _verification_policies(
+    verification: VerificationService,
+) -> tuple[VerificationPolicy, ...]:
+    refs = {
+        (event.policy_id, event.policy_version)
+        for event in verification.audit_history()
+        if event.policy_id is not None and event.policy_version is not None
+    }
+    return tuple(verification.get_policy(policy_id, version) for policy_id, version in sorted(refs))
+
+
+def _policy_ref(policy: VerificationPolicy) -> str:
+    return f"{policy.policy_id}@{policy.version}"
+
+
+def _policy_from_ref(
+    verification: VerificationService,
+    resource_id: str,
+) -> VerificationPolicy:
+    policy_id, separator, raw_version = resource_id.rpartition("@")
+    if not separator or not policy_id or not raw_version:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found")
+    try:
+        version = int(raw_version)
+    except ValueError as exc:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found") from exc
+    if version < 1:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found")
+    return verification.get_policy(policy_id, version)
+
+
+def _policy_resource(policy: VerificationPolicy) -> dict[str, JsonValue]:
+    return {
+        "id": _policy_ref(policy),
+        "type": "verification_policy",
+        "policy_id": policy.policy_id,
+        "version": policy.version,
+        "name": policy.name,
+        "scope": {
+            "task_ids": list(policy.scope.task_ids),
+            "project_ids": list(policy.scope.project_ids),
+            "agent_ids": list(policy.scope.agent_ids),
+            "capability_ids": list(policy.scope.capability_ids),
+        },
+        "stages": [
+            {
+                "stage_id": stage.stage_id,
+                "verifier_kind": stage.verifier_kind.value,
+                "minimum_results": stage.minimum_results,
+                "accepted_outcomes": [outcome.value for outcome in stage.accepted_outcomes],
+                "capability_ref": stage.capability_ref,
+                "critical": stage.critical,
+            }
+            for stage in policy.stages
+        ],
+        "max_repair_attempts": policy.max_repair_attempts,
+        "request_timeout_seconds": policy.request_timeout_seconds,
+        "result_expiry_seconds": policy.result_expiry_seconds,
+        "failure_policy": policy.failure_policy.value,
+        "timeout_failure_policy": policy.timeout_failure_policy.value,
+        "created_at": policy.created_at.isoformat(),
+    }
 
 
 def _verification_resource(

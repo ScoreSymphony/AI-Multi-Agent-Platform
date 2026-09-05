@@ -24,6 +24,7 @@ from ai_multi_agent_platform.verification import (
 )
 from ai_multi_agent_platform.verification.control_plane import (
     VERIFICATION_COLLECTION,
+    VERIFICATION_POLICY_COLLECTION,
     VERIFICATION_REQUIREMENT_COLLECTION,
     VERIFICATION_REVIEW_COLLECTION,
     register_verification_control_plane,
@@ -41,7 +42,11 @@ class VerificationSearchAuthorization(FakeAuthorizationProvider):
 
     async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision:
         self.calls.append(request)
-        if request.action in {"verification:list", "verification-requirement:list"}:
+        if request.action in {
+            "verification-policy:list",
+            "verification:list",
+            "verification-requirement:list",
+        }:
             if request.principal_ref == "local:anonymous":
                 return AuthorizationDecision(allowed=False, reason="synthetic-rebuild-actor")
             if (
@@ -164,7 +169,9 @@ def _items(page: dict[str, object]) -> list[dict[str, object]]:
     return items
 
 
-def test_verification_requests_and_requirements_are_searchable_without_review_evidence_leaks() -> None:
+def test_verification_requests_and_requirements_are_searchable_without_review_evidence_leaks() -> (
+    None
+):
     async def scenario() -> None:
         authorization = VerificationSearchAuthorization()
         kernel, verification, completion, control_plane, http = await _stack(authorization)
@@ -181,6 +188,7 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
             capability_id=capability_id,
             artifact_id=artifact_id,
         )
+        policy = verification.get_policy(request.policy_id, request.policy_version)
         result = verification.record_human_review(
             request.verification_id,
             reviewer_ref=REVIEWER_SECRET,
@@ -199,7 +207,9 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
         assert item["owner_id"] == "alice"
         assert item["status"] == "completed"
         assert item["updated_at"] == result.completed_at.isoformat()
-        assert item["canonical_ref"] == f"/api/v1/{VERIFICATION_COLLECTION}/{request.verification_id}"
+        assert (
+            item["canonical_ref"] == f"/api/v1/{VERIFICATION_COLLECTION}/{request.verification_id}"
+        )
         assert item["provenance"] == {
             "indexed_from": "canonical-control-plane",
             "collection": VERIFICATION_COLLECTION,
@@ -208,6 +218,9 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
         for query_value in (
             task.task_id,
             request.result_id,
+            result.verification_result_id,
+            policy.policy_id,
+            str(policy.version),
             artifact_id,
             capability_id,
             "human-review",
@@ -216,6 +229,26 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
             "pass",
         ):
             page = await _search(http, type="verification", q=str(query_value))
+            assert page["total"] == 1, (query_value, page)
+
+        policy_ref = f"{policy.policy_id}@{policy.version}"
+        policy_page = await _search(http, type="verification_policy", id=policy_ref)
+        assert policy_page["total"] == 1
+        policy_item = _items(policy_page)[0]
+        assert policy_item["resource_id"] == policy_ref
+        assert policy_item["title"] == policy.name
+        assert policy_item["version"] == str(policy.version)
+        assert policy_item["canonical_ref"] == (
+            f"/api/v1/{VERIFICATION_POLICY_COLLECTION}/{policy_ref}"
+        )
+        for query_value in (
+            policy.policy_id,
+            policy.name,
+            requested_capability_ref,
+            "human",
+            "pass",
+        ):
+            page = await _search(http, type="verification_policy", q=str(query_value))
             assert page["total"] == 1, (query_value, page)
 
         requirement = await _search(
@@ -245,7 +278,10 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
             page = await _search(http, q=private_value)
             assert page["total"] == 0, (private_value, page)
 
-        serialized = json.dumps({"verification": exact, "requirement": requirement}, sort_keys=True)
+        serialized = json.dumps(
+            {"verification": exact, "policy": policy_page, "requirement": requirement},
+            sort_keys=True,
+        )
         assert FINDING_SECRET not in serialized
         assert DIGEST_SECRET not in serialized
         assert REVIEWER_SECRET not in serialized
@@ -259,7 +295,12 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
             call
             for call in authorization.calls
             if call.principal_ref == "local:anonymous"
-            and call.action in {"verification:list", "verification-requirement:list"}
+            and call.action
+            in {
+                "verification-policy:list",
+                "verification:list",
+                "verification-requirement:list",
+            }
         ]
         assert anonymous_verification_calls == []
 
