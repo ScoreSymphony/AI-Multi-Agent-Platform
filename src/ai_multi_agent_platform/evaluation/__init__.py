@@ -1,5 +1,6 @@
 """Canonical evaluation and regression framework."""
 
+from .agent_evidence import AgentRunEvidenceCaseExecutor
 from .aggregation import (
     AggregatedEvaluationResult,
     AggregationMethod,
@@ -102,6 +103,7 @@ from .workspace import (
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
     "AccountingEvaluationEvidenceProvider",
+    "AgentRunEvidenceCaseExecutor",
     "AggregatedEvaluationResult",
     "AggregationMethod",
     "AggregationPolicy",
