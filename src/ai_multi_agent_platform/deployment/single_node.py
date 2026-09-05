@@ -9,6 +9,7 @@ from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.agents import (
     AgentRuntime,
     AgentService,
+    DurableRoutingProfileAgentRuntime,
     JsonAgentRepository,
     register_agent_control_plane,
     register_standard_agent_control_plane,
@@ -25,8 +26,8 @@ from ai_multi_agent_platform.control_plane.approval_portability_composition impo
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
     ConversationService,
+    DurableRoutingProfileConversationResponseProvider,
     JsonConversationRepository,
-    ModelRuntimeConversationResponseProvider,
 )
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
@@ -266,8 +267,9 @@ def build_single_node_deployment(
     routing_profile_repository = JsonModelRoutingProfileRepository(
         database_dir / "model-routing-profiles.json"
     )
-    agent_runtime = AgentRuntime(
+    agent_runtime = DurableRoutingProfileAgentRuntime(
         agents,
+        routing_profile_repository=routing_profile_repository,
         model_registry=models,
         capability_registry=capabilities,
     )
@@ -283,10 +285,10 @@ def build_single_node_deployment(
     )
     onboarding.restore()
     model_runtime = ModelRuntime(models)
-    conversation_response_provider = ModelRuntimeConversationResponseProvider(
+    conversation_response_provider = DurableRoutingProfileConversationResponseProvider(
         model_runtime,
         agents,
-        routing_profiles=agent_runtime.routing_profiles,
+        routing_profile_repository=routing_profile_repository,
     )
 
     template_handlers = ContextualTemplateHandlerRegistry()
