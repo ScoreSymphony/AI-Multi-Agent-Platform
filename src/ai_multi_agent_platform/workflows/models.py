@@ -129,6 +129,10 @@ class WorkflowCompatibility:
         _require_nonblank(self.schema_version, "workflow schema version")
         if self.platform_version_range is not None:
             _require_nonblank(self.platform_version_range, "platform version range")
+        if not self.provider_agnostic:
+            raise ValueError("canonical workflow compatibility must remain provider agnostic")
+        if not self.orchestrator_agnostic:
+            raise ValueError("canonical workflow compatibility must remain orchestrator agnostic")
         versions = dict(self.contract_versions)
         for key, value in versions.items():
             _require_nonblank(key, "workflow contract name")
