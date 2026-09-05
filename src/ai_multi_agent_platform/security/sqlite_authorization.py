@@ -58,19 +58,19 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
         canonical resources exist. Scoped policies cannot be generalized to arbitrary target
         Projects/Organizations/Teams/Workspaces, so they intentionally return no grants here.
         Approval-gated actions are also excluded: requiring approval is not equivalent to an
-        immediately grantable permission.
+        immediately grantable permission. Actor type must come from trusted authentication
+        context; without it the result is fail-closed.
         """
 
         policy = self._policies.get(principal_ref)
-        if policy is None:
+        if policy is None or actor_type is None:
             return frozenset()
-        if actor_type is not None:
-            try:
-                canonical_actor_type = ActorType(actor_type)
-            except ValueError:
-                return frozenset()
-            if canonical_actor_type not in policy.actor_types:
-                return frozenset()
+        try:
+            canonical_actor_type = ActorType(actor_type)
+        except ValueError:
+            return frozenset()
+        if canonical_actor_type not in policy.actor_types:
+            return frozenset()
         if (
             policy.project_ids
             or policy.organization_ids
