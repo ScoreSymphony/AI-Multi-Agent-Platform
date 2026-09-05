@@ -8,8 +8,10 @@ from typing import Any, cast
 import pytest
 
 from ai_multi_agent_platform.automation.runtime import AutomationRuntimeTick
-from ai_multi_agent_platform.distributed import DistributedRegistry
+from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.distributed.models import WorkerJobRequest
+from ai_multi_agent_platform.distributed.registry import DistributedRegistry
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.high_availability import (
     AvailabilityMode,
     ControlPlaneFailoverService,
@@ -55,6 +57,17 @@ class CountingScheduler:
         del job, now
         self.calls += 1
         raise RuntimeError("scheduler reached")
+
+
+def _job() -> WorkerJobRequest:
+    return WorkerJobRequest(
+        execution=ExecutionRequest(
+            run_id=new_id("run"),
+            subject_type="task",
+            subject_id=new_id("task"),
+            context=OperationContext(correlation_id="corr:issue-89-ha-dispatch"),
+        )
+    )
 
 
 def test_automation_ticks_follow_current_leadership() -> None:
@@ -119,9 +132,8 @@ def test_standby_distributed_runtime_rejects_before_scheduling() -> None:
             authority_check=standby.require_authority,
             scheduler=cast(Any, scheduler),
         )
-        fake_job = cast(WorkerJobRequest, object())
         with pytest.raises(NotLeaderError):
-            await runtime.dispatch(fake_job, now=NOW)
+            await runtime.dispatch(_job(), now=NOW)
         assert scheduler.calls == 0
 
     asyncio.run(scenario())
@@ -144,9 +156,8 @@ def test_active_distributed_runtime_reaches_scheduler_after_authority_check() ->
             authority_check=active.require_authority,
             scheduler=cast(Any, scheduler),
         )
-        fake_job = cast(WorkerJobRequest, object())
         with pytest.raises(RuntimeError, match="scheduler reached"):
-            await runtime.dispatch(fake_job, now=NOW)
+            await runtime.dispatch(_job(), now=NOW)
         assert scheduler.calls == 1
 
     asyncio.run(scenario())
