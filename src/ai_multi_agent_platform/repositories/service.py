@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
+from ai_multi_agent_platform.connectors import ExternalResourceReference
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 from ai_multi_agent_platform.security import (
@@ -18,10 +19,14 @@ from ai_multi_agent_platform.security import (
 
 from .contracts import RepositoryProvider
 from .models import (
+    RepositoryChangeRequest,
+    RepositoryChangeRequestState,
     RepositoryCommit,
     RepositoryCommitInfo,
     RepositoryConnection,
     RepositoryDiff,
+    RepositoryIssue,
+    RepositoryIssueState,
     RepositoryOperation,
     RepositoryReference,
     RepositoryRevision,
@@ -179,6 +184,147 @@ class RepositoryService:
             limit=limit,
         )
 
+    async def read_issue(
+        self,
+        repository_id: str,
+        issue: ExternalResourceReference,
+        context: RepositoryCallContext,
+    ) -> RepositoryIssue:
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(binding, RepositoryOperation.ISSUE_READ, context)
+        return await binding.provider.read_issue(binding.reference, issue, operation)
+
+    async def open_issue(
+        self,
+        repository_id: str,
+        title: str,
+        context: RepositoryCallContext,
+        *,
+        body: str | None = None,
+    ) -> RepositoryIssue:
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(
+            binding,
+            RepositoryOperation.ISSUE_WRITE,
+            context,
+            payload={"action": "open", "title": title},
+        )
+        return await binding.provider.open_issue(
+            binding.reference,
+            title,
+            operation,
+            body=body,
+        )
+
+    async def update_issue(
+        self,
+        repository_id: str,
+        issue: ExternalResourceReference,
+        context: RepositoryCallContext,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: RepositoryIssueState | None = None,
+    ) -> RepositoryIssue:
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(
+            binding,
+            RepositoryOperation.ISSUE_WRITE,
+            context,
+            payload={
+                "action": "update",
+                "issue_id": issue.id,
+                "state": state.value if state is not None else None,
+            },
+        )
+        return await binding.provider.update_issue(
+            binding.reference,
+            issue,
+            operation,
+            title=title,
+            body=body,
+            state=state,
+        )
+
+    async def read_change_request(
+        self,
+        repository_id: str,
+        change_request: ExternalResourceReference,
+        context: RepositoryCallContext,
+    ) -> RepositoryChangeRequest:
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(
+            binding,
+            RepositoryOperation.CHANGE_REQUEST_READ,
+            context,
+        )
+        return await binding.provider.read_change_request(
+            binding.reference,
+            change_request,
+            operation,
+        )
+
+    async def open_change_request(
+        self,
+        repository_id: str,
+        title: str,
+        head_ref: str,
+        base_ref: str,
+        context: RepositoryCallContext,
+        *,
+        body: str | None = None,
+    ) -> RepositoryChangeRequest:
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(
+            binding,
+            RepositoryOperation.CHANGE_REQUEST_WRITE,
+            context,
+            payload={
+                "action": "open",
+                "title": title,
+                "head_ref": head_ref,
+                "base_ref": base_ref,
+            },
+        )
+        return await binding.provider.open_change_request(
+            binding.reference,
+            title,
+            head_ref,
+            base_ref,
+            operation,
+            body=body,
+        )
+
+    async def update_change_request(
+        self,
+        repository_id: str,
+        change_request: ExternalResourceReference,
+        context: RepositoryCallContext,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: RepositoryChangeRequestState | None = None,
+    ) -> RepositoryChangeRequest:
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(
+            binding,
+            RepositoryOperation.CHANGE_REQUEST_WRITE,
+            context,
+            payload={
+                "action": "update",
+                "change_request_id": change_request.id,
+                "state": state.value if state is not None else None,
+            },
+        )
+        return await binding.provider.update_change_request(
+            binding.reference,
+            change_request,
+            operation,
+            title=title,
+            body=body,
+            state=state,
+        )
+
     async def status(self, repository_id: str, context: RepositoryCallContext) -> RepositoryStatus:
         binding = self._registry.resolve(repository_id)
         operation = await self._enforce(binding, RepositoryOperation.STATUS, context)
@@ -326,7 +472,11 @@ class RepositoryService:
             action = AuthorizationAction.MODIFY
             side_effect = "local_write"
             risk = RiskClassification.ELEVATED
-        elif repository_operation is RepositoryOperation.PUSH:
+        elif repository_operation in {
+            RepositoryOperation.PUSH,
+            RepositoryOperation.ISSUE_WRITE,
+            RepositoryOperation.CHANGE_REQUEST_WRITE,
+        }:
             action = AuthorizationAction.MODIFY
             side_effect = "external"
             risk = RiskClassification.HIGH
