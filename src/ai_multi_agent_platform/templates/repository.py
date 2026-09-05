@@ -139,10 +139,7 @@ class InMemoryTemplateRepository:
         """Compensate a newly imported Template only while it has no instances."""
 
         self.get_template(template_id)
-        if any(
-            item.source.template_id == template_id
-            for item in self._instantiations.values()
-        ):
+        if any(item.source.template_id == template_id for item in self._instantiations.values()):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "cannot compensate Template after an instantiation has been recorded",

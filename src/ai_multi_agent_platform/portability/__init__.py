@@ -126,6 +126,15 @@ from .planner import (
 )
 from .registry import ImportContext, ResourceCodec, ResourceExport, ResourceSerializerRegistry
 from .schema import PORTABLE_PACKAGE_SCHEMA_V1, validate_package_document
+from .template_codecs import (
+    TEMPLATE_PORTABLE_SCHEMA_VERSION,
+    TEMPLATE_RESOURCE_TYPE,
+    TemplatePortableCodec,
+    TemplatePortableSnapshot,
+    register_template_portability_codec,
+    snapshot_template,
+)
+from .template_import import TemplateImportMutationHandler
 from .validation import find_runtime_private_path, validate_portable_payload
 from .workflow import (
     ExportSelection,
@@ -159,6 +168,8 @@ __all__ = [
     "PORTABLE_PACKAGE_SCHEMA_V1",
     "TASK_HISTORY_PORTABLE_SCHEMA_VERSION",
     "TASK_HISTORY_RESOURCE_TYPE",
+    "TEMPLATE_PORTABLE_SCHEMA_VERSION",
+    "TEMPLATE_RESOURCE_TYPE",
     "AgentImportMutationHandler",
     "AgentPortableCodec",
     "AgentPortableSnapshot",
@@ -225,6 +236,9 @@ __all__ = [
     "StoredImportPreview",
     "TaskHistoryImportMutationHandler",
     "TaskHistoryPortableCodec",
+    "TemplateImportMutationHandler",
+    "TemplatePortableCodec",
+    "TemplatePortableSnapshot",
     "automation_runtime_exclusions",
     "build_package",
     "connection_runtime_exclusions",
@@ -244,6 +258,7 @@ __all__ = [
     "register_knowledge_portability_codec",
     "register_memory_portability_codec",
     "register_task_history_portability_codec",
+    "register_template_portability_codec",
     "resource_dependency",
     "seal_resource",
     "secret_reference_requirement_identifier",
@@ -254,6 +269,7 @@ __all__ = [
     "snapshot_file",
     "snapshot_memory",
     "snapshot_task_history",
+    "snapshot_template",
     "validate_package_document",
     "validate_portable_payload",
     "verify_package",

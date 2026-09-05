@@ -10,20 +10,16 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.templates import (
-    TemplateCompatibility,
     TemplateContent,
     TemplateDefinition,
-    TemplateDependency,
-    TemplateProvenance,
     TemplateRepository,
-    TemplateRequirements,
     TemplateRevision,
-    TemplateRevisionRef,
     TemplateRevisionState,
-    TemplateTrust,
+    validate_template_configuration,
+)
+from ai_multi_agent_platform.templates.codec import (
     template_content_from_json,
     template_content_to_json,
-    validate_template_configuration,
 )
 
 from .dependencies import resource_dependency
@@ -46,7 +42,9 @@ class TemplatePortableSnapshot:
             raise ValueError("portable Template revisions must match the Template definition")
         numbers = tuple(item.revision for item in self.revisions)
         if numbers != tuple(range(1, self.definition.current_revision + 1)):
-            raise ValueError("portable Template revision history must be contiguous from revision 1")
+            raise ValueError(
+                "portable Template revision history must be contiguous from revision 1"
+            )
         if self.revisions[-1].revision != self.definition.current_revision:
             raise ValueError("portable Template definition must point at its latest revision")
         published = tuple(
@@ -289,8 +287,7 @@ def _remap_content(content: TemplateContent, context: ImportContext) -> Template
     requirements = replace(
         requirements,
         model_policy_refs=tuple(
-            context.remap("model_routing_policy", item)
-            for item in requirements.model_policy_refs
+            context.remap("model_routing_policy", item) for item in requirements.model_policy_refs
         ),
     )
     return replace(
