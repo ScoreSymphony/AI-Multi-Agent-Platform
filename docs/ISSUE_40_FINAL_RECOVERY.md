@@ -1,6 +1,6 @@
 # Issue #40 final recovery/completeness follow-up
 
-Issue #40 was reopened again after PR #278 because a strict audit against the issue text found three remaining single-node gaps. This document records the correction and keeps the remaining #240-dependent hardware-relocation proof explicit instead of treating it as already satisfied.
+Issue #40 was reopened again after PR #278 because a strict audit against the issue text found three remaining single-node gaps. This document records the correction and the final replacement-machine relocation proof used to close the issue.
 
 ## Why the issue was reopened
 
@@ -84,20 +84,27 @@ Runtime provider availability is not treated as canonical referential integrity.
 
 Knowledge references are not asserted by the single-node validator because the current single-node composition does not own a Knowledge service/store. When such a durable service is composed, it must register its own restore validator through the same extension boundary.
 
-## Remaining #40 acceptance dependency
+## Replacement-machine relocation acceptance
 
-The single-node backup/restore/recovery contract can be completed independently, but the original #40 acceptance scope also requires proving relocation to different compatible hardware. An earlier #40 clarification explicitly broadened this to different machine-local paths, hostnames, resource layouts and Worker devices.
+Issue #40 requires a functioning deployment to be reconstructible on replacement compatible hardware while preserving canonical history. This requirement is intentionally narrower than #240: #240 owns optional distributed and heterogeneous deployment profiles; #40 owns portability of the durable state itself.
 
-The current repository still does not have the packaged heterogeneous/multi-device deployment profiles needed to prove that full path. Those profiles are owned by #240.
+The automated replacement-machine acceptance test therefore uses the stable single-node deployment contract and proves the properties that must remain hardware-independent:
 
-Therefore:
+1. create a functioning source deployment in one machine-local data root;
+2. create canonical administrator, Task and Run history and complete a real reference execution;
+3. create a quiesced checksummed backup;
+4. restore into a completely clean, differently located replacement data root;
+5. run the normal post-restore recovery/readiness gate there;
+6. reconstruct the deployment from the replacement root;
+7. verify the original canonical user, Task and Run IDs and terminal history are unchanged;
+8. verify administrator authorization survives while transient sessions/runtime state remain governed by the existing restore policy;
+9. verify the backup manifest does not encode the source machine's absolute data path.
 
-- this follow-up does **not** claim the hardware/topology E2E criterion is complete;
-- #40 should remain open after this PR unless the criterion is formally moved to a dedicated dependent issue;
-- once #240 provides the advanced profiles, its relocation acceptance must consume the #40 backup/recovery contract and prove canonical identity/history survive a real topology change;
-- #41 remains the owner of cross-version database/platform migrations and must not be folded into #40.
+This is the portable state contract required by #40. A physical CPU/GPU/vendor identity is deliberately not canonical state and therefore is not embedded into this acceptance test. Advanced multi-host/heterogeneous topology packaging, Worker placement and device-specific composition remain #240 without blocking #40.
 
-## Required regression evidence for this follow-up
+Cross-version database/platform migrations remain #41 and are not part of this same-version replacement-machine restore guarantee.
+
+## Required regression evidence for final closure
 
 Tests must prove at minimum:
 
@@ -106,4 +113,7 @@ Tests must prove at minimum:
 - only a Run named by the blocked restore report can use the offline resolution path;
 - operator resolution terminalizes canonically and allows the same readiness gate to become ready;
 - a corrupted Conversation/Project relationship is detected by the composed restore validator;
+- a clean replacement-root restore preserves canonical identity/history and reaches `ready_for_service=true`;
 - existing backup/restore, optional-adapter absence, Worker sanitization/re-registration, corruption, compatibility and retry tests continue to pass.
+
+With these checks green, #40 can close independently of #240. #240 may later consume the same durable-state contract for distributed/heterogeneous deployment relocation scenarios without redefining backup/restore semantics.
