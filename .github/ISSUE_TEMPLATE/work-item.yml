@@ -1,0 +1,151 @@
+name: Work item
+description: Propose a focused platform implementation, architecture, quality, integration, or operations task.
+title: "[Work item]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for actionable repository work. Questions about private vulnerabilities must use the Security Advisory link instead.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What observable outcome should this issue produce?
+      placeholder: Describe the user, operator, architecture, or quality outcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is included in this work?
+      placeholder: List the contracts, components, documentation, or operational behavior in scope.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What must explicitly not be changed or delivered by this issue?
+      value: None.
+    validations:
+      required: true
+
+  - type: textarea
+    id: canonical-ownership
+    attributes:
+      label: Canonical ownership
+      description: Name the platform-owned domain, contract, service, or repository process that owns this work.
+      placeholder: Do not create a client-private or provider-private competing contract.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Select exactly one work type. The governance workflow applies the matching label.
+      options:
+        - "type: architecture"
+        - "type: feature"
+        - "type: integration"
+        - "type: operations"
+        - "type: quality"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Select the single canonical ownership area.
+      options:
+        - "area: core"
+        - "area: runtime"
+        - "area: agents"
+        - "area: data"
+        - "area: clients"
+        - "area: integrations"
+        - "area: operations"
+        - "area: security"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Target milestone
+      description: Select the milestone whose outcome requires this work.
+      options:
+        - "M1 - Architecture Foundation"
+        - "M2 - Usable Single-Node Prototype"
+        - "M3 - Operational v1"
+        - "M4 - Distributed & Ecosystem"
+    validations:
+      required: true
+
+  - type: textarea
+    id: hard-dependencies
+    attributes:
+      label: Hard dependencies
+      description: List only issues, contracts, or decisions that must land before this issue can be completed.
+      value: None.
+    validations:
+      required: true
+
+  - type: textarea
+    id: follow-up-integrations
+    attributes:
+      label: Follow-up integrations
+      description: List related consumers or later integrations that do not block completion.
+      value: None.
+    validations:
+      required: true
+
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Deliverables
+      description: List the expected code, documentation, tests, decision records, or operational changes.
+      placeholder: "- Deliverable one\n- Deliverable two"
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: State testable or reviewable outcomes as a checklist.
+      placeholder: "- [ ] Observable outcome\n- [ ] Relevant documentation is updated"
+    validations:
+      required: true
+
+  - type: textarea
+    id: required-tests
+    attributes:
+      label: Required tests
+      description: Name the automated and manual evidence required before closure.
+      placeholder: List contract, integration, security, compatibility, or manual acceptance evidence.
+    validations:
+      required: true
+
+  - type: textarea
+    id: definition-of-done
+    attributes:
+      label: Definition of Done
+      description: State the observable condition that proves this issue is complete.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contributor-confirmation
+    attributes:
+      label: Contributor confirmation
+      options:
+        - label: I searched for existing or superseding issues before submitting this work item.
+          required: true
+        - label: I will follow the repository Code of Conduct and contribution rules.
+          required: true

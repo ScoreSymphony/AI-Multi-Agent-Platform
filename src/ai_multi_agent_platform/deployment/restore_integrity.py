@@ -15,6 +15,7 @@ from ai_multi_agent_platform.conversations.models import (
 )
 from ai_multi_agent_platform.kernel import RecoveryReport
 
+from .restore_integrity_extended import single_node_extended_restore_integrity_validators
 from .single_node import SingleNodeDeployment
 
 DeploymentRestoreValidator = Callable[[tuple[RecoveryReport, ...]], Awaitable[tuple[str, ...]]]
@@ -33,7 +34,11 @@ def single_node_restore_integrity_validators(
         count, message_count = await _validate_conversations(deployment, reports)
         return (f"conversation-message-references:{count}:{message_count}",)
 
-    return (agents, conversations)
+    return (
+        agents,
+        conversations,
+        *single_node_extended_restore_integrity_validators(deployment),
+    )
 
 
 async def _validate_agents(

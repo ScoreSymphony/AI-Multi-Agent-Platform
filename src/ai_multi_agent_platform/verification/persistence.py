@@ -13,6 +13,7 @@ from typing import Any, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import Provenance
+from ai_multi_agent_platform.security.authorization import RiskClassification
 
 from .audit import VerificationAuditEvent, VerificationAuditEventType
 from .gate import TaskVerificationRequirement, VerificationCompletionAuthority
@@ -65,6 +66,7 @@ _ENUM_TYPES: dict[str, type[Enum]] = {
         VerificationOutcome,
         VerificationRequestStatus,
         VerifierKind,
+        RiskClassification,
     )
 }
 
@@ -164,8 +166,13 @@ class SqliteVerificationService(_SqliteVerificationState, VerificationService):
         db_path: str | Path,
         *,
         require_canonical_subjects: bool = False,
+        require_canonical_results: bool = False,
     ) -> None:
-        VerificationService.__init__(self, require_canonical_subjects=require_canonical_subjects)
+        VerificationService.__init__(
+            self,
+            require_canonical_subjects=require_canonical_subjects,
+            require_canonical_results=require_canonical_results,
+        )
         _SqliteVerificationState.__init__(self, db_path)
         self._restore_service_state()
 
@@ -227,8 +234,13 @@ class SqliteVerificationService(_SqliteVerificationState, VerificationService):
             self._save_service_state()
         return request
 
-    def submit_result(self, result: VerificationResult) -> VerificationResult:
-        submitted = super().submit_result(result)
+    def submit_result(
+        self,
+        result: VerificationResult,
+        *,
+        _canonical_result_token: object | None = None,
+    ) -> VerificationResult:
+        submitted = super().submit_result(result, _canonical_result_token=_canonical_result_token)
         self._save_service_state()
         return submitted
 
@@ -497,6 +509,16 @@ class SqliteVerificationCompletionAuthority(
         now: datetime | None = None,
     ) -> TaskVerificationRequirement:
         requirement = super().bind_subject(task_id=task_id, subject=subject, now=now)
+        self._save_requirements()
+        return requirement
+
+    def invalidate_task_subject(
+        self,
+        task_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> TaskVerificationRequirement | None:
+        requirement = super().invalidate_task_subject(task_id, now=now)
         self._save_requirements()
         return requirement
 

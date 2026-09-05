@@ -12,11 +12,24 @@ Do **not** publish exploit details, credentials, private data, working proof-of-
 
 Preferred reporting path:
 
-1. Use GitHub's private vulnerability-reporting / Security Advisory flow for this repository when the **Report a vulnerability** action is available.
+1. Use GitHub's enabled private vulnerability-reporting / Security Advisory flow for this repository through the **Report a vulnerability** action.
 2. If private reporting is unavailable, create a minimal public issue asking the repository owner for a private security contact. Include only the affected area and that you have a security report; do not include exploit details.
 3. After a private channel is established, provide the affected revision/version, impact, prerequisites, reproduction steps, suggested mitigation if known and whether the issue appears to be actively exploited.
 
 Reports made in good faith to improve the platform are welcome. Please avoid accessing data you do not own, causing availability impact, persisting on systems or expanding testing beyond what is necessary to demonstrate the issue.
+
+## Response ownership and targets
+
+@ScoreSymphony owns repository security intake, advisory coordination and security release approval until that responsibility is explicitly delegated in repository governance.
+
+The project targets:
+
+- acknowledgement of a credible private report within three business days;
+- initial severity, affected-scope and containment triage within seven calendar days;
+- regular private status updates while a confirmed vulnerability remains unresolved; and
+- coordinated public disclosure only after users have a practical remediation or containment path.
+
+These targets are best-effort rather than a contractual service-level agreement. Severity, active exploitation, credential exposure and the availability of a safe mitigation determine remediation priority. Reporters should not publish exploit details before coordinated disclosure without first giving maintainers a reasonable opportunity to protect users.
 
 ## Security response basics
 
@@ -30,6 +43,8 @@ For a credible report, maintainers should:
 6. rotate/revoke exposed secrets, sessions, worker identities or signing material as required;
 7. publish an appropriate advisory/release note after users have a practical remediation path;
 8. update the threat model, secure-development guidance and regression suite when the incident reveals a missing invariant or trust assumption.
+
+The security owner records affected versions, severity, remediation revision, credit preferences and disclosure decisions in the private advisory. Security fixes use the normal verification requirements, with private-fork or accelerated release handling when public development would expose users before remediation.
 
 ## Security architecture
 
@@ -62,3 +77,5 @@ A downstream implementation that requires weakening a documented security invari
 ## Supported security posture
 
 The project is under active development. Passing the baseline security regression suite does not mean the platform is secure against every deployment-specific threat, and it does not replace specialized external review or penetration testing for high-risk deployments.
+
+At least quarterly, the maintainer reviews private-reporting availability, unresolved alerts, collaborator permissions, branch protection, dependency/security automation and threat-model assumptions. The same review is required before a release when security boundaries or privileged capabilities materially changed.

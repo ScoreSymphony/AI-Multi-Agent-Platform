@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -23,6 +23,14 @@ from ai_multi_agent_platform.contracts.types import (
     ProviderDescriptor,
 )
 from ai_multi_agent_platform.domain import OwnerRef
+
+
+def _json_default(value: object) -> object:
+    """Convert immutable Mapping views at the persistence boundary without mutating Events."""
+
+    if isinstance(value, Mapping):
+        return dict(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
 class SqliteEventProvider(EventProvider):
@@ -96,7 +104,12 @@ class SqliteEventProvider(EventProvider):
                     event.owner_ref.id if event.owner_ref else None,
                     event.project_id,
                     event.schema_version,
-                    json.dumps(event.payload, sort_keys=True, separators=(",", ":")),
+                    json.dumps(
+                        event.payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        default=_json_default,
+                    ),
                 ),
             )
 

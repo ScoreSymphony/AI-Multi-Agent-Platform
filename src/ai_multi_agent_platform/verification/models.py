@@ -15,6 +15,7 @@ from types import MappingProxyType
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import Provenance, new_id, validate_id
+from ai_multi_agent_platform.security.authorization import RiskClassification
 
 
 def utc_now() -> datetime:
@@ -132,7 +133,14 @@ class ReviewerIndependence:
     agent_reviewer_must_be_read_only: bool = False
     human_reviewer_must_differ: bool = False
     forbid_self_verification: bool = False
+    forbid_self_verification_risk_classes: tuple[RiskClassification, ...] = ()
     require_distinct_verifiers: bool = False
+
+    def __post_init__(self) -> None:
+        if len(set(self.forbid_self_verification_risk_classes)) != len(
+            self.forbid_self_verification_risk_classes
+        ):
+            raise ValueError("self-verification risk classes must be unique")
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,6 +174,7 @@ class VerificationPolicy:
     version: int = 1
     scope: VerificationScope = VerificationScope()
     independence: ReviewerIndependence = ReviewerIndependence()
+    risk_classification: RiskClassification = RiskClassification.STANDARD
     max_repair_attempts: int = 0
     request_timeout_seconds: float | None = None
     result_expiry_seconds: float | None = None

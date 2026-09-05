@@ -120,7 +120,7 @@ def test_manifest_and_openapi_include_current_domains_without_speculation() -> N
         assert manifest.status == 200
         assert isinstance(manifest.body, dict)
         # Built-in private Notification resources deliberately stay out of generic extension
-        # discovery/Search even though they are present in the canonical manifest.
+        # discovery even though a separate privacy-minimized projection participates in Search.
         assert control_plane.registered_collections == (
             DELIVERY_COLLECTION,
             AUTOMATION_COLLECTION,
@@ -174,7 +174,8 @@ def test_manifest_and_openapi_include_current_domains_without_speculation() -> N
             "collections": [NOTIFICATION_COLLECTION, NOTIFICATION_PREFERENCE_COLLECTION],
             "commands": list(NOTIFICATION_COMMANDS),
             "visibility": "recipient-scoped",
-            "search_indexed": False,
+            "search_indexed": True,
+            "search_projection": "privacy-minimized-derived-state",
             "source_of_truth": False,
         }
 
@@ -191,7 +192,10 @@ def test_manifest_and_openapi_include_current_domains_without_speculation() -> N
         assert "/api/v1/search" in composed_paths
         assert composed_openapi.body["x-registered-extension-collections"] == []
         assert composed_openapi.body["x-registered-extension-commands"] == []
-        assert composed_openapi.body["x-notifications"]["search_indexed"] is False
+        assert composed_openapi.body["x-notifications"]["search_indexed"] is True
+        assert composed_openapi.body["x-notifications"]["search_projection"] == (
+            "privacy-minimized-derived-state"
+        )
 
     asyncio.run(scenario())
 

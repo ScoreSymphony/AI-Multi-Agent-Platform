@@ -1,0 +1,70 @@
+name: CodeQL
+
+env:
+  CODEQL_OVERLAY_DATABASE_MODE: none
+  CODEQL_ACTION_DIFF_INFORMED_QUERIES: false
+
+on:
+  push:
+    branches: [main, fix/code-scanning-alert-1]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+      - name: Analyze
+        uses: github/codeql-action/analyze@v4
+      - name: Summarize CodeQL findings for alert triage
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob
+          import json
+
+          def escape_command(value: str) -> str:
+              return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+          for sarif_path in glob.glob("../results/*.sarif"):
+              with open(sarif_path, encoding="utf-8") as handle:
+                  sarif = json.load(handle)
+              for run in sarif.get("runs", []):
+                  for result in run.get("results", []):
+                      locations = result.get("locations") or [{}]
+                      physical = locations[0].get("physicalLocation", {})
+                      artifact = physical.get("artifactLocation", {})
+                      region = physical.get("region", {})
+                      rule = result.get("ruleId", "")
+                      path = artifact.get("uri", "")
+                      line = region.get("startLine") or 1
+                      message = result.get("message", {}).get("text", "")
+                      print(
+                          "CODEQL_RESULT "
+                          f"rule={rule} path={path} line={line} message={message}"
+                      )
+                      print(
+                          f"::warning file={path},line={line},title=CodeQL {rule}::"
+                          f"{escape_command(message)}"
+                      )
+          PY

@@ -10,6 +10,7 @@ from .delivery import (
     NotificationDeliveryCoordinator,
     UnavailableDeliveryChannel,
 )
+from .delivery_sqlite import SqliteDeliveryAttemptRepository
 from .events import NotificationProjectingEventProvider, ProjectionFailureSink
 from .integrations import (
     approval_required_candidate,
@@ -40,6 +41,7 @@ from .models import (
 from .preferences import (
     InMemoryNotificationPreferenceRepository,
     NotificationPreferenceRepository,
+    external_delivery_allowed,
     preference_allows,
 )
 from .recipients import (
@@ -52,10 +54,20 @@ from .recipients import (
 )
 from .repository import InMemoryNotificationRepository, NotificationRepository
 from .rules import NotificationRule, TaskTerminalNotificationRule
+from .runtime import (
+    InMemoryNotificationRuntimeState,
+    NotificationRuntime,
+    NotificationRuntimeState,
+    NotificationRuntimeTick,
+    ReminderEvaluator,
+    SqliteNotificationRuntimeState,
+)
 from .service import NotificationEventSink, NotificationService
 from .sqlite import SqliteNotificationPreferenceRepository, SqliteNotificationRepository
+from .visibility import AllowAllNotificationVisibilityGuard, NotificationVisibilityGuard
 
 __all__ = [
+    "AllowAllNotificationVisibilityGuard",
     "AllowAllRecipientEligibilityGuard",
     "DeliveryAttempt",
     "DeliveryAttemptRepository",
@@ -65,6 +77,7 @@ __all__ = [
     "InMemoryDeliveryAttemptRepository",
     "InMemoryNotificationPreferenceRepository",
     "InMemoryNotificationRepository",
+    "InMemoryNotificationRuntimeState",
     "Notification",
     "NotificationAction",
     "NotificationCandidate",
@@ -80,17 +93,24 @@ __all__ = [
     "NotificationQuery",
     "NotificationRepository",
     "NotificationRule",
+    "NotificationRuntime",
+    "NotificationRuntimeState",
+    "NotificationRuntimeTick",
     "NotificationService",
     "NotificationSeverity",
     "NotificationState",
+    "NotificationVisibilityGuard",
     "ProjectionFailureSink",
     "RecipientEligibilityGuard",
     "RecipientRef",
     "RecipientResolver",
     "RecipientType",
+    "ReminderEvaluator",
     "SourceRef",
+    "SqliteDeliveryAttemptRepository",
     "SqliteNotificationPreferenceRepository",
     "SqliteNotificationRepository",
+    "SqliteNotificationRuntimeState",
     "StaticRecipientEligibilityGuard",
     "StaticRecipientResolver",
     "TaskTerminalNotificationRule",
@@ -99,6 +119,7 @@ __all__ = [
     "approval_resolved_candidate",
     "budget_threshold_candidate",
     "canonical_attention_candidate",
+    "external_delivery_allowed",
     "fanout_notification_event_sinks",
     "membership_attention_candidate",
     "preference_allows",

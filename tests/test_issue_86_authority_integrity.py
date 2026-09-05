@@ -17,11 +17,12 @@ from ai_multi_agent_platform.agents import (
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, ExecutionStatus
 from ai_multi_agent_platform.data import LocalFileProvider
-from ai_multi_agent_platform.domain import OwnerRef, new_id
+from ai_multi_agent_platform.domain import OwnerRef, TaskStatus, new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 from ai_multi_agent_platform.verification import (
     CanonicalVerificationRuntime,
+    CompletionState,
     KernelFileVerificationEvidenceResolver,
     ReviewerIndependence,
     VerificationCompletionAuthority,
@@ -248,5 +249,87 @@ def test_reverification_derives_task_and_replaces_producer_context(tmp_path) -> 
         assert repaired.producer.model_config_id == "model-b"
         assert repaired.producer.provider_id == "provider-b"
         assert repaired.producer.actor_ref != first_producer.actor_ref
+
+    asyncio.run(scenario())
+
+
+def test_output_attachment_automatically_invalidates_previously_accepted_subject() -> None:
+    async def scenario() -> None:
+        verification = VerificationService()
+        completion = VerificationCompletionAuthority(verification)
+        policy = verification.register_policy(
+            VerificationPolicy(
+                name="automatic-output-invalidation",
+                stages=(VerificationStage("review", VerifierKind.HUMAN),),
+            )
+        )
+        lifecycle = FakeLifecycleBackend()
+        kernel = PlatformKernel(
+            orchestrator=FakeOrchestrator(),
+            lifecycle=lifecycle,
+            repository=InMemoryKernelRepository(),
+            completion_authority=completion,
+        )
+        task = await kernel.create_task(
+            idempotency_key="invalidate:create",
+            title="Invalidate old review",
+            objective="New output must require new verification",
+            owner_type="user",
+            owner_id="issue-86",
+        )
+        completion.require_task(
+            task_id=task.task_id,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+        )
+        await kernel.ready_task(idempotency_key="invalidate:ready", task_id=task.task_id)
+        run = await kernel.start_task(idempotency_key="invalidate:start", task_id=task.task_id)
+        lifecycle.complete(run.run_id, status=ExecutionStatus.SUCCEEDED, output={"v": 1})
+        await kernel.refresh_run(
+            idempotency_key="invalidate:refresh", task_id=task.task_id, run_id=run.run_id
+        )
+        first_result_id = new_id("result")
+        await kernel.attach_result(
+            idempotency_key="invalidate:first-result",
+            task_id=task.task_id,
+            run_id=run.run_id,
+            result_id=first_result_id,
+        )
+        first_subject = VerificationSubject(
+            subject_type="result",
+            subject_id=first_result_id,
+            revision="1",
+            digest="sha256:first",
+        )
+        request = completion.request_verification(
+            task_id=task.task_id,
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id="review",
+            subject=first_subject,
+            result_id=first_result_id,
+            correlation_id=task.task_id,
+        )
+        verification.record_human_review(
+            request.verification_id,
+            reviewer_ref="user:reviewer",
+            outcome=VerificationOutcome.PASS,
+        )
+        assert completion.assess_task_completion(task.task_id).state is CompletionState.ACCEPTED
+
+        await kernel.attach_result(
+            idempotency_key="invalidate:second-result",
+            task_id=task.task_id,
+            run_id=run.run_id,
+            result_id=new_id("result"),
+        )
+        requirement = completion.requirement_for(task.task_id)
+        assert requirement is not None
+        assert requirement.subject is None
+        assert completion.assess_task_completion(task.task_id).state is CompletionState.WAITING
+        blocked = await kernel.complete_task(
+            idempotency_key="invalidate:complete", task_id=task.task_id
+        )
+        assert blocked.status is TaskStatus.WAITING
 
     asyncio.run(scenario())

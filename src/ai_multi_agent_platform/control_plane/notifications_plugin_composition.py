@@ -1,9 +1,9 @@
 """Runtime-complete canonical Notification Control Plane composition.
 
 Notifications are a built-in private attention domain, not a generic extension collection.
-The final composition therefore keeps their internal resource/command handlers available while
-excluding them from generic extension discovery and global Search indexing. Their northbound
-routes are published explicitly here.
+Their northbound routes remain explicit and hidden from generic extension discovery, while a
+privacy-minimized derived projection participates in canonical global Search. Search never owns
+Notification state and every result is re-authorized against the current recipient and source.
 """
 
 from __future__ import annotations
@@ -12,8 +12,10 @@ from copy import deepcopy
 from typing import Any, cast
 from uuid import uuid4
 
-from ai_multi_agent_platform.contracts.errors import ContractError
+from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.notifications import Notification
+from ai_multi_agent_platform.search import SearchDocument, SearchResult
 
 from .authentication_hardening import (
     AuthenticatedControlPlaneHTTP as _BaseAuthenticatedControlPlaneHTTP,
@@ -31,6 +33,7 @@ from .notifications_composition import (
     NOTIFICATION_COLLECTION,
     NOTIFICATION_COMMANDS,
     NOTIFICATION_PREFERENCE_COLLECTION,
+    _recipient_from_context,
 )
 from .notifications_live import ControlPlane as _NotificationControlPlane
 from .notifications_live import ControlPlaneASGI
@@ -39,10 +42,11 @@ from .notifications_live import build_openapi as _build_notification_live_openap
 
 _NOTIFICATION_COLLECTIONS = frozenset({NOTIFICATION_COLLECTION, NOTIFICATION_PREFERENCE_COLLECTION})
 _NOTIFICATION_COMMAND_SET = frozenset(NOTIFICATION_COMMANDS)
+_NOTIFICATION_SEARCH_TYPE = "notification"
 
 
 class ControlPlane(_NotificationControlPlane):
-    """Public Control Plane with private notifications hidden from generic extensions."""
+    """Public Control Plane with private Notifications hidden from generic extensions."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._notification_routes_locked = False
@@ -63,6 +67,67 @@ class ControlPlane(_NotificationControlPlane):
             command
             for command in super().registered_commands
             if command not in _NOTIFICATION_COMMAND_SET
+        )
+
+    async def _registered_extension_search_documents(
+        self,
+        correlation_id: str,
+    ) -> tuple[list[SearchDocument], dict[str, tuple[str, str]]]:
+        """Add private Notification metadata to derived Search without exposing generic routes."""
+
+        documents, authorization = await super()._registered_extension_search_documents(
+            correlation_id
+        )
+        if _NOTIFICATION_SEARCH_TYPE in authorization:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "notification Search type conflicts with another registered resource",
+            )
+        for notification in await self.notification_service.list_search_snapshot():
+            documents.append(_notification_search_document(notification))
+        authorization[_NOTIFICATION_SEARCH_TYPE] = (
+            NOTIFICATION_COLLECTION,
+            "notification:list",
+        )
+        return documents, authorization
+
+    async def _search_result_allowed(
+        self,
+        context: Any,
+        result: SearchResult,
+    ) -> bool:
+        if result.resource_type != _NOTIFICATION_SEARCH_TYPE:
+            return await super()._search_result_allowed(context, result)
+
+        try:
+            recipient = _recipient_from_context(context)
+        except ContractError:
+            return False
+        if result.owner_type != recipient.type.value or result.owner_id != recipient.id:
+            return False
+        if not self.notification_service.get_preference(recipient).in_app_enabled:
+            return False
+
+        try:
+            notification = await self.notification_service.get(
+                result.resource_id,
+                recipient=recipient,
+            )
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                return False
+            raise
+        if notification.state.value != result.status:
+            return False
+        if not await self.notification_source_visible(context, notification):
+            return False
+        return await self._allowed(
+            context,
+            "notification:list",
+            NOTIFICATION_COLLECTION,
+            owner_type=recipient.type.value,
+            owner_id=recipient.id,
+            project_id=notification.project_id,
         )
 
     def register_resource_service(self, collection: str, service: ResourceService) -> None:
@@ -216,6 +281,59 @@ def build_openapi(
     return _augment_notification_openapi(specification)
 
 
+def _notification_search_document(notification: Notification) -> SearchDocument:
+    """Build the intentionally small privacy-safe Search projection for one Notification."""
+
+    keywords = tuple(
+        dict.fromkeys(
+            value
+            for value in (
+                "notification",
+                notification.id,
+                notification.category.value,
+                notification.severity.value,
+                notification.state.value,
+                notification.source.resource_type,
+                notification.source.resource_id,
+                notification.task_id,
+                notification.run_id,
+                notification.approval_id,
+                notification.verification_id,
+                notification.node_id,
+                notification.automation_id,
+                notification.membership_id,
+            )
+            if value is not None
+        )
+    )
+    tags = tuple(
+        dict.fromkeys(
+            (
+                notification.category.value,
+                notification.severity.value,
+                notification.state.value,
+                notification.source.resource_type,
+            )
+        )
+    )
+    return SearchDocument(
+        resource_type=_NOTIFICATION_SEARCH_TYPE,
+        resource_id=notification.id,
+        title=(f"Notification: {notification.category.value} / {notification.severity.value}"),
+        summary="",
+        project_id=notification.project_id,
+        workspace_id=notification.workspace_id,
+        owner_type=notification.recipient.type.value,
+        owner_id=notification.recipient.id,
+        status=notification.state.value,
+        tags=tags,
+        keywords=keywords,
+        updated_at=notification.updated_at.isoformat(),
+        canonical_ref=f"/api/{API_VERSION}/{NOTIFICATION_COLLECTION}/{notification.id}",
+        provenance={"indexed_from": "canonical-notification-repository"},
+    )
+
+
 def _augment_notification_openapi(specification: dict[str, Any]) -> dict[str, Any]:
     paths = specification.get("paths")
     if not isinstance(paths, dict):
@@ -275,7 +393,8 @@ def _augment_notification_openapi(specification: dict[str, Any]) -> dict[str, An
         "collections": [NOTIFICATION_COLLECTION, NOTIFICATION_PREFERENCE_COLLECTION],
         "commands": list(NOTIFICATION_COMMANDS),
         "visibility": "recipient-scoped",
-        "search_indexed": False,
+        "search_indexed": True,
+        "search_projection": "privacy-minimized-derived-state",
         "source_of_truth": False,
     }
     return specification
