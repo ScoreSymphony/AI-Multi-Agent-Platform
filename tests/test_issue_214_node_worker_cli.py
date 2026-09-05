@@ -156,6 +156,7 @@ def _invoke(
         transport=transport,
         stdout=stdout,
         stderr=stderr,
+        stdin=StringIO(),
     )
     payload = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
     assert isinstance(payload, dict)
