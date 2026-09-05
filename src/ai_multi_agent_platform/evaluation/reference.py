@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Mapping
 from typing import Literal, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -16,6 +17,10 @@ from .context import EvaluationExecutionContext
 from .models import EvaluationAttempt, EvaluationCase, EvaluationObservation
 
 OwnerType = Literal["user", "organization", "team", "service"]
+TaskMetadataFactory = Callable[
+    [EvaluationCase, EvaluationExecutionContext],
+    Mapping[str, JsonValue],
+]
 
 
 def _input_string(case: EvaluationCase, key: str, default: str) -> str:
@@ -41,6 +46,7 @@ class KernelEvaluationCaseExecutor:
         source: str = "evaluation-reference",
         poll_interval_seconds: float = 0.01,
         run_workspace_bindings: RunWorkspaceBindingRepository | None = None,
+        task_metadata_factory: TaskMetadataFactory | None = None,
     ) -> None:
         if not owner_id.strip():
             raise ValueError("evaluation executor owner_id must not be blank")
@@ -54,6 +60,7 @@ class KernelEvaluationCaseExecutor:
         self._source = source
         self._poll_interval_seconds = poll_interval_seconds
         self._run_workspace_bindings = run_workspace_bindings
+        self._task_metadata_factory = task_metadata_factory
 
     def _project_for(self, execution_context: EvaluationExecutionContext) -> str | None:
         if execution_context.owner_type is not None:
@@ -126,6 +133,16 @@ class KernelEvaluationCaseExecutor:
             actor_ref=self._actor_ref,
             source=self._source,
         )
+        if self._task_metadata_factory is not None:
+            metadata = dict(self._task_metadata_factory(case, execution_context))
+            if metadata:
+                task = await self._kernel.update_task(
+                    idempotency_key=f"{key}:configure-task",
+                    task_id=task.task_id,
+                    metadata=metadata,
+                    actor_ref=self._actor_ref,
+                    source=self._source,
+                )
         await self._kernel.ready_task(
             idempotency_key=f"{key}:ready-task",
             task_id=task.task_id,
@@ -233,3 +250,6 @@ class KernelEvaluationCaseExecutor:
             artifact_refs=artifact_refs,
             event_types=tuple(event.event_type for event in events),
         )
+
+
+__all__ = ["KernelEvaluationCaseExecutor", "OwnerType", "TaskMetadataFactory"]
