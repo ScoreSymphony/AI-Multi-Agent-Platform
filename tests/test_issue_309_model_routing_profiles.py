@@ -202,9 +202,7 @@ async def test_provider_replacement_does_not_rewrite_profile_identity(tmp_path) 
     profile = await service.create_profile(
         name="Pinned canonical model",
         policy=model_api.ModelRoutingProfilePolicy(
-            requirements=model_api.RoutingRequirements(
-                explicit_model_id="model-local-large"
-            )
+            requirements=model_api.RoutingRequirements(explicit_model_id="model-local-large")
         ),
         owner_ref=OWNER,
         principal_ref=OWNER.id,
