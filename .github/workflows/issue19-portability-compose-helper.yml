@@ -26,27 +26,17 @@ jobs:
 
           path = Path("src/ai_multi_agent_platform/deployment/single_node.py")
           text = path.read_text(encoding="utf-8")
-          old = '''    portability_workflow = build_agent_portability_workflow(
-              agents=agents.repository,
-              models=models,
-              scopes=scopes,
-              platform_version=__version__,
-              templates=templates.repository,
+          marker = "        templates=templates.repository,\n    )\n\n    control_plane = ControlPlane("
+          replacement = (
+              "        templates=templates.repository,\n"
+              "        evaluation=evaluation_composition.service,\n"
+              "    )\n\n    control_plane = ControlPlane("
           )
-          '''
-          new = '''    portability_workflow = build_agent_portability_workflow(
-              agents=agents.repository,
-              models=models,
-              scopes=scopes,
-              platform_version=__version__,
-              templates=templates.repository,
-              evaluation=evaluation_composition.service,
-          )
-          '''
-          if old in text:
-              path.write_text(text.replace(old, new, 1), encoding="utf-8")
-          elif new not in text:
-              raise SystemExit("expected portability composition block not found")
+          if "        evaluation=evaluation_composition.service,\n" not in text:
+              if marker not in text:
+                  raise SystemExit("expected portability composition marker not found")
+              text = text.replace(marker, replacement, 1)
+              path.write_text(text, encoding="utf-8")
           PY
           python -m pip install "ruff>=0.12,<1"
           ruff format \
