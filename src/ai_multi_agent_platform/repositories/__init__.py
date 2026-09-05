@@ -20,6 +20,7 @@ from .catalog import (
 from .connector_repository import ConnectorRepositoryProvider
 from .contracts import RepositoryProvider
 from .events import RepositoryEventBridge, repository_platform_event_id, repository_resource_payload
+from .local_bootstrap import managed_local_connection_metadata, restore_managed_local_repositories
 from .local_git import LocalGitRepositoryProvider
 from .management import RepositoryDiscoveryResolver, RepositoryManagementService
 from .models import (
@@ -90,9 +91,11 @@ __all__ = [
     "SqliteRepositoryProvenanceStore",
     "connector_repository_factory",
     "local_git_repository_factory",
+    "managed_local_connection_metadata",
     "repository_capability",
     "repository_capability_specs",
     "repository_platform_event_id",
     "repository_resource_payload",
+    "restore_managed_local_repositories",
     "validate_git_revision",
 ]
