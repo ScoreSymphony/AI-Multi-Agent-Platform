@@ -1,8 +1,8 @@
 """Reusable acceptance runner for the single-node usable-prototype gate.
 
 The gate deliberately reuses canonical integration evidence instead of creating a
-second platform implementation.  Each check names the owning subsystem and runs a
-small, deterministic command from a repository checkout.  Results can therefore be
+second platform implementation. Each check names the owning subsystem and runs a
+small, deterministic command from a repository checkout. Results can therefore be
 consumed by CI as JSON while remaining understandable to a local operator.
 """
 
@@ -83,7 +83,8 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                 "#39 single-node deployment",
                 "authenticated canonical Task/Run/Result path and observable capability execution",
                 _pytest(
-                    "tests/test_issue39_single_node_deployment.py::test_single_node_reference_smoke_is_retry_safe_across_restart"
+                    "tests/test_issue39_single_node_deployment.py::"
+                    "test_single_node_reference_smoke_is_retry_safe_across_restart"
                 ),
             ),
             AcceptanceCheck(
@@ -124,15 +125,22 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             AcceptanceCheck(
                 "loopback-openai-compatible",
                 "#10/#250 model provider",
-                "replaceable local/self-hosted HTTP model is discovered and generates without paid service",
+                (
+                    "replaceable local/self-hosted HTTP model is discovered and generates "
+                    "without paid service"
+                ),
                 _pytest(
-                    "tests/test_issue_252_acceptance_gate.py::test_local_ai_profile_uses_real_loopback_openai_compatible_endpoint"
+                    "tests/test_issue_252_acceptance_gate.py::"
+                    "test_local_ai_profile_uses_real_loopback_openai_compatible_endpoint"
                 ),
             ),
             AcceptanceCheck(
                 "first-run-local-model",
                 "#250 first-run onboarding",
-                "first-run local/self-hosted model configuration remains provider-neutral and secret-safe",
+                (
+                    "first-run local/self-hosted model configuration remains provider-neutral "
+                    "and secret-safe"
+                ),
                 _pytest("tests/test_issue_250_first_run_onboarding.py"),
             ),
         )
@@ -141,7 +149,10 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             AcceptanceCheck(
                 "provider-inventory-revalidation",
                 "#250 first-run onboarding",
-                "missing configured provider-native model fails closed and can recover by canonical health refresh",
+                (
+                    "missing configured provider-native model fails closed and can recover by "
+                    "canonical health refresh"
+                ),
                 _pytest("tests/test_issue_250_restart_inventory_revalidation.py"),
             ),
             AcceptanceCheck(
@@ -157,7 +168,8 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             "#39 single-node deployment",
             "single-node canonical execution remains retry-safe across process reconstruction",
             _pytest(
-                "tests/test_issue39_single_node_deployment.py::test_single_node_reference_smoke_is_retry_safe_across_restart"
+                "tests/test_issue39_single_node_deployment.py::"
+                "test_single_node_reference_smoke_is_retry_safe_across_restart"
             ),
         ),
         AcceptanceCheck(
