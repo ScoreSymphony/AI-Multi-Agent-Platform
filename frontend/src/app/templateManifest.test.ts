@@ -11,6 +11,8 @@ function manifest(overrides: Partial<APImanifest> = {}): APImanifest {
     api_version: "v1",
     resources: [...TEMPLATE_REQUIRED_RESOURCES],
     commands: [...TEMPLATE_REQUIRED_COMMANDS],
+    openapi: "/api/v1/openapi.json",
+    live_updates: "sse",
     ...overrides,
   };
 }
