@@ -496,9 +496,7 @@ def _repository_search_resource(binding: RepositoryBinding) -> dict[str, JsonVal
         if value is not None
     )
     operations = tuple(
-        capability.operation.value
-        for capability in reference.capabilities
-        if capability.supported
+        capability.operation.value for capability in reference.capabilities if capability.supported
     )
     summary_parts = [f"{reference.visibility.value} repository"]
     if host is not None:

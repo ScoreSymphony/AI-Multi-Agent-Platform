@@ -261,7 +261,9 @@ def test_connector_repository_collaboration_objects_are_canonical_and_namespaced
     async def scenario() -> None:
         connector, provider, connection, context = _fixture()
         repository = (await provider.discover(connection, context))[0]
-        capabilities = {capability.operation.value: capability for capability in repository.capabilities}
+        capabilities = {
+            capability.operation.value: capability for capability in repository.capabilities
+        }
         assert capabilities["repository.issue.read"].requires_credentials is True
         assert capabilities["repository.issue.write"].side_effects.value == "external"
         assert capabilities["repository.change_request.read"].requires_credentials is True
@@ -272,7 +274,9 @@ def test_connector_repository_collaboration_objects_are_canonical_and_namespaced
         assert issue.external_resource.metadata["provider_resource_type"] == "issue"
         assert issue.external_resource.native_reference.namespace == "fake.collaboration"
         assert issue.state is RepositoryIssueState.OPEN
-        assert (await provider.read_issue(repository, issue.external_resource, context)).id == issue.id
+        assert (
+            await provider.read_issue(repository, issue.external_resource, context)
+        ).id == issue.id
         closed = await provider.update_issue(
             repository,
             issue.external_resource,
@@ -290,7 +294,9 @@ def test_connector_repository_collaboration_objects_are_canonical_and_namespaced
             body="change",
         )
         assert change_request.external_resource.resource_type == "repository_change_request"
-        assert change_request.external_resource.metadata["provider_resource_type"] == "merge_request"
+        assert (
+            change_request.external_resource.metadata["provider_resource_type"] == "merge_request"
+        )
         assert change_request.head_ref == "feature"
         assert change_request.base_ref == "main"
         loaded = await provider.read_change_request(

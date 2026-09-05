@@ -223,7 +223,10 @@ def test_connector_repository_provider_is_provider_neutral_and_fail_closed() -> 
         assert repository.visibility.value == "private"
         assert repository.resolved_revision == _SHA
         assert provider.descriptor.provider_type == "repository"
-        assert any(capability.operation.value == "repository.inspect_refs" for capability in repository.capabilities)
+        assert any(
+            capability.operation.value == "repository.inspect_refs"
+            for capability in repository.capabilities
+        )
 
         resolved = await provider.resolve_revision(repository, "main", context)
         assert resolved.requested_ref == "main"

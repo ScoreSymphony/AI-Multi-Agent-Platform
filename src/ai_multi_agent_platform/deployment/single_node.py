@@ -419,7 +419,9 @@ def build_single_node_deployment(
     )
     resolvers = control_plane.workspace_source_resolvers
     if resolvers is None:
-        raise RuntimeError("single-node Control Plane did not initialize Workspace source resolvers")
+        raise RuntimeError(
+            "single-node Control Plane did not initialize Workspace source resolvers"
+        )
     resolvers.register(RepositoryWorkspaceSourceResolver(repository_registry, files))
     control_plane.configure_repository_run_integration(repository_run_integration)
     register_repository_control_plane(
