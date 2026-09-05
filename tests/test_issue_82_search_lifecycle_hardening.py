@@ -140,8 +140,7 @@ def test_repository_search_preserves_connection_scope_without_becoming_provenanc
         assert document.project_id == project_id
         # A Repository can back multiple Workspaces. Search must not invent one Workspace scope.
         assert document.workspace_id is None
-        # Run input/output provenance remains canonical Repository provenance,
-        # not derived Search state.
+        # Run input/output provenance remains canonical Repository provenance, not derived Search state.
         assert provenance.get(run_id, binding.reference.id) == record
         serialized = repr(document)
         assert input_revision not in serialized
