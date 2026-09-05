@@ -199,7 +199,9 @@ def test_restart_promotion_reconciles_running_work_and_preserves_worker_identity
         assert len(lifecycle.start_calls) == 1
 
         observed = await runtime.reconcile(now=NOW + timedelta(seconds=1))
-        running = next(record for record in observed if record.job.worker_job_id == job.worker_job_id)
+        running = next(
+            record for record in observed if record.job.worker_job_id == job.worker_job_id
+        )
         assert running.state is DispatchState.RUNNING
         assert registry.active_reservations()
 
