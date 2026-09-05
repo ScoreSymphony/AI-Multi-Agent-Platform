@@ -49,4 +49,6 @@ def test_required_plugin_with_unsupported_manifest_version_blocks_preflight(
     assert not report.ok
     check = next(item for item in report.checks if item.code == "plugin.incompatible")
     assert check.details["manifest_version"] == "0"
-    assert any("manifest version" in reason for reason in check.details["reasons"])
+    reasons = check.details["reasons"]
+    assert isinstance(reasons, list)
+    assert any(isinstance(reason, str) and "manifest version" in reason for reason in reasons)
