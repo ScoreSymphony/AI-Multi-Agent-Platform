@@ -19,7 +19,12 @@ from .catalog import (
 )
 from .connector_repository import ConnectorRepositoryProvider
 from .contracts import RepositoryProvider
-from .events import RepositoryEventBridge, repository_platform_event_id, repository_resource_payload
+from .events import (
+    RepositoryEventBridge,
+    repository_platform_event,
+    repository_platform_event_id,
+    repository_resource_payload,
+)
 from .execution_lifecycle import RepositoryWorkspaceExecutionCoordinator
 from .local_bootstrap import managed_local_connection_metadata, restore_managed_local_repositories
 from .local_git import LocalGitRepositoryProvider
@@ -46,6 +51,7 @@ from .models import (
 )
 from .persistence import SqliteRepositoryProvenanceStore
 from .run_integration import RepositoryRunArtifactBundle, RepositoryRunIntegration
+from .runtime_events import RepositoryEventRuntimeIngress
 from .service import (
     RepositoryBinding,
     RepositoryCallContext,
@@ -76,6 +82,7 @@ __all__ = [
     "RepositoryDiff",
     "RepositoryDiscoveryResolver",
     "RepositoryEventBridge",
+    "RepositoryEventRuntimeIngress",
     "RepositoryIssue",
     "RepositoryIssueState",
     "RepositoryManagementService",
@@ -104,6 +111,7 @@ __all__ = [
     "managed_local_connection_metadata",
     "repository_capability",
     "repository_capability_specs",
+    "repository_platform_event",
     "repository_platform_event_id",
     "repository_resource_payload",
     "restore_managed_local_repositories",
