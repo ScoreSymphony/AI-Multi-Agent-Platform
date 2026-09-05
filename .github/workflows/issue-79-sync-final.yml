@@ -30,7 +30,6 @@ jobs:
             tests/test_issue_79_cli_portability.py
             tests/test_issue_79_control_plane_portability.py
             tests/test_issue_79_single_node_portability.py
-            tests/test_issue_79_workflow.py
           )
           for file in "${files[@]}"; do
             mkdir -p "$(dirname "$file")"
@@ -115,8 +114,8 @@ jobs:
       - name: Format and validate synchronized slice
         run: |
           python -m pip install "ruff>=0.12,<1"
-          ruff check --fix src/ai_multi_agent_platform/cli/main.py src/ai_multi_agent_platform/cli/portability.py src/ai_multi_agent_platform/control_plane/__init__.py src/ai_multi_agent_platform/control_plane/portability_api.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/portability/composition.py src/ai_multi_agent_platform/portability/workflow.py tests/test_issue_79_cli_portability.py tests/test_issue_79_control_plane_portability.py tests/test_issue_79_single_node_portability.py tests/test_issue_79_workflow.py
-          ruff format src/ai_multi_agent_platform/cli/main.py src/ai_multi_agent_platform/cli/portability.py src/ai_multi_agent_platform/control_plane/__init__.py src/ai_multi_agent_platform/control_plane/portability_api.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/portability/composition.py src/ai_multi_agent_platform/portability/workflow.py tests/test_issue_79_cli_portability.py tests/test_issue_79_control_plane_portability.py tests/test_issue_79_single_node_portability.py tests/test_issue_79_workflow.py
+          ruff check --fix src/ai_multi_agent_platform/cli/main.py src/ai_multi_agent_platform/cli/portability.py src/ai_multi_agent_platform/control_plane/__init__.py src/ai_multi_agent_platform/control_plane/portability_api.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/portability/composition.py src/ai_multi_agent_platform/portability/workflow.py tests/test_issue_79_cli_portability.py tests/test_issue_79_control_plane_portability.py tests/test_issue_79_single_node_portability.py
+          ruff format src/ai_multi_agent_platform/cli/main.py src/ai_multi_agent_platform/cli/portability.py src/ai_multi_agent_platform/control_plane/__init__.py src/ai_multi_agent_platform/control_plane/portability_api.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/portability/composition.py src/ai_multi_agent_platform/portability/workflow.py tests/test_issue_79_cli_portability.py tests/test_issue_79_control_plane_portability.py tests/test_issue_79_single_node_portability.py
       - name: Commit synchronized implementation and remove helper
         run: |
           git rm .github/workflows/issue-79-sync-final.yml
