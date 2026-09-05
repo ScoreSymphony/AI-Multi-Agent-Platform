@@ -1,4 +1,12 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime
+from pathlib import Path
+
+from ai_multi_agent_platform.repositories import (
+    RepositoryRunProvenance,
+    SqliteRepositoryProvenanceStore,
+)
 
 
 _INPUT_REVISION = "1" * 40
@@ -11,12 +19,7 @@ _ARTIFACT_ID = "artifact_00000000-0000-4000-8000-000000000005"
 _PROVIDER_RESOURCE_ID = "external_resource_00000000-0000-4000-8000-000000000006"
 
 
-def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path) -> None:
-    from ai_multi_agent_platform.repositories import (
-        RepositoryRunProvenance,
-        SqliteRepositoryProvenanceStore,
-    )
-
+def test_sqlite_repository_provenance_survives_restart_and_upsert(tmp_path: Path) -> None:
     path = tmp_path / "repository-provenance.sqlite3"
     recorded_at = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
