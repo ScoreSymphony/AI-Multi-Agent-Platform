@@ -93,7 +93,9 @@ def test_current_control_plane_composes_exact_owner_accounting_without_organizat
     asyncio.run(scenario())
 
 
-def test_current_control_plane_upgrades_usage_visibility_when_organizations_are_configured() -> None:
+def test_current_control_plane_upgrades_usage_visibility_when_organizations_are_configured() -> (
+    None
+):
     async def scenario() -> None:
         organization_repository = InMemoryOrganizationRepository()
         organizations = OrganizationService(organization_repository)

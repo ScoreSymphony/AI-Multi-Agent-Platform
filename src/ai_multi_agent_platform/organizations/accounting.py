@@ -9,7 +9,12 @@ from ai_multi_agent_platform.accounting.control_plane import (
     _budget_resource,
     _record_resource,
 )
-from ai_multi_agent_platform.accounting.models import UsageBudget, UsageQuery, UsageRecord, UsageScope
+from ai_multi_agent_platform.accounting.models import (
+    UsageBudget,
+    UsageQuery,
+    UsageRecord,
+    UsageScope,
+)
 from ai_multi_agent_platform.accounting.service import AccountingService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -73,7 +78,10 @@ class OrganizationAccountingVisibility:
             return False
         if organization.status is not OrganizationStatus.ACTIVE:
             return False
-        if principal == organization.owner_actor_id or principal in organization.administrator_actor_ids:
+        if (
+            principal == organization.owner_actor_id
+            or principal in organization.administrator_actor_ids
+        ):
             return True
         memberships = await self._active_memberships(principal, organization_id)
         # A Team-scoped grant is intentionally not an Organization-wide grant. Without
@@ -88,7 +96,9 @@ class OrganizationAccountingVisibility:
         principal = context.actor.principal_ref
         try:
             team = await self._organizations.repository.get_team(team_id)
-            organization = await self._organizations.repository.get_organization(team.organization_id)
+            organization = await self._organizations.repository.get_organization(
+                team.organization_id
+            )
         except LookupError:
             return False
         if (
@@ -96,7 +106,10 @@ class OrganizationAccountingVisibility:
             or organization.status is not OrganizationStatus.ACTIVE
         ):
             return False
-        if principal == organization.owner_actor_id or principal in organization.administrator_actor_ids:
+        if (
+            principal == organization.owner_actor_id
+            or principal in organization.administrator_actor_ids
+        ):
             return True
         memberships = await self._active_memberships(principal, team.organization_id)
         return any(
@@ -172,7 +185,9 @@ class OrganizationUsageRecordResourceService:
         resource_id: str,
     ) -> dict[str, JsonValue]:
         for record in self._accounting.query(UsageQuery()):
-            if record.id == resource_id and await self._visibility.raw_record_visible(context, record):
+            if record.id == resource_id and await self._visibility.raw_record_visible(
+                context, record
+            ):
                 return _record_resource(record)
         raise ContractError(ErrorCode.NOT_FOUND, f"usage record not found: {resource_id}")
 
@@ -332,12 +347,8 @@ def _exact_budget_owner(context: RequestContext, budget: UsageBudget) -> bool:
 
 
 def _record_in_organization(record: UsageRecord, organization_id: str) -> bool:
-    return (
-        record.scope.organization_id == organization_id
-        or (
-            record.scope.owner_type == "organization"
-            and record.scope.owner_id == organization_id
-        )
+    return record.scope.organization_id == organization_id or (
+        record.scope.owner_type == "organization" and record.scope.owner_id == organization_id
     )
 
 

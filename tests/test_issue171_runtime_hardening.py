@@ -292,16 +292,13 @@ def test_real_distributed_heartbeat_feeds_canonical_node_worker_accounting() -> 
     assert by_metric["worker.jobs.active"].scope.worker_id == worker_id
     assert by_metric["worker.jobs.active"].scope.node_id == node_id
     assert not any(
-        record.metric_type.startswith("scheduler.reserved")
-        for record in accounting.query()
+        record.metric_type.startswith("scheduler.reserved") for record in accounting.query()
     )
 
 
 def test_real_agent_team_run_remains_explainable_after_revision_and_mapper_change() -> None:
     async def scenario() -> None:
-        repository, runtime, definition, revision, team_definition, team_revision = (
-            _agent_fixture()
-        )
+        repository, runtime, definition, revision, team_definition, team_revision = _agent_fixture()
         task_id = new_id("task")
         first_run_id = new_id("run")
         first_runs = await runtime.start_team(
@@ -334,10 +331,7 @@ def test_real_agent_team_run_remains_explainable_after_revision_and_mapper_chang
         assert historical.scope.agent_id != requested_but_not_executed
         assert historical.provenance["agent_revision"] == 1
         assert historical.provenance["team_revision"] == 1
-        assert (
-            historical.provenance["orchestrator_adapter_id"]
-            == "reference-orchestrator"
-        )
+        assert historical.provenance["orchestrator_adapter_id"] == "reference-orchestrator"
 
         second_revision = AgentRevision(
             agent_id=revision.agent_id,
@@ -398,9 +392,7 @@ def test_real_agent_team_run_remains_explainable_after_revision_and_mapper_chang
             )
         )
 
-        records = accounting.query(
-            UsageQuery(metric_type="model.call.count", unit="count")
-        )
+        records = accounting.query(UsageQuery(metric_type="model.call.count", unit="count"))
         assert len(records) == 2
         assert records[0].scope.agent_id == revision.agent_id
         assert records[1].scope.agent_id == revision.agent_id
@@ -410,10 +402,7 @@ def test_real_agent_team_run_remains_explainable_after_revision_and_mapper_chang
         assert records[0].provenance["team_revision"] == 1
         assert records[1].provenance["agent_revision"] == 2
         assert records[1].provenance["team_revision"] == 2
-        assert (
-            records[1].provenance["orchestrator_adapter_id"]
-            == "replacement-orchestrator"
-        )
+        assert records[1].provenance["orchestrator_adapter_id"] == "replacement-orchestrator"
 
     asyncio.run(scenario())
 
@@ -479,9 +468,7 @@ def test_remote_worker_trace_preserves_executed_agent_team_into_accounting() -> 
             operation=execute,
         )
 
-        subscription = transport.subscribe(
-            Subscription(topic=topic, consumer_id="issue-171")
-        )
+        subscription = transport.subscribe(Subscription(topic=topic, consumer_id="issue-171"))
         delivery = await anext(subscription)
         carrier = extract_trace_carrier(delivery.envelope)
         await transport.ack(delivery)
@@ -490,9 +477,7 @@ def test_remote_worker_trace_preserves_executed_agent_team_into_accounting() -> 
         assert carrier.team_id == team_definition.team_id
         assert carrier.worker_id == worker_id
 
-        dispatch = accounting.query(
-            UsageQuery(metric_type="worker.dispatch.count", unit="count")
-        )
+        dispatch = accounting.query(UsageQuery(metric_type="worker.dispatch.count", unit="count"))
         assert len(dispatch) == 1
         record = dispatch[0]
         assert record.scope.run_id == run_id
@@ -509,18 +494,10 @@ def test_team_grant_does_not_expand_to_organization_or_other_team() -> None:
     async def scenario() -> None:
         repository = InMemoryOrganizationRepository()
         organizations = OrganizationService(repository)
-        org_a = await repository.save_organization(
-            Organization(name="A", owner_actor_id="owner-a")
-        )
-        org_b = await repository.save_organization(
-            Organization(name="B", owner_actor_id="owner-b")
-        )
-        team_a = await repository.save_team(
-            Team(organization_id=org_a.id, name="A team")
-        )
-        other_team = await repository.save_team(
-            Team(organization_id=org_a.id, name="Other team")
-        )
+        org_a = await repository.save_organization(Organization(name="A", owner_actor_id="owner-a"))
+        org_b = await repository.save_organization(Organization(name="B", owner_actor_id="owner-b"))
+        team_a = await repository.save_team(Team(organization_id=org_a.id, name="A team"))
+        other_team = await repository.save_team(Team(organization_id=org_a.id, name="Other team"))
         membership = await repository.save_membership(
             Membership(
                 actor_id="alice",
@@ -590,8 +567,7 @@ def test_team_grant_does_not_expand_to_organization_or_other_team() -> None:
         team_aggregates = [
             item
             for item in aggregates
-            if isinstance(item.get("scope"), dict)
-            and item["scope"].get("team_id") == team_a.id
+            if isinstance(item.get("scope"), dict) and item["scope"].get("team_id") == team_a.id
         ]
         assert len(team_aggregates) == 1
         assert team_aggregates[0]["total"] == 3.0
@@ -619,15 +595,11 @@ def test_team_grant_does_not_expand_to_organization_or_other_team() -> None:
             PageQuery(),
         )
         assert not any(
-            isinstance(item.get("scope"), dict)
-            and item["scope"].get("team_id") == team_a.id
+            isinstance(item.get("scope"), dict) and item["scope"].get("team_id") == team_a.id
             for item in after
         )
         assert accounting.query()[0] == before
-        assert (
-            accounting.query()[0].provenance["membership_at_record_time"]
-            == "historical"
-        )
+        assert accounting.query()[0].provenance["membership_at_record_time"] == "historical"
 
     asyncio.run(scenario())
 
