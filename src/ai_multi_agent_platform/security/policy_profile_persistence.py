@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, cast
@@ -55,6 +54,37 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         super().append_revision(definition, revision)
         self._save()
 
+    def import_profile(
+        self,
+        definition: AuthorizationPolicyProfileDefinition,
+        revisions: tuple[AuthorizationPolicyProfileRevision, ...],
+    ) -> None:
+        """Persist one complete imported history with in-memory rollback on write failure."""
+
+        super().import_profile(definition, revisions)
+        try:
+            self._save()
+        except Exception:
+            InMemoryAuthorizationPolicyProfileRepository.delete_profile(
+                self,
+                definition.policy_profile_id,
+            )
+            raise
+
+    def delete_profile(self, policy_profile_id: str) -> None:
+        definition = self.get_profile(policy_profile_id)
+        revisions = self.list_revisions(policy_profile_id)
+        super().delete_profile(policy_profile_id)
+        try:
+            self._save()
+        except Exception:
+            InMemoryAuthorizationPolicyProfileRepository.import_profile(
+                self,
+                definition,
+                revisions,
+            )
+            raise
+
     def set_enabled(self, definition: AuthorizationPolicyProfileDefinition) -> None:
         super().set_enabled(definition)
         self._save()
@@ -101,51 +131,22 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
             histories.setdefault(revision.policy_profile_id, []).append(revision)
 
         for definition in definitions:
-            history = sorted(
-                histories.pop(definition.policy_profile_id, []),
-                key=lambda item: item.revision,
+            history = tuple(
+                sorted(
+                    histories.pop(definition.policy_profile_id, []),
+                    key=lambda item: item.revision,
+                )
             )
-            self._restore_profile(definition, history)
+            InMemoryAuthorizationPolicyProfileRepository.import_profile(
+                self,
+                definition,
+                history,
+            )
         if histories:
             raise ValueError("policy profile repository contains revisions without definitions")
 
         for assignment in assignments:
             self._restore_assignment(assignment)
-
-    def _restore_profile(
-        self,
-        definition: AuthorizationPolicyProfileDefinition,
-        history: list[AuthorizationPolicyProfileRevision],
-    ) -> None:
-        if not history or history[-1].revision != definition.current_revision:
-            raise ValueError("policy profile definition does not match persisted revision history")
-        expected = list(range(1, definition.current_revision + 1))
-        if [item.revision for item in history] != expected:
-            raise ValueError("policy profile revision history is not contiguous")
-        for index, revision in enumerate(history):
-            interim = replace(
-                definition,
-                current_revision=revision.revision,
-                enabled=True,
-                updated_at=max(definition.created_at, revision.created_at),
-            )
-            if index == 0:
-                InMemoryAuthorizationPolicyProfileRepository.create_profile(self, interim, revision)
-            else:
-                InMemoryAuthorizationPolicyProfileRepository.append_revision(
-                    self,
-                    interim,
-                    revision,
-                )
-        restored = self.get_profile(definition.policy_profile_id)
-        lifecycle_restored = replace(
-            restored,
-            enabled=definition.enabled,
-            updated_at=definition.updated_at,
-        )
-        InMemoryAuthorizationPolicyProfileRepository.set_enabled(self, lifecycle_restored)
-        if self.get_profile(definition.policy_profile_id) != definition:
-            raise ValueError("policy profile definition metadata does not match revision history")
 
     def _restore_assignment(self, assignment: AuthorizationPolicyAssignment) -> None:
         if assignment.assignment_id in self._assignments:
