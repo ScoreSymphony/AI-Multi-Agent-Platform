@@ -416,11 +416,13 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
             fixture_dir = self._root / fixture_id
             if not fixture_dir.is_dir():
                 raise ValueError(f"evaluation fixture directory not found: {fixture_id}")
-            paths = tuple(sorted(path for path in fixture_dir.rglob("*") if path.is_file()))
-            if not paths:
+            fixture_paths = tuple(
+                sorted(path for path in fixture_dir.rglob("*") if path.is_file())
+            )
+            if not fixture_paths:
                 raise ValueError(f"evaluation fixture directory is empty: {fixture_id}")
             digest = hashlib.sha256()
-            for path in paths:
+            for path in fixture_paths:
                 relative_path = path.relative_to(fixture_dir).as_posix()
                 data = path.read_bytes()
                 file_digest = hashlib.sha256(data).hexdigest()
@@ -450,8 +452,8 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
                     checksum=digest.hexdigest(),
                 )
             )
-        paths = [item.relative_path for item in workspace_files]
-        if len(paths) != len(set(paths)):
+        relative_paths = [item.relative_path for item in workspace_files]
+        if len(relative_paths) != len(set(relative_paths)):
             raise ValueError("evaluation fixtures contain duplicate workspace-relative paths")
         return ResolvedEvaluationFixtures(
             files=tuple(workspace_files),
