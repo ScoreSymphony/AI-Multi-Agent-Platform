@@ -48,6 +48,8 @@ Each immutable revision owns:
 
 `ModelRoutingProfilePolicy` stores only platform concepts. It may require context window, tool calling, structured output, streaming, modalities, reasoning metadata, local/self-hosted placement and an explicit canonical model configuration. `preferred_model_ids` adds an ordered list of canonical model configuration IDs.
 
+`local_only=True` is the strict local placement rule and permits only `ModelLocation.LOCAL`. `self_hosted_only=True` follows the existing Issue #10 router contract: it excludes remote-provider models while allowing both `LOCAL` and `SELF_HOSTED` configurations. The two flags remain mutually exclusive.
+
 It does **not** persist:
 
 - provider-native model names;
@@ -76,11 +78,15 @@ Disabling a profile changes lifecycle state on the stable definition; it does no
 
 `ModelRoutingProfileResolver` resolves an exact canonical revision, rejects mutable/non-canonical reference strings, requires the stable definition to be enabled and enforces Project scope before returning the immutable revision.
 
-## Authorization and scope
+## Authorization, assignment and scope
 
 `ModelRoutingProfileService` is the management boundary. When an Issue #15 `AuthorizationProvider` is supplied, create/version/read/enable/disable operations are authorized using `model-routing-profile:*` actions. Project-scoped profiles additionally require the same canonical `project_id` in `OperationContext`.
 
-The repository itself does not make authorization decisions. This keeps storage reusable while ensuring application-facing lifecycle operations go through the existing authorization boundary.
+Assignment is a separate authorization decision. `ModelRoutingProfileAssignmentGate` authorizes the exact immutable revision with the `model-routing-profile:assign` action, checks enabled state and Project scope before assignment, and preserves the authenticated actor type supplied by the Control Plane. Without an AuthorizationProvider it fails closed unless the assignment context exactly matches the profile owner scope.
+
+The standard single-node Agent Control Plane uses `RoutingProfileAwareAgentCommandHandlers`. Agent create, update, clone and rollback validate an exact `ModelRoutingProfileRef` and pass it through the assignment gate **before** the Agent revision is written. A denied assignment therefore cannot leave a partially created or updated Agent revision.
+
+The repository itself does not make authorization decisions. This keeps storage reusable while ensuring application-facing lifecycle and assignment operations use the existing authorization boundary.
 
 ## Runtime consumption
 
@@ -104,13 +110,15 @@ Issue #79 consumes the #309 domain rather than defining another routing-policy r
 
 `ModelRoutingProfileImportMutationHandler` replays the complete history through the canonical repository. A failed partial replay is compensated by removing the just-created profile, and the normal #79 import executor can also roll the resource back if a later package resource fails.
 
+Exact routing-profile references embedded in Agent and Template portability are represented as dependencies on the canonical `model_routing_profile` resource with the referenced revision pinned. ID regeneration therefore remaps the profile identity without changing the pinned revision. Legacy/generic model-policy strings are preserved as their existing policy references instead of being silently reinterpreted as #309 resources.
+
 The standard single-node portability workflow registers this codec and import handler whenever the routing-profile repository is available.
 
 ## Relationship to Templates
 
 Existing Agent model policy contains `routing_profile_ref`; an exact `ModelRoutingProfileRef.canonical_ref` is the canonical value to place there when reproducibility is required. Templates can carry the same reference without becoming the profile source of truth.
 
-The standard Template environment advertises enabled routing profiles as exact current-revision references. Issue #78 can therefore validate Template model-policy requirements against canonical #309 inventory rather than model configuration IDs or gateway-private policy names.
+The standard Template environment advertises enabled routing profiles as exact current-revision references. Issue #78 can therefore validate Template model-policy requirements against canonical #309 inventory rather than model configuration IDs or gateway-private policy names. Template persistence still owns only the reference/package metadata; routing-profile identity, history and runtime routing remain owned by #309/#10.
 
 ## Example
 
