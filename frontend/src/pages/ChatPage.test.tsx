@@ -4,8 +4,15 @@ import type {
   ConversationResponseActivityEvent,
   ConversationResponseDeltaEvent,
 } from "../api/conversationResponses";
-import type { CanonicalConversationMessage, ConversationReference } from "../api/conversations";
+import type {
+  CanonicalConversationMessage,
+  ConversationReference,
+  ConversationTaskEvent,
+} from "../api/conversations";
+import type { CanonicalNotification } from "../api/notifications";
 import {
+  ActivityItem,
+  AttentionNotificationItem,
   ConversationMessageView,
   TentativeResponseView,
   applyResponseActivity,
@@ -99,6 +106,9 @@ describe("ChatPage canonical helpers", () => {
     expect(conversationReferenceHref({ ...base, kind: "run", id: "run_123" })).toBe(
       "/runs/run_123",
     );
+    expect(conversationReferenceHref({ ...base, kind: "result", id: "result_123" })).toBe(
+      "/results/result_123",
+    );
     expect(conversationReferenceHref({ ...base, kind: "knowledge", id: "knowledge_source_123" }))
       .toBeNull();
   });
@@ -134,6 +144,94 @@ describe("ChatPage canonical helpers", () => {
     expect(html).toContain("Hello world");
     expect(html).toContain("Thinking summary");
     expect(html).toContain("data-response-state=\"tentative\"");
+  });
+
+  it("renders authoritative lifecycle references and waiting attention separately from model text", () => {
+    const lifecycle: ConversationTaskEvent = {
+      id: "cursor_123",
+      type: "conversation.task-event",
+      conversation_id: "conversation_123",
+      task_id: "task_123",
+      authoritative: true,
+      event: {
+        id: "event_123",
+        event_type: "task.waiting",
+        occurred_at: "2026-09-04T02:00:00+00:00",
+      },
+      references: [
+        { kind: "result", id: "result_123", label: null, metadata: {} },
+      ],
+      attention: {
+        kind: "task_waiting",
+        task_id: "task_123",
+        blocked: true,
+        reason: "Choose the canonical deployment target",
+      },
+    };
+
+    const html = renderToStaticMarkup(<ActivityItem item={lifecycle} />);
+    expect(html).toContain("task.waiting");
+    expect(html).toContain("authoritative");
+    expect(html).toContain("result_123");
+    expect(html).toContain("User input required");
+    expect(html).toContain("Choose the canonical deployment target");
+  });
+
+  it("renders canonical approval notifications without inventing a chat-owned approval action", () => {
+    const notification: CanonicalNotification = {
+      id: "notification_123",
+      type: "notification",
+      category: "approval",
+      severity: "warning",
+      title: "Approval required",
+      summary: {
+        approval_id: "approval_123",
+        action: "deploy.release",
+        risk: "high",
+      },
+      state: "unread",
+      recipient: { type: "user", id: "alice" },
+      source: { resource_type: "approval", resource_id: "approval_123" },
+      project_id: "project_123",
+      workspace_id: null,
+      task_id: "task_123",
+      run_id: "run_123",
+      approval_id: "approval_123",
+      verification_id: null,
+      node_id: null,
+      automation_id: null,
+      membership_id: null,
+      resource_ref: { resource_type: "approval", resource_id: "approval_123" },
+      actions: [
+        {
+          action_id: "review",
+          label: "Review approval",
+          command: null,
+          resource_type: "approval",
+          resource_id: "approval_123",
+          href: "/approvals/approval_123",
+        },
+      ],
+      aggregation_key: "approval:approval_123:pending",
+      occurrence_count: 1,
+      created_at: "2026-09-04T02:00:00+00:00",
+      updated_at: "2026-09-04T02:00:00+00:00",
+      read_at: null,
+      acknowledged_at: null,
+      dismissed_at: null,
+      archived_at: null,
+      expires_at: null,
+      correlation_id: null,
+      causation_id: null,
+      delivery: { metadata: {}, attempts: [] },
+    };
+
+    const html = renderToStaticMarkup(<AttentionNotificationItem item={notification} />);
+    expect(html).toContain("Approval required");
+    expect(html).toContain("canonical approval");
+    expect(html).toContain("approval_123");
+    expect(html).toContain("Review approval");
+    expect(html).toContain("Action: deploy.release");
   });
 
   it("upserts the durable committed Assistant message without duplicating it", () => {
