@@ -17,6 +17,8 @@ from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlane,
     ControlPlaneASGI,
+    evaluation_command_handlers,
+    evaluation_resource_services,
 )
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
@@ -26,6 +28,8 @@ from ai_multi_agent_platform.conversations import (
 )
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
+from ai_multi_agent_platform.evaluation import EvaluationService, SqliteEvaluationRepository
+from ai_multi_agent_platform.evaluation.single_node import build_single_node_evaluation
 from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
 from ai_multi_agent_platform.kernel import (
     EventSourcedTaskRepository,
@@ -123,6 +127,8 @@ class SingleNodeDeployment:
     first_task: FirstRunTaskService
     secrets: SecretProvider | None
     templates: TemplateApplicationService
+    evaluation_repository: SqliteEvaluationRepository
+    evaluation: EvaluationService
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     verification: SqliteVerificationService
@@ -273,8 +279,9 @@ def build_single_node_deployment(
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
     orchestrator = ReferenceOrchestrator()
+    reference_executor = ReferenceExecutor(config.executor_dir)
     reference_lifecycle = ExecutorLifecycleBackend(
-        ReferenceExecutor(config.executor_dir),
+        reference_executor,
         workspace=_REFERENCE_EXECUTION_WORKSPACE,
         action="echo",
     )
@@ -309,6 +316,13 @@ def build_single_node_deployment(
         scopes=scopes,
         agents=agents,
     )
+    evaluation_composition = build_single_node_evaluation(
+        database_path=database_dir / "evaluation.sqlite3",
+        kernel=kernel,
+        agents=agents.repository,
+        orchestrator=orchestrator,
+        executor=reference_executor,
+    )
 
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
     authentication = LocalAuthenticationService(store=authentication_store)
@@ -329,6 +343,10 @@ def build_single_node_deployment(
         conversation_file_provider=files,
         conversation_response_provider=conversation_response_provider,
     )
+    for collection, service in evaluation_resource_services(evaluation_composition.service).items():
+        control_plane.register_resource_service(collection, service)
+    for command, handler in evaluation_command_handlers(evaluation_composition.service).items():
+        control_plane.register_command(command, handler)
     register_agent_control_plane(control_plane, agents, runtime=agent_runtime)
     register_standard_agent_control_plane(control_plane, agents)
     register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
@@ -389,6 +407,8 @@ def build_single_node_deployment(
         first_task=first_task,
         secrets=secret_provider,
         templates=templates,
+        evaluation_repository=evaluation_composition.repository,
+        evaluation=evaluation_composition.service,
         authentication=authentication,
         authorization=authorization,
         verification=verification,
