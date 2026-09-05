@@ -252,7 +252,11 @@ def build_single_node_deployment(
     onboarding.restore()
     model_runtime = ModelRuntime(models)
     agent_runtime = AgentRuntime(agents, model_registry=models)
-    conversation_response_provider = ModelRuntimeConversationResponseProvider(model_runtime, agents)
+    conversation_response_provider = ModelRuntimeConversationResponseProvider(
+        model_runtime,
+        agents,
+        routing_profiles=agent_runtime.routing_profiles,
+    )
 
     template_handlers = ContextualTemplateHandlerRegistry()
     register_agent_template_handlers(template_handlers, agents)

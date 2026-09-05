@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.conversations import (
+    ContextResolvingConversationResponseProvider,
     ConversationContentBlock,
     MessageRole,
     ModelRuntimeConversationResponseProvider,
@@ -27,10 +28,9 @@ def test_single_node_exposes_and_persists_canonical_conversations_across_restart
         )
 
         assert first.control_plane.conversation_service is first.conversations
-        assert isinstance(
-            first.control_plane.conversation_response_provider,
-            ModelRuntimeConversationResponseProvider,
-        )
+        first_provider = first.control_plane.conversation_response_provider
+        assert isinstance(first_provider, ContextResolvingConversationResponseProvider)
+        assert isinstance(first_provider.inner, ModelRuntimeConversationResponseProvider)
         assert first.model_runtime.registry is first.models
 
         manifest = await first.http.handle(
@@ -61,10 +61,9 @@ def test_single_node_exposes_and_persists_canonical_conversations_across_restart
 
         restarted = build_single_node_deployment(config)
         assert restarted.control_plane.conversation_service is restarted.conversations
-        assert isinstance(
-            restarted.control_plane.conversation_response_provider,
-            ModelRuntimeConversationResponseProvider,
-        )
+        restarted_provider = restarted.control_plane.conversation_response_provider
+        assert isinstance(restarted_provider, ContextResolvingConversationResponseProvider)
+        assert isinstance(restarted_provider.inner, ModelRuntimeConversationResponseProvider)
         persisted = await restarted.conversations.get_conversation(conversation.id)
         history, cursor = await restarted.conversations.list_messages(conversation.id, limit=20)
 

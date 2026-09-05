@@ -18,6 +18,7 @@ from .models import (
     ConversationStatus,
     MessageRole,
     ModelRoutingPreference,
+    ParticipantKind,
     ReferenceKind,
     ResourceReference,
 )
@@ -169,6 +170,8 @@ class ConversationService:
         task_metadata["conversation_id"] = conversation.id
         task_metadata["conversation_message_id"] = message.id
         payload["metadata"] = task_metadata
+        if conversation.default_agent is not None and "agent_assignment" not in payload:
+            payload["agent_assignment"] = _agent_assignment(conversation.default_agent)
         task = await create_task(payload)
         task_id = task.get("id")
         if not isinstance(task_id, str):
@@ -295,6 +298,17 @@ class ConversationService:
             return conversation
         updated = replace(conversation, status=status, updated_at=datetime.now(UTC))
         return await self._repository.save_conversation(updated)
+
+
+def _agent_assignment(selection: AgentSelectionRef) -> dict[str, JsonValue]:
+    kind = "agent" if selection.kind is ParticipantKind.AGENT else "agent_team"
+    return {
+        "kind": kind,
+        "id": selection.id,
+        "revision": selection.revision,
+        "required": True,
+        "policy_ref": None,
+    }
 
 
 def _append_reference(

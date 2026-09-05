@@ -3,6 +3,7 @@ import type {
   ConversationResponseActivityEvent,
   ConversationResponseDeltaEvent,
 } from "../api/conversationResponses";
+import { listConversationAttentionNotifications } from "../api/conversationAttention";
 import {
   ConversationClient,
   ConversationEventStream,
@@ -130,20 +131,8 @@ export function ChatPage({ client }: { client: ConversationClient }) {
       return;
     }
     try {
-      const page = await notificationClient.list({
-        limit: 100,
-        sort: "updated_at",
-        direction: "desc",
-      });
       setAttentionNotifications(
-        page.items.filter(
-          (item) =>
-            item.task_id !== null
-            && taskIds.has(item.task_id)
-            && (item.category === "approval" || item.category === "agent_input")
-            && item.state !== "dismissed"
-            && item.state !== "archived",
-        ),
+        await listConversationAttentionNotifications(notificationClient, taskIds),
       );
       setAttentionError(null);
     } catch (nextError) {
