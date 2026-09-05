@@ -53,9 +53,7 @@ def test_environment_resolver_derives_resolved_ids_from_actual_server_owned_bind
     asyncio.run(scenario())
 
 
-def test_environment_resolver_preserves_legacy_resolved_inventory_but_apply_bindings_stay_empty() -> (
-    None
-):
+def test_environment_resolver_preserves_legacy_names_without_apply_bindings() -> None:
     async def scenario() -> None:
         resolver = PlatformTemplateEnvironmentResolver(
             placeholders=lambda _: ("legacy-placeholder",),
