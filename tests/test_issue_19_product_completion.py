@@ -281,7 +281,9 @@ def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
                         "version": "1.0",
                         "input_template": {
                             "title": "Evaluate exact Agent",
-                            "objective": "Produce one response through the selected Agent and model.",
+                            "objective": (
+                                "Produce one response through the selected Agent and model."
+                            ),
                             "evaluation_target": {
                                 "kind": "agent",
                                 "agent_id": assistant.agent_id,
