@@ -17,6 +17,7 @@ from ai_multi_agent_platform.notifications import (
     NotificationAction,
     NotificationCandidate,
     NotificationCategory,
+    NotificationQuery,
     NotificationSeverity,
     RecipientRef,
     RecipientType,
@@ -25,9 +26,6 @@ from ai_multi_agent_platform.notifications import (
     approval_resolved_candidate,
     budget_threshold_candidate,
     canonical_attention_candidate,
-)
-from ai_multi_agent_platform.notifications.task_management import (
-    DEFAULT_DEADLINE_APPROACHING_WINDOW,
 )
 from ai_multi_agent_platform.security.approvals import ApprovalRecord
 from ai_multi_agent_platform.security.enforcement import AuthorizationGate
@@ -55,6 +53,8 @@ class ControlPlane(_BaseControlPlane):
         provided_sink = cast(AutomationEventSink | None, kwargs.get("automation_event_sink"))
         holder: list[ControlPlane] = []
         self._approval_recipient_resolver = approval_recipient_resolver
+        self._accounting_service = accounting_service
+        self._accounting_recovery_complete = accounting_service is None
         self._source_attention_queue: SimpleQueue[NotificationCandidate] = SimpleQueue()
 
         async def notification_automation_sink(event: dict[str, JsonValue]) -> None:
@@ -85,9 +85,9 @@ class ControlPlane(_BaseControlPlane):
         self,
         *,
         now: datetime | None = None,
-        approaching_window: timedelta = DEFAULT_DEADLINE_APPROACHING_WINDOW,
+        approaching_window: timedelta | None = None,
     ) -> tuple[Notification, ...]:
-        """Evaluate #88 reminders and drain synchronous completed-domain attention hooks."""
+        """Evaluate #88 reminders and completed-domain attention projections."""
 
         created = list(
             await super().evaluate_task_attention_reminders(
@@ -95,6 +95,7 @@ class ControlPlane(_BaseControlPlane):
                 approaching_window=approaching_window,
             )
         )
+
         while True:
             try:
                 candidate = self._source_attention_queue.get_nowait()
@@ -106,6 +107,16 @@ class ControlPlane(_BaseControlPlane):
                 continue
             if notification is not None:
                 created.append(notification)
+
+        accounting = self._accounting_service
+        if accounting is not None and not self._accounting_recovery_complete:
+            recovered, complete = await self._recover_persisted_budget_thresholds(
+                accounting,
+                now=now,
+            )
+            created.extend(recovered)
+            self._accounting_recovery_complete = complete
+
         return tuple(created)
 
     async def _project_approval_event(self, event: str, approval: ApprovalRecord) -> None:
@@ -140,7 +151,7 @@ class ControlPlane(_BaseControlPlane):
 
         try:
             budget = accounting.store.get_budget(event.budget_id)
-            if budget.owner_type is None or budget.owner_id is None:
+            if budget is None or budget.owner_type is None or budget.owner_id is None:
                 return
             recipient = RecipientRef(RecipientType(budget.owner_type), budget.owner_id)
             self._source_attention_queue.put(budget_threshold_candidate(event, recipient=recipient))
@@ -148,6 +159,70 @@ class ControlPlane(_BaseControlPlane):
             # Accounting already owns and committed the budget/usage state. Invalid or missing
             # recipient metadata must not make accounting ingestion fail.
             return
+
+    async def _recover_persisted_budget_thresholds(
+        self,
+        accounting: AccountingService,
+        *,
+        now: datetime | None,
+    ) -> tuple[tuple[Notification, ...], bool]:
+        """Reconstruct lost #76 attention from durable budget/threshold state after restart.
+
+        Accounting persists the threshold level before its synchronous observer runs. If a process
+        dies in that gap, no in-memory queue item survives. The first Notification runtime pass
+        therefore projects the currently persisted threshold state once. Existing historical
+        attention with the same deterministic aggregation identity suppresses restart duplicates.
+        Transient projection failures keep recovery pending for the next runtime tick.
+        """
+
+        created: list[Notification] = []
+        retry_required = False
+        for budget in accounting.store.list_budgets():
+            level = accounting.store.get_threshold_level(budget.id)
+            if level is None:
+                continue
+            if budget.owner_type is None or budget.owner_id is None:
+                continue
+            try:
+                state = accounting.budget_state(budget.id)
+                if state.level != level:
+                    # Rolling/current usage no longer supports the persisted attention state.
+                    # Notifications must not resurrect stale accounting truth.
+                    continue
+                recipient = RecipientRef(RecipientType(budget.owner_type), budget.owner_id)
+                event = BudgetThresholdEvent(
+                    budget_id=budget.id,
+                    level=level,
+                    consumed=state.consumed,
+                    limit=budget.limit,
+                    metric_type=budget.metric_type,
+                    unit=budget.unit,
+                    scope_type=budget.scope_type,
+                    scope_id=budget.scope_id,
+                    action=budget.action,
+                    budget_version=budget.version,
+                )
+                candidate = budget_threshold_candidate(event, recipient=recipient)
+                if await self._has_notification_history(candidate):
+                    continue
+                notification = await self.notification_service.create_once(candidate, now=now)
+                if notification is not None:
+                    created.append(notification)
+            except Exception:
+                retry_required = True
+        return tuple(created), not retry_required
+
+    async def _has_notification_history(self, candidate: NotificationCandidate) -> bool:
+        aggregation_key = candidate.aggregation_key
+        if aggregation_key is None:
+            return False
+        history = await self.notification_service.list(
+            NotificationQuery(
+                recipient=candidate.recipient,
+                include_archived=True,
+            )
+        )
+        return any(item.aggregation_key == aggregation_key for item in history)
 
     async def connector_health_event_sink(
         self,
