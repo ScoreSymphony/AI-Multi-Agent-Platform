@@ -66,9 +66,7 @@ def test_clean_replacement_machine_restore_preserves_canonical_history(
     assert server_main(["recover-restore"]) == 0
 
     report = json.loads(
-        (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_REPORT).read_text(
-            encoding="utf-8"
-        )
+        (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_REPORT).read_text(encoding="utf-8")
     )
     assert report["ready_for_service"] is True
     assert report["unresolved_run_ids"] == []
