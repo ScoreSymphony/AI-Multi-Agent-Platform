@@ -89,7 +89,10 @@ from ai_multi_agent_platform.verification import (
 )
 from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
-from ai_multi_agent_platform.workspaces import SqliteWorkspaceProvider
+from ai_multi_agent_platform.workspaces import (
+    SqliteRunWorkspaceBindingRepository,
+    SqliteWorkspaceProvider,
+)
 
 from .config import SingleNodeConfig
 
@@ -99,6 +102,8 @@ _SMOKE_TASK_KEY = "deployment-smoke-task-v1"
 _SMOKE_READY_KEY = "deployment-smoke-ready-v1"
 _SMOKE_START_KEY = "deployment-smoke-start-v1"
 _SMOKE_REFRESH_KEY = "deployment-smoke-refresh-v1"
+_EVALUATION_PROJECT_KEY = "evaluation-system-project-v1"
+_EVALUATION_OWNER_ID = "evaluation-single-node"
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +125,7 @@ class SingleNodeDeployment:
     scopes: SqliteScopeStore
     files: LocalFileProvider
     workspaces: SqliteWorkspaceProvider
+    run_workspace_bindings: SqliteRunWorkspaceBindingRepository
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
@@ -243,6 +249,15 @@ def build_single_node_deployment(
         files,
         database_dir / "workspaces.sqlite3",
     )
+    run_workspace_bindings = SqliteRunWorkspaceBindingRepository(
+        database_dir / "run-workspace-bindings.sqlite3"
+    )
+    evaluation_project = scopes.create_project(
+        key=_EVALUATION_PROJECT_KEY,
+        name="Platform Evaluation",
+        owner_type="service",
+        owner_id=_EVALUATION_OWNER_ID,
+    )
     agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
     conversations = ConversationService(
         JsonConversationRepository(database_dir / "conversations.json")
@@ -324,10 +339,18 @@ def build_single_node_deployment(
     )
     evaluation_composition = build_single_node_evaluation(
         database_path=database_dir / "evaluation.sqlite3",
+        asset_dir=config.evaluation_dir,
         kernel=kernel,
         agents=agents.repository,
+        agent_runtime=agent_runtime,
+        models=models,
+        model_runtime=model_runtime,
         orchestrator=orchestrator,
         executor=reference_executor,
+        files=files,
+        workspaces=workspaces,
+        project_id=evaluation_project.id,
+        run_workspace_bindings=run_workspace_bindings,
     )
 
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
@@ -413,6 +436,7 @@ def build_single_node_deployment(
         scopes=scopes,
         files=files,
         workspaces=workspaces,
+        run_workspace_bindings=run_workspace_bindings,
         agents=agents,
         conversations=conversations,
         agent_runtime=agent_runtime,
