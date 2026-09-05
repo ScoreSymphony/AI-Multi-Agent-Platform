@@ -179,8 +179,7 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         )
         key = (assignment.principal_ref, assignment.profile_ref)
         if any(
-            (item.principal_ref, item.profile_ref) == key
-            for item in self._assignments.values()
+            (item.principal_ref, item.profile_ref) == key for item in self._assignments.values()
         ):
             raise ValueError("policy profile repository contains duplicate profile assignments")
         self._assignments[assignment.assignment_id] = assignment
@@ -320,8 +319,7 @@ def _content(value: object) -> AuthorizationPolicyProfileContent:
             AuthorizationAction(value) for value in _string_tuple(item, "allowed_actions")
         ),
         approval_required_actions=tuple(
-            AuthorizationAction(value)
-            for value in _string_tuple(item, "approval_required_actions")
+            AuthorizationAction(value) for value in _string_tuple(item, "approval_required_actions")
         ),
         resource_types=tuple(
             ResourceType(value) for value in _string_tuple(item, "resource_types")
