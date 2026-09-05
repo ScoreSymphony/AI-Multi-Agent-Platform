@@ -160,8 +160,7 @@ def _remap_case(case: EvaluationCase, context: ImportContext) -> EvaluationCase:
         if isinstance(agent_id, str):
             target["agent_id"] = context.remap("agent", agent_id)
     fixtures = tuple(
-        context.remap(EVALUATION_FIXTURE_RESOURCE_TYPE, fixture_id)
-        for fixture_id in case.fixtures
+        context.remap(EVALUATION_FIXTURE_RESOURCE_TYPE, fixture_id) for fixture_id in case.fixtures
     )
     return replace(case, input_template=input_template, fixtures=fixtures)
 
