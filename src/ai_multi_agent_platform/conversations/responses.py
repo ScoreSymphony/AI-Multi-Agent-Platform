@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 
+from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 
@@ -76,6 +77,7 @@ class ConversationResponseRequest:
     source_message_id: str
     target: ConversationResponseTarget
     history: tuple[ConversationMessage, ...]
+    operation: OperationContext | None = None
     project_id: str | None = None
     model_preference: ModelRoutingPreference | None = None
     resolved_context: tuple[ConversationResolvedContext, ...] = ()
@@ -96,6 +98,11 @@ class ConversationResponseRequest:
             raise ValueError("conversation response requires durable message history")
         if self.history[-1].id != self.source_message_id:
             raise ValueError("conversation response source message must be the latest history item")
+        if self.operation is not None:
+            if self.operation.correlation_id != self.correlation_id:
+                raise ValueError("conversation response operation correlation_id must match request")
+            if self.operation.project_id != self.project_id:
+                raise ValueError("conversation response operation project_id must match request")
 
 
 @dataclass(frozen=True, slots=True)
