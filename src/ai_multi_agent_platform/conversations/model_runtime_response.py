@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
+from dataclasses import replace
 
 from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.agents.models import (
+    AgentModelPolicy,
     AgentRevision,
     AgentTeamRevision,
     InstructionSource,
+    ModelFallbackPolicy,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.models import (
     CanonicalModelRequest,
+    DeterministicModelRouter,
     ModelContentBlock,
     ModelContentKind,
     ModelMessage,
@@ -25,6 +29,7 @@ from ai_multi_agent_platform.models import (
 
 from .models import ContentKind, ConversationMessage, MessageRole, MessageStatus
 from .responses import (
+    ConversationResolvedContext,
     ConversationResponseChunk,
     ConversationResponseChunkKind,
     ConversationResponseRequest,
@@ -36,9 +41,11 @@ type ConversationInstructionResolver = Callable[[str], str]
 class ModelRuntimeConversationResponseProvider:
     """Generate conversational text through the canonical model registry/router/runtime.
 
-    This adapter deliberately performs no Task/Run transition and owns no provider-native
-    session. Agent/Team targets are resolved to their immutable canonical revisions and
-    only their platform-owned instruction/model policy is supplied to ``ModelRuntime``.
+    Conversational output is deliberately non-durable execution: it creates no Task/Run
+    or AgentRun by itself. Agent/Team targets still use their exact immutable revision and
+    canonical model-routing policy. When the user turns the conversation into durable
+    work, the Conversation service assigns that exact Agent/Team revision to the canonical
+    Task so normal AgentRuntime capability/authorization policy remains authoritative.
     """
 
     def __init__(
@@ -47,19 +54,21 @@ class ModelRuntimeConversationResponseProvider:
         agents: AgentService,
         *,
         instruction_resolver: ConversationInstructionResolver | None = None,
+        routing_profiles: Mapping[str, RoutingRequirements] | None = None,
     ) -> None:
         self._runtime = runtime
         self._agents = agents
         self._instruction_resolver = instruction_resolver
+        self._routing_profiles = dict(routing_profiles or {})
 
     def stream_response(
         self,
         request: ConversationResponseRequest,
     ) -> AsyncIterator[ConversationResponseChunk]:
         async def stream() -> AsyncIterator[ConversationResponseChunk]:
-            system_instruction, agent_id, agent_requirements = self._target_context(request)
-            model_config_id, routing_requirements = _effective_routing(
-                agent_requirements,
+            system_instruction, agent_id, agent_policy = self._target_context(request)
+            model_config_id, routing_requirements = self._effective_routing(
+                agent_policy,
                 request,
             )
             response = await self._runtime.generate_canonical(
@@ -70,7 +79,10 @@ class ModelRuntimeConversationResponseProvider:
                         causation_id=request.source_message_id,
                         project_id=request.project_id,
                     ),
-                    messages=_model_history(request.history),
+                    messages=(
+                        *_resolved_context_messages(request.resolved_context),
+                        *_model_history(request.history),
+                    ),
                     system_instruction=system_instruction,
                     model_config_id=model_config_id,
                     agent_id=agent_id,
@@ -102,7 +114,7 @@ class ModelRuntimeConversationResponseProvider:
     def _target_context(
         self,
         request: ConversationResponseRequest,
-    ) -> tuple[str, str | None, RoutingRequirements | None]:
+    ) -> tuple[str, str | None, AgentModelPolicy | None]:
         target = request.target
         if target.kind == "agent":
             revision = self._agents.get_agent_revision(target.id, target.revision)
@@ -110,7 +122,7 @@ class ModelRuntimeConversationResponseProvider:
             return (
                 self._agent_instruction(revision),
                 revision.agent_id,
-                revision.profile.model.requirements,
+                revision.profile.model,
             )
         if target.kind == "agent_team":
             team = self._agents.get_team_revision(target.id, target.revision)
@@ -135,7 +147,7 @@ class ModelRuntimeConversationResponseProvider:
             return (
                 f"{team_context}\n\n{self._agent_instruction(leader)}",
                 leader.agent_id,
-                leader.profile.model.requirements,
+                leader.profile.model,
             )
         if target.kind == "project":
             return (
@@ -157,6 +169,58 @@ class ModelRuntimeConversationResponseProvider:
             None,
             None,
         )
+
+    def _effective_routing(
+        self,
+        agent_policy: AgentModelPolicy | None,
+        request: ConversationResponseRequest,
+    ) -> tuple[str | None, dict[str, JsonValue]]:
+        preference = request.model_preference
+        if agent_policy is None:
+            if preference is None:
+                return None, {}
+            return preference.model_config_id, dict(preference.routing_requirements)
+
+        requirements = self._agent_requirements(agent_policy)
+        if preference is not None and (
+            preference.model_config_id is not None or preference.routing_requirements
+        ):
+            if not agent_policy.allow_task_override:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "conversation model override is not permitted by this Agent revision",
+                )
+            requirements = _merge_requirements(
+                requirements,
+                _preference_requirements(preference.model_config_id, preference.routing_requirements),
+            )
+
+        router = DeterministicModelRouter(self._runtime.registry)
+        try:
+            route = router.route(requirements)
+        except ContractError:
+            if (
+                requirements.explicit_model_id is None
+                or agent_policy.fallback is not ModelFallbackPolicy.ROUTE
+            ):
+                raise
+            requirements = replace(requirements, explicit_model_id=None)
+            route = router.route(requirements)
+        return route.model_config_id, _routing_requirements_json(requirements)
+
+    def _agent_requirements(self, policy: AgentModelPolicy) -> RoutingRequirements:
+        requirements = policy.requirements
+        profile_ref = policy.routing_profile_ref
+        if profile_ref is None:
+            return requirements
+        try:
+            profile = self._routing_profiles[profile_ref]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"agent routing profile is not configured: {profile_ref}",
+            ) from exc
+        return _merge_requirements(profile, requirements)
 
     def _team_leader(self, team: AgentTeamRevision) -> AgentRevision:
         leader_id = team.profile.leader_agent_id
@@ -212,20 +276,90 @@ def _require_enabled_agent(revision: AgentRevision) -> None:
         )
 
 
-def _effective_routing(
-    agent_requirements: RoutingRequirements | None,
-    request: ConversationResponseRequest,
-) -> tuple[str | None, dict[str, JsonValue]]:
-    requirements = _routing_requirements_json(agent_requirements)
-    model_config_id = (
-        agent_requirements.explicit_model_id if agent_requirements is not None else None
+def _preference_requirements(
+    model_config_id: str | None,
+    values: Mapping[str, JsonValue],
+) -> RoutingRequirements:
+    supported = {
+        "min_context_window",
+        "tool_calling",
+        "structured_output",
+        "streaming",
+        "modalities",
+        "reasoning",
+        "local_only",
+        "self_hosted_only",
+    }
+    unknown = sorted(set(values).difference(supported))
+    if unknown:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "conversation model preference contains unsupported routing requirements",
+            details={"fields": unknown},
+        )
+
+    def optional_positive_int(key: str) -> int | None:
+        value = values.get(key)
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ContractError(ErrorCode.INVALID_REQUEST, f"{key} must be a positive integer")
+        return value
+
+    def boolean(key: str) -> bool:
+        value = values.get(key, False)
+        if not isinstance(value, bool):
+            raise ContractError(ErrorCode.INVALID_REQUEST, f"{key} must be a boolean")
+        return value
+
+    def strings(key: str) -> tuple[str, ...]:
+        value = values.get(key, [])
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            raise ContractError(ErrorCode.INVALID_REQUEST, f"{key} must be a list of strings")
+        return tuple(value)
+
+    return RoutingRequirements(
+        explicit_model_id=model_config_id,
+        min_context_window=optional_positive_int("min_context_window"),
+        tool_calling=boolean("tool_calling"),
+        structured_output=boolean("structured_output"),
+        streaming=boolean("streaming"),
+        modalities=strings("modalities"),
+        reasoning=strings("reasoning"),
+        local_only=boolean("local_only"),
+        self_hosted_only=boolean("self_hosted_only"),
     )
-    preference = request.model_preference
-    if preference is not None:
-        requirements.update(dict(preference.routing_requirements))
-        if preference.model_config_id is not None:
-            model_config_id = preference.model_config_id
-    return model_config_id, requirements
+
+
+def _merge_requirements(
+    base: RoutingRequirements,
+    overlay: RoutingRequirements,
+) -> RoutingRequirements:
+    context_windows = [
+        value
+        for value in (base.min_context_window, overlay.min_context_window)
+        if value is not None
+    ]
+    modalities = tuple(dict.fromkeys((*base.modalities, *overlay.modalities)))
+    reasoning = tuple(dict.fromkeys((*base.reasoning, *overlay.reasoning)))
+    local_only = base.local_only or overlay.local_only
+    self_hosted_only = base.self_hosted_only or overlay.self_hosted_only
+    if local_only and self_hosted_only:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "combined Agent model requirements conflict: local_only and self_hosted_only",
+        )
+    return RoutingRequirements(
+        explicit_model_id=overlay.explicit_model_id or base.explicit_model_id,
+        min_context_window=max(context_windows) if context_windows else None,
+        tool_calling=base.tool_calling or overlay.tool_calling,
+        structured_output=base.structured_output or overlay.structured_output,
+        streaming=base.streaming or overlay.streaming,
+        modalities=modalities,
+        reasoning=reasoning,
+        local_only=local_only,
+        self_hosted_only=self_hosted_only,
+    )
 
 
 def _routing_requirements_json(
@@ -250,6 +384,18 @@ def _routing_requirements_json(
     if requirements.reasoning:
         result["reasoning"] = list(requirements.reasoning)
     return result
+
+
+def _resolved_context_messages(
+    resolved: tuple[ConversationResolvedContext, ...],
+) -> tuple[ModelMessage, ...]:
+    return tuple(
+        ModelMessage.text(
+            ModelRole.SYSTEM,
+            f"Authorized canonical conversation context {item.kind}:{item.id}:\n{item.text}",
+        )
+        for item in resolved
+    )
 
 
 def _model_history(history: tuple[ConversationMessage, ...]) -> tuple[ModelMessage, ...]:
