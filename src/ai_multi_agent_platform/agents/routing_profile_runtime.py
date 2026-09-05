@@ -17,7 +17,7 @@ from ai_multi_agent_platform.models import (
     RoutingRequirements,
 )
 
-from .models import AgentExecutionSpec, AgentRevision
+from .models import AgentExecutionSpec, AgentRevision, AgentTeamRevision
 from .runtime import AgentRuntime, _merge_requirements
 from .service import AgentService
 
@@ -47,7 +47,7 @@ class DurableRoutingProfileAgentRuntime(AgentRuntime):
         run_id: str,
         agent_id: str,
         revision: int | None = None,
-        team_revision=None,
+        team_revision: AgentTeamRevision | None = None,
         task_model_override: RoutingRequirements | None = None,
         requested_capability_ids: tuple[str, ...] = (),
         shared_capability_ids: tuple[str, ...] = (),
