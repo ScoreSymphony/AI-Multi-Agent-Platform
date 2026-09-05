@@ -61,6 +61,7 @@ def build_agent_portability_workflow(
     source_instance_id: str | None = None,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
     project_dependency_audit: ProjectDependencyAudit | None = None,
+    additional_resource_exists: Callable[[str, str], bool] | None = None,
 ) -> PortabilityWorkflowService:
     """Compose production-safe portability against supplied canonical stores.
 
@@ -72,8 +73,10 @@ def build_agent_portability_workflow(
     never gain assignments or effective authority as an import side effect.
 
     Project rollback deliberately fails closed unless the caller supplies a cross-domain
-    dependency audit that can prove removal is safe. Dependencies without a supplied
-    destination registry remain unavailable so import preview fails closed rather than
+    dependency audit that can prove removal is safe. Resource domains not owned directly by
+    this composition, such as Organization, Team or Node, can expose a synchronous
+    canonical existence view through ``additional_resource_exists``. Without that view,
+    those dependencies remain unavailable and import preview fails closed rather than
     making optimistic assumptions about target state.
     """
 
@@ -178,6 +181,8 @@ def build_agent_portability_workflow(
             return _canonical_exists(lambda: scopes.get_project(resource_id))
         if resource_type == "workspace":
             return _canonical_exists(lambda: scopes.get_workspace(resource_id))
+        if additional_resource_exists is not None:
+            return additional_resource_exists(resource_type, resource_id)
         return False
 
     def dependency_available(requirement: DependencyRequirement) -> bool:
