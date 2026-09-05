@@ -218,16 +218,19 @@ def test_operator_backup_cli_records_environment_build_commit(
     monkeypatch.setenv(BUILD_COMMIT_ENV, "build-commit-from-environment")
     destination = tmp_path / "provenance-backup"
 
-    assert backup_main(
-        [
-            "create",
-            "--data-dir",
-            str(config.data_dir),
-            "--destination",
-            str(destination),
-            "--quiesced",
-        ]
-    ) == 0
+    assert (
+        backup_main(
+            [
+                "create",
+                "--data-dir",
+                str(config.data_dir),
+                "--destination",
+                str(destination),
+                "--quiesced",
+            ]
+        )
+        == 0
+    )
     manifest = json.loads((destination / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["platform"]["commit"] == "build-commit-from-environment"
     assert require_build_commit() == "build-commit-from-environment"
@@ -256,12 +259,15 @@ def test_operator_restore_requires_explicit_opt_in_for_unpinned_legacy_backup(
         )
     assert exc_info.value.code == 2
 
-    assert backup_main(
-        [
-            "restore",
-            str(backup),
-            "--target-data-dir",
-            str(tmp_path / "allowed-legacy-restore"),
-            "--allow-unpinned-backup",
-        ]
-    ) == 0
+    assert (
+        backup_main(
+            [
+                "restore",
+                str(backup),
+                "--target-data-dir",
+                str(tmp_path / "allowed-legacy-restore"),
+                "--allow-unpinned-backup",
+            ]
+        )
+        == 0
+    )
