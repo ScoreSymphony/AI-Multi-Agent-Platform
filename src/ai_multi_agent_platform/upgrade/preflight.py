@@ -19,7 +19,13 @@ from .compatibility import (
     format_compatibility_check,
     plugin_compatibility_checks,
 )
-from .migrations import JsonMigrationHistoryStore, MigrationError, MigrationRegistry
+from .migrations import (
+    JsonMigrationHistoryStore,
+    MigrationContext,
+    MigrationError,
+    MigrationRegistry,
+    MigrationStep,
+)
 from .models import CheckSeverity, MigrationStatus, PreflightCheck, PreflightReport, VersionSnapshot
 
 SUPPORTED_HISTORICAL_EVENT_SCHEMA_VERSIONS = frozenset({"1.0", "2.0"})
@@ -64,7 +70,7 @@ class UpgradePreflight:
 
     def run(self, request: PreflightRequest) -> PreflightReport:
         checks: list[PreflightCheck] = []
-        steps = ()
+        steps: tuple[MigrationStep, ...] = ()
         try:
             steps = self.migrations.plan(
                 request.current.domain_schema,
@@ -89,6 +95,7 @@ class UpgradePreflight:
 
         checks.extend(_version_checks(request.current, request.target))
         checks.extend(_storage_checks(request.data_dir, request.minimum_free_bytes))
+        checks.extend(_migration_precondition_checks(steps, self.history, request.data_dir))
 
         unresolved = self.history.unresolved()
         if unresolved is not None:
@@ -175,6 +182,46 @@ class UpgradePreflight:
             backup_required=backup_required,
             maintenance_required=bool(steps or request.plugin_state_migration_required),
         )
+
+
+def _migration_precondition_checks(
+    steps: tuple[MigrationStep, ...],
+    history: JsonMigrationHistoryStore,
+    data_dir: Path,
+) -> tuple[PreflightCheck, ...]:
+    """Evaluate read-only invariants before any new migration mutation starts.
+
+    A step precondition is deliberately an upgrade-source invariant, not an assertion that depends on
+    mutations from an earlier step in the same plan. Intermediate expectations belong in the earlier
+    step's post-validation. Already-started/applied revisions are not re-preflighted during recovery.
+    """
+
+    context = MigrationContext(data_dir=data_dir)
+    checks: list[PreflightCheck] = []
+    for step in steps:
+        if step.precondition is None or history.get(step.revision) is not None:
+            continue
+        try:
+            step.precondition(context)
+        except Exception as exc:
+            checks.append(
+                PreflightCheck(
+                    code="migration.precondition.failed",
+                    severity=CheckSeverity.ERROR,
+                    message=f"migration {step.revision} precondition failed: {exc}",
+                    details={"revision": step.revision, "error": f"{type(exc).__name__}: {exc}"},
+                )
+            )
+        else:
+            checks.append(
+                PreflightCheck(
+                    code="migration.precondition.satisfied",
+                    severity=CheckSeverity.INFO,
+                    message=f"migration {step.revision} precondition is satisfied",
+                    details={"revision": step.revision},
+                )
+            )
+    return tuple(checks)
 
 
 def _version_checks(
