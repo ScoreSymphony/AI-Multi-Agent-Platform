@@ -87,6 +87,12 @@ class InMemoryCapabilityAssignmentRepository:
                 ErrorCode.CONTRACT_VIOLATION,
                 "capability assignment identity scope cannot change across revisions",
             )
+        previous = self.get_revision(policy.assignment_id, current.current_revision)
+        if revision.content.target != previous.content.target:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "capability assignment target cannot change across revisions",
+            )
         key = (revision.assignment_id, revision.revision)
         if key in self._revisions:
             raise ContractError(ErrorCode.CONFLICT, "capability assignment revision already exists")
