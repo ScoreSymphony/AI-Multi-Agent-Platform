@@ -6,7 +6,7 @@ from pathlib import Path
 from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.data.models import DataAccessContext
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.organizations import (
     InMemoryOrganizationRepository,
     OrganizationOwnershipFileProvider,
@@ -27,7 +27,7 @@ def test_file_write_and_artifact_link_mirror_personal_canonical_owner(tmp_path: 
             owner_type="user",
             owner_id="alice",
         )
-        file_id = "file_issue87_owner_adapter"
+        file_id = new_id("file")
 
         stored = await files.write(file_id, b"payload", operation)
         assert stored.object_ref == file_id
@@ -36,7 +36,7 @@ def test_file_write_and_artifact_link_mirror_personal_canonical_owner(tmp_path: 
         assert ownership.organization_id is None
 
         access = DataAccessContext(operation=operation, actor_ref="user:alice")
-        artifact_id = "artifact_issue87_owner_adapter"
+        artifact_id = new_id("artifact")
         linked = await files.link_artifact(file_id, artifact_id, access)
         assert artifact_id in linked.artifact_ids
         artifact_ownership = await repository.get_ownership("artifact", artifact_id)
@@ -75,7 +75,7 @@ def test_file_create_mirrors_organization_owner_without_read_side_effects(tmp_pa
         record = await files.create_file(
             b"organization payload",
             access,
-            file_id="file_issue87_org_owner",
+            file_id=new_id("file"),
         )
         ownership = await repository.get_ownership("file", record.file_id)
         assert ownership.owner_ref == OwnerRef(type="organization", id=organization.id)
