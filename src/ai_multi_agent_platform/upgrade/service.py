@@ -65,7 +65,9 @@ class MaintenanceStateStore:
         if not isinstance(started_at, str) or not started_at:
             raise UpgradeError("upgrade maintenance marker has invalid started_at")
         if not isinstance(source, dict) or not isinstance(target, dict):
-            raise UpgradeError("upgrade maintenance marker is missing source/target version vectors")
+            raise UpgradeError(
+                "upgrade maintenance marker is missing source/target version vectors"
+            )
         if not isinstance(planned, list) or any(
             not isinstance(item, str) or not item for item in planned
         ):
