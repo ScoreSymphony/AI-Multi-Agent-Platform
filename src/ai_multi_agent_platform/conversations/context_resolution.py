@@ -175,12 +175,9 @@ def _decode_text_file(data: bytes, content_type: str | None) -> str | None:
             "application/yaml",
         }
     )
-    if textual:
-        return data.decode("utf-8", errors="replace")
-    try:
-        return data.decode("utf-8")
-    except UnicodeDecodeError:
+    if not textual:
         return None
+    return data.decode("utf-8", errors="replace")
 
 
 async def _resolve_knowledge(
