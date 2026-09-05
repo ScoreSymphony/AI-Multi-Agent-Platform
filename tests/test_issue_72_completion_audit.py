@@ -262,6 +262,35 @@ def test_file_reference_is_resolved_into_ephemeral_model_context(tmp_path: Path)
     assert record.file_id in str(message.to_json())
 
 
+def test_binary_file_reference_is_metadata_only_even_when_bytes_are_utf8(tmp_path: Path) -> None:
+    project_id = new_id("project")
+    files = LocalFileProvider(tmp_path / "files", tmp_path / "files.sqlite3")
+    sensitive_binary_text = b"binary-marked-secret-that-happens-to-be-valid-utf8"
+    record = asyncio.run(
+        files.create_file(
+            sensitive_binary_text,
+            _data_context(project_id),
+            content_type="application/octet-stream",
+        )
+    )
+    message = _message(
+        references=(ResourceReference(kind=ReferenceKind.FILE, id=record.file_id),)
+    )
+
+    resolved = asyncio.run(
+        resolve_conversation_context(
+            _response_request(message, project_id=project_id),
+            file_provider=files,
+            knowledge_provider=None,
+        )
+    )
+
+    assert len(resolved) == 1
+    assert "binary content is not injected as text" in resolved[0].text
+    assert "binary-marked-secret-that-happens-to-be-valid-utf8" not in resolved[0].text
+    assert "application/octet-stream" in resolved[0].text
+
+
 def test_knowledge_reference_is_resolved_into_ephemeral_model_context(tmp_path: Path) -> None:
     project_id = new_id("project")
     knowledge = LocalKnowledgeProvider(tmp_path / "knowledge.sqlite3")
