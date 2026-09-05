@@ -112,6 +112,15 @@ def test_dependency_and_placeholder_validation_is_fail_closed() -> None:
         )
 
 
+def test_stage_tool_ids_require_canonical_tool_identity() -> None:
+    canonical_tool_id = new_id("tool")
+    stage = WorkflowStage(stage_id="a", title="A", tool_ids=(canonical_tool_id,))
+    assert stage.tool_ids == (canonical_tool_id,)
+
+    with pytest.raises(ValueError, match="expected canonical tool id"):
+        WorkflowStage(stage_id="a", title="A", tool_ids=("provider-native-search",))
+
+
 def test_exact_revision_admission_creates_task_bound_plan_without_mutating_workflow() -> None:
     service = WorkflowService(InMemoryWorkflowRepository())
     revision = service.create(owner_ref=_owner(), content=_content())
