@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from ai_multi_agent_platform.agents import AgentRunStatus, AgentRuntime
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
@@ -240,7 +242,7 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         )
 
     @staticmethod
-    def _generic_binding(metadata: dict[str, JsonValue]) -> AgentExecutionBinding | None:
+    def _generic_binding(metadata: Mapping[str, JsonValue]) -> AgentExecutionBinding | None:
         try:
             return decode_agent_execution_binding(metadata)
         except ValueError as exc:
