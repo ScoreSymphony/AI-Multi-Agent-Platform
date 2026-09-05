@@ -14,7 +14,9 @@ from .registry import RegistryError
 from .runtime import DispatchRecord, DistributedRuntime
 
 NODE_COLLECTION = "nodes"
+NODE_TYPE = "node"
 WORKER_COLLECTION = "workers"
+WORKER_TYPE = "worker"
 WORKER_JOB_COLLECTION = "worker-jobs"
 
 DISTRIBUTED_ADMIN_COMMANDS = (
@@ -40,6 +42,11 @@ class NodeResourceService:
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
         return tuple(_node_resource(node) for node in self.runtime.registry.list_nodes())
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate privacy-safe canonical Node metadata for derived global Search."""
+
+        return tuple(_node_search_resource(node) for node in self.runtime.registry.list_nodes())
 
     async def get_resource(
         self,
@@ -68,6 +75,11 @@ class WorkerResourceService:
         del context, query
         return tuple(_worker_resource(worker) for worker in self.runtime.registry.list_workers())
 
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate privacy-safe canonical Worker metadata for derived global Search."""
+
+        return tuple(_worker_search_resource(worker) for worker in self.runtime.registry.list_workers())
+
     async def get_resource(
         self,
         context: RequestContext,
@@ -83,6 +95,10 @@ class WorkerResourceService:
 
 class WorkerJobResourceService:
     """Read-only dispatch ownership/reconciliation projection without secret references."""
+
+    # Worker jobs are scheduler/lifecycle state, not part of #288 global discovery.
+    # Keeping them out also prevents Search from becoming a second dispatch authority.
+    search_indexable = False
 
     def __init__(self, runtime: DistributedRuntime) -> None:
         self.runtime = runtime
@@ -261,6 +277,85 @@ def _worker_resource(worker: WorkerRecord) -> dict[str, JsonValue]:
         "draining": worker.draining,
         "locality_refs": list(worker.locality_refs),
     }
+
+
+def _node_search_resource(node: NodeRecord) -> dict[str, JsonValue]:
+    """Small Search projection derived solely from the canonical Node record."""
+
+    aliases = _search_terms(
+        *node.supported_runtimes,
+        *node.model_refs,
+        node.os_name,
+        node.platform,
+        node.architecture,
+        node.trust_level,
+        "draining" if node.draining else None,
+        "maintenance" if node.maintenance else None,
+        "network-available" if node.network_available else "network-unavailable",
+        *_resource_class_terms(node.resources),
+    )
+    return {
+        "type": NODE_TYPE,
+        "id": node.node_id,
+        "display_name": node.display_name,
+        "status": node.status.value,
+        "labels": list(node.labels),
+        "updated_at": _timestamp(node.last_heartbeat_at),
+        "aliases": list(aliases),
+        "capabilities": list(node.capability_refs),
+    }
+
+
+def _worker_search_resource(worker: WorkerRecord) -> dict[str, JsonValue]:
+    """Small Search projection derived solely from the canonical Worker record."""
+
+    aliases = _search_terms(
+        worker.node_id,
+        worker.worker_type,
+        *worker.supported_executors,
+        *worker.supported_runtimes,
+        *worker.model_refs,
+        worker.protocol_version,
+        worker.worker_version,
+        "draining" if worker.draining else None,
+    )
+    return {
+        "type": WORKER_TYPE,
+        "id": worker.worker_id,
+        "status": worker.status.value,
+        "updated_at": _timestamp(worker.last_heartbeat_at),
+        "aliases": list(aliases),
+        "capabilities": list(worker.capability_refs),
+    }
+
+
+def _resource_class_terms(resources: ResourceSnapshot) -> tuple[str, ...]:
+    """Describe resource classes without indexing provider-private infrastructure IDs."""
+
+    values: list[str | None] = []
+    if resources.cpu_cores_total > 0:
+        values.append("cpu")
+    if resources.ram_total_bytes > 0:
+        values.append("ram")
+    if resources.storage_total_bytes > 0:
+        values.append("storage")
+    for accelerator in resources.accelerators:
+        values.extend(("accelerator", accelerator.kind, accelerator.vendor, accelerator.model))
+    return _search_terms(*values)
+
+
+def _search_terms(*values: str | None) -> tuple[str, ...]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        if value is None:
+            continue
+        normalized = value.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        terms.append(normalized)
+    return tuple(terms)
 
 
 def _worker_job_resource(record: DispatchRecord) -> dict[str, JsonValue]:
