@@ -144,20 +144,17 @@ def _materialize_value(
     path: str,
 ) -> FrozenJsonValue:
     if isinstance(value, Mapping):
-        return cast(
-            FrozenJsonValue,
-            {
-                str(key): _materialize_value(
-                    item,
-                    placeholder_bindings=placeholder_bindings,
-                    secret_reference_bindings=secret_reference_bindings,
-                    ordinary=ordinary,
-                    secret=secret,
-                    path=f"{path}.{key}",
-                )
-                for key, item in value.items()
-            },
-        )
+        return {
+            str(key): _materialize_value(
+                item,
+                placeholder_bindings=placeholder_bindings,
+                secret_reference_bindings=secret_reference_bindings,
+                ordinary=ordinary,
+                secret=secret,
+                path=f"{path}.{key}",
+            )
+            for key, item in value.items()
+        }
     if isinstance(value, tuple):
         return tuple(
             _materialize_value(
