@@ -36,6 +36,7 @@ class MigrationStep:
     to_schema: str
     description: str
     apply: MigrationAction
+    precondition: MigrationValidator | None = None
     validate: MigrationValidator | None = None
     transactional: bool = False
     restart_safe: bool = False
@@ -66,6 +67,8 @@ class MigrationStep:
             "from_schema": self.from_schema,
             "to_schema": self.to_schema,
             "description": self.description,
+            "precondition_declared": self.precondition is not None,
+            "validation_declared": self.validate is not None,
             "transactional": self.transactional,
             "restart_safe": self.restart_safe,
             "backup_required": self.backup_required,
@@ -212,6 +215,16 @@ class MigrationRunner:
                 raise MigrationError(
                     f"migration {step.revision!r} requires a transaction context from persistence"
                 )
+            # Preconditions are evaluated only before the first mutation attempt. A restart-safe
+            # resume may intentionally observe partially transformed state; the durable STARTED or
+            # FAILED record proves the original precondition already passed.
+            if existing is None and step.precondition is not None:
+                try:
+                    step.precondition(context)
+                except Exception as exc:
+                    raise MigrationError(
+                        f"migration {step.revision!r} precondition failed: {exc}"
+                    ) from exc
             started_at = _now()
             self.history.put(
                 MigrationRecord(
