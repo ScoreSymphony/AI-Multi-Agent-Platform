@@ -289,13 +289,6 @@ def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
                                 "agent_id": assistant.agent_id,
                                 "agent_revision": assistant.revision,
                                 "model_config_id": "model-evaluation-target",
-                                "snapshot_references": [
-                                    {
-                                        "kind": "prompt_config",
-                                        "ref_id": "evaluation-target-prompt",
-                                        "version": "1.0",
-                                    }
-                                ],
                             },
                         },
                         "assertions": [
@@ -349,7 +342,7 @@ def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
         assert executed.body["status"] == "completed"
         results = executed.body["results"]
         assert isinstance(results, list)
-        assert all(result["outcome"] == "passed" for result in results)
+        assert all(result["outcome"] == "passed" for result in results), results
         snapshot = executed.body["snapshot"]
         refs = {(item["kind"], item["ref_id"], item["version"]) for item in snapshot["references"]}
         assert ("agent", assistant.agent_id, str(assistant.revision)) in refs
@@ -357,7 +350,13 @@ def test_agent_model_target_runs_through_product_evaluation_and_server_snapshot(
         assert any(
             kind == "provider" and ref_id == "local-evaluation-provider" for kind, ref_id, _ in refs
         )
-        assert ("prompt_config", "evaluation-target-prompt", "1.0") in refs
+        prompt_refs = [
+            item for item in snapshot["references"] if item["kind"] == "prompt_config"
+        ]
+        assert len(prompt_refs) == 1
+        assert prompt_refs[0]["ref_id"] == f"{assistant.agent_id}:instructions"
+        assert prompt_refs[0]["version"] == str(assistant.revision)
+        assert str(prompt_refs[0]["revision"]).startswith("sha256:")
         assert any(call[1].endswith("/chat/completions") for call in restarted_transport.calls)
 
         detail = deployment.evaluation.get_run_detail(str(executed.body["id"]))
