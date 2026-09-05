@@ -978,11 +978,8 @@ class AuthorizationPolicyProfileService:
         side_effect: str | None,
         risk: RiskClassification,
     ) -> None:
-        operation = replace(
-            context.operation,
-            project_id=project_id or context.operation.project_id,
-        )
-        actor = infer_actor_identity(context.actor_ref, organization_id=context.organization_id)
+        operation = replace(context.operation, project_id=project_id)
+        actor = infer_actor_identity(context.actor_ref)
         proposed = ProposedAction(
             AuthorizationContext(
                 actor=actor,
@@ -990,8 +987,8 @@ class AuthorizationPolicyProfileService:
                 resource_type=ResourceType.GENERIC,
                 resource_id=resource_id,
                 operation=operation,
-                organization_id=organization_id or context.organization_id,
-                team_id=team_id or context.team_id,
+                organization_id=organization_id,
+                team_id=team_id,
                 side_effect=side_effect,
                 security_labels=("authorization-policy-profile",),
             ),
