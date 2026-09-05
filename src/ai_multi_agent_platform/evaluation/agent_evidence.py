@@ -73,9 +73,13 @@ class AgentRunEvidenceCaseExecutor:
         selected_model = observation.selected_model_config_id
         selected_provider = observation.selected_provider_id
         if selected_model is not None and model_ids and model_ids != (selected_model,):
-            raise ValueError("AgentRun model evidence conflicts with existing evaluation observation")
+            raise ValueError(
+                "AgentRun model evidence conflicts with existing evaluation observation"
+            )
         if selected_provider is not None and provider_ids and provider_ids != (selected_provider,):
-            raise ValueError("AgentRun provider evidence conflicts with existing evaluation observation")
+            raise ValueError(
+                "AgentRun provider evidence conflicts with existing evaluation observation"
+            )
         if selected_model is None and len(model_ids) == 1:
             selected_model = model_ids[0]
         if selected_provider is None and len(provider_ids) == 1:
