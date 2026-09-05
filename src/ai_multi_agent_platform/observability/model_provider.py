@@ -67,7 +67,7 @@ class ObservedModelProvider(_GenerateObservedModelProvider):
                 failure = FailureClassification(
                     component=FailureComponent.MODEL_PROVIDER_ROUTER,
                     code=ErrorCode.CANCELLED.value,
-                    retryable=True,
+                    retryable=False,
                 )
                 self._finish_stream_failure(
                     span,
