@@ -54,6 +54,8 @@ platform portability report import_<digest>
 
 The single-node deployment composes canonical Agent, Agent Team and Template export/import against their durable repositories. Template portability reuses the canonical #78 Template repository and immutable revision model rather than defining a second Template lifecycle inside #79.
 
+Portability remains an optional composition layer instead of being imported by the base `ai_multi_agent_platform.control_plane` package. Production deployments that enable portability select the portability-aware `ControlPlane` explicitly. This keeps unrelated Agent/Template/Control-Plane package initialization acyclic while preserving the same northbound API once the feature is composed.
+
 Preview checks Model dependencies against the canonical `ModelRegistry`, Project/Workspace resource dependencies against `ScopeStore`, and existing Template dependencies against the canonical Template repository.
 
 Capability, plugin, connector and secret requirements remain fail-closed in this composition until their corresponding canonical production registries are explicitly wired. This is intentional: preview must not claim a dependency is available merely because its resource type exists somewhere in the codebase.
