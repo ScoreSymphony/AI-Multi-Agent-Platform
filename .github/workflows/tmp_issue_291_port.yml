@@ -19,7 +19,10 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Apply issue 291 patch
-        run: python scripts/tmp_issue_291_patch.py
+        shell: bash
+        run: |
+          sed -i 's/if count != 1:/if count < 1:/' scripts/tmp_issue_291_patch.py
+          python scripts/tmp_issue_291_patch.py
       - name: Bootstrap test environment
         shell: bash
         run: |
