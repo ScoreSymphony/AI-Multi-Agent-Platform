@@ -38,10 +38,6 @@ from ai_multi_agent_platform.security.authorization import (
     ResourceType,
 )
 from ai_multi_agent_platform.security.enforcement import AuthorizationGate
-from ai_multi_agent_platform.security.policy_profile_import_service import (
-    AuthorizationPolicyProfileImportService,
-    PortableInMemoryAuthorizationPolicyProfileRepository,
-)
 from ai_multi_agent_platform.security.policy_profiles import (
     AuthorizationPolicyProfileCallContext,
     AuthorizationPolicyProfileContent,
@@ -92,7 +88,19 @@ def _source_profile(
             created_at=definition.created_at,
         ),
     )
-    return definition
+    second = replace(definition, current_revision=2)
+    repository.append_revision(
+        second,
+        AuthorizationPolicyProfileRevision(
+            policy_profile_id=profile_id,
+            revision=2,
+            owner_ref=owner,
+            content=replace(content, name="Portable developer policy v2"),
+            project_id=project_id,
+            created_at=second.updated_at,
+        ),
+    )
+    return second
 
 
 def _import_context() -> AuthorizationPolicyProfileCallContext:
@@ -106,14 +114,14 @@ def _import_context() -> AuthorizationPolicyProfileCallContext:
     )
 
 
-def _import_gate() -> AuthorizationGate:
+def _gate(*actions: AuthorizationAction) -> AuthorizationGate:
     return AuthorizationGate(
         LocalAuthorizationProvider(
             (
                 LocalPrincipalPolicy(
                     principal_ref="service:portability",
                     actor_types=frozenset({ActorType.SERVICE}),
-                    allowed_actions=frozenset({AuthorizationAction.CREATE}),
+                    allowed_actions=frozenset(actions),
                     resource_types=frozenset({ResourceType.GENERIC}),
                 ),
             )
@@ -122,7 +130,7 @@ def _import_gate() -> AuthorizationGate:
 
 
 def _exists(
-    repository: PortableInMemoryAuthorizationPolicyProfileRepository,
+    repository: InMemoryAuthorizationPolicyProfileRepository,
     resource_id: str,
 ) -> bool:
     try:
@@ -137,7 +145,12 @@ def _exists(
 def test_policy_profile_full_79_roundtrip_imports_disabled_untrusted_configuration() -> None:
     source = InMemoryAuthorizationPolicyProfileRepository()
     source_definition = _source_profile(source)
-    destination = PortableInMemoryAuthorizationPolicyProfileRepository()
+    destination = InMemoryAuthorizationPolicyProfileRepository()
+    destination_owner = OwnerRef(type="service", id="destination-policy-owner")
+    management = AuthorizationPolicyProfileService(
+        destination,
+        _gate(AuthorizationAction.CREATE),
+    )
 
     serializers = ResourceSerializerRegistry()
     register_authorization_policy_profile_portability_codec(serializers)
@@ -147,13 +160,12 @@ def test_policy_profile_full_79_roundtrip_imports_disabled_untrusted_configurati
         return snapshot_authorization_policy_profile(source, resource_id)
 
     export_sources.register(AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE, load)
-    import_service = AuthorizationPolicyProfileImportService(destination, _import_gate())
     mutations = ImportMutationRegistry()
     mutations.register(
         AuthorizationPolicyProfileImportMutationHandler(
-            import_service,
-            destination,
+            management,
             import_context=_import_context(),
+            target_owner_ref=destination_owner,
         )
     )
     workflow = PortabilityWorkflowService(
@@ -164,7 +176,7 @@ def test_policy_profile_full_79_roundtrip_imports_disabled_untrusted_configurati
                 resource_type == AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE
                 and _exists(destination, resource_id)
             ),
-            dependency_available=lambda requirement: True,
+            dependency_available=lambda _requirement: True,
             security_inspector=inspect_authorization_policy_profile_import,
         ),
         executor=ImportExecutor(serializers, mutations),
@@ -191,43 +203,62 @@ def test_policy_profile_full_79_roundtrip_imports_disabled_untrusted_configurati
     report = asyncio.run(workflow.execute_import(preview.preview_id))
     assert report.result.resources[0].target_id == source_definition.policy_profile_id
     imported = destination.get_profile(source_definition.policy_profile_id)
-    imported_revision = destination.get_revision(source_definition.policy_profile_id, 1)
+    revisions = destination.list_revisions(source_definition.policy_profile_id)
     assert imported.enabled is False
-    assert imported_revision.content.provenance.imported is True
-    assert imported_revision.content.provenance.trusted is False
-    assert imported_revision.content.provenance.source.startswith("portable-import:")
+    assert imported.owner_ref == destination_owner
+    assert tuple(item.revision for item in revisions) == (1, 2)
+    assert all(item.owner_ref == destination_owner for item in revisions)
+    assert all(item.content.provenance.imported for item in revisions)
+    assert all(not item.content.provenance.trusted for item in revisions)
     assert destination.list_assignments(policy_profile_id=source_definition.policy_profile_id) == ()
 
 
-def test_imported_profile_cannot_self_grant_or_be_assigned_while_disabled() -> None:
+def test_imported_profile_stays_non_authoritative_until_explicit_enable_and_assignment() -> None:
     source = InMemoryAuthorizationPolicyProfileRepository()
     definition = _source_profile(source)
-    destination = PortableInMemoryAuthorizationPolicyProfileRepository()
-    import_service = AuthorizationPolicyProfileImportService(destination, _import_gate())
     snapshot = snapshot_authorization_policy_profile(source, definition.policy_profile_id)
+    registry = ResourceSerializerRegistry()
+    register_authorization_policy_profile_portability_codec(registry)
+    portable = registry.serialize(AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE, snapshot)
+    decoded = registry.deserialize(portable)
+    assert isinstance(decoded, AuthorizationPolicyProfilePortableSnapshot)
 
-    imported = asyncio.run(
-        import_service.import_history(
-            snapshot.definition,
-            snapshot.revisions,
-            context=_import_context(),
-            source_reference="portable-resource:test",
-        )
+    destination = InMemoryAuthorizationPolicyProfileRepository()
+    service = AuthorizationPolicyProfileService(
+        destination,
+        _gate(AuthorizationAction.CREATE, AuthorizationAction.ADMINISTER),
     )
-    assert imported.enabled is False
+    handler = AuthorizationPolicyProfileImportMutationHandler(
+        service,
+        import_context=_import_context(),
+        target_owner_ref=OwnerRef(type="service", id="destination-policy-owner"),
+    )
+    asyncio.run(handler.preflight(portable, decoded, ImportContext()))
+    asyncio.run(handler.apply(portable, decoded, ImportContext()))
 
-    management = AuthorizationPolicyProfileService(destination, _import_gate())
     with pytest.raises(ContractError) as captured:
         asyncio.run(
-            management.assign(
-                profile_ref=destination.get_revision(imported.policy_profile_id, 1).ref,
+            service.assign(
+                profile_ref=destination.get_revision(definition.policy_profile_id, 2).ref,
                 principal_ref="service:portability",
                 actor_types=(ActorType.SERVICE,),
                 context=_import_context(),
             )
         )
     assert captured.value.code is ErrorCode.CONFLICT
-    assert destination.list_assignments(policy_profile_id=imported.policy_profile_id) == ()
+    assert destination.list_assignments(policy_profile_id=definition.policy_profile_id) == ()
+
+    enabled = asyncio.run(service.enable(definition.policy_profile_id, _import_context()))
+    assert enabled.enabled is True
+    assignment = asyncio.run(
+        service.assign(
+            profile_ref=destination.get_revision(definition.policy_profile_id, 2).ref,
+            principal_ref="service:portability",
+            actor_types=(ActorType.SERVICE,),
+            context=_import_context(),
+        )
+    )
+    assert assignment.profile_ref.revision == 2
 
 
 def test_regenerate_id_remaps_profile_and_canonical_scope_references() -> None:
@@ -259,8 +290,8 @@ def test_regenerate_id_remaps_profile_and_canonical_scope_references() -> None:
     assert decoded.definition.policy_profile_id == target_profile
     assert decoded.definition.project_id == target_project
     assert decoded.definition.enabled is False
-    assert decoded.revisions[0].project_id == target_project
-    assert decoded.revisions[0].content.scope_constraints.project_ids == (target_project,)
+    assert decoded.revisions[-1].project_id == target_project
+    assert decoded.revisions[-1].content.scope_constraints.project_ids == (target_project,)
 
 
 def test_policy_profile_security_inspection_blocks_assignment_payloads() -> None:
@@ -283,22 +314,26 @@ def test_policy_profile_security_inspection_blocks_assignment_payloads() -> None
     assert findings[0].blocking is True
 
 
-def test_import_compensation_removes_only_safe_imported_profile() -> None:
+def test_import_compensation_removes_only_dormant_unassigned_untrusted_profile() -> None:
     source = InMemoryAuthorizationPolicyProfileRepository()
     definition = _source_profile(source)
-    destination = PortableInMemoryAuthorizationPolicyProfileRepository()
-    service = AuthorizationPolicyProfileImportService(destination, _import_gate())
     snapshot = snapshot_authorization_policy_profile(source, definition.policy_profile_id)
-    asyncio.run(
-        service.import_history(
-            snapshot.definition,
-            snapshot.revisions,
-            context=_import_context(),
-            source_reference="portable-resource:test",
-        )
-    )
+    serializers = ResourceSerializerRegistry()
+    register_authorization_policy_profile_portability_codec(serializers)
+    portable = serializers.serialize(AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE, snapshot)
+    decoded = serializers.deserialize(portable)
+    assert isinstance(decoded, AuthorizationPolicyProfilePortableSnapshot)
 
-    service.compensate_import(definition.policy_profile_id)
+    destination = InMemoryAuthorizationPolicyProfileRepository()
+    service = AuthorizationPolicyProfileService(destination, _gate(AuthorizationAction.CREATE))
+    handler = AuthorizationPolicyProfileImportMutationHandler(
+        service,
+        import_context=_import_context(),
+        target_owner_ref=OwnerRef(type="service", id="destination-policy-owner"),
+    )
+    token = asyncio.run(handler.apply(portable, decoded, ImportContext()))
+    asyncio.run(handler.rollback(portable, decoded, token, ImportContext()))
+
     with pytest.raises(ContractError) as captured:
         destination.get_profile(definition.policy_profile_id)
     assert captured.value.code is ErrorCode.NOT_FOUND
