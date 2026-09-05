@@ -84,7 +84,7 @@ class ExternalResourceResourceService(ResourceService):
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        resource = await self._connectors.repository.get_external_resource(resource_id)
+        resource = await self._resource_or_not_found(resource_id)
         connection = await self._authorized_connection_or_not_found(
             context,
             resource,
@@ -127,7 +127,7 @@ class ExternalResourceResourceService(ResourceService):
                 ErrorCode.INVALID_REQUEST,
                 "external-resource detach does not accept remote mutation arguments",
             )
-        resource = await self._connectors.repository.get_external_resource(resource_ref)
+        resource = await self._resource_or_not_found(resource_ref)
         await self._authorized_connection_or_not_found(
             context,
             resource,
@@ -139,6 +139,19 @@ class ExternalResourceResourceService(ResourceService):
             "detached": True,
             "remote_deleted": False,
         }
+
+    async def _resource_or_not_found(
+        self, resource_id: str
+    ) -> ExternalResourceReference:
+        try:
+            return await self._connectors.repository.get_external_resource(resource_id)
+        except ContractError as exc:
+            if exc.code is ErrorCode.NOT_FOUND:
+                raise ContractError(
+                    ErrorCode.NOT_FOUND,
+                    "external resource not found",
+                ) from exc
+            raise
 
     async def _authorized_connection_or_not_found(
         self,
@@ -170,7 +183,7 @@ class ExternalResourceResourceService(ResourceService):
             }:
                 raise ContractError(
                     ErrorCode.NOT_FOUND,
-                    f"external resource not found: {resource.id}",
+                    "external resource not found",
                 ) from exc
             raise
 
