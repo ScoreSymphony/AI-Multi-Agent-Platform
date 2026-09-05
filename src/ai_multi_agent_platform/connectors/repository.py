@@ -1,4 +1,4 @@
-"""Connector definition, connection and sync-state persistence seams."""
+"""Connector definition, connection, external-resource and sync-state persistence seams."""
 
 from __future__ import annotations
 
@@ -7,7 +7,13 @@ from abc import ABC, abstractmethod
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import validate_id
 
-from .models import Connection, ConnectionStatus, ConnectorDefinition, SyncCheckpoint
+from .models import (
+    Connection,
+    ConnectionStatus,
+    ConnectorDefinition,
+    ExternalResourceReference,
+    SyncCheckpoint,
+)
 
 
 class ConnectorRepository(ABC):
@@ -40,6 +46,22 @@ class ConnectorRepository(ABC):
         ...
 
     @abstractmethod
+    async def save_external_resource(
+        self, resource: ExternalResourceReference
+    ) -> ExternalResourceReference: ...
+
+    @abstractmethod
+    async def get_external_resource(self, resource_id: str) -> ExternalResourceReference: ...
+
+    @abstractmethod
+    async def list_external_resources(
+        self, *, connection_id: str | None = None
+    ) -> tuple[ExternalResourceReference, ...]: ...
+
+    @abstractmethod
+    async def delete_external_resource(self, resource_id: str) -> None: ...
+
+    @abstractmethod
     async def save_checkpoint(self, checkpoint: SyncCheckpoint) -> SyncCheckpoint: ...
 
     @abstractmethod
@@ -52,6 +74,7 @@ class InMemoryConnectorRepository(ConnectorRepository):
     def __init__(self) -> None:
         self._definitions: dict[tuple[str, str], ConnectorDefinition] = {}
         self._connections: dict[str, Connection] = {}
+        self._external_resources: dict[str, ExternalResourceReference] = {}
         self._checkpoints: dict[tuple[str, str], SyncCheckpoint] = {}
 
     async def save_definition(self, definition: ConnectorDefinition) -> ConnectorDefinition:
@@ -110,6 +133,9 @@ class InMemoryConnectorRepository(ConnectorRepository):
         for key in tuple(self._checkpoints):
             if key[0] == connection_id:
                 del self._checkpoints[key]
+        for resource_id, resource in tuple(self._external_resources.items()):
+            if resource.connection_id == connection_id:
+                del self._external_resources[resource_id]
 
     async def remove_connection_if_unused(self, connection_id: str) -> None:
         validate_id(connection_id, "connection")
@@ -131,7 +157,69 @@ class InMemoryConnectorRepository(ConnectorRepository):
                 "cannot compensate a Connection with synchronization history",
                 details={"connection_id": connection_id},
             )
+        if any(
+            resource.connection_id == connection_id
+            for resource in self._external_resources.values()
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "cannot compensate a Connection with durable external-resource references",
+                details={"connection_id": connection_id},
+            )
         del self._connections[connection_id]
+
+    async def save_external_resource(
+        self, resource: ExternalResourceReference
+    ) -> ExternalResourceReference:
+        if resource.connection_id not in self._connections:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"connection not found: {resource.connection_id}",
+            )
+        current = self._external_resources.get(resource.id)
+        if current is not None and (
+            current.connection_id != resource.connection_id
+            or current.resource_type != resource.resource_type
+            or current.native_reference != resource.native_reference
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "external-resource canonical identity cannot be rebound",
+                details={"external_resource_id": resource.id},
+            )
+        self._external_resources[resource.id] = resource
+        return resource
+
+    async def get_external_resource(self, resource_id: str) -> ExternalResourceReference:
+        validate_id(resource_id, "external_resource")
+        try:
+            return self._external_resources[resource_id]
+        except KeyError as exc:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"external resource not found: {resource_id}",
+            ) from exc
+
+    async def list_external_resources(
+        self, *, connection_id: str | None = None
+    ) -> tuple[ExternalResourceReference, ...]:
+        if connection_id is not None:
+            validate_id(connection_id, "connection")
+        items = (
+            resource
+            for resource in self._external_resources.values()
+            if connection_id is None or resource.connection_id == connection_id
+        )
+        return tuple(sorted(items, key=lambda item: item.id))
+
+    async def delete_external_resource(self, resource_id: str) -> None:
+        validate_id(resource_id, "external_resource")
+        if resource_id not in self._external_resources:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                f"external resource not found: {resource_id}",
+            )
+        del self._external_resources[resource_id]
 
     async def save_checkpoint(self, checkpoint: SyncCheckpoint) -> SyncCheckpoint:
         self._checkpoints[(checkpoint.connection_id, checkpoint.stream)] = checkpoint
