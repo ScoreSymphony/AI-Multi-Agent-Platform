@@ -44,15 +44,28 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         revision: AuthorizationPolicyProfileRevision,
     ) -> None:
         super().create_profile(definition, revision)
-        self._save()
+        try:
+            self._save()
+        except Exception:
+            InMemoryAuthorizationPolicyProfileRepository.delete_profile(
+                self,
+                definition.policy_profile_id,
+            )
+            raise
 
     def append_revision(
         self,
         definition: AuthorizationPolicyProfileDefinition,
         revision: AuthorizationPolicyProfileRevision,
     ) -> None:
+        previous = self.get_profile(definition.policy_profile_id)
         super().append_revision(definition, revision)
-        self._save()
+        try:
+            self._save()
+        except Exception:
+            self._profiles[definition.policy_profile_id] = previous
+            self._revisions.pop((revision.policy_profile_id, revision.revision), None)
+            raise
 
     def import_profile(
         self,
@@ -86,12 +99,21 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
             raise
 
     def set_enabled(self, definition: AuthorizationPolicyProfileDefinition) -> None:
+        previous = self.get_profile(definition.policy_profile_id)
         super().set_enabled(definition)
-        self._save()
+        try:
+            self._save()
+        except Exception:
+            self._profiles[definition.policy_profile_id] = previous
+            raise
 
     def create_assignment(self, assignment: AuthorizationPolicyAssignment) -> None:
         super().create_assignment(assignment)
-        self._save()
+        try:
+            self._save()
+        except Exception:
+            self._assignments.pop(assignment.assignment_id, None)
+            raise
 
     def _save(self) -> None:
         document: dict[str, JsonValue] = {
