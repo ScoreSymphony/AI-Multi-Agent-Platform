@@ -54,7 +54,7 @@ def run_cli(
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
     area = _requested_area(arguments)
-    if area not in {"auth", "approval"}:
+    if area not in {"auth", "approval", "__help__"}:
         return _run_legacy_authenticated(
             arguments,
             transport=transport,
@@ -243,6 +243,8 @@ def _requested_area(arguments: list[str]) -> str | None:
         _, remaining = _common_parser().parse_known_args(arguments)
     except SystemExit:
         return None
+    if remaining and remaining[0] in {"-h", "--help"}:
+        return "__help__"
     return remaining[0] if remaining else None
 
 
