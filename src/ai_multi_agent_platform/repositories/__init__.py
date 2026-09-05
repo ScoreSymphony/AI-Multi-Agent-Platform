@@ -8,6 +8,7 @@ from .capabilities import (
     repository_capability,
     repository_capability_specs,
 )
+from .capability_bridge import RepositoryActorResolver, RepositoryCapabilityProvider
 from .catalog import (
     RepositoryBindingRecord,
     RepositoryProviderFactory,
@@ -53,10 +54,12 @@ __all__ = [
     "LOCAL_WRITE_OPERATIONS",
     "LocalGitRepositoryProvider",
     "READ_OPERATIONS",
+    "RepositoryActorResolver",
     "RepositoryBinding",
     "RepositoryBindingRecord",
     "RepositoryCallContext",
     "RepositoryCapability",
+    "RepositoryCapabilityProvider",
     "RepositoryCommit",
     "RepositoryConnection",
     "RepositoryDiff",
