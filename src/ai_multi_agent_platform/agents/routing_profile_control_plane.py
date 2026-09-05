@@ -141,6 +141,7 @@ class RoutingProfileAwareAgentCommandHandlers(AgentCommandHandlers):
                 owner_id=context.actor.owner_id,
                 project_id=project_id,
             ),
+            actor_type=context.actor.actor_type or "service",
         )
 
 
