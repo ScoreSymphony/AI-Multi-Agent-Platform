@@ -22,6 +22,9 @@ from .models import VersionSnapshot
 
 VERSION_STATE_SCHEMA = "1"
 BASELINE_MIGRATION_REVISION = "baseline"
+# This is deliberately immutable: only the release that introduced #41 may adopt an existing
+# untracked data root as its baseline. Future releases must migrate from a tracked source state.
+BASELINE_ADOPTION_PLATFORM_RELEASE = "0.0.1"
 
 
 class VersionStateError(RuntimeError):
@@ -91,6 +94,12 @@ class JsonVersionStateStore:
         if self.path.exists():
             raise VersionStateError("upgrade version state is already initialized")
         adopted = snapshot or current_release_versions()
+        if snapshot is None and adopted.platform_release != BASELINE_ADOPTION_PLATFORM_RELEASE:
+            raise VersionStateError(
+                "untracked data roots may be adopted only by the #41 baseline release "
+                f"{BASELINE_ADOPTION_PLATFORM_RELEASE}; release {adopted.platform_release} must "
+                "start from an existing tracked version state or an explicitly supported migration"
+            )
         self.write(adopted)
         return adopted
 
