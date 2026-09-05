@@ -25,7 +25,10 @@ def add_portability_parser(areas: argparse._SubParsersAction[argparse.ArgumentPa
         metavar="TYPE:ID",
         help="canonical resource selection; repeat for multiple resources",
     )
-    export.add_argument("--metadata-json", help="optional JSON object embedded as provenance metadata")
+    export.add_argument(
+        "--metadata-json",
+        help="optional JSON object embedded as provenance metadata",
+    )
     export.add_argument("--idempotency-key")
 
     validate = commands.add_parser("validate", help="validate and register a portable package")
@@ -86,7 +89,8 @@ def execute_portability(
     if args.command == "import":
         if not args.yes:
             raise ProfileError(
-                "portability import mutates canonical resources; rerun with --yes after reviewing preview"
+                "portability import mutates canonical resources; rerun with --yes "
+                "after reviewing preview"
             )
         return client.post(
             "/commands/portability.import",
