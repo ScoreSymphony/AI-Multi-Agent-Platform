@@ -26,7 +26,11 @@ from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import OwnerRef, new_id
-from ai_multi_agent_platform.notifications import RecipientRef, RecipientType, budget_threshold_candidate
+from ai_multi_agent_platform.notifications import (
+    RecipientRef,
+    RecipientType,
+    budget_threshold_candidate,
+)
 from ai_multi_agent_platform.observability import MetricRecord, TelemetryContext
 from ai_multi_agent_platform.organizations.accounting import (
     DEFAULT_ACCOUNTING_AGGREGATE_POLICY_REF,
@@ -176,15 +180,17 @@ def test_executed_agent_revision_is_provenance_only_and_never_guessed() -> None:
     team_id = new_id("agent_team")
     reader = SimpleNamespace(
         list_agent_runs=lambda requested=None: (
-            SimpleNamespace(
-                agent_run_id=new_id("agent_run"),
-                agent=SimpleNamespace(agent_id=agent_id, revision=7),
-                team=SimpleNamespace(team_id=team_id, revision=3),
-                orchestrator_adapter_id="orchestrator:test",
-            ),
-        )
-        if requested in {None, run_id}
-        else (),
+            (
+                SimpleNamespace(
+                    agent_run_id=new_id("agent_run"),
+                    agent=SimpleNamespace(agent_id=agent_id, revision=7),
+                    team=SimpleNamespace(team_id=team_id, revision=3),
+                    orchestrator_adapter_id="orchestrator:test",
+                ),
+            )
+            if requested in {None, run_id}
+            else ()
+        ),
     )
     accounting = AccountingService(
         InMemoryUsageStore(),
@@ -270,7 +276,9 @@ def test_workspace_snapshot_uses_logical_bytes_without_duplicate_physical_storag
     assert retired_bytes.quantity == 0.0
 
 
-def test_membership_policy_grants_aggregate_scope_but_suspension_revokes_future_visibility() -> None:
+def test_membership_policy_grants_aggregate_scope_but_suspension_revokes_future_visibility() -> (
+    None
+):
     async def scenario() -> None:
         repository = InMemoryOrganizationRepository()
         service = OrganizationService(repository)
@@ -308,6 +316,7 @@ def test_threshold_generation_survives_restart_and_allows_later_recross(tmp_path
     events = []
     accounting = AccountingService(store, threshold_event_sink=events.append)
     project_id = new_id("project")
+    recipient_id = new_id("user")
     budget = UsageBudget(
         metric_type="storage.file.bytes.current",
         unit="bytes",
@@ -338,7 +347,7 @@ def test_threshold_generation_survives_restart_and_allows_later_recross(tmp_path
     assert store.get_threshold_generation(budget.id) == 1
     first = budget_threshold_candidate(
         events[-1],
-        recipient=RecipientRef(RecipientType.USER, "alice"),
+        recipient=RecipientRef(RecipientType.USER, recipient_id),
         threshold_generation=store.get_threshold_generation(budget.id),
     )
 
@@ -353,7 +362,7 @@ def test_threshold_generation_survives_restart_and_allows_later_recross(tmp_path
     assert store.get_threshold_generation(budget.id) == 2
     second = budget_threshold_candidate(
         events[-1],
-        recipient=RecipientRef(RecipientType.USER, "alice"),
+        recipient=RecipientRef(RecipientType.USER, recipient_id),
         threshold_generation=store.get_threshold_generation(budget.id),
     )
     assert first.aggregation_key != second.aggregation_key
@@ -361,7 +370,7 @@ def test_threshold_generation_survives_restart_and_allows_later_recross(tmp_path
     restarted_again = SQLiteUsageStore(path)
     recovered = budget_threshold_candidate(
         events[-1],
-        recipient=RecipientRef(RecipientType.USER, "alice"),
+        recipient=RecipientRef(RecipientType.USER, recipient_id),
         threshold_generation=restarted_again.get_threshold_generation(budget.id),
     )
     assert recovered.aggregation_key == second.aggregation_key

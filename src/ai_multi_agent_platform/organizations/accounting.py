@@ -9,7 +9,12 @@ from ai_multi_agent_platform.accounting.control_plane import (
     _budget_resource,
     _record_resource,
 )
-from ai_multi_agent_platform.accounting.models import UsageBudget, UsageQuery, UsageRecord, UsageScope
+from ai_multi_agent_platform.accounting.models import (
+    UsageBudget,
+    UsageQuery,
+    UsageRecord,
+    UsageScope,
+)
 from ai_multi_agent_platform.accounting.service import AccountingService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -28,7 +33,8 @@ class OrganizationAccountingVisibility:
     The Control Plane authorization provider still gates the request itself. This helper
     only prevents the accounting read model from widening that decision to stale or
     unrelated Organization/Team scopes. Cross-member aggregates require either canonical
-    Organization administration or an explicit membership policy reference.
+    Organization administration or an explicit membership policy reference. That aggregate
+    grant never widens raw UsageRecord visibility beyond the exact canonical owner.
     """
 
     def __init__(
@@ -43,13 +49,7 @@ class OrganizationAccountingVisibility:
         self.aggregate_policy_ref = aggregate_policy_ref
 
     async def raw_record_visible(self, context: RequestContext, record: UsageRecord) -> bool:
-        if _exact_owner(context, record.scope):
-            return True
-        if record.scope.owner_type == "organization" and record.scope.owner_id is not None:
-            return await self.can_aggregate_organization(context, record.scope.owner_id)
-        if record.scope.owner_type == "team" and record.scope.owner_id is not None:
-            return await self.can_aggregate_team(context, record.scope.owner_id)
-        return False
+        return _exact_owner(context, record.scope)
 
     async def budget_visible(self, context: RequestContext, budget: UsageBudget) -> bool:
         if _exact_budget_owner(context, budget):
@@ -78,16 +78,27 @@ class OrganizationAccountingVisibility:
             return False
         if organization.status is not OrganizationStatus.ACTIVE:
             return False
-        if principal == organization.owner_actor_id or principal in organization.administrator_actor_ids:
+        if (
+            principal == organization.owner_actor_id
+            or principal in organization.administrator_actor_ids
+        ):
             return True
         memberships = await self._active_memberships(principal, organization_id)
-        return any(self.aggregate_policy_ref in item.policy_refs for item in memberships)
+        # A Team-scoped grant is intentionally not an Organization-wide grant. Without
+        # this distinction, a user allowed to inspect one Team's aggregate usage could
+        # silently gain aggregate visibility over every other Team/member in the Organization.
+        return any(
+            item.team_id is None and self.aggregate_policy_ref in item.policy_refs
+            for item in memberships
+        )
 
     async def can_aggregate_team(self, context: RequestContext, team_id: str) -> bool:
         principal = context.actor.principal_ref
         try:
             team = await self._organizations.repository.get_team(team_id)
-            organization = await self._organizations.repository.get_organization(team.organization_id)
+            organization = await self._organizations.repository.get_organization(
+                team.organization_id
+            )
         except LookupError:
             return False
         if (
@@ -95,7 +106,10 @@ class OrganizationAccountingVisibility:
             or organization.status is not OrganizationStatus.ACTIVE
         ):
             return False
-        if principal == organization.owner_actor_id or principal in organization.administrator_actor_ids:
+        if (
+            principal == organization.owner_actor_id
+            or principal in organization.administrator_actor_ids
+        ):
             return True
         memberships = await self._active_memberships(principal, team.organization_id)
         return any(
@@ -141,7 +155,7 @@ class OrganizationAccountingVisibility:
 
 
 class OrganizationUsageRecordResourceService:
-    """Raw accounting records with exact-owner and explicit shared-owner visibility."""
+    """Raw accounting records remain exact-owner isolated."""
 
     search_indexable = False
 
@@ -171,7 +185,9 @@ class OrganizationUsageRecordResourceService:
         resource_id: str,
     ) -> dict[str, JsonValue]:
         for record in self._accounting.query(UsageQuery()):
-            if record.id == resource_id and await self._visibility.raw_record_visible(context, record):
+            if record.id == resource_id and await self._visibility.raw_record_visible(
+                context, record
+            ):
                 return _record_resource(record)
         raise ContractError(ErrorCode.NOT_FOUND, f"usage record not found: {resource_id}")
 
@@ -331,12 +347,8 @@ def _exact_budget_owner(context: RequestContext, budget: UsageBudget) -> bool:
 
 
 def _record_in_organization(record: UsageRecord, organization_id: str) -> bool:
-    return (
-        record.scope.organization_id == organization_id
-        or (
-            record.scope.owner_type == "organization"
-            and record.scope.owner_id == organization_id
-        )
+    return record.scope.organization_id == organization_id or (
+        record.scope.owner_type == "organization" and record.scope.owner_id == organization_id
     )
 
 
@@ -347,10 +359,20 @@ def _record_in_team(record: UsageRecord, team_id: str) -> bool:
 
 
 def _sanitize_for_organization(record: UsageRecord, organization_id: str) -> UsageRecord:
+    """Remove person-level execution dimensions before Organization aggregation.
+
+    Aggregate readers may need resource dimensions (Workspace/Worker/Node/etc.) so point-in-time
+    gauges remain mathematically correct, but they do not receive Task/Run/Agent identifiers that
+    would turn an aggregate view into an indirect per-user activity feed.
+    """
+
     return replace(
         record,
         scope=replace(
             record.scope,
+            task_id=None,
+            run_id=None,
+            agent_id=None,
             owner_type="organization",
             owner_id=organization_id,
             organization_id=organization_id,
@@ -359,10 +381,15 @@ def _sanitize_for_organization(record: UsageRecord, organization_id: str) -> Usa
 
 
 def _sanitize_for_team(record: UsageRecord, team_id: str) -> UsageRecord:
+    """Remove person-level execution dimensions before Team aggregation."""
+
     return replace(
         record,
         scope=replace(
             record.scope,
+            task_id=None,
+            run_id=None,
+            agent_id=None,
             owner_type="team",
             owner_id=team_id,
             team_id=team_id,
