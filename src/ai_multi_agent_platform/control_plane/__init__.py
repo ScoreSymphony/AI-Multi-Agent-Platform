@@ -14,6 +14,7 @@ from .conversation_api import (
 )
 from .conversation_current_composition import (
     AuthenticatedControlPlaneHTTP,
+    ControlPlane,
     ControlPlaneASGI,
     ControlPlaneHTTP,
     build_openapi,
@@ -59,14 +60,6 @@ from .plugin_api import (
     PLUGIN_COLLECTIONS,
     PLUGIN_COMMANDS,
     PluginPermissionResolver,
-)
-from .portability_api import (
-    PORTABILITY_COLLECTIONS,
-    PORTABILITY_COMMANDS,
-    PORTABILITY_PACKAGE_COLLECTION,
-    PORTABILITY_PREVIEW_COLLECTION,
-    PORTABILITY_REPORT_COLLECTION,
-    ControlPlane,
 )
 from .service import ScopeStore
 from .task_management_contract import (
@@ -122,11 +115,6 @@ __all__ = [
     "PLUGIN_COLLECTION",
     "PLUGIN_COLLECTIONS",
     "PLUGIN_COMMANDS",
-    "PORTABILITY_COLLECTIONS",
-    "PORTABILITY_COMMANDS",
-    "PORTABILITY_PACKAGE_COLLECTION",
-    "PORTABILITY_PREVIEW_COLLECTION",
-    "PORTABILITY_REPORT_COLLECTION",
     "PageQuery",
     "PluginPermissionResolver",
     "REQUIRED_COMMANDS",
