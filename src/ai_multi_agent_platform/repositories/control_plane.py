@@ -45,7 +45,9 @@ class RepositoryResourceService(ResourceService):
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        return _repository_resource(await self._repositories.read(resource_id, _call_context(context)))
+        return _repository_resource(
+            await self._repositories.read(resource_id, _call_context(context))
+        )
 
 
 def register_repository_control_plane(
