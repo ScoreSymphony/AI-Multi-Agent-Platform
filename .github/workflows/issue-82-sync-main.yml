@@ -1,0 +1,68 @@
+name: Issue 82 sync main
+
+on:
+  push:
+    branches: [feat/issue-82-operational-completion]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/issue-82-operational-completion
+          fetch-depth: 0
+      - name: Merge current main with audited issue 82 conflict resolution
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          set +e
+          git merge --no-ff --no-commit origin/main
+          merge_status=$?
+          set -e
+          if [ "$merge_status" -ne 0 ]; then
+            python - <<'PY'
+          from pathlib import Path
+
+          paths = (
+              Path("frontend/src/app/Shell.tsx"),
+              Path("src/ai_multi_agent_platform/deployment/single_node.py"),
+          )
+          for path in paths:
+              text = path.read_text(encoding="utf-8")
+              output: list[str] = []
+              cursor = 0
+              conflicts = 0
+              while True:
+                  start = text.find("<<<<<<< HEAD\n", cursor)
+                  if start < 0:
+                      output.append(text[cursor:])
+                      break
+                  separator = text.find("=======\n", start)
+                  end = text.find(">>>>>>> origin/main\n", separator)
+                  if separator < 0 or end < 0:
+                      raise SystemExit(f"malformed merge conflict in {path}")
+                  output.append(text[cursor:start])
+                  output.append(text[start + len("<<<<<<< HEAD\n") : separator])
+                  cursor = end + len(">>>>>>> origin/main\n")
+                  conflicts += 1
+              if conflicts != 1:
+                  raise SystemExit(f"expected exactly one audited conflict in {path}, found {conflicts}")
+              path.write_text("".join(output), encoding="utf-8")
+          PY
+            git add frontend/src/app/Shell.tsx src/ai_multi_agent_platform/deployment/single_node.py
+          fi
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "unresolved merge conflicts remain"
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+          git diff --check
+          git rm .github/workflows/issue-82-sync-main.yml
+          git commit -m "chore: sync issue #82 with current main"
+          git push origin HEAD:feat/issue-82-operational-completion
