@@ -139,7 +139,9 @@ async def test_create_version_and_restart_preserve_exact_revisions(tmp_path) -> 
 
 
 @pytest.mark.asyncio
-async def test_exact_profile_revision_drives_deterministic_preference_and_fallback(tmp_path) -> None:
+async def test_exact_profile_revision_drives_deterministic_preference_and_fallback(
+    tmp_path,
+) -> None:
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
     service = ModelRoutingProfileService(repository)
     router = DeterministicModelRouter(_registry())
