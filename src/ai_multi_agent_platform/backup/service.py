@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from .dependencies import DependencyInventoryError, discover_single_node_external_dependencies
 from .inventory import required_single_node_store_paths
 from .manifest import ManifestSchemaError, validate_backup_manifest_v1
 from .recovery import write_restore_recovery_marker
@@ -76,6 +77,10 @@ def create_single_node_backup(
             raise BackupError("single-node backup metadata profile must be 'single-node'")
         metadata.update(deployment_metadata)
     _assert_non_secret_metadata(metadata)
+    try:
+        external_dependencies = discover_single_node_external_dependencies(source, metadata)
+    except DependencyInventoryError as exc:
+        raise BackupError(f"cannot inventory external dependencies: {exc}") from exc
 
     partial = target.with_name(f".{target.name}.partial")
     if partial.exists():
@@ -141,10 +146,7 @@ def create_single_node_backup(
                 "mode": "none",
                 "plaintext_secret_material_included": False,
             },
-            "external_dependencies": [
-                "secret-provider key/material must be recovered separately",
-                "optional adapters/providers must be reinstalled or may remain unavailable",
-            ],
+            "external_dependencies": [item.to_manifest() for item in external_dependencies],
             "excluded": excluded,
             "restore_policy": {
                 "authentication_sessions": "invalidate",
