@@ -36,7 +36,8 @@ class TemplateRepository(Protocol):
     ) -> tuple[TemplateInstantiation, ...]: ...
 
     def delete_template(self, template_id: str) -> None:
-        """Delete an uninstantiated Template for transaction compensation only.""" ...
+        """Delete an uninstantiated Template for transaction compensation only."""
+        ...
 
 
 class InMemoryTemplateRepository:
