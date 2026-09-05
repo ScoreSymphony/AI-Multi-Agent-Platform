@@ -38,6 +38,7 @@ def _model_registry() -> ModelRegistry:
         ("model-preferred-r1", ModelLocation.LOCAL),
         ("model-preferred-r2", ModelLocation.LOCAL),
         ("model-self-hosted", ModelLocation.SELF_HOSTED),
+        ("model-remote", ModelLocation.REMOTE),
     ):
         registry.register_model(
             ModelConfiguration(
@@ -159,14 +160,18 @@ async def test_disabled_profile_fails_before_agent_execution(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_self_hosted_profile_constraint_routes_only_self_hosted_model(tmp_path) -> None:
+async def test_self_hosted_profile_constraint_excludes_remote_but_allows_local(tmp_path) -> None:
     profiles = JsonModelRoutingProfileRepository(tmp_path / "routing-profiles.json")
     profile_service = ModelRoutingProfileService(profiles)
     profile = await profile_service.create_profile(
         name="Self-hosted only",
         policy=ModelRoutingProfilePolicy(
             requirements=RoutingRequirements(self_hosted_only=True, tool_calling=True),
-            preferred_model_ids=("model-preferred-r1", "model-self-hosted"),
+            preferred_model_ids=(
+                "model-remote",
+                "model-preferred-r1",
+                "model-self-hosted",
+            ),
             fallback=RoutingProfileFallbackPolicy.FAIL,
         ),
         owner_ref=OWNER,
@@ -179,7 +184,7 @@ async def test_self_hosted_profile_constraint_routes_only_self_hosted_model(tmp_
     )
 
     route = DeterministicModelRouter(_model_registry()).route_profile(profile)
-    assert route.model_config_id == "model-self-hosted"
+    assert route.model_config_id == "model-preferred-r1"
 
 
 def test_exact_profile_resolver_rejects_mutable_legacy_reference(tmp_path) -> None:
