@@ -50,9 +50,7 @@ def decode_agent_execution_binding(
     capability_ids: list[str] = []
     for value in raw_capabilities:
         if not isinstance(value, str) or not value.strip():
-            raise ValueError(
-                f"{AGENT_EXECUTION_CAPABILITY_IDS_KEY} must contain non-blank strings"
-            )
+            raise ValueError(f"{AGENT_EXECUTION_CAPABILITY_IDS_KEY} must contain non-blank strings")
         capability_ids.append(value)
     if len(capability_ids) != len(set(capability_ids)):
         raise ValueError(f"{AGENT_EXECUTION_CAPABILITY_IDS_KEY} must be unique")
