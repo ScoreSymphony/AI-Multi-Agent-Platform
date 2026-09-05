@@ -357,7 +357,6 @@ def _execute_auth(
         profile,
         AuthenticatedTransport(base_transport, state),
     )
-
     if args.command == "me":
         renderer.success(client.get("/auth/me"))
         return 0
@@ -374,10 +373,7 @@ def _execute_auth(
                     "profile": profile_name,
                     "authenticated": False,
                     "credential_revoked": False,
-                    "message": (
-                        "local bearer credential cleared; use credential revoke "
-                        "to revoke it"
-                    ),
+                    "message": "local bearer credential cleared; revoke it explicitly if needed",
                 }
             )
             return 0
