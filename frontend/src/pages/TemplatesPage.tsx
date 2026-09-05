@@ -529,7 +529,7 @@ function TemplateTable({ templates }: { templates: CanonicalTemplate[] }) {
   );
 }
 
-function PreviewReport({ preview }: { preview: TemplatePreview }) {
+export function PreviewReport({ preview }: { preview: TemplatePreview }) {
   const blockers = [
     ["Required capabilities", preview.missing_required_capability_ids],
     ["Required capability versions", preview.incompatible_capability_versions],
