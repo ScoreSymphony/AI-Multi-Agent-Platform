@@ -127,7 +127,10 @@ class WorkspaceStructureTemplateHandler:
             if failures:
                 raise ContractError(
                     ErrorCode.BACKEND_ERROR,
-                    "Workspace Template creation failed and partial creation could not be fully compensated",
+                    (
+                        "Workspace Template creation failed and partial creation "
+                        "could not be fully compensated"
+                    ),
                     details={
                         "creation_error_type": type(creation_error).__name__,
                         "creation_error": str(creation_error),
