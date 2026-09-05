@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from ipaddress import ip_address
 from typing import cast
 from urllib.parse import urlsplit
@@ -55,6 +55,26 @@ _PLAINTEXT_CREDENTIAL_KEYS = frozenset(
         "token",
     }
 )
+
+
+@dataclass(frozen=True, slots=True)
+class FirstRunPath:
+    """One canonical Project/Workspace/General-Assistant execution path."""
+
+    project_id: str
+    workspace_id: str
+    agent_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class FirstRunPathProjection:
+    """Structural and executable first-run paths derived without side effects."""
+
+    project_ids: tuple[str, ...]
+    workspace_bindings: tuple[tuple[str, str], ...]
+    structural_paths: tuple[FirstRunPath, ...]
+    executable_paths: tuple[FirstRunPath, ...]
+    blockers: tuple[dict[str, JsonValue], ...]
 
 
 class OnboardingService:
@@ -310,29 +330,19 @@ class OnboardingService:
         return result
 
     def status(self, context: RequestContext) -> dict[str, JsonValue]:
-        """Return first-run progress using the same preconditions as first-Task execution."""
+        """Return first-run progress using the same executable paths as first-Task resolution."""
 
-        owner_type = context.actor.owner_type
-        owner_id = context.actor.owner_id
+        projection = self.first_run_path_projection(context)
         projects = tuple(
             project
             for project in self.scopes.list_projects()
-            if owner_type is not None
-            and owner_id is not None
-            and project.owner_ref.type == owner_type
-            and project.owner_ref.id == owner_id
+            if project.id in projection.project_ids
         )
-        project_ids = {project.id for project in projects}
         workspaces = tuple(
             workspace
             for workspace in self.scopes.list_workspaces()
-            if owner_type is not None
-            and owner_id is not None
-            and workspace.owner_type == owner_type
-            and workspace.owner_id == owner_id
-            and workspace.project_id in project_ids
+            if (workspace.project_id, workspace.id) in projection.workspace_bindings
         )
-        workspace_bindings = {(workspace.project_id, workspace.id) for workspace in workspaces}
 
         local_models = tuple(
             model
@@ -363,79 +373,18 @@ class OnboardingService:
             and self.models.effective_health(model) in _ROUTABLE_HEALTH
         )
 
-        general_assistants = self._scoped_general_assistants(
-            owner_type,
-            owner_id,
-            workspace_bindings,
-        )
-        executable_general_assistants: list[tuple[str, str, str]] = []
-        blockers: list[JsonValue] = []
-        for project_id, workspace_id, agent_id in general_assistants:
-            try:
-                self.preflight_general_assistant(
-                    agent_id,
-                    project_id=project_id,
-                    workspace_id=workspace_id,
-                )
-            except ContractError as exc:
-                blockers.append(
-                    {
-                        "agent_id": agent_id,
-                        "project_id": project_id,
-                        "workspace_id": workspace_id,
-                        "error_code": exc.code.value,
-                        "message": exc.message,
-                    }
-                )
-            else:
-                executable_general_assistants.append((project_id, workspace_id, agent_id))
-
-        selected_project = projects[0] if len(projects) == 1 else None
-        project_workspaces = tuple(
-            workspace
-            for workspace in workspaces
-            if selected_project is not None and workspace.project_id == selected_project.id
-        )
-        selected_workspace = project_workspaces[0] if len(project_workspaces) == 1 else None
-        workspace_general_assistants = tuple(
-            item
-            for item in general_assistants
-            if selected_project is not None
-            and selected_workspace is not None
-            and item[0] == selected_project.id
-            and item[1] == selected_workspace.id
-        )
-        executable_workspace_general_assistants = tuple(
-            item
-            for item in executable_general_assistants
-            if selected_project is not None
-            and selected_workspace is not None
-            and item[0] == selected_project.id
-            and item[1] == selected_workspace.id
-        )
-
         selection_kind: str | None = None
         if not routable_models:
             state = "needs_model"
-        elif not projects:
+        elif not projection.project_ids:
             state = "needs_project"
-        elif len(projects) > 1:
-            state = "needs_selection"
-            selection_kind = "project"
-        elif not project_workspaces:
+        elif projection.executable_paths:
+            selection_kind = _first_run_selection_kind(projection.executable_paths)
+            state = "needs_selection" if selection_kind is not None else "ready_for_task"
+        elif not projection.workspace_bindings:
             state = "needs_workspace"
-        elif len(project_workspaces) > 1:
-            state = "needs_selection"
-            selection_kind = "workspace"
-        elif not workspace_general_assistants:
-            state = "needs_general_assistant"
-        elif not executable_workspace_general_assistants:
-            state = "needs_general_assistant"
-        elif len(workspace_general_assistants) > 1:
-            state = "needs_selection"
-            selection_kind = "agent"
         else:
-            state = "ready_for_task"
+            state = "needs_general_assistant"
 
         guidance: list[JsonValue] = []
         if state == "needs_model":
@@ -464,7 +413,7 @@ class OnboardingService:
         elif state == "needs_project":
             guidance.append("Create a canonical Project through the versioned Control Plane.")
         elif state == "needs_workspace":
-            guidance.append("Create or select a canonical Workspace for the Project.")
+            guidance.append("Create a canonical Workspace for an owned Project.")
         elif state == "needs_selection":
             guidance.append(
                 f"Multiple executable first-run candidates require an explicit {selection_kind} "
@@ -472,25 +421,41 @@ class OnboardingService:
                 "agent_id to onboarding.run-first-task."
             )
         elif state == "needs_general_assistant":
-            if workspace_general_assistants and blockers:
+            if projection.structural_paths and projection.blockers:
                 guidance.append(
-                    "An enabled owned General Assistant is present for the selected Workspace, "
-                    "but its current editable configuration does not pass the first-run execution "
-                    "preflight. Review the reported Agent blocker and its instruction, model, "
-                    "capability and task-override policy."
+                    "Enabled owned General Assistants are present, but their current editable "
+                    "configurations do not pass the first-run execution preflight. Review the "
+                    "reported Agent blockers and their instruction, model, capability and "
+                    "task-override policies."
                 )
             else:
                 guidance.append(
                     "Use standard-agent.bootstrap, then standard-agent.clone for "
                     "general_assistant. The editable clone must be enabled, owned by the current "
-                    "user and bound to an owned Project/Workspace that can be selected by "
-                    "onboarding.run-first-task."
+                    "user and bound to an owned Project/Workspace."
                 )
         else:
             guidance.append(
                 "The first-run prerequisites are ready; start a canonical Task now or use the "
                 "canonical Chat surface."
             )
+
+        candidate_paths = (
+            projection.executable_paths
+            if projection.executable_paths
+            else projection.structural_paths
+        )
+        candidate_project_ids = (
+            sorted({path.project_id for path in candidate_paths})
+            if candidate_paths
+            else list(projection.project_ids)
+        )
+        candidate_workspace_ids = (
+            sorted({path.workspace_id for path in candidate_paths})
+            if candidate_paths
+            else sorted(workspace_id for _, workspace_id in projection.workspace_bindings)
+        )
+        candidate_agent_ids = sorted({path.agent_id for path in candidate_paths})
 
         starter_catalog_installed = any(
             revision.profile.metadata.get("starter_catalog_source") == STARTER_CATALOG_SOURCE
@@ -504,7 +469,7 @@ class OnboardingService:
             "id": FIRST_RUN_RESOURCE_ID,
             "type": "onboarding_status",
             "state": state,
-            "authenticated_actor_present": owner_id is not None,
+            "authenticated_actor_present": context.actor.owner_id is not None,
             "project_count": len(projects),
             "workspace_count": len(workspaces),
             "local_model_count": len(local_models),
@@ -512,26 +477,193 @@ class OnboardingService:
             "remote_model_count": len(remote_models),
             "text_capable_golden_path_model_count": len(text_capable_models),
             "usable_golden_path_model_count": len(routable_models),
-            "general_assistant_count": len(general_assistants),
-            "executable_general_assistant_count": len(executable_general_assistants),
-            "general_assistant_blockers": blockers,
+            "general_assistant_count": len(projection.structural_paths),
+            "executable_general_assistant_count": len(projection.executable_paths),
+            "general_assistant_blockers": cast(JsonValue, list(projection.blockers)),
             "selection_required": selection_kind is not None,
             "selection_kind": selection_kind,
-            "candidate_project_ids": cast(JsonValue, sorted(project_ids)),
-            "candidate_workspace_ids": cast(
-                JsonValue,
-                sorted(workspace.id for workspace in workspaces),
-            ),
-            "candidate_agent_ids": cast(
-                JsonValue,
-                sorted(item[2] for item in general_assistants),
-            ),
+            "candidate_project_ids": cast(JsonValue, candidate_project_ids),
+            "candidate_workspace_ids": cast(JsonValue, candidate_workspace_ids),
+            "candidate_agent_ids": cast(JsonValue, candidate_agent_ids),
             "starter_catalog_installed": starter_catalog_installed,
             "installed_model_adapter_ids": cast(JsonValue, sorted(self.model_adapters)),
             "automatic_remote_provider_selection": False,
             "automatic_paid_provider_selection": False,
             "guidance": guidance,
         }
+
+    def first_run_path_projection(self, context: RequestContext) -> FirstRunPathProjection:
+        """Project structural and executable first-run paths without mutating canonical state."""
+
+        owner_type = context.actor.owner_type
+        owner_id = context.actor.owner_id
+        if owner_type is None or owner_id is None:
+            return FirstRunPathProjection((), (), (), (), ())
+
+        project_ids = tuple(
+            sorted(
+                project.id
+                for project in self.scopes.list_projects()
+                if project.owner_ref.type == owner_type and project.owner_ref.id == owner_id
+            )
+        )
+        owned_projects = set(project_ids)
+        workspace_bindings = tuple(
+            sorted(
+                (workspace.project_id, workspace.id)
+                for workspace in self.scopes.list_workspaces()
+                if workspace.owner_type == owner_type
+                and workspace.owner_id == owner_id
+                and workspace.project_id in owned_projects
+            )
+        )
+        structural_paths = tuple(
+            FirstRunPath(project_id, workspace_id, agent_id)
+            for project_id, workspace_id, agent_id in self._scoped_general_assistants(
+                owner_type,
+                owner_id,
+                set(workspace_bindings),
+            )
+        )
+        executable_paths: list[FirstRunPath] = []
+        blockers: list[dict[str, JsonValue]] = []
+        for path in structural_paths:
+            try:
+                self.preflight_general_assistant(
+                    path.agent_id,
+                    project_id=path.project_id,
+                    workspace_id=path.workspace_id,
+                )
+            except ContractError as exc:
+                blockers.append(
+                    {
+                        "agent_id": path.agent_id,
+                        "project_id": path.project_id,
+                        "workspace_id": path.workspace_id,
+                        "error_code": exc.code.value,
+                        "message": exc.message,
+                    }
+                )
+            else:
+                executable_paths.append(path)
+        return FirstRunPathProjection(
+            project_ids=project_ids,
+            workspace_bindings=workspace_bindings,
+            structural_paths=structural_paths,
+            executable_paths=tuple(executable_paths),
+            blockers=tuple(blockers),
+        )
+
+    def resolve_first_run_path(
+        self,
+        context: RequestContext,
+        *,
+        project_id: str | None = None,
+        workspace_id: str | None = None,
+        agent_id: str | None = None,
+    ) -> FirstRunPath:
+        """Resolve exactly one executable path, respecting any explicit canonical IDs."""
+
+        owner_type = context.actor.owner_type
+        owner_id = context.actor.owner_id
+        if owner_type is None or owner_id is None:
+            raise ContractError(
+                ErrorCode.UNAUTHORIZED,
+                "first-run Task requires an authenticated canonical owner",
+            )
+
+        projection = self.first_run_path_projection(context)
+        if project_id is not None and project_id not in projection.project_ids:
+            raise ContractError(ErrorCode.FORBIDDEN, "Project is not owned by the caller")
+        if workspace_id is not None:
+            matching_workspaces = {
+                candidate_workspace_id
+                for candidate_project_id, candidate_workspace_id in projection.workspace_bindings
+                if project_id is None or candidate_project_id == project_id
+            }
+            if workspace_id not in matching_workspaces:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "Workspace is not owned by the caller or does not belong to the selected "
+                    "Project",
+                )
+        if agent_id is not None:
+            structural_agent_paths = _filter_first_run_paths(
+                projection.structural_paths,
+                project_id=project_id,
+                workspace_id=workspace_id,
+                agent_id=agent_id,
+            )
+            if not structural_agent_paths:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "selected Agent is not an enabled owned General Assistant for the selected "
+                    "Project/Workspace",
+                )
+
+        executable = _filter_first_run_paths(
+            projection.executable_paths,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            agent_id=agent_id,
+        )
+        if len(executable) == 1:
+            return executable[0]
+        if len(executable) > 1:
+            selection_kind = _first_run_selection_kind(executable)
+            assert selection_kind is not None
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                f"{selection_kind}_id is required because multiple executable first-run paths "
+                "remain",
+                details={
+                    "selection_kind": selection_kind,
+                    "candidate_project_ids": sorted({path.project_id for path in executable}),
+                    "candidate_workspace_ids": sorted({path.workspace_id for path in executable}),
+                    "candidate_agent_ids": sorted({path.agent_id for path in executable}),
+                },
+            )
+
+        structural = _filter_first_run_paths(
+            projection.structural_paths,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            agent_id=agent_id,
+        )
+        if len(structural) == 1:
+            blocked = structural[0]
+            self.preflight_general_assistant(
+                blocked.agent_id,
+                project_id=blocked.project_id,
+                workspace_id=blocked.workspace_id,
+            )
+            raise AssertionError("first-run preflight unexpectedly accepted a blocked path")
+
+        if not projection.project_ids:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "first-run onboarding requires an owned Project",
+            )
+        matching_projects = {project_id} if project_id is not None else set(projection.project_ids)
+        matching_workspace_bindings = tuple(
+            binding for binding in projection.workspace_bindings if binding[0] in matching_projects
+        )
+        if not matching_workspace_bindings:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "first-run onboarding requires a Workspace for the selected Project",
+            )
+        if workspace_id is not None and not structural:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "selected Workspace has no executable enabled owned General Assistant",
+            )
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "no executable first-run path matches the current selection; review General Assistant "
+            "preflight blockers",
+            details={"general_assistant_blockers": cast(JsonValue, list(projection.blockers))},
+        )
 
     def preflight_general_assistant(
         self,
@@ -588,6 +720,32 @@ class OnboardingService:
                     "installed_adapter_ids": cast(JsonValue, sorted(self.model_adapters)),
                 },
             ) from exc
+
+
+def _filter_first_run_paths(
+    paths: tuple[FirstRunPath, ...],
+    *,
+    project_id: str | None,
+    workspace_id: str | None,
+    agent_id: str | None,
+) -> tuple[FirstRunPath, ...]:
+    return tuple(
+        path
+        for path in paths
+        if (project_id is None or path.project_id == project_id)
+        and (workspace_id is None or path.workspace_id == workspace_id)
+        and (agent_id is None or path.agent_id == agent_id)
+    )
+
+
+def _first_run_selection_kind(paths: tuple[FirstRunPath, ...]) -> str | None:
+    if len({path.project_id for path in paths}) > 1:
+        return "project"
+    if len({path.workspace_id for path in paths}) > 1:
+        return "workspace"
+    if len({path.agent_id for path in paths}) > 1:
+        return "agent"
+    return None
 
 
 def _reject_credentials(value: JsonValue, *, path: str = "payload") -> None:
