@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +13,7 @@ from ai_multi_agent_platform.domain import OwnerRef
 
 from .authorization import ActorType, AuthorizationAction, ResourceType
 from .policy_profiles import (
+    POLICY_PROFILE_SCHEMA_VERSION,
     AuthorizationPolicyAssignment,
     AuthorizationPolicyConditions,
     AuthorizationPolicyProfileContent,
@@ -26,13 +26,12 @@ from .policy_profiles import (
 )
 
 POLICY_PROFILE_REPOSITORY_SCHEMA_VERSION = "1"
-
 OwnerType = Literal["user", "organization", "team", "service"]
 _OWNER_TYPES = frozenset({"user", "organization", "team", "service"})
 
 
 class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfileRepository):
-    """Persist complete immutable policy histories and exact-revision assignments atomically."""
+    """Atomically persist profiles, immutable revisions and exact-revision assignments."""
 
     def __init__(self, path: str | Path) -> None:
         super().__init__()
@@ -69,9 +68,9 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
             "schema_version": POLICY_PROFILE_REPOSITORY_SCHEMA_VERSION,
             "profiles": [_definition_to_json(item) for item in self.list_profiles()],
             "revisions": [
-                policy_profile_revision_to_json(revision)
-                for definition in self.list_profiles()
-                for revision in self.list_revisions(definition.policy_profile_id)
+                _revision_to_json(revision)
+                for profile in self.list_profiles()
+                for revision in self.list_revisions(profile.policy_profile_id)
             ],
             "assignments": [_assignment_to_json(item) for item in self.list_assignments()],
         }
@@ -94,10 +93,7 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
             )
 
         definitions = tuple(_definition(item) for item in _required_array(document, "profiles"))
-        revisions = tuple(
-            policy_profile_revision_from_json(item)
-            for item in _required_array(document, "revisions")
-        )
+        revisions = tuple(_revision(item) for item in _required_array(document, "revisions"))
         assignments = tuple(_assignment(item) for item in _required_array(document, "assignments"))
 
         histories: dict[str, list[AuthorizationPolicyProfileRevision]] = {}
@@ -126,9 +122,6 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
         expected = list(range(1, definition.current_revision + 1))
         if [item.revision for item in history] != expected:
             raise ValueError("policy profile revision history is not contiguous")
-        if any(item.policy_profile_id != definition.policy_profile_id for item in history):
-            raise ValueError("policy profile revision history contains mismatched profile IDs")
-
         for index, revision in enumerate(history):
             interim = replace(
                 definition,
@@ -137,141 +130,51 @@ class JsonAuthorizationPolicyProfileRepository(InMemoryAuthorizationPolicyProfil
                 updated_at=max(definition.created_at, revision.created_at),
             )
             if index == 0:
-                InMemoryAuthorizationPolicyProfileRepository.create_profile(
-                    self,
-                    interim,
-                    revision,
-                )
+                InMemoryAuthorizationPolicyProfileRepository.create_profile(self, interim, revision)
             else:
                 InMemoryAuthorizationPolicyProfileRepository.append_revision(
                     self,
                     interim,
                     revision,
                 )
-
         restored = self.get_profile(definition.policy_profile_id)
-        if restored.current_revision != definition.current_revision:
-            raise ValueError("restored policy profile revision metadata is inconsistent")
-        InMemoryAuthorizationPolicyProfileRepository.set_enabled(self, definition)
+        lifecycle_restored = replace(
+            restored,
+            enabled=definition.enabled,
+            updated_at=definition.updated_at,
+        )
+        InMemoryAuthorizationPolicyProfileRepository.set_enabled(self, lifecycle_restored)
+        if self.get_profile(definition.policy_profile_id) != definition:
+            raise ValueError("policy profile definition metadata does not match revision history")
 
     def _restore_assignment(self, assignment: AuthorizationPolicyAssignment) -> None:
-        """Restore historical assignment even when its profile is now disabled."""
-
-        self.get_profile(assignment.profile_ref.policy_profile_id)
+        if assignment.assignment_id in self._assignments:
+            raise ValueError("policy profile repository contains duplicate assignments")
         self.get_revision(
             assignment.profile_ref.policy_profile_id,
             assignment.profile_ref.revision,
         )
-        if assignment.assignment_id in self._assignments:
-            raise ValueError("policy profile repository contains duplicate assignment IDs")
         key = (assignment.principal_ref, assignment.profile_ref)
-        if any((item.principal_ref, item.profile_ref) == key for item in self._assignments.values()):
-            raise ValueError("policy profile repository contains duplicate exact assignments")
+        if any(
+            (item.principal_ref, item.profile_ref) == key
+            for item in self._assignments.values()
+        ):
+            raise ValueError("policy profile repository contains duplicate profile assignments")
         self._assignments[assignment.assignment_id] = assignment
 
 
 def policy_profile_revision_to_json(
-    item: AuthorizationPolicyProfileRevision,
+    revision: AuthorizationPolicyProfileRevision,
 ) -> dict[str, JsonValue]:
-    """Canonical provider-neutral serialization of one immutable policy revision."""
+    """Canonical provider-neutral serialization used by persistence and portability."""
 
-    content = item.content
-    scope = content.scope_constraints
-    conditions = content.conditions
-    provenance = content.provenance
-    return {
-        "policy_profile_id": item.policy_profile_id,
-        "revision": item.revision,
-        "owner_ref": _owner_to_json(item.owner_ref),
-        "project_id": item.project_id,
-        "organization_id": item.organization_id,
-        "team_id": item.team_id,
-        "created_at": item.created_at.isoformat(),
-        "content": {
-            "name": content.name,
-            "description": content.description,
-            "allowed_actions": [value.value for value in content.allowed_actions],
-            "approval_required_actions": [
-                value.value for value in content.approval_required_actions
-            ],
-            "resource_types": [value.value for value in content.resource_types],
-            "scope_constraints": {
-                "project_ids": list(scope.project_ids),
-                "organization_ids": list(scope.organization_ids),
-                "team_ids": list(scope.team_ids),
-                "workspace_ids": list(scope.workspace_ids),
-                "resource_ids": list(scope.resource_ids),
-            },
-            "conditions": {
-                "required_security_labels": list(conditions.required_security_labels),
-                "allowed_node_ids": list(conditions.allowed_node_ids),
-                "allowed_side_effects": list(conditions.allowed_side_effects),
-            },
-            "provenance": {
-                "created_by": provenance.created_by,
-                "source": provenance.source,
-                "source_reference": provenance.source_reference,
-                "imported": provenance.imported,
-                "trusted": provenance.trusted,
-            },
-            "schema_version": content.schema_version,
-        },
-    }
+    return _revision_to_json(revision)
 
 
-def policy_profile_revision_from_json(value: object) -> AuthorizationPolicyProfileRevision:
-    item = _object(value, "policy profile revision")
-    content = _object(_required(item, "content"), "policy profile content")
-    scope = _object(_required(content, "scope_constraints"), "scope_constraints")
-    conditions = _object(_required(content, "conditions"), "conditions")
-    provenance = _object(_required(content, "provenance"), "provenance")
-    return AuthorizationPolicyProfileRevision(
-        policy_profile_id=_required_string(item, "policy_profile_id"),
-        revision=_required_int(item, "revision"),
-        owner_ref=_owner(_required(item, "owner_ref")),
-        project_id=_optional_string(item, "project_id"),
-        organization_id=_optional_string(item, "organization_id"),
-        team_id=_optional_string(item, "team_id"),
-        created_at=_datetime(_required_string(item, "created_at")),
-        content=AuthorizationPolicyProfileContent(
-            name=_required_string(content, "name"),
-            description=_required_string_allow_blank(content, "description"),
-            allowed_actions=tuple(
-                AuthorizationAction(value)
-                for value in _string_array(content, "allowed_actions")
-            ),
-            approval_required_actions=tuple(
-                AuthorizationAction(value)
-                for value in _string_array(content, "approval_required_actions")
-            ),
-            resource_types=tuple(
-                ResourceType(value) for value in _string_array(content, "resource_types")
-            ),
-            scope_constraints=AuthorizationPolicyScopeConstraints(
-                project_ids=_string_array(scope, "project_ids"),
-                organization_ids=_string_array(scope, "organization_ids"),
-                team_ids=_string_array(scope, "team_ids"),
-                workspace_ids=_string_array(scope, "workspace_ids"),
-                resource_ids=_string_array(scope, "resource_ids"),
-            ),
-            conditions=AuthorizationPolicyConditions(
-                required_security_labels=_string_array(
-                    conditions,
-                    "required_security_labels",
-                ),
-                allowed_node_ids=_string_array(conditions, "allowed_node_ids"),
-                allowed_side_effects=_string_array(conditions, "allowed_side_effects"),
-            ),
-            provenance=AuthorizationPolicyProvenance(
-                created_by=_required_string(provenance, "created_by"),
-                source=_required_string(provenance, "source"),
-                source_reference=_optional_string(provenance, "source_reference"),
-                imported=_required_bool(provenance, "imported"),
-                trusted=_required_bool(provenance, "trusted"),
-            ),
-            schema_version=_required_string(content, "schema_version"),
-        ),
-    )
+def policy_profile_revision_from_json(value: JsonValue) -> AuthorizationPolicyProfileRevision:
+    """Decode only the canonical schema; provider-private policy objects are unsupported."""
+
+    return _revision(value)
 
 
 def _definition_to_json(item: AuthorizationPolicyProfileDefinition) -> dict[str, JsonValue]:
@@ -288,19 +191,48 @@ def _definition_to_json(item: AuthorizationPolicyProfileDefinition) -> dict[str,
     }
 
 
-def _definition(value: object) -> AuthorizationPolicyProfileDefinition:
-    item = _object(value, "policy profile definition")
-    return AuthorizationPolicyProfileDefinition(
-        policy_profile_id=_required_string(item, "policy_profile_id"),
-        owner_ref=_owner(_required(item, "owner_ref")),
-        current_revision=_required_int(item, "current_revision"),
-        enabled=_required_bool(item, "enabled"),
-        project_id=_optional_string(item, "project_id"),
-        organization_id=_optional_string(item, "organization_id"),
-        team_id=_optional_string(item, "team_id"),
-        created_at=_datetime(_required_string(item, "created_at")),
-        updated_at=_datetime(_required_string(item, "updated_at")),
-    )
+def _revision_to_json(item: AuthorizationPolicyProfileRevision) -> dict[str, JsonValue]:
+    return {
+        "schema_version": POLICY_PROFILE_SCHEMA_VERSION,
+        "policy_profile_id": item.policy_profile_id,
+        "revision": item.revision,
+        "owner_ref": _owner_to_json(item.owner_ref),
+        "content": _content_to_json(item.content),
+        "project_id": item.project_id,
+        "organization_id": item.organization_id,
+        "team_id": item.team_id,
+        "created_at": item.created_at.isoformat(),
+    }
+
+
+def _content_to_json(item: AuthorizationPolicyProfileContent) -> dict[str, JsonValue]:
+    return {
+        "name": item.name,
+        "description": item.description,
+        "allowed_actions": [value.value for value in item.allowed_actions],
+        "approval_required_actions": [value.value for value in item.approval_required_actions],
+        "resource_types": [value.value for value in item.resource_types],
+        "scope_constraints": {
+            "project_ids": list(item.scope_constraints.project_ids),
+            "organization_ids": list(item.scope_constraints.organization_ids),
+            "team_ids": list(item.scope_constraints.team_ids),
+            "workspace_ids": list(item.scope_constraints.workspace_ids),
+            "resource_ids": list(item.scope_constraints.resource_ids),
+        },
+        "conditions": {
+            "required_security_labels": list(item.conditions.required_security_labels),
+            "allowed_node_ids": list(item.conditions.allowed_node_ids),
+            "allowed_side_effects": list(item.conditions.allowed_side_effects),
+        },
+        "provenance": {
+            "created_by": item.provenance.created_by,
+            "source": item.provenance.source,
+            "source_reference": item.provenance.source_reference,
+            "imported": item.provenance.imported,
+            "trusted": item.provenance.trusted,
+        },
+        "schema_version": item.schema_version,
+    }
 
 
 def _assignment_to_json(item: AuthorizationPolicyAssignment) -> dict[str, JsonValue]:
@@ -320,6 +252,80 @@ def _assignment_to_json(item: AuthorizationPolicyAssignment) -> dict[str, JsonVa
     }
 
 
+def _definition(value: object) -> AuthorizationPolicyProfileDefinition:
+    item = _object(value, "policy profile definition")
+    return AuthorizationPolicyProfileDefinition(
+        policy_profile_id=_required_string(item, "policy_profile_id"),
+        owner_ref=_owner(_required(item, "owner_ref")),
+        current_revision=_required_int(item, "current_revision"),
+        enabled=_required_bool(item, "enabled"),
+        project_id=_optional_string(item, "project_id"),
+        organization_id=_optional_string(item, "organization_id"),
+        team_id=_optional_string(item, "team_id"),
+        created_at=_datetime(_required_string(item, "created_at")),
+        updated_at=_datetime(_required_string(item, "updated_at")),
+    )
+
+
+def _revision(value: object) -> AuthorizationPolicyProfileRevision:
+    item = _object(value, "policy profile revision")
+    schema_version = _required_string(item, "schema_version")
+    if schema_version != POLICY_PROFILE_SCHEMA_VERSION:
+        raise ValueError(f"unsupported canonical policy profile schema version: {schema_version!r}")
+    return AuthorizationPolicyProfileRevision(
+        policy_profile_id=_required_string(item, "policy_profile_id"),
+        revision=_required_int(item, "revision"),
+        owner_ref=_owner(_required(item, "owner_ref")),
+        content=_content(_required(item, "content")),
+        project_id=_optional_string(item, "project_id"),
+        organization_id=_optional_string(item, "organization_id"),
+        team_id=_optional_string(item, "team_id"),
+        created_at=_datetime(_required_string(item, "created_at")),
+    )
+
+
+def _content(value: object) -> AuthorizationPolicyProfileContent:
+    item = _object(value, "policy profile content")
+    scope = _object(_required(item, "scope_constraints"), "scope_constraints")
+    conditions = _object(_required(item, "conditions"), "conditions")
+    provenance = _object(_required(item, "provenance"), "provenance")
+    source_reference = _optional_string(provenance, "source_reference")
+    return AuthorizationPolicyProfileContent(
+        name=_required_string(item, "name"),
+        description=_required_string_allow_blank(item, "description"),
+        allowed_actions=tuple(
+            AuthorizationAction(value) for value in _string_tuple(item, "allowed_actions")
+        ),
+        approval_required_actions=tuple(
+            AuthorizationAction(value)
+            for value in _string_tuple(item, "approval_required_actions")
+        ),
+        resource_types=tuple(
+            ResourceType(value) for value in _string_tuple(item, "resource_types")
+        ),
+        scope_constraints=AuthorizationPolicyScopeConstraints(
+            project_ids=_string_tuple(scope, "project_ids"),
+            organization_ids=_string_tuple(scope, "organization_ids"),
+            team_ids=_string_tuple(scope, "team_ids"),
+            workspace_ids=_string_tuple(scope, "workspace_ids"),
+            resource_ids=_string_tuple(scope, "resource_ids"),
+        ),
+        conditions=AuthorizationPolicyConditions(
+            required_security_labels=_string_tuple(conditions, "required_security_labels"),
+            allowed_node_ids=_string_tuple(conditions, "allowed_node_ids"),
+            allowed_side_effects=_string_tuple(conditions, "allowed_side_effects"),
+        ),
+        provenance=AuthorizationPolicyProvenance(
+            created_by=_required_string(provenance, "created_by"),
+            source=_required_string(provenance, "source"),
+            source_reference=source_reference,
+            imported=_required_bool(provenance, "imported"),
+            trusted=_required_bool(provenance, "trusted"),
+        ),
+        schema_version=_required_string(item, "schema_version"),
+    )
+
+
 def _assignment(value: object) -> AuthorizationPolicyAssignment:
     item = _object(value, "policy profile assignment")
     profile_ref = _object(_required(item, "profile_ref"), "profile_ref")
@@ -330,7 +336,7 @@ def _assignment(value: object) -> AuthorizationPolicyAssignment:
             revision=_required_int(profile_ref, "revision"),
         ),
         principal_ref=_required_string(item, "principal_ref"),
-        actor_types=tuple(ActorType(value) for value in _string_array(item, "actor_types")),
+        actor_types=tuple(ActorType(value) for value in _string_tuple(item, "actor_types")),
         assigned_by=_required_string(item, "assigned_by"),
         project_id=_optional_string(item, "project_id"),
         organization_id=_optional_string(item, "organization_id"),
@@ -348,74 +354,71 @@ def _owner(value: object) -> OwnerRef:
     owner_type = _required_string(item, "type")
     if owner_type not in _OWNER_TYPES:
         raise ValueError("owner_ref.type is invalid")
-    return OwnerRef(
-        type=cast(OwnerType, owner_type),
-        id=_required_string(item, "id"),
-    )
+    return OwnerRef(type=cast(OwnerType, owner_type), id=_required_string(item, "id"))
 
 
-def _object(value: object, name: str) -> dict[str, object]:
+def _object(value: object, name: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ValueError(f"{name} must be an object")
     if any(not isinstance(key, str) for key in value):
         raise ValueError(f"{name} keys must be strings")
-    return cast(dict[str, object], value)
+    return cast(dict[str, JsonValue], value)
 
 
-def _required(item: Mapping[str, object], key: str) -> object:
-    if key not in item:
-        raise ValueError(f"missing required field: {key}")
-    return item[key]
+def _required(item: dict[str, JsonValue], field: str) -> JsonValue:
+    if field not in item:
+        raise ValueError(f"missing required field: {field}")
+    return item[field]
 
 
-def _required_string(item: Mapping[str, object], key: str) -> str:
-    value = _required(item, key)
+def _required_array(item: dict[str, JsonValue], field: str) -> list[JsonValue]:
+    value = _required(item, field)
+    if not isinstance(value, list):
+        raise ValueError(f"{field} must be an array")
+    return value
+
+
+def _required_string(item: dict[str, JsonValue], field: str) -> str:
+    value = _required(item, field)
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{key} must be a non-blank string")
+        raise ValueError(f"{field} must be a non-blank string")
     return value
 
 
-def _required_string_allow_blank(item: Mapping[str, object], key: str) -> str:
-    value = _required(item, key)
+def _required_string_allow_blank(item: dict[str, JsonValue], field: str) -> str:
+    value = _required(item, field)
     if not isinstance(value, str):
-        raise ValueError(f"{key} must be a string")
+        raise ValueError(f"{field} must be a string")
     return value
 
 
-def _optional_string(item: Mapping[str, object], key: str) -> str | None:
-    value = item.get(key)
+def _optional_string(item: dict[str, JsonValue], field: str) -> str | None:
+    value = item.get(field)
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{key} must be a non-blank string or null")
+        raise ValueError(f"{field} must be a non-blank string or null")
     return value
 
 
-def _required_int(item: Mapping[str, object], key: str) -> int:
-    value = _required(item, key)
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise ValueError(f"{key} must be an integer")
+def _required_int(item: dict[str, JsonValue], field: str) -> int:
+    value = _required(item, field)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field} must be an integer")
     return value
 
 
-def _required_bool(item: Mapping[str, object], key: str) -> bool:
-    value = _required(item, key)
+def _required_bool(item: dict[str, JsonValue], field: str) -> bool:
+    value = _required(item, field)
     if not isinstance(value, bool):
-        raise ValueError(f"{key} must be a boolean")
+        raise ValueError(f"{field} must be a boolean")
     return value
 
 
-def _required_array(item: Mapping[str, object], key: str) -> list[object]:
-    value = _required(item, key)
-    if not isinstance(value, list):
-        raise ValueError(f"{key} must be an array")
-    return value
-
-
-def _string_array(item: Mapping[str, object], key: str) -> tuple[str, ...]:
-    values = _required_array(item, key)
+def _string_tuple(item: dict[str, JsonValue], field: str) -> tuple[str, ...]:
+    values = _required_array(item, field)
     if any(not isinstance(value, str) or not value.strip() for value in values):
-        raise ValueError(f"{key} must contain non-blank strings")
+        raise ValueError(f"{field} must contain only non-blank strings")
     return tuple(cast(str, value) for value in values)
 
 
