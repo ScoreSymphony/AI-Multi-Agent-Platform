@@ -359,9 +359,7 @@ def build_single_node_deployment(
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
     authorization_gate = AuthorizationGate(authorization)
     capability_assignments = CapabilityAssignmentService(
-        repository=JsonCapabilityAssignmentRepository(
-            database_dir / "capability-assignments.json"
-        ),
+        repository=JsonCapabilityAssignmentRepository(database_dir / "capability-assignments.json"),
         capabilities=capabilities,
         targets=CallableCapabilityAssignmentTargetResolver(
             get_agent=agents.repository.get_agent,
