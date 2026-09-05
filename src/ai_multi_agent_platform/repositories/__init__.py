@@ -27,6 +27,7 @@ from .models import (
     RepositoryVisibility,
     validate_git_revision,
 )
+from .persistence import SqliteRepositoryProvenanceStore
 from .run_integration import RepositoryRunArtifactBundle, RepositoryRunIntegration
 from .service import (
     RepositoryBinding,
@@ -66,6 +67,7 @@ __all__ = [
     "RepositoryTreeEntry",
     "RepositoryVisibility",
     "RepositoryWorkspaceSourceResolver",
+    "SqliteRepositoryProvenanceStore",
     "repository_capability",
     "repository_capability_specs",
     "repository_platform_event_id",
