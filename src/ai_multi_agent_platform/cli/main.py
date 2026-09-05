@@ -21,6 +21,7 @@ from .client import (
     HTTPTransport,
     TransportError,
 )
+from .compute import add_compute_parsers, doctor_compute, execute_compute
 from .evaluation import add_evaluation_parser, execute_evaluation
 from .memory_knowledge import (
     add_memory_knowledge_parsers,
@@ -53,6 +54,7 @@ def run_cli(
     transport: HTTPTransport | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
+    stdin: TextIO | None = None,
 ) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -62,6 +64,9 @@ def run_cli(
         stdout=stdout,
         stderr=stderr,
     )
+    previous_stdin = sys.stdin
+    if stdin is not None:
+        sys.stdin = stdin
     try:
         store = ProfileStore.load(Path(args.config).expanduser())
         if args.area == "profile":
@@ -98,6 +103,9 @@ def run_cli(
     except TransportError as exc:
         renderer.error(exc)
         return 4
+    finally:
+        if stdin is not None:
+            sys.stdin = previous_stdin
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -139,6 +147,7 @@ def _build_parser() -> argparse.ArgumentParser:
     add_memory_knowledge_parsers(areas)
     add_onboarding_parser(areas)
     add_portability_parser(areas)
+    add_compute_parsers(areas)
 
     profile = areas.add_parser("profile", help="manage non-secret target profiles")
     profile.set_defaults(area="profile")
@@ -420,6 +429,8 @@ def _execute(
         return CommandResult(execute_knowledge(args, client, _require_confirmation))
     if args.area == "portability":
         return CommandResult(execute_portability(args, client))
+    if args.area in {"node", "worker", "worker-job"}:
+        return CommandResult(execute_compute(args, client, _require_confirmation))
     if args.area == "project":
         return _project_command(args, client, profile)
     if args.area == "workspace":
@@ -528,6 +539,10 @@ def _doctor(client: ControlPlaneClient) -> CommandResult:
                 "message": f"unsupported API version: {api_version}",
             }
         )
+    if not blocking:
+        compute_status, compute_checks = doctor_compute(client)
+        degraded = degraded or compute_status == "degraded"
+        checks.extend(compute_checks)
     summary = "blocking" if blocking else "degraded" if degraded else "healthy"
     return CommandResult(
         ClientResponse(

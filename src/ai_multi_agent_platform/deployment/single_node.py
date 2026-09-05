@@ -21,7 +21,7 @@ from ai_multi_agent_platform.control_plane import (
     evaluation_command_handlers,
     evaluation_resource_services,
 )
-from ai_multi_agent_platform.control_plane.portability_api import ControlPlane
+from ai_multi_agent_platform.control_plane.approval_portability_composition import ControlPlane
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
     ConversationService,
@@ -52,6 +52,7 @@ from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
 from ai_multi_agent_platform.security import (
     ActorType,
+    AuthorizationGate,
     LocalAuthenticationService,
     LocalPrincipalPolicy,
     LocalUserAccount,
@@ -373,6 +374,7 @@ def build_single_node_deployment(
         conversation_file_provider=files,
         conversation_response_provider=conversation_response_provider,
         portability_workflow=portability_workflow,
+        approval_gate=AuthorizationGate(authorization),
     )
     for collection, service in evaluation_resource_services(evaluation_composition.service).items():
         control_plane.register_resource_service(collection, service)

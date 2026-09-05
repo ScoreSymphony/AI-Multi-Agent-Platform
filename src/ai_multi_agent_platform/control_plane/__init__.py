@@ -1,5 +1,15 @@
 """Versioned platform-owned northbound Control Plane."""
 
+from .approval_decision_composition import (
+    APPROVAL_APPROVE_COMMAND,
+    APPROVAL_DECISION_COMMANDS,
+    APPROVAL_DENY_COMMAND,
+    AuthenticatedControlPlaneHTTP,
+    ControlPlane,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
+)
 from .automation_api import (
     AUTOMATION_COLLECTION,
     AUTOMATION_COMMANDS,
@@ -11,12 +21,6 @@ from .conversation_api import (
     CONVERSATION_COLLECTIONS,
     CONVERSATION_COMMANDS,
     CONVERSATION_MESSAGE_COLLECTION,
-)
-from .conversation_current_composition import (
-    AuthenticatedControlPlaneHTTP,
-    ControlPlaneASGI,
-    ControlPlaneHTTP,
-    build_openapi,
 )
 from .evaluation_contract import (
     EVALUATION_COLLECTIONS,
@@ -68,7 +72,6 @@ from .organization_api import (
 )
 from .organization_audit_api import (
     ORGANIZATION_AUDIT_COLLECTION,
-    ControlPlane,
     OrganizationAuditLog,
 )
 from .plugin_api import (
@@ -100,6 +103,9 @@ __all__ = [
     "APIError",
     "APIException",
     "API_VERSION",
+    "APPROVAL_APPROVE_COMMAND",
+    "APPROVAL_DECISION_COMMANDS",
+    "APPROVAL_DENY_COMMAND",
     "AUTOMATION_COLLECTION",
     "AUTOMATION_COMMANDS",
     "AUTOMATION_STATE_ENV",
