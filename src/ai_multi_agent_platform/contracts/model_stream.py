@@ -1,17 +1,15 @@
-"""Provider-neutral model streaming contracts and events."""
+"""Provider-neutral model streaming events."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol, runtime_checkable
 
-from .types import AdapterMetadata, JsonValue, ModelRequest, ModelResponse
+from .types import AdapterMetadata, JsonValue, ModelResponse
 
 
 class ModelStreamEventKind(StrEnum):
-    """Canonical event kinds emitted by streaming model providers."""
+    """Canonical event kinds emitted by model providers."""
 
     TEXT_DELTA = "text_delta"
     COMPLETED = "completed"
@@ -56,15 +54,3 @@ class ModelStreamEvent:
             raise ValueError("completed model stream events require a final response")
         if self.response.request_id != self.request_id:
             raise ValueError("stream event and final response request_id must match")
-
-
-@runtime_checkable
-class StreamingModelProvider(Protocol):
-    """Optional streaming extension for the canonical ``ModelProvider`` seam.
-
-    Providers that can stream implement this structural extension. ``ModelRuntime``
-    keeps ordinary ``ModelProvider`` implementations compatible through a deterministic
-    one-chunk fallback built from ``generate``.
-    """
-
-    def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]: ...
