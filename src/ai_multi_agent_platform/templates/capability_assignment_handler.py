@@ -230,7 +230,7 @@ def _compatibility(data: Mapping[str, object]) -> CapabilityCompatibilityRequest
         minimum_version=_optional_string(data, "minimum_version"),
         maximum_version=_optional_string(data, "maximum_version"),
         include_minimum=_optional_bool(data, "include_minimum", default=True),
-        include_maximum=_optional_bool(data, "include_maximum", default=True),
+        include_maximum=_optional_bool(data, "include_maximum", default=False),
         required_features=required_features,
     )
 
