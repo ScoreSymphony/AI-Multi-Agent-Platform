@@ -362,6 +362,7 @@ def build_single_node_deployment(
         verification,
         verification_completion,
         verification_evidence,
+        verification_runtime,
     )
     control_plane.bind_observability_timeline(VerificationTimelineReader(verification))
 
