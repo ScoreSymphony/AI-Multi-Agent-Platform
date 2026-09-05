@@ -35,7 +35,7 @@ jobs:
           replace_once(
               "src/ai_multi_agent_platform/repositories/control_plane.py",
               '''    control_plane.register_resource_service(\n        REPOSITORY_COLLECTION,\n        RepositoryResourceService(repositories),\n    )\n\n    async def branches(''',
-              '''    control_plane.register_resource_service(\n        REPOSITORY_COLLECTION,\n        RepositoryResourceService(repositories),\n    )\n    if management is not None:\n        # #44 discovers this hook dynamically at Connection-removal time, so registration order\n        # does not matter and repository bindings cannot outlive their canonical Connection.\n        setattr(\n            control_plane,\n            "connector_connection_removal_hook",\n            management.detach_connection,\n        )\n\n    async def branches(''',
+              '''    control_plane.register_resource_service(\n        REPOSITORY_COLLECTION,\n        RepositoryResourceService(repositories),\n    )\n    if management is not None:\n        # #44 discovers this hook dynamically at Connection-removal time, so registration order\n        # does not matter and repository bindings cannot outlive their canonical Connection.\n        setattr(  # noqa: B010\n            control_plane,\n            "connector_connection_removal_hook",\n            management.detach_connection,\n        )\n\n    async def branches(''',
           )
           replace_once(
               "src/ai_multi_agent_platform/repositories/control_plane.py",
@@ -97,13 +97,19 @@ jobs:
               '''        approval_gate,\n        managed_local_root=config.repositories_dir,\n    )''',
               '''        approval_gate,\n        managed_local_root=config.repositories_dir,\n        discovery_resolver=repository_discovery_resolver,\n    )''',
           )
+          replace_once(
+              "tests/test_issue_82_search_lifecycle_hardening.py",
+              '''        # Run input/output provenance remains canonical Repository provenance, not derived Search state.\n''',
+              '''        # Run input/output provenance remains canonical Repository provenance,\n        # not derived Search state.\n''',
+          )
           PY
       - name: Install project tooling
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-      - name: Format audited changes
+      - name: Normalize audited changes
         run: |
+          ruff check --fix src/ai_multi_agent_platform/connectors/service.py src/ai_multi_agent_platform/connectors/control_plane.py src/ai_multi_agent_platform/repositories/control_plane.py src/ai_multi_agent_platform/repositories/management.py src/ai_multi_agent_platform/repositories/connector_bootstrap.py src/ai_multi_agent_platform/deployment/single_node.py tests/test_issue_82_search_lifecycle_hardening.py
           ruff format src/ai_multi_agent_platform/connectors/service.py src/ai_multi_agent_platform/connectors/control_plane.py src/ai_multi_agent_platform/repositories/control_plane.py src/ai_multi_agent_platform/repositories/management.py src/ai_multi_agent_platform/repositories/connector_bootstrap.py src/ai_multi_agent_platform/deployment/single_node.py tests/test_issue_82_search_lifecycle_hardening.py
       - name: Validate targeted issue 82 hardening
         run: |
