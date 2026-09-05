@@ -132,7 +132,7 @@ def _post(
 
 
 def test_conversation_creation_pins_omitted_agent_and_team_revisions(tmp_path: Path) -> None:
-    agents, _, _, http, _ = _stack(tmp_path)
+    agents, conversations, _, http, _ = _stack(tmp_path)
     owner = OwnerRef(type="user", id=ACTOR.owner_id)
     agent = agents.create_agent(_profile("Pinned Agent"), owner_ref=owner)
     teammate = agents.create_agent(_profile("Pinned Teammate"), owner_ref=owner)
@@ -195,10 +195,10 @@ def test_conversation_creation_pins_omitted_agent_and_team_revisions(tmp_path: P
         _profile("Updated Agent"),
         expected_revision=agent.revision,
     )
-    persisted_target = cast(
-        dict[str, JsonValue],
-        cast(dict[str, JsonValue], agent_conversation["metadata"])["target"],
-    )
+    persisted = _run(conversations.get_conversation(cast(str, agent_conversation["id"])))
+    assert persisted.default_agent is not None
+    assert persisted.default_agent.revision == agent.revision
+    persisted_target = cast(dict[str, JsonValue], persisted.metadata["target"])
     assert persisted_target["revision"] == agent.revision
 
 
