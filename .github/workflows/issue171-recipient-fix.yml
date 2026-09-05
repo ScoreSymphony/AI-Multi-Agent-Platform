@@ -1,0 +1,46 @@
+name: Issue 171 temporary recipient fixer
+
+on:
+  push:
+    branches:
+      - issue-171-runtime-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    if: github.repository == 'ScoreSymphony/AI-Multi-Agent-Platform'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: issue-171-runtime-hardening
+      - name: Use canonical notification recipient ID
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/test_issue171_accounting_integrations.py')
+          text = path.read_text()
+          anchor = '    project_id = new_id("project")\n    budget = UsageBudget(\n'
+          replacement = '    project_id = new_id("project")\n    recipient_id = new_id("user")\n    budget = UsageBudget(\n'
+          if anchor not in text:
+              raise SystemExit('expected threshold test anchor not found')
+          text = text.replace(anchor, replacement, 1)
+          target = 'RecipientRef(RecipientType.USER, "alice")'
+          if text.count(target) != 3:
+              raise SystemExit(f'expected 3 legacy recipient references, found {text.count(target)}')
+          text = text.replace(target, 'RecipientRef(RecipientType.USER, recipient_id)')
+          path.write_text(text)
+          PY
+          git rm .github/workflows/issue171-recipient-fix.yml
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/test_issue171_accounting_integrations.py
+          git commit -m 'test(accounting): use canonical budget notification recipient'
+          git push origin HEAD:issue-171-runtime-hardening
