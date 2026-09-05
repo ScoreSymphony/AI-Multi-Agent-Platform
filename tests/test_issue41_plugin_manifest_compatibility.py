@@ -55,10 +55,7 @@ def test_required_plugin_with_unsupported_manifest_version_blocks_preflight(
     assert check.details["manifest_version"] == "0"
     reasons = check.details["reasons"]
     assert isinstance(reasons, list)
-    assert any(
-        isinstance(reason, str) and "manifest version" in reason
-        for reason in reasons
-    )
+    assert any(isinstance(reason, str) and "manifest version" in reason for reason in reasons)
 
 
 def test_missing_required_plugin_manifest_blocks_preflight(tmp_path: Path) -> None:
