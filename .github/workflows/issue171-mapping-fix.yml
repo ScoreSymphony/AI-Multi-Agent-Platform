@@ -1,0 +1,47 @@
+name: Issue 171 temporary mapping fixer
+
+on:
+  push:
+    branches:
+      - issue-171-runtime-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    if: github.repository == 'ScoreSymphony/AI-Multi-Agent-Platform'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: issue-171-runtime-hardening
+      - name: Apply covariant Mapping annotation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/ai_multi_agent_platform/control_plane/organization_runtime_composition.py')
+          text = path.read_text()
+          old_import = 'from typing import TYPE_CHECKING, Any, Literal, cast\n'
+          new_import = 'from collections.abc import Mapping\nfrom typing import TYPE_CHECKING, Any, Literal, cast\n'
+          if old_import not in text:
+              raise SystemExit('expected typing import not found')
+          text = text.replace(old_import, new_import, 1)
+          old_type = '        services: dict[str, ResourceService]\n'
+          new_type = '        services: Mapping[str, ResourceService]\n'
+          if old_type not in text:
+              raise SystemExit('expected services annotation not found')
+          text = text.replace(old_type, new_type, 1)
+          path.write_text(text)
+          PY
+          git rm .github/workflows/issue171-mapping-fix.yml
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ai_multi_agent_platform/control_plane/organization_runtime_composition.py
+          git commit -m 'fix(accounting): use covariant resource-service mapping'
+          git push origin HEAD:issue-171-runtime-hardening
