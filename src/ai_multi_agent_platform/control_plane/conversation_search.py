@@ -1,6 +1,6 @@
 """Privacy-safe global Search integration for canonical Conversations (#289).
 
-Search remains derived discovery state.  Conversation/Message lifecycle, retention and
+Search remains derived discovery state. Conversation/Message lifecycle, retention and
 access decisions stay owned by the canonical #72 domain and are re-checked before a
 Search result can become caller-visible.
 """
@@ -23,11 +23,7 @@ from ai_multi_agent_platform.conversations import (
 )
 from ai_multi_agent_platform.search import SearchResult
 
-from .conversation_api import (
-    CONVERSATION_COLLECTION,
-    CONVERSATION_MESSAGE_COLLECTION,
-    _conversation_allowed,
-)
+from .conversation_api import CONVERSATION_COLLECTION, CONVERSATION_MESSAGE_COLLECTION
 from .extensions import ResourceService
 from .models import PageQuery, RequestContext
 
@@ -151,7 +147,7 @@ async def conversation_search_result_allowed(
 ) -> bool | None:
     """Re-authorize Conversation Search hits against canonical #72 state.
 
-    ``None`` means this result belongs to another domain.  Conversation results never
+    ``None`` means this result belongs to another domain. Conversation results never
     authorize from SearchDocument scope metadata alone: the canonical Conversation is
     loaded again so stale or forged derived index state cannot reveal private existence.
     """
@@ -167,7 +163,7 @@ async def conversation_search_result_allowed(
             now=datetime.now(UTC),
         ):
             return False
-        return await _conversation_allowed(
+        return await _canonical_conversation_allowed(
             control_plane,
             context,
             "conversation:list",
@@ -186,7 +182,7 @@ async def conversation_search_result_allowed(
             now=datetime.now(UTC),
         ):
             return False
-        return await _conversation_allowed(
+        return await _canonical_conversation_allowed(
             control_plane,
             context,
             "conversation-message:list",
@@ -194,6 +190,24 @@ async def conversation_search_result_allowed(
         )
 
     return None
+
+
+async def _canonical_conversation_allowed(
+    control_plane: _ConversationSearchControlPlane,
+    context: RequestContext,
+    action: str,
+    conversation: Conversation,
+) -> bool:
+    """Mirror #72's private-owner rule before consulting platform authorization."""
+
+    if conversation.project_id is None and conversation.owner_ref != context.actor.principal_ref:
+        return False
+    return await control_plane._allowed(
+        context,
+        action,
+        conversation.id,
+        project_id=conversation.project_id,
+    )
 
 
 def _conversation_indexable(
