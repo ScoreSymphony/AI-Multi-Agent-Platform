@@ -104,6 +104,27 @@ class RepositoryService:
         self._registry = registry
         self._authorization = authorization
 
+    async def read(
+        self,
+        repository_id: str,
+        context: RepositoryCallContext,
+    ) -> RepositoryReference:
+        binding = self._registry.resolve(repository_id)
+        await self._enforce(binding.reference, RepositoryOperation.READ, context)
+        return await binding.provider.read(binding.reference, context.operation)
+
+    async def list(
+        self,
+        context: RepositoryCallContext,
+        *,
+        connection_id: str | None = None,
+    ) -> tuple[RepositoryReference, ...]:
+        visible: list[RepositoryReference] = []
+        for binding in self._registry.list(connection_id=connection_id):
+            await self._enforce(binding.reference, RepositoryOperation.READ, context)
+            visible.append(await binding.provider.read(binding.reference, context.operation))
+        return tuple(visible)
+
     async def status(self, repository_id: str, context: RepositoryCallContext) -> RepositoryStatus:
         binding = self._registry.resolve(repository_id)
         await self._enforce(binding.reference, RepositoryOperation.STATUS, context)
