@@ -8,6 +8,14 @@ from .capabilities import (
     repository_capability,
     repository_capability_specs,
 )
+from .catalog import (
+    RepositoryBindingRecord,
+    RepositoryProviderFactory,
+    RepositoryRegistryBootstrap,
+    SqliteRepositoryBindingCatalog,
+    connector_repository_factory,
+    local_git_repository_factory,
+)
 from .connector_repository import ConnectorRepositoryProvider
 from .contracts import RepositoryProvider
 from .events import RepositoryEventBridge, repository_platform_event_id, repository_resource_payload
@@ -46,6 +54,7 @@ __all__ = [
     "LocalGitRepositoryProvider",
     "READ_OPERATIONS",
     "RepositoryBinding",
+    "RepositoryBindingRecord",
     "RepositoryCallContext",
     "RepositoryCapability",
     "RepositoryCommit",
@@ -55,8 +64,10 @@ __all__ = [
     "RepositoryOperation",
     "RepositoryProvenanceStore",
     "RepositoryProvider",
+    "RepositoryProviderFactory",
     "RepositoryReference",
     "RepositoryRegistry",
+    "RepositoryRegistryBootstrap",
     "RepositoryRevision",
     "RepositoryRunArtifactBundle",
     "RepositoryRunIntegration",
@@ -67,7 +78,10 @@ __all__ = [
     "RepositoryTreeEntry",
     "RepositoryVisibility",
     "RepositoryWorkspaceSourceResolver",
+    "SqliteRepositoryBindingCatalog",
     "SqliteRepositoryProvenanceStore",
+    "connector_repository_factory",
+    "local_git_repository_factory",
     "repository_capability",
     "repository_capability_specs",
     "repository_platform_event_id",
