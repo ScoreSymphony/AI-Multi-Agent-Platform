@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 
 import pytest
 
+from ai_multi_agent_platform.adapters import HttpJsonResponse
 from ai_multi_agent_platform.adapters.onboarding_openai_compatible import (
     OpenAICompatibleOnboardingAdapter,
 )
+from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
@@ -33,6 +35,8 @@ from ai_multi_agent_platform.observability import (
     ObservedModelProvider,
     Telemetry,
 )
+from ai_multi_agent_platform.onboarding import OnboardingModelEndpoint
+from ai_multi_agent_platform.security import SecretReference
 
 
 class NativeStreamingProvider(ModelProvider):
@@ -146,6 +150,56 @@ class BlockingCancellationProvider(ModelProvider):
             )
             await asyncio.Event().wait()
             raise AssertionError("cancelled stream unexpectedly resumed")
+
+        return iterate()
+
+
+class CredentialStreamingTransport:
+    def __init__(self) -> None:
+        self.stream_headers: list[Mapping[str, str]] = []
+
+    async def request_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        payload: Mapping[str, JsonValue] | None,
+        timeout_seconds: float,
+    ) -> HttpJsonResponse:
+        del method, url, headers, payload, timeout_seconds
+        return HttpJsonResponse(200, {"data": [{"id": "native-secret-stream"}]})
+
+    def stream_json(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        payload: Mapping[str, JsonValue] | None,
+        timeout_seconds: float,
+    ) -> AsyncIterator[HttpJsonResponse]:
+        del method, url, payload, timeout_seconds
+        self.stream_headers.append(dict(headers))
+
+        async def iterate() -> AsyncIterator[HttpJsonResponse]:
+            yield HttpJsonResponse(
+                200,
+                {"choices": [{"delta": {"content": "secret "}, "finish_reason": None}]},
+            )
+            yield HttpJsonResponse(
+                200,
+                {
+                    "choices": [{"delta": {"content": "stream"}, "finish_reason": None}],
+                },
+            )
+            yield HttpJsonResponse(
+                200,
+                {
+                    "choices": [{"delta": {}, "finish_reason": "stop"}],
+                    "usage": {"total_tokens": 7},
+                },
+            )
 
         return iterate()
 
@@ -270,3 +324,58 @@ def test_runtime_maps_stream_consumer_cancellation_to_canonical_error() -> None:
     assert error.retryable is False
     assert error.details["request_id"] == "cancel-stream"
     assert error.details["model_config_id"] == "model-issue-10-completion"
+
+
+def test_onboarding_secret_wrapper_preserves_native_streaming() -> None:
+    async def scenario() -> tuple[tuple[ModelStreamEvent, ...], CredentialStreamingTransport]:
+        reference = SecretReference(
+            provider="local-secrets",
+            secret_id="stream-token",
+            scope="platform",
+        )
+        secrets = LocalSecretProvider()
+        await secrets.create(
+            reference,
+            "secret-stream-token",
+            purpose="model-provider-auth",
+            allowed_consumers=("model-provider:secret-stream-provider",),
+            allowed_purposes=("model-provider-auth",),
+        )
+        transport = CredentialStreamingTransport()
+        adapter = OpenAICompatibleOnboardingAdapter(
+            transport=transport,
+            secret_provider=secrets,
+        )
+        provider = adapter.build_provider(
+            OnboardingModelEndpoint(
+                provider_id="secret-stream-provider",
+                base_url="http://127.0.0.1:8000/v1",
+                models={"model-secret-stream": "native-secret-stream"},
+                credential_ref=reference,
+            )
+        )
+        events = await collect(
+            provider.stream(
+                ModelRequest(
+                    request_id="credential-stream",
+                    messages=("hello",),
+                    context=OperationContext(correlation_id="corr-credential-stream"),
+                    requirements={"model_config_id": "model-secret-stream", "streaming": True},
+                )
+            )
+        )
+        return events, transport
+
+    events, transport = asyncio.run(scenario())
+
+    assert [event.kind for event in events] == [
+        ModelStreamEventKind.TEXT_DELTA,
+        ModelStreamEventKind.TEXT_DELTA,
+        ModelStreamEventKind.COMPLETED,
+    ]
+    assert [event.text_delta for event in events[:-1]] == ["secret ", "stream"]
+    assert transport.stream_headers == [{
+        "Accept": "text/event-stream",
+        "Content-Type": "application/json",
+        "Authorization": "Bearer secret-stream-token",
+    }]
