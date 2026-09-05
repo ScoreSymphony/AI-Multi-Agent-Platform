@@ -16,6 +16,7 @@ from .models import (
     RepositoryCommitInfo,
     RepositoryDiff,
     RepositoryIssueState,
+    RepositoryOperation,
     RepositoryReference,
     RepositoryRevision,
 )
@@ -81,6 +82,26 @@ class RepositoryResourceService(ResourceService):
         # avoiding provider reads and synthetic authorization identities.
         bindings = self._repositories._registry.list()  # noqa: SLF001
         return tuple(_repository_search_resource(binding) for binding in bindings)
+
+    async def search_result_allowed(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> bool:
+        """Re-evaluate canonical Repository policy without provider reads or content access."""
+
+        try:
+            binding = self._repositories._registry.resolve(resource_id)  # noqa: SLF001
+            await self._repositories._enforce(  # noqa: SLF001
+                binding,
+                RepositoryOperation.READ,
+                _call_context(context),
+            )
+        except ContractError as exc:
+            if exc.code in {ErrorCode.NOT_FOUND, ErrorCode.UNAUTHORIZED, ErrorCode.FORBIDDEN}:
+                return False
+            raise
+        return True
 
     async def get_resource(
         self,
