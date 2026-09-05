@@ -15,6 +15,11 @@ from ai_multi_agent_platform.agents import (
     register_standard_agent_control_plane,
 )
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
+from ai_multi_agent_platform.capability_assignments import (
+    CallableCapabilityAssignmentTargetResolver,
+    CapabilityAssignmentService,
+    JsonCapabilityAssignmentRepository,
+)
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
@@ -60,6 +65,7 @@ from ai_multi_agent_platform.onboarding import (
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
 from ai_multi_agent_platform.repositories import (
+    RepositoryEventRuntimeIngress,
     RepositoryManagementService,
     RepositoryRegistry,
     RepositoryRunIntegration,
@@ -92,6 +98,7 @@ from ai_multi_agent_platform.templates import (
     WorkspaceStructureTemplateExporter,
     register_agent_template_handlers,
     register_automation_template_handler,
+    register_capability_assignment_template_handler,
     register_project_template_handler,
     register_workspace_structure_template_handler,
 )
@@ -156,10 +163,12 @@ class SingleNodeDeployment:
     repository_management: RepositoryManagementService
     repository_run_integration: RepositoryRunIntegration
     repository_workspace_execution: RepositoryWorkspaceExecutionCoordinator
+    repository_event_ingress: RepositoryEventRuntimeIngress
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
     capabilities: CapabilityRegistry
+    capability_assignments: CapabilityAssignmentService
     models: ModelRegistry
     model_runtime: ModelRuntime
     onboarding: OnboardingService
@@ -304,6 +313,10 @@ def build_single_node_deployment(
         repository_provenance,
         fallback_workspace=_REFERENCE_EXECUTION_WORKSPACE,
     )
+    repository_event_ingress = RepositoryEventRuntimeIngress(
+        repository_registry,
+        kernel_repository,
+    )
     evaluation_project = scopes.create_project(
         key=_EVALUATION_PROJECT_KEY,
         name="Platform Evaluation",
@@ -423,6 +436,17 @@ def build_single_node_deployment(
         kernel,
     )
     repository_workspace_execution.configure_run_integration(repository_run_integration)
+    capability_assignments = CapabilityAssignmentService(
+        repository=JsonCapabilityAssignmentRepository(database_dir / "capability-assignments.json"),
+        capabilities=capabilities,
+        targets=CallableCapabilityAssignmentTargetResolver(
+            get_agent=agents.repository.get_agent,
+            get_team=agents.repository.get_team,
+            get_project=scopes.get_project,
+        ),
+        authorization=approval_gate,
+    )
+    register_capability_assignment_template_handler(template_handlers, capability_assignments)
 
     evaluation_evidence_providers: list[EvaluationEvidenceProvider] = []
     if accounting_service is not None:
@@ -513,6 +537,18 @@ def build_single_node_deployment(
             capability.capability_id
             for capability in capabilities.inventory_capabilities(include_unavailable=False)
         ),
+        capability_versions=lambda: (
+            (capability.capability_id, capability.version)
+            for capability in capabilities.inventory_capabilities(include_unavailable=False)
+        ),
+        grantable_permissions=lambda context: (
+            action.value
+            for action in authorization.globally_grantable_actions(
+                context.actor.principal_ref,
+                actor_type=context.actor.actor_type,
+            )
+        ),
+        platform_version=__version__,
     )
     register_template_control_plane(
         control_plane,
@@ -566,10 +602,12 @@ def build_single_node_deployment(
         repository_management=repository_management,
         repository_run_integration=repository_run_integration,
         repository_workspace_execution=repository_workspace_execution,
+        repository_event_ingress=repository_event_ingress,
         agents=agents,
         conversations=conversations,
         agent_runtime=agent_runtime,
         capabilities=capabilities,
+        capability_assignments=capability_assignments,
         models=models,
         model_runtime=model_runtime,
         onboarding=onboarding,
