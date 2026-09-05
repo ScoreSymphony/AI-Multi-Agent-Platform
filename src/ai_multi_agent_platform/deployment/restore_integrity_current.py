@@ -196,9 +196,7 @@ def _validate_notifications(deployment: SingleNodeDeployment, index: _CurrentInd
 
         automation_id = _optional_string(item, "automation_id", entity)
         if automation_id is not None and automation_id not in index.automation_ids:
-            raise RestoreValidationError(
-                f"{entity} references missing automation {automation_id}"
-            )
+            raise RestoreValidationError(f"{entity} references missing automation {automation_id}")
         verification_id = _optional_string(item, "verification_id", entity)
         if verification_id is not None and verification_id not in index.verification_ids:
             raise RestoreValidationError(
@@ -261,9 +259,7 @@ def _validate_notifications(deployment: SingleNodeDeployment, index: _CurrentInd
         entity = f"notification delivery {attempt_id}"
         notification = str(notification_id)
         if notification not in notification_ids:
-            raise RestoreValidationError(
-                f"{entity} references missing notification {notification}"
-            )
+            raise RestoreValidationError(f"{entity} references missing notification {notification}")
         item = _json_document(str(payload), entity)
         if _required_string(item, "id") != str(attempt_id):
             raise RestoreValidationError(f"{entity} payload identity is inconsistent")
@@ -336,10 +332,14 @@ def _validate_templates(deployment: SingleNodeDeployment, index: _CurrentIndex) 
                         f"{dependency.template_id}@{dependency.revision}"
                     )
             source_template = revision.content.provenance.source_template
-            if source_template is not None and (
-                source_template.template_id,
-                source_template.revision,
-            ) not in revision_refs:
+            if (
+                source_template is not None
+                and (
+                    source_template.template_id,
+                    source_template.revision,
+                )
+                not in revision_refs
+            ):
                 raise RestoreValidationError(
                     f"{entity} references missing provenance source "
                     f"{source_template.template_id}@{source_template.revision}"
@@ -423,7 +423,9 @@ def _validate_owner(
         try:
             deployment.agents.repository.get_agent(owner_id)
         except ContractError as exc:
-            raise RestoreValidationError(f"{entity} references missing agent owner {owner_id}") from exc
+            raise RestoreValidationError(
+                f"{entity} references missing agent owner {owner_id}"
+            ) from exc
     if owner_type in {"agent_team", "agent-team"}:
         try:
             deployment.agents.repository.get_team(owner_id)
@@ -466,7 +468,9 @@ def _validate_resource_reference(
         try:
             deployment.agents.repository.get_agent(resource_id)
         except ContractError as exc:
-            raise RestoreValidationError(f"{entity} references missing agent {resource_id}") from exc
+            raise RestoreValidationError(
+                f"{entity} references missing agent {resource_id}"
+            ) from exc
     if resource_type in {"agent_team", "agent-team"}:
         try:
             deployment.agents.repository.get_team(resource_id)
