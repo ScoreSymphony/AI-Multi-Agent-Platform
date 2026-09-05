@@ -8,6 +8,7 @@ references remain interpretable after later edits or provider replacement.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Protocol
@@ -645,6 +646,7 @@ class AuthorizationPolicyProfileService:
         """Authorize and atomically persist dormant, untrusted imported configuration."""
 
         self._validate_import_candidate(definition, revisions)
+        fingerprint = hashlib.sha256(repr((definition, revisions)).encode("utf-8")).hexdigest()
         await self._enforce(
             action=AuthorizationAction.CREATE,
             resource_id=definition.policy_profile_id,
@@ -652,7 +654,10 @@ class AuthorizationPolicyProfileService:
             project_id=definition.project_id,
             organization_id=definition.organization_id,
             team_id=definition.team_id,
-            payload_ref=f"{definition.policy_profile_id}@import:{definition.current_revision}",
+            payload_ref=(
+                f"{definition.policy_profile_id}@import:{definition.current_revision}:"
+                f"sha256:{fingerprint}"
+            ),
             side_effect="policy_profile_import",
             risk=RiskClassification.CRITICAL,
         )
