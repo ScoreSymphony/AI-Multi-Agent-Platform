@@ -95,7 +95,10 @@ class RepositoryEventRuntimeIngress:
         *,
         ingress_correlation_id: str,
     ) -> PlatformEvent:
-        """Bind one normalized event to the canonical project stream without losing ingress trace."""
+        """Bind one normalized event to the canonical project stream.
+
+        Preserve the original ingress correlation separately for diagnostics and provenance.
+        """
 
         stream_id = event.project_id
         if stream_id is None:
