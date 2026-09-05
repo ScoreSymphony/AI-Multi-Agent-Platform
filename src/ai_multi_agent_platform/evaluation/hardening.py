@@ -55,7 +55,7 @@ def _strict_json_copy(value: object) -> JsonValue:
     if isinstance(value, (list, tuple)):
         return [_strict_json_copy(item) for item in value]
     raise TypeError(
-        "evaluation assertion evidence contains a non-JSON value: " f"{type(value).__name__}"
+        f"evaluation assertion evidence contains a non-JSON value: {type(value).__name__}"
     )
 
 
