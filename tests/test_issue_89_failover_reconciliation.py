@@ -194,9 +194,13 @@ def test_restart_promotion_reconciles_running_work_and_preserves_worker_identity
         runtime.attach_worker(LocalWorker(worker.worker_id, lifecycle))
         job = _job(worker.worker_id)
 
-        initial = await runtime.dispatch(job, now=NOW)
-        assert initial.state is DispatchState.RUNNING
+        accepted = await runtime.dispatch(job, now=NOW)
+        assert accepted.state is DispatchState.DISPATCHED
         assert len(lifecycle.start_calls) == 1
+
+        observed = await runtime.reconcile(now=NOW + timedelta(seconds=1))
+        running = next(record for record in observed if record.job.worker_job_id == job.worker_job_id)
+        assert running.state is DispatchState.RUNNING
         assert registry.active_reservations()
 
         clock = MutableClock(NOW + RESERVATION_TTL + timedelta(milliseconds=1))
