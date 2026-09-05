@@ -16,6 +16,7 @@ from ai_multi_agent_platform.accounting import (
 )
 from ai_multi_agent_platform.agents import (
     AgentDefinition,
+    AgentExecutionSpec,
     AgentInstructions,
     AgentProfile,
     AgentRevision,
@@ -30,7 +31,7 @@ from ai_multi_agent_platform.agents import (
     InstructionSource,
     OrchestratorMapping,
 )
-from ai_multi_agent_platform.contracts import OperationContext, WorkerDescriptor
+from ai_multi_agent_platform.contracts import ExecutionHandle, OperationContext, WorkerDescriptor
 from ai_multi_agent_platform.contracts.types import ExecutionRequest
 from ai_multi_agent_platform.control_plane.models import ActorContext, PageQuery, RequestContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
@@ -55,6 +56,7 @@ from ai_multi_agent_platform.messaging import (
 from ai_multi_agent_platform.observability import (
     AccountingBridgeExporter,
     InMemoryExporter,
+    MetricRecord,
     ObservedWorkerProvider,
     Telemetry,
     TelemetryContext,
@@ -67,7 +69,12 @@ from ai_multi_agent_platform.organizations.accounting import (
     DEFAULT_ACCOUNTING_AGGREGATE_POLICY_REF,
     organization_accounting_resource_services,
 )
-from ai_multi_agent_platform.organizations.models import Membership, MembershipStatus, Organization, Team
+from ai_multi_agent_platform.organizations.models import (
+    Membership,
+    MembershipStatus,
+    Organization,
+    Team,
+)
 from ai_multi_agent_platform.organizations.repository import InMemoryOrganizationRepository
 from ai_multi_agent_platform.organizations.service import OrganizationService
 from ai_multi_agent_platform.security.authorization import ActorType
@@ -119,23 +126,25 @@ def _agent_fixture() -> tuple[
     repository = InMemoryAgentRepository()
     owner = OwnerRef(type="user", id="alice")
     agent_id = new_id("agent")
-    agent_profile = AgentProfile(
+    profile = AgentProfile(
         name="Accounting executor",
         role="execute canonical work",
-        instructions=AgentInstructions(role=InstructionSource(content="Execute the task.")),
+        instructions=AgentInstructions(
+            role=InstructionSource(content="Execute the task."),
+        ),
     )
-    agent_revision = AgentRevision(
+    revision = AgentRevision(
         agent_id=agent_id,
         revision=1,
-        profile=agent_profile,
+        profile=profile,
         owner_ref=owner,
     )
-    agent_definition = AgentDefinition(
+    definition = AgentDefinition(
         agent_id=agent_id,
         owner_ref=owner,
         current_revision=1,
     )
-    repository.create_agent(agent_definition, agent_revision)
+    repository.create_agent(definition, revision)
 
     team_id = new_id("team")
     team_revision = AgentTeamRevision(
@@ -161,11 +170,56 @@ def _agent_fixture() -> tuple[
     return (
         repository,
         AgentRuntime(AgentService(repository)),
-        agent_definition,
-        agent_revision,
+        definition,
+        revision,
         team_definition,
         team_revision,
     )
+
+
+class _ReplacementMapper:
+    adapter_id = "replacement-orchestrator"
+
+    async def map_agent(self, spec: AgentExecutionSpec) -> OrchestratorMapping:
+        return OrchestratorMapping(
+            adapter_id=self.adapter_id,
+            runtime_ref=f"replacement:{spec.agent_revision.agent_id}:{spec.run_id}",
+            metadata={},
+        )
+
+
+class _TransportingWorkerProvider(FakeWorkerProvider):
+    def __init__(
+        self,
+        *,
+        workers: tuple[WorkerDescriptor, ...],
+        hierarchy: TraceHierarchy,
+        transport: InProcessMessageTransport,
+        topic: str,
+    ) -> None:
+        super().__init__(workers=workers)
+        self._hierarchy = hierarchy
+        self._transport = transport
+        self._topic = topic
+
+    async def dispatch(
+        self,
+        worker_id: str,
+        request: ExecutionRequest,
+    ) -> ExecutionHandle:
+        envelope = inject_trace_carrier(
+            TransportEnvelope(
+                message_type="worker.dispatch",
+                kind=MessageKind.COMMAND,
+                payload_schema_version="1.0",
+                source_component="issue-171-hardening",
+                correlation_id=request.context.correlation_id,
+                payload={"worker_id": worker_id},
+            ),
+            self._hierarchy.current_carrier(),
+        )
+        await self._transport.publish(self._topic, envelope)
+        return await super().dispatch(worker_id, request)
 
 
 def test_real_distributed_heartbeat_feeds_canonical_node_worker_accounting() -> None:
@@ -237,19 +291,17 @@ def test_real_distributed_heartbeat_feeds_canonical_node_worker_accounting() -> 
     assert by_metric["node.cpu.cores.capacity"].scope.node_id == node_id
     assert by_metric["worker.jobs.active"].scope.worker_id == worker_id
     assert by_metric["worker.jobs.active"].scope.node_id == node_id
-    assert not any(record.metric_type.startswith("scheduler.reserved") for record in accounting.query())
+    assert not any(
+        record.metric_type.startswith("scheduler.reserved")
+        for record in accounting.query()
+    )
 
 
-def test_real_agent_team_run_pins_historical_accounting_across_revision_and_mapper_changes() -> None:
+def test_real_agent_team_run_remains_explainable_after_revision_and_mapper_change() -> None:
     async def scenario() -> None:
-        (
-            repository,
-            runtime,
-            agent_definition,
-            agent_revision,
-            team_definition,
-            team_revision,
-        ) = _agent_fixture()
+        repository, runtime, definition, revision, team_definition, team_revision = (
+            _agent_fixture()
+        )
         task_id = new_id("task")
         first_run_id = new_id("run")
         first_runs = await runtime.start_team(
@@ -257,15 +309,15 @@ def test_real_agent_team_run_pins_historical_accounting_across_revision_and_mapp
             run_id=first_run_id,
             team_id=team_definition.team_id,
         )
-        assert len(first_runs) == 1
         executed = first_runs[0]
 
         accounting = AccountingService(
             InMemoryUsageStore(),
             usage_attributor=AgentRunUsageAttributor(repository),
         )
+        requested_but_not_executed = new_id("agent")
         accounting.ingest_metric(
-            __import__("ai_multi_agent_platform.observability", fromlist=["MetricRecord"]).MetricRecord(
+            MetricRecord(
                 "platform.model.calls",
                 1.0,
                 context=TelemetryContext(
@@ -274,22 +326,32 @@ def test_real_agent_team_run_pins_historical_accounting_across_revision_and_mapp
                     agent_id=executed.agent.agent_id,
                     team_id=executed.team.team_id if executed.team is not None else None,
                 ),
+                attributes={"requested_agent_id": requested_but_not_executed},
             )
         )
         historical = accounting.query()[0]
+        assert historical.scope.agent_id == revision.agent_id
+        assert historical.scope.agent_id != requested_but_not_executed
         assert historical.provenance["agent_revision"] == 1
         assert historical.provenance["team_revision"] == 1
-        assert historical.provenance["orchestrator_adapter_id"] == "reference-orchestrator"
+        assert (
+            historical.provenance["orchestrator_adapter_id"]
+            == "reference-orchestrator"
+        )
 
-        second_agent_revision = AgentRevision(
-            agent_id=agent_revision.agent_id,
+        second_revision = AgentRevision(
+            agent_id=revision.agent_id,
             revision=2,
-            profile=replace(agent_revision.profile, description="revision two"),
-            owner_ref=agent_revision.owner_ref,
+            profile=replace(revision.profile, description="revision two"),
+            owner_ref=revision.owner_ref,
         )
         repository.update_agent(
-            replace(agent_definition, current_revision=2, updated_at=BASE + timedelta(seconds=2)),
-            second_agent_revision,
+            replace(
+                definition,
+                current_revision=2,
+                updated_at=definition.updated_at + timedelta(seconds=1),
+            ),
+            second_revision,
         )
         second_team_revision = AgentTeamRevision(
             team_id=team_revision.team_id,
@@ -299,26 +361,20 @@ def test_real_agent_team_run_pins_historical_accounting_across_revision_and_mapp
                 team_revision.profile,
                 members=(
                     AgentTeamMember(
-                        agent=AgentRevisionRef(agent_id=agent_revision.agent_id, revision=2),
+                        agent=AgentRevisionRef(agent_id=revision.agent_id, revision=2),
                         role="executor",
                     ),
                 ),
             ),
         )
         repository.update_team(
-            replace(team_definition, current_revision=2, updated_at=BASE + timedelta(seconds=2)),
+            replace(
+                team_definition,
+                current_revision=2,
+                updated_at=team_definition.updated_at + timedelta(seconds=1),
+            ),
             second_team_revision,
         )
-
-        class ReplacementMapper:
-            adapter_id = "replacement-orchestrator"
-
-            async def map_agent(self, spec):  # type: ignore[no-untyped-def]
-                return OrchestratorMapping(
-                    adapter_id=self.adapter_id,
-                    runtime_ref=f"replacement:{spec.agent_revision.agent_id}:{spec.run_id}",
-                    metadata={},
-                )
 
         second_run_id = new_id("run")
         second_runs = await runtime.start_team(
@@ -326,11 +382,11 @@ def test_real_agent_team_run_pins_historical_accounting_across_revision_and_mapp
             run_id=second_run_id,
             team_id=team_definition.team_id,
             revision=2,
-            mapper=ReplacementMapper(),
+            mapper=_ReplacementMapper(),
         )
         second = second_runs[0]
         accounting.ingest_metric(
-            __import__("ai_multi_agent_platform.observability", fromlist=["MetricRecord"]).MetricRecord(
+            MetricRecord(
                 "platform.model.calls",
                 1.0,
                 context=TelemetryContext(
@@ -342,47 +398,24 @@ def test_real_agent_team_run_pins_historical_accounting_across_revision_and_mapp
             )
         )
 
-        records = accounting.query(UsageQuery(metric_type="model.call.count", unit="count"))
+        records = accounting.query(
+            UsageQuery(metric_type="model.call.count", unit="count")
+        )
         assert len(records) == 2
-        assert records[0].scope.agent_id == records[1].scope.agent_id == agent_revision.agent_id
-        assert records[0].scope.team_id == records[1].scope.team_id == team_revision.team_id
+        assert records[0].scope.agent_id == revision.agent_id
+        assert records[1].scope.agent_id == revision.agent_id
+        assert records[0].scope.team_id == team_revision.team_id
+        assert records[1].scope.team_id == team_revision.team_id
         assert records[0].provenance["agent_revision"] == 1
         assert records[0].provenance["team_revision"] == 1
         assert records[1].provenance["agent_revision"] == 2
         assert records[1].provenance["team_revision"] == 2
-        assert records[1].provenance["orchestrator_adapter_id"] == "replacement-orchestrator"
+        assert (
+            records[1].provenance["orchestrator_adapter_id"]
+            == "replacement-orchestrator"
+        )
 
     asyncio.run(scenario())
-
-
-class _TransportingWorkerProvider(FakeWorkerProvider):
-    def __init__(
-        self,
-        *,
-        workers: tuple[WorkerDescriptor, ...],
-        hierarchy: TraceHierarchy,
-        transport: InProcessMessageTransport,
-        topic: str,
-    ) -> None:
-        super().__init__(workers=workers)
-        self._hierarchy = hierarchy
-        self._transport = transport
-        self._topic = topic
-
-    async def dispatch(self, worker_id: str, request: ExecutionRequest):  # type: ignore[no-untyped-def]
-        envelope = inject_trace_carrier(
-            TransportEnvelope(
-                message_type="worker.dispatch",
-                kind=MessageKind.COMMAND,
-                payload_schema_version="1.0",
-                source_component="issue-171-hardening",
-                correlation_id=request.context.correlation_id,
-                payload={"worker_id": worker_id},
-            ),
-            self._hierarchy.current_carrier(),
-        )
-        await self._transport.publish(self._topic, envelope)
-        return await super().dispatch(worker_id, request)
 
 
 def test_remote_worker_trace_preserves_executed_agent_team_into_accounting() -> None:
@@ -390,10 +423,11 @@ def test_remote_worker_trace_preserves_executed_agent_team_into_accounting() -> 
         repository, agent_runtime, _, _, team_definition, team_revision = _agent_fixture()
         task_id = new_id("task")
         run_id = new_id("run")
+        agent_id = team_revision.profile.members[0].agent.agent_id
         executed = await agent_runtime.start_agent(
             task_id=task_id,
             run_id=run_id,
-            agent_id=team_revision.profile.members[0].agent.agent_id,
+            agent_id=agent_id,
             team_revision=team_revision,
         )
         accounting = AccountingService(
@@ -416,7 +450,10 @@ def test_remote_worker_trace_preserves_executed_agent_team_into_accounting() -> 
             telemetry,
             hierarchy=hierarchy,
         )
-        operation = OperationContext(correlation_id=task_id, causation_id=executed.agent_run_id)
+        operation = OperationContext(
+            correlation_id=task_id,
+            causation_id=executed.agent_run_id,
+        )
 
         async def execute() -> None:
             await worker.dispatch(
@@ -442,7 +479,9 @@ def test_remote_worker_trace_preserves_executed_agent_team_into_accounting() -> 
             operation=execute,
         )
 
-        subscription = transport.subscribe(Subscription(topic=topic, consumer_id="issue-171"))
+        subscription = transport.subscribe(
+            Subscription(topic=topic, consumer_id="issue-171")
+        )
         delivery = await anext(subscription)
         carrier = extract_trace_carrier(delivery.envelope)
         await transport.ack(delivery)
@@ -466,14 +505,22 @@ def test_remote_worker_trace_preserves_executed_agent_team_into_accounting() -> 
     asyncio.run(scenario())
 
 
-def test_team_membership_grant_does_not_expand_to_organization_or_other_team() -> None:
+def test_team_grant_does_not_expand_to_organization_or_other_team() -> None:
     async def scenario() -> None:
         repository = InMemoryOrganizationRepository()
         organizations = OrganizationService(repository)
-        org_a = await repository.save_organization(Organization(name="A", owner_actor_id="owner-a"))
-        org_b = await repository.save_organization(Organization(name="B", owner_actor_id="owner-b"))
-        team_a = await repository.save_team(Team(organization_id=org_a.id, name="A team"))
-        other_team = await repository.save_team(Team(organization_id=org_a.id, name="Other team"))
+        org_a = await repository.save_organization(
+            Organization(name="A", owner_actor_id="owner-a")
+        )
+        org_b = await repository.save_organization(
+            Organization(name="B", owner_actor_id="owner-b")
+        )
+        team_a = await repository.save_team(
+            Team(organization_id=org_a.id, name="A team")
+        )
+        other_team = await repository.save_team(
+            Team(organization_id=org_a.id, name="Other team")
+        )
         membership = await repository.save_membership(
             Membership(
                 actor_id="alice",
@@ -485,9 +532,6 @@ def test_team_membership_grant_does_not_expand_to_organization_or_other_team() -
         )
 
         accounting = AccountingService(InMemoryUsageStore())
-        task_id = new_id("task")
-        run_id = new_id("run")
-        agent_id = new_id("agent")
         accounting.record(
             UsageRecord(
                 metric_type="task.count",
@@ -498,9 +542,9 @@ def test_team_membership_grant_does_not_expand_to_organization_or_other_team() -
                 scope=UsageScope(
                     organization_id=org_a.id,
                     team_id=team_a.id,
-                    task_id=task_id,
-                    run_id=run_id,
-                    agent_id=agent_id,
+                    task_id=new_id("task"),
+                    run_id=new_id("run"),
+                    agent_id=new_id("agent"),
                     owner_type="user",
                     owner_id="bob",
                 ),
@@ -539,7 +583,10 @@ def test_team_membership_grant_does_not_expand_to_organization_or_other_team() -
 
         services = organization_accounting_resource_services(accounting, organizations)
         context = _request_context("alice")
-        aggregates = await services["usage-aggregates"].list_resources(context, PageQuery())
+        aggregates = await services["usage-aggregates"].list_resources(
+            context,
+            PageQuery(),
+        )
         team_aggregates = [
             item
             for item in aggregates
@@ -553,7 +600,6 @@ def test_team_membership_grant_does_not_expand_to_organization_or_other_team() -
         assert team_aggregates[0]["scope"].get("agent_id") is None
         assert not any(
             isinstance(item.get("scope"), dict)
-            and item["scope"].get("organization_id") in {org_a.id, org_b.id}
             and item["scope"].get("owner_type") == "organization"
             for item in aggregates
         )
@@ -568,21 +614,31 @@ def test_team_membership_grant_does_not_expand_to_organization_or_other_team() -
                 suspended_at=BASE + timedelta(seconds=10),
             )
         )
-        after = await services["usage-aggregates"].list_resources(context, PageQuery())
+        after = await services["usage-aggregates"].list_resources(
+            context,
+            PageQuery(),
+        )
         assert not any(
-            isinstance(item.get("scope"), dict) and item["scope"].get("team_id") == team_a.id
+            isinstance(item.get("scope"), dict)
+            and item["scope"].get("team_id") == team_a.id
             for item in after
         )
         assert accounting.query()[0] == before
-        assert accounting.query()[0].provenance["membership_at_record_time"] == "historical"
+        assert (
+            accounting.query()[0].provenance["membership_at_record_time"]
+            == "historical"
+        )
 
     asyncio.run(scenario())
 
 
-def test_workspace_archive_retains_current_gauge_and_new_snapshot_replaces_old_value(tmp_path) -> None:
+def test_workspace_archive_retains_latest_snapshot_until_deletion(tmp_path) -> None:
     project_id = new_id("project")
     context = _data_context(project_id)
-    files = LocalFileProvider(tmp_path / "files", tmp_path / "files.sqlite3")
+    files = LocalFileProvider(
+        tmp_path / "files",
+        tmp_path / "files.sqlite3",
+    )
     first = asyncio.run(files.create_file(b"abc", context))
     second = asyncio.run(files.create_file(b"defgh", context))
     workspace = Workspace(
@@ -595,18 +651,39 @@ def test_workspace_archive_retains_current_gauge_and_new_snapshot_replaces_old_v
     first_snapshot = WorkspaceSnapshot(
         workspace_id=workspace.id,
         revision=1,
-        files=(WorkspaceFile("a.txt", first.file_id, first.sha256),),
+        files=(
+            WorkspaceFile(
+                relative_path="a.txt",
+                file_id=first.file_id,
+                sha256=first.sha256,
+            ),
+        ),
         content_checksum="1" * 64,
     )
-    asyncio.run(snapshots.reconcile(workspace, first_snapshot, context, observed_at=BASE))
+    asyncio.run(
+        snapshots.reconcile(
+            workspace,
+            first_snapshot,
+            context,
+            observed_at=BASE,
+        )
+    )
 
     archived = replace(workspace, status=WorkspaceStatus.ARCHIVED)
     second_snapshot = WorkspaceSnapshot(
         workspace_id=workspace.id,
         revision=2,
         files=(
-            WorkspaceFile("a.txt", first.file_id, first.sha256),
-            WorkspaceFile("b.txt", second.file_id, second.sha256),
+            WorkspaceFile(
+                relative_path="a.txt",
+                file_id=first.file_id,
+                sha256=first.sha256,
+            ),
+            WorkspaceFile(
+                relative_path="b.txt",
+                file_id=second.file_id,
+                sha256=second.sha256,
+            ),
         ),
         content_checksum="2" * 64,
         parent_snapshot_id=first_snapshot.id,
@@ -629,7 +706,10 @@ def test_workspace_archive_retains_current_gauge_and_new_snapshot_replaces_old_v
     assert aggregate.total == 8.0
 
     deleted = replace(archived, status=WorkspaceStatus.DELETED)
-    snapshots.retire(deleted, observed_at=BASE + timedelta(seconds=2))
+    snapshots.retire(
+        deleted,
+        observed_at=BASE + timedelta(seconds=2),
+    )
     retired = accounting.aggregate(
         UsageQuery(
             metric_type="workspace.snapshot.logical_bytes.current",
