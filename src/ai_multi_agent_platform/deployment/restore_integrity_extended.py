@@ -338,7 +338,10 @@ async def _validate_automations(
                 f"automation delivery {delivery.id} references missing automation "
                 f"{delivery.automation_id}"
             )
-        if delivery.generated_task_id is not None and delivery.generated_task_id not in index.task_ids:
+        if (
+            delivery.generated_task_id is not None
+            and delivery.generated_task_id not in index.task_ids
+        ):
             raise RestoreValidationError(
                 f"automation delivery {delivery.id} references missing generated task "
                 f"{delivery.generated_task_id}"
@@ -377,9 +380,7 @@ def _validate_authorization(
                 f"authorization policy {principal} references missing projects "
                 f"{sorted(missing_projects)!r}"
             )
-        workspaces = _string_array(
-            workspace_json, f"authorization policy {principal} workspaces"
-        )
+        workspaces = _string_array(workspace_json, f"authorization policy {principal} workspaces")
         missing_workspaces = set(workspaces) - set(workspace_projects)
         if missing_workspaces:
             raise RestoreValidationError(
@@ -406,7 +407,9 @@ def _validate_authentication(
                     f"{credential.owner_id}"
                 )
         elif credential.actor_type is ActorType.AGENT:
-            _require_agent(deployment, credential.owner_id, f"credential {credential.credential_id}")
+            _require_agent(
+                deployment, credential.owner_id, f"credential {credential.credential_id}"
+            )
         # SERVICE/WORKER/INTEGRATION owners are intentionally not asserted here because the
         # current SingleNodeDeployment has no composed canonical registry for those identities.
 
@@ -555,19 +558,10 @@ def _validate_owner(
 ) -> None:
     if owner_type == "user" and owner_id not in index.user_ids:
         raise RestoreValidationError(f"{entity} references missing user owner {owner_id}")
-    if owner_type == "service":
-        return
-    if owner_type == "team":
-        try:
-            index_value = owner_id
-            # Agent Teams are the only durable team registry composed by SingleNode today.
-            # If the identifier has the Agent Team canonical shape, require that definition.
-            if index_value.startswith(("agent_team_", "agent_team:", "agent-team:")):
-                raise LookupError
-        except LookupError:
-            return
-    # Organization/team owner registries are not yet composed by the current single-node profile.
-    # Their opaque IDs therefore cannot be existence-checked here without inventing authority.
+    if owner_type == "automation" and owner_id not in automation_ids:
+        raise RestoreValidationError(f"{entity} references missing automation owner {owner_id}")
+    # Organization/team/service owner registries are not composed by the current single-node
+    # profile. Their opaque IDs cannot be existence-checked here without inventing authority.
 
 
 def _validate_project_workspace_pair(
@@ -601,7 +595,9 @@ def _validate_principal(
 ) -> None:
     if principal_ref.startswith(("user_", "user:")):
         if principal_ref not in user_ids:
-            raise RestoreValidationError(f"{entity} references missing user principal {principal_ref}")
+            raise RestoreValidationError(
+                f"{entity} references missing user principal {principal_ref}"
+            )
         return
     if principal_ref.startswith(("agent_team_", "agent_team:", "agent-team:")):
         try:
@@ -614,7 +610,10 @@ def _validate_principal(
     if principal_ref.startswith(("agent_", "agent:")):
         _require_agent(deployment, principal_ref, entity)
         return
-    if principal_ref.startswith(("automation_", "automation:")) and principal_ref not in automation_ids:
+    if (
+        principal_ref.startswith(("automation_", "automation:"))
+        and principal_ref not in automation_ids
+    ):
         raise RestoreValidationError(
             f"{entity} references missing automation principal {principal_ref}"
         )
