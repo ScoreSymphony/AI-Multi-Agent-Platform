@@ -13,6 +13,16 @@ from ai_multi_agent_platform.upgrade import (
 )
 
 
+def _preflight(data_dir: Path) -> UpgradePreflight:
+    current = current_release_versions()
+    return UpgradePreflight(
+        MigrationRegistry(),
+        JsonMigrationHistoryStore.for_data_dir(data_dir),
+        portable_translators=FormatTranslatorRegistry(current.portable_format),
+        template_translators=FormatTranslatorRegistry(current.template_schema),
+    )
+
+
 def test_required_plugin_with_unsupported_manifest_version_blocks_preflight(
     tmp_path: Path,
 ) -> None:
@@ -29,14 +39,8 @@ def test_required_plugin_with_unsupported_manifest_version_blocks_preflight(
         extensions=(),
         manifest_version="0",
     )
-    preflight = UpgradePreflight(
-        MigrationRegistry(),
-        JsonMigrationHistoryStore.for_data_dir(data_dir),
-        portable_translators=FormatTranslatorRegistry(current.portable_format),
-        template_translators=FormatTranslatorRegistry(current.template_schema),
-    )
 
-    report = preflight.run(
+    report = _preflight(data_dir).run(
         PreflightRequest(
             data_dir=data_dir,
             current=current,
@@ -55,3 +59,22 @@ def test_required_plugin_with_unsupported_manifest_version_blocks_preflight(
         isinstance(reason, str) and "manifest version" in reason
         for reason in reasons
     )
+
+
+def test_missing_required_plugin_manifest_blocks_preflight(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    (data_dir / "db").mkdir(parents=True)
+    current = current_release_versions()
+
+    report = _preflight(data_dir).run(
+        PreflightRequest(
+            data_dir=data_dir,
+            current=current,
+            target=current,
+            required_plugin_ids=frozenset({"required.plugin"}),
+        )
+    )
+
+    assert not report.ok
+    check = next(item for item in report.checks if item.code == "plugin.required_missing")
+    assert check.details["plugin_ids"] == ["required.plugin"]
