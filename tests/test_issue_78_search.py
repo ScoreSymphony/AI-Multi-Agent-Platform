@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
-from ai_multi_agent_platform.contracts.types import AuthorizationDecision, AuthorizationRequest
+from ai_multi_agent_platform.contracts.types import (
+    AuthorizationDecision,
+    AuthorizationRequest,
+    JsonValue,
+)
 from ai_multi_agent_platform.control_plane import ControlPlane
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.domain import OwnerRef
@@ -19,6 +23,7 @@ from ai_multi_agent_platform.templates import (
     TemplateType,
     register_template_control_plane,
 )
+from ai_multi_agent_platform.templates.control_plane import TemplateResourceService
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
     FakeLifecycleBackend,
@@ -80,7 +85,7 @@ def _content(
     source: str = "issue-78-search-source",
     author: str = "issue-78-search-author",
 ) -> TemplateContent:
-    payload: dict[str, object] = {"profile": {"name": name}}
+    payload: dict[str, JsonValue] = {"profile": {"name": name}}
     if marker is not None:
         payload["credential_ref"] = marker
     return TemplateContent(
@@ -92,6 +97,16 @@ def _content(
         provenance=TemplateProvenance(author=author, source=source),
         tags=tags,
     )
+
+
+def _items(page: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
+    raw_items = page["items"]
+    assert isinstance(raw_items, list)
+    items: list[dict[str, JsonValue]] = []
+    for raw_item in raw_items:
+        assert isinstance(raw_item, dict)
+        items.append(raw_item)
+    return items
 
 
 def test_global_search_discovers_safe_template_metadata_and_never_configuration_values() -> None:
@@ -129,13 +144,15 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
             ),
         )
         assert exact["total"] == 1
-        item = exact["items"][0]
+        item = _items(exact)[0]
         assert item["resource_id"] == published.template_id
         assert item["title"] == "Portable Review Stack"
         assert item["summary"] == "Reusable multi-agent review topology"
         assert item["version"] == str(published.revision)
         assert item["canonical_ref"] == f"/api/v1/templates/{published.template_id}"
-        assert item["provenance"]["collection"] == "templates"
+        provenance = item["provenance"]
+        assert isinstance(provenance, dict)
+        assert provenance["collection"] == "templates"
         assert item["access"] == "authorized"
 
         by_type = await control_plane.search_resources(
@@ -143,7 +160,7 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
             SearchQuery(text="composite", resource_types=("template",)),
         )
         assert published.template_id in {
-            result["resource_id"] for result in by_type["items"]
+            result["resource_id"] for result in _items(by_type)
         }
 
         by_tag = await control_plane.search_resources(
@@ -154,7 +171,7 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
                 mode=SearchMode.METADATA,
             ),
         )
-        assert [result["resource_id"] for result in by_tag["items"]] == [
+        assert [result["resource_id"] for result in _items(by_tag)] == [
             published.template_id
         ]
 
@@ -163,7 +180,7 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
             SearchQuery(text=dependency.template_id, resource_types=("template",)),
         )
         assert published.template_id in {
-            result["resource_id"] for result in by_dependency["items"]
+            result["resource_id"] for result in _items(by_dependency)
         }
 
         for provenance_term in ("canonical-template-export", "template-author"):
@@ -172,7 +189,7 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
                 SearchQuery(text=provenance_term, resource_types=("template",)),
             )
             assert published.template_id in {
-                result["resource_id"] for result in by_provenance["items"]
+                result["resource_id"] for result in _items(by_provenance)
             }
 
         hidden = await control_plane.search_resources(
@@ -183,11 +200,9 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
             ),
         )
         assert hidden["total"] == 0
-        assert hidden["items"] == []
+        assert _items(hidden) == []
 
-        search_resources = await control_plane._registered_resource_service(
-            "templates"
-        ).list_search_resources()
+        search_resources = await TemplateResourceService(repository).list_search_resources()
         root_search_resource = next(
             resource for resource in search_resources if resource["id"] == root.template_id
         )
@@ -233,7 +248,7 @@ def test_template_search_authorization_hides_exact_id_counts_and_organization_sc
                 ),
             )
             assert result["total"] == 0
-            assert result["items"] == []
+            assert _items(result) == []
 
         assert any(
             request.action == "template:list"
@@ -272,9 +287,10 @@ def test_template_search_rebuild_replaces_stale_revision_metadata() -> None:
             _context(),
             SearchQuery(text="New Search Name", resource_types=("template",)),
         )
+        new_items = _items(new_result)
         assert new_result["total"] == 1
-        assert new_result["items"][0]["resource_id"] == original.template_id
-        assert new_result["items"][0]["version"] == str(revised.revision)
+        assert new_items[0]["resource_id"] == original.template_id
+        assert new_items[0]["version"] == str(revised.revision)
 
         old_result = await control_plane.search_resources(
             _context(),
