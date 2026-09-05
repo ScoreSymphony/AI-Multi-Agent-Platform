@@ -107,7 +107,38 @@ class _KnowledgeConversationCommandHandlers(ConversationCommandHandlers):
                     "conversation retention metadata is platform-managed",
                     details={"fields": cast(JsonValue, reserved)},
                 )
-        return await super().create_conversation(context, resource_ref, payload)
+        return await super().create_conversation(
+            context,
+            resource_ref,
+            self._pin_agent_revisions(payload),
+        )
+
+    def _pin_agent_revisions(self, payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        """Snapshot omitted Agent/Team revisions before the durable Conversation is created."""
+
+        service = self._agent_service
+        if service is None:
+            return payload
+        normalized = dict(payload)
+        for field_name in ("target", "default_agent"):
+            raw = normalized.get(field_name)
+            if not isinstance(raw, Mapping):
+                continue
+            kind = raw.get("kind")
+            resource_id = raw.get("id")
+            revision = raw.get("revision")
+            if revision is not None or not isinstance(resource_id, str):
+                continue
+            if kind == "agent":
+                revision = service.get_agent_revision(resource_id).revision
+            elif kind == "agent_team":
+                revision = service.get_team_revision(resource_id).revision
+            else:
+                continue
+            resolved = dict(raw)
+            resolved["revision"] = revision
+            normalized[field_name] = cast(JsonValue, resolved)
+        return normalized
 
     async def _validate_reference(
         self,
