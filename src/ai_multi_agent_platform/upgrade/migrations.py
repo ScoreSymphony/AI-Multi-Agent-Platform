@@ -159,9 +159,18 @@ class JsonMigrationHistoryStore:
         )
         temporary.replace(self.path)
 
+    def unresolved(self) -> MigrationRecord | None:
+        unresolved = [
+            item
+            for item in self.records()
+            if item.status in {MigrationStatus.STARTED, MigrationStatus.FAILED}
+        ]
+        return unresolved[-1] if unresolved else None
+
     def unresolved_failure(self) -> MigrationRecord | None:
-        failed = [item for item in self.records() if item.status is MigrationStatus.FAILED]
-        return failed[-1] if failed else None
+        """Backward-compatible alias for callers that previously checked only failed records."""
+
+        return self.unresolved()
 
 
 class MigrationRunner:
@@ -185,10 +194,15 @@ class MigrationRunner:
                     )
                 if existing.status is MigrationStatus.APPLIED:
                     continue
-                if existing.status is MigrationStatus.FAILED:
+                if existing.status in {MigrationStatus.STARTED, MigrationStatus.FAILED}:
+                    state = (
+                        "was interrupted after it started"
+                        if existing.status is MigrationStatus.STARTED
+                        else "previously failed"
+                    )
                     if not resume_failed:
                         raise MigrationError(
-                            f"migration {step.revision!r} previously failed; explicit resume required"
+                            f"migration {step.revision!r} {state}; explicit resume required"
                         )
                     if not step.restart_safe:
                         raise MigrationError(
