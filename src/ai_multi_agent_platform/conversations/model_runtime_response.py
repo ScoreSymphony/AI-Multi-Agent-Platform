@@ -72,14 +72,15 @@ class ModelRuntimeConversationResponseProvider:
                 agent_policy,
                 request,
             )
+            operation = request.operation or OperationContext(
+                correlation_id=request.correlation_id,
+                causation_id=request.source_message_id,
+                project_id=request.project_id,
+            )
             response = await self._runtime.generate_canonical(
                 CanonicalModelRequest(
                     request_id=request.request_id,
-                    context=OperationContext(
-                        correlation_id=request.correlation_id,
-                        causation_id=request.source_message_id,
-                        project_id=request.project_id,
-                    ),
+                    context=operation,
                     messages=(
                         *_resolved_context_messages(request.resolved_context),
                         *_model_history(request.history),
