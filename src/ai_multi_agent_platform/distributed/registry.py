@@ -136,6 +136,7 @@ class DistributedRegistry:
                 "unsupported worker protocol version: "
                 f"{request.protocol_version!r} != {WORKER_PROTOCOL_VERSION!r}"
             )
+        self._assert_worker_protocol_versions(request.workers)
         node = replace(
             request.node,
             registered_at=timestamp,
@@ -172,6 +173,7 @@ class DistributedRegistry:
 
         if heartbeat.protocol_version != WORKER_PROTOCOL_VERSION:
             raise RegistryError("heartbeat protocol version mismatch")
+        self._assert_worker_protocol_versions(heartbeat.workers)
         try:
             node = self._nodes[heartbeat.node_id]
         except KeyError as exc:
@@ -250,10 +252,16 @@ class DistributedRegistry:
         return updated
 
     def deregister_worker(self, worker_id: str) -> None:
-        self.get_worker(worker_id)
+        worker = self.get_worker(worker_id)
         for reservation in tuple(self.active_reservations(worker_id=worker_id)):
             self.release_reservation(reservation.reservation_id)
         self._workers.pop(worker_id)
+        node = self._nodes.get(worker.node_id)
+        if node is not None:
+            self._nodes[worker.node_id] = replace(
+                node,
+                worker_refs=tuple(ref for ref in node.worker_refs if ref != worker_id),
+            )
 
     def deregister_node(self, node_id: str) -> None:
         self.get_node(node_id)
@@ -523,6 +531,16 @@ class DistributedRegistry:
         for reservation in self.active_reservations(worker_id=worker_id):
             if reservation.status is ReservationStatus.ACTIVE:
                 self.renew_reservation(reservation.reservation_id, now=now)
+
+    @staticmethod
+    def _assert_worker_protocol_versions(workers: tuple[WorkerRecord, ...]) -> None:
+        for worker in workers:
+            if worker.protocol_version != WORKER_PROTOCOL_VERSION:
+                raise RegistryError(
+                    "worker protocol version mismatch: "
+                    f"{worker.worker_id} reports {worker.protocol_version!r}; "
+                    f"expected {WORKER_PROTOCOL_VERSION!r}"
+                )
 
     def _reservation(self, reservation_id: str) -> Reservation:
         try:

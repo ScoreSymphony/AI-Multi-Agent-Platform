@@ -1,0 +1,9 @@
+{
+  "policy_id": "aggregation.release-stochastic",
+  "version": "1",
+  "score_method": "mean",
+  "metric_method": "median",
+  "minimum_pass_rate": 0.8,
+  "fail_on_error": true,
+  "require_equal_sample_count": true
+}

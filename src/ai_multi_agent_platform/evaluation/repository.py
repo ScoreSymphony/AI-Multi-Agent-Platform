@@ -1,9 +1,10 @@
-"""Reference in-memory persistence for evaluation runs, results and comparisons."""
+"""Reference in-memory persistence for evaluation runs, results, aggregates and comparisons."""
 
 from __future__ import annotations
 
 from threading import RLock
 
+from .aggregation import AggregatedEvaluationResult
 from .models import ComparisonReport, EvaluationResult, EvaluationRun
 
 
@@ -18,6 +19,7 @@ class InMemoryEvaluationRepository:
     def __init__(self) -> None:
         self._runs: dict[str, EvaluationRun] = {}
         self._results: dict[str, list[EvaluationResult]] = {}
+        self._aggregates: dict[str, list[AggregatedEvaluationResult]] = {}
         self._comparisons: dict[str, ComparisonReport] = {}
         self._lock = RLock()
 
@@ -60,6 +62,37 @@ class InMemoryEvaluationRepository:
     def list_results(self, evaluation_run_id: str) -> tuple[EvaluationResult, ...]:
         with self._lock:
             return tuple(self._results.get(evaluation_run_id, ()))
+
+    def save_aggregate(self, aggregate: AggregatedEvaluationResult) -> None:
+        with self._lock:
+            aggregates = self._aggregates.setdefault(aggregate.evaluation_run_id, [])
+            for index, existing in enumerate(aggregates):
+                if existing.result_id == aggregate.result_id:
+                    aggregates[index] = aggregate
+                    return
+            aggregates.append(aggregate)
+
+    def list_aggregates(
+        self,
+        evaluation_run_id: str,
+        *,
+        aggregation_policy_id: str | None = None,
+        aggregation_policy_version: str | None = None,
+    ) -> tuple[AggregatedEvaluationResult, ...]:
+        with self._lock:
+            aggregates = tuple(self._aggregates.get(evaluation_run_id, ()))
+        return tuple(
+            aggregate
+            for aggregate in aggregates
+            if (
+                aggregation_policy_id is None
+                or aggregate.aggregation_policy_id == aggregation_policy_id
+            )
+            and (
+                aggregation_policy_version is None
+                or aggregate.aggregation_policy_version == aggregation_policy_version
+            )
+        )
 
     def list_case_results(
         self,

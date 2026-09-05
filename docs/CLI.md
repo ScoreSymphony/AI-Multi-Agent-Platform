@@ -157,7 +157,7 @@ List commands support the Control Plane conventions `--limit`, `--cursor`, `--so
 
 ## Evaluation and regression commands (#19)
 
-Evaluation commands are a thin northbound adapter over the canonical Evaluation Control Plane resources and commands. The CLI never constructs an `EvaluationRunner`, reads the evaluation repository directly, or introduces a second evaluation lifecycle.
+Evaluation commands are a thin northbound adapter over the canonical Evaluation Control Plane resources and commands. The CLI never constructs an `EvaluationRunner`, reads the evaluation repository directly, aggregates repetition samples locally, or introduces a second evaluation lifecycle.
 
 Configured suites are addressed by exact versioned references:
 
@@ -175,30 +175,47 @@ platform eval run suite_id@version \
   --idempotency-key eval-run-001
 ```
 
-`--snapshot-json` must be a JSON object with a non-blank `platform_version`. The Control Plane remains authoritative for the complete snapshot schema, including canonical version references and environment values. `--repetitions` defaults to `1`; repeated runs can be executed now, while automatic stochastic aggregation/comparison remains separate #19 work.
+`--snapshot-json` must be a JSON object with a non-blank `platform_version`. The Control Plane remains authoritative for the complete snapshot schema, including canonical version references and environment values. `--repetitions` defaults to `1`. Repeated runs persist every raw repetition result; any reduction of those samples into comparable values is owned by the Evaluation service under an exact versioned aggregation policy.
 
 Optional run arguments are:
 
 - `--baseline-run-id`;
-- `--regression-policy-ref` using an exact versioned policy reference;
+- `--regression-policy-ref` using an exact versioned regression-policy reference;
+- `--aggregation-policy-ref` using an exact versioned aggregation-policy reference; required when an automatic baseline comparison involves repeated samples;
 - `--repetitions`;
 - `--seed`;
 - `--idempotency-key`.
 
-Inspect the durable run detail, including evaluator results and any stored comparison:
+For example, an automatic repeated baseline comparison can be requested with:
+
+```bash
+platform eval run suite_id@version \
+  --snapshot-json '{"platform_version":"0.0.1","platform_commit":"abc123","references":[],"environment":[]}' \
+  --repetitions 5 \
+  --seed 41 \
+  --baseline-run-id evaluation_run_baseline \
+  --regression-policy-ref policy_id@version \
+  --aggregation-policy-ref aggregation_id@version \
+  --idempotency-key eval-run-repeated-001
+```
+
+Inspect the durable run detail, including raw evaluator results, any stored derived aggregates, and any stored comparison:
 
 ```bash
 platform eval result show evaluation_run_...
 ```
 
-Persist a comparison for a completed current run:
+Persist a comparison for completed runs:
 
 ```bash
 platform eval compare evaluation_run_current \
   --baseline-run-id evaluation_run_baseline \
   --regression-policy-ref policy_id@version \
+  --aggregation-policy-ref aggregation_id@version \
   --idempotency-key eval-compare-001
 ```
+
+`--aggregation-policy-ref` may be omitted when both runs are single-repetition runs and raw `EvaluationResult` records are compared directly. When either run contains repeated samples, the exact aggregation-policy reference is required; the CLI only forwards that reference and never chooses or executes an aggregation method itself.
 
 Both mutations call `/api/v1/commands/evaluation.*`; reads use `/api/v1/evaluation-suites` and `/api/v1/evaluation-runs`.
 

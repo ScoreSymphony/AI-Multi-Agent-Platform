@@ -12,7 +12,7 @@ from ai_multi_agent_platform.contracts.types import (
     ExecutionRequest,
     ExecutionSnapshot,
 )
-from ai_multi_agent_platform.domain import new_id, validate_id
+from ai_multi_agent_platform.domain import RunStatus, new_id, validate_id
 
 WORKER_PROTOCOL_VERSION = "1.0"
 
@@ -278,6 +278,17 @@ class WorkerJobResult:
     def __post_init__(self) -> None:
         validate_id(self.worker_job_id, "worker_job")
         validate_id(self.worker_id, "worker")
+        if self.execution is not None:
+            expected_execution_status = {
+                JobResultStatus.SUCCEEDED: RunStatus.SUCCEEDED,
+                JobResultStatus.FAILED: RunStatus.FAILED,
+                JobResultStatus.CANCELLED: RunStatus.CANCELLED,
+                JobResultStatus.TIMED_OUT: RunStatus.TIMED_OUT,
+            }[self.status]
+            if self.execution.status is not expected_execution_status:
+                raise ValueError(
+                    "worker result status must match its terminal execution snapshot status"
+                )
 
 
 @dataclass(frozen=True, slots=True)

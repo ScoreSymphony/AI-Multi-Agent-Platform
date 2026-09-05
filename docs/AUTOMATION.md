@@ -1,6 +1,6 @@
 # Automation, Triggers and Event-Driven Task Creation
 
-Issue #18 introduces Automation as a canonical platform domain without creating a second execution system.
+Issue #18 introduced Automation as a canonical platform domain without creating a second execution system. Issue #241 hardens that baseline with durable automatic delivery retries, an explicit recoverable `INVALID` lifecycle and fail-closed workspace-aware platform-event visibility.
 
 ## Core invariant
 
@@ -27,7 +27,8 @@ An Automation stores:
 - canonical Task template;
 - deduplication, retry and overlap policy;
 - created/updated timestamps and revision;
-- last/next schedule evaluation metadata.
+- last/next schedule evaluation metadata;
+- while invalid, categorical `invalidation_reason_code`, `invalidated_at` and `state_before_invalid` metadata.
 
 The identity is captured from the canonical actor context that creates the Automation. Automation creation does not accept an arbitrary replacement identity, so a creator cannot mint a more privileged execution identity through Automation configuration.
 
@@ -49,7 +50,7 @@ The reference recurring scheduler intentionally uses a small interval-based cont
 
 Each occurrence is persisted as a canonical `trigger_delivery_*` record containing source, fired/received timestamps, payload, dedupe key, processing status, attempts, generated Task ID and canonical failure details.
 
-The repository enforces a unique `(automation_id, dedupe_key)` occurrence. Redelivery therefore cannot create a second Task unintentionally, including after process restart when the SQLite repository is used.
+Retry state remains on that same durable delivery through `retryable`, `last_failed_at`, `next_retry_at` and `retry_exhausted_at`. The repository enforces a unique `(automation_id, dedupe_key)` occurrence, so redelivery and automatic retry cannot create a replacement TriggerDelivery accidentally, including after process restart when the SQLite repository is used.
 
 ## Scheduling semantics
 
@@ -68,6 +69,8 @@ The deterministic reference scheduler supports:
 
 `coalesce` creates at most one delivery after downtime and advances the next occurrence past the current time. `skip` advances past missed occurrences without creating work.
 
+`AutomationRuntime` combines the next normal schedule evaluation with the next durable delivery-retry deadline when calculating its wakeup. No external broker or workflow engine is required by the reference path.
+
 ## Overlap semantics
 
 The baseline exposes two explicit policies:
@@ -76,6 +79,8 @@ The baseline exposes two explicit policies:
 - `allow`: distinct deduplicated occurrences are allowed to enter canonical Task creation concurrently. There is no per-Automation serialization lock for this policy.
 
 Overlap policy is separate from deduplication. A redelivery with the same dedupe key still resolves to the existing TriggerDelivery and must not create duplicate work even when `allow` is selected.
+
+Automatic retries obey the same overlap policy. With `skip_while_processing`, a due retry encountering an already-held Automation processing lock is suppressed with `retry-suppressed-overlap`; the failed TriggerDelivery, attempt count and retry deadline remain intact so a later runtime tick can retry it. With `allow`, the due retry may re-enter Task admission while another distinct delivery for the same Automation is still processing.
 
 ## Webhook boundary
 
@@ -97,15 +102,25 @@ The public Automation service additionally exposes a replaceable async payload-v
 
 Webhook task admission is also bounded by a configurable per-Automation/per-source fixed-window rate limit (default: 120 unique deliveries per 60 seconds). Duplicate deliveries with an existing dedupe key are resolved before the rate counter, so legitimate redelivery remains idempotent and cheap. The reference limiter is intentionally in-process resource protection; a distributed deployment may replace or front it with shared ingress controls without changing canonical Automation semantics.
 
+An `INVALID` Automation rejects webhook delivery before normal admission.
+
 ## Platform-event triggers
 
-Platform-event Triggers match one canonical `event_type` and optional exact field filters. The baseline service consumes canonical event semantics directly and has no broker dependency. Issue #35 may later provide distributed transport without changing the Automation contract.
+Platform-event Triggers match one canonical `event_type` and optional exact field filters. The service consumes canonical Event semantics directly and has no broker dependency. Issue #35 may later provide distributed transport without changing the Automation contract.
+
+Visibility is evaluated before trigger filters or delivery/dedupe mutation. Project-scoped Automations require the matching canonical project. Workspace-scoped Automations additionally require workspace scope to be proven by the replaceable `WorkspaceEventScopeResolver`.
+
+The reference `CanonicalWorkspaceEventScopeResolver` does not add an Automation-only `workspace_id` to Event payloads. It resolves workspace identity from canonical #37 workspace state and durable Run-to-Workspace bindings. Missing, ambiguous, inconsistent or failing resolution is fail-closed. Rejection audit records contain only abstract scope reason categories and omit hidden event, subject and foreign-workspace identifiers.
+
+Owner-only behavior remains conservative. An unowned/global event is visible only to a service-owned Automation when no project/workspace scope already authorizes it. Historical events older than the Automation are not treated as replay requests.
 
 ## Task creation and provenance
 
 The Automation Control Plane adapter renders the configured Task template and calls the existing `ControlPlane.create_task(...)` path using the Automation identity and a deterministic idempotency key.
 
-The generated Task therefore still passes normal `task:create` authorization and Task-management validation. It receives provenance labels:
+The generated Task therefore still passes normal `task:create` authorization and Task-management validation. Automatic retries re-enter this same path and re-check current authorization; retry state is not an authorization cache.
+
+Tasks receive provenance labels:
 
 - `automation:<automation_id>`
 - `delivery:<trigger_delivery_id>`
@@ -114,17 +129,45 @@ The TriggerDelivery also stores the generated canonical Task ID, giving bidirect
 
 ## Audit and observability
 
-Automation creation, updates and state changes emit backend-neutral `automation.configuration` events containing the Automation ID, revision, changed fields, state and update timestamp. The events distinguish the Automation execution identity (`automation_principal_ref`) from the authenticated principal that performed the configuration mutation (`changed_by_principal_ref`). For direct service embeddings without a request actor, the Automation principal is the deterministic fallback. This provides an auditable mutation trail even when no external observability backend is installed.
+Automation creation, updates and ordinary state changes emit backend-neutral `automation.configuration` events containing the Automation ID, revision, changed fields, state and update timestamp. The events distinguish the Automation execution identity (`automation_principal_ref`) from the authenticated principal that performed the configuration mutation (`changed_by_principal_ref`). For direct service embeddings without a request actor, the Automation principal is the deterministic fallback.
 
-Delivery processing emits `automation.delivery` events with Automation and TriggerDelivery IDs, generated Task ID, source, fired/received timestamps, attempt, duration, dedupe/outcome information and canonical error code. Schedule deliveries additionally include timezone, configured start, interval, missed-run policy and current next-evaluation metadata.
+Delivery processing emits `automation.delivery` events with Automation and TriggerDelivery IDs, generated Task ID, source, fired/received timestamps, attempt, duration, dedupe/outcome information, canonical error code and retry state. Retry outcomes include `retry-scheduled`, `retry-started`, `retry-succeeded`, `retry-exhausted`, lifecycle suppression and overlap suppression.
+
+Invalidation and recovery emit `automation.lifecycle` events with categorical reason/state metadata only. Workspace/event visibility rejection uses `automation.event_visibility` with non-disclosing reason categories.
 
 An observability implementation may enrich or export these events, but the Automation engine exposes the structured data independently of that backend.
 
 ## Retry semantics
 
-Processing failures remain on the same persisted TriggerDelivery and explicit retry reuses that Delivery and the same deterministic Task idempotency key. `RetryPolicy.max_attempts` is enforced by the canonical service, so a processing retry cannot create an unlimited series of Task-admission attempts.
+Retryable processing failures are scheduled automatically on the same persisted TriggerDelivery. The initial processing pass is attempt `1`; manual and automatic retries increment the same counter and share `RetryPolicy.max_attempts`.
 
-`base_backoff_seconds` is retained as declarative retry-policy metadata for a future durable/automatic retry scheduler. The baseline `automation.retry-delivery` command is an explicit operator/API retry and does not sleep inside the request path. This separation avoids turning Control Plane requests into long-running timers while preserving a stable policy field for a later scheduler implementation.
+The reference backoff is deterministic exponential backoff without jitter:
+
+```text
+delay = base_backoff_seconds * 2 ** (failed_attempt - 1)
+```
+
+`RetryPolicy.base_backoff_seconds` therefore affects actual runtime scheduling. `base_backoff_seconds = 0` remains valid; the runtime applies a polling floor so repeated zero-delay failures cannot form a CPU spin loop.
+
+`next_retry_at` and exhaustion state are durable and survive restart. `PAUSED`, `DISABLED` and `INVALID` suppress automatic retries without consuming an attempt or replacing the delivery. Re-enabling or successful revalidation allows an already-due retained retry to proceed.
+
+Manual `automation.retry-delivery` and automatic retry converge on the same processing path. Both use the same deterministic Task-admission idempotency key derived from Automation ID and delivery dedupe key. Stable configuration/authorization/contract failures are terminal unless the owning layer explicitly classifies them as retryable.
+
+## INVALID lifecycle and revalidation
+
+`INVALID` represents durable configuration/lifecycle invalidity, not a transient runtime failure. Examples include incompatible configuration, a permanently invalid required reference or unsupported capability. Temporary provider/backend/worker unavailability does not invalidate an Automation.
+
+Entry and exit are explicit lifecycle operations. Generic pause/resume/disable state mutation cannot enter or leave `INVALID`.
+
+Invalidation preserves the current schedule position and stores only safe categorical metadata:
+
+- `invalidation_reason_code`;
+- `invalidated_at`;
+- `state_before_invalid`.
+
+Successful revalidation restores the exact pre-invalid lifecycle state (`ENABLED`, `PAUSED` or `DISABLED`) without recomputing the schedule and clears invalidation metadata. Transient validation failure leaves the Automation unchanged in `INVALID`; permanent validation failure remains invalid with a safe reason category. The configuration-validation step is a replaceable service seam for integrations that own secrets, providers or external references.
+
+Legacy durable rows that already contain `state=invalid` but predate the metadata are read conservatively as `legacy_invalid_state` with previous state `DISABLED`, requiring explicit revalidation before they can return to service.
 
 ## Control Plane resources
 
@@ -140,11 +183,15 @@ and these canonical commands:
 - `automation.pause`
 - `automation.resume`
 - `automation.disable`
+- `automation.invalidate`
+- `automation.revalidate`
 - `automation.test`
 - `automation.webhook`
 - `automation.event`
 - `automation.evaluate`
 - `automation.retry-delivery`
+
+`automation.invalidate` and `automation.revalidate` are administrative Automation lifecycle commands and require the canonical Automation `ADMINISTER` authorization vocabulary.
 
 They use the generic versioned Control Plane extension route and therefore remain independent of the frontend.
 
@@ -154,8 +201,10 @@ Automation composes above the current Search-enabled Control Plane layer rather 
 
 `AutomationRepository` is the durable storage seam. The baseline includes in-memory and SQLite implementations.
 
-`ReferenceScheduler` is deterministic and in-process. It only evaluates due Trigger occurrences and delegates them back to `AutomationService`.
+`ReferenceScheduler` is deterministic and in-process. Normal schedule evaluation delegates back to `AutomationService`; `AutomationRuntime` adds restart-safe wakeups for both schedule and retry deadlines.
+
+`WorkspaceEventScopeResolver` is the provider-neutral workspace visibility seam. The reference implementation resolves canonical #37 workspace relationships without changing Event payload identity.
 
 `TaskCreator` is the admission port. The production Control Plane implementation binds this port to canonical Task creation. Test or alternate embeddings may supply another implementation, but the public composed platform never routes Automation directly to execution providers.
 
-No Temporal installation, distributed broker, frontend or connector framework is required for the reference path.
+No Temporal installation, distributed broker, paid scheduler, frontend or connector framework is required for the reference path.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from .aggregation import AggregatedEvaluationResult
 from .context import EvaluationExecutionContext
 from .models import (
     ComparisonReport,
@@ -17,7 +18,7 @@ from .models import (
 
 
 class Evaluator(Protocol):
-    """Replaceable evaluator boundary shared by deterministic and scored evaluation."""
+    """Replaceable synchronous evaluator boundary."""
 
     @property
     def descriptor(self) -> EvaluatorDescriptor: ...
@@ -29,6 +30,24 @@ class Evaluator(Protocol):
         case: EvaluationCase,
         observation: EvaluationObservation,
     ) -> EvaluationResult: ...
+
+
+class AsyncEvaluator(Protocol):
+    """Replaceable asynchronous evaluator boundary for model/network-backed scoring."""
+
+    @property
+    def descriptor(self) -> EvaluatorDescriptor: ...
+
+    async def evaluate(
+        self,
+        *,
+        evaluation_run_id: str,
+        case: EvaluationCase,
+        observation: EvaluationObservation,
+    ) -> EvaluationResult: ...
+
+
+type EvaluatorLike = Evaluator | AsyncEvaluator
 
 
 class EvaluationCaseExecutor(Protocol):
@@ -66,7 +85,7 @@ class EvaluationIsolation(Protocol):
 
 
 class EvaluationRepository(Protocol):
-    """Persistence boundary for canonical evaluation runs, results and comparisons."""
+    """Persistence boundary for canonical evaluation runs, results, aggregates and comparisons."""
 
     def save_run(self, run: EvaluationRun) -> None: ...
 
@@ -75,6 +94,16 @@ class EvaluationRepository(Protocol):
     def save_result(self, result: EvaluationResult) -> None: ...
 
     def list_results(self, evaluation_run_id: str) -> tuple[EvaluationResult, ...]: ...
+
+    def save_aggregate(self, aggregate: AggregatedEvaluationResult) -> None: ...
+
+    def list_aggregates(
+        self,
+        evaluation_run_id: str,
+        *,
+        aggregation_policy_id: str | None = None,
+        aggregation_policy_version: str | None = None,
+    ) -> tuple[AggregatedEvaluationResult, ...]: ...
 
     def save_comparison(self, comparison: ComparisonReport) -> None: ...
 

@@ -12,6 +12,7 @@ Task / Run
     -> WorkerJobRequest
     -> DeterministicScheduler
     -> capacity Reservation
+    -> #15 dispatch authorization (when configured)
     -> WorkerDispatcher
     -> LifecycleBackend
     -> executor adapter
@@ -63,6 +64,8 @@ The reference `DistributedRegistry` supports:
 - drain/maintenance controls;
 - graceful deregistration;
 - reservation release on deregistration.
+
+Both the outer registration/heartbeat protocol version and every declared `WorkerRecord.protocol_version` must match `WORKER_PROTOCOL_VERSION` before registry state is mutated. Explicit Worker deregistration also removes the corresponding ID from the owning Node's `worker_refs`, so discovery state cannot retain a stale schedulable Worker reference.
 
 A Worker that disappears is not trusted as healthy indefinitely. Re-registration restores participation using the same canonical identity.
 
@@ -117,6 +120,16 @@ A newly selected reservation is `reserved`. Successful Worker acceptance commits
 
 The registry prevents a second Worker from claiming the same canonical Worker Job while its reservation is active and prevents subsequent jobs from overcommitting already-reserved capacity.
 
+## Dispatch authorization
+
+`DistributedRuntime` accepts the existing canonical #15 `AuthorizationProvider` as an optional deployment dependency. When configured, every new placement is authorized against the **exact selected `worker_*` resource before the external Worker dispatch boundary**.
+
+The authorization request carries only canonical scope/context fields needed for policy evaluation: principal, action, Worker/Node, Project, Workspace, Task, Run and an unambiguous required capability when available. Job input and `secret_refs` are not copied into the policy request.
+
+Placement still reserves capacity before this final authorization gate so the authorization decision refers to the deterministic selected Worker. A denial or authorization-provider failure releases that reservation before the Worker can start execution; no dispatch ownership record is created and the denied Worker Job is not executed.
+
+Reference scheduler tests may construct a runtime without an authorization provider, matching the deterministic local/reference path allowed by #14. Production composition that requires #15 enforcement supplies the canonical provider rather than defining a distributed-specific policy system.
+
 ## Worker protocol and local reference worker
 
 `WorkerJobRequest` is the transport-neutral job message. It carries:
@@ -132,6 +145,27 @@ The registry prevents a second Worker from claiming the same canonical Worker Jo
 
 Duplicate delivery of the same exact `worker_job_id` is idempotent. Reusing that ID with a different payload is rejected.
 
+## #35 replaceable Worker message transport
+
+`TransportWorkerDispatcher` and `WorkerTransportEndpoint` adapt the transport-neutral Worker contract to the existing #35 `MessageTransport` abstraction. They do not introduce a second broker contract and do not select Redis, NATS, Kafka, RabbitMQ or another permanent transport.
+
+Worker operations are carried as versioned command/reply envelopes for:
+
+- `dispatch`;
+- `get`;
+- `cancel`;
+- terminal `result` retrieval including canonical artifact and evidence references.
+
+The identity layers remain distinct:
+
+- `worker_job_id` is the canonical Worker execution/idempotency identity;
+- transport `message_id` is only one delivery identity;
+- correlation/causation, Task, Run, project and idempotency metadata are propagated through the #35 envelope.
+
+#35 is explicitly at-least-once. The distributed runtime therefore does not claim exactly-once messaging. A lost dispatch reply can be retried with a new transport message ID and the same Worker Job identity; the Worker executes the canonical Run only once. Likewise, a lost terminal result reply is recovered by repeating result retrieval, not by redispatching the execution. Tests prove that Artifact/Evidence references survive that retry while the lifecycle start count remains unchanged.
+
+Only portable secret references may appear in Worker job envelopes. Plaintext secret material is resolved at the execution boundary and is not copied into transport payloads, persistence, telemetry or Control Plane projections.
+
 ## Failure and reconciliation
 
 `DistributedRuntime` records dispatch ownership and reconciles active work.
@@ -144,9 +178,44 @@ Current reference behavior:
 - once the Worker is reachable again the pending cancellation is applied;
 - terminal execution releases the active capacity reservation;
 - a lost acknowledgement preserves dispatch ownership and capacity until reconciliation instead of making unsafe parallel redispatch possible;
-- Worker dispatch remains idempotent by Worker Job ID.
+- Worker dispatch remains idempotent by Worker Job ID;
+- lost transport replies are retried against the same Worker Job identity rather than interpreted as proof that execution did not happen.
 
 This deliberately avoids both an unsafe "still running forever" assumption and an unsafe immediate duplicate dispatch after loss of an acknowledgement.
+
+## Controlled cross-Worker failover
+
+Liveness loss is not proof that the previous execution stopped. A network partition, missed heartbeat or unreachable dispatcher therefore moves the Worker Job to `lost` but does **not** by itself authorize a second Worker to run the same canonical work.
+
+Controlled ownership transfer uses a separate, replaceable `WorkerOwnershipFencer`. A deployment-specific supervisor, process manager or other trusted authority may implement that protocol and return a `FailoverFenceReceipt` proving that the exact `(worker_job_id, worker_id)` ownership has been fenced/stopped. No concrete supervisor or infrastructure product is canonical.
+
+The safe state transition is:
+
+```text
+running/dispatched
+    -> lost
+    -> valid matching fence receipt
+    -> fenced
+    -> new reservation on a different eligible Worker
+    -> next dispatch attempt
+```
+
+The rules are:
+
+- `RetryMode.NEVER` is never eligible for cross-Worker failover;
+- retry-safe `SAFE`/`IDEMPOTENT` work may transfer only after successful fencing;
+- a missing, failed or identity-mismatched fence leaves the Worker Job `lost` and preserves its old capacity claim;
+- the old reservation is released only after the valid fence has been accepted;
+- `fenced` is persisted before a replacement dispatch, so a Control-Plane restart between fencing and redispatch cannot recreate two valid owners;
+- the replacement Worker is evaluated through the same scheduler hard filters and deterministic scoring used for ordinary placement;
+- the previous Worker is explicitly excluded from the replacement candidate set;
+- `worker_job_id`, `ExecutionRequest`/Run identity, requirements, workspace/snapshot/artifact/secret references, actor/cancellation/idempotency and trace context remain unchanged;
+- only `dispatch_attempt` advances for the new ownership attempt;
+- cancellation while `fenced` terminates the canonical Worker Job instead of starting a replacement;
+- if no alternate attached Worker is eligible, the job remains safely `fenced` without an active capacity claim;
+- a late return of the previously fenced Worker cannot reclaim the current dispatch record after ownership moved to the replacement Worker.
+
+Tests cover network partition without fencing, retry-forbidden work, invalid fence identity, A-to-B capacity transfer, deterministic alternate selection, restart between fence and redispatch, cancellation while fenced, no-replacement behavior and late old-Worker rejoin.
 
 ## Restart persistence
 
@@ -156,9 +225,16 @@ This deliberately avoids both an unsafe "still running forever" assumption and a
 - Worker runtime records;
 - heartbeat sequence state;
 - active/reserved capacity claims;
-- dispatch ownership records and portable Worker Job data.
+- dispatch ownership records and portable Worker Job data;
+- retrieved terminal `WorkerJobResult` state including canonical artifact/evidence references.
+
+Distributed JSON state schema v2 adds the optional terminal result field while the reference store remains able to restore schema v1 snapshots. A v1 record therefore restores with no cached result and can recover the result from the same Worker after reachability is re-established.
 
 The runtime persists dispatch ownership before the external Worker acknowledgement can be lost. After Control-Plane restart, persisted health is deliberately restored as offline rather than trusted as fresh liveness evidence. Re-registration/heartbeat then re-establishes reachability and reconciliation continues without duplicating execution.
+
+Terminal execution state and result collection are intentionally separate. `DistributedRuntime.result(...)` first returns a previously persisted `WorkerJobResult`; otherwise it queries the exact owning result-capable Worker, validates Worker Job/Worker/Run identity and persists the canonical result. A lost completion response therefore survives Control-Plane restart: the same Worker Job result is requested again after rejoin, without a new dispatch. Once persisted, the result remains retrievable after another restart even when no Worker is attached.
+
+A persisted `fenced` dispatch record is intentionally restored without an old active reservation. The replacement attempt may then be scheduled after eligible Worker liveness is re-established; fencing is not repeated merely because the Control Plane restarted.
 
 The JSON store is a reference backend, not a canonical database choice. A durable database implementation can replace it without changing scheduling semantics.
 
@@ -174,7 +250,7 @@ Registered read collections are:
 
 Administrative commands currently include Node drain/undrain, Node maintenance enable/disable and Worker drain/undrain. They inherit the existing Control Plane idempotency and #15 authorization boundary.
 
-Worker-job projections intentionally omit `secret_refs`. Secret values never belong in Node/Worker/job diagnostic resources.
+Worker-job projections intentionally omit `secret_refs`. Input `artifact_refs` remain distinct from the optional terminal `result` projection. When a terminal result has been collected, the read-only projection exposes its status, canonical output artifact refs, evidence refs, error category, completion time and execution status; it never exposes secret references or plaintext secret material.
 
 Remote Worker registration and heartbeat are not implemented as ordinary human/admin Control Plane commands. They use `WorkerProtocolService`, because they require #36 Worker-token authentication, replay protection, reporter binding and protocol-specific authorization before any runtime mutation.
 
@@ -221,14 +297,18 @@ The distributed runtime consumes the existing #37 remote materialization contrac
 
 A lost dispatch acknowledgement does not trigger premature cleanup or a second workspace materialization. The wrapper retains the original materialization receipt and reuses it when the same idempotent Worker Job is retried/reconciled. Remote result artifact IDs are folded into `WorkerJobResult` without exposing a host path.
 
-## Remaining #14 integration work
+## #34 scoped secret delivery
 
-The distributed foundation now includes runtime records, scheduling, node-wide/accelerator capacity accounting, leases, local Worker dispatch, loss/rejoin reconciliation, restart persistence, Control Plane read/admin integration, authenticated/authorized Worker registration-heartbeat, #5 Node/Worker provider adapters, #16 telemetry integration and #37 remote workspace materialization/result/cleanup composition.
+`SecretDeliveringWorkerDispatcher` resolves canonical `SecretReference` objects only at the exact Worker execution boundary. Resolution uses the existing #34 `SecretProvider` / `SecretAccessContext` contracts and therefore composes with the established #15 authorization boundary rather than creating a second distributed secret system.
 
-Full issue completion still requires the remaining composition work, especially:
+`WorkerJobRequest` stores only opaque secret references. Plaintext `SecretMaterial` exists only in the ephemeral per-dispatch bundle passed to a secret-aware execution adapter and is not stored in distributed JSON persistence, Worker Job Control Plane resources, #16 telemetry or #35 transport envelopes.
 
-- scoped secret-resolution/delivery at the Worker execution boundary without putting plaintext secrets into `WorkerJobRequest` persistence, diagnostics or telemetry;
-- a real replaceable remote transport fixture while keeping local/single-node operation on the same abstractions;
-- explicit transport-level remote result/evidence return and terminal reconciliation semantics;
-- controlled failover/re-dispatch policy for work proven safe to retry after Worker loss;
-- remaining acceptance/security/recovery tests and final cross-issue integration review.
+## Issue #14 completion status
+
+The distributed-runtime scope now includes canonical runtime projections, versioned registration/heartbeat, capability/resource scheduling, node-wide and accelerator capacity leases, local and remote Worker dispatch, authenticated Worker reporting, explicit #15 pre-dispatch authorization hooks, provider/Control-Plane integration, restart persistence, durable terminal result/evidence recovery, remote workspace composition, scoped secret delivery, structured telemetry, replaceable #35 transport, lost-reply recovery and controlled fenced cross-Worker failover.
+
+The acceptance path uses the same canonical `ExecutionRequest`/`WorkerJobRequest` regardless of whether the selected Worker is local or remote. Tests cover ordinary single-/multi-Worker scheduling as well as controlled transfer of the same canonical work from one lost/fenced Worker to another eligible Worker without changing Task or agent logic. Result recovery tests additionally prove lost-completion-response -> Control-Plane restart -> same-Worker result recovery -> second restart without Worker attachment, while the original execution is started only once.
+
+No infrastructure-provider identifier, host name, GPU vendor, broker, container runtime or deployment topology becomes a canonical execution identity. Deployment profiles such as #240 consume these contracts rather than introducing a second scheduler.
+
+No additional functional #14 subsystem is intentionally deferred. Issue closure requires the final synchronized CI/integration review of the completing PR.

@@ -1,15 +1,40 @@
 """Canonical evaluation and regression framework."""
 
+from .aggregation import (
+    AggregatedEvaluationResult,
+    AggregationMethod,
+    AggregationPolicy,
+    AggregationSampleRef,
+    ResultAggregator,
+)
+from .aggregation_config import load_aggregation_policy, parse_aggregation_policy
+from .ci_gate import EvaluationCIGateReport, run_reference_ci_gate
+from .config import (
+    EvaluationBaseline,
+    load_evaluation_baseline,
+    load_evaluation_suite,
+    load_regression_policy,
+    parse_evaluation_suite,
+    parse_regression_policy,
+)
 from .context import EvaluationExecutionContext
 from .contracts import (
+    AsyncEvaluator,
     EvaluationCaseExecutor,
     EvaluationHistoryRepository,
     EvaluationIsolation,
     EvaluationRepository,
     Evaluator,
+    EvaluatorLike,
 )
-from .evaluators import DeterministicAssertionEvaluator, MetricThresholdEvaluator, SafeEvaluator
+from .evaluators import (
+    DeterministicAssertionEvaluator,
+    MetricThresholdEvaluator,
+    SafeEvaluator,
+    evaluate_safely,
+)
 from .history import EvaluationHistoryService, EvaluationTrendPoint
+from .model_judge import ModelJudgeEvaluator
 from .models import (
     EVALUATION_SCHEMA_VERSION,
     AssertionResult,
@@ -41,10 +66,12 @@ from .models import (
 from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
+from .rubric import ObservationRubricEvaluator
 from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolation
 from .service import (
     EvaluationRunDetail,
     EvaluationService,
+    aggregation_policy_ref,
     evaluation_suite_ref,
     regression_policy_ref,
 )
@@ -59,7 +86,12 @@ from .workspace import (
 
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
+    "AggregatedEvaluationResult",
+    "AggregationMethod",
+    "AggregationPolicy",
+    "AggregationSampleRef",
     "AssertionResult",
+    "AsyncEvaluator",
     "ComparisonFinding",
     "ComparisonKind",
     "ComparisonOperator",
@@ -68,6 +100,8 @@ __all__ = [
     "DeterministicAssertion",
     "DeterministicAssertionEvaluator",
     "EvaluationAttempt",
+    "EvaluationBaseline",
+    "EvaluationCIGateReport",
     "EvaluationCase",
     "EvaluationCaseExecutor",
     "EvaluationExecutionContext",
@@ -91,17 +125,21 @@ __all__ = [
     "Evaluator",
     "EvaluatorDescriptor",
     "EvaluatorKind",
+    "EvaluatorLike",
     "InMemoryEvaluationRepository",
     "KernelEvaluationCaseExecutor",
     "MetricResult",
     "MetricRule",
     "MetricThresholdEvaluator",
+    "ModelJudgeEvaluator",
     "NoopEvaluationIsolation",
+    "ObservationRubricEvaluator",
     "RegressionEngine",
     "RegressionPolicy",
     "RegressionRule",
     "RegressionRuleKind",
     "ResolvedEvaluationFixtures",
+    "ResultAggregator",
     "RubricCriterion",
     "SafeEvaluator",
     "SnapshotValue",
@@ -109,6 +147,16 @@ __all__ = [
     "StaticEvaluationFixtureResolver",
     "VersionReference",
     "WorkspaceEvaluationIsolation",
+    "aggregation_policy_ref",
+    "evaluate_safely",
     "evaluation_suite_ref",
+    "load_aggregation_policy",
+    "load_evaluation_baseline",
+    "load_evaluation_suite",
+    "load_regression_policy",
+    "parse_aggregation_policy",
+    "parse_evaluation_suite",
+    "parse_regression_policy",
     "regression_policy_ref",
+    "run_reference_ci_gate",
 ]

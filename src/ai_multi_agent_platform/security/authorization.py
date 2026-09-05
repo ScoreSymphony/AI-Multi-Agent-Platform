@@ -45,6 +45,18 @@ class AuthorizationAction(StrEnum):
     MANAGE_CREDENTIALS = "manage_credentials"
     DISPATCH = "dispatch"
     INVOKE_SENSITIVE_CAPABILITY = "invoke_sensitive_capability"
+    RESULT_READ = "result:read"
+    ONBOARDING_CONFIGURE_MODEL = "onboarding.configure-model"
+    ONBOARDING_RUN_FIRST_TASK = "onboarding.run-first-task"
+    VERIFICATION_LIST = "verification:list"
+    VERIFICATION_READ = "verification:read"
+    VERIFICATION_REVIEW_LIST = "verification-review:list"
+    VERIFICATION_REVIEW_READ = "verification-review:read"
+    VERIFICATION_REQUIREMENT_LIST = "verification-requirement:list"
+    VERIFICATION_REQUIREMENT_READ = "verification-requirement:read"
+    VERIFICATION_ACCEPT = "verification.accept"
+    VERIFICATION_REJECT = "verification.reject"
+    VERIFICATION_REQUEST_CHANGES = "verification.request-changes"
 
 
 class ResourceType(StrEnum):
@@ -422,7 +434,11 @@ def infer_actor_identity(actor_ref: str, *, organization_id: str | None = None) 
         actor_type = ActorType.INTEGRATION
     else:
         actor_type = ActorType.SERVICE
-    return ActorIdentity(actor_ref, actor_type, organization_id=organization_id)
+    return ActorIdentity(
+        actor_id=actor_ref,
+        actor_type=actor_type,
+        organization_id=organization_id,
+    )
 
 
 def _scope_allowed(value: str | None, allowed: frozenset[str]) -> bool:

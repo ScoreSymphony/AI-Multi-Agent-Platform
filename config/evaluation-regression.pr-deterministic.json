@@ -1,0 +1,25 @@
+{
+  "policy_id": "policy.pr-deterministic",
+  "version": "1",
+  "rules": [
+    {
+      "rule_id": "deterministic-pass-to-fail",
+      "kind": "deterministic_pass_to_fail"
+    },
+    {
+      "rule_id": "score-drop",
+      "kind": "score_drop",
+      "threshold": 0.0
+    },
+    {
+      "rule_id": "critical-case-failure",
+      "kind": "tagged_case_failure",
+      "tag": "critical"
+    },
+    {
+      "rule_id": "security-case-failure",
+      "kind": "tagged_case_failure",
+      "tag": "security"
+    }
+  ]
+}

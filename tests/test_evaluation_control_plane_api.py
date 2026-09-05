@@ -10,6 +10,8 @@ from ai_multi_agent_platform.control_plane.evaluation_contract import (
     evaluation_resource_services,
 )
 from ai_multi_agent_platform.evaluation import (
+    AggregationMethod,
+    AggregationPolicy,
     ComparisonOperator,
     ConfigurationSnapshot,
     DeterministicAssertion,
@@ -28,6 +30,7 @@ from ai_multi_agent_platform.evaluation import (
 )
 from ai_multi_agent_platform.evaluation.service import (
     EvaluationService,
+    aggregation_policy_ref,
     evaluation_suite_ref,
     regression_policy_ref,
 )
@@ -93,11 +96,21 @@ def _evaluation_stack() -> tuple[
             ),
         ),
     )
+    aggregation_policy = AggregationPolicy(
+        policy_id="reference.aggregate",
+        version="1.0",
+        score_method=AggregationMethod.MEAN,
+        metric_method=AggregationMethod.MEAN,
+        minimum_pass_rate=1.0,
+        fail_on_error=True,
+        require_equal_sample_count=True,
+    )
     service = EvaluationService(
         repository=repository,
         runner=runner,
         suites=(suite,),
         policies=(policy,),
+        aggregation_policies=(aggregation_policy,),
     )
     return service, executor, repository
 
@@ -277,6 +290,110 @@ def test_control_plane_exposes_evaluation_resources_run_and_compare_commands() -
         )
         assert loaded.status == 200
         assert isinstance(loaded.body, dict)
+        assert loaded.body["comparison"] == comparison.body
+
+    asyncio.run(scenario())
+
+
+def test_control_plane_repeated_runs_require_and_expose_exact_aggregation_policy() -> None:
+    async def scenario() -> None:
+        service, executor, _ = _evaluation_stack()
+        _, http = _control_plane(service)
+        suite_ref = evaluation_suite_ref(service.list_suites()[0])
+        aggregation = service.get_aggregation_policy("reference.aggregate@1.0")
+        aggregation_ref = aggregation_policy_ref(aggregation)
+
+        baseline_response = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/evaluation.run",
+                headers=_headers("eval-repeated-baseline"),
+                body={
+                    "resource_ref": suite_ref,
+                    "snapshot": _snapshot_payload("repeated-baseline"),
+                    "repetitions": 2,
+                    "aggregation_policy_ref": aggregation_ref,
+                },
+            )
+        )
+        assert baseline_response.status == 200
+        assert isinstance(baseline_response.body, dict)
+        baseline_run_id = baseline_response.body["id"]
+        assert isinstance(baseline_run_id, str)
+        baseline_aggregates = baseline_response.body["aggregates"]
+        assert isinstance(baseline_aggregates, list)
+        assert len(baseline_aggregates) == 1
+        assert baseline_aggregates[0]["aggregation_policy_id"] == aggregation.policy_id
+        assert baseline_aggregates[0]["aggregation_policy_version"] == aggregation.version
+        assert baseline_aggregates[0]["sample_count"] == 2
+        assert baseline_aggregates[0]["pass_rate"] == 1.0
+
+        executor.status = "bad"
+        current_response = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/evaluation.run",
+                headers=_headers("eval-repeated-current"),
+                body={
+                    "resource_ref": suite_ref,
+                    "snapshot": _snapshot_payload("repeated-current"),
+                    "repetitions": 2,
+                    "aggregation_policy_ref": aggregation_ref,
+                },
+            )
+        )
+        assert current_response.status == 200
+        assert isinstance(current_response.body, dict)
+        current_run_id = current_response.body["id"]
+        assert isinstance(current_run_id, str)
+        current_aggregates = current_response.body["aggregates"]
+        assert isinstance(current_aggregates, list)
+        assert current_aggregates[0]["sample_count"] == 2
+        assert current_aggregates[0]["pass_rate"] == 0.0
+
+        comparison = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/evaluation.compare",
+                headers=_headers("eval-repeated-compare"),
+                body={
+                    "resource_ref": current_run_id,
+                    "baseline_run_id": baseline_run_id,
+                    "regression_policy_ref": "reference.pr@1.0",
+                    "aggregation_policy_ref": aggregation_ref,
+                },
+            )
+        )
+        assert comparison.status == 200
+        assert isinstance(comparison.body, dict)
+        assert comparison.body["regression_count"] == 1
+
+        loaded = await http.handle(
+            HTTPRequest(
+                method="GET",
+                path=f"/api/v1/{EVALUATION_RUN_COLLECTION}/{current_run_id}",
+                headers=_headers(),
+            )
+        )
+        assert loaded.status == 200
+        assert isinstance(loaded.body, dict)
+        snapshot = loaded.body["snapshot"]
+        assert isinstance(snapshot, dict)
+        references = snapshot["references"]
+        assert isinstance(references, list)
+        aggregation_refs = [
+            reference
+            for reference in references
+            if isinstance(reference, dict) and reference.get("kind") == "aggregation_policy"
+        ]
+        assert aggregation_refs == [
+            {
+                "kind": "aggregation_policy",
+                "ref_id": aggregation.policy_id,
+                "version": aggregation.version,
+                "revision": None,
+            }
+        ]
         assert loaded.body["comparison"] == comparison.body
 
     asyncio.run(scenario())

@@ -171,6 +171,7 @@ class RubricCriterion:
     criterion_id: str
     description: str
     weight: float = 1.0
+    minimum_score: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.criterion_id.strip():
@@ -179,6 +180,8 @@ class RubricCriterion:
             raise ValueError("rubric description must not be blank")
         if self.weight <= 0:
             raise ValueError("rubric weight must be greater than zero")
+        if not 0.0 <= self.minimum_score <= 1.0:
+            raise ValueError("rubric minimum_score must be between 0.0 and 1.0")
 
 
 @dataclass(frozen=True, slots=True)

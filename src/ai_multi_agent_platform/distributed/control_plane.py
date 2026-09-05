@@ -266,6 +266,19 @@ def _worker_resource(worker: WorkerRecord) -> dict[str, JsonValue]:
 def _worker_job_resource(record: DispatchRecord) -> dict[str, JsonValue]:
     job = record.job
     snapshot = record.snapshot
+    result = record.result
+    result_projection: dict[str, JsonValue] | None = None
+    if result is not None:
+        result_projection = {
+            "status": result.status.value,
+            "artifact_refs": list(result.artifact_refs),
+            "evidence_refs": list(result.evidence_refs),
+            "error_category": result.error_category,
+            "completed_at": _timestamp(result.completed_at),
+            "execution_status": (
+                None if result.execution is None else result.execution.status.value
+            ),
+        }
     return {
         "id": job.worker_job_id,
         "worker_id": record.worker_id,
@@ -285,6 +298,7 @@ def _worker_job_resource(record: DispatchRecord) -> dict[str, JsonValue]:
         "trace_parent": job.trace_parent,
         "requirements": _requirements(job.requirements),
         "execution_status": None if snapshot is None else snapshot.status.value,
+        "result": result_projection,
         "last_error": record.last_error,
     }
 

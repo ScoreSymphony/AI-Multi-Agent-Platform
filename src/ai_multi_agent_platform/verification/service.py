@@ -25,6 +25,8 @@ from .models import (
     VerifierKind,
 )
 
+_CANONICAL_SUBJECT_TOKEN = object()
+
 
 class VerificationService:
     """Reference canonical verification authority.
@@ -35,7 +37,8 @@ class VerificationService:
     state; kernel integration consumes ``assess_completion`` as a deterministic gate.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, require_canonical_subjects: bool = False) -> None:
+        self._require_canonical_subjects = require_canonical_subjects
         self._policies: dict[tuple[str, int], VerificationPolicy] = {}
         self._requests: dict[str, VerificationRequest] = {}
         self._results: dict[str, VerificationResult] = {}
@@ -92,7 +95,16 @@ class VerificationService:
         repair_attempt: int = 0,
         causation_id: str | None = None,
         now: datetime | None = None,
+        _canonical_subject_token: object | None = None,
     ) -> VerificationRequest:
+        if (
+            self._require_canonical_subjects
+            and _canonical_subject_token is not _CANONICAL_SUBJECT_TOKEN
+        ):
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "raw verification subjects are disabled; use CanonicalVerificationRuntime",
+            )
         policy = self.get_policy(policy_id, policy_version)
         try:
             stage = policy.stage(stage_id)
@@ -206,6 +218,48 @@ class VerificationService:
                 )
             )
         return request
+
+    def cancel_request(
+        self,
+        verification_id: str,
+        *,
+        now: datetime | None = None,
+        causation_id: str | None = None,
+    ) -> VerificationRequest:
+        """Cancel one still-pending canonical verification obligation."""
+
+        current = now or datetime.now(UTC)
+        if current.tzinfo is None or current.utcoffset() is None:
+            raise ValueError("verification cancellation time must be timezone-aware")
+        request = self.get_request(verification_id, now=current)
+        if request.status is VerificationRequestStatus.CANCELLED:
+            return request
+        if request.status is not VerificationRequestStatus.PENDING:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"verification request cannot be cancelled from {request.status.value}",
+            )
+        cancelled = replace(request, status=VerificationRequestStatus.CANCELLED)
+        self._requests[verification_id] = cancelled
+        self._audit_events.append(
+            VerificationAuditEvent(
+                event_type=VerificationAuditEventType.REQUEST_CANCELLED,
+                occurred_at=current,
+                task_id=cancelled.task_id,
+                verification_id=cancelled.verification_id,
+                run_id=cancelled.run_id,
+                project_id=cancelled.project_id,
+                policy_id=cancelled.policy_id,
+                policy_version=cancelled.policy_version,
+                stage_id=cancelled.stage_id,
+                subject=cancelled.subject,
+                requested_verifier_kind=cancelled.requested_verifier_kind,
+                repair_attempt=cancelled.repair_attempt,
+                correlation_id=cancelled.correlation_id,
+                causation_id=causation_id or cancelled.causation_id,
+            )
+        )
+        return cancelled
 
     def result_for(self, verification_id: str) -> VerificationResult | None:
         result_id = self._result_by_verification.get(verification_id)
@@ -366,7 +420,20 @@ class VerificationService:
         result_id: str | None = None,
         artifact_ids: tuple[str, ...] = (),
         causation_id: str | None = None,
+        producer: ProducerIdentity | None = None,
+        project_id: str | None = None,
+        capability_ids: tuple[str, ...] | None = None,
+        _replace_context: bool = False,
+        _canonical_subject_token: object | None = None,
     ) -> VerificationRequest:
+        if (
+            self._require_canonical_subjects
+            and _canonical_subject_token is not _CANONICAL_SUBJECT_TOKEN
+        ):
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "raw repaired verification subjects are disabled; use CanonicalVerificationRuntime",
+            )
         previous = self.get_request(verification_id)
         previous_result = self.result_for(verification_id)
         if (
@@ -396,11 +463,16 @@ class VerificationService:
             run_id=run_id,
             result_id=result_id,
             artifact_ids=artifact_ids,
-            project_id=previous.project_id,
-            capability_ids=previous.capability_ids,
-            producer=previous.producer,
+            project_id=project_id if _replace_context else previous.project_id,
+            capability_ids=(
+                capability_ids
+                if _replace_context and capability_ids is not None
+                else previous.capability_ids
+            ),
+            producer=producer if _replace_context else previous.producer,
             repair_attempt=next_attempt,
             causation_id=causation_id,
+            _canonical_subject_token=_canonical_subject_token,
         )
 
     def assess_completion(
@@ -436,6 +508,78 @@ class VerificationService:
                 policy_id=policy_id,
                 policy_version=policy_version,
             )
+
+        # Definitive outcomes must be evaluated across every stage before an
+        # earlier incomplete stage can return WAITING. This makes the policy invariant
+        # "any critical failure blocks completion" independent of stage ordering.
+        stage_matches = {
+            stage.stage_id: self._matching_stage_results(
+                task_id=task_id,
+                subject=subject,
+                policy=policy,
+                stage_id=stage.stage_id,
+                now=current,
+            )
+            for stage in policy.stages
+        }
+        observed_repair_attempt = max(
+            (
+                request.repair_attempt
+                for matching in stage_matches.values()
+                for request, _result in matching
+            ),
+            default=0,
+        )
+        for stage in policy.stages:
+            matching = stage_matches[stage.stage_id]
+            if stage.critical and any(
+                result.outcome is VerificationOutcome.FAIL for _request, result in matching
+            ):
+                return CompletionAssessment(
+                    task_id=task_id,
+                    subject=subject,
+                    state=self._failure_state(policy),
+                    reason="critical verification stage failed",
+                    policy_id=policy_id,
+                    policy_version=policy_version,
+                    blocking_verification_ids=tuple(
+                        request.verification_id
+                        for request, result in matching
+                        if result.outcome is VerificationOutcome.FAIL
+                    ),
+                    repair_attempts_remaining=max(
+                        0, policy.max_repair_attempts - observed_repair_attempt
+                    ),
+                )
+        for stage in policy.stages:
+            matching = stage_matches[stage.stage_id]
+            if any(
+                result.outcome is VerificationOutcome.NEEDS_CHANGES for _request, result in matching
+            ):
+                remaining = max(0, policy.max_repair_attempts - observed_repair_attempt)
+                state = (
+                    CompletionState.REPAIR_REQUIRED
+                    if remaining > 0
+                    else self._failure_state(policy)
+                )
+                return CompletionAssessment(
+                    task_id=task_id,
+                    subject=subject,
+                    state=state,
+                    reason=(
+                        "verification requested changes"
+                        if remaining > 0
+                        else "verification repair limit exhausted"
+                    ),
+                    policy_id=policy_id,
+                    policy_version=policy_version,
+                    blocking_verification_ids=tuple(
+                        request.verification_id
+                        for request, result in matching
+                        if result.outcome is VerificationOutcome.NEEDS_CHANGES
+                    ),
+                    repair_attempts_remaining=remaining,
+                )
 
         blocking: list[str] = []
         max_repair_attempt = 0
@@ -502,12 +646,41 @@ class VerificationService:
                 if result.outcome in stage.accepted_outcomes
             ]
             if policy.independence.require_distinct_verifiers:
-                distinct = {result.verifier.verifier_ref for _request, result in accepted}
+                distinct = {
+                    self._distinct_verifier_key(result.verifier) for _request, result in accepted
+                }
                 accepted_count = len(distinct)
             else:
                 accepted_count = len(accepted)
             if accepted_count < stage.minimum_results:
-                blocking.extend(request.verification_id for request, _result in matching)
+                stage_requests = self._matching_stage_requests(
+                    task_id=task_id,
+                    subject=subject,
+                    policy=policy,
+                    stage_id=stage.stage_id,
+                    now=current,
+                )
+                expired = [
+                    request
+                    for request in stage_requests
+                    if request.status is VerificationRequestStatus.EXPIRED
+                ]
+                if expired:
+                    return CompletionAssessment(
+                        task_id=task_id,
+                        subject=subject,
+                        state=self._failure_state_for(policy.timeout_failure_policy),
+                        reason=f"verification stage {stage.stage_id!r} timed out",
+                        policy_id=policy_id,
+                        policy_version=policy_version,
+                        blocking_verification_ids=tuple(
+                            request.verification_id for request in expired
+                        ),
+                        repair_attempts_remaining=max(
+                            0, policy.max_repair_attempts - max_repair_attempt
+                        ),
+                    )
+                blocking.extend(request.verification_id for request in stage_requests)
                 return CompletionAssessment(
                     task_id=task_id,
                     subject=subject,
@@ -559,6 +732,28 @@ class VerificationService:
         items.sort(key=lambda item: (item[0].created_at, item[0].verification_id))
         return tuple(items)
 
+    def _matching_stage_requests(
+        self,
+        *,
+        task_id: str,
+        subject: VerificationSubject,
+        policy: VerificationPolicy,
+        stage_id: str,
+        now: datetime,
+    ) -> list[VerificationRequest]:
+        matches: list[VerificationRequest] = []
+        for stored in list(self._requests.values()):
+            if (
+                stored.task_id != task_id
+                or stored.policy_id != policy.policy_id
+                or stored.policy_version != policy.version
+                or stored.stage_id != stage_id
+                or stored.subject != subject
+            ):
+                continue
+            matches.append(self.get_request(stored.verification_id, now=now))
+        return matches
+
     def _matching_stage_results(
         self,
         *,
@@ -569,15 +764,13 @@ class VerificationService:
         now: datetime,
     ) -> list[tuple[VerificationRequest, VerificationResult]]:
         matches: list[tuple[VerificationRequest, VerificationResult]] = []
-        for request in self._requests.values():
-            if (
-                request.task_id != task_id
-                or request.policy_id != policy.policy_id
-                or request.policy_version != policy.version
-                or request.stage_id != stage_id
-                or request.subject != subject
-            ):
-                continue
+        for request in self._matching_stage_requests(
+            task_id=task_id,
+            subject=subject,
+            policy=policy,
+            stage_id=stage_id,
+            now=now,
+        ):
             result = self.result_for(request.verification_id)
             if result is None:
                 continue
@@ -589,12 +782,30 @@ class VerificationService:
         return matches
 
     @staticmethod
-    def _failure_state(policy: VerificationPolicy) -> CompletionState:
-        if policy.failure_policy is VerificationFailurePolicy.WAIT:
+    def _distinct_verifier_key(verifier: VerifierIdentity) -> str:
+        if verifier.kind is VerifierKind.AGENT:
+            assert verifier.agent_id is not None
+            return f"agent:{verifier.agent_id}"
+        if verifier.kind is VerifierKind.HUMAN:
+            return f"human:{verifier.verifier_ref}"
+        if verifier.kind is VerifierKind.PROVIDER:
+            provider = verifier.provider_id or "unknown-provider"
+            return f"provider:{provider}:{verifier.verifier_ref}"
+        return f"deterministic:{verifier.verifier_ref}"
+
+    @staticmethod
+    def _failure_state_for(
+        failure_policy: VerificationFailurePolicy,
+    ) -> CompletionState:
+        if failure_policy is VerificationFailurePolicy.WAIT:
             return CompletionState.WAITING
-        if policy.failure_policy is VerificationFailurePolicy.ESCALATE:
+        if failure_policy is VerificationFailurePolicy.ESCALATE:
             return CompletionState.ESCALATED
         return CompletionState.REJECTED
+
+    @classmethod
+    def _failure_state(cls, policy: VerificationPolicy) -> CompletionState:
+        return cls._failure_state_for(policy.failure_policy)
 
     @staticmethod
     def _enforce_independence(
@@ -604,40 +815,84 @@ class VerificationService:
     ) -> None:
         rules = policy.independence
         producer = request.producer
+
         if verifier.kind is VerifierKind.AGENT and rules.agent_reviewer_must_be_read_only:
             if not verifier.read_only:
                 raise ContractError(
                     ErrorCode.FORBIDDEN,
                     "verification policy requires read-only reviewer-agent capabilities",
                 )
+
+        requires_producer = (
+            (rules.producer_agent_must_differ and verifier.kind is VerifierKind.AGENT)
+            or rules.model_must_differ
+            or rules.provider_must_differ
+            or (rules.human_reviewer_must_differ and verifier.kind is VerifierKind.HUMAN)
+            or rules.forbid_self_verification
+        )
+        if requires_producer and producer is None:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "verification policy cannot prove required producer identity",
+            )
         if producer is None:
             return
+
         if rules.producer_agent_must_differ and verifier.kind is VerifierKind.AGENT:
-            if producer.agent_id is not None and verifier.agent_id == producer.agent_id:
+            if producer.agent_id is None or verifier.agent_id is None:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "verification policy cannot prove producer/reviewer agent independence",
+                )
+            if verifier.agent_id == producer.agent_id:
                 raise ContractError(
                     ErrorCode.FORBIDDEN,
                     "verification policy requires reviewer agent to differ from producer",
                 )
+
         if rules.model_must_differ:
-            if (
-                producer.model_config_id is not None
-                and verifier.model_config_id is not None
-                and verifier.model_config_id == producer.model_config_id
-            ):
+            if producer.model_config_id is None or verifier.model_config_id is None:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "verification policy cannot prove reviewer model independence",
+                )
+            if verifier.model_config_id == producer.model_config_id:
                 raise ContractError(
                     ErrorCode.FORBIDDEN,
                     "verification policy requires reviewer model to differ from producer model",
                 )
+
         if rules.provider_must_differ:
-            if (
-                producer.provider_id is not None
-                and verifier.provider_id is not None
-                and verifier.provider_id == producer.provider_id
-            ):
+            if producer.provider_id is None or verifier.provider_id is None:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "verification policy cannot prove reviewer provider independence",
+                )
+            if verifier.provider_id == producer.provider_id:
                 raise ContractError(
                     ErrorCode.FORBIDDEN,
                     "verification policy requires reviewer provider to differ "
                     "from producer provider",
+                )
+
+        if rules.human_reviewer_must_differ and verifier.kind is VerifierKind.HUMAN:
+            if verifier.verifier_ref == producer.actor_ref:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "verification policy requires a separate human reviewer",
+                )
+
+        if rules.forbid_self_verification:
+            same_actor = verifier.verifier_ref == producer.actor_ref
+            same_agent = (
+                verifier.kind is VerifierKind.AGENT
+                and producer.agent_id is not None
+                and verifier.agent_id == producer.agent_id
+            )
+            if same_actor or same_agent:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "verification policy forbids self-verification",
                 )
 
     @staticmethod
