@@ -46,7 +46,11 @@ class ModelRoutingProfileRepository(Protocol):
 
     def list_definitions(self) -> tuple[ModelRoutingProfileDefinition, ...]: ...
 
+    def list_revisions(self, profile_id: str) -> tuple[ModelRoutingProfileRevision, ...]: ...
+
     def set_enabled(self, profile_id: str, enabled: bool) -> ModelRoutingProfileDefinition: ...
+
+    def delete_profile(self, profile_id: str) -> None: ...
 
 
 class JsonModelRoutingProfileRepository:
@@ -117,6 +121,13 @@ class JsonModelRoutingProfileRepository:
     def list_definitions(self) -> tuple[ModelRoutingProfileDefinition, ...]:
         return tuple(self._definitions[key] for key in sorted(self._definitions))
 
+    def list_revisions(self, profile_id: str) -> tuple[ModelRoutingProfileRevision, ...]:
+        definition = self.get_definition(profile_id)
+        return tuple(
+            self._revisions[(profile_id, revision)]
+            for revision in range(1, definition.current_revision + 1)
+        )
+
     def set_enabled(self, profile_id: str, enabled: bool) -> ModelRoutingProfileDefinition:
         current = self.get_definition(profile_id)
         if current.enabled is enabled:
@@ -125,6 +136,13 @@ class JsonModelRoutingProfileRepository:
         self._definitions[profile_id] = updated
         self._persist()
         return updated
+
+    def delete_profile(self, profile_id: str) -> None:
+        definition = self.get_definition(profile_id)
+        del self._definitions[profile_id]
+        for revision in range(1, definition.current_revision + 1):
+            self._revisions.pop((profile_id, revision), None)
+        self._persist()
 
     def _validate_pair(
         self,
