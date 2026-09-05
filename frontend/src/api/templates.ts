@@ -115,6 +115,11 @@ export interface TemplatePreview {
   dependency_order: TemplateRevisionRef[];
   missing_required_capability_ids: string[];
   missing_optional_capability_ids: string[];
+  incompatible_capability_versions: string[];
+  incompatible_optional_capability_versions: string[];
+  incompatible_platform_versions: string[];
+  missing_contract_versions: string[];
+  incompatible_contract_versions: string[];
   missing_plugin_ids: string[];
   missing_connector_ids: string[];
   missing_model_policy_refs: string[];
