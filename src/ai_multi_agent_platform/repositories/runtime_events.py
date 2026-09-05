@@ -108,13 +108,15 @@ class RepositoryEventRuntimeIngress:
             )
         payload = dict(event.payload)
         payload["ingress_correlation_id"] = ingress_correlation_id
-        provenance = replace(
-            event.provenance,
-            details={
-                **event.provenance.details,
-                "ingress_correlation_id": ingress_correlation_id,
-            },
-        )
+        provenance = event.provenance
+        if provenance is not None:
+            provenance = replace(
+                provenance,
+                details={
+                    **provenance.details,
+                    "ingress_correlation_id": ingress_correlation_id,
+                },
+            )
         return replace(
             event,
             correlation_id=stream_id,
