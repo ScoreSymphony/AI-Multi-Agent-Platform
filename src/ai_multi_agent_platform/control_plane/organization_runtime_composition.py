@@ -113,6 +113,7 @@ class ControlPlane(_CurrentControlPlane):
         accounting = self._accounting_service
         if accounting is None:
             return
+        services: dict[str, ResourceService]
         if self._organization_service is None:
             from ai_multi_agent_platform.accounting.control_plane import (
                 accounting_resource_services,
