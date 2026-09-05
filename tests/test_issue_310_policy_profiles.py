@@ -396,9 +396,7 @@ def test_unsupported_provider_neutral_conditions_fail_closed_in_local_compiler()
     assert captured.value.code is ErrorCode.UNSUPPORTED_CAPABILITY
 
 
-def test_canonical_serialization_contains_no_credentials_or_provider_private_policy_objects() -> (
-    None
-):
+def test_canonical_serialization_contains_no_credentials_or_provider_private_policy_objects() -> None:
     revision = AuthorizationPolicyProfileRevision(
         policy_profile_id=new_id("authorization_policy_profile"),
         revision=1,
