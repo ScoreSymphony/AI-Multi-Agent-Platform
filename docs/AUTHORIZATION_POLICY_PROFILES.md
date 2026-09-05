@@ -70,23 +70,34 @@ canonical authorization vocabulary above.
 ## 4. Provenance and imported configuration
 
 `AuthorizationPolicyProvenance` records who created the configuration, its source and an
-optional source reference. Imported configuration can explicitly be marked `imported` and
-`trusted=False`.
+optional source reference. Portable decoding marks imported revisions explicitly as
+`imported=True` and `trusted=False` before mutation can occur.
 
 Trust metadata is descriptive input to governance; it is never itself a grant. In
 particular, an imported profile that contains `administer` or another privileged action
-cannot authorize its own assignment or activation.
+cannot authorize its own activation or assignment.
 
 ## 5. Lifecycle service and approvals
 
-`AuthorizationPolicyProfileService` is the canonical management boundary for profile
-create/read/list/revise/disable and assignment operations. It is constructed with the
-existing `AuthorizationGate`, so profile management uses the normal issue-#15 decision and
-approval path rather than a policy-profile-specific bypass.
+`AuthorizationPolicyProfileService` is the canonical management and import boundary. It
+owns:
+
+- create/read/list;
+- immutable revision creation;
+- explicit enable/disable lifecycle changes;
+- exact-revision assignment;
+- safe import of complete dormant/untrusted histories;
+- narrowly-scoped import compensation for package rollback.
+
+The service is constructed with the existing `AuthorizationGate`, so user-visible profile
+management and import application use the normal issue-#15 decision and approval path
+rather than a policy-profile-specific decision engine.
 
 Mutations are treated as privileged operations:
 
 - create/revise: high-risk configuration changes;
+- import: critical creation of permission-bearing configuration;
+- enable: critical activation step;
 - disable: administrative change;
 - assignment: critical administrative change.
 
@@ -103,6 +114,10 @@ Applying or translating assigned configuration into a concrete provider remains 
 separate privileged operation and must pass the normal authorization/approval boundary.
 This separation is required so replacing the provider cannot change canonical profile
 identity or silently turn imported configuration into authority.
+
+Disabled profiles cannot be assigned. A portable import is always disabled, so the target
+actor must separately pass the authorization boundary to enable it and then separately
+pass the boundary again to create an assignment.
 
 ## 7. Local reference-provider compilation
 
@@ -121,6 +136,10 @@ profile.
 `JsonAuthorizationPolicyProfileRepository` adds dependency-free durable persistence with
 full immutable revision history and exact-revision assignments.
 
+Both repositories support atomic complete-history import and guarded removal for import
+compensation. The JSON repository persists or rolls back the corresponding in-memory
+mutation if its durable write fails.
+
 The JSON store contains canonical configuration only. Secret values, provider-native
 objects and compiled provider policy state are excluded. Repository restoration validates
 contiguous revision history and profile/revision identity consistency before accepting the
@@ -128,29 +147,65 @@ stored state.
 
 ## 9. Portability boundary (#79)
 
-Cross-deployment transport belongs to the existing issue-#79 portability layer rather than
-to the policy repository format.
+Cross-deployment transport uses the existing issue-#79 package, validation, preview,
+remapping and rollback infrastructure.
 
-The portable resource must include the stable profile definition and complete immutable
-revision history, support the normal preserve/regenerate ID policy and remap typed
-canonical scope references through the import context.
+`AuthorizationPolicyProfilePortableCodec` serializes:
 
-Security requirements for policy-profile import are stricter than ordinary configuration
-copying:
+- the stable profile definition;
+- the complete immutable revision history;
+- canonical dependency references for typed Project, Organization, Team, Workspace and
+  Node scopes.
 
-1. importing a profile never imports or creates effective assignments;
-2. imported provenance is treated as imported/untrusted configuration on the destination;
-3. preview must expose privileged/escalating policy content before mutation;
-4. destination authorization must approve the import through the canonical policy
-   management boundary;
-5. import must use the ordinary #79 preflight/apply/rollback contract;
-6. provider-private policy objects and secret material are never portable;
-7. enabling or applying imported policy remains a separate authorized action.
+It never serializes assignments, effective provider grants, provider-native policy objects
+or credentials.
+
+The normal #79 `IdPolicy` supports preserving or regenerating the profile identity.
+Canonical typed scope references are remapped through `ImportContext`. Opaque exact
+resource IDs are preserved rather than guessed into a resource type.
+
+### Preview security inspection
+
+The generic #79 preview supports resource-specific `ImportSecurityFinding` values. Policy
+profiles report:
+
+- `untrusted_configuration` to make the dormant/untrusted import state explicit;
+- `permission_escalation` with the potential direct actions, approval-gated actions and
+  resource types carried by the profile;
+- blocking `invalid_security_payload` when a package attempts to transport assignments or
+  the policy payload cannot be safely inspected.
+
+Blocking security findings make the import preview not ready before mutation.
+
+### Safe import
+
+`AuthorizationPolicyProfileImportMutationHandler` delegates materialization to
+`AuthorizationPolicyProfileService.import_profile()`. The handler:
+
+1. verifies that the decoded target matches the accepted preview mapping;
+2. requires the decoded profile to remain disabled;
+3. requires every imported revision to be explicitly imported and untrusted;
+4. replaces source ownership with an explicit destination `OwnerRef`;
+5. invokes the canonical service rather than writing the repository directly;
+6. creates no assignments;
+7. returns a rollback token only after complete import succeeds.
+
+`compensate_import()` can remove only a disabled, unassigned, imported/untrusted profile.
+It is not a general deletion API and fails closed once the profile has been enabled or
+assigned.
+
+The production portability composition enables policy-profile transport only when the
+canonical repository, canonical policy service, explicit import authorization context and
+explicit destination owner are supplied together. Partial configuration is rejected.
 
 This preserves the invariant:
 
 ```text
-portable configuration -> validated canonical profile -> authorized assignment/application
+portable configuration
+    -> validation + security preview
+    -> canonical dormant/untrusted profile
+    -> separately authorized enable
+    -> separately authorized assignment/application
 ```
 
 and explicitly rejects:
