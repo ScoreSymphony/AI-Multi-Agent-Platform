@@ -98,7 +98,7 @@ class AutomationTemplateHandler:
 
 @dataclass(slots=True)
 class AutomationTemplateExporter:
-    """Snapshot reusable Automation configuration without runtime state, identity or source scope."""
+    """Snapshot reusable Automation configuration without runtime identity or source scope."""
 
     automations: AutomationService
     templates: TemplateService
