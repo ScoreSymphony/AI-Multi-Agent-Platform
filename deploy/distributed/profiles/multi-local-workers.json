@@ -1,0 +1,82 @@
+{
+  "schema_version": "1",
+  "profile_id": "multi-local-workers",
+  "description": "One Control Plane and two schedulable Worker processes on the same ordinary host.",
+  "control_plane": {
+    "endpoint_ref": "deployment:control-plane-loopback",
+    "network_scope": "loopback",
+    "tls_required": false
+  },
+  "nodes": [
+    {
+      "deployment": {
+        "host_ref": "device-a",
+        "connection_mode": "local",
+        "transport_endpoint_ref": "deployment:in-process-transport",
+        "workspace_root": "/var/lib/ai-multi-agent-platform/workspaces",
+        "tls_required": false,
+        "credential_reference": null
+      },
+      "canonical": {
+        "node_id": "node_00000000-0000-4000-8000-000000000240",
+        "display_name": "Local execution node",
+        "labels": ["placement:local"],
+        "supported_runtimes": ["python"],
+        "model_refs": [],
+        "capability_refs": ["execution:general"],
+        "locality_refs": ["workspace:local-primary"],
+        "resources": {
+          "cpu_cores": 8,
+          "ram_bytes": 17179869184,
+          "storage_bytes": 214748364800,
+          "accelerators": []
+        }
+      },
+      "workers": [
+        {
+          "worker_id": "worker_00000000-0000-4000-8000-000000000241",
+          "worker_type": "execution",
+          "supported_executors": ["reference"],
+          "capability_refs": ["execution:general"],
+          "supported_runtimes": ["python"],
+          "model_refs": [],
+          "concurrency_limit": 2,
+          "locality_refs": ["workspace:local-primary"],
+          "worker_version": "0"
+        },
+        {
+          "worker_id": "worker_00000000-0000-4000-8000-000000000242",
+          "worker_type": "execution",
+          "supported_executors": ["reference"],
+          "capability_refs": ["execution:general"],
+          "supported_runtimes": ["python"],
+          "model_refs": [],
+          "concurrency_limit": 2,
+          "locality_refs": ["workspace:local-primary"],
+          "worker_version": "0"
+        }
+      ],
+      "reporter_worker_id": null
+    }
+  ],
+  "optional_services": [
+    {
+      "service_id": "model-endpoint",
+      "enabled": false,
+      "network_scope": "private",
+      "endpoint_ref": null
+    },
+    {
+      "service_id": "browser-service",
+      "enabled": false,
+      "network_scope": "private",
+      "endpoint_ref": null
+    },
+    {
+      "service_id": "connector-service",
+      "enabled": false,
+      "network_scope": "private",
+      "endpoint_ref": null
+    }
+  ]
+}
