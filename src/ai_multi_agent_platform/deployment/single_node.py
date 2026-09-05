@@ -323,6 +323,7 @@ def build_single_node_deployment(
         health_providers=(orchestrator, lifecycle, files),
         model_registry=models,
         automation_state_path=database_dir / "automation.sqlite3",
+        notification_state_path=database_dir / "notifications.sqlite3",
         conversation_service=conversations,
         conversation_agent_service=agents,
         conversation_file_provider=files,
