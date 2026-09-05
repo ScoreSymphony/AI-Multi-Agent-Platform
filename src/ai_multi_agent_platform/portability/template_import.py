@@ -55,7 +55,7 @@ class TemplateImportMutationHandler:
                     snapshot.definition,
                     revision.revision,
                     latest_published,
-                    final=index == len(snapshot.revisions) - 1,
+                    is_final=index == len(snapshot.revisions) - 1,
                 )
                 if index == 0:
                     self._repository.create_template(definition, revision)
@@ -92,16 +92,16 @@ class TemplateImportMutationHandler:
 
 
 def _definition_at(
-    final: TemplateDefinition,
+    final_definition: TemplateDefinition,
     revision: int,
     latest_published: int | None,
     *,
-    final: bool,
+    is_final: bool,
 ) -> TemplateDefinition:
-    if final:
-        return final
+    if is_final:
+        return final_definition
     return replace(
-        final,
+        final_definition,
         current_revision=revision,
         latest_published_revision=latest_published,
     )
