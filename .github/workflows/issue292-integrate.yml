@@ -20,8 +20,6 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Apply integration edits
-        run: python tools/issue292_integrate.py
       - name: Bootstrap
         shell: bash
         run: |
@@ -37,15 +35,22 @@ jobs:
           ruff check src tests
       - name: Type check
         run: mypy
-      - name: Existing connector regressions
-        run: pytest -q tests/test_connectors.py tests/test_connector_control_plane.py tests/test_issue_45_connector_search.py tests/test_portability_connectors.py
-      - name: Commit validated integration
+      - name: Issue 292 and connector regressions
+        run: >-
+          pytest -q
+          tests/test_issue_292_external_resource_search.py
+          tests/test_connectors.py
+          tests/test_connector_control_plane.py
+          tests/test_issue_45_connector_search.py
+          tests/test_issue_87_search_and_invitation_security.py
+          tests/test_portability_connectors.py
+      - name: Commit validated formatting
         shell: bash
         run: |
           git config user.name "Score Symphony"
           git config user.email "scoresymphony@gmail.com"
-          git add src
+          git add src tests
           if ! git diff --cached --quiet; then
-            git commit -m "feat: wire durable external resources into sync and Search (#292)"
+            git commit -m "style: format issue 292 external resource integration"
             git push origin HEAD:feat/issue-292-external-resource-search
           fi
