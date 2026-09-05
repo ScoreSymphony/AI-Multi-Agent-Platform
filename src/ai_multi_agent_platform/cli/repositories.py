@@ -32,7 +32,9 @@ def add_repository_parser(
     show = commands.add_parser("show", help="show one attached repository")
     show.add_argument("repository_id")
 
-    attach = commands.add_parser("attach-local", help="attach or initialize a managed local Git repository")
+    attach = commands.add_parser(
+        "attach-local", help="attach or initialize a managed local Git repository"
+    )
     attach.add_argument("project_id")
     attach.add_argument("--name", required=True)
     attach.add_argument("--initialize", action="store_true")
@@ -97,9 +99,13 @@ def add_repository_parser(
     push.add_argument("--refspec")
     push.add_argument("--idempotency-key")
 
-    issue = commands.add_parser("issue", help="inspect and update provider-neutral repository issues")
+    issue = commands.add_parser(
+        "issue", help="inspect and update provider-neutral repository issues"
+    )
     issue_commands = issue.add_subparsers(dest="issue_command", required=True)
-    issue_show = issue_commands.add_parser("show", help="show a canonical repository issue reference")
+    issue_show = issue_commands.add_parser(
+        "show", help="show a canonical repository issue reference"
+    )
     issue_show.add_argument("repository_id")
     issue_show.add_argument("--resource-json", required=True)
     issue_show.add_argument("--idempotency-key")
@@ -131,7 +137,9 @@ def add_repository_parser(
     change_show.add_argument("repository_id")
     change_show.add_argument("--resource-json", required=True)
     change_show.add_argument("--idempotency-key")
-    change_open = change_request_commands.add_parser("open", help="open a repository change request")
+    change_open = change_request_commands.add_parser(
+        "open", help="open a repository change request"
+    )
     change_open.add_argument("repository_id")
     change_open.add_argument("--title", required=True)
     change_open.add_argument("--head-ref", required=True)
