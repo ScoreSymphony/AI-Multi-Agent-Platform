@@ -261,6 +261,18 @@ def test_control_plane_binds_export_preview_and_import_without_client_owned_plan
         assert isinstance(report_id, str)
         assert target[target_id].name == "Portable demo"
 
+        replayed = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/portability.import",
+                headers=_headers("portable-import-2"),
+                body={"resource_ref": preview_id},
+            )
+        )
+        assert replayed.status == 200
+        assert replayed.body == imported.body
+        assert len(target) == 1
+
         report = await http.handle(
             HTTPRequest(
                 method="GET",
