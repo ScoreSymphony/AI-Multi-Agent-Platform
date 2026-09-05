@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.capabilities import CapabilityCompatibilityRequest, CapabilitySpec
+from ai_multi_agent_platform.capabilities import (
+    CapabilityCompatibilityRequest,
+    CapabilitySpec,
+)
 from ai_multi_agent_platform.capability_assignments import (
     CapabilityAssignmentAccessContext,
     CapabilityAssignmentContent,
@@ -26,7 +29,12 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
-from ai_multi_agent_platform.security import ActorIdentity, ActorType, ProposedAction, RiskClassification
+from ai_multi_agent_platform.security import (
+    ActorIdentity,
+    ActorType,
+    ProposedAction,
+    RiskClassification,
+)
 
 OWNER = OwnerRef(type="user", id="issue-366-hardening-owner")
 
@@ -54,7 +62,10 @@ class _Targets:
         target: CapabilityAssignmentTarget,
     ) -> ResolvedCapabilityAssignmentTarget:
         if target != self.target:
-            raise ContractError(ErrorCode.NOT_FOUND, "canonical assignment target not found")
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                "canonical assignment target not found",
+            )
         return self.resolved
 
 
@@ -116,7 +127,13 @@ def test_create_inherits_canonical_target_scope_and_survives_restart(tmp_path: P
     service = _service(
         target,
         repository=repository,
-        specs=(CapabilitySpec(capability_id="tool.echo", name="Echo", version="1.0"),),
+        specs=(
+            CapabilitySpec(
+                capability_id="tool.echo",
+                name="Echo",
+                version="1.0",
+            ),
+        ),
         resolved=ResolvedCapabilityAssignmentTarget(project_id=project_id),
     )
 
@@ -144,7 +161,13 @@ def test_revise_preserves_exact_history_and_rejects_stale_revision() -> None:
     service = _service(
         target,
         repository=repository,
-        specs=(CapabilitySpec(capability_id="tool.echo", name="Echo", version="1.0"),),
+        specs=(
+            CapabilitySpec(
+                capability_id="tool.echo",
+                name="Echo",
+                version="1.0",
+            ),
+        ),
     )
     first = asyncio.run(
         service.create(
@@ -236,7 +259,12 @@ def test_exact_version_and_feature_constraints_are_registry_backed() -> None:
                 owner_ref=OWNER,
                 content=CapabilityAssignmentContent(
                     target=target,
-                    required=(CapabilityAssignmentRule("tool.echo", exact_version="3.0"),),
+                    required=(
+                        CapabilityAssignmentRule(
+                            "tool.echo",
+                            exact_version="3.0",
+                        ),
+                    ),
                 ),
                 access=_access(),
             )
