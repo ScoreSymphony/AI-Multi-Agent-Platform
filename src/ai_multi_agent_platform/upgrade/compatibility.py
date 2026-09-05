@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
-from ai_multi_agent_platform.plugins.models import PluginManifest
+from ai_multi_agent_platform.plugins.models import PLUGIN_MANIFEST_VERSION, PluginManifest
 
 from .models import CheckSeverity, PreflightCheck
 
@@ -98,6 +98,11 @@ def plugin_compatibility_checks(
     for manifest in manifests:
         required = manifest.plugin_id in required_plugin_ids
         reasons: list[str] = []
+        if manifest.manifest_version != PLUGIN_MANIFEST_VERSION:
+            reasons.append(
+                f"plugin manifest version {manifest.manifest_version!r} != "
+                f"supported {PLUGIN_MANIFEST_VERSION!r}"
+            )
         if not manifest.supported_platform.contains(target_platform):
             reasons.append(f"platform {target_platform} is outside declared supported range")
         for extension in manifest.extensions:
@@ -120,6 +125,7 @@ def plugin_compatibility_checks(
                     details={
                         "plugin_id": manifest.plugin_id,
                         "plugin_version": manifest.plugin_version,
+                        "manifest_version": manifest.manifest_version,
                         "reasons": reasons,
                     },
                 )
@@ -130,7 +136,10 @@ def plugin_compatibility_checks(
                     code="plugin.compatible",
                     severity=CheckSeverity.INFO,
                     message=f"plugin {manifest.plugin_id} is compatible",
-                    details={"plugin_version": manifest.plugin_version},
+                    details={
+                        "plugin_version": manifest.plugin_version,
+                        "manifest_version": manifest.manifest_version,
+                    },
                 )
             )
     return tuple(checks)
