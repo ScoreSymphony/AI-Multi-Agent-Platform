@@ -218,7 +218,7 @@ export function TaskDetailPage({
             disabled={busy || !canMove}
             onChange={(event) => setDestinationProjectId(event.target.value)}
           >
-            <option value="">Personal / no Project</option>
+            <option value="">No Project</option>
             {currentProjectMissing ? (
               <option value={task.project_id ?? ""}>{task.project_id} (current)</option>
             ) : null}
