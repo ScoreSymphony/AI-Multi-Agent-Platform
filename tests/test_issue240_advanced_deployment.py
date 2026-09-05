@@ -407,18 +407,12 @@ def test_optional_model_service_degradation_does_not_break_general_execution() -
     profile = _profile("cpu-control-gpu-worker.json")
     runtime = _registered_runtime("cpu-control-gpu-worker.json")
     accelerated = profile.nodes[1]
-    degraded_workers = tuple(replace(worker, model_refs=()) for worker in accelerated.workers)
-    runtime.heartbeat(
-        Heartbeat(
-            node_id=accelerated.node.node_id,
-            sequence=1,
-            observed_at=NOW + timedelta(seconds=1),
-            resources=accelerated.node.resources,
-            workers=degraded_workers,
-            model_refs=(),
-        ),
-        now=NOW + timedelta(seconds=1),
+    degraded_request = replace(
+        accelerated.registration_request(),
+        node=replace(accelerated.node, model_refs=()),
+        workers=tuple(replace(worker, model_refs=()) for worker in accelerated.workers),
     )
+    runtime.register(degraded_request, now=NOW + timedelta(seconds=1))
 
     model_decision = DeterministicScheduler(runtime.registry).evaluate(
         _job(
