@@ -14,6 +14,9 @@ from uuid import uuid4
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.conversations import Conversation, ConversationService
+from ai_multi_agent_platform.conversations.lifecycle_projection import (
+    project_conversation_lifecycle_event,
+)
 from ai_multi_agent_platform.domain import validate_id
 
 from .automation_runtime_composition import ControlPlaneASGI as _CurrentControlPlaneASGI
@@ -117,16 +120,26 @@ async def subscribe_conversation_events(
                         "canonical Task event projection did not contain an event id",
                     )
                 validate_id(event_id, "event")
+                lifecycle = await project_conversation_lifecycle_event(
+                    service,
+                    conversation_id=conversation.id,
+                    task_id=task_id,
+                    event=event,
+                )
                 current_positions[task_id] = event_id
                 cursor = _encode_cursor(current_positions)
-                yield {
+                projection: dict[str, JsonValue] = {
                     "id": cursor,
                     "type": "conversation.task-event",
                     "conversation_id": conversation.id,
                     "task_id": task_id,
                     "authoritative": True,
                     "event": event,
+                    "references": [reference.to_json() for reference in lifecycle.references],
                 }
+                if lifecycle.attention is not None:
+                    projection["attention"] = lifecycle.attention
+                yield projection
         finally:
             for pump in pumps:
                 if not pump.done():
