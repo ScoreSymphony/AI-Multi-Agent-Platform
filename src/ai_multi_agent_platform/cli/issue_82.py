@@ -8,10 +8,11 @@ CLI areas are delegated unchanged to the authenticated issue #214 composition.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, cast
 from urllib.parse import quote
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -212,6 +213,58 @@ def _build_parser() -> argparse.ArgumentParser:
     detach.add_argument("repository_id")
     _add_mutation_arguments(detach)
 
+    issue = commands.add_parser(
+        "issue",
+        help="inspect and mutate provider-neutral repository issues",
+    )
+    issue_commands = issue.add_subparsers(dest="issue_command", required=True)
+    issue_show = issue_commands.add_parser("show", help="read a canonical repository issue")
+    issue_show.add_argument("repository_id")
+    issue_show.add_argument("--resource-json", required=True)
+    issue_show.add_argument("--approval-id")
+    issue_open = issue_commands.add_parser("open", help="open a repository issue")
+    issue_open.add_argument("repository_id")
+    issue_open.add_argument("--title", required=True)
+    issue_open.add_argument("--body")
+    _add_mutation_arguments(issue_open)
+    issue_update = issue_commands.add_parser("update", help="update a repository issue")
+    issue_update.add_argument("repository_id")
+    issue_update.add_argument("--resource-json", required=True)
+    issue_update.add_argument("--title")
+    issue_update.add_argument("--body")
+    issue_update.add_argument("--state", choices=("open", "closed", "unknown"))
+    _add_mutation_arguments(issue_update)
+
+    change_request = commands.add_parser(
+        "change-request",
+        help="inspect and mutate provider-neutral repository change requests",
+    )
+    change_commands = change_request.add_subparsers(dest="change_request_command", required=True)
+    change_show = change_commands.add_parser(
+        "show",
+        help="read a canonical repository change request",
+    )
+    change_show.add_argument("repository_id")
+    change_show.add_argument("--resource-json", required=True)
+    change_show.add_argument("--approval-id")
+    change_open = change_commands.add_parser("open", help="open a repository change request")
+    change_open.add_argument("repository_id")
+    change_open.add_argument("--title", required=True)
+    change_open.add_argument("--head-ref", required=True)
+    change_open.add_argument("--base-ref", required=True)
+    change_open.add_argument("--body")
+    _add_mutation_arguments(change_open)
+    change_update = change_commands.add_parser("update", help="update a repository change request")
+    change_update.add_argument("repository_id")
+    change_update.add_argument("--resource-json", required=True)
+    change_update.add_argument("--title")
+    change_update.add_argument("--body")
+    change_update.add_argument(
+        "--state",
+        choices=("open", "draft", "closed", "merged", "unknown"),
+    )
+    _add_mutation_arguments(change_update)
+
     return parser
 
 
@@ -222,8 +275,9 @@ def _add_mutation_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _execute_repository(args: argparse.Namespace, client: ControlPlaneClient) -> ClientResponse:
     command = str(args.command)
-    if command in _MUTATING_COMMANDS or (command == "discover" and bool(args.attach)):
-        _require_confirmation(args, command)
+    side_effect = _side_effect_command(args)
+    if side_effect is not None:
+        _require_confirmation(args, side_effect)
 
     if command == "list":
         query = _list_query(args)
@@ -328,7 +382,104 @@ def _execute_repository(args: argparse.Namespace, client: ControlPlaneClient) ->
             _approval_payload(args.approval_id),
             idempotency_key=args.idempotency_key,
         )
+    if command == "issue":
+        return _execute_issue(args, client)
+    if command == "change-request":
+        return _execute_change_request(args, client)
     raise ValueError(f"unsupported repository command: {command}")
+
+
+def _execute_issue(args: argparse.Namespace, client: ControlPlaneClient) -> ClientResponse:
+    subcommand = str(args.issue_command)
+    if subcommand == "show":
+        payload: dict[str, JsonValue] = {
+            "resource": _reference_json(args.resource_json, "--resource-json")
+        }
+        _optional_payload(payload, "approval_id", args.approval_id)
+        return _repository_command(client, "repository.issue.read", args.repository_id, payload)
+    if subcommand == "open":
+        payload = {"title": args.title}
+        _optional_payload(payload, "body", args.body)
+        _optional_payload(payload, "approval_id", args.approval_id)
+        return _repository_command(
+            client,
+            "repository.issue.open",
+            args.repository_id,
+            payload,
+            idempotency_key=args.idempotency_key,
+        )
+    if subcommand == "update":
+        changes: dict[str, JsonValue] = {}
+        _optional_payload(changes, "title", args.title)
+        _optional_payload(changes, "body", args.body)
+        _optional_payload(changes, "state", args.state)
+        if not changes:
+            raise ValueError("repository issue update requires --title, --body, or --state")
+        payload = {
+            "resource": _reference_json(args.resource_json, "--resource-json"),
+            **changes,
+        }
+        _optional_payload(payload, "approval_id", args.approval_id)
+        return _repository_command(
+            client,
+            "repository.issue.update",
+            args.repository_id,
+            payload,
+            idempotency_key=args.idempotency_key,
+        )
+    raise ValueError(f"unsupported repository issue command: {subcommand}")
+
+
+def _execute_change_request(args: argparse.Namespace, client: ControlPlaneClient) -> ClientResponse:
+    subcommand = str(args.change_request_command)
+    if subcommand == "show":
+        payload: dict[str, JsonValue] = {
+            "resource": _reference_json(args.resource_json, "--resource-json")
+        }
+        _optional_payload(payload, "approval_id", args.approval_id)
+        return _repository_command(
+            client,
+            "repository.change_request.read",
+            args.repository_id,
+            payload,
+        )
+    if subcommand == "open":
+        payload = {
+            "title": args.title,
+            "head_ref": args.head_ref,
+            "base_ref": args.base_ref,
+        }
+        _optional_payload(payload, "body", args.body)
+        _optional_payload(payload, "approval_id", args.approval_id)
+        return _repository_command(
+            client,
+            "repository.change_request.open",
+            args.repository_id,
+            payload,
+            idempotency_key=args.idempotency_key,
+        )
+    if subcommand == "update":
+        changes: dict[str, JsonValue] = {}
+        _optional_payload(changes, "title", args.title)
+        _optional_payload(changes, "body", args.body)
+        _optional_payload(changes, "state", args.state)
+        if not changes:
+            raise ValueError(
+                "repository change-request update requires --title, --body, or --state"
+            )
+        payload = {
+            "resource": _reference_json(args.resource_json, "--resource-json"),
+            **changes,
+        }
+        _optional_payload(payload, "approval_id", args.approval_id)
+        return _repository_command(
+            client,
+            "repository.change_request.update",
+            args.repository_id,
+            payload,
+            idempotency_key=args.idempotency_key,
+        )
+    raise ValueError(f"unsupported repository change-request command: {subcommand}")
 
 
 def _repository_command(
@@ -370,6 +521,29 @@ def _approval_payload(approval_id: str | None) -> dict[str, JsonValue]:
 def _optional_payload(payload: dict[str, JsonValue], key: str, value: str | None) -> None:
     if value is not None:
         payload[key] = value
+
+
+def _reference_json(raw: str, option: str) -> dict[str, JsonValue]:
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{option} must contain valid JSON") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"{option} must contain a JSON object")
+    return cast(dict[str, JsonValue], value)
+
+
+def _side_effect_command(args: argparse.Namespace) -> str | None:
+    command = str(args.command)
+    if command in _MUTATING_COMMANDS:
+        return command
+    if command == "discover" and bool(args.attach):
+        return "discover --attach"
+    if command == "issue" and str(args.issue_command) in {"open", "update"}:
+        return f"issue {args.issue_command}"
+    if command == "change-request" and str(args.change_request_command) in {"open", "update"}:
+        return f"change-request {args.change_request_command}"
+    return None
 
 
 def _require_confirmation(args: argparse.Namespace, command: str) -> None:
