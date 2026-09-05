@@ -128,9 +128,7 @@ def materialize_template_revision(
 
     content = replace(
         revision.content,
-        configuration=TemplateConfiguration(
-            payload=cast(Mapping[str, FrozenJsonValue], materialized)
-        ),
+        configuration=TemplateConfiguration(payload=materialized),
     )
     validate_template_configuration(content.configuration)
     return replace(revision, content=content)
