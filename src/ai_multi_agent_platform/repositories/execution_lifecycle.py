@@ -83,9 +83,10 @@ class RepositoryWorkspaceExecutionCoordinator:
                 details={"run_id": request.run_id},
             )
 
+        actor_ref = self._provenance_actor(request.run_id) or "service:platform-execution"
         materialization = await self._workspaces.materialize(
             binding.workspace_id,
-            self._execution_data_context(request, binding, actor_ref="service:platform-execution"),
+            self._execution_data_context(request, binding, actor_ref=actor_ref),
             snapshot_id=binding.workspace_snapshot_id,
             task_id=binding.task_id,
             run_id=request.run_id,
@@ -129,11 +130,11 @@ class RepositoryWorkspaceExecutionCoordinator:
                     "repository Run integration is not configured for completion capture",
                     retryable=True,
                 )
-            actor_refs = {record.actor_ref for record in records}
-            if len(actor_refs) != 1:
+            actor_ref = self._provenance_actor(request.run_id)
+            if actor_ref is None:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    "repository Run provenance contains inconsistent actors",
+                    "repository Run provenance has no canonical actor",
                     details={"run_id": request.run_id},
                 )
             agent_ids = {record.agent_id for record in records if record.agent_id is not None}
@@ -143,7 +144,6 @@ class RepositoryWorkspaceExecutionCoordinator:
                     "repository Run provenance contains inconsistent agents",
                     details={"run_id": request.run_id},
                 )
-            actor_ref = next(iter(actor_refs))
             agent_id = next(iter(agent_ids)) if agent_ids else None
             await integration.capture_workspace_changes(
                 run_id=request.run_id,
@@ -170,6 +170,26 @@ class RepositoryWorkspaceExecutionCoordinator:
                 details={"run_id": run_id},
             )
         return binding
+
+    def _provenance_actor(self, run_id: str) -> str | None:
+        records = self._provenance.for_run(run_id)
+        if not records:
+            return None
+        actor_refs = {record.actor_ref for record in records}
+        if len(actor_refs) != 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "repository Run provenance contains inconsistent actors",
+                details={"run_id": run_id},
+            )
+        actor_ref = next(iter(actor_refs))
+        if not actor_ref.strip():
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "repository Run provenance contains a blank actor",
+                details={"run_id": run_id},
+            )
+        return actor_ref
 
     @staticmethod
     def _validate_materialization(
