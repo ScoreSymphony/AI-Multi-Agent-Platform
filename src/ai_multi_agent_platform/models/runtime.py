@@ -14,8 +14,6 @@ from ai_multi_agent_platform.contracts import (
     ModelResponse,
     ModelSelection,
     ModelStreamEvent,
-    ModelStreamEventKind,
-    StreamingModelProvider,
 )
 
 from .protocol import CanonicalModelRequest, CanonicalModelResponse
@@ -44,21 +42,11 @@ class ModelRuntime:
         return self._normalize_response(request, config, provider_response)
 
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
-        """Route once and expose canonical incremental events.
-
-        Providers that implement ``StreamingModelProvider`` are consumed natively.
-        Other ``ModelProvider`` implementations retain full compatibility through a
-        deterministic one-chunk fallback built from ``generate``.
-        """
+        """Route once and expose canonical incremental provider events."""
 
         async def iterate() -> AsyncIterator[ModelStreamEvent]:
             config, provider, routed_request = await self._resolve_target(request)
-            if isinstance(provider, StreamingModelProvider):
-                provider_stream = provider.stream(routed_request)
-            else:
-                provider_stream = self._fallback_stream(provider, routed_request)
-
-            async for event in provider_stream:
+            async for event in provider.stream(routed_request):
                 if event.request_id != request.request_id:
                     raise ContractError(
                         ErrorCode.CONTRACT_VIOLATION,
@@ -177,25 +165,4 @@ class ModelRuntime:
                 "provider_reported_model_ref": provider_reported_model_ref,
                 "correlation_id": request.context.correlation_id,
             },
-        )
-
-    async def _fallback_stream(
-        self,
-        provider: ModelProvider,
-        request: ModelRequest,
-    ) -> AsyncIterator[ModelStreamEvent]:
-        response = await provider.generate(request)
-        if response.text:
-            yield ModelStreamEvent(
-                kind=ModelStreamEventKind.TEXT_DELTA,
-                request_id=response.request_id,
-                model_ref=response.model_ref,
-                text_delta=response.text,
-            )
-        yield ModelStreamEvent(
-            kind=ModelStreamEventKind.COMPLETED,
-            request_id=response.request_id,
-            model_ref=response.model_ref,
-            usage=dict(response.usage),
-            response=response,
         )
