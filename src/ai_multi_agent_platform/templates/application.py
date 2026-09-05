@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 
 from .models import (
@@ -132,6 +133,18 @@ class ContextualTemplateResourceHandler(Protocol):
     ) -> tuple[TemplateResourceRef, ...]: ...
 
 
+@runtime_checkable
+class CompensatingTemplateResourceHandler(Protocol):
+    """Optional guarded rollback seam for resources created by one Template handler."""
+
+    async def compensate(
+        self,
+        resources: tuple[TemplateResourceRef, ...],
+        provenance: TemplateInstantiationProvenance,
+        context: TemplateInstantiationContext,
+    ) -> None: ...
+
+
 class _PreviewHandlerAdapter:
     """Expose only preview through the existing low-level handler contract."""
 
@@ -197,6 +210,22 @@ class CompositeTemplateHandler:
         del revision, provenance, context
         return ()
 
+    async def compensate(
+        self,
+        resources: tuple[TemplateResourceRef, ...],
+        provenance: TemplateInstantiationProvenance,
+        context: TemplateInstantiationContext,
+    ) -> None:
+        del resources, provenance, context
+
+
+@dataclass(frozen=True, slots=True)
+class _AppliedResources:
+    handler: ContextualTemplateResourceHandler
+    resources: tuple[TemplateResourceRef, ...]
+    provenance: TemplateInstantiationProvenance
+    context: TemplateInstantiationContext
+
 
 class TemplateApplicationService:
     """Safely apply a complete Template dependency graph to canonical resource handlers."""
@@ -256,36 +285,95 @@ class TemplateApplicationService:
         instance_id = new_id("template_instance")
         created_by_source: dict[TemplateRevisionRef, tuple[TemplateResourceRef, ...]] = {}
         resource_refs: list[TemplateResourceRef] = []
+        applied_resources: list[_AppliedResources] = []
 
-        for item in dependency_order:
-            handler = self.handlers.get(item.content.template_type)
-            if handler is None:
-                handler_type = item.content.template_type.value
-                raise ContractError(
-                    ErrorCode.CONTRACT_VIOLATION,
-                    f"Template handler disappeared during apply: {handler_type}",
+        try:
+            for item in dependency_order:
+                handler = self.handlers.get(item.content.template_type)
+                if handler is None:
+                    handler_type = item.content.template_type.value
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        f"Template handler disappeared during apply: {handler_type}",
+                    )
+                context = TemplateInstantiationContext(
+                    instance_id=instance_id,
+                    environment=environment,
+                    created_resources=created_by_source,
                 )
-            context = TemplateInstantiationContext(
-                instance_id=instance_id,
-                environment=environment,
-                created_resources=created_by_source,
-            )
-            provenance = TemplateInstantiationProvenance(
-                source=item.ref,
-                applied_by=applied_by,
-            )
-            created = await handler.instantiate(item, provenance, context)
-            created_by_source[item.ref] = created
-            resource_refs.extend(created)
+                provenance = TemplateInstantiationProvenance(
+                    source=item.ref,
+                    applied_by=applied_by,
+                )
+                created = await handler.instantiate(item, provenance, context)
+                created_by_source[item.ref] = created
+                resource_refs.extend(created)
+                if created:
+                    applied_resources.append(
+                        _AppliedResources(
+                            handler=handler,
+                            resources=created,
+                            provenance=provenance,
+                            context=context,
+                        )
+                    )
 
-        instantiation = TemplateInstantiation(
-            source=root.ref,
-            applied_by=applied_by,
-            resource_refs=tuple(resource_refs),
-            instance_id=instance_id,
-        )
-        self.repository.record_instantiation(instantiation)
-        return instantiation
+            instantiation = TemplateInstantiation(
+                source=root.ref,
+                applied_by=applied_by,
+                resource_refs=tuple(resource_refs),
+                instance_id=instance_id,
+            )
+            self.repository.record_instantiation(instantiation)
+            return instantiation
+        except Exception as apply_error:
+            await self._compensate_failed_apply(applied_resources, apply_error)
+            raise
+
+    async def _compensate_failed_apply(
+        self,
+        applied_resources: list[_AppliedResources],
+        apply_error: Exception,
+    ) -> None:
+        failures: list[JsonValue] = []
+        uncompensated: list[JsonValue] = []
+        for applied in reversed(applied_resources):
+            handler = applied.handler
+            if not isinstance(handler, CompensatingTemplateResourceHandler):
+                uncompensated.extend(
+                    {
+                        "resource_type": resource.resource_type,
+                        "resource_id": resource.resource_id,
+                    }
+                    for resource in applied.resources
+                )
+                continue
+            try:
+                await handler.compensate(
+                    applied.resources,
+                    applied.provenance,
+                    applied.context,
+                )
+            except Exception as compensation_error:
+                failures.append(
+                    {
+                        "template_type": handler.template_type.value,
+                        "error_type": type(compensation_error).__name__,
+                        "error": str(compensation_error),
+                    }
+                )
+
+        if failures or uncompensated:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "Template apply failed and created resources could not be fully compensated",
+                details={
+                    "apply_error_type": type(apply_error).__name__,
+                    "apply_error": str(apply_error),
+                    "compensation_failures": failures,
+                    "uncompensated_resources": uncompensated,
+                },
+            ) from apply_error
 
     async def reapply(
         self,
