@@ -29,6 +29,7 @@ from .service import VerificationService
 
 VERIFICATION_POLICY_COLLECTION = "verification-policies"
 VERIFICATION_COLLECTION = "verifications"
+VERIFICATION_RESULT_COLLECTION = "verification-results"
 VERIFICATION_REVIEW_COLLECTION = "verification-reviews"
 VERIFICATION_REQUIREMENT_COLLECTION = "verification-requirements"
 VERIFICATION_COMMANDS = (
@@ -137,6 +138,81 @@ class VerificationResourceService(ResourceService):
             resource_ref=request.verification_id,
         )
         return _verification_resource(request, self._verification.result_for(resource_id))
+
+
+class VerificationResultResourceService(ResourceService):
+    """Task-scoped read view of canonical Verification Results."""
+
+    def __init__(
+        self,
+        control_plane: ControlPlane,
+        verification: VerificationService,
+    ) -> None:
+        self._control_plane = control_plane
+        self._verification = verification
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del query
+        resources: list[tuple[VerificationResult, dict[str, JsonValue]]] = []
+        for task_id in await _task_ids(self._control_plane):
+            task = await self._control_plane._kernel.get_task(task_id)
+            if not await _allowed_for_task(
+                self._control_plane,
+                context,
+                "verification-result:list",
+                task,
+                resource_ref=task_id,
+            ):
+                continue
+            for request, result in self._verification.history(task_id=task_id):
+                if result is not None:
+                    resources.append((result, _verification_result_resource(request, result)))
+        resources.sort(key=lambda item: (item[0].completed_at, item[0].verification_result_id))
+        return tuple(resource for _result, resource in resources)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate privacy-safe canonical Result projections for Search rebuild."""
+
+        resources: list[tuple[VerificationResult, dict[str, JsonValue]]] = []
+        for task_id in await _task_ids(self._control_plane):
+            task = await self._control_plane._kernel.get_task(task_id)
+            for request, result in self._verification.history(task_id=task_id):
+                if result is None:
+                    continue
+                resources.append(
+                    (
+                        result,
+                        _search_scoped_resource(
+                            _verification_result_search_resource(request, result),
+                            task,
+                        ),
+                    )
+                )
+        resources.sort(key=lambda item: (item[0].completed_at, item[0].verification_result_id))
+        return tuple(resource for _result, resource in resources)
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        task, request, result = await _verification_result_entry(
+            self._control_plane,
+            self._verification,
+            resource_id,
+        )
+        await _authorize_for_task(
+            self._control_plane,
+            context,
+            "verification-result:read",
+            task,
+            resource_ref=result.verification_result_id,
+        )
+        return _verification_result_resource(request, result)
 
 
 class VerificationReviewQueueResourceService(ResourceService):
@@ -446,6 +522,10 @@ def register_verification_control_plane(
         VerificationResourceService(control_plane, verification),
     )
     control_plane.register_resource_service(
+        VERIFICATION_RESULT_COLLECTION,
+        VerificationResultResourceService(control_plane, verification),
+    )
+    control_plane.register_resource_service(
         VERIFICATION_REVIEW_COLLECTION,
         VerificationReviewQueueResourceService(control_plane, verification),
     )
@@ -465,6 +545,19 @@ async def _task_ids(control_plane: ControlPlane) -> tuple[str, ...]:
         for stream_id in await control_plane._events.list_stream_ids()
         if stream_id.startswith("task_")
     )
+
+
+async def _verification_result_entry(
+    control_plane: ControlPlane,
+    verification: VerificationService,
+    resource_id: str,
+) -> tuple[TaskState, VerificationRequest, VerificationResult]:
+    for task_id in await _task_ids(control_plane):
+        task = await control_plane._kernel.get_task(task_id)
+        for request, result in verification.history(task_id=task_id):
+            if result is not None and result.verification_result_id == resource_id:
+                return task, request, result
+    raise ContractError(ErrorCode.NOT_FOUND, "verification result was not found")
 
 
 async def _authorize_for_task(
@@ -653,6 +746,65 @@ def _result_resource(result: VerificationResult) -> dict[str, JsonValue]:
         "started_at": result.started_at.isoformat(),
         "completed_at": result.completed_at.isoformat(),
         "metadata": dict(result.metadata),
+    }
+
+
+def _verification_result_resource(
+    request: VerificationRequest,
+    result: VerificationResult,
+) -> dict[str, JsonValue]:
+    resource = _result_resource(result)
+    resource.update(
+        {
+            "type": "verification_result",
+            "task_id": request.task_id,
+            "run_id": request.run_id,
+            "result_id": request.result_id,
+            "artifact_ids": list(request.artifact_ids),
+            "capability_ids": list(request.capability_ids),
+            "policy_id": request.policy_id,
+            "policy_version": request.policy_version,
+            "stage_id": request.stage_id,
+        }
+    )
+    return resource
+
+
+def _verification_result_search_resource(
+    request: VerificationRequest,
+    result: VerificationResult,
+) -> dict[str, JsonValue]:
+    """Project Result discovery metadata without findings, evidence, digest or human refs."""
+
+    return {
+        "id": result.verification_result_id,
+        "type": "verification_result",
+        "verification_id": result.verification_id,
+        "task_id": request.task_id,
+        "run_id": request.run_id,
+        "result_id": request.result_id,
+        "artifact_ids": list(request.artifact_ids),
+        "capability_ids": list(request.capability_ids),
+        "policy_id": request.policy_id,
+        "policy_version": request.policy_version,
+        "stage_id": request.stage_id,
+        "status": result.outcome.value,
+        "outcome": result.outcome.value,
+        "subject": {
+            "type": result.subject.subject_type,
+            "id": result.subject.subject_id,
+            "revision": result.subject.revision,
+        },
+        "verifier": {
+            "kind": result.verifier.kind.value,
+            "agent_id": result.verifier.agent_id,
+            "agent_revision": result.verifier.agent_revision,
+            "model_config_id": result.verifier.model_config_id,
+            "provider_id": result.verifier.provider_id,
+            "read_only": result.verifier.read_only,
+        },
+        "started_at": result.started_at.isoformat(),
+        "completed_at": result.completed_at.isoformat(),
     }
 
 

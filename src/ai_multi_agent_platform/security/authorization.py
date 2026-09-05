@@ -52,6 +52,8 @@ class AuthorizationAction(StrEnum):
     VERIFICATION_POLICY_READ = "verification-policy:read"
     VERIFICATION_LIST = "verification:list"
     VERIFICATION_READ = "verification:read"
+    VERIFICATION_RESULT_LIST = "verification-result:list"
+    VERIFICATION_RESULT_READ = "verification-result:read"
     VERIFICATION_REVIEW_LIST = "verification-review:list"
     VERIFICATION_REVIEW_READ = "verification-review:read"
     VERIFICATION_REQUIREMENT_LIST = "verification-requirement:list"

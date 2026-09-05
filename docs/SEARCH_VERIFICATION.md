@@ -7,7 +7,8 @@ The Verification integration layers on the canonical Search foundation from #45 
 Global Search derives safe documents for:
 
 - versioned Verification Policies (`verification_policy`);
-- Verification Requests together with the presence and safe outcome metadata of their canonical Verification Result (`verification`);
+- Verification Requests (`verification`);
+- canonical Verification Results through a derived read/search view (`verification_result`);
 - task-scoped Verification Requirements (`verification_requirement`).
 
 The pending human-review queue is deliberately not indexed because it is a filtered navigation view over the same canonical Verification Requests and would create a second Search identity.
@@ -18,7 +19,7 @@ Search is discovery-only. It cannot certify a result, accept a task, or replace 
 
 ## Privacy and evidence boundary
 
-Search indexes only explicitly safe nested metadata. It may include canonical Task/Run/Result/Artifact relationships, policy/version, stage, outcome, requested verifier kind, machine-verifier Agent/model/provider identifiers, exact subject type/id/revision, and policy scope/stage metadata.
+Search indexes only explicitly safe nested metadata. It may include canonical Task/Run/Result/Artifact relationships, policy/version, stage, outcome, requested/verifying kind, machine-verifier Agent/model/provider identifiers, exact subject type/id/revision, and policy scope/stage metadata. Verification Results receive their own `verification-results` read/search view, but that view is derived from #86 request/result history and owns no lifecycle state.
 
 It deliberately excludes:
 

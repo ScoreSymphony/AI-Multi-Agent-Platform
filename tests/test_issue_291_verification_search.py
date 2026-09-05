@@ -26,6 +26,7 @@ from ai_multi_agent_platform.verification.control_plane import (
     VERIFICATION_COLLECTION,
     VERIFICATION_POLICY_COLLECTION,
     VERIFICATION_REQUIREMENT_COLLECTION,
+    VERIFICATION_RESULT_COLLECTION,
     VERIFICATION_REVIEW_COLLECTION,
     register_verification_control_plane,
 )
@@ -45,6 +46,7 @@ class VerificationSearchAuthorization(FakeAuthorizationProvider):
         if request.action in {
             "verification-policy:list",
             "verification:list",
+            "verification-result:list",
             "verification-requirement:list",
         }:
             if request.principal_ref == "local:anonymous":
@@ -231,6 +233,38 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
             page = await _search(http, type="verification", q=str(query_value))
             assert page["total"] == 1, (query_value, page)
 
+        exact_result = await _search(
+            http,
+            type="verification_result",
+            id=result.verification_result_id,
+        )
+        assert exact_result["total"] == 1
+        result_item = _items(exact_result)[0]
+        assert result_item["resource_id"] == result.verification_result_id
+        assert result_item["title"] == f"Verification result for {request.verification_id}"
+        assert result_item["project_id"] == project_id
+        assert result_item["owner_type"] == "user"
+        assert result_item["owner_id"] == "alice"
+        assert result_item["status"] == "pass"
+        assert result_item["updated_at"] == result.completed_at.isoformat()
+        assert result_item["canonical_ref"] == (
+            f"/api/v1/{VERIFICATION_RESULT_COLLECTION}/{result.verification_result_id}"
+        )
+        for query_value in (
+            request.verification_id,
+            task.task_id,
+            request.result_id,
+            policy.policy_id,
+            str(policy.version),
+            artifact_id,
+            capability_id,
+            "human-review",
+            "human",
+            "pass",
+        ):
+            page = await _search(http, type="verification_result", q=str(query_value))
+            assert page["total"] == 1, (query_value, page)
+
         policy_ref = f"{policy.policy_id}@{policy.version}"
         policy_page = await _search(http, type="verification_policy", id=policy_ref)
         assert policy_page["total"] == 1
@@ -279,7 +313,12 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
             assert page["total"] == 0, (private_value, page)
 
         serialized = json.dumps(
-            {"verification": exact, "policy": policy_page, "requirement": requirement},
+            {
+                "verification": exact,
+                "verification_result": exact_result,
+                "policy": policy_page,
+                "requirement": requirement,
+            },
             sort_keys=True,
         )
         assert FINDING_SECRET not in serialized
@@ -299,6 +338,7 @@ def test_verification_requests_and_requirements_are_searchable_without_review_ev
             in {
                 "verification-policy:list",
                 "verification:list",
+                "verification-result:list",
                 "verification-requirement:list",
             }
         ]
@@ -330,6 +370,11 @@ def test_verification_search_indexes_all_task_scopes_but_hides_denied_project_ex
             project_id=hidden_project,
             digest="sha256:hidden-verification",
         )
+        hidden_result_record = verification.record_human_review(
+            hidden_request.verification_id,
+            reviewer_ref="user:hidden-reviewer",
+            outcome=VerificationOutcome.PASS,
+        )
 
         rebuilt = await control_plane.rebuild_search_index()
         assert rebuilt > 0
@@ -343,6 +388,11 @@ def test_verification_search_indexes_all_task_scopes_but_hides_denied_project_ex
             type="verification",
             id=hidden_request.verification_id,
         )
+        hidden_result = await _search(
+            http,
+            type="verification_result",
+            id=hidden_result_record.verification_result_id,
+        )
         hidden_requirement = await _search(
             http,
             type="verification_requirement",
@@ -354,18 +404,21 @@ def test_verification_search_indexes_all_task_scopes_but_hides_denied_project_ex
             project_id=hidden_project,
         )
         assert hidden_verification["total"] == 0
+        assert hidden_result["total"] == 0
         assert hidden_requirement["total"] == 0
         assert hidden_project_page["total"] == 0
 
         serialized = json.dumps(
             {
                 "verification": hidden_verification,
+                "verification_result": hidden_result,
                 "requirement": hidden_requirement,
                 "project": hidden_project_page,
             },
             sort_keys=True,
         )
         assert hidden_request.verification_id not in serialized
+        assert hidden_result_record.verification_result_id not in serialized
         assert hidden_task.task_id not in serialized
         assert hidden_project not in serialized
         assert "bob" not in serialized
@@ -373,13 +426,19 @@ def test_verification_search_indexes_all_task_scopes_but_hides_denied_project_ex
         denied_calls = [
             call
             for call in authorization.calls
-            if call.action in {"verification:list", "verification-requirement:list"}
+            if call.action
+            in {
+                "verification:list",
+                "verification-result:list",
+                "verification-requirement:list",
+            }
             and call.context.project_id == hidden_project
         ]
         assert denied_calls
         assert all(call.context.owner_type == "user" for call in denied_calls)
         assert all(call.context.owner_id == "bob" for call in denied_calls)
         assert any(call.action == "verification:list" for call in denied_calls)
+        assert any(call.action == "verification-result:list" for call in denied_calls)
         assert any(call.action == "verification-requirement:list" for call in denied_calls)
 
         visible_requirement = await _search(

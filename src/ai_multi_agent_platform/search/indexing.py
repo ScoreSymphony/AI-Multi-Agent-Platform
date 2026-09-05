@@ -158,6 +158,10 @@ def _display_title(
         task_id = _optional_string(resource, "task_id")
         if task_id is not None:
             return f"Verification for task {task_id}"
+    if resource_type == "verification_result":
+        verification_id = _optional_string(resource, "verification_id")
+        if verification_id is not None:
+            return f"Verification result for {verification_id}"
     if resource_type == "verification_requirement":
         task_id = _optional_string(resource, "task_id")
         if task_id is not None:
@@ -287,6 +291,10 @@ def _updated_at(resource_type: str, resource: Mapping[str, JsonValue]) -> str | 
         )
     if resource_type == "verification_policy":
         return _optional_string(resource, "created_at")
+    if resource_type == "verification_result":
+        return _optional_string(resource, "completed_at") or _optional_string(
+            resource, "started_at"
+        )
     if resource_type == "verification":
         result = _nested_mapping(resource, "verification_result")
         if result is not None:
@@ -445,7 +453,12 @@ def _verification_keywords(
         add_scalar(subject, "type", "id", "revision")
         # Exact digests are deliberately retained only behind the canonical resource read.
 
-    if resource_type == "verification":
+    if resource_type == "verification_result":
+        add_scalar(resource, "verification_id", "policy_id", "policy_version", "outcome")
+        add_subject(resource)
+        verifier = _nested_mapping(resource, "verifier")
+        add_scalar(verifier, "kind", "agent_id", "agent_revision", "model_config_id", "provider_id")
+    elif resource_type == "verification":
         add_scalar(_nested_mapping(resource, "policy"), "id", "version")
         add_subject(resource)
         result = _nested_mapping(resource, "verification_result")
