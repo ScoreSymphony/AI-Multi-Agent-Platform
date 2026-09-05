@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.data import DataAccessContext
 from ai_multi_agent_platform.domain import OwnerRef
 
@@ -88,3 +89,16 @@ class WorkspaceProvider(ABC):
 
     @abstractmethod
     async def cleanup(self) -> CleanupReport: ...
+
+    async def compensate_workspace(self, workspace_id: str) -> Workspace:
+        """Remove a freshly-created unused Workspace when a larger operation rolls back.
+
+        This is deliberately not a normal delete lifecycle. Providers that cannot prove
+        compensation safety must fail closed instead of removing canonical Workspace state.
+        """
+
+        del workspace_id
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "workspace provider does not support guarded creation compensation",
+        )
