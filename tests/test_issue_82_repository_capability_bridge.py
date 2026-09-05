@@ -104,9 +104,63 @@ def test_repository_operations_run_through_capability_registry_and_service_polic
             capability.capability_id: capability
             for capability in capabilities.inventory_capabilities()
         }
+        assert inventory["repository.inspect_refs"].required_permissions == (
+            "repository.inspect_refs",
+        )
         assert inventory["repository.status"].required_permissions == ("repository.status",)
         assert inventory["repository.commit"].side_effects.value == "local_write"
         assert inventory["repository.push"].side_effects.value == "external"
+
+        branches = await invoker.invoke(
+            CapabilityInvocation(
+                invocation_id="repository-branches-capability",
+                capability_id="repository.inspect_refs",
+                arguments={"repository_id": repository.id, "kind": "branches"},
+                context=operation,
+                trace=trace,
+                granted_permissions=frozenset({"repository.inspect_refs"}),
+            )
+        )
+        assert isinstance(branches.output, dict)
+        assert branches.output["branches"] == ["main"]
+
+        history = await invoker.invoke(
+            CapabilityInvocation(
+                invocation_id="repository-commits-capability",
+                capability_id="repository.inspect_refs",
+                arguments={
+                    "repository_id": repository.id,
+                    "kind": "commits",
+                    "revision": "HEAD",
+                    "limit": 1,
+                },
+                context=operation,
+                trace=trace,
+                granted_permissions=frozenset({"repository.inspect_refs"}),
+            )
+        )
+        assert isinstance(history.output, dict)
+        commits = history.output["commits"]
+        assert isinstance(commits, list)
+        assert len(commits) == 1
+        assert commits[0]["message"] == "initial"
+
+        with pytest.raises(ContractError) as invalid_limit:
+            await invoker.invoke(
+                CapabilityInvocation(
+                    invocation_id="repository-invalid-commit-limit",
+                    capability_id="repository.inspect_refs",
+                    arguments={
+                        "repository_id": repository.id,
+                        "kind": "commits",
+                        "limit": 0,
+                    },
+                    context=operation,
+                    trace=trace,
+                    granted_permissions=frozenset({"repository.inspect_refs"}),
+                )
+            )
+        assert invalid_limit.value.code is ErrorCode.INVALID_REQUEST
 
         status = await invoker.invoke(
             CapabilityInvocation(
