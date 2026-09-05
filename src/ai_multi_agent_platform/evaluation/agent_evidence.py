@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Protocol
 
-from ai_multi_agent_platform.agents.repository import AgentRepository
+from ai_multi_agent_platform.agents.models import AgentRunRecord
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .context import EvaluationExecutionContext
@@ -12,6 +13,12 @@ from .contracts import EvaluationCaseExecutor
 from .models import EvaluationAttempt, EvaluationCase, EvaluationObservation
 
 _AGENT_BEHAVIOR_KEY = "agent_behavior"
+
+
+class AgentRunReader(Protocol):
+    """Minimal source-owned AgentRun read boundary needed by Evaluation."""
+
+    def list_agent_runs(self, run_id: str | None = None) -> tuple[AgentRunRecord, ...]: ...
 
 
 def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -31,7 +38,7 @@ class AgentRunEvidenceCaseExecutor:
     selected identity; multi-agent detail remains available in ``agent_behavior.runs``.
     """
 
-    def __init__(self, executor: EvaluationCaseExecutor, agents: AgentRepository) -> None:
+    def __init__(self, executor: EvaluationCaseExecutor, agents: AgentRunReader) -> None:
         self._executor = executor
         self._agents = agents
 
@@ -50,7 +57,12 @@ class AgentRunEvidenceCaseExecutor:
         if observation.run_id is None:
             return observation
 
-        records = tuple(sorted(self._agents.list_agent_runs(observation.run_id), key=lambda item: item.agent_run_id))
+        records = tuple(
+            sorted(
+                self._agents.list_agent_runs(observation.run_id),
+                key=lambda item: item.agent_run_id,
+            )
+        )
         if not records:
             return observation
         if _AGENT_BEHAVIOR_KEY in observation.data:
@@ -117,4 +129,4 @@ class AgentRunEvidenceCaseExecutor:
         )
 
 
-__all__ = ["AgentRunEvidenceCaseExecutor"]
+__all__ = ["AgentRunEvidenceCaseExecutor", "AgentRunReader"]
