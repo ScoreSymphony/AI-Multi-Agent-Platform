@@ -24,21 +24,18 @@ from .conversation_current_composition import (
     AuthenticatedControlPlaneHTTP,
     ControlPlaneASGI,
     ControlPlaneHTTP,
-)
-from .organization_audit_api import ControlPlane as _CurrentControlPlane
-from .conversation_current_composition import (
     build_openapi as _build_current_openapi,
 )
 from .models import RequestContext
-from .portability_api import ControlPlane as _PortabilityControlPlane
+from .organization_audit_api import ControlPlane as _CurrentControlPlane
 
 APPROVAL_APPROVE_COMMAND = "approval.approve"
 APPROVAL_DENY_COMMAND = "approval.deny"
 APPROVAL_DECISION_COMMANDS = (APPROVAL_APPROVE_COMMAND, APPROVAL_DENY_COMMAND)
 
 
-class ControlPlane(_CurrentControlPlane, _PortabilityControlPlane):
-    """Current Control Plane plus portability and the #15-gated Approval decision seam."""
+class ControlPlane(_CurrentControlPlane):
+    """Current Control Plane plus the #15-gated Approval decision seam."""
 
     def __init__(
         self,
