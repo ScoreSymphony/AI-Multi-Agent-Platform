@@ -93,13 +93,19 @@ class JsonCapabilityAssignmentRepository(InMemoryCapabilityAssignmentRepository)
     ) -> None:
         if not history or history[-1].revision != policy.current_revision:
             raise ValueError("capability-assignment policy does not match revision history")
-        if [item.revision for item in history] != list(range(1, policy.current_revision + 1)):
+        if [item.revision for item in history] != list(
+            range(1, policy.current_revision + 1)
+        ):
             raise ValueError("capability-assignment revision history is not contiguous")
         for index, revision in enumerate(history):
             interim = replace(policy, current_revision=revision.revision)
             if index == 0:
                 InMemoryCapabilityAssignmentRepository.create(self, interim, revision)
             else:
-                InMemoryCapabilityAssignmentRepository.append_revision(self, interim, revision)
+                InMemoryCapabilityAssignmentRepository.append_revision(
+                    self,
+                    interim,
+                    revision,
+                )
         if self.get(policy.assignment_id) != policy:
             raise ValueError("restored capability-assignment policy metadata differs")
