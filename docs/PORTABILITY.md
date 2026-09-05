@@ -306,4 +306,4 @@ The #79 portability stack verifies at least:
 - Automation identity-transfer rejection before mutation;
 - guarded Automation rollback for in-memory and SQLite repositories.
 
-Further canonical configuration codecs, import/export reports and Control Plane/CLI surfaces remain follow-up work within #79.
+Template full-revision round trip, canonical Template dependency/reference remapping, guarded Template compensation, replay-safe import reports and Control Plane/CLI workflows are covered by the current #79 implementation. Remaining resource-family integrations are intentionally dependency-gated: Project portability waits for #308, durable model-routing-policy portability for #309, reusable authorization-policy portability for #310, and Evaluation suite/result portability for #19. #79 must consume those canonical contracts rather than inventing shadow persistence.

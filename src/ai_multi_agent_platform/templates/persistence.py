@@ -55,6 +55,10 @@ class JsonTemplateRepository(InMemoryTemplateRepository):
         super().record_instantiation(instantiation)
         self._save()
 
+    def delete_template(self, template_id: str) -> None:
+        super().delete_template(template_id)
+        self._save()
+
     def _save(self) -> None:
         document: dict[str, JsonValue] = {
             "schema_version": TEMPLATE_REPOSITORY_SCHEMA_VERSION,
