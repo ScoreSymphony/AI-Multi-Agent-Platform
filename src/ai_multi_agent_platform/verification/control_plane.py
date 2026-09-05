@@ -12,7 +12,7 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.control_plane.service import _payload_digest
 from ai_multi_agent_platform.kernel import TaskState
 
-from .evidence import VerificationEvidenceResolver
+from .evidence import CanonicalVerificationRuntime, VerificationEvidenceResolver
 from .gate import VerificationCompletionAuthority
 from .models import (
     VerificationFinding,
@@ -358,10 +358,12 @@ class VerificationCommandHandlers:
         control_plane: ControlPlane,
         verification: VerificationService,
         evidence: VerificationEvidenceResolver | None = None,
+        runtime: CanonicalVerificationRuntime | None = None,
     ) -> None:
         self._control_plane = control_plane
         self._verification = verification
         self._evidence = evidence
+        self._runtime = runtime
 
     async def accept(
         self,
@@ -479,28 +481,31 @@ class VerificationCommandHandlers:
                     severity="info" if outcome is VerificationOutcome.PASS else "warning",
                 ),
             )
-        result = self._verification.submit_result(
-            VerificationResult(
-                verification_id=verification_id,
-                verifier=VerifierIdentity(
-                    verifier_ref=context.actor.principal_ref,
-                    kind=VerifierKind.HUMAN,
-                    read_only=True,
-                ),
-                outcome=outcome,
-                subject=request.subject,
-                findings=findings,
-                evidence_artifact_ids=evidence_artifact_ids,
-                checks_executed=("human_review",),
-                metadata={
-                    "control_plane": {
-                        "idempotency_key": key,
-                        "payload_digest": digest,
-                        "actor_ref": context.actor.principal_ref,
-                        "action": action,
-                    }
-                },
-            )
+        proposed = VerificationResult(
+            verification_id=verification_id,
+            verifier=VerifierIdentity(
+                verifier_ref=context.actor.principal_ref,
+                kind=VerifierKind.HUMAN,
+                read_only=True,
+            ),
+            outcome=outcome,
+            subject=request.subject,
+            findings=findings,
+            evidence_artifact_ids=evidence_artifact_ids,
+            checks_executed=("human_review",),
+            metadata={
+                "control_plane": {
+                    "idempotency_key": key,
+                    "payload_digest": digest,
+                    "actor_ref": context.actor.principal_ref,
+                    "action": action,
+                }
+            },
+        )
+        result = (
+            await self._runtime.submit_result(proposed)
+            if self._runtime is not None
+            else self._verification.submit_result(proposed)
         )
         return _verification_resource(self._verification.get_request(verification_id), result)
 
@@ -510,6 +515,7 @@ def register_verification_control_plane(
     verification: VerificationService,
     completion: VerificationCompletionAuthority,
     evidence: VerificationEvidenceResolver | None = None,
+    runtime: CanonicalVerificationRuntime | None = None,
 ) -> None:
     """Register #86 read/review surfaces on the generic #32 extension seam."""
 
@@ -533,7 +539,7 @@ def register_verification_control_plane(
         VERIFICATION_REQUIREMENT_COLLECTION,
         VerificationRequirementResourceService(control_plane, completion),
     )
-    handlers = VerificationCommandHandlers(control_plane, verification, evidence)
+    handlers = VerificationCommandHandlers(control_plane, verification, evidence, runtime)
     control_plane.register_command("verification.accept", handlers.accept)
     control_plane.register_command("verification.reject", handlers.reject)
     control_plane.register_command("verification.request-changes", handlers.request_changes)

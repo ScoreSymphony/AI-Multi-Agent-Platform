@@ -11,6 +11,7 @@ from .evidence import (
 from .gate import (
     CompletionAuthority,
     CompletionGateDecision,
+    OutputChangeAwareCompletionAuthority,
     TaskVerificationRequirement,
     VerificationCompletionAuthority,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "CompletionGateDecision",
     "CompletionState",
     "CanonicalVerificationRuntime",
+    "OutputChangeAwareCompletionAuthority",
     "DeterministicCheck",
     "KernelFileVerificationEvidenceResolver",
     "ProducerIdentity",

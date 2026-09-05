@@ -11,7 +11,6 @@ from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_no
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.verification import (
     SqliteVerificationService,
-    VerificationOutcome,
     VerificationPolicy,
     VerificationRequestStatus,
     VerificationStage,
@@ -164,10 +163,23 @@ def test_single_node_human_review_rejects_forged_subject_and_unknown_evidence(
         assert evidence_error.value.code is ErrorCode.NOT_FOUND
         assert deployment.verification.result_for(canonical_request.verification_id) is None
 
-        deployment.verification.record_human_review(
-            canonical_request.verification_id,
-            reviewer_ref=admin.user_id,
-            outcome=VerificationOutcome.PASS,
+        accept_context = RequestContext(
+            request_id="canonical-review-accept",
+            correlation_id=task.task_id,
+            idempotency_key="canonical-review-accept",
+            actor=ActorContext(
+                principal_ref=admin.user_id,
+                owner_type="user",
+                owner_id=admin.user_id,
+                actor_type="human",
+            ),
         )
+        accepted = await deployment.control_plane.execute_command(
+            accept_context,
+            "verification.accept",
+            canonical_request.verification_id,
+            {},
+        )
+        assert accepted["verification_result"]["outcome"] == "pass"
 
     asyncio.run(scenario())

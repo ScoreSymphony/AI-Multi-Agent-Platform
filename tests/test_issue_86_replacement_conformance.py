@@ -294,7 +294,7 @@ async def _agent_reviewer_outcome(
         run_id=new_id("run"),
         agent_id=agent.agent_id,
     )
-    result = reviewer.complete_review(
+    result = await reviewer.complete_review(
         record.agent_run_id,
         outcome=VerificationOutcome.PASS,
     )
@@ -403,7 +403,7 @@ def test_reviewer_provider_independence_uses_actual_routed_provider_identity() -
             agent_id=agent.agent_id,
             task_model_override=RoutingRequirements(explicit_model_id="review-model-b"),
         )
-        result = reviewer.complete_review(
+        result = await reviewer.complete_review(
             record.agent_run_id,
             outcome=VerificationOutcome.PASS,
         )

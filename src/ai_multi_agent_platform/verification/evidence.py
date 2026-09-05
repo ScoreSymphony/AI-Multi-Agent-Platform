@@ -14,8 +14,15 @@ from ai_multi_agent_platform.data.contracts import FileProvider
 from ai_multi_agent_platform.data.models import DataAccessContext, FileState
 from ai_multi_agent_platform.domain import RunStatus, validate_id
 
+from .deterministic import ReferenceDeterministicVerifier
 from .gate import TaskVerificationRequirement, VerificationCompletionAuthority
-from .models import ProducerIdentity, VerificationRequest, VerificationSubject
+from .models import (
+    ProducerIdentity,
+    VerificationRequest,
+    VerificationResult,
+    VerificationSubject,
+)
+from .service import _CANONICAL_RESULT_TOKEN
 
 if TYPE_CHECKING:
     from ai_multi_agent_platform.agents import AgentRepository
@@ -372,6 +379,34 @@ class CanonicalVerificationRuntime:
             producer=context.producer,
             causation_id=causation_id,
         )
+
+    async def submit_result(self, result: VerificationResult) -> VerificationResult:
+        request = self._completion.verification.get_request(result.verification_id)
+        canonical_subject = await self._evidence.resolve_subject(
+            task_id=request.task_id,
+            subject_type=request.subject.subject_type,
+            subject_id=request.subject.subject_id,
+        )
+        if canonical_subject != request.subject or result.subject != canonical_subject:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "verification result subject differs from current canonical evidence",
+            )
+        await self._evidence.validate_evidence_artifacts(
+            task_id=request.task_id,
+            artifact_ids=result.evidence_artifact_ids,
+        )
+        return self._completion.verification.submit_result(
+            result, _canonical_result_token=_CANONICAL_RESULT_TOKEN
+        )
+
+    async def run_deterministic(
+        self,
+        verification_id: str,
+        verifier: ReferenceDeterministicVerifier,
+    ) -> VerificationResult:
+        request = self._completion.verification.get_request(verification_id)
+        return await self.submit_result(verifier.verify(request))
 
     async def request_reverification_after_repair(
         self,

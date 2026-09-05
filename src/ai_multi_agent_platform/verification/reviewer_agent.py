@@ -15,7 +15,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.models import RoutingRequirements
 
-from .evidence import VerificationEvidenceResolver
+from .evidence import CanonicalVerificationRuntime, VerificationEvidenceResolver
 from .models import (
     VerificationFinding,
     VerificationOutcome,
@@ -45,10 +45,12 @@ class ReviewerAgentRuntime:
         verification: VerificationService,
         agents: AgentRuntime,
         evidence: VerificationEvidenceResolver | None = None,
+        canonical_runtime: CanonicalVerificationRuntime | None = None,
     ) -> None:
         self._verification = verification
         self._agents = agents
         self._evidence = evidence
+        self._canonical_runtime = canonical_runtime
 
     async def start_review(
         self,
@@ -57,6 +59,8 @@ class ReviewerAgentRuntime:
         run_id: str,
         agent_id: str,
         revision: int | None = None,
+        team_id: str | None = None,
+        team_revision: int | None = None,
         mapper: AgentOrchestratorMapper | None = None,
         task_model_override: RoutingRequirements | None = None,
         requested_capability_ids: tuple[str, ...] = (),
@@ -91,6 +95,32 @@ class ReviewerAgentRuntime:
 
         policy = self._verification.get_policy(request.policy_id, request.policy_version)
         stage = policy.stage(request.stage_id)
+        bound_team = None
+        resolved_revision = revision
+        shared_capability_ids: tuple[str, ...] = ()
+        if team_id is None and team_revision is not None:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "reviewer team_revision requires team_id",
+            )
+        if team_id is not None:
+            bound_team = self._agents.service.get_team_revision(team_id, team_revision)
+            member = next(
+                (item for item in bound_team.profile.members if item.agent.agent_id == agent_id),
+                None,
+            )
+            if member is None:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "reviewer Agent is not a member of the requested Team revision",
+                )
+            if revision is not None and revision != member.agent.revision:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "reviewer Agent revision differs from the Team member revision",
+                )
+            resolved_revision = member.agent.revision
+            shared_capability_ids = bound_team.profile.shared_capability_ids
         capability_ids = list(requested_capability_ids)
         if stage.capability_ref is not None and stage.capability_ref not in capability_ids:
             capability_ids.append(stage.capability_ref)
@@ -100,9 +130,11 @@ class ReviewerAgentRuntime:
             task_id=request.task_id,
             run_id=run_id,
             agent_id=agent_id,
-            revision=revision,
+            revision=resolved_revision,
+            team_revision=bound_team,
             task_model_override=task_model_override,
             requested_capability_ids=requested,
+            shared_capability_ids=shared_capability_ids,
             available_capability_ids=available_capability_ids,
             granted_permissions=granted_permissions,
             available_worker_capabilities=available_worker_capabilities,
@@ -134,8 +166,10 @@ class ReviewerAgentRuntime:
             agent_id=spec.agent_revision.agent_id,
             revision=spec.agent_revision.revision,
             mapper=mapper,
+            team_revision=bound_team,
             task_model_override=task_model_override,
             requested_capability_ids=requested,
+            shared_capability_ids=shared_capability_ids,
             available_capability_ids=available_capability_ids,
             granted_permissions=granted_permissions,
             available_worker_capabilities=available_worker_capabilities,
@@ -160,7 +194,7 @@ class ReviewerAgentRuntime:
             )
         return record
 
-    def complete_review(
+    async def complete_review(
         self,
         agent_run_id: str,
         *,
@@ -215,14 +249,18 @@ class ReviewerAgentRuntime:
                 f"reviewer Agent run did not complete successfully: {record.status.value}",
             )
 
-        return self._verification.record_agent_review(
-            verification_id,
+        proposed = VerificationResult(
+            verification_id=verification_id,
             verifier=verifier,
             outcome=outcome,
+            subject=request.subject,
             findings=findings,
             evidence_artifact_ids=evidence_artifact_ids,
             checks_executed=checks_executed,
         )
+        if self._canonical_runtime is not None:
+            return await self._canonical_runtime.submit_result(proposed)
+        return self._verification.submit_result(proposed)
 
     def _spec_is_read_only(
         self,
