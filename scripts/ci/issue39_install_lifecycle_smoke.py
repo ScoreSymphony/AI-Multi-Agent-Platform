@@ -28,14 +28,22 @@ def _run(
     env: dict[str, str],
     stdin: str | None = None,
 ) -> str:
-    completed = subprocess.run(
-        [executable, *args],
-        check=True,
-        env=env,
-        input=stdin,
-        text=True,
-        capture_output=True,
-    )
+    try:
+        completed = subprocess.run(
+            [executable, *args],
+            check=True,
+            env=env,
+            input=stdin,
+            text=True,
+            capture_output=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        command = " ".join((executable, *args))
+        raise RuntimeError(
+            f"command failed with exit code {exc.returncode}: {command}\n"
+            f"stdout:\n{exc.stdout or ''}\n"
+            f"stderr:\n{exc.stderr or ''}"
+        ) from exc
     return completed.stdout.strip()
 
 
