@@ -3,13 +3,17 @@
 ## Development flow
 
 1. Start from the latest `main`.
-2. Create a focused branch for one issue or tightly related work package.
-3. Keep canonical platform contracts independent from concrete upstream implementations.
-4. Add or update tests for behavior changes.
-5. Format changed code with `ruff format .`.
-6. Run the local validation commands before opening a pull request.
-7. Open a pull request that references the relevant numbered issue.
-8. Prefer squash merges for focused work packages unless preserving commit history is materially useful.
+2. Select an issue with exactly one `type:*`, `area:*`, `stage:*` label and one milestone.
+3. Confirm that its hard dependencies are merged before implementation starts.
+4. Create a focused branch for one issue or tightly related work package.
+5. Keep canonical platform contracts independent from concrete upstream implementations.
+6. Add or update tests for behavior changes.
+7. Format changed code with `ruff format .`.
+8. Run the local validation commands before opening a pull request.
+9. Open a pull request that references the relevant numbered issue.
+10. Prefer squash merges for focused work packages unless preserving commit history is materially useful.
+
+Repository decision-making, ownership, triage and release responsibilities are defined in [`GOVERNANCE.md`](GOVERNANCE.md). The release checklist is maintained in [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
 
 ## Reconciling stale or superseded branches
 
