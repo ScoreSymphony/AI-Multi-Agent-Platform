@@ -1,8 +1,9 @@
 # ADR 0008: Defer an external durable workflow engine and add only missing platform durability
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-09-05
 - **Affected issue:** #21
+- **Implementation follow-up:** #384
 - **Hard dependencies reviewed:** #1, #4, #5, #6, #9, #14, #18
 - **Related decisions:** ADR 0005 (message transport is not canonical event history)
 - **Decision outcome:** **Outcome 2 — Add minimal internal durability features; do not adopt Temporal or another external workflow engine now.**
@@ -613,4 +614,4 @@ DBOS:
 
 ## Status transition
 
-This ADR is **Proposed** in the #21 pull request. It should become **Accepted** when the issue/PR is reviewed and the project agrees that the next durability work is the narrow platform-owned Plan/Step coordinator rather than an external workflow-engine integration.
+This ADR is **Accepted** for #21. The platform will implement the narrow platform-owned durable Plan/Step coordinator in #384 and will re-evaluate Temporal, DBOS or another external engine only when the documented triggers are reached.
