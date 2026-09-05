@@ -110,6 +110,9 @@ def test_repository_control_plane_exposes_resources_and_policy_gated_git_command
     async def scenario() -> None:
         control_plane, http, root, repository_id = await _stack(tmp_path)
         assert "repositories" in control_plane.registered_collections
+        assert "repository.branches" in control_plane.registered_commands
+        assert "repository.tags" in control_plane.registered_commands
+        assert "repository.commits" in control_plane.registered_commands
         assert "repository.status" in control_plane.registered_commands
         assert "repository.push" in control_plane.registered_commands
 
@@ -135,6 +138,46 @@ def test_repository_control_plane_exposes_resources_and_policy_gated_git_command
         assert loaded.status == 200
         assert isinstance(loaded.body, dict)
         assert loaded.body["id"] == repository_id
+
+        branches = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/repository.branches",
+                headers=_headers("branches-1"),
+                body={"resource_ref": repository_id},
+            )
+        )
+        assert branches.status == 200
+        assert isinstance(branches.body, dict)
+        assert branches.body["branches"] == ["main"]
+
+        tags = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/repository.tags",
+                headers=_headers("tags-1"),
+                body={"resource_ref": repository_id},
+            )
+        )
+        assert tags.status == 200
+        assert isinstance(tags.body, dict)
+        assert tags.body["tags"] == []
+
+        commits = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/repository.commits",
+                headers=_headers("commits-1"),
+                body={"resource_ref": repository_id, "revision": "HEAD", "limit": 1},
+            )
+        )
+        assert commits.status == 200
+        assert isinstance(commits.body, dict)
+        commit_items = commits.body["commits"]
+        assert isinstance(commit_items, list)
+        assert len(commit_items) == 1
+        assert commit_items[0]["message"] == "initial"
+        assert len(commit_items[0]["revision"]) == 40
 
         status = await http.handle(
             HTTPRequest(
@@ -180,6 +223,24 @@ def test_repository_control_plane_exposes_resources_and_policy_gated_git_command
         assert committed.body["repository_id"] == repository_id
         assert isinstance(committed.body["revision"], str)
         assert len(committed.body["revision"]) == 40
+
+        history = await http.handle(
+            HTTPRequest(
+                method="POST",
+                path="/api/v1/commands/repository.commits",
+                headers=_headers("commits-2"),
+                body={"resource_ref": repository_id, "limit": 2},
+            )
+        )
+        assert history.status == 200
+        assert isinstance(history.body, dict)
+        history_items = history.body["commits"]
+        assert isinstance(history_items, list)
+        assert [item["message"] for item in history_items] == [
+            "control-plane change",
+            "initial",
+        ]
+        assert history_items[0]["parent_revisions"] == [history_items[1]["revision"]]
 
         rejected = await http.handle(
             HTTPRequest(
