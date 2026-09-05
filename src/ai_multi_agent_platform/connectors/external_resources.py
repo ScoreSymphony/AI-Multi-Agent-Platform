@@ -98,9 +98,7 @@ class ExternalResourceResourceService(ResourceService):
         resource: ExternalResourceReference,
     ) -> Connection:
         try:
-            connection = await self._connectors.repository.get_connection(
-                resource.connection_id
-            )
+            connection = await self._connectors.repository.get_connection(resource.connection_id)
             return await self._connectors.get_connection(
                 connection.id,
                 actor=self._actor_resolver(context),
