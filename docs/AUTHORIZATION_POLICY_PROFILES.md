@@ -46,6 +46,12 @@ Each immutable revision owns:
 Historical revisions are never rewritten when a later revision is created or when the
 active authorization provider is replaced.
 
+An explicit Project, Organization or Team scope on the profile/revision is an outer
+security bound for permission-bearing content. Inner policy constraints may be empty or
+repeat that same bound, but they cannot point outside it. When an inner constraint is
+empty, compatible provider compilation inherits the outer bound rather than interpreting
+the omission as globally unrestricted authority.
+
 ## 3. Provider-neutral policy content
 
 The current canonical vocabulary supports:
@@ -102,7 +108,11 @@ Mutations are treated as privileged operations:
 - assignment: critical administrative change.
 
 If the configured provider returns `require_approval`, the ordinary exact-action approval
-workflow applies. The profile service does not implement a second approval model.
+workflow applies. The profile service does not implement a second approval model. Critical
+imports additionally bind that exact action to a SHA-256 fingerprint computed by the
+canonical service over the destination definition and complete revision history. An
+approval for one policy body therefore cannot authorize changed content under the same
+policy ID and revision.
 
 ## 6. Assignments are configuration, not authority
 
@@ -126,6 +136,11 @@ pass the boundary again to create an assignment.
 It rejects unsupported canonical conditions and exact resource-ID constraints instead of
 silently dropping them.
 
+Project, Organization and Team constraints inherit any corresponding outer profile scope
+when the inner constraint is empty. Because the local reference provider treats an empty
+scope set as unrestricted, this inheritance is required to preserve the canonical outer
+security boundary.
+
 The resulting `LocalPrincipalPolicy` has no canonical identity of its own. Recompiling the
 same profile for a different compatible provider does not mutate or re-key the canonical
 profile.
@@ -137,8 +152,10 @@ profile.
 full immutable revision history and exact-revision assignments.
 
 Both repositories support atomic complete-history import and guarded removal for import
-compensation. The JSON repository persists or rolls back the corresponding in-memory
-mutation if its durable write fails.
+compensation. The JSON repository rolls back the corresponding in-memory mutation whenever
+a durable write fails, including create, revision append, lifecycle changes, assignment,
+complete-history import and guarded deletion. The live process therefore cannot report a
+policy mutation that would disappear after restart.
 
 The JSON store contains canonical configuration only. Secret values, provider-native
 objects and compiled provider policy state are excluded. Repository restoration validates
