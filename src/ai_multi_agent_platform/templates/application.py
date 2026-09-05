@@ -433,9 +433,7 @@ class TemplateApplicationService:
             "Template is not compatible with the target environment",
             details={
                 "missing_capabilities": list(preview.missing_required_capability_ids),
-                "incompatible_capability_versions": list(
-                    preview.incompatible_capability_versions
-                ),
+                "incompatible_capability_versions": list(preview.incompatible_capability_versions),
                 "incompatible_platform_versions": list(preview.incompatible_platform_versions),
                 "missing_contract_versions": list(preview.missing_contract_versions),
                 "incompatible_contract_versions": list(preview.incompatible_contract_versions),
