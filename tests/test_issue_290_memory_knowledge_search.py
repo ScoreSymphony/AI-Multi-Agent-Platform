@@ -167,11 +167,13 @@ async def _memory(
             "private_note": "memory-private-metadata-needle",
         },
     )
+    access_owner_type = "organization" if scope is MemoryScope.ORGANIZATION else "user"
+    access_owner_id = scope_id if scope in {MemoryScope.USER, MemoryScope.ORGANIZATION} else "alice"
     return await provider.write_entry(
         entry,
         _access(
-            owner_type="organization" if scope is MemoryScope.ORGANIZATION else "user",
-            owner_id=scope_id if scope is MemoryScope.ORGANIZATION else "alice",
+            owner_type=access_owner_type,
+            owner_id=access_owner_id,
             project_id=project_id,
         ),
     )
