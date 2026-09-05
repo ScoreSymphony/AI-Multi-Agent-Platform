@@ -26,7 +26,23 @@ from .models import (
 from .store import UsageStore
 
 ThresholdEventSink = Callable[[BudgetThresholdEvent], None]
+UsageAttributor = Callable[[UsageRecord], UsageRecord]
 MAX_TREND_BUCKETS = 500
+
+_RUNTIME_GAUGE_METRICS = frozenset(
+    {
+        "platform.node.cpu_cores_total",
+        "platform.node.cpu_cores_available",
+        "platform.node.ram_total_bytes",
+        "platform.node.ram_available_bytes",
+        "platform.node.storage_total_bytes",
+        "platform.node.storage_available_bytes",
+        "platform.node.accelerator_memory_total_bytes",
+        "platform.node.accelerator_memory_available_total_bytes",
+        "platform.worker.active_jobs",
+        "platform.worker.concurrency_limit",
+    }
+)
 
 
 class AccountingService:
@@ -37,13 +53,17 @@ class AccountingService:
         store: UsageStore,
         *,
         threshold_event_sink: ThresholdEventSink | None = None,
+        usage_attributor: UsageAttributor | None = None,
     ) -> None:
         self.store = store
         self.threshold_event_sink = threshold_event_sink
+        self.usage_attributor = usage_attributor
 
     def ingest_metric(self, record: MetricRecord) -> None:
         usage = usage_from_metric(record)
         if usage is not None:
+            if self.usage_attributor is not None:
+                usage = self.usage_attributor(usage)
             self.record(usage)
 
     def record(self, record: UsageRecord) -> None:
@@ -250,7 +270,7 @@ def aggregate_usage_records(
     end: datetime | None = None,
     default_aggregation_mode: AggregationMode = AggregationMode.ADDITIVE,
 ) -> UsageAggregate:
-    """Aggregate one canonical metric without summing point-in-time gauges."""
+    """Aggregate one canonical metric without collapsing distinct point-in-time gauges."""
 
     modes = {record.aggregation_mode for record in records}
     if len(modes) > 1:
@@ -261,8 +281,11 @@ def aggregate_usage_records(
         quality_counts[record.quality] += 1
 
     if mode is AggregationMode.LATEST and records:
-        latest = max(records, key=lambda record: (record.timestamp, record.id))
-        total = latest.quantity
+        latest_records = _latest_records_by_scope(records)
+        if any(record.quantity is None for record in latest_records):
+            total = None
+        else:
+            total = sum(record.quantity for record in latest_records if record.quantity is not None)
     else:
         values = [record.quantity for record in records if record.quantity is not None]
         total = sum(values) if values else None
@@ -346,6 +369,23 @@ def trend_usage_records(
     return tuple(buckets)
 
 
+def _latest_records_by_scope(records: tuple[UsageRecord, ...]) -> tuple[UsageRecord, ...]:
+    """Keep one latest gauge per exact canonical UsageScope.
+
+    A broad query may contain many Workers, Nodes or other scoped resources. Choosing one
+    globally latest row would drop every other resource. Exact scope grouping preserves
+    resource identity while still preventing historical snapshots from being summed.
+    """
+
+    latest: dict[tuple[tuple[str, str], ...], UsageRecord] = {}
+    for record in records:
+        key = tuple(sorted(record.scope.fields().items()))
+        current = latest.get(key)
+        if current is None or (record.timestamp, record.id) > (current.timestamp, current.id):
+            latest[key] = record
+    return tuple(latest[key] for key in sorted(latest))
+
+
 def _budget_quantity(records: tuple[UsageRecord, ...]) -> float:
     if not records:
         return 0.0
@@ -354,9 +394,12 @@ def _budget_quantity(records: tuple[UsageRecord, ...]) -> float:
         raise ValueError("budget cannot mix aggregation modes for one metric/unit")
     mode = next(iter(modes))
     if mode is AggregationMode.LATEST:
-        latest = max(records, key=lambda record: (record.timestamp, record.id))
-        assert latest.quantity is not None
-        return latest.quantity
+        latest_records = _latest_records_by_scope(records)
+        total = 0.0
+        for record in latest_records:
+            assert record.quantity is not None
+            total += record.quantity
+        return total
     total = 0.0
     for record in records:
         assert record.quantity is not None
@@ -531,6 +574,56 @@ def _metric_mapping(
             "count",
             MeasurementQuality.MEASURED,
         ),
+        "platform.node.cpu_cores_total": (
+            "node.cpu.cores.capacity",
+            "cores",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.node.cpu_cores_available": (
+            "node.cpu.cores.available",
+            "cores",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.node.ram_total_bytes": (
+            "node.memory.bytes.capacity",
+            "bytes",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.node.ram_available_bytes": (
+            "node.memory.bytes.available",
+            "bytes",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.node.storage_total_bytes": (
+            "node.storage.bytes.capacity",
+            "bytes",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.node.storage_available_bytes": (
+            "node.storage.bytes.available",
+            "bytes",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.node.accelerator_memory_total_bytes": (
+            "node.accelerator.memory.bytes.capacity",
+            "bytes",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.node.accelerator_memory_available_total_bytes": (
+            "node.accelerator.memory.bytes.available",
+            "bytes",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.worker.active_jobs": (
+            "worker.jobs.active",
+            "count",
+            MeasurementQuality.REPORTED,
+        ),
+        "platform.worker.concurrency_limit": (
+            "worker.jobs.capacity",
+            "count",
+            MeasurementQuality.REPORTED,
+        ),
     }
     return exact.get(metric.name)
 
@@ -539,7 +632,7 @@ def _aggregation_mode(metric: MetricRecord) -> AggregationMode:
     if metric.name in {
         "platform.node.reported_resource",
         "platform.worker.reported_resource",
-    }:
+    } | _RUNTIME_GAUGE_METRICS:
         return AggregationMode.LATEST
     return AggregationMode.ADDITIVE
 

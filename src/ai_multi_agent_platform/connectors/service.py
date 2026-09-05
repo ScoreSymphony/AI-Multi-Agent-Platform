@@ -485,6 +485,11 @@ class ConnectorService:
             self._validate_resource_binding(resource, connection, provider)
         for event in result.events:
             self._validate_event_binding(event, connection, provider)
+        if mode is SyncMode.REBUILD:
+            await self.repository.replace_external_resources(connection.id, result.resources)
+        else:
+            for resource in result.resources:
+                await self.repository.save_external_resource(resource)
         await self.repository.save_checkpoint(result.checkpoint)
         return result
 
