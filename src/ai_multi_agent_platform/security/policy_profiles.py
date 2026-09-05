@@ -55,6 +55,15 @@ def _aware(value: datetime, name: str) -> datetime:
     return value
 
 
+def _require_within_outer_scope(
+    outer_id: str | None,
+    values: tuple[str, ...],
+    scope_name: str,
+) -> None:
+    if outer_id is not None and any(value != outer_id for value in values):
+        raise ValueError(f"{scope_name} contains value outside profile outer {scope_name}")
+
+
 @dataclass(frozen=True, slots=True)
 class AuthorizationPolicyProfileRef:
     policy_profile_id: str
@@ -232,6 +241,14 @@ class AuthorizationPolicyProfileRevision:
             validate_id(self.team_id, "team")
             if self.organization_id is None:
                 raise ValueError("team-scoped policy revisions require organization_id")
+        scope = self.content.scope_constraints
+        _require_within_outer_scope(self.project_id, scope.project_ids, "project scope")
+        _require_within_outer_scope(
+            self.organization_id,
+            scope.organization_ids,
+            "organization scope",
+        )
+        _require_within_outer_scope(self.team_id, scope.team_ids, "team scope")
         _aware(self.created_at, "created_at")
 
     @property
@@ -957,15 +974,20 @@ def compile_local_principal_policy(
             "LocalAuthorizationProvider cannot represent resource-ID policy constraints",
             details={"policy_profile_ref": revision.ref.token},
         )
+    project_ids = scope.project_ids or ((revision.project_id,) if revision.project_id else ())
+    organization_ids = scope.organization_ids or (
+        (revision.organization_id,) if revision.organization_id else ()
+    )
+    team_ids = scope.team_ids or ((revision.team_id,) if revision.team_id else ())
     return LocalPrincipalPolicy(
         principal_ref=principal_ref,
         actor_types=frozenset(actor_types),
         allowed_actions=frozenset(revision.content.allowed_actions),
         approval_actions=frozenset(revision.content.approval_required_actions),
         resource_types=frozenset(revision.content.resource_types),
-        project_ids=frozenset(scope.project_ids),
-        organization_ids=frozenset(scope.organization_ids),
-        team_ids=frozenset(scope.team_ids),
+        project_ids=frozenset(project_ids),
+        organization_ids=frozenset(organization_ids),
+        team_ids=frozenset(team_ids),
         workspace_ids=frozenset(scope.workspace_ids),
     )
 
