@@ -17,7 +17,6 @@ from ai_multi_agent_platform.capability_assignments import (
     CapabilityAssignmentTargetType,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
-from ai_multi_agent_platform.contracts.types import FrozenJsonValue
 from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.security import ActorIdentity, ActorType
 
@@ -248,7 +247,10 @@ def _access_context(
     if actor_type is None:
         raise ContractError(
             ErrorCode.FORBIDDEN,
-            "capability-assignment Template application requires an attributable user or service actor",
+            (
+                "capability-assignment Template application requires an attributable "
+                "user or service actor"
+            ),
         )
     return CapabilityAssignmentAccessContext(
         actor=ActorIdentity(
