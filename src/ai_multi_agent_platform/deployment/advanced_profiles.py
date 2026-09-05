@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import (
     AcceleratorResource,
     NodeRecord,
@@ -20,6 +21,7 @@ from ai_multi_agent_platform.distributed import (
     ResourceSnapshot,
     WorkerRecord,
 )
+from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.security import SecretReference
 
 ConnectionMode = Literal["local", "remote"]
@@ -51,6 +53,12 @@ class ControlPlaneBinding:
     network_scope: NetworkScope
     tls_required: bool
 
+    def __post_init__(self) -> None:
+        if not self.endpoint_ref.strip():
+            raise AdvancedDeploymentProfileError("Control Plane endpoint_ref must not be blank")
+        if self.network_scope == "public" and not self.tls_required:
+            raise AdvancedDeploymentProfileError("public Control Plane endpoints must require TLS")
+
 
 @dataclass(frozen=True, slots=True)
 class WorkerHostBinding:
@@ -62,6 +70,28 @@ class WorkerHostBinding:
     workspace_root: Path
     tls_required: bool
     credential_reference: SecretReference | None = None
+
+    def __post_init__(self) -> None:
+        if not self.host_ref.strip():
+            raise AdvancedDeploymentProfileError("deployment host_ref must not be blank")
+        if not self.transport_endpoint_ref.strip():
+            raise AdvancedDeploymentProfileError(
+                "deployment transport_endpoint_ref must not be blank"
+            )
+        if not self.workspace_root.is_absolute():
+            raise AdvancedDeploymentProfileError(
+                "deployment workspace_root must be an absolute machine-local path"
+            )
+        if self.connection_mode == "remote" and not self.tls_required:
+            raise AdvancedDeploymentProfileError(
+                "remote deployment bindings must require authenticated TLS transport"
+            )
+
+    def workspace_path(self, workspace_id: str) -> Path:
+        """Map one canonical Workspace ID to a deterministic machine-local path."""
+
+        validate_id(workspace_id, "workspace")
+        return self.workspace_root / workspace_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +126,8 @@ class DeploymentNode:
     reporter_worker_id: str | None = None
 
     def __post_init__(self) -> None:
+        if not self.workers:
+            raise AdvancedDeploymentProfileError("deployment node must declare at least one Worker")
         worker_ids = {worker.worker_id for worker in self.workers}
         if len(worker_ids) != len(self.workers):
             raise AdvancedDeploymentProfileError("deployment node contains duplicate Worker IDs")
@@ -111,10 +143,6 @@ class DeploymentNode:
             if self.binding.credential_reference is None:
                 raise AdvancedDeploymentProfileError(
                     "remote deployment node requires a canonical SecretReference"
-                )
-            if not self.binding.tls_required:
-                raise AdvancedDeploymentProfileError(
-                    "remote deployment node must require authenticated TLS transport"
                 )
         elif self.reporter_worker_id is not None and self.reporter_worker_id not in worker_ids:
             raise AdvancedDeploymentProfileError(
@@ -153,6 +181,8 @@ class AdvancedDeploymentProfile:
             raise AdvancedDeploymentProfileError(
                 f"unsupported advanced deployment profile schema: {self.schema_version!r}"
             )
+        if not self.nodes:
+            raise AdvancedDeploymentProfileError("advanced deployment profile requires a Node")
         node_ids = [item.node.node_id for item in self.nodes]
         if len(set(node_ids)) != len(node_ids):
             raise AdvancedDeploymentProfileError("profile contains duplicate canonical Node IDs")
@@ -216,20 +246,20 @@ def parse_advanced_deployment_profile(value: object) -> AdvancedDeploymentProfil
 def _parse_control_plane(value: object) -> ControlPlaneBinding:
     data = _mapping(value, "control_plane")
     _only_keys(data, {"endpoint_ref", "network_scope", "tls_required"}, "control_plane")
-    scope = _network_scope(data.get("network_scope"), "control_plane.network_scope")
-    tls_required = _boolean(data.get("tls_required"), "control_plane.tls_required")
-    if scope == "public" and not tls_required:
-        raise AdvancedDeploymentProfileError("public Control Plane endpoints must require TLS")
     return ControlPlaneBinding(
         endpoint_ref=_string(data.get("endpoint_ref"), "control_plane.endpoint_ref"),
-        network_scope=scope,
-        tls_required=tls_required,
+        network_scope=_network_scope(data.get("network_scope"), "control_plane.network_scope"),
+        tls_required=_boolean(data.get("tls_required"), "control_plane.tls_required"),
     )
 
 
 def _parse_deployment_node(value: object) -> DeploymentNode:
     data = _mapping(value, "node entry")
-    _only_keys(data, {"deployment", "canonical", "workers", "reporter_worker_id"}, "node entry")
+    _only_keys(
+        data,
+        {"deployment", "canonical", "workers", "reporter_worker_id"},
+        "node entry",
+    )
     binding = _parse_host_binding(data.get("deployment"))
     node = _parse_node_record(data.get("canonical"))
     workers_raw = _sequence(data.get("workers"), "workers")
@@ -274,7 +304,11 @@ def _parse_host_binding(value: object) -> WorkerHostBinding:
 
 def _parse_secret_reference(value: object) -> SecretReference:
     data = _mapping(value, "credential_reference")
-    _only_keys(data, {"provider", "secret_id", "scope", "version", "metadata"}, "credential_reference")
+    _only_keys(
+        data,
+        {"provider", "secret_id", "scope", "version", "metadata"},
+        "credential_reference",
+    )
     metadata_raw = data.get("metadata", {})
     metadata = _mapping(metadata_raw, "credential_reference.metadata")
     return SecretReference(
@@ -282,7 +316,7 @@ def _parse_secret_reference(value: object) -> SecretReference:
         secret_id=_string(data.get("secret_id"), "credential_reference.secret_id"),
         scope=_string(data.get("scope"), "credential_reference.scope"),
         version=_optional_string(data.get("version"), "credential_reference.version"),
-        metadata=cast(Mapping[str, object], metadata),
+        metadata=cast(Mapping[str, JsonValue], metadata),
     )
 
 
@@ -386,7 +420,11 @@ def _parse_resources(value: object) -> ResourceSnapshot:
 
 def _parse_accelerator(value: object) -> AcceleratorResource:
     data = _mapping(value, "accelerator")
-    _only_keys(data, {"accelerator_id", "kind", "vendor", "model", "memory_bytes"}, "accelerator")
+    _only_keys(
+        data,
+        {"accelerator_id", "kind", "vendor", "model", "memory_bytes"},
+        "accelerator",
+    )
     memory = _integer(data.get("memory_bytes", 0), "accelerator.memory_bytes", minimum=0)
     return AcceleratorResource(
         accelerator_id=_string(data.get("accelerator_id"), "accelerator.accelerator_id"),
