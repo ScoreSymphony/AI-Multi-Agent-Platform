@@ -51,15 +51,26 @@ A safe promotion uses this barrier:
 ```text
 standby
   -> acquire lease / new fencing epoch
+  -> promoting
   -> reconcile unfinished durable work and stale ownership
   -> active
 ```
 
+`PROMOTING` owns the newly acquired epoch but is not ordinary write/dispatch authority. Public
+mutation, Automation and new Worker dispatch paths still fail closed. The only additional authority
+available in that state is `require_reconciliation_authority()`, which exists for narrowly scoped
+recovery side effects such as completing a cancellation that was already durably pending before the
+leadership change.
+
 If reconciliation fails, the candidate is fenced and releases the lease when possible. Availability
 is not restored by skipping reconciliation.
 
-The generic `FailoverReconciler` is the integration point. Concrete reconciliation must eventually
-cover the owning subsystems rather than inventing a second recovery model.
+`FailoverReconciler` remains the generic integration point. `DistributedRuntimeFailoverReconciler`
+is the concrete #14 adapter: it invokes the existing `DistributedRuntime.reconcile()` state machine,
+validates the same fencing epoch before and after that potentially asynchronous recovery pass, and
+reports changed ownership plus expired reservations. It intentionally does not redispatch lost work
+during promotion; ordinary fenced #14 failover/redispatch happens only after the Control Plane is
+active.
 
 ## Authority-bearing runtime boundaries
 
@@ -84,7 +95,12 @@ For HA Worker transport, `FencedTransportWorkerDispatcher` therefore adds the cu
 `FencingToken(instance_id, epoch)` to the operational message envelope for `dispatch` and `cancel`.
 The token is deliberately not added to canonical `WorkerJobRequest` identity/state.
 
-`FencedWorkerTransportEndpoint` validates that token through the same replaceable
+Dispatch always uses ordinary active-leader authority. Cancel may use a separate
+`cancel_authority_check`; HA promotion composition can bind that to
+`require_reconciliation_authority()` so a `PROMOTING` candidate may finish an already-durable
+cancellation without gaining permission to dispatch new work.
+
+`FencedWorkerTransportEndpoint` validates the supplied token through the same replaceable
 `CoordinationProvider` immediately before handing the command to the Worker dispatcher. It rejects:
 
 - missing/malformed fencing evidence;
@@ -99,6 +115,18 @@ profiles.
 Transport authentication and service identity remain responsibilities of the existing messaging and
 Worker security boundaries. Fencing proves current authority generation; it is not a substitute for
 cryptographic authentication.
+
+## Worker restart and re-registration
+
+Distributed state restoration already treats persisted liveness conservatively: restored Node and
+Worker records begin offline rather than treating old heartbeats as current evidence. During
+promotion, `DistributedRuntimeFailoverReconciler` reuses that state to classify unreachable running
+ownership as `lost` and to expire reservation leases whose TTL has elapsed.
+
+After promotion, the Worker/Node may re-register with the same existing IDs. Re-registration updates
+liveness/registration state; it does not mint replacement Task/Run/Worker identities and it does not
+resurrect a reservation that reconciliation already expired. Lost work is not automatically executed
+a second time merely because the Worker reappeared.
 
 ## Failover behavior by subsystem
 
@@ -167,21 +195,24 @@ reconciled state according to the selected backend.
 
 ## Current implementation boundary
 
-The current #89 branch provides:
+The current #89 implementation provides:
 
 - platform-owned availability/coordination/fencing contracts;
 - a deterministic in-memory coordination fixture;
 - fail-closed active/passive/warm-standby service semantics;
-- promotion reconciliation barrier;
+- explicit `PROMOTING` state and narrow reconciliation authority;
+- a concrete distributed-runtime promotion reconciler reusing #14 recovery semantics;
+- restart reconciliation of running Worker Jobs without duplicate redispatch;
+- stale reservation expiry and same-ID Worker/Node re-registration coverage;
 - HA readiness/status projection;
 - authority gating for Control Plane mutation paths;
 - leadership-gated Automation runtime evaluation;
 - authority-gated distributed scheduling/dispatch/failover actions;
 - Worker-side stale-epoch rejection for HA dispatch and cancel transport;
-- deterministic fencing/outage/promotion/Automation/dispatch/Worker-epoch tests.
+- distinct Worker cancel authority for promotion-time durable cancellation recovery;
+- deterministic fencing/outage/promotion/Automation/dispatch/Worker-epoch/restart tests.
 
-Before #89 can close, remaining issue-owned work includes concrete Worker reconnect/re-registration
-and stale-reservation reconciliation after promotion, an optional production-shaped HA deployment
-composition with a suitable shared backend, fuller failover telemetry, and cross-process/chaos-style
-acceptance scenarios including running-task recovery, duplicate command handling, stream reconnect
-and authentication/session continuity.
+Before #89 can close, remaining issue-owned work includes an optional production-shaped HA
+deployment composition with a suitable shared coordination backend, fuller failover telemetry, and
+cross-process/chaos-style acceptance scenarios including duplicate command handling, stream
+reconnect and authentication/session continuity.
