@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 
-from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.security.authorization import ActorIdentity, ActorType
 
 from .models import (
@@ -178,7 +178,7 @@ class OrganizationService:
         organization_id: str,
         invited_by_actor_id: str,
         expires_at: datetime,
-        token_ref: str,
+        token_ref: str | None = None,
         team_id: str | None = None,
         intended_identity_ref: str | None = None,
         intended_email_ref: str | None = None,
@@ -196,7 +196,7 @@ class OrganizationService:
             invited_by_actor_id=invited_by_actor_id,
             requested_role_refs=role_refs,
             requested_policy_refs=policy_refs,
-            token_ref=token_ref,
+            token_ref=token_ref or f"identity-bound:{new_id('invitation')}",
             created_at=current,
             expires_at=expires_at,
         )
@@ -219,10 +219,11 @@ class OrganizationService:
                 replace(invitation, status=InvitationStatus.EXPIRED)
             )
             raise ValueError("invitation has expired")
-        if (
-            invitation.intended_identity_ref is not None
-            and invitation.intended_identity_ref != actor_id
-        ):
+        if invitation.intended_identity_ref is None:
+            raise ValueError(
+                "invitation is not bound to an authenticated identity and cannot be redeemed"
+            )
+        if invitation.intended_identity_ref != actor_id:
             raise ValueError("invitation is bound to another identity")
         membership = await self.add_member(
             actor_id=actor_id,
@@ -356,6 +357,27 @@ class OrganizationService:
             role_refs=tuple(sorted({value for item in active for value in item.role_refs})),
             policy_refs=tuple(sorted({value for item in active for value in item.policy_refs})),
         )
+
+    async def actor_can_discover_organization(
+        self,
+        *,
+        actor_id: str,
+        organization_id: str,
+    ) -> bool:
+        """Return live canonical organization visibility for discovery guards."""
+        try:
+            organization = await self._repository.get_organization(organization_id)
+        except LookupError:
+            return False
+        if (
+            actor_id == organization.owner_actor_id
+            or actor_id in organization.administrator_actor_ids
+        ):
+            return True
+        memberships = await self._repository.list_memberships(
+            actor_id=actor_id, organization_id=organization_id
+        )
+        return any(item.status is MembershipStatus.ACTIVE for item in memberships)
 
     async def actor_identity_for_scope(
         self,

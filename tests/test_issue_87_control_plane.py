@@ -214,7 +214,6 @@ def test_invitation_projection_hides_token_and_accepts_before_membership_exists(
             "invite-create",
             intended_identity_ref="user:invitee",
             expires_at=expires_at.isoformat(),
-            token_ref="secret-ref:one-time-invite",
             role_refs=["role:member"],
         )
         assert invitation_response.status == 200
@@ -222,7 +221,6 @@ def test_invitation_projection_hides_token_and_accepts_before_membership_exists(
         invitation_id = invitation_response.body["id"]
         assert isinstance(invitation_id, str)
         assert "token_ref" not in invitation_response.body
-        assert "secret-ref:one-time-invite" not in repr(invitation_response.body)
 
         invitee_read = await http.handle(
             HTTPRequest(
@@ -232,7 +230,7 @@ def test_invitation_projection_hides_token_and_accepts_before_membership_exists(
             )
         )
         assert invitee_read.status == 200
-        assert "secret-ref:one-time-invite" not in repr(invitee_read.body)
+        assert "token_ref" not in repr(invitee_read.body)
 
         accepted = await _command(
             http,

@@ -13,7 +13,6 @@ from ai_multi_agent_platform.organizations import (
     ExternalGroupMapping,
     Invitation,
     Membership,
-    MembershipStatus,
     Organization,
     OrganizationService,
     ResourceOwnership,
@@ -83,6 +82,11 @@ class _OrganizationResources(ResourceService):
     def __init__(self, service: OrganizationService, collection: CollectionName) -> None:
         self._service = service
         self._collection = collection
+        self.search_indexable = collection in {
+            ORGANIZATION_COLLECTION,
+            TEAM_COLLECTION,
+            MEMBERSHIP_COLLECTION,
+        }
 
     async def list_resources(
         self,
@@ -153,6 +157,24 @@ class _OrganizationResources(ResourceService):
             if await _is_organization_admin(self._service, principal, mapping.organization_id):
                 visible_mappings.append(_external_group_mapping_resource(mapping))
         return tuple(visible_mappings)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate actor-independent, privacy-minimal Search projections."""
+        if self._collection == ORGANIZATION_COLLECTION:
+            return tuple(
+                _organization_search_resource(item)
+                for item in await self._service.repository.list_organizations()
+            )
+        if self._collection == TEAM_COLLECTION:
+            return tuple(
+                _team_search_resource(item) for item in await self._service.repository.list_teams()
+            )
+        if self._collection == MEMBERSHIP_COLLECTION:
+            return tuple(
+                _membership_search_resource(item)
+                for item in await self._service.repository.list_memberships()
+            )
+        return ()
 
     async def get_resource(
         self,
@@ -425,7 +447,6 @@ class _OrganizationCommands:
                     organization_id=resource_ref,
                     invited_by_actor_id=context.actor.principal_ref,
                     expires_at=_timestamp(payload, "expires_at"),
-                    token_ref=_required_string(payload, "token_ref"),
                     team_id=_optional_string(payload, "team_id"),
                     intended_identity_ref=_optional_string(payload, "intended_identity_ref"),
                     intended_email_ref=_optional_string(payload, "intended_email_ref"),
@@ -590,14 +611,10 @@ async def _visible_organization_ids(
 ) -> frozenset[str]:
     visible: set[str] = set()
     for organization in await service.repository.list_organizations():
-        if (
-            principal_ref == organization.owner_actor_id
-            or principal_ref in organization.administrator_actor_ids
+        if await service.actor_can_discover_organization(
+            actor_id=principal_ref, organization_id=organization.id
         ):
             visible.add(organization.id)
-    for membership in await service.repository.list_memberships(actor_id=principal_ref):
-        if membership.status is MembershipStatus.ACTIVE:
-            visible.add(membership.organization_id)
     return frozenset(visible)
 
 
@@ -702,6 +719,51 @@ def _membership_resource(value: Membership) -> dict[str, JsonValue]:
         "suspended_at": _time_json(value.suspended_at),
         "revoked_at": _time_json(value.revoked_at),
         "expires_at": _time_json(value.expires_at),
+    }
+
+
+def _organization_search_resource(value: Organization) -> dict[str, JsonValue]:
+    return {
+        "id": value.id,
+        "type": "organization",
+        "name": value.name,
+        "display_name": value.display_name,
+        "status": value.status.value,
+        "organization_id": value.id,
+        "owner_type": "organization",
+        "owner_id": value.id,
+        "updated_at": value.updated_at.isoformat(),
+    }
+
+
+def _team_search_resource(value: Team) -> dict[str, JsonValue]:
+    return {
+        "id": value.id,
+        "type": "team",
+        "organization_id": value.organization_id,
+        "name": value.name,
+        "description": value.description,
+        "status": value.status.value,
+        "parent_team_id": value.parent_team_id,
+        "owner_type": "organization",
+        "owner_id": value.organization_id,
+        "updated_at": value.updated_at.isoformat(),
+    }
+
+
+def _membership_search_resource(value: Membership) -> dict[str, JsonValue]:
+    updated_at = value.revoked_at or value.suspended_at or value.accepted_at
+    return {
+        "id": value.id,
+        "type": "membership",
+        "organization_id": value.organization_id,
+        "team_id": value.team_id,
+        "actor_id": value.actor_id,
+        "actor_type": value.actor_type.value,
+        "status": value.status.value,
+        "owner_type": "organization",
+        "owner_id": value.organization_id,
+        "updated_at": updated_at.isoformat(),
     }
 
 

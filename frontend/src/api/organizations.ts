@@ -183,7 +183,6 @@ export interface CreateInvitationInput {
   role_refs?: string[];
   policy_refs?: string[];
   expires_at: string;
-  token_ref: string;
 }
 
 export interface SetOwnershipInput {

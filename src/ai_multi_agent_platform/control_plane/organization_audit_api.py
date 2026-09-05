@@ -93,6 +93,8 @@ class OrganizationAuditLog:
 
 
 class _OrganizationAuditResources(ResourceService):
+    search_indexable = False
+
     def __init__(self, service: OrganizationService, audit: OrganizationAuditLog) -> None:
         self._service = service
         self._audit = audit

@@ -78,7 +78,6 @@ describe("OrganizationClient", () => {
     await client.createInvitation("org_1", {
       intended_identity_ref: "user:invitee",
       expires_at: "2026-09-04T00:00:00+00:00",
-      token_ref: "secret:invitation:test",
     });
     await client.revokeInvitation("invitation_1");
     await client.setOwnership({
@@ -137,7 +136,7 @@ describe("OrganizationClient", () => {
       resource_ref: "org_1",
       actor_id: "user:member",
     });
-    expect(calls[10]?.body.token_ref).toBe("secret:invitation:test");
+    expect(calls[10]?.body).not.toHaveProperty("token_ref");
     expect(calls[12]?.body).toMatchObject({
       resource_ref: "template_1",
       resource_id: "template_1",

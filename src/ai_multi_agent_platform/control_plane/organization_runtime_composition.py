@@ -8,6 +8,7 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.organizations import OrganizationService, ResourceOwnership
+from ai_multi_agent_platform.search import SearchResult
 
 from .conversation_current_composition import ControlPlane as _CurrentControlPlane
 from .extensions import CommandHandler, ResourceService
@@ -106,6 +107,19 @@ class ControlPlane(_CurrentControlPlane):
     @property
     def ownership_mirror(self) -> CanonicalOwnershipMirror | None:
         return self._ownership_mirror
+
+    @property
+    def organization_search_visibility_available(self) -> bool:
+        return self._organization_service is not None
+
+    async def _search_result_allowed(self, context: RequestContext, result: SearchResult) -> bool:
+        organization_id = _search_result_organization_id(result)
+        if organization_id is not None and self._organization_service is not None:
+            if not await self._organization_service.actor_can_discover_organization(
+                actor_id=context.actor.principal_ref, organization_id=organization_id
+            ):
+                return False
+        return await super()._search_result_allowed(context, result)
 
     def register_resource_service(self, collection: str, service: ResourceService) -> None:
         if collection in ORGANIZATION_COLLECTIONS:
@@ -222,6 +236,11 @@ class ControlPlane(_CurrentControlPlane):
                 resource,
             )
         return resource
+
+
+def _search_result_organization_id(result: SearchResult) -> str | None:
+    value = result.provenance.get("organization_id")
+    return value if isinstance(value, str) and value else None
 
 
 async def _cross_organization_share_target(

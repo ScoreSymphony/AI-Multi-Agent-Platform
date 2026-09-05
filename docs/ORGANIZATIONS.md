@@ -52,7 +52,7 @@ Invitation lifecycle is:
 
 `pending -> accepted | expired | revoked`
 
-Invitation records contain only a secure `token_ref`; token material and credentials remain outside this domain. Northbound invitation projections deliberately omit `token_ref`, so secret references are not exposed through list/get responses.
+Invitation persistence keeps any internal `token_ref` outside northbound projections, but the V1 browser/API baseline does not invent or submit secret references. Without a separately implemented one-time credential verifier, redemption is allowed only when `intended_identity_ref` matches the authenticated principal. Email-only invitations may be created, expired or revoked, but cannot be redeemed merely by knowing an Invitation ID.
 
 ## Authorization bridge
 
@@ -128,7 +128,9 @@ Mutation commands include:
 
 Organization-sensitive mutations receive an owner-scoped #15 check. Scope-aware resource services filter individual records before caller-visible pagination/counts, so another Organization cannot be inferred from counts or exact hidden IDs.
 
-`invitation.accept` is intentionally usable before Membership exists: the invited actor gains the Membership only when acceptance succeeds. Authentication and the generic #15 command boundary still apply.
+`invitation.accept` is usable before Membership exists only for an authenticated principal matching `intended_identity_ref`; the invited actor gains Membership when acceptance succeeds. Email-only records require a future canonical one-time credential flow before they can be redeemable. Authentication and the generic #15 command boundary still apply.
+
+Global Search indexes privacy-minimal Organization, Team and Membership projections only. Live Organization visibility is rechecked before results, totals or exact-ID existence are returned, then the canonical #15 authorization provider still makes the final action decision. The same visibility hook enables organization-scoped Connection discovery without changing canonical Connection ownership. Invitations, ownership/share records, IdP mappings and Organization audit events remain outside global Search.
 
 ## Frontend
 
@@ -185,6 +187,9 @@ Issue #87 is covered by dedicated domain, Control Plane, persistence, authorizat
 - restart-safe SQLite Organization persistence;
 - Project/Workspace, Agent/Agent Team/Automation, Memory/Knowledge, Connection and File/Artifact ownership mirrors;
 - administrative ownership-metadata visibility without implicit secret access;
-- typed frontend Organization API behavior.
+- typed frontend Organization API behavior;
+- Organization/Team/Membership Search with cross-Organization non-disclosure and immediate suspension/removal visibility loss;
+- organization-scoped Connection Search guarded by the same live Organization visibility hook;
+- identity-bound invitation redemption without browser-generated secret references.
 
 The Organization runtime is composed above the current Conversation-aware Control Plane rather than an obsolete intermediate stack, so later platform domains remain intact when #87 is enabled.

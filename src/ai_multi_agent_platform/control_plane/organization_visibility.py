@@ -19,6 +19,7 @@ from .organization_api import (
 
 
 class AdministrativeOwnershipVisibility(ResourceService):
+    search_indexable = False
     """Add org owner/admin visibility to non-secret ownership/share metadata."""
 
     def __init__(

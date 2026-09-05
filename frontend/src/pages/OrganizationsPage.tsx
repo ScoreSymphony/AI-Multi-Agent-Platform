@@ -199,7 +199,6 @@ export function OrganizationsPage({ client }: { client: OrganizationClient }) {
         role_refs: csv(form, "role_refs"),
         policy_refs: csv(form, "policy_refs"),
         expires_at: expiresAt(form),
-        token_ref: `secret:invitation:${crypto.randomUUID()}`,
       });
       event.currentTarget.reset();
     });
@@ -633,7 +632,7 @@ function InvitationTable({
               <td><StatusBadge value={invitation.status} /></td>
               <td>{formatDate(invitation.expires_at)}</td>
               <td className="actions-cell">
-                <button className="secondary" disabled={invitation.status !== "pending" || busy !== null} onClick={() => onAccept(invitation)}>Accept as current user</button>
+                <button className="secondary" disabled={invitation.status !== "pending" || invitation.intended_identity_ref === null || busy !== null} onClick={() => onAccept(invitation)}>Accept as current user</button>
                 <button className="danger" disabled={invitation.status !== "pending" || busy !== null} onClick={() => onRevoke(invitation)}>Revoke</button>
               </td>
             </tr>
