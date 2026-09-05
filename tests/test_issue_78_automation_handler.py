@@ -50,10 +50,14 @@ def _application(service: AutomationService) -> TemplateApplicationService:
     return TemplateApplicationService(InMemoryTemplateRepository(), registry)
 
 
-def test_existing_automation_export_roundtrips_without_runtime_identity_or_state() -> None:
+def test_existing_automation_export_roundtrips_without_runtime_identity_or_source_scope() -> None:
     async def scenario() -> None:
         service = _automation_service()
         application = _application(service)
+        source_project_id = new_id("project")
+        source_workspace_id = new_id("workspace")
+        source_task_project_id = new_id("project")
+        source_task_workspace_id = new_id("workspace")
         source = await service.create_automation(
             name="Daily review",
             description="Reusable manual review automation",
@@ -66,8 +70,12 @@ def test_existing_automation_export_roundtrips_without_runtime_identity_or_state
             task_template=TaskTemplate(
                 title="Review",
                 objective="Review the current project state",
+                project_id=source_task_project_id,
+                workspace_id=source_task_workspace_id,
                 payload={"labels": ["review"]},
             ),
+            project_id=source_project_id,
+            workspace_id=source_workspace_id,
         )
         exporter = AutomationTemplateExporter(service, application.templates)
         draft = await exporter.create_from_automation(
@@ -75,6 +83,28 @@ def test_existing_automation_export_roundtrips_without_runtime_identity_or_state
             owner_ref=_owner(),
             author="issue-78-test",
         )
+        definition = application.repository.get_template(draft.template_id)
+        payload = draft.content.configuration.payload
+        assert payload is not None
+        assert payload["project_id"] is None
+        assert payload["workspace_id"] is None
+        task_payload = payload["task_template"]
+        assert isinstance(task_payload, dict | object)
+        assert task_payload["project_id"] is None  # type: ignore[index]
+        assert task_payload["workspace_id"] is None  # type: ignore[index]
+        assert definition.project_id is None
+        assert draft.content.requirements.workspace_prerequisites == ()
+        assert draft.content.provenance.metadata["source_project_id"] == source_project_id
+        assert draft.content.provenance.metadata["source_workspace_id"] == source_workspace_id
+        assert (
+            draft.content.provenance.metadata["source_task_project_id"]
+            == source_task_project_id
+        )
+        assert (
+            draft.content.provenance.metadata["source_task_workspace_id"]
+            == source_task_workspace_id
+        )
+
         published = application.templates.publish(
             draft.template_id,
             expected_revision=draft.revision,
@@ -92,7 +122,13 @@ def test_existing_automation_export_roundtrips_without_runtime_identity_or_state
         assert created.name == source.name
         assert created.description == source.description
         assert created.trigger == source.trigger
-        assert created.task_template == source.task_template
+        assert created.task_template.title == source.task_template.title
+        assert created.task_template.objective == source.task_template.objective
+        assert created.task_template.payload == source.task_template.payload
+        assert created.project_id is None
+        assert created.workspace_id is None
+        assert created.task_template.project_id is None
+        assert created.task_template.workspace_id is None
         assert created.identity.owner_type == "user"
         assert created.identity.owner_id == _owner().id
         assert created.identity.principal_ref == _owner().id
