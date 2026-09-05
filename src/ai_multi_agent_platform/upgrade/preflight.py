@@ -66,7 +66,10 @@ class UpgradePreflight:
         checks: list[PreflightCheck] = []
         steps = ()
         try:
-            steps = self.migrations.plan(request.current.domain_schema, request.target.domain_schema)
+            steps = self.migrations.plan(
+                request.current.domain_schema,
+                request.target.domain_schema,
+            )
             checks.append(
                 PreflightCheck(
                     code="migration.path.supported",
@@ -91,11 +94,7 @@ class UpgradePreflight:
         if unresolved is not None:
             matching = next((step for step in steps if step.revision == unresolved.revision), None)
             resumable = request.resume_failed and matching is not None and matching.restart_safe
-            state_name = (
-                "interrupted"
-                if unresolved.status is MigrationStatus.STARTED
-                else "failed"
-            )
+            state_name = "interrupted" if unresolved.status is MigrationStatus.STARTED else "failed"
             checks.append(
                 PreflightCheck(
                     code=(
@@ -153,7 +152,12 @@ class UpgradePreflight:
                 )
             )
 
-        backup_required = any(step.backup_required for step in steps)
+        # Until a plugin proves a reversible state transition, migration of plugin-owned state is
+        # treated as restore-required across releases. This prevents a code downgrade from being
+        # mistaken for a safe rollback after the plugin store has moved forward.
+        backup_required = bool(request.plugin_state_migration_required) or any(
+            step.backup_required for step in steps
+        )
         checks.extend(
             _backup_checks(
                 request.backup_dir,
@@ -173,7 +177,10 @@ class UpgradePreflight:
         )
 
 
-def _version_checks(current: VersionSnapshot, target: VersionSnapshot) -> tuple[PreflightCheck, ...]:
+def _version_checks(
+    current: VersionSnapshot,
+    target: VersionSnapshot,
+) -> tuple[PreflightCheck, ...]:
     checks: list[PreflightCheck] = []
     if current.api != target.api:
         checks.append(
@@ -280,9 +287,7 @@ def _storage_checks(data_dir: Path, minimum_free_bytes: int) -> tuple[PreflightC
         checks.append(
             PreflightCheck(
                 code="storage.disk.free",
-                severity=(
-                    CheckSeverity.ERROR if free < minimum_free_bytes else CheckSeverity.INFO
-                ),
+                severity=(CheckSeverity.ERROR if free < minimum_free_bytes else CheckSeverity.INFO),
                 message=f"{free} bytes free in data filesystem",
                 details={"free_bytes": free, "minimum_free_bytes": minimum_free_bytes},
             )
@@ -334,7 +339,7 @@ def _backup_checks(
                 code="backup.required.missing" if required else "backup.not_supplied",
                 severity=CheckSeverity.ERROR if required else CheckSeverity.WARNING,
                 message=(
-                    "a verified source-release backup is required for this forward-only/risky upgrade"
+                    "a verified source-release backup is required for this state-changing upgrade"
                     if required
                     else "no backup supplied; recommended before upgrade"
                 ),
