@@ -38,16 +38,22 @@ The returned `onboarding_status.state` is one of:
 
 | State | Meaning | Next canonical action |
 |---|---|---|
-| `needs_model` | No usable local/self-hosted model is explicitly configured | `onboarding.configure-model` |
-| `needs_project` | Model is ready, but the current actor owns no Project | create/select a Project |
-| `needs_workspace` | Project exists, but no owned Workspace exists | create/select a Workspace |
-| `needs_general_assistant` | Model + scope exist, but no owned General Assistant clone exists | bootstrap/clone #77 starter |
-| `ready_for_task` | first-run prerequisites are present | `onboarding.run-first-task`, or Chat when #72 is present |
+| `needs_model` | No currently routable, text-capable local/self-hosted model is available | configure a model or revalidate its provider health |
+| `needs_project` | A model is routable, but the current actor owns no Project | create/select a Project |
+| `needs_workspace` | Project exists, but no compatible owned Workspace exists | create/select a Workspace |
+| `needs_general_assistant` | Model + scope exist, but no enabled owned General Assistant clone is bound to a selectable Project/Workspace | bootstrap/clone #77 starter |
+| `ready_for_task` | the execution prerequisites for the first canonical Task are present | `onboarding.run-first-task` or the canonical Chat surface |
 
-The status also reports separate counts for `local`, `self_hosted` and `remote` model
-configurations. A remote model never satisfies the local-model golden path merely by existing in
-the registry. The response also exposes the installed onboarding adapter IDs and explicitly reports
-that no remote or paid provider is selected automatically.
+Readiness deliberately uses canonical effective model health, not only the health value persisted in
+the `ModelConfiguration`. The same health states accepted by normal routing (`healthy` and
+`degraded`) satisfy first-run readiness; `unknown` and `unavailable` do not. The model must also
+provide the `text` modality required by the General Assistant first-Task path.
+
+The status reports separate counts for `local`, `self_hosted` and `remote` model configurations,
+plus text-capable and currently usable golden-path counts. A remote model never satisfies the
+local-model golden path merely by existing in the registry. The response also exposes the installed
+onboarding adapter IDs and explicitly reports that no remote or paid provider is selected
+automatically.
 
 ## Configure a local/self-hosted model
 
@@ -148,9 +154,11 @@ POST /api/v1/commands/standard-agent.bootstrap
 POST /api/v1/commands/standard-agent.clone
 ```
 
-Clone the `general_assistant` starter for the authenticated user and, where useful, bind the clone
-to the selected Project/Workspace. The resulting resource is an ordinary editable canonical Agent
-and is not overwritten by starter upgrades.
+For the first-Task readiness path, clone the `general_assistant` starter for the authenticated user,
+keep the editable clone enabled and bind it to the selected owned Project and Workspace. Readiness
+uses these same scope and enabled-state prerequisites as `onboarding.run-first-task`, so a disabled
+or mismatched clone cannot make onboarding report `ready_for_task`. The resulting resource remains
+an ordinary editable canonical Agent and is not overwritten by starter upgrades.
 
 ## First real Task result
 
@@ -175,12 +183,12 @@ canonical `ModelConfiguration`, invokes the configured `ModelProvider`, records 
 the Run output, attaches a canonical Result and returns the visible result identifiers/output. The
 Task, Run, AgentRun and Result remain readable after restart.
 
-This Task path is independent of #72. The conversational entrypoint can later consume the same
-canonical runtime without #250 introducing a private chat backend.
+This Task path is independent of Chat. The conversational entrypoint consumes the same canonical
+runtime without #250 introducing a private chat backend.
 
 ## CLI
 
-The CLI now exposes thin API-only onboarding commands:
+The CLI exposes thin API-only onboarding commands:
 
 ```text
 platform onboarding status
@@ -192,6 +200,15 @@ These commands use the same `/api/v1/onboarding/...` and `/api/v1/commands/...` 
 surfaces documented above. CLI code does not import or call `ModelRegistry`, `AgentRuntime` or a
 model backend directly. The progressive Web UI in #236 can consume the same API surface.
 
+Provider health revalidation uses the existing canonical ModelProvider administration command:
+
+```text
+platform model-provider refresh-health <provider-id> --idempotency-key <unique-key>
+```
+
+The local authorization vocabulary recognizes this canonical action, so the bootstrapped first
+administrator can perform the revalidation without bypassing #15.
+
 ## Restart behavior
 
 The single-node composition restores:
@@ -202,24 +219,33 @@ The single-node composition restores:
 - onboarding command replay records;
 - canonical Task/Run/Result and Agent repository state through their existing durable stores.
 
+A newly reconstructed runtime provider begins with runtime health `unknown`. Persisted model health
+is intentionally not treated as proof that the endpoint is still reachable. Therefore onboarding
+returns `needs_model` after restart until provider health is revalidated through the canonical
+ModelProvider health command. Once the endpoint reports a routable health state, the existing
+Project, Workspace and General Assistant become usable again without recreation. Regression coverage
+executes a second real model-backed Task after this revalidation and verifies that it reaches a new
+canonical Result.
+
 Authentication, authorization, Project, Workspace and the remaining canonical domains continue to
 be owned by their existing #39 persistence boundaries. Secret values are subject to the selected
 SecretProvider's own durability semantics and are never persisted by onboarding itself.
 
 ## Issue #250 boundary
 
-The implemented #250 slice now covers:
+The #250 slice covers:
 
 1. understandable fresh-install/no-model status;
 2. provider-neutral local/self-hosted model configuration and validation;
-3. explicit zero-paid-service reference behavior with no remote fallback;
-4. canonical #34 `SecretReference` integration without plaintext persistence;
-5. reuse of canonical Project/Workspace and editable #77 General Assistant resources;
-6. a real Agent-driven first Task producing a canonical visible Result;
-7. restart restoration of model/provider configuration and canonical Task/Run/Result state;
-8. API-only CLI onboarding commands using the same Control Plane surface intended for #236;
-9. retry-safe `configure-model` command replay and recursive plaintext credential rejection.
+3. execution-compatible effective-health and text-capability readiness;
+4. explicit zero-paid-service reference behavior with no remote fallback;
+5. canonical #34 `SecretReference` integration without plaintext persistence;
+6. reuse of canonical Project/Workspace and an enabled, correctly scoped editable #77 General Assistant;
+7. a real Agent-driven first Task producing a canonical visible Result;
+8. restart restoration followed by explicit provider-health revalidation and another real Task/Result;
+9. API-only CLI onboarding commands using the same Control Plane surface intended for #236;
+10. retry-safe `configure-model` command replay and recursive plaintext credential rejection.
 
-Before #250 is closed, the complete branch CI and fresh-install lifecycle smoke must be green and
-the acceptance coverage must be reviewed against the issue one final time. The progressive Web UI
-itself remains #236, and the Chat entrypoint remains #72.
+The progressive guided Web UI remains #236, while the broader reproducible single-node product
+acceptance gate remains #252. #250 is complete only when the full branch CI, fresh-install smoke and
+the readiness/restart regression coverage are green.

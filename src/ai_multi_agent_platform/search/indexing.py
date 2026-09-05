@@ -75,6 +75,7 @@ def document_from_resource(
                 responsible_id,
                 agent_assignment_id,
                 *_resource_keywords(resource),
+                *_verification_keywords(resource_type, resource),
                 *dependency_ids,
                 *_profile_keywords(resource),
             )
@@ -153,6 +154,18 @@ def _display_title(
             return f"Evaluation run for {suite_id} {suite_version}"
         if suite_id is not None:
             return f"Evaluation run for {suite_id}"
+    if resource_type == "verification":
+        task_id = _optional_string(resource, "task_id")
+        if task_id is not None:
+            return f"Verification for task {task_id}"
+    if resource_type == "verification_result":
+        verification_id = _optional_string(resource, "verification_id")
+        if verification_id is not None:
+            return f"Verification result for {verification_id}"
+    if resource_type == "verification_requirement":
+        task_id = _optional_string(resource, "task_id")
+        if task_id is not None:
+            return f"Verification requirement for task {task_id}"
     if resource_type == "usage-aggregate":
         metric_type = _optional_string(resource, "metric_type")
         unit = _optional_string(resource, "unit")
@@ -276,6 +289,19 @@ def _updated_at(resource_type: str, resource: Mapping[str, JsonValue]) -> str | 
         return _optional_string(resource, "completed_at") or _optional_string(
             resource, "started_at"
         )
+    if resource_type == "verification_policy":
+        return _optional_string(resource, "created_at")
+    if resource_type == "verification_result":
+        return _optional_string(resource, "completed_at") or _optional_string(
+            resource, "started_at"
+        )
+    if resource_type == "verification":
+        result = _nested_mapping(resource, "verification_result")
+        if result is not None:
+            completed_at = _optional_string(result, "completed_at")
+            if completed_at is not None:
+                return completed_at
+        return _optional_string(resource, "created_at")
     return None
 
 
@@ -286,6 +312,9 @@ def _version(resource_type: str, resource: Mapping[str, JsonValue]) -> str | Non
             return str(value)
     if resource_type == "evaluation-suite":
         return _optional_string(resource, "version")
+    if resource_type == "verification_policy":
+        value = resource.get("version")
+        return str(value) if isinstance(value, int | str) else None
     return None
 
 
@@ -356,6 +385,13 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "suite_id",
         "suite_version",
         "baseline_run_id",
+        "policy_id",
+        "failure_policy",
+        "timeout_failure_policy",
+        "result_id",
+        "stage_id",
+        "requested_verifier_kind",
+        "requested_capability_ref",
     ):
         value = _optional_string(resource, field)
         if value is not None:
@@ -370,6 +406,7 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         "failed_dependency_ids",
         "artifact_ids",
         "capabilities",
+        "capability_ids",
         "extension_ids",
         "extension_types",
         "requested_permissions",
@@ -390,6 +427,72 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
         boolean_value = resource.get(field)
         if isinstance(boolean_value, bool):
             values.append(positive if boolean_value else negative)
+    return _deduplicate_strings(tuple(values))
+
+
+def _verification_keywords(
+    resource_type: str,
+    resource: Mapping[str, JsonValue],
+) -> tuple[str, ...]:
+    """Return explicit safe nested Verification metadata, never findings/evidence/digests."""
+
+    values: list[str] = []
+
+    def add_scalar(mapping: Mapping[str, JsonValue] | None, *fields: str) -> None:
+        if mapping is None:
+            return
+        for field in fields:
+            value = mapping.get(field)
+            if isinstance(value, str) and value.strip():
+                values.append(value)
+            elif isinstance(value, int):
+                values.append(str(value))
+
+    def add_subject(mapping: Mapping[str, JsonValue]) -> None:
+        subject = _nested_mapping(mapping, "subject")
+        add_scalar(subject, "type", "id", "revision")
+        # Exact digests are deliberately retained only behind the canonical resource read.
+
+    if resource_type == "verification_result":
+        add_scalar(resource, "verification_id", "policy_id", "policy_version", "outcome")
+        add_subject(resource)
+        verifier = _nested_mapping(resource, "verifier")
+        add_scalar(verifier, "kind", "agent_id", "agent_revision", "model_config_id", "provider_id")
+    elif resource_type == "verification":
+        add_scalar(_nested_mapping(resource, "policy"), "id", "version")
+        add_subject(resource)
+        result = _nested_mapping(resource, "verification_result")
+        if result is not None:
+            add_scalar(result, "id", "outcome")
+            verifier = _nested_mapping(result, "verifier")
+            # Arbitrary verifier refs (especially human identities) stay out of global text.
+            add_scalar(verifier, "kind", "agent_id", "model_config_id", "provider_id")
+    elif resource_type == "verification_requirement":
+        add_scalar(_nested_mapping(resource, "policy"), "id", "version")
+        add_subject(resource)
+        completion = _nested_mapping(resource, "completion")
+        if completion is not None:
+            add_scalar(completion, "state")
+            values.extend(_string_sequence(completion, "blocking_verification_ids"))
+    elif resource_type == "verification_policy":
+        add_scalar(
+            resource,
+            "policy_id",
+            "version",
+            "failure_policy",
+            "timeout_failure_policy",
+        )
+        scope = _nested_mapping(resource, "scope")
+        if scope is not None:
+            for field in ("task_ids", "project_ids", "agent_ids", "capability_ids"):
+                values.extend(_string_sequence(scope, field))
+        raw_stages = resource.get("stages")
+        if isinstance(raw_stages, Sequence) and not isinstance(raw_stages, str | bytes | bytearray):
+            for raw_stage in raw_stages:
+                if not isinstance(raw_stage, Mapping):
+                    continue
+                add_scalar(raw_stage, "stage_id", "verifier_kind", "capability_ref")
+                values.extend(_string_sequence(raw_stage, "accepted_outcomes"))
     return _deduplicate_strings(tuple(values))
 
 

@@ -68,6 +68,7 @@ export interface CanonicalConversation {
   task_ids: string[];
   run_ids: string[];
   artifact_ids: string[];
+  result_ids: string[];
   created_at: string;
   updated_at: string;
   metadata: Record<string, JsonValue>;
@@ -138,6 +139,16 @@ export interface ConversationTaskAttachment {
   task: CanonicalTask;
 }
 
+export interface ConversationAttentionSignal {
+  kind: string;
+  task_id: string;
+  blocked: boolean;
+  reason?: string;
+  verification_state?: string;
+  blocking_verification_ids?: string[];
+  [key: string]: JsonValue | undefined;
+}
+
 export interface ConversationTaskEvent {
   id: string;
   type: "conversation.task-event";
@@ -151,6 +162,8 @@ export interface ConversationTaskEvent {
     timestamp?: string;
     [key: string]: JsonValue | undefined;
   };
+  references: ConversationReference[];
+  attention?: ConversationAttentionSignal;
 }
 
 export interface ConversationClientOptions {

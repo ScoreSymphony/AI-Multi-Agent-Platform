@@ -102,6 +102,7 @@ async def stream_conversation_response(
         source_message_id=source.id,
         target=_response_target(conversation),
         history=history,
+        project_id=conversation.project_id,
         model_preference=conversation.model_preference,
     )
 

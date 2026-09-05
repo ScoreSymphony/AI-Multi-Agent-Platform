@@ -33,6 +33,15 @@ from .evaluators import (
     SafeEvaluator,
     evaluate_safely,
 )
+from .evidence import (
+    AccountingEvaluationEvidenceProvider,
+    CompositeEvaluationEvidenceProvider,
+    EvaluationEvidence,
+    EvaluationEvidenceProvider,
+    EvidenceEnrichingCaseExecutor,
+    InMemoryObservabilityEvaluationEvidenceProvider,
+    LogReferenceResolver,
+)
 from .history import EvaluationHistoryService, EvaluationTrendPoint
 from .model_judge import ModelJudgeEvaluator
 from .models import (
@@ -86,6 +95,7 @@ from .workspace import (
 
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
+    "AccountingEvaluationEvidenceProvider",
     "AggregatedEvaluationResult",
     "AggregationMethod",
     "AggregationPolicy",
@@ -96,6 +106,7 @@ __all__ = [
     "ComparisonKind",
     "ComparisonOperator",
     "ComparisonReport",
+    "CompositeEvaluationEvidenceProvider",
     "ConfigurationSnapshot",
     "DeterministicAssertion",
     "DeterministicAssertionEvaluator",
@@ -104,6 +115,8 @@ __all__ = [
     "EvaluationCIGateReport",
     "EvaluationCase",
     "EvaluationCaseExecutor",
+    "EvaluationEvidence",
+    "EvaluationEvidenceProvider",
     "EvaluationExecutionContext",
     "EvaluationFixture",
     "EvaluationFixtureResolver",
@@ -126,8 +139,11 @@ __all__ = [
     "EvaluatorDescriptor",
     "EvaluatorKind",
     "EvaluatorLike",
+    "EvidenceEnrichingCaseExecutor",
     "InMemoryEvaluationRepository",
+    "InMemoryObservabilityEvaluationEvidenceProvider",
     "KernelEvaluationCaseExecutor",
+    "LogReferenceResolver",
     "MetricResult",
     "MetricRule",
     "MetricThresholdEvaluator",
