@@ -159,9 +159,7 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
             _context(),
             SearchQuery(text="composite", resource_types=("template",)),
         )
-        assert published.template_id in {
-            result["resource_id"] for result in _items(by_type)
-        }
+        assert published.template_id in {result["resource_id"] for result in _items(by_type)}
 
         by_tag = await control_plane.search_resources(
             _context(),
@@ -171,17 +169,13 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
                 mode=SearchMode.METADATA,
             ),
         )
-        assert [result["resource_id"] for result in _items(by_tag)] == [
-            published.template_id
-        ]
+        assert [result["resource_id"] for result in _items(by_tag)] == [published.template_id]
 
         by_dependency = await control_plane.search_resources(
             _context(),
             SearchQuery(text=dependency.template_id, resource_types=("template",)),
         )
-        assert published.template_id in {
-            result["resource_id"] for result in _items(by_dependency)
-        }
+        assert published.template_id in {result["resource_id"] for result in _items(by_dependency)}
 
         for provenance_term in ("canonical-template-export", "template-author"):
             by_provenance = await control_plane.search_resources(
@@ -211,7 +205,9 @@ def test_global_search_discovers_safe_template_metadata_and_never_configuration_
         assert "configuration" not in root_search_resource
         assert "requirements" not in root_search_resource
         assert "credential_ref" not in repr(root_search_resource)
-        assert repository.get_revision(root.template_id, 1).content.configuration.payload is not None
+        assert (
+            repository.get_revision(root.template_id, 1).content.configuration.payload is not None
+        )
 
     asyncio.run(scenario())
 
