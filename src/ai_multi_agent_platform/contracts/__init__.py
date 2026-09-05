@@ -28,7 +28,7 @@ from .interfaces import (
     ToolProvider,
     WorkerProvider,
 )
-from .model_stream import ModelStreamEvent, ModelStreamEventKind, StreamingModelProvider
+from .model_stream import ModelStreamEvent, ModelStreamEventKind
 from .types import (
     CONTRACT_VERSION,
     AdapterMetadata,
@@ -106,7 +106,6 @@ __all__ = [
     "ProviderDescriptor",
     "RetryMode",
     "StoredObject",
-    "StreamingModelProvider",
     "ToolInvocation",
     "ToolProvider",
     "ToolResult",
