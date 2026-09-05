@@ -147,9 +147,7 @@ def test_preflight_reports_interrupted_migration_distinctly(tmp_path: Path) -> N
         template_translators=FormatTranslatorRegistry(release.template_schema),
     )
 
-    blocked = preflight.run(
-        PreflightRequest(data_dir=data_dir, current=current, target=target)
-    )
+    blocked = preflight.run(PreflightRequest(data_dir=data_dir, current=current, target=target))
     resumable = preflight.run(
         PreflightRequest(
             data_dir=data_dir,
