@@ -27,6 +27,7 @@ from .migrations import (
     MigrationStep,
 )
 from .models import CheckSeverity, MigrationStatus, PreflightCheck, PreflightReport, VersionSnapshot
+from .versioning import BASELINE_MIGRATION_REVISION
 
 SUPPORTED_HISTORICAL_EVENT_SCHEMA_VERSIONS = frozenset({"1.0", "2.0"})
 BackupVerifier = Callable[[Path], BackupVerification]
@@ -84,6 +85,13 @@ class UpgradePreflight:
                     details={"revisions": [step.revision for step in steps]},
                 )
             )
+            checks.extend(
+                _target_migration_revision_checks(
+                    request.current,
+                    request.target,
+                    steps,
+                )
+            )
         except MigrationError as exc:
             checks.append(
                 PreflightCheck(
@@ -93,6 +101,7 @@ class UpgradePreflight:
                 )
             )
 
+        checks.extend(_current_migration_revision_checks(request.current, self.history))
         checks.extend(_version_checks(request.current, request.target))
         checks.extend(_storage_checks(request.data_dir, request.minimum_free_bytes))
         checks.extend(_migration_precondition_checks(steps, self.history, request.data_dir))
@@ -191,6 +200,66 @@ class UpgradePreflight:
         )
 
 
+def _target_migration_revision_checks(
+    current: VersionSnapshot,
+    target: VersionSnapshot,
+    steps: tuple[MigrationStep, ...],
+) -> tuple[PreflightCheck, ...]:
+    expected = steps[-1].revision if steps else current.migration_revision
+    if target.migration_revision != expected:
+        return (
+            PreflightCheck(
+                code="migration.revision.target_mismatch",
+                severity=CheckSeverity.ERROR,
+                message=(
+                    f"target migration revision {target.migration_revision!r} does not match "
+                    f"planned revision {expected!r}"
+                ),
+                details={
+                    "expected_revision": expected,
+                    "target_revision": target.migration_revision,
+                },
+            ),
+        )
+    return (
+        PreflightCheck(
+            code="migration.revision.target_consistent",
+            severity=CheckSeverity.INFO,
+            message=f"target migration revision {expected!r} matches the migration plan",
+        ),
+    )
+
+
+def _current_migration_revision_checks(
+    current: VersionSnapshot,
+    history: JsonMigrationHistoryStore,
+) -> tuple[PreflightCheck, ...]:
+    if current.migration_revision == BASELINE_MIGRATION_REVISION:
+        return ()
+    record = history.get(current.migration_revision)
+    if record is None or record.status is not MigrationStatus.APPLIED:
+        return (
+            PreflightCheck(
+                code="migration.revision.current_unproven",
+                severity=CheckSeverity.ERROR,
+                message=(
+                    f"active migration revision {current.migration_revision!r} is not backed by "
+                    "an applied migration-history record"
+                ),
+                details={"current_revision": current.migration_revision},
+            ),
+        )
+    return (
+        PreflightCheck(
+            code="migration.revision.current_proven",
+            severity=CheckSeverity.INFO,
+            message=(
+                f"active migration revision {current.migration_revision!r} is recorded as applied"
+            ),
+        ),
+    )
+
+
 def _migration_precondition_checks(
     steps: tuple[MigrationStep, ...],
     history: JsonMigrationHistoryStore,
@@ -204,10 +273,11 @@ def _migration_precondition_checks(
     re-preflighted during recovery.
     """
 
-    context = MigrationContext(data_dir=data_dir)
     checks: list[PreflightCheck] = []
+    context = MigrationContext(data_dir=data_dir)
     for step in steps:
-        if step.precondition is None or history.get(step.revision) is not None:
+        existing = history.get(step.revision)
+        if existing is not None or step.precondition is None:
             continue
         try:
             step.precondition(context)
@@ -345,7 +415,9 @@ def _storage_checks(data_dir: Path, minimum_free_bytes: int) -> tuple[PreflightC
         checks.append(
             PreflightCheck(
                 code="storage.disk.free",
-                severity=(CheckSeverity.ERROR if free < minimum_free_bytes else CheckSeverity.INFO),
+                severity=(
+                    CheckSeverity.ERROR if free < minimum_free_bytes else CheckSeverity.INFO
+                ),
                 message=f"{free} bytes free in data filesystem",
                 details={"free_bytes": free, "minimum_free_bytes": minimum_free_bytes},
             )
@@ -397,7 +469,7 @@ def _backup_checks(
                 code="backup.required.missing" if required else "backup.not_supplied",
                 severity=CheckSeverity.ERROR if required else CheckSeverity.WARNING,
                 message=(
-                    "a verified source-release backup is required for this state-changing upgrade"
+                    "a verified source-release backup is required for this forward-only/risky upgrade"
                     if required
                     else "no backup supplied; recommended before upgrade"
                 ),
