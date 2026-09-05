@@ -10,7 +10,8 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.models import ModelLocation
 
-from .service import FIRST_RUN_RESOURCE_ID, OnboardingService as _BaseOnboardingService
+from .service import FIRST_RUN_RESOURCE_ID
+from .service import OnboardingService as _BaseOnboardingService
 
 _ROUTABLE_HEALTH = frozenset({HealthStatus.HEALTHY, HealthStatus.DEGRADED})
 
