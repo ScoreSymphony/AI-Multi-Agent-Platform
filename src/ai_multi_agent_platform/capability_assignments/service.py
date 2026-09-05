@@ -56,40 +56,47 @@ class CapabilityAssignmentService:
         assignment_id: str | None = None,
     ) -> CapabilityAssignmentRevision:
         canonical_id = assignment_id or new_id("cap_assignment")
-        resolved_scope = self.targets.resolve(content.target)
-        canonical_project_id = project_id if project_id is not None else resolved_scope.project_id
-        canonical_organization_id = (
-            organization_id if organization_id is not None else resolved_scope.organization_id
-        )
         now = utc_now()
-        policy = CapabilityAssignmentPolicy(
+        provisional_scope = ResolvedCapabilityAssignmentTarget(
+            project_id=project_id,
+            organization_id=organization_id,
+        )
+        provisional_policy = CapabilityAssignmentPolicy(
             assignment_id=canonical_id,
             owner_ref=owner_ref,
             current_revision=1,
-            project_id=canonical_project_id,
-            organization_id=canonical_organization_id,
+            project_id=project_id,
+            organization_id=organization_id,
             created_at=now,
             updated_at=now,
         )
-        revision = CapabilityAssignmentRevision(
+        provisional_revision = CapabilityAssignmentRevision(
             assignment_id=canonical_id,
             revision=1,
             owner_ref=owner_ref,
             content=content,
-            project_id=canonical_project_id,
-            organization_id=canonical_organization_id,
+            project_id=project_id,
+            organization_id=organization_id,
             created_at=now,
         )
         await self.authorization.enforce(
             self._action(
                 access,
                 AuthorizationAction.CREATE,
-                policy,
-                revision,
-                resolved_scope,
+                provisional_policy,
+                provisional_revision,
+                provisional_scope,
             ),
             approval_id=access.approval_id,
             risk=assignment_risk(content),
+        )
+
+        resolved_scope = self.targets.resolve(content.target)
+        canonical_project_id = (
+            project_id if project_id is not None else resolved_scope.project_id
+        )
+        canonical_organization_id = (
+            organization_id if organization_id is not None else resolved_scope.organization_id
         )
         self._validate(
             content,
@@ -97,6 +104,28 @@ class CapabilityAssignmentService:
             canonical_organization_id,
             resolved_target=resolved_scope,
         )
+        policy = replace(
+            provisional_policy,
+            project_id=canonical_project_id,
+            organization_id=canonical_organization_id,
+        )
+        revision = replace(
+            provisional_revision,
+            project_id=canonical_project_id,
+            organization_id=canonical_organization_id,
+        )
+        if policy != provisional_policy:
+            await self.authorization.enforce(
+                self._action(
+                    access,
+                    AuthorizationAction.CREATE,
+                    policy,
+                    revision,
+                    resolved_scope,
+                ),
+                approval_id=access.approval_id,
+                risk=assignment_risk(content),
+            )
         self.repository.create(policy, revision)
         return revision
 
@@ -124,7 +153,7 @@ class CapabilityAssignmentService:
             current_revision=revision.revision,
             updated_at=now,
         )
-        provisional_scope = ResolvedCapabilityAssignmentTarget(
+        stored_scope = ResolvedCapabilityAssignmentTarget(
             project_id=current.project_id,
             organization_id=current.organization_id,
         )
@@ -134,7 +163,7 @@ class CapabilityAssignmentService:
                 AuthorizationAction.MODIFY,
                 updated,
                 revision,
-                provisional_scope,
+                stored_scope,
             ),
             approval_id=access.approval_id,
             risk=assignment_risk(content),
@@ -163,13 +192,22 @@ class CapabilityAssignmentService:
         access: CapabilityAssignmentAccessContext,
     ) -> CapabilityAssignmentPolicy:
         policy = self.repository.get(assignment_id)
-        revision = self.repository.get_revision(assignment_id, policy.current_revision)
+        revision = self.repository.get_revision(
+            assignment_id,
+            policy.current_revision,
+        )
         stored_scope = ResolvedCapabilityAssignmentTarget(
             project_id=policy.project_id,
             organization_id=policy.organization_id,
         )
         await self.authorization.enforce(
-            self._action(access, AuthorizationAction.READ, policy, revision, stored_scope),
+            self._action(
+                access,
+                AuthorizationAction.READ,
+                policy,
+                revision,
+                stored_scope,
+            ),
             approval_id=access.approval_id,
             risk=RiskClassification.STANDARD,
         )
@@ -189,7 +227,13 @@ class CapabilityAssignmentService:
             organization_id=policy.organization_id,
         )
         await self.authorization.enforce(
-            self._action(access, AuthorizationAction.READ, policy, item, stored_scope),
+            self._action(
+                access,
+                AuthorizationAction.READ,
+                policy,
+                item,
+                stored_scope,
+            ),
             approval_id=access.approval_id,
             risk=RiskClassification.STANDARD,
         )
@@ -208,7 +252,10 @@ class CapabilityAssignmentService:
                 continue
             if organization_id is not None and policy.organization_id != organization_id:
                 continue
-            revision = self.repository.get_revision(policy.assignment_id, policy.current_revision)
+            revision = self.repository.get_revision(
+                policy.assignment_id,
+                policy.current_revision,
+            )
             stored_scope = ResolvedCapabilityAssignmentTarget(
                 project_id=policy.project_id,
                 organization_id=policy.organization_id,
@@ -299,8 +346,14 @@ class CapabilityAssignmentService:
             "revision": revision.revision,
             "target_type": revision.content.target.subject_type.value,
             "target_id": revision.content.target.subject_id,
-            "required_capability_ids": [item.capability_id for item in revision.content.required],
-            "allowed_capability_ids": [item.capability_id for item in revision.content.allowed],
-            "denied_capability_ids": [item.capability_id for item in revision.content.denied],
+            "required_capability_ids": [
+                item.capability_id for item in revision.content.required
+            ],
+            "allowed_capability_ids": [
+                item.capability_id for item in revision.content.allowed
+            ],
+            "denied_capability_ids": [
+                item.capability_id for item in revision.content.denied
+            ],
         }
         return ProposedAction(context=context, payload=payload)
