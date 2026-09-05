@@ -142,10 +142,6 @@ class _InventoryValidatedOpenAICompatibleModelProvider(OpenAICompatibleModelProv
     """Treat configured-model disappearance as provider unavailability for onboarding routes."""
 
     async def health(self) -> HealthStatus:
-        health = await super().health()
-        if health not in {HealthStatus.HEALTHY, HealthStatus.DEGRADED}:
-            return health
-
         try:
             native_models = await self.list_native_models()
         except ContractError:
@@ -153,8 +149,11 @@ class _InventoryValidatedOpenAICompatibleModelProvider(OpenAICompatibleModelProv
             return self._health
 
         configured_native_models = frozenset(self.config.models.values())
-        if not configured_native_models.issubset(native_models):
-            self._health = HealthStatus.UNAVAILABLE
+        self._health = (
+            HealthStatus.HEALTHY
+            if configured_native_models.issubset(native_models)
+            else HealthStatus.UNAVAILABLE
+        )
         return self._health
 
 
