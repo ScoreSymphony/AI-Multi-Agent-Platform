@@ -100,6 +100,12 @@ class _KnowledgeConversationCommandHandlers(ConversationCommandHandlers):
     ) -> dict[str, JsonValue]:
         metadata = payload.get("metadata")
         if isinstance(metadata, Mapping):
+            if "target" in metadata:
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    "conversation target metadata is platform-managed; use the top-level target",
+                    details={"field": "target"},
+                )
             reserved = sorted(RESERVED_CONVERSATION_METADATA_KEYS.intersection(metadata))
             if reserved:
                 raise ContractError(
