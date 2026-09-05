@@ -40,7 +40,7 @@ def observation_assertion_payload(observation: EvaluationObservation) -> dict[st
     if _BEHAVIOR_KEY in observation.data:
         raise ValueError("evaluation observation data must not shadow reserved behavior metadata")
     payload = dict(observation.data)
-    payload[_BEHAVIOR_KEY] = {
+    behavior: dict[str, JsonValue] = {
         "task_id": observation.task_id,
         "run_id": observation.run_id,
         "artifact_refs": list(observation.artifact_refs),
@@ -50,6 +50,7 @@ def observation_assertion_payload(observation: EvaluationObservation) -> dict[st
         "capability_refs": list(observation.capability_refs),
         "event_types": list(observation.event_types),
     }
+    payload[_BEHAVIOR_KEY] = behavior
     return payload
 
 
