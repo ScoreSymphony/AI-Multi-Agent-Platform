@@ -62,7 +62,10 @@ class _Inventory:
 
 @dataclass(slots=True)
 class _Targets:
-    values: dict[tuple[CapabilityAssignmentTargetType, str], ResolvedCapabilityAssignmentTarget]
+    values: dict[
+        tuple[CapabilityAssignmentTargetType, str],
+        ResolvedCapabilityAssignmentTarget,
+    ]
 
     def resolve(
         self,
@@ -71,7 +74,10 @@ class _Targets:
         try:
             return self.values[(target.subject_type, target.subject_id)]
         except KeyError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, "canonical assignment target not found") from exc
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                "canonical assignment target not found",
+            ) from exc
 
 
 class _Gate:
@@ -102,7 +108,10 @@ class _Gate:
     ) -> AuthorizationDecision:
         decision = await self.decide(action, approval_id=approval_id, risk=risk)
         if decision.outcome is not AuthorizationOutcome.ALLOW:
-            raise ContractError(ErrorCode.FORBIDDEN, decision.reason or "authorization denied")
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                decision.reason or "authorization denied",
+            )
         return decision
 
 
@@ -130,7 +139,9 @@ class _ReplacementEchoProvider(CapabilityToolProvider):
         )
 
     async def invoke(self, invocation: ToolInvocation) -> ToolResult:
-        raise AssertionError(f"test provider must not be invoked: {invocation.invocation_id}")
+        raise AssertionError(
+            f"test provider must not be invoked: {invocation.invocation_id}"
+        )
 
 
 def _access(
