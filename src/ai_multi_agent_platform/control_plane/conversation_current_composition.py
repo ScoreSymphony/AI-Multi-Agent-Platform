@@ -16,6 +16,7 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.conversations import (
     RESERVED_CONVERSATION_METADATA_KEYS,
+    ContextResolvingConversationResponseProvider,
     Conversation,
     ConversationService,
     ReferenceKind,
@@ -176,7 +177,15 @@ class ControlPlane(_ConversationControlPlane, _NotificationControlPlane):
             **kwargs,
         )
         self._conversation_knowledge_provider = conversation_knowledge_provider
-        self.conversation_response_provider = conversation_response_provider
+        self.conversation_response_provider = (
+            ContextResolvingConversationResponseProvider(
+                conversation_response_provider,
+                file_provider=conversation_file_provider,
+                knowledge_provider=conversation_knowledge_provider,
+            )
+            if conversation_response_provider is not None
+            else None
+        )
 
         if conversation_service is not None:
             # The intermediate Conversation composition installs the canonical handlers.
