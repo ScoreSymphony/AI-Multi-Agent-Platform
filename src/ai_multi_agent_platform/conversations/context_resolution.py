@@ -154,13 +154,18 @@ async def _bounded_file_bytes(
 
 
 def _decode_text_file(data: bytes, content_type: str | None) -> str | None:
-    textual = content_type is None or content_type.startswith("text/") or content_type in {
-        "application/json",
-        "application/ld+json",
-        "application/xml",
-        "application/x-yaml",
-        "application/yaml",
-    }
+    textual = (
+        content_type is None
+        or content_type.startswith("text/")
+        or content_type
+        in {
+            "application/json",
+            "application/ld+json",
+            "application/xml",
+            "application/x-yaml",
+            "application/yaml",
+        }
+    )
     if textual:
         return data.decode("utf-8", errors="replace")
     try:
@@ -187,7 +192,9 @@ async def _resolve_knowledge(
         )
     )
     if not results:
-        text = f"Canonical Knowledge source {source_id}: no matching context for the current message."
+        text = (
+            f"Canonical Knowledge source {source_id}: no matching context for the current message."
+        )
     else:
         parts: list[str] = []
         remaining = MAX_KNOWLEDGE_CONTEXT_CHARS
@@ -213,9 +220,7 @@ def _context_references(request: ConversationResponseRequest) -> tuple[ResourceR
     for message in request.history:
         candidates = list(message.references)
         candidates.extend(
-            block.reference
-            for block in message.content
-            if block.reference is not None
+            block.reference for block in message.content if block.reference is not None
         )
         for reference in candidates:
             if reference.kind not in {ReferenceKind.FILE, ReferenceKind.KNOWLEDGE}:
