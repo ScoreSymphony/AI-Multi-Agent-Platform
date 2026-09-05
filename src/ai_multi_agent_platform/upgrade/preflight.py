@@ -375,8 +375,7 @@ def _plugin_state_migration_checks(request: PreflightRequest) -> tuple[Preflight
                 code="plugin.state_migration.hook_missing",
                 severity=CheckSeverity.ERROR,
                 message=(
-                    "plugin-owned state requires migration but no controlled #20 hook "
-                    "is available"
+                    "plugin-owned state requires migration but no controlled #20 hook is available"
                 ),
                 details={"plugin_ids": sorted(required)},
             ),
