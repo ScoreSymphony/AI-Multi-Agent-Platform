@@ -12,6 +12,7 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.workspaces import WorkspaceProvider
 
+from .access import TemplateScopeAccess
 from .agent_handlers import AgentTemplateExporter
 from .application import TemplateApplicationService
 from .automation_handler import AutomationTemplateExporter
@@ -59,48 +60,105 @@ class TemplateEnvironmentResolver(Protocol):
 
 
 class TemplateResourceService:
-    def __init__(self, repository: TemplateRepository) -> None:
+    def __init__(
+        self,
+        repository: TemplateRepository,
+        *,
+        scope_access: TemplateScopeAccess | None = None,
+    ) -> None:
         self.repository = repository
+        self.scope_access = scope_access
 
     async def list_resources(
         self,
         context: RequestContext,
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
-        del context, query
-        return tuple(
-            _template_resource(self.repository, item.template_id)
-            for item in self.repository.list_templates()
-        )
+        del query
+        resources: list[dict[str, JsonValue]] = []
+        for item in self.repository.list_templates():
+            if self.scope_access is not None and not await self.scope_access.allowed(
+                context,
+                "template:list",
+                item.template_id,
+                owner_ref=item.owner_ref,
+                project_id=item.project_id,
+            ):
+                continue
+            resources.append(_template_resource(self.repository, item.template_id))
+        return tuple(resources)
 
     async def get_resource(
         self,
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        del context
+        definition = self.repository.get_template(resource_id)
+        if self.scope_access is not None:
+            await self.scope_access.authorize(
+                context,
+                "template:read",
+                resource_id,
+                owner_ref=definition.owner_ref,
+                project_id=definition.project_id,
+            )
         return _template_resource(self.repository, resource_id)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Return privacy-safe metadata for the derived global Search index."""
+
+        resources: list[dict[str, JsonValue]] = []
+        for item in self.repository.list_templates():
+            resource = _template_search_resource(self.repository, item.template_id)
+            if resource is not None:
+                resources.append(resource)
+        return tuple(resources)
 
 
 class TemplateInstanceResourceService:
-    def __init__(self, repository: TemplateRepository) -> None:
+    search_indexable = False
+
+    def __init__(
+        self,
+        repository: TemplateRepository,
+        *,
+        scope_access: TemplateScopeAccess | None = None,
+    ) -> None:
         self.repository = repository
+        self.scope_access = scope_access
 
     async def list_resources(
         self,
         context: RequestContext,
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
-        del context, query
-        return tuple(_instance_resource(item) for item in self.repository.list_instantiations())
+        del query
+        resources: list[dict[str, JsonValue]] = []
+        for item in self.repository.list_instantiations():
+            if self.scope_access is not None and not await self.scope_access.allowed(
+                context,
+                "template-instance:list",
+                item.instance_id,
+                owner_ref=item.applied_by,
+            ):
+                continue
+            resources.append(_instance_resource(item))
+        return tuple(resources)
 
     async def get_resource(
         self,
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        del context
-        return _instance_resource(self.repository.get_instantiation(resource_id))
+        item = self.repository.get_instantiation(resource_id)
+        if self.scope_access is not None:
+            await self.scope_access.authorize(
+                context,
+                "template-instance:read",
+                resource_id,
+                owner_ref=item.applied_by,
+            )
+        return _instance_resource(item)
 
 
 class TemplateCommandHandlers:
@@ -113,11 +171,13 @@ class TemplateCommandHandlers:
         environment_resolver: TemplateEnvironmentResolver | None = None,
         agent_exporter: AgentTemplateExporter | None = None,
         automation_exporter: AutomationTemplateExporter | None = None,
+        scope_access: TemplateScopeAccess | None = None,
     ) -> None:
         self.application = application
         self.environment_resolver = environment_resolver
         self.agent_exporter = agent_exporter
         self.automation_exporter = automation_exporter
+        self.scope_access = scope_access
 
     async def create_template(
         self,
@@ -126,6 +186,8 @@ class TemplateCommandHandlers:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         _require_collection(resource_ref, TEMPLATE_COLLECTION)
+        organization_id = _optional_string(payload, "organization_id")
+        _validate_requested_organization_scope(context, organization_id)
         content = _authored_content(
             template_content_from_json(_required(payload, "content")),
             context,
@@ -135,7 +197,7 @@ class TemplateCommandHandlers:
             owner_ref=_actor_owner(context),
             content=content,
             project_id=_optional_string(payload, "project_id"),
-            organization_id=_optional_string(payload, "organization_id"),
+            organization_id=organization_id,
         )
         return _template_resource(self.application.repository, revision.template_id)
 
@@ -151,11 +213,22 @@ class TemplateCommandHandlers:
                 ErrorCode.UNAVAILABLE,
                 "Agent-to-Template export is not enabled in this Control Plane composition",
             )
+        agent_id = _required_string(payload, "agent_id")
+        source_revision = _optional_positive_int(payload, "revision")
+        if self.scope_access is not None:
+            source = self.agent_exporter.agents.get_agent_revision(agent_id, source_revision)
+            await self.scope_access.authorize(
+                context,
+                "template.create-from-agent",
+                source.agent_id,
+                owner_ref=source.owner_ref,
+                project_id=source.project_id,
+            )
         revision = self.agent_exporter.create_from_agent(
-            _required_string(payload, "agent_id"),
+            agent_id,
             owner_ref=_actor_owner(context),
             author=context.actor.principal_ref,
-            revision=_optional_positive_int(payload, "revision"),
+            revision=source_revision,
             name=_optional_string(payload, "name"),
         )
         return _template_resource(self.application.repository, revision.template_id)
@@ -172,8 +245,21 @@ class TemplateCommandHandlers:
                 ErrorCode.UNAVAILABLE,
                 "Automation-to-Template export is not enabled in this Control Plane composition",
             )
+        automation_id = _required_string(payload, "automation_id")
+        if self.scope_access is not None:
+            source = await self.automation_exporter.automations.get_automation(automation_id)
+            await self.scope_access.authorize(
+                context,
+                "template.create-from-automation",
+                source.id,
+                owner_ref=OwnerRef(
+                    type=source.identity.owner_type,
+                    id=source.identity.owner_id,
+                ),
+                project_id=source.project_id,
+            )
         revision = await self.automation_exporter.create_from_automation(
-            _required_string(payload, "automation_id"),
+            automation_id,
             owner_ref=_actor_owner(context),
             author=context.actor.principal_ref,
             name=_optional_string(payload, "name"),
@@ -186,6 +272,7 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        await self._authorize_template(context, "template.revise", resource_ref)
         content = _authored_content(
             template_content_from_json(_required(payload, "content")),
             context,
@@ -204,7 +291,7 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del context
+        await self._authorize_template(context, "template.publish", resource_ref)
         revision = self.application.templates.publish(
             resource_ref,
             expected_revision=_required_positive_int(payload, "expected_revision"),
@@ -217,6 +304,7 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        await self._authorize_template(context, "template.clone", resource_ref)
         revision = self.application.templates.clone_template(
             resource_ref,
             owner_ref=_actor_owner(context),
@@ -232,6 +320,7 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        await self._authorize_template(context, "template.fork", resource_ref)
         revision = self.application.templates.fork_template(
             resource_ref,
             owner_ref=_actor_owner(context),
@@ -247,6 +336,7 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        await self._authorize_template(context, "template.preview", resource_ref)
         _reject_server_resolved_environment(payload)
         preview = self.application.preview(
             resource_ref,
@@ -265,6 +355,7 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        await self._authorize_template(context, "template.apply", resource_ref)
         _reject_server_resolved_environment(payload)
         instantiation = await self.application.apply(
             resource_ref,
@@ -280,6 +371,7 @@ class TemplateCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
+        await self._authorize_template(context, "template.reapply", resource_ref)
         _reject_server_resolved_environment(payload)
         instantiation = await self.application.reapply(
             resource_ref,
@@ -294,6 +386,23 @@ class TemplateCommandHandlers:
             return TemplateEnvironment()
         return await self.environment_resolver.resolve(context)
 
+    async def _authorize_template(
+        self,
+        context: RequestContext,
+        action: str,
+        template_id: str,
+    ) -> None:
+        if self.scope_access is None:
+            return
+        definition = self.application.repository.get_template(template_id)
+        await self.scope_access.authorize(
+            context,
+            action,
+            template_id,
+            owner_ref=definition.owner_ref,
+            project_id=definition.project_id,
+        )
+
 
 def register_template_control_plane(
     control_plane: ControlPlane,
@@ -306,12 +415,14 @@ def register_template_control_plane(
     """Register Template resources/commands without changing the Control Plane foundation."""
 
     repository = application.repository
+    scope_access = TemplateScopeAccess(control_plane)
     control_plane.register_resource_service(
-        TEMPLATE_COLLECTION, TemplateResourceService(repository)
+        TEMPLATE_COLLECTION,
+        TemplateResourceService(repository, scope_access=scope_access),
     )
     control_plane.register_resource_service(
         TEMPLATE_INSTANCE_COLLECTION,
-        TemplateInstanceResourceService(repository),
+        TemplateInstanceResourceService(repository, scope_access=scope_access),
     )
     if environment_resolver is None:
         workspace_provider = cast(
@@ -324,6 +435,7 @@ def register_template_control_plane(
         environment_resolver=environment_resolver,
         agent_exporter=agent_exporter,
         automation_exporter=automation_exporter,
+        scope_access=scope_access,
     )
     control_plane.register_command("template.create", handlers.create_template)
     if agent_exporter is not None:
@@ -363,6 +475,48 @@ def _template_resource(
     }
 
 
+def _template_search_resource(
+    repository: TemplateRepository,
+    template_id: str,
+) -> dict[str, JsonValue] | None:
+    definition = repository.get_template(template_id)
+    if definition.organization_id is not None and (
+        definition.owner_ref.type != "organization"
+        or definition.owner_ref.id != definition.organization_id
+    ):
+        # Search must fail closed when an organization scope cannot be represented by
+        # the canonical owner scope consumed by registered-resource authorization.
+        return None
+    revision = repository.get_revision(template_id, definition.current_revision)
+    content = revision.content
+    dependencies: list[JsonValue] = [
+        (
+            dependency.template_id
+            if dependency.revision is None
+            else f"{dependency.template_id}@{dependency.revision}"
+        )
+        for dependency in content.dependencies
+    ]
+    return {
+        "id": template_id,
+        "type": "template",
+        "name": content.name,
+        "description": content.description,
+        "kind": content.template_type.value,
+        "state": revision.state.value,
+        "current_revision": definition.current_revision,
+        "latest_published_revision": definition.latest_published_revision,
+        "owner_ref": json_object(definition.owner_ref),
+        "project_id": definition.project_id,
+        "organization_id": definition.organization_id,
+        "updated_at": definition.updated_at.isoformat(),
+        "tags": list(content.tags),
+        "dependencies": dependencies,
+        "source": content.provenance.source,
+        "author": content.provenance.author,
+    }
+
+
 def _instance_resource(instantiation: object) -> dict[str, JsonValue]:
     item = json_object(instantiation)
     instance_id = item.get("instance_id")
@@ -397,6 +551,20 @@ def _actor_owner(context: RequestContext) -> OwnerRef:
     if context.actor.owner_type is not None and context.actor.owner_id is not None:
         return OwnerRef(type=context.actor.owner_type, id=context.actor.owner_id)
     return OwnerRef(type="service", id=context.actor.principal_ref)
+
+
+def _validate_requested_organization_scope(
+    context: RequestContext,
+    organization_id: str | None,
+) -> None:
+    if organization_id is None:
+        return
+    owner = _actor_owner(context)
+    if owner.type != "organization" or owner.id != organization_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "organization-scoped Templates must be created under the matching organization owner",
+        )
 
 
 def _reject_server_resolved_environment(payload: dict[str, JsonValue]) -> None:
