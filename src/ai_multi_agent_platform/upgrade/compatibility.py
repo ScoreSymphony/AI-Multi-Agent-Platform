@@ -98,6 +98,18 @@ def plugin_compatibility_checks(
 ) -> tuple[PreflightCheck, ...]:
     expected = expected_interfaces or {}
     checks: list[PreflightCheck] = []
+    manifest_ids = {manifest.plugin_id for manifest in manifests}
+    missing_required = sorted(required_plugin_ids - manifest_ids)
+    if missing_required:
+        checks.append(
+            PreflightCheck(
+                code="plugin.required_missing",
+                severity=CheckSeverity.ERROR,
+                message="required plugin manifests are unavailable for upgrade validation",
+                details={"plugin_ids": missing_required},
+            )
+        )
+
     for manifest in manifests:
         required = manifest.plugin_id in required_plugin_ids
         reasons: list[str] = []
