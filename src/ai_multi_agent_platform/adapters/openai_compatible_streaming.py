@@ -117,9 +117,7 @@ class UrllibOpenAICompatibleStreamingTransport(UrllibOpenAICompatibleTransport):
                         HttpJsonResponse(
                             status_code=exc.code,
                             payload=(
-                                cast(JsonValue, parsed)
-                                if _is_json_value(parsed)
-                                else str(parsed)
+                                cast(JsonValue, parsed) if _is_json_value(parsed) else str(parsed)
                             ),
                             headers=dict(exc.headers.items()) if exc.headers is not None else {},
                         ),
@@ -209,9 +207,7 @@ class OpenAICompatibleModelProvider(_BaseOpenAICompatibleModelProvider):
         )
         return replace(
             descriptor,
-            supported_operations=tuple(
-                dict.fromkeys((*descriptor.supported_operations, "stream"))
-            ),
+            supported_operations=tuple(dict.fromkeys((*descriptor.supported_operations, "stream"))),
             capabilities=capabilities,
         )
 
