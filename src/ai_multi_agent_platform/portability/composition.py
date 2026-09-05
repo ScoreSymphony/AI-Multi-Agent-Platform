@@ -22,6 +22,8 @@ from .dependencies import parse_resource_dependency
 from .executor import ImportExecutor, ImportMutationRegistry
 from .models import DependencyKind, DependencyRequirement, IdPolicy
 from .planner import ImportPreviewService
+from .project_codecs import PROJECT_RESOURCE_TYPE, register_project_portability_codec
+from .project_import import ProjectDependencyAudit, ProjectImportMutationHandler
 from .registry import ResourceSerializerRegistry
 from .template_codecs import (
     TEMPLATE_RESOURCE_TYPE,
@@ -41,13 +43,16 @@ def build_agent_portability_workflow(
     templates: TemplateRepository | None = None,
     source_instance_id: str | None = None,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
+    project_dependency_audit: ProjectDependencyAudit | None = None,
 ) -> PortabilityWorkflowService:
     """Compose production-safe portability against supplied canonical stores.
 
-    Agent and Agent Team are always available. Template portability is enabled only
-    when the canonical #78 repository is supplied. Dependencies without a supplied
-    destination registry remain unavailable so import preview fails closed rather
-    than making optimistic assumptions about target state.
+    Agent, Agent Team and Project are always available. Template portability is enabled
+    only when the canonical #78 repository is supplied. Project rollback deliberately
+    fails closed unless the caller supplies a cross-domain dependency audit that can
+    prove removal is safe. Dependencies without a supplied destination registry remain
+    unavailable so import preview fails closed rather than making optimistic assumptions
+    about target state.
     """
 
     serializers = ResourceSerializerRegistry()
@@ -56,6 +61,7 @@ def build_agent_portability_workflow(
         agent_id_policy=id_policy,
         team_id_policy=id_policy,
     )
+    register_project_portability_codec(serializers, id_policy=id_policy)
     if templates is not None:
         register_template_portability_codec(serializers, id_policy=id_policy)
 
@@ -67,8 +73,12 @@ def build_agent_portability_workflow(
     async def load_team(resource_id: str) -> object:
         return snapshot_agent_team(agents, resource_id)
 
+    async def load_project(resource_id: str) -> object:
+        return scopes.get_project(resource_id)
+
     export_sources.register(AGENT_RESOURCE_TYPE, load_agent)
     export_sources.register(AGENT_TEAM_RESOURCE_TYPE, load_team)
+    export_sources.register(PROJECT_RESOURCE_TYPE, load_project)
     if templates is not None:
 
         async def load_template(resource_id: str) -> object:
@@ -79,6 +89,12 @@ def build_agent_portability_workflow(
     mutations = ImportMutationRegistry()
     mutations.register(AgentImportMutationHandler(agents))
     mutations.register(AgentTeamImportMutationHandler(agents))
+    mutations.register(
+        ProjectImportMutationHandler(
+            scopes,
+            dependency_audit=project_dependency_audit,
+        )
+    )
     if templates is not None:
         mutations.register(TemplateImportMutationHandler(templates))
 
@@ -89,7 +105,7 @@ def build_agent_portability_workflow(
             return _canonical_exists(lambda: agents.get_team(resource_id))
         if resource_type == TEMPLATE_RESOURCE_TYPE and templates is not None:
             return _canonical_exists(lambda: templates.get_template(resource_id))
-        if resource_type == "project":
+        if resource_type == PROJECT_RESOURCE_TYPE:
             return _canonical_exists(lambda: scopes.get_project(resource_id))
         if resource_type == "workspace":
             return _canonical_exists(lambda: scopes.get_workspace(resource_id))

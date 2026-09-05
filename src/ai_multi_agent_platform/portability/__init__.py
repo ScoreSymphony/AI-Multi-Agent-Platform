@@ -124,6 +124,13 @@ from .planner import (
     MissingDependency,
     PlannedResource,
 )
+from .project_codecs import (
+    PROJECT_PORTABLE_SCHEMA_VERSION,
+    PROJECT_RESOURCE_TYPE,
+    ProjectPortableCodec,
+    register_project_portability_codec,
+)
+from .project_import import ProjectDependencyAudit, ProjectImportMutationHandler
 from .registry import ImportContext, ResourceCodec, ResourceExport, ResourceSerializerRegistry
 from .schema import PORTABLE_PACKAGE_SCHEMA_V1, validate_package_document
 from .template_codecs import (
@@ -166,6 +173,8 @@ __all__ = [
     "PORTABLE_FORMAT_VERSION",
     "PORTABLE_INTEGRITY_ALGORITHM",
     "PORTABLE_PACKAGE_SCHEMA_V1",
+    "PROJECT_PORTABLE_SCHEMA_VERSION",
+    "PROJECT_RESOURCE_TYPE",
     "TASK_HISTORY_PORTABLE_SCHEMA_VERSION",
     "TASK_HISTORY_RESOURCE_TYPE",
     "TEMPLATE_PORTABLE_SCHEMA_VERSION",
@@ -229,6 +238,9 @@ __all__ = [
     "PortablePackageManifest",
     "PortableResource",
     "PortableResourceDescriptor",
+    "ProjectDependencyAudit",
+    "ProjectImportMutationHandler",
+    "ProjectPortableCodec",
     "ResourceCodec",
     "ResourceDependencyRef",
     "ResourceExport",
@@ -257,6 +269,7 @@ __all__ = [
     "register_file_portability_codecs",
     "register_knowledge_portability_codec",
     "register_memory_portability_codec",
+    "register_project_portability_codec",
     "register_task_history_portability_codec",
     "register_template_portability_codec",
     "resource_dependency",
