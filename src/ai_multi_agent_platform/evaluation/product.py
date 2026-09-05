@@ -416,9 +416,7 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
             fixture_dir = self._root / fixture_id
             if not fixture_dir.is_dir():
                 raise ValueError(f"evaluation fixture directory not found: {fixture_id}")
-            fixture_paths = tuple(
-                sorted(path for path in fixture_dir.rglob("*") if path.is_file())
-            )
+            fixture_paths = tuple(sorted(path for path in fixture_dir.rglob("*") if path.is_file()))
             if not fixture_paths:
                 raise ValueError(f"evaluation fixture directory is empty: {fixture_id}")
             digest = hashlib.sha256()
