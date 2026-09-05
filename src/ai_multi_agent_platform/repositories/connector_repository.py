@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from uuid import uuid4
 
 from ai_multi_agent_platform.connectors import (
@@ -20,10 +21,14 @@ from .capabilities import CREDENTIAL_OPERATIONS, repository_capability
 from .contracts import RepositoryProvider
 from .models import (
     RepositoryCapability,
+    RepositoryChangeRequest,
+    RepositoryChangeRequestState,
     RepositoryCommit,
     RepositoryCommitInfo,
     RepositoryConnection,
     RepositoryDiff,
+    RepositoryIssue,
+    RepositoryIssueState,
     RepositoryOperation,
     RepositoryReference,
     RepositoryRevision,
@@ -45,6 +50,13 @@ _ACTIONS: dict[RepositoryOperation, str] = {
     RepositoryOperation.PUSH: "repository.push",
 }
 _REF_ACTIONS = {"repository.branches", "repository.tags", "repository.commits"}
+_ISSUE_READ_ACTION = "repository.issue.read"
+_ISSUE_WRITE_ACTIONS = {"repository.issue.open", "repository.issue.update"}
+_CHANGE_REQUEST_READ_ACTION = "repository.change_request.read"
+_CHANGE_REQUEST_WRITE_ACTIONS = {
+    "repository.change_request.open",
+    "repository.change_request.update",
+}
 
 
 class ConnectorRepositoryProvider(RepositoryProvider):
@@ -222,6 +234,160 @@ class ConnectorRepositoryProvider(RepositoryProvider):
                 )
             )
         return tuple(commits)
+
+    async def read_issue(
+        self,
+        repository: RepositoryReference,
+        issue: ExternalResourceReference,
+        context: OperationContext,
+    ) -> RepositoryIssue:
+        action = _ISSUE_READ_ACTION
+        self._require_collaboration_reference(issue, "repository_issue")
+        result = await self._action(
+            repository,
+            RepositoryOperation.ISSUE_READ,
+            action,
+            {"issue": issue.to_dict()},
+            context,
+        )
+        return self._issue_result(repository, result, action)
+
+    async def open_issue(
+        self,
+        repository: RepositoryReference,
+        title: str,
+        context: OperationContext,
+        *,
+        body: str | None = None,
+    ) -> RepositoryIssue:
+        action = "repository.issue.open"
+        arguments: dict[str, JsonValue] = {"title": _nonblank(title, "issue title")}
+        if body is not None:
+            arguments["body"] = body
+        result = await self._action(
+            repository,
+            RepositoryOperation.ISSUE_WRITE,
+            action,
+            arguments,
+            context,
+        )
+        return self._issue_result(repository, result, action)
+
+    async def update_issue(
+        self,
+        repository: RepositoryReference,
+        issue: ExternalResourceReference,
+        context: OperationContext,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: RepositoryIssueState | None = None,
+    ) -> RepositoryIssue:
+        action = "repository.issue.update"
+        self._require_collaboration_reference(issue, "repository_issue")
+        arguments: dict[str, JsonValue] = {"issue": issue.to_dict()}
+        if title is not None:
+            arguments["title"] = _nonblank(title, "issue title")
+        if body is not None:
+            arguments["body"] = body
+        if state is not None:
+            arguments["state"] = state.value
+        if len(arguments) == 1:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "repository issue update requires at least one change",
+            )
+        result = await self._action(
+            repository,
+            RepositoryOperation.ISSUE_WRITE,
+            action,
+            arguments,
+            context,
+        )
+        return self._issue_result(repository, result, action)
+
+    async def read_change_request(
+        self,
+        repository: RepositoryReference,
+        change_request: ExternalResourceReference,
+        context: OperationContext,
+    ) -> RepositoryChangeRequest:
+        action = _CHANGE_REQUEST_READ_ACTION
+        self._require_collaboration_reference(
+            change_request,
+            "repository_change_request",
+        )
+        result = await self._action(
+            repository,
+            RepositoryOperation.CHANGE_REQUEST_READ,
+            action,
+            {"change_request": change_request.to_dict()},
+            context,
+        )
+        return self._change_request_result(repository, result, action)
+
+    async def open_change_request(
+        self,
+        repository: RepositoryReference,
+        title: str,
+        head_ref: str,
+        base_ref: str,
+        context: OperationContext,
+        *,
+        body: str | None = None,
+    ) -> RepositoryChangeRequest:
+        action = "repository.change_request.open"
+        arguments: dict[str, JsonValue] = {
+            "title": _nonblank(title, "change-request title"),
+            "head_ref": _nonblank(head_ref, "change-request head_ref"),
+            "base_ref": _nonblank(base_ref, "change-request base_ref"),
+        }
+        if body is not None:
+            arguments["body"] = body
+        result = await self._action(
+            repository,
+            RepositoryOperation.CHANGE_REQUEST_WRITE,
+            action,
+            arguments,
+            context,
+        )
+        return self._change_request_result(repository, result, action)
+
+    async def update_change_request(
+        self,
+        repository: RepositoryReference,
+        change_request: ExternalResourceReference,
+        context: OperationContext,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        state: RepositoryChangeRequestState | None = None,
+    ) -> RepositoryChangeRequest:
+        action = "repository.change_request.update"
+        self._require_collaboration_reference(
+            change_request,
+            "repository_change_request",
+        )
+        arguments: dict[str, JsonValue] = {"change_request": change_request.to_dict()}
+        if title is not None:
+            arguments["title"] = _nonblank(title, "change-request title")
+        if body is not None:
+            arguments["body"] = body
+        if state is not None:
+            arguments["state"] = state.value
+        if len(arguments) == 1:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "repository change-request update requires at least one change",
+            )
+        result = await self._action(
+            repository,
+            RepositoryOperation.CHANGE_REQUEST_WRITE,
+            action,
+            arguments,
+            context,
+        )
+        return self._change_request_result(repository, result, action)
 
     async def status(
         self,
@@ -428,6 +594,80 @@ class ConnectorRepositoryProvider(RepositoryProvider):
             )
         )
 
+    def _issue_result(
+        self,
+        repository: RepositoryReference,
+        result: ConnectorActionResult,
+        action: str,
+    ) -> RepositoryIssue:
+        output = _mapping(result.output, action)
+        resource = self._collaboration_resource(result, action, "repository_issue")
+        return RepositoryIssue(
+            repository_id=repository.id,
+            external_resource=resource,
+            title=_string(output, "title", action),
+            state=_issue_state(output.get("state"), action),
+            body=_optional_text(output.get("body"), action, "body"),
+            metadata=resource.metadata,
+        )
+
+    def _change_request_result(
+        self,
+        repository: RepositoryReference,
+        result: ConnectorActionResult,
+        action: str,
+    ) -> RepositoryChangeRequest:
+        output = _mapping(result.output, action)
+        resource = self._collaboration_resource(
+            result,
+            action,
+            "repository_change_request",
+        )
+        return RepositoryChangeRequest(
+            repository_id=repository.id,
+            external_resource=resource,
+            title=_string(output, "title", action),
+            state=_change_request_state(output.get("state"), action),
+            head_ref=_optional_string(output.get("head_ref"), action, "head_ref"),
+            base_ref=_optional_string(output.get("base_ref"), action, "base_ref"),
+            body=_optional_text(output.get("body"), action, "body"),
+            metadata=resource.metadata,
+        )
+
+    def _collaboration_resource(
+        self,
+        result: ConnectorActionResult,
+        action: str,
+        canonical_type: str,
+    ) -> ExternalResourceReference:
+        if len(result.resource_refs) != 1:
+            raise _invalid(action, "exactly one collaboration resource reference is required")
+        resource = result.resource_refs[0]
+        if resource.connection_id != self._connection.id:
+            raise _invalid(action, "collaboration resource belongs to another connection")
+        metadata = dict(resource.metadata)
+        if resource.resource_type != canonical_type:
+            metadata["provider_resource_type"] = resource.resource_type
+        return replace(resource, resource_type=canonical_type, metadata=metadata)
+
+    def _require_collaboration_reference(
+        self,
+        resource: ExternalResourceReference,
+        canonical_type: str,
+    ) -> None:
+        if resource.connection_id != self._connection.id:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "repository collaboration resource belongs to another connection",
+                provider_id=self.provider_id,
+            )
+        if resource.resource_type != canonical_type:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                f"repository collaboration resource must be {canonical_type}",
+                provider_id=self.provider_id,
+            )
+
     def _wrap(
         self,
         resource: ExternalResourceReference,
@@ -471,6 +711,14 @@ class ConnectorRepositoryProvider(RepositoryProvider):
                 operations.append(operation)
         if actions.intersection(_REF_ACTIONS):
             operations.append(RepositoryOperation.INSPECT_REFS)
+        if _ISSUE_READ_ACTION in actions:
+            operations.append(RepositoryOperation.ISSUE_READ)
+        if actions.intersection(_ISSUE_WRITE_ACTIONS):
+            operations.append(RepositoryOperation.ISSUE_WRITE)
+        if _CHANGE_REQUEST_READ_ACTION in actions:
+            operations.append(RepositoryOperation.CHANGE_REQUEST_READ)
+        if actions.intersection(_CHANGE_REQUEST_WRITE_ACTIONS):
+            operations.append(RepositoryOperation.CHANGE_REQUEST_WRITE)
         return tuple(
             repository_capability(
                 operation,
@@ -535,6 +783,14 @@ def _optional_string(value: JsonValue | None, action: str, field: str) -> str | 
     return value
 
 
+def _optional_text(value: JsonValue | None, action: str, field: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise _invalid(action, f"{field} must be a string or null")
+    return value
+
+
 def _revision(value: JsonValue | None, action: str, field: str) -> str:
     if not isinstance(value, str):
         raise _invalid(action, f"{field} must be an immutable Git revision")
@@ -579,6 +835,31 @@ def _revisions(value: JsonValue | None, action: str, field: str) -> tuple[str, .
 def _metadata_string(metadata: Mapping[str, JsonValue], key: str) -> str | None:
     value = metadata.get(key)
     return value if isinstance(value, str) and value.strip() else None
+
+
+def _issue_state(value: JsonValue | None, action: str) -> RepositoryIssueState:
+    if value is None:
+        return RepositoryIssueState.UNKNOWN
+    if not isinstance(value, str):
+        raise _invalid(action, "state must be a string or null")
+    try:
+        return RepositoryIssueState(value)
+    except ValueError:
+        return RepositoryIssueState.UNKNOWN
+
+
+def _change_request_state(
+    value: JsonValue | None,
+    action: str,
+) -> RepositoryChangeRequestState:
+    if value is None:
+        return RepositoryChangeRequestState.UNKNOWN
+    if not isinstance(value, str):
+        raise _invalid(action, "state must be a string or null")
+    try:
+        return RepositoryChangeRequestState(value)
+    except ValueError:
+        return RepositoryChangeRequestState.UNKNOWN
 
 
 def _revision_or_none(value: str | None) -> str | None:
