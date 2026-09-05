@@ -66,11 +66,7 @@ class DistributedRuntimeFailoverReconciler:
             for record in reconciled
             if before_states.get(record.job.worker_job_id) != record.state
         )
-        newly_lost = tuple(
-            record
-            for record in state_changes
-            if record.state is DispatchState.LOST
-        )
+        newly_lost = tuple(record for record in state_changes if record.state is DispatchState.LOST)
 
         return ReconciliationResult(
             recovered_items=len(state_changes),
