@@ -392,7 +392,6 @@ class InMemoryAuthorizationPolicyProfileRepository:
         if any(key in self._revisions for key in keys):
             raise ContractError(ErrorCode.CONFLICT, "policy profile revision already exists")
 
-        # Mutate only after the complete history has been validated.
         self._profiles[profile_id] = definition
         for revision in revisions:
             self._revisions[(profile_id, revision.revision)] = revision
@@ -773,8 +772,6 @@ class AuthorizationPolicyProfileService:
         context: AuthorizationPolicyProfileCallContext,
     ) -> AuthorizationPolicyProfileDefinition:
         current = self._repository.get_profile(policy_profile_id)
-        if not current.enabled:
-            return current
         await self._enforce_definition(
             AuthorizationAction.ADMINISTER,
             current,
@@ -782,6 +779,8 @@ class AuthorizationPolicyProfileService:
             side_effect="policy_profile_disable",
             risk=RiskClassification.HIGH,
         )
+        if not current.enabled:
+            return current
         updated = replace(current, enabled=False, updated_at=utc_now())
         self._repository.set_enabled(updated)
         return updated
@@ -794,8 +793,6 @@ class AuthorizationPolicyProfileService:
         """Explicitly activate dormant configuration through the normal admin gate."""
 
         current = self._repository.get_profile(policy_profile_id)
-        if current.enabled:
-            return current
         await self._enforce_definition(
             AuthorizationAction.ADMINISTER,
             current,
@@ -803,6 +800,8 @@ class AuthorizationPolicyProfileService:
             side_effect="policy_profile_enable",
             risk=RiskClassification.CRITICAL,
         )
+        if current.enabled:
+            return current
         updated = replace(current, enabled=True, updated_at=utc_now())
         self._repository.set_enabled(updated)
         return updated
