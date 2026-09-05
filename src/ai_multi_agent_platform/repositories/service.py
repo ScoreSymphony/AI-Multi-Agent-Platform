@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
@@ -118,8 +118,8 @@ class RepositoryService:
         context: RepositoryCallContext,
     ) -> RepositoryReference:
         binding = self._registry.resolve(repository_id)
-        await self._enforce(binding.reference, RepositoryOperation.READ, context)
-        return await binding.provider.read(binding.reference, context.operation)
+        operation = await self._enforce(binding, RepositoryOperation.READ, context)
+        return await binding.provider.read(binding.reference, operation)
 
     async def list(
         self,
@@ -129,14 +129,14 @@ class RepositoryService:
     ) -> tuple[RepositoryReference, ...]:
         visible: list[RepositoryReference] = []
         for binding in self._registry.list(connection_id=connection_id):
-            await self._enforce(binding.reference, RepositoryOperation.READ, context)
-            visible.append(await binding.provider.read(binding.reference, context.operation))
+            operation = await self._enforce(binding, RepositoryOperation.READ, context)
+            visible.append(await binding.provider.read(binding.reference, operation))
         return tuple(visible)
 
     async def status(self, repository_id: str, context: RepositoryCallContext) -> RepositoryStatus:
         binding = self._registry.resolve(repository_id)
-        await self._enforce(binding.reference, RepositoryOperation.STATUS, context)
-        return await binding.provider.status(binding.reference, context.operation)
+        operation = await self._enforce(binding, RepositoryOperation.STATUS, context)
+        return await binding.provider.status(binding.reference, operation)
 
     async def diff(
         self,
@@ -146,10 +146,10 @@ class RepositoryService:
         base_revision: str | None = None,
     ) -> RepositoryDiff:
         binding = self._registry.resolve(repository_id)
-        await self._enforce(binding.reference, RepositoryOperation.DIFF, context)
+        operation = await self._enforce(binding, RepositoryOperation.DIFF, context)
         return await binding.provider.diff(
             binding.reference,
-            context.operation,
+            operation,
             base_revision=base_revision,
         )
 
@@ -163,8 +163,8 @@ class RepositoryService:
         checkout: bool = False,
     ) -> RepositoryRevision:
         binding = self._registry.resolve(repository_id)
-        await self._enforce(
-            binding.reference,
+        operation = await self._enforce(
+            binding,
             RepositoryOperation.CREATE_BRANCH,
             context,
             payload={"name": name, "start_revision": start_revision, "checkout": checkout},
@@ -172,7 +172,7 @@ class RepositoryService:
         return await binding.provider.create_branch(
             binding.reference,
             name,
-            context.operation,
+            operation,
             start_revision=start_revision,
             checkout=checkout,
         )
@@ -184,13 +184,13 @@ class RepositoryService:
         context: RepositoryCallContext,
     ) -> RepositoryRevision:
         binding = self._registry.resolve(repository_id)
-        await self._enforce(
-            binding.reference,
+        operation = await self._enforce(
+            binding,
             RepositoryOperation.CHECKOUT,
             context,
             payload={"revision": revision},
         )
-        return await binding.provider.checkout(binding.reference, revision, context.operation)
+        return await binding.provider.checkout(binding.reference, revision, operation)
 
     async def commit(
         self,
@@ -202,8 +202,8 @@ class RepositoryService:
         author_email: str,
     ) -> RepositoryCommit:
         binding = self._registry.resolve(repository_id)
-        await self._enforce(
-            binding.reference,
+        operation = await self._enforce(
+            binding,
             RepositoryOperation.COMMIT,
             context,
             payload={"message": message, "author": author_name},
@@ -211,7 +211,7 @@ class RepositoryService:
         return await binding.provider.commit(
             binding.reference,
             message,
-            context.operation,
+            operation,
             author_name=author_name,
             author_email=author_email,
         )
@@ -222,8 +222,8 @@ class RepositoryService:
         context: RepositoryCallContext,
     ) -> RepositoryRevision | None:
         binding = self._registry.resolve(repository_id)
-        await self._enforce(binding.reference, RepositoryOperation.FETCH, context)
-        return await binding.provider.fetch(binding.reference, context.operation)
+        operation = await self._enforce(binding, RepositoryOperation.FETCH, context)
+        return await binding.provider.fetch(binding.reference, operation)
 
     async def push(
         self,
@@ -234,28 +234,45 @@ class RepositoryService:
         refspec: str | None = None,
     ) -> RepositoryRevision:
         binding = self._registry.resolve(repository_id)
-        await self._enforce(
-            binding.reference,
+        operation = await self._enforce(
+            binding,
             RepositoryOperation.PUSH,
             context,
             payload={"remote": remote, "refspec": refspec},
         )
         return await binding.provider.push(
             binding.reference,
-            context.operation,
+            operation,
             remote=remote,
             refspec=refspec,
         )
 
     async def _enforce(
         self,
-        repository: RepositoryReference,
-        operation: RepositoryOperation,
+        binding: RepositoryBinding,
+        repository_operation: RepositoryOperation,
         context: RepositoryCallContext,
         *,
         payload: dict[str, JsonValue] | None = None,
-    ) -> None:
-        if operation in {
+    ) -> OperationContext:
+        binding_project_id = binding.connection.connection.project_id
+        requested_project_id = context.operation.project_id
+        if (
+            binding_project_id is not None
+            and requested_project_id is not None
+            and requested_project_id != binding_project_id
+        ):
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "repository operation project scope does not match repository connection",
+            )
+        operation = (
+            replace(context.operation, project_id=binding_project_id)
+            if binding_project_id is not None and requested_project_id is None
+            else context.operation
+        )
+
+        if repository_operation in {
             RepositoryOperation.CREATE_BRANCH,
             RepositoryOperation.CHECKOUT,
             RepositoryOperation.COMMIT,
@@ -263,11 +280,11 @@ class RepositoryService:
             action = AuthorizationAction.MODIFY
             side_effect = "local_write"
             risk = RiskClassification.ELEVATED
-        elif operation is RepositoryOperation.PUSH:
+        elif repository_operation is RepositoryOperation.PUSH:
             action = AuthorizationAction.MODIFY
             side_effect = "external"
             risk = RiskClassification.HIGH
-        elif operation is RepositoryOperation.FETCH:
+        elif repository_operation is RepositoryOperation.FETCH:
             action = AuthorizationAction.READ
             side_effect = "external_read_local_write"
             risk = RiskClassification.STANDARD
@@ -281,14 +298,14 @@ class RepositoryService:
                 actor=actor,
                 action=action,
                 resource_type=ResourceType.GENERIC,
-                resource_id=repository.id,
-                operation=context.operation,
+                resource_id=binding.reference.id,
+                operation=operation,
                 task_id=context.task_id,
                 run_id=context.run_id,
                 agent_id=context.agent_id,
-                capability_ref=operation.value,
+                capability_ref=repository_operation.value,
                 side_effect=side_effect,
-                security_labels=("repository", operation.value),
+                security_labels=("repository", repository_operation.value),
             ),
             payload=payload,
         )
@@ -297,6 +314,7 @@ class RepositoryService:
             approval_id=context.approval_id,
             risk=risk,
         )
+        return operation
 
 
 class RepositoryProvenanceStore:
