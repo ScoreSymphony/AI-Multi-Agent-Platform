@@ -97,7 +97,8 @@ class AgentTeamTemplateExporter:
                     "role": member.role,
                     "required": member.required,
                     "can_delegate_to_template_ids": tuple(
-                        published_agents[agent_id].template_id for agent_id in member.can_delegate_to
+                        published_agents[agent_id].template_id
+                        for agent_id in member.can_delegate_to
                     ),
                 }
                 for member in source.profile.members
