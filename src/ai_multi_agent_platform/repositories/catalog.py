@@ -181,7 +181,9 @@ class SqliteRepositoryBindingCatalog:
                 "failed to read repository binding",
             ) from exc
         if row is None:
-            raise ContractError(ErrorCode.NOT_FOUND, f"repository binding not found: {repository_id}")
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"repository binding not found: {repository_id}"
+            )
         return _decode_binding_record(cast(str, row["payload_json"]))
 
     def list(self, *, connection_id: str | None = None) -> tuple[RepositoryBindingRecord, ...]:
@@ -225,7 +227,9 @@ class SqliteRepositoryBindingCatalog:
                 "failed to delete repository binding",
             ) from exc
         if cursor.rowcount == 0:
-            raise ContractError(ErrorCode.NOT_FOUND, f"repository binding not found: {repository_id}")
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"repository binding not found: {repository_id}"
+            )
 
 
 class RepositoryRegistryBootstrap:
@@ -423,9 +427,7 @@ def _decode_repository_reference(data: dict[str, object]) -> RepositoryReference
         capabilities.append(
             RepositoryCapability(
                 operation=RepositoryOperation(_required_string(capability, "operation")),
-                side_effects=SideEffectClassification(
-                    _required_string(capability, "side_effects")
-                ),
+                side_effects=SideEffectClassification(_required_string(capability, "side_effects")),
                 requires_credentials=requires_credentials,
                 supported=supported,
             )
