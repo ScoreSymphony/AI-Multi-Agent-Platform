@@ -60,9 +60,7 @@ class ControlPlane(_BaseControlPlane):
             "leader_instance_id": status.leader_instance_id,
             "epoch": status.epoch,
             "lease_expires_at": (
-                status.lease_expires_at.isoformat()
-                if status.lease_expires_at is not None
-                else None
+                status.lease_expires_at.isoformat() if status.lease_expires_at is not None else None
             ),
             "coordination_available": status.coordination_available,
             "promotion_count": status.promotion_count,

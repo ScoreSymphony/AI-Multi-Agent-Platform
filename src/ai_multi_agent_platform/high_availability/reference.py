@@ -132,11 +132,7 @@ class InMemoryCoordinationProvider:
             )
 
     def _current_lease(self) -> CoordinationLease:
-        if (
-            self._owner_instance_id is None
-            or self._acquired_at is None
-            or self._expires_at is None
-        ):
+        if self._owner_instance_id is None or self._acquired_at is None or self._expires_at is None:
             raise RuntimeError("coordination provider has no active lease")
         return CoordinationLease(
             token=FencingToken(

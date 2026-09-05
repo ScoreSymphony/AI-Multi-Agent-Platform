@@ -79,9 +79,7 @@ class AuthorityGatedAutomationLoop:
                 self._last_error = exc
 
             try:
-                await asyncio.wait_for(
-                    self._stop_event.wait(), timeout=self._poll_interval_seconds
-                )
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._poll_interval_seconds)
             except TimeoutError:
                 pass
 
