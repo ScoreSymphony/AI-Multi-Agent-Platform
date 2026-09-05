@@ -81,7 +81,13 @@ class OrganizationAccountingVisibility:
         if principal == organization.owner_actor_id or principal in organization.administrator_actor_ids:
             return True
         memberships = await self._active_memberships(principal, organization_id)
-        return any(self.aggregate_policy_ref in item.policy_refs for item in memberships)
+        # A Team-scoped grant is intentionally not an Organization-wide grant. Without
+        # this distinction, a user allowed to inspect one Team's aggregate usage could
+        # silently gain aggregate visibility over every other Team/member in the Organization.
+        return any(
+            item.team_id is None and self.aggregate_policy_ref in item.policy_refs
+            for item in memberships
+        )
 
     async def can_aggregate_team(self, context: RequestContext, team_id: str) -> bool:
         principal = context.actor.principal_ref
@@ -347,10 +353,20 @@ def _record_in_team(record: UsageRecord, team_id: str) -> bool:
 
 
 def _sanitize_for_organization(record: UsageRecord, organization_id: str) -> UsageRecord:
+    """Remove person-level execution dimensions before Organization aggregation.
+
+    Aggregate readers may need resource dimensions (Workspace/Worker/Node/etc.) so point-in-time
+    gauges remain mathematically correct, but they do not receive Task/Run/Agent identifiers that
+    would turn an aggregate view into an indirect per-user activity feed.
+    """
+
     return replace(
         record,
         scope=replace(
             record.scope,
+            task_id=None,
+            run_id=None,
+            agent_id=None,
             owner_type="organization",
             owner_id=organization_id,
             organization_id=organization_id,
@@ -359,10 +375,15 @@ def _sanitize_for_organization(record: UsageRecord, organization_id: str) -> Usa
 
 
 def _sanitize_for_team(record: UsageRecord, team_id: str) -> UsageRecord:
+    """Remove person-level execution dimensions before Team aggregation."""
+
     return replace(
         record,
         scope=replace(
             record.scope,
+            task_id=None,
+            run_id=None,
+            agent_id=None,
             owner_type="team",
             owner_id=team_id,
             team_id=team_id,
