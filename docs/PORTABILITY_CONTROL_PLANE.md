@@ -39,6 +39,7 @@ The CLI is a client of those same `/api/v1` commands and resources:
 
 ```text
 platform portability export --resource agent:agent_123 --resource agent_team:team_123
+platform portability export --resource project:project_123
 platform portability export --resource template:template_123
 platform portability validate package.json
 platform portability preview package_<checksum>
@@ -52,7 +53,11 @@ platform portability report import_<digest>
 
 ## Current production composition
 
-The single-node deployment composes canonical Agent, Agent Team and Template export/import against their durable repositories. Template portability reuses the canonical #78 Template repository and immutable revision model rather than defining a second Template lifecycle inside #79.
+The single-node deployment composes canonical Agent, Agent Team, Project and Template export/import against their durable repositories. Template portability reuses the canonical #78 Template repository and immutable revision model rather than defining a second Template lifecycle inside #79.
+
+Project portability reuses the canonical `ScopeStore`/`SqliteScopeStore` persistence completed by #308. The portable snapshot preserves the complete canonical Project identity, owner, timestamps, schema version, provenance and external references. Import writes the complete snapshot through `ScopeStore.store_project_snapshot(...)`; it does not reconstruct a reduced Project or create a portability-specific Project store.
+
+Project rollback is deliberately fail-closed. The #308 compensation seam refuses deletion unless cross-domain dependency safety is explicitly proven and also rejects deletion when Workspace dependencies exist. A deployment that cannot provide a complete cross-domain dependency audit therefore reports incomplete compensation rather than risking deletion of a referenced Project.
 
 Portability remains an optional composition layer instead of being imported by the base `ai_multi_agent_platform.control_plane` package. Production deployments that enable portability select the portability-aware `ControlPlane` explicitly. This keeps unrelated Agent/Template/Control-Plane package initialization acyclic while preserving the same northbound API once the feature is composed.
 
@@ -60,7 +65,7 @@ Preview checks Model dependencies against the canonical `ModelRegistry`, Project
 
 Capability, plugin, connector and secret requirements remain fail-closed in this composition until their corresponding canonical production registries are explicitly wired. This is intentional: preview must not claim a dependency is available merely because its resource type exists somewhere in the codebase.
 
-Project portability itself remains blocked on #308, which must first complete canonical Project persistence. Model-routing-policy portability remains blocked on #309, authorization-policy portability on #310, and Evaluation asset portability on #19. #79 does not create shadow persistence to bypass those domain owners.
+Project portability is no longer blocked: #308 is complete and its canonical persistence seam is now consumed by #79. Durable model-routing-policy portability remains blocked on #309, authorization-policy portability on #310, and Evaluation asset portability on #19. #79 does not create shadow persistence to bypass those domain owners.
 
 ## Execution boundary
 
