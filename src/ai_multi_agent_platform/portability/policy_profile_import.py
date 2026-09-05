@@ -40,11 +40,13 @@ class AuthorizationPolicyProfileImportMutationHandler:
     def __init__(
         self,
         service: AuthorizationPolicyProfileService,
+        repository: AuthorizationPolicyProfileRepository,
         *,
         import_context: AuthorizationPolicyProfileCallContext,
         target_owner_ref: OwnerRef,
     ) -> None:
         self._service = service
+        self._repository = repository
         self._import_context = import_context
         self._target_owner_ref = target_owner_ref
 
@@ -75,6 +77,7 @@ class AuthorizationPolicyProfileImportMutationHandler:
                 ErrorCode.INVALID_CONFIGURATION,
                 "portable policy profile must be imported as untrusted configuration",
             )
+        _require_missing_profile(self._repository, expected_target)
 
     async def apply(
         self,
@@ -117,8 +120,7 @@ class AuthorizationPolicyProfileImportMutationHandler:
     ) -> AuthorizationPolicyProfilePortableSnapshot:
         definition = replace(snapshot.definition, owner_ref=self._target_owner_ref)
         revisions = tuple(
-            replace(revision, owner_ref=self._target_owner_ref)
-            for revision in snapshot.revisions
+            replace(revision, owner_ref=self._target_owner_ref) for revision in snapshot.revisions
         )
         return AuthorizationPolicyProfilePortableSnapshot(definition, revisions)
 
@@ -130,6 +132,23 @@ def _require_snapshot(value: object) -> AuthorizationPolicyProfilePortableSnapsh
             "policy profile import handler received the wrong decoded resource type",
         )
     return value
+
+
+def _require_missing_profile(
+    repository: AuthorizationPolicyProfileRepository,
+    policy_profile_id: str,
+) -> None:
+    try:
+        repository.get_profile(policy_profile_id)
+    except ContractError as exc:
+        if exc.code is ErrorCode.NOT_FOUND:
+            return
+        raise
+    raise ContractError(
+        ErrorCode.CONFLICT,
+        "authorization policy profile appeared after import preview",
+        details={"policy_profile_id": policy_profile_id},
+    )
 
 
 async def load_authorization_policy_profile_snapshot(
