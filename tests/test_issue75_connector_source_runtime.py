@@ -70,6 +70,7 @@ def test_connector_health_failure_projects_attention_through_registered_control_
             ),
             actor=ActorIdentity(recipient.id, ActorType.HUMAN),
             context=OperationContext(
+                correlation_id="issue75-connector-create",
                 owner_type=recipient.type.value,
                 owner_id=recipient.id,
                 project_id=project_id,
