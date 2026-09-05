@@ -56,13 +56,18 @@ class CapabilityAssignmentService:
         assignment_id: str | None = None,
     ) -> CapabilityAssignmentRevision:
         canonical_id = assignment_id or new_id("cap_assignment")
+        resolved_scope = self.targets.resolve(content.target)
+        canonical_project_id = project_id if project_id is not None else resolved_scope.project_id
+        canonical_organization_id = (
+            organization_id if organization_id is not None else resolved_scope.organization_id
+        )
         now = utc_now()
         policy = CapabilityAssignmentPolicy(
             assignment_id=canonical_id,
             owner_ref=owner_ref,
             current_revision=1,
-            project_id=project_id,
-            organization_id=organization_id,
+            project_id=canonical_project_id,
+            organization_id=canonical_organization_id,
             created_at=now,
             updated_at=now,
         )
@@ -71,13 +76,9 @@ class CapabilityAssignmentService:
             revision=1,
             owner_ref=owner_ref,
             content=content,
-            project_id=project_id,
-            organization_id=organization_id,
+            project_id=canonical_project_id,
+            organization_id=canonical_organization_id,
             created_at=now,
-        )
-        provisional_scope = ResolvedCapabilityAssignmentTarget(
-            project_id=project_id,
-            organization_id=organization_id,
         )
         await self.authorization.enforce(
             self._action(
@@ -85,12 +86,17 @@ class CapabilityAssignmentService:
                 AuthorizationAction.CREATE,
                 policy,
                 revision,
-                provisional_scope,
+                resolved_scope,
             ),
             approval_id=access.approval_id,
             risk=assignment_risk(content),
         )
-        self._validate(content, project_id, organization_id)
+        self._validate(
+            content,
+            canonical_project_id,
+            canonical_organization_id,
+            resolved_target=resolved_scope,
+        )
         self.repository.create(policy, revision)
         return revision
 
@@ -227,8 +233,10 @@ class CapabilityAssignmentService:
         content: CapabilityAssignmentContent,
         project_id: str | None,
         organization_id: str | None,
+        *,
+        resolved_target: ResolvedCapabilityAssignmentTarget | None = None,
     ) -> ResolvedCapabilityAssignmentTarget:
-        resolved = self.targets.resolve(content.target)
+        resolved = resolved_target or self.targets.resolve(content.target)
         if (
             project_id is not None
             and resolved.project_id is not None
