@@ -8,11 +8,20 @@ from ai_multi_agent_platform.control_plane.extensions import ControlPlane, Resou
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .management import RepositoryManagementService
-from .models import RepositoryCommit, RepositoryDiff, RepositoryReference, RepositoryRevision
+from .models import (
+    RepositoryCommit,
+    RepositoryCommitInfo,
+    RepositoryDiff,
+    RepositoryReference,
+    RepositoryRevision,
+)
 from .service import RepositoryCallContext, RepositoryService
 
 REPOSITORY_COLLECTION = "repositories"
 REPOSITORY_COMMANDS = (
+    "repository.branches",
+    "repository.tags",
+    "repository.commits",
     "repository.status",
     "repository.diff",
     "repository.fetch",
@@ -73,6 +82,41 @@ def register_repository_control_plane(
         REPOSITORY_COLLECTION,
         RepositoryResourceService(repositories),
     )
+
+    async def branches(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"approval_id"})
+        values = await repositories.branches(resource_ref, _call_context(context, payload))
+        return {"repository_id": resource_ref, "branches": list(values)}
+
+    async def tags(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"approval_id"})
+        values = await repositories.tags(resource_ref, _call_context(context, payload))
+        return {"repository_id": resource_ref, "tags": list(values)}
+
+    async def commits(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"revision", "limit", "approval_id"})
+        values = await repositories.commits(
+            resource_ref,
+            _call_context(context, payload),
+            revision=_optional_string(payload.get("revision"), "revision") or "HEAD",
+            limit=_optional_int(payload.get("limit"), "limit") or 50,
+        )
+        return {
+            "repository_id": resource_ref,
+            "commits": [_commit_info_resource(value) for value in values],
+        }
 
     async def status(
         context: RequestContext,
@@ -176,6 +220,9 @@ def register_repository_control_plane(
         )
         return _revision_resource(result)
 
+    control_plane.register_command("repository.branches", branches)
+    control_plane.register_command("repository.tags", tags)
+    control_plane.register_command("repository.commits", commits)
     control_plane.register_command("repository.status", status)
     control_plane.register_command("repository.diff", diff)
     control_plane.register_command("repository.fetch", fetch)
@@ -305,6 +352,15 @@ def _commit_resource(commit: RepositoryCommit) -> dict[str, JsonValue]:
     }
 
 
+def _commit_info_resource(commit: RepositoryCommitInfo) -> dict[str, JsonValue]:
+    return {
+        "repository_id": commit.repository_id,
+        "revision": commit.revision,
+        "message": commit.message,
+        "parent_revisions": list(commit.parent_revisions),
+    }
+
+
 def _reject_unknown(payload: dict[str, JsonValue], allowed: set[str]) -> None:
     unexpected = sorted(set(payload) - allowed)
     if unexpected:
@@ -343,5 +399,16 @@ def _optional_bool(value: JsonValue, field_name: str) -> bool | None:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             f"repository command field {field_name} must be boolean or null",
+        )
+    return value
+
+
+def _optional_int(value: JsonValue, field_name: str) -> int | None:
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"repository command field {field_name} must be integer or null",
         )
     return value
