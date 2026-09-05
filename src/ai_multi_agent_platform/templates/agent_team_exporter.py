@@ -211,7 +211,7 @@ class AgentTeamTemplateExporter:
                 details={
                     "export_error_type": type(export_error).__name__,
                     "export_error": str(export_error),
-                    "cleanup_failures": failures,
+                    "cleanup_failures": json_value(failures),
                 },
             ) from export_error
 
