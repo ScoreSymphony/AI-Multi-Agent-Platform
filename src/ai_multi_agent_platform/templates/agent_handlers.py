@@ -143,7 +143,7 @@ class AgentTemplateExporter:
         name: str | None = None,
     ) -> TemplateRevision:
         source = self.agents.get_agent_revision(agent_id, revision)
-        profile = _freeze_json_object(json_value(source.profile), "Agent profile")
+        profile = portable_agent_profile_payload(source.profile)
         requirements = TemplateRequirements(
             capabilities=_capability_requirements(source.profile),
             model_policy_refs=(
@@ -174,6 +174,8 @@ class AgentTemplateExporter:
                     "source_resource_revision": source.revision,
                     "source_project_id": source.project_id,
                     "source_workspace_id": source.workspace_id,
+                    "source_default_project_id": source.profile.workspace_defaults.project_id,
+                    "source_default_workspace_id": source.profile.workspace_defaults.workspace_id,
                 },
             ),
             tags=("agent", "exported"),
@@ -192,6 +194,34 @@ def register_agent_template_handlers(
 
     registry.register(AgentTemplateHandler(service))
     registry.register(AgentTeamTemplateHandler(service))
+
+
+def portable_agent_profile_payload(profile: AgentProfile) -> Mapping[str, FrozenJsonValue]:
+    """Return a deployment-portable Agent profile or fail on undeclared local references."""
+
+    unsupported: list[str] = []
+    if profile.data_access.memory_config_refs:
+        unsupported.append("data_access.memory_config_refs")
+    if profile.data_access.knowledge_source_ids:
+        unsupported.append("data_access.knowledge_source_ids")
+    if profile.policy_hooks.authorization_profile_ref is not None:
+        unsupported.append("policy_hooks.authorization_profile_ref")
+    if profile.policy_hooks.verification_policy_refs:
+        unsupported.append("policy_hooks.verification_policy_refs")
+    if unsupported:
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "Agent Template export cannot preserve deployment-local Agent references "
+            "without declared portable dependencies",
+            details={"fields": unsupported},
+        )
+
+    payload = dict(_freeze_json_object(json_value(profile), "Agent profile"))
+    payload["workspace_defaults"] = {
+        "project_id": None,
+        "workspace_id": None,
+    }
+    return payload
 
 
 def _agent_profile(payload: Mapping[str, object]) -> AgentProfile:
