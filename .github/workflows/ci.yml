@@ -26,9 +26,7 @@ jobs:
       - name: Ruff format
         run: ruff format --check .
       - name: Ruff lint
-        run: |
-          ruff check --diff tests/test_issue_309_model_routing_profiles.py
-          exit 1
+        run: ruff check .
       - name: Mypy
         run: mypy
       - name: Pytest
