@@ -14,6 +14,7 @@ from ai_multi_agent_platform.adapters.onboarding_openai_compatible import (
 from ai_multi_agent_platform.adapters.single_node_app import build_default_single_node_deployment
 from ai_multi_agent_platform.agents import (
     STANDARD_AGENT_IDS,
+    AgentRuntime,
     AgentService,
     InMemoryAgentRepository,
     bootstrap_standard_agents,
@@ -84,12 +85,14 @@ def _service(
     secret_provider: SecretProvider | None = None,
 ) -> OnboardingService:
     registry = models or ModelRegistry()
+    agent_service = agents or AgentService(InMemoryAgentRepository())
     service = OnboardingService(
         models=registry,
         model_store=JsonModelRegistryStore(tmp_path / "models.json"),
         provider_store=JsonModelProviderSetupStore(tmp_path / "model-providers.json"),
         scopes=scopes or ScopeStore(),
-        agents=agents or AgentService(InMemoryAgentRepository()),
+        agents=agent_service,
+        agent_runtime=AgentRuntime(agent_service, model_registry=registry),
         model_adapters=(
             OpenAICompatibleOnboardingAdapter(
                 transport=transport,
@@ -397,4 +400,6 @@ def test_existing_canonical_project_workspace_and_general_assistant_advance_stat
     status = service.status(_context())
     assert status["state"] == "ready_for_task"
     assert status["general_assistant_count"] == 1
+    assert status["executable_general_assistant_count"] == 1
+    assert status["selection_required"] is False
     assert status["starter_catalog_installed"] is True

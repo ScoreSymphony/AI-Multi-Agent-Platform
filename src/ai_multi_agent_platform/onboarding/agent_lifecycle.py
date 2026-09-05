@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ai_multi_agent_platform.agents import AgentRunStatus, AgentRuntime
+from ai_multi_agent_platform.agents import AgentRevision, AgentRunStatus, AgentRuntime
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,
@@ -25,6 +25,49 @@ FIRST_RUN_EXECUTION_PROFILE_KEY = "onboarding.execution_profile"
 FIRST_RUN_AGENT_EXECUTION_PROFILE = "general_assistant"
 FIRST_RUN_AGENT_ID_KEY = "onboarding.agent_id"
 FIRST_RUN_WORKSPACE_ID_KEY = "onboarding.workspace_id"
+FIRST_RUN_MODEL_REQUIREMENTS = RoutingRequirements(
+    modalities=("text",),
+    self_hosted_only=True,
+)
+
+_PREFLIGHT_TASK_ID = "task_00000000-0000-4000-8000-000000000250"
+_PREFLIGHT_RUN_ID = "run_00000000-0000-4000-8000-000000000250"
+
+
+def preflight_first_run_agent(
+    agents: AgentRuntime,
+    agent_id: str,
+    *,
+    project_id: str | None,
+    workspace_id: str | None,
+) -> AgentRevision:
+    """Validate one General Assistant against the exact first-run execution requirements.
+
+    This method is deliberately side-effect-free. It uses ``AgentRuntime.prepare_agent`` so
+    readiness and execution share model/capability/task-override policy, then adds the one
+    reference-profile requirement that lives at the lifecycle seam: inline role instructions.
+    """
+
+    revision = agents.service.get_agent_revision(agent_id)
+    if revision.profile.instructions.role.content is None:
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "first-run General Assistant requires inline role instructions in the reference "
+            "execution profile",
+        )
+    agents.prepare_agent(
+        task_id=_PREFLIGHT_TASK_ID,
+        run_id=_PREFLIGHT_RUN_ID,
+        agent_id=agent_id,
+        revision=revision.revision,
+        task_model_override=FIRST_RUN_MODEL_REQUIREMENTS,
+        task_context={"objective": "first-run execution preflight"},
+        project_context={
+            "project_id": project_id,
+            "workspace_id": workspace_id,
+        },
+    )
+    return revision
 
 
 class FirstRunAgentLifecycleBackend(LifecycleBackend):
@@ -88,14 +131,21 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                 "first-run Agent task has an invalid Workspace ID",
             )
 
+        revision = preflight_first_run_agent(
+            self._agents,
+            agent_id,
+            project_id=task.task.project_id,
+            workspace_id=workspace_id,
+        )
+        instruction = revision.profile.instructions.role.content
+        assert instruction is not None
+
         agent_run = await self._agents.start_agent(
             task_id=task.task_id,
             run_id=request.run_id,
             agent_id=agent_id,
-            task_model_override=RoutingRequirements(
-                modalities=("text",),
-                self_hosted_only=True,
-            ),
+            revision=revision.revision,
+            task_model_override=FIRST_RUN_MODEL_REQUIREMENTS,
             task_context={"objective": task.task.description},
             project_context={
                 "project_id": task.task.project_id,
@@ -107,17 +157,6 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         result_id = new_id("result")
 
         try:
-            revision = self._agents.service.get_agent_revision(
-                agent_run.agent.agent_id,
-                agent_run.agent.revision,
-            )
-            instruction = revision.profile.instructions.role.content
-            if instruction is None:
-                raise ContractError(
-                    ErrorCode.UNSUPPORTED_CAPABILITY,
-                    "first-run General Assistant requires inline role instructions in the "
-                    "reference execution profile",
-                )
             if agent_run.selected_model_config_id is None:
                 raise ContractError(
                     ErrorCode.NO_COMPATIBLE_ROUTE,
@@ -130,8 +169,8 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                     context=request.context,
                     requirements={
                         "model_config_id": agent_run.selected_model_config_id,
-                        "self_hosted_only": True,
-                        "modalities": ["text"],
+                        "self_hosted_only": FIRST_RUN_MODEL_REQUIREMENTS.self_hosted_only,
+                        "modalities": list(FIRST_RUN_MODEL_REQUIREMENTS.modalities),
                     },
                 )
             )

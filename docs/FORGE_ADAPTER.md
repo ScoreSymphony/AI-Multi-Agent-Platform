@@ -1,6 +1,6 @@
 # Forge execution adapter
 
-Status: **Issue #9 Phase 4 adapter boundary and the first Phase 5 kernel/recovery regressions are implemented; a concrete Forge transport remains intentionally unselected.**
+Status: **Issue #9 is complete: the optional execution-only Forge transport and adapter boundary are implemented.**
 
 `ai_multi_agent_platform.adapters.forge.ForgeExecutor` is an optional execution adapter behind the platform-owned `Executor` contract.
 
@@ -11,9 +11,12 @@ It does not make Forge a platform lifecycle authority and it does not import leg
 The adapter is split into two layers:
 
 - `ForgeExecutor` implements the canonical `Executor` interface.
-- `ForgeClient` is a small platform-owned protocol for a future concrete Forge HTTP/process transport.
+- `ForgeClient` is a small platform-owned protocol implemented by the execution-only
+  `ForgeHttpClient` transport.
 
-The current implementation intentionally does not choose or embed a concrete Forge transport. Tests use a fake client so translation behavior can be verified independently from deployment and network assumptions.
+`ForgeHttpClient` targets the pinned `forge-executor-sidecar/v1` runtime and accepts only
+unauthenticated loopback HTTP URLs. Tests retain a fake client so translation behavior can be
+verified independently from deployment and network assumptions.
 
 ## Identity ownership
 
@@ -106,12 +109,10 @@ The implementation was designed from the behavior audit recorded in `docs/FORGE_
 
 No source from `ScoreSymphony/AI-Agent-VPS` is copied into this adapter. The current reuse mode is adapter integration plus reference-only behavioral influence.
 
-## Remaining issue #9 work
+## Concrete runtime coverage
 
-The main unresolved part is now the concrete backend connection:
-
-1. verify which stable Forge HTTP/process boundary from `ScoreSymphony/AI-Agent-VPS` should be supported;
-2. implement that concrete `ForgeClient` transport without exposing Forge-private types to core code;
-3. add an integration test against a real Forge instance/fixture for execution, health and cancellation;
-4. extend historical-event/reconciliation coverage only where a real Forge transport exposes additional backend facts that the canonical kernel must reconcile;
-5. keep Forge disabled/removable without affecting reference execution or core startup.
+`tests/test_forge_http.py` validates protocol and identity translation for the concrete HTTP
+client. `tests/test_forge_sidecar_integration.py`, run by the `forge-sidecar-integration` CI job,
+builds the exact pinned Rust sidecar and verifies real health, execution and cancellation behavior.
+The sidecar is loopback-only and optional; removing it does not affect core startup or reference
+execution.

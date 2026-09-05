@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import replace
 
@@ -38,7 +39,10 @@ class ModelRuntime:
 
     async def generate(self, request: ModelRequest) -> ModelResponse:
         config, provider, routed_request = await self._resolve_target(request)
-        provider_response = await provider.generate(routed_request)
+        try:
+            provider_response = await provider.generate(routed_request)
+        except asyncio.CancelledError as exc:
+            raise self._cancelled_error(request, config) from exc
         return self._normalize_response(request, config, provider_response)
 
     def stream(self, request: ModelRequest) -> AsyncIterator[ModelStreamEvent]:
@@ -46,34 +50,37 @@ class ModelRuntime:
 
         async def iterate() -> AsyncIterator[ModelStreamEvent]:
             config, provider, routed_request = await self._resolve_target(request)
-            async for event in provider.stream(routed_request):
-                if event.request_id != request.request_id:
-                    raise ContractError(
-                        ErrorCode.CONTRACT_VIOLATION,
-                        "model provider stream event request_id does not match request",
-                        provider_id=config.provider_id,
-                        details={
-                            "expected_request_id": request.request_id,
-                            "reported_request_id": event.request_id,
-                        },
+            try:
+                async for event in provider.stream(routed_request):
+                    if event.request_id != request.request_id:
+                        raise ContractError(
+                            ErrorCode.CONTRACT_VIOLATION,
+                            "model provider stream event request_id does not match request",
+                            provider_id=config.provider_id,
+                            details={
+                                "expected_request_id": request.request_id,
+                                "reported_request_id": event.request_id,
+                            },
+                        )
+
+                    provider_reported_model_ref = event.model_ref
+                    response = event.response
+                    if response is not None:
+                        response = self._normalize_response(request, config, response)
+
+                    runtime_metadata = self._runtime_metadata(
+                        request,
+                        config,
+                        provider_reported_model_ref,
                     )
-
-                provider_reported_model_ref = event.model_ref
-                response = event.response
-                if response is not None:
-                    response = self._normalize_response(request, config, response)
-
-                runtime_metadata = self._runtime_metadata(
-                    request,
-                    config,
-                    provider_reported_model_ref,
-                )
-                yield replace(
-                    event,
-                    model_ref=config.config_id,
-                    response=response,
-                    adapter_metadata=event.adapter_metadata + (runtime_metadata,),
-                )
+                    yield replace(
+                        event,
+                        model_ref=config.config_id,
+                        response=response,
+                        adapter_metadata=event.adapter_metadata + (runtime_metadata,),
+                    )
+            except asyncio.CancelledError as exc:
+                raise self._cancelled_error(request, config) from exc
 
         return iterate()
 
@@ -164,5 +171,20 @@ class ModelRuntime:
                 "provider_id": config.provider_id,
                 "provider_reported_model_ref": provider_reported_model_ref,
                 "correlation_id": request.context.correlation_id,
+            },
+        )
+
+    @staticmethod
+    def _cancelled_error(
+        request: ModelRequest,
+        config: ModelConfiguration,
+    ) -> ContractError:
+        return ContractError(
+            ErrorCode.CANCELLED,
+            "model request was cancelled",
+            provider_id=config.provider_id,
+            details={
+                "request_id": request.request_id,
+                "model_config_id": config.config_id,
             },
         )

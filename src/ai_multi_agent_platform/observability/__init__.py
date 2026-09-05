@@ -27,6 +27,7 @@ from .integrations import (
     inject_trace_carrier,
     timeline_entry_resource,
 )
+from .model_provider import ObservedModelProvider
 from .models import (
     CaptureKind,
     CapturePolicy,
@@ -44,7 +45,6 @@ from .models import (
 from .progressive import (
     CompositeInvocationObserver,
     ObservabilityInvocationObserver,
-    ObservedModelProvider,
     ObservedModelRouter,
     ObservedNodeProvider,
     ObservedOrchestrator,

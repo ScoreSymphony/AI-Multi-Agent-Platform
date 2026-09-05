@@ -12,7 +12,7 @@ def test_single_node_composes_canonical_portability(tmp_path: Path) -> None:
 
     workflow = deployment.control_plane.portability_workflow
     assert workflow is not None
-    assert workflow.export_resource_types == ("agent", "agent_team", "template")
+    assert workflow.export_resource_types == ("agent", "agent_team", "project", "template")
 
     collections = set(deployment.control_plane.registered_collections)
     commands = set(deployment.control_plane.registered_commands)

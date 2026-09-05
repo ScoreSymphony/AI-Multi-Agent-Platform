@@ -1,32 +1,56 @@
-# CLI approval inspection
+# CLI approval inspection and decisions
 
-Issue #38 exposes the completed #15 approval lifecycle through a read-only canonical Control Plane collection before adding decision commands.
+Issue #38 introduced read-only #15 Approval inspection. Issue #214 completes the canonical decision workflow without giving the CLI access to Approval storage or lifecycle mutation primitives.
 
 ## Commands
 
-Approval resources are discovered through the registered extension surface:
+The dedicated canonical surface is:
+
+```text
+platform approval list --filter status=pending
+platform approval show <approval_id>
+platform approval approve <approval_id> [--comment ...] [--idempotency-key ...]
+platform approval deny <approval_id> [--comment ...] [--idempotency-key ...]
+```
+
+The existing generic read-only extension commands remain compatible:
 
 ```text
 platform extension list approvals --filter status=pending
 platform extension show approvals <approval_id>
 ```
 
-The collection exposes canonical approval identity and lifecycle metadata, including the exact action/resource binding, requester, risk/policy information, timestamps and `requested_action_digest`.
+Approval resources expose canonical identity and lifecycle metadata, including exact action/resource binding, requester, risk/policy information, timestamps and `requested_action_digest`.
 
-## Security boundary
+## Decision security boundary
 
-The inspection surface never serializes the proposed action payload. The digest and an optional safe `payload_ref` are the only payload-related fields exposed by the approval contract.
+Before an approve/deny mutation, the CLI reads the canonical Approval and presents the safe action, resource, risk, policy and digest context to the user. Interactive use requires confirmation; non-interactive callers must pass `--yes`.
 
-The CLI remains a normal northbound client:
+The mutation is sent only to the versioned Control Plane:
 
 ```text
-CLI -> /api/v1/approvals -> ApprovalService read boundary
+CLI
+ |
+ | GET /api/v1/approvals/<id>
+ | POST /api/v1/commands/approval.approve|approval.deny
+ v
+Control Plane
+ |
+ | compare caller requested_action_digest with stored Approval binding
+ | require Idempotency-Key
+ v
+AuthorizationGate.decide_approval()
+ |
+ v
+ApprovalService._decide_authorized()
 ```
 
-If the `approvals` collection is not registered, the CLI fails during OpenAPI extension discovery and does not access `ApprovalService` or another backend directly.
+The CLI never imports or calls `ApprovalService.decide()` or `_decide_authorized()`. The Control Plane does not expose a generic ApprovalService mutation primitive; it invokes the #15 `AuthorizationGate.decide_approval()` application boundary after exact-digest validation.
 
-## Approval decisions
+A changed digest is rejected before decision. An unauthorized approver is rejected by #15. Expired or otherwise non-pending Approvals conflict deterministically. A repeated identical Control Plane mutation with the same idempotency key returns the recorded safe result, while reusing that key for a different decision conflicts.
 
-Approve/deny is intentionally not implemented as a direct `ApprovalService.decide()` call. #15 explicitly forbids that bypass: decisions must pass `AuthorizationGate.decide_approval()` so the approver and the stored exact action are authorized canonically.
+## Secret safety
 
-The generic extension command boundary currently performs an additional coarse command authorization before dispatch. Until a gate-aware northbound approval-decision route is defined, the CLI must not invent a direct approval mutation path.
+The proposed action payload is never serialized by the Approval resource or decision response. The digest and an optional safe `payload_ref` are the only payload-related Approval fields. Confirmation text contains only safe canonical action/resource/risk/policy/digest metadata.
+
+This keeps CLI and future Web clients on the same shared northbound contract; Web consumption remains owned by #313.

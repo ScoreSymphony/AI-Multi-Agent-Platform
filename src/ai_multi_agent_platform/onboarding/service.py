@@ -10,7 +10,7 @@ from ipaddress import ip_address
 from typing import cast
 from urllib.parse import urlsplit
 
-from ai_multi_agent_platform.agents import STARTER_CATALOG_SOURCE, AgentService
+from ai_multi_agent_platform.agents import STARTER_CATALOG_SOURCE, AgentRuntime, AgentService
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,
@@ -29,6 +29,7 @@ from ai_multi_agent_platform.models import (
 )
 from ai_multi_agent_platform.security import SecretReference
 
+from .agent_lifecycle import preflight_first_run_agent
 from .persistence import (
     JsonModelProviderSetupStore,
     JsonOnboardingCommandStore,
@@ -42,6 +43,7 @@ ONBOARDING_COLLECTION = "onboarding"
 ONBOARDING_CONFIGURE_MODEL_COMMAND = "onboarding.configure-model"
 ONBOARDING_COMMANDS = (ONBOARDING_CONFIGURE_MODEL_COMMAND,)
 
+_ROUTABLE_HEALTH = frozenset({HealthStatus.HEALTHY, HealthStatus.DEGRADED})
 _PLAINTEXT_CREDENTIAL_KEYS = frozenset(
     {
         "apikey",
@@ -71,15 +73,21 @@ class OnboardingService:
         provider_store: JsonModelProviderSetupStore,
         scopes: ScopeStore,
         agents: AgentService,
+        agent_runtime: AgentRuntime,
         model_adapters: Iterable[OnboardingModelAdapter] = (),
         command_store: JsonOnboardingCommandStore | None = None,
     ) -> None:
+        if agent_runtime.service is not agents:
+            raise ValueError("onboarding AgentRuntime must use the supplied AgentService")
+        if agent_runtime.model_registry is not models:
+            raise ValueError("onboarding AgentRuntime must use the supplied ModelRegistry")
         self.models = models
         self.model_store = model_store
         self.provider_store = provider_store
         self.command_store = command_store
         self.scopes = scopes
         self.agents = agents
+        self.agent_runtime = agent_runtime
         self.model_adapters: dict[str, OnboardingModelAdapter] = {}
         for adapter in model_adapters:
             if not adapter.adapter_id.strip():
@@ -302,7 +310,7 @@ class OnboardingService:
         return result
 
     def status(self, context: RequestContext) -> dict[str, JsonValue]:
-        """Return the current user's first-run progress without mutating owned resources."""
+        """Return first-run progress using the same preconditions as first-Task execution."""
 
         owner_type = context.actor.owner_type
         owner_id = context.actor.owner_id
@@ -314,6 +322,7 @@ class OnboardingService:
             and project.owner_ref.type == owner_type
             and project.owner_ref.id == owner_id
         )
+        project_ids = {project.id for project in projects}
         workspaces = tuple(
             workspace
             for workspace in self.scopes.list_workspaces()
@@ -321,7 +330,10 @@ class OnboardingService:
             and owner_id is not None
             and workspace.owner_type == owner_type
             and workspace.owner_id == owner_id
+            and workspace.project_id in project_ids
         )
+        workspace_bindings = {(workspace.project_id, workspace.id) for workspace in workspaces}
+
         local_models = tuple(
             model
             for model in self.models.list_models(enabled=True)
@@ -337,16 +349,149 @@ class OnboardingService:
             for model in self.models.list_models(enabled=True)
             if model.location is ModelLocation.REMOTE
         )
+        golden_path_models = (*local_models, *self_hosted_models)
         attached_provider_ids = {
             provider.descriptor.provider_id for provider in self.models.list_providers()
         }
-        usable_golden_path_models = tuple(
-            model
-            for model in (*local_models, *self_hosted_models)
-            if model.provider_id in attached_provider_ids
-            and model.health is not HealthStatus.UNAVAILABLE
+        text_capable_models = tuple(
+            model for model in golden_path_models if "text" in model.capabilities.modalities
         )
-        general_assistants = self._owned_general_assistants(owner_type, owner_id)
+        routable_models = tuple(
+            model
+            for model in text_capable_models
+            if model.provider_id in attached_provider_ids
+            and self.models.effective_health(model) in _ROUTABLE_HEALTH
+        )
+
+        general_assistants = self._scoped_general_assistants(
+            owner_type,
+            owner_id,
+            workspace_bindings,
+        )
+        executable_general_assistants: list[tuple[str, str, str]] = []
+        blockers: list[JsonValue] = []
+        for project_id, workspace_id, agent_id in general_assistants:
+            try:
+                self.preflight_general_assistant(
+                    agent_id,
+                    project_id=project_id,
+                    workspace_id=workspace_id,
+                )
+            except ContractError as exc:
+                blockers.append(
+                    {
+                        "agent_id": agent_id,
+                        "project_id": project_id,
+                        "workspace_id": workspace_id,
+                        "error_code": exc.code.value,
+                        "message": exc.message,
+                    }
+                )
+            else:
+                executable_general_assistants.append((project_id, workspace_id, agent_id))
+
+        selected_project = projects[0] if len(projects) == 1 else None
+        project_workspaces = tuple(
+            workspace
+            for workspace in workspaces
+            if selected_project is not None and workspace.project_id == selected_project.id
+        )
+        selected_workspace = project_workspaces[0] if len(project_workspaces) == 1 else None
+        workspace_general_assistants = tuple(
+            item
+            for item in general_assistants
+            if selected_project is not None
+            and selected_workspace is not None
+            and item[0] == selected_project.id
+            and item[1] == selected_workspace.id
+        )
+        executable_workspace_general_assistants = tuple(
+            item
+            for item in executable_general_assistants
+            if selected_project is not None
+            and selected_workspace is not None
+            and item[0] == selected_project.id
+            and item[1] == selected_workspace.id
+        )
+
+        selection_kind: str | None = None
+        if not routable_models:
+            state = "needs_model"
+        elif not projects:
+            state = "needs_project"
+        elif len(projects) > 1:
+            state = "needs_selection"
+            selection_kind = "project"
+        elif not project_workspaces:
+            state = "needs_workspace"
+        elif len(project_workspaces) > 1:
+            state = "needs_selection"
+            selection_kind = "workspace"
+        elif not workspace_general_assistants:
+            state = "needs_general_assistant"
+        elif not executable_workspace_general_assistants:
+            state = "needs_general_assistant"
+        elif len(workspace_general_assistants) > 1:
+            state = "needs_selection"
+            selection_kind = "agent"
+        else:
+            state = "ready_for_task"
+
+        guidance: list[JsonValue] = []
+        if state == "needs_model":
+            if not golden_path_models:
+                guidance.append(
+                    "Configure an explicit local or self-hosted ModelProvider with "
+                    "onboarding.configure-model."
+                )
+            elif not text_capable_models:
+                guidance.append(
+                    "The configured local/self-hosted models do not provide the text modality "
+                    "required by the first General Assistant Task; configure or enable a "
+                    "text-capable canonical ModelConfiguration."
+                )
+            else:
+                guidance.append(
+                    "The configured text-capable local/self-hosted model is not currently "
+                    "routable. Refresh its canonical ModelProvider health (for example with "
+                    "`platform model-provider refresh-health PROVIDER_ID`) or revalidate the "
+                    "endpoint before starting the first Task."
+                )
+            guidance.append(
+                "No remote or paid provider is selected automatically and no prompt is "
+                "transmitted externally by onboarding."
+            )
+        elif state == "needs_project":
+            guidance.append("Create a canonical Project through the versioned Control Plane.")
+        elif state == "needs_workspace":
+            guidance.append("Create or select a canonical Workspace for the Project.")
+        elif state == "needs_selection":
+            guidance.append(
+                f"Multiple executable first-run candidates require an explicit {selection_kind} "
+                "selection. Pass the corresponding canonical project_id, workspace_id or "
+                "agent_id to onboarding.run-first-task."
+            )
+        elif state == "needs_general_assistant":
+            if workspace_general_assistants and blockers:
+                guidance.append(
+                    "An enabled owned General Assistant is present for the selected Workspace, "
+                    "but its current editable configuration does not pass the first-run execution "
+                    "preflight. Review the reported Agent blocker and its instruction, model, "
+                    "capability and task-override policy."
+                )
+            else:
+                guidance.append(
+                    "Use standard-agent.bootstrap, then standard-agent.clone for "
+                    "general_assistant. The editable clone must be enabled, owned by the current "
+                    "user and bound to an owned Project/Workspace that can be selected by "
+                    "onboarding.run-first-task."
+                )
+        else:
+            guidance.append(
+                "The first-run prerequisites are ready; start a canonical Task now or use the "
+                "canonical Chat surface."
+            )
+
         starter_catalog_installed = any(
             revision.profile.metadata.get("starter_catalog_source") == STARTER_CATALOG_SOURCE
             and revision.owner_ref.type == "service"
@@ -355,43 +500,6 @@ class OnboardingService:
                 for definition in self.agents.repository.list_agents()
             )
         )
-
-        if not usable_golden_path_models:
-            state = "needs_model"
-        elif not projects:
-            state = "needs_project"
-        elif not workspaces:
-            state = "needs_workspace"
-        elif not general_assistants:
-            state = "needs_general_assistant"
-        else:
-            state = "ready_for_task"
-
-        guidance: list[JsonValue] = []
-        if state == "needs_model":
-            guidance.extend(
-                (
-                    "Configure an explicit local or self-hosted ModelProvider with "
-                    "onboarding.configure-model.",
-                    "No remote or paid provider is selected automatically and no prompt is "
-                    "transmitted externally by onboarding.",
-                )
-            )
-        elif state == "needs_project":
-            guidance.append("Create a canonical Project through the versioned Control Plane.")
-        elif state == "needs_workspace":
-            guidance.append("Create or select a canonical Workspace for the Project.")
-        elif state == "needs_general_assistant":
-            guidance.append(
-                "Use standard-agent.bootstrap, then standard-agent.clone for general_assistant; "
-                "the clone remains an ordinary editable AgentDefinition."
-            )
-        else:
-            guidance.append(
-                "The first-run prerequisites are ready; start a canonical Task now or use the "
-                "Chat surface when #72 is available."
-            )
-
         return {
             "id": FIRST_RUN_RESOURCE_ID,
             "type": "onboarding_status",
@@ -402,14 +510,71 @@ class OnboardingService:
             "local_model_count": len(local_models),
             "self_hosted_model_count": len(self_hosted_models),
             "remote_model_count": len(remote_models),
-            "usable_golden_path_model_count": len(usable_golden_path_models),
+            "text_capable_golden_path_model_count": len(text_capable_models),
+            "usable_golden_path_model_count": len(routable_models),
             "general_assistant_count": len(general_assistants),
+            "executable_general_assistant_count": len(executable_general_assistants),
+            "general_assistant_blockers": blockers,
+            "selection_required": selection_kind is not None,
+            "selection_kind": selection_kind,
+            "candidate_project_ids": cast(JsonValue, sorted(project_ids)),
+            "candidate_workspace_ids": cast(
+                JsonValue,
+                sorted(workspace.id for workspace in workspaces),
+            ),
+            "candidate_agent_ids": cast(
+                JsonValue,
+                sorted(item[2] for item in general_assistants),
+            ),
             "starter_catalog_installed": starter_catalog_installed,
             "installed_model_adapter_ids": cast(JsonValue, sorted(self.model_adapters)),
             "automatic_remote_provider_selection": False,
             "automatic_paid_provider_selection": False,
             "guidance": guidance,
         }
+
+    def preflight_general_assistant(
+        self,
+        agent_id: str,
+        *,
+        project_id: str,
+        workspace_id: str,
+    ) -> None:
+        """Validate a selected General Assistant without mutating Task/Run/Agent state."""
+
+        preflight_first_run_agent(
+            self.agent_runtime,
+            agent_id,
+            project_id=project_id,
+            workspace_id=workspace_id,
+        )
+
+    def _scoped_general_assistants(
+        self,
+        owner_type: str | None,
+        owner_id: str | None,
+        workspace_bindings: set[tuple[str, str]],
+    ) -> tuple[tuple[str, str, str], ...]:
+        if owner_type is None or owner_id is None:
+            return ()
+        candidates: list[tuple[str, str, str]] = []
+        for definition in self.agents.repository.list_agents():
+            revision = self.agents.get_agent_revision(definition.agent_id)
+            project_id = revision.project_id
+            workspace_id = revision.workspace_id
+            if (
+                revision.owner_ref.type == owner_type
+                and revision.owner_ref.id == owner_id
+                and project_id is not None
+                and workspace_id is not None
+                and (project_id, workspace_id) in workspace_bindings
+                and revision.profile.metadata.get("starter_key") == "general_assistant"
+                and revision.profile.metadata.get("starter_catalog_source")
+                == STARTER_CATALOG_SOURCE
+                and revision.profile.enabled
+            ):
+                candidates.append((project_id, workspace_id, revision.agent_id))
+        return tuple(sorted(candidates))
 
     def _model_adapter(self, adapter_id: str) -> OnboardingModelAdapter:
         try:
@@ -423,26 +588,6 @@ class OnboardingService:
                     "installed_adapter_ids": cast(JsonValue, sorted(self.model_adapters)),
                 },
             ) from exc
-
-    def _owned_general_assistants(
-        self,
-        owner_type: str | None,
-        owner_id: str | None,
-    ) -> tuple[str, ...]:
-        if owner_type is None or owner_id is None:
-            return ()
-        agent_ids: list[str] = []
-        for definition in self.agents.repository.list_agents():
-            revision = self.agents.get_agent_revision(definition.agent_id)
-            if (
-                revision.owner_ref.type == owner_type
-                and revision.owner_ref.id == owner_id
-                and revision.profile.metadata.get("starter_key") == "general_assistant"
-                and revision.profile.metadata.get("starter_catalog_source")
-                == STARTER_CATALOG_SOURCE
-            ):
-                agent_ids.append(revision.agent_id)
-        return tuple(sorted(agent_ids))
 
 
 def _reject_credentials(value: JsonValue, *, path: str = "payload") -> None:
