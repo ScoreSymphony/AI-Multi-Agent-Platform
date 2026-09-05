@@ -77,6 +77,25 @@ class _ControlPlane:
     def register_command(self, name: str, handler: object) -> None:
         self.commands[name] = handler
 
+    async def _authorize(
+        self,
+        context: RequestContext,
+        action: str,
+        resource_ref: str,
+        **scope: object,
+    ) -> None:
+        del context, action, resource_ref, scope
+
+    async def _allowed(
+        self,
+        context: RequestContext,
+        action: str,
+        resource_ref: str,
+        **scope: object,
+    ) -> bool:
+        del context, action, resource_ref, scope
+        return True
+
 
 def test_control_plane_registration_resolves_workspace_inventory_server_side() -> None:
     async def scenario() -> None:
