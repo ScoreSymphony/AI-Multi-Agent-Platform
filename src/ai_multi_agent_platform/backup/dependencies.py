@@ -36,9 +36,7 @@ class BackupExternalDependency:
         object.__setattr__(self, "metadata", copied)
 
     def to_manifest(self) -> dict[str, JsonValue]:
-        metadata: dict[str, JsonValue] = {
-            key: value for key, value in self.metadata.items()
-        }
+        metadata: dict[str, JsonValue] = {key: value for key, value in self.metadata.items()}
         return {
             "dependency_id": self.dependency_id,
             "kind": self.kind,
