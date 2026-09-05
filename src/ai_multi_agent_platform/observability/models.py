@@ -44,6 +44,7 @@ class FailureComponent(StrEnum):
     VERIFICATION = "verification"
     SCHEDULER_WORKER_NODE = "scheduler_worker_node"
     AUTOMATION = "automation"
+    CONTROL_PLANE_HA = "control_plane_ha"
     CONNECTOR_BROWSER = "connector_browser"
     PLUGIN_ADAPTER = "plugin_adapter"
     INFRASTRUCTURE_UNKNOWN = "infrastructure_unknown"
@@ -218,26 +219,28 @@ class CapturePolicy:
     capture_tool_outputs: bool = False
     capture_file_contents: bool = False
     capture_auth_session_values: bool = False
-    replacement: str = "[REDACTED]"
-    sensitive_keys: frozenset[str] = frozenset(
+
+    _CONTENT_KEYS = frozenset(
         {
-            "api_key",
-            "apikey",
+            "content",
+            "prompt",
+            "response",
+            "body",
+            "text",
+            "file_content",
+            "tool_input",
+            "tool_output",
+            "auth_session",
             "authorization",
             "cookie",
-            "credential",
-            "credentials",
             "password",
             "secret",
-            "session",
-            "session_id",
-            "access_token",
-            "refresh_token",
-            "id_token",
+            "token",
+            "api_key",
         }
     )
 
-    def permits(self, kind: CaptureKind) -> bool:
+    def allows(self, kind: CaptureKind) -> bool:
         if kind is CaptureKind.GENERIC:
             return True
         return {
@@ -251,31 +254,26 @@ class CapturePolicy:
 
     def redact(
         self,
-        values: Mapping[str, JsonValue],
+        attributes: Mapping[str, JsonValue],
         *,
         kind: CaptureKind = CaptureKind.GENERIC,
     ) -> dict[str, JsonValue]:
-        if not self.permits(kind):
-            return {"capture": self.replacement}
-        return {key: self._redact_value(key, value) for key, value in values.items()}
+        if not self.allows(kind):
+            return {"capture": "disabled"}
+        return {key: self._redact_value(key, value) for key, value in attributes.items()}
 
     def _redact_value(self, key: str, value: JsonValue) -> JsonValue:
-        normalized = key.strip().lower().replace("-", "_")
-        if normalized in self.sensitive_keys or normalized.endswith("_secret"):
-            return self.replacement
-        if normalized.endswith("_password") or normalized.endswith("_credential"):
-            return self.replacement
-        if normalized.endswith("_token") and normalized != "token_count":
-            return self.replacement
+        if key.lower() in self._CONTENT_KEYS:
+            return "[redacted]"
         if isinstance(value, dict):
-            return {child: self._redact_value(child, item) for child, item in value.items()}
+            return {nested: self._redact_value(nested, item) for nested, item in value.items()}
         if isinstance(value, list):
-            return [self._redact_nested(item) for item in value]
+            return [self._redact_list_item(item) for item in value]
         return value
 
-    def _redact_nested(self, value: JsonValue) -> JsonValue:
+    def _redact_list_item(self, value: JsonValue) -> JsonValue:
         if isinstance(value, dict):
             return {key: self._redact_value(key, item) for key, item in value.items()}
         if isinstance(value, list):
-            return [self._redact_nested(item) for item in value]
+            return [self._redact_list_item(item) for item in value]
         return value
