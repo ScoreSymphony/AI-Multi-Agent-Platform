@@ -16,6 +16,7 @@ from ai_multi_agent_platform.kernel import PlatformKernel, RecoveryReport
 from .service import BackupError, verify_restored_single_node_data_root
 
 HealthProbe = Callable[[], Awaitable[dict[str, JsonValue]]]
+RestoreIntegrityValidator = Callable[[tuple[RecoveryReport, ...]], Awaitable[tuple[str, ...]]]
 
 
 class RestoreValidationError(RuntimeError):
@@ -30,8 +31,14 @@ async def validate_restored_single_node(
     reports: tuple[RecoveryReport, ...],
     restore_metadata: dict[str, Any],
     health_probe: HealthProbe,
+    extra_validators: tuple[RestoreIntegrityValidator, ...] = (),
 ) -> tuple[str, ...]:
-    """Validate durable stores, canonical references, file bytes, and provider readiness."""
+    """Validate durable stores, canonical references, file bytes, and provider readiness.
+
+    The generic backup layer owns checks that are common to every single-node composition. The
+    concrete deployment can append validators for durable subsystems that it composes (for example
+    Agents or Conversations) without making backup core depend on those application modules.
+    """
 
     sqlite_versions = _sqlite_versions_from_restore_metadata(restore_metadata)
     try:
@@ -51,20 +58,31 @@ async def validate_restored_single_node(
     workspace_count = _validate_workspace_references(scopes=scopes, project_ids=project_ids)
     file_count = _validate_file_store(data_dir=data_dir, project_ids=project_ids)
 
+    checks: list[str] = [
+        "durable-state-layout-and-sqlite-integrity",
+        f"canonical-task-run-references:{task_count}:{run_count}",
+        f"workspace-project-references:{workspace_count}",
+        f"durable-file-metadata-and-bytes:{file_count}",
+    ]
+    for validator in extra_validators:
+        try:
+            validator_checks = await validator(reports)
+        except RestoreValidationError:
+            raise
+        except Exception as exc:
+            raise RestoreValidationError(
+                f"deployment restore-integrity validator failed: {type(exc).__name__}: {exc}"
+            ) from exc
+        checks.extend(validator_checks)
+
     health = await health_probe()
     if health.get("status") != "healthy" or health.get("ready") is not True:
         raise RestoreValidationError(
             "restored control-plane health/readiness check failed: "
             f"status={health.get('status')!r} ready={health.get('ready')!r}"
         )
-
-    return (
-        "durable-state-layout-and-sqlite-integrity",
-        f"canonical-task-run-references:{task_count}:{run_count}",
-        f"workspace-project-references:{workspace_count}",
-        f"durable-file-metadata-and-bytes:{file_count}",
-        "control-plane-provider-health-ready",
-    )
+    checks.append("control-plane-provider-health-ready")
+    return tuple(checks)
 
 
 def _sqlite_versions_from_restore_metadata(value: dict[str, Any]) -> dict[str, int]:

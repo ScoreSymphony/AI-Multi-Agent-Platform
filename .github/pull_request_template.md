@@ -6,6 +6,12 @@ Describe the focused change and why it is needed.
 
 Closes or progresses #
 
+## Scope and ownership
+
+- [ ] The pull request has one focused outcome and a canonical owner.
+- [ ] Hard dependencies are merged or explicitly documented.
+- [ ] Follow-up work is recorded without weakening this change's Definition of Done.
+
 ## Architecture impact
 
 - [ ] No canonical architecture change
@@ -41,7 +47,14 @@ For architecture-significant updates, summarize old/new revisions, relevant `sec
 - [ ] `mypy`
 - [ ] `pytest`
 - [ ] `python -m build`
+- [ ] frontend typecheck, tests and build completed when frontend code changed
+- [ ] dependency and security review completed when dependencies or trust boundaries changed
 - [ ] relevant adapter/contract/integration/regression tests completed
+
+## Release and operations impact
+
+- [ ] No release, migration, configuration, backup or rollback impact
+- [ ] Operational impact is documented and the release notes/changelog were updated
 
 ## Notes
 

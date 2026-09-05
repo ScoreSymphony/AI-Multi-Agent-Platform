@@ -20,6 +20,7 @@ from ai_multi_agent_platform.backup import (
     validate_restored_single_node,
     verify_backup,
 )
+from ai_multi_agent_platform.backup.inventory import required_single_node_store_paths
 from ai_multi_agent_platform.backup.manifest import backup_manifest_v1_schema
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.server import main as server_main
@@ -42,6 +43,15 @@ def _backup(config: SingleNodeConfig, tmp_path: Path, name: str = "backup") -> P
         platform_commit="issue-40-hardening",
         quiesced=True,
     )
+
+
+def _materialize_required_stores(root: Path) -> None:
+    for relative in required_single_node_store_paths():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            with sqlite3.connect(path):
+                pass
 
 
 def test_packaged_manifest_schema_matches_normative_repository_schema() -> None:
@@ -87,6 +97,14 @@ def test_backup_rejects_incomplete_source_and_manifest_scope(tmp_path: Path) -> 
 
     with pytest.raises(BackupError, match="missing required single-node components"):
         verify_backup(backup)
+
+
+def test_backup_rejects_missing_required_durable_store(tmp_path: Path) -> None:
+    config, _ = _deployment(tmp_path)
+    (config.database_dir / "scopes.sqlite3").unlink()
+
+    with pytest.raises(BackupError, match=r"required durable store: db/scopes\.sqlite3"):
+        _backup(config, tmp_path)
 
 
 def test_verify_detects_sqlite_schema_metadata_mismatch(tmp_path: Path) -> None:
@@ -155,6 +173,8 @@ def test_full_operator_recovery_runs_integrity_and_health_gate(tmp_path: Path, m
         "canonical-task-run-references:1:0",
         "workspace-project-references:0",
         "durable-file-metadata-and-bytes:0",
+        "agent-team-run-references:0",
+        "conversation-message-references:0:0",
         "control-plane-provider-health-ready",
     ]
     assert not (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_PENDING).exists()
@@ -217,6 +237,42 @@ def test_integrity_gate_rejects_missing_canonical_project_reference(tmp_path: Pa
     asyncio.run(scenario())
 
 
+def test_composed_conversation_integrity_rejects_missing_project(
+    tmp_path: Path, monkeypatch
+) -> None:
+    async def prepare() -> tuple[Path, str]:
+        config, deployment = _deployment(tmp_path)
+        admin = deployment.bootstrap_admin("admin", PASSWORD)
+        project = deployment.scopes.create_project(
+            key="conversation-project",
+            name="Conversation project",
+            owner_type="user",
+            owner_id=admin.user_id,
+        )
+        await deployment.conversations.create_conversation(
+            title="Persistent conversation",
+            owner_ref=admin.user_id,
+            project_id=project.id,
+        )
+        backup = _backup(config, tmp_path)
+        restored_root = restore_single_node_backup(
+            backup_dir=backup,
+            target_data_dir=tmp_path / "conversation-restored",
+            expected_platform_version=__version__,
+        )
+        return restored_root, project.id
+
+    restored_root, project_id = asyncio.run(prepare())
+    with sqlite3.connect(restored_root / "db" / "scopes.sqlite3") as connection:
+        connection.execute("DELETE FROM scope_projects WHERE project_id = ?", (project_id,))
+        connection.commit()
+
+    monkeypatch.setenv("AI_MAP_DATA_DIR", str(restored_root))
+    monkeypatch.setenv("AI_MAP_SECURE_COOKIE", "false")
+    assert server_main(["recover-restore"]) == 3
+    assert (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_PENDING).is_file()
+
+
 def test_integrity_gate_rejects_unready_provider_health(tmp_path: Path) -> None:
     async def scenario() -> None:
         config, _ = _deployment(tmp_path)
@@ -257,10 +313,10 @@ def test_integrity_gate_rejects_unready_provider_health(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def test_server_refuses_normal_service_while_restored_run_is_unresolved(
+def test_server_refuses_then_operator_resolves_orphaned_restored_run(
     tmp_path: Path, monkeypatch
 ) -> None:
-    async def prepare() -> Path:
+    async def prepare() -> tuple[Path, str, str]:
         source = tmp_path / "active-source"
         (source / "db").mkdir(parents=True)
         (source / "files").mkdir()
@@ -273,13 +329,14 @@ def test_server_refuses_normal_service_while_restored_run_is_unresolved(
         task = await kernel.create_task(
             idempotency_key="active:create",
             title="Active task",
-            objective="Remain unresolved after host loss",
+            objective="Require explicit operator recovery after host loss",
             owner_type="service",
             owner_id="test",
         )
         await kernel.ready_task(idempotency_key="active:ready", task_id=task.task_id)
         run = await kernel.start_task(idempotency_key="active:start", task_id=task.task_id)
         assert run.status.value == "running"
+        _materialize_required_stores(source)
 
         backup = create_single_node_backup(
             data_dir=source,
@@ -287,13 +344,14 @@ def test_server_refuses_normal_service_while_restored_run_is_unresolved(
             platform_version=__version__,
             quiesced=True,
         )
-        return restore_single_node_backup(
+        restored = restore_single_node_backup(
             backup_dir=backup,
             target_data_dir=tmp_path / "active-restored",
             expected_platform_version=__version__,
         )
+        return restored, task.task_id, run.run_id
 
-    restored_root = asyncio.run(prepare())
+    restored_root, task_id, run_id = asyncio.run(prepare())
     monkeypatch.setenv("AI_MAP_DATA_DIR", str(restored_root))
     monkeypatch.setenv("AI_MAP_SECURE_COOKIE", "false")
 
@@ -301,11 +359,86 @@ def test_server_refuses_normal_service_while_restored_run_is_unresolved(
     report_path = restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_REPORT
     first_report = json.loads(report_path.read_text(encoding="utf-8"))
     assert first_report["ready_for_service"] is False
-    assert len(first_report["unresolved_run_ids"]) == 1
+    assert first_report["unresolved_run_ids"] == [run_id]
     assert not (restored_root / RESTORE_RECOVERY_DIR / RESTORE_RECOVERY_PENDING).exists()
 
-    # The pending marker is gone, but the blocked report is retried and serving remains denied.
+    # The pending marker is gone, but the blocked report remains authoritative.
     assert server_main(["serve"]) == 3
-    second_report = json.loads(report_path.read_text(encoding="utf-8"))
-    assert second_report["ready_for_service"] is False
-    assert second_report["unresolved_run_ids"] == first_report["unresolved_run_ids"]
+    assert (
+        server_main(
+            [
+                "resolve-restore-run",
+                "--task-id",
+                task_id,
+                "--run-id",
+                run_id,
+                "--resolution",
+                "failed",
+                "--reason",
+                "execution backend was lost with the original host",
+            ]
+        )
+        == 0
+    )
+
+    final_report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert final_report["ready_for_service"] is True
+    assert final_report["unresolved_run_ids"] == []
+    assert server_main(["recover-restore"]) == 0
+
+    restored = build_single_node_deployment(
+        SingleNodeConfig(data_dir=restored_root, secure_cookie=False)
+    )
+    recovered_run = asyncio.run(restored.kernel.get_run(task_id, run_id))
+    assert recovered_run.status.value == "failed"
+    assert recovered_run.recovery_required is False
+
+
+def test_restore_run_resolution_rejects_run_not_in_blocked_report(
+    tmp_path: Path, monkeypatch
+) -> None:
+    async def prepare() -> tuple[Path, str, str]:
+        config, deployment = _deployment(tmp_path)
+        task = await deployment.kernel.create_task(
+            idempotency_key="ordinary:create",
+            title="Ordinary task",
+            objective="Never become an operator recovery target",
+            owner_type="service",
+            owner_id="test",
+        )
+        await deployment.kernel.ready_task(
+            idempotency_key="ordinary:ready",
+            task_id=task.task_id,
+        )
+        run = await deployment.kernel.create_run(
+            idempotency_key="ordinary:run",
+            task_id=task.task_id,
+        )
+        backup = _backup(config, tmp_path)
+        restored = restore_single_node_backup(
+            backup_dir=backup,
+            target_data_dir=tmp_path / "ordinary-restored",
+            expected_platform_version=__version__,
+        )
+        return restored, task.task_id, run.run_id
+
+    restored_root, task_id, run_id = asyncio.run(prepare())
+    monkeypatch.setenv("AI_MAP_DATA_DIR", str(restored_root))
+    monkeypatch.setenv("AI_MAP_SECURE_COOKIE", "false")
+    assert server_main(["recover-restore"]) == 0
+    assert (
+        server_main(
+            [
+                "resolve-restore-run",
+                "--task-id",
+                task_id,
+                "--run-id",
+                run_id,
+                "--resolution",
+                "cancelled",
+                "--reason",
+                "must not be accepted",
+            ]
+        )
+        == 3
+    )

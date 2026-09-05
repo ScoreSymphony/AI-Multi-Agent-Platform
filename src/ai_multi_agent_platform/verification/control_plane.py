@@ -12,11 +12,12 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.control_plane.service import _payload_digest
 from ai_multi_agent_platform.kernel import TaskState
 
-from .evidence import VerificationEvidenceResolver
+from .evidence import CanonicalVerificationRuntime, VerificationEvidenceResolver
 from .gate import VerificationCompletionAuthority
 from .models import (
     VerificationFinding,
     VerificationOutcome,
+    VerificationPolicy,
     VerificationRequest,
     VerificationRequestStatus,
     VerificationResult,
@@ -26,7 +27,9 @@ from .models import (
 )
 from .service import VerificationService
 
+VERIFICATION_POLICY_COLLECTION = "verification-policies"
 VERIFICATION_COLLECTION = "verifications"
+VERIFICATION_RESULT_COLLECTION = "verification-results"
 VERIFICATION_REVIEW_COLLECTION = "verification-reviews"
 VERIFICATION_REQUIREMENT_COLLECTION = "verification-requirements"
 VERIFICATION_COMMANDS = (
@@ -34,6 +37,38 @@ VERIFICATION_COMMANDS = (
     "verification.reject",
     "verification.request-changes",
 )
+
+
+class VerificationPolicyResourceService(ResourceService):
+    """Versioned policy discovery with explicit collection-level authorization."""
+
+    def __init__(self, verification: VerificationService) -> None:
+        self._verification = verification
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del context, query
+        return tuple(
+            _policy_resource(policy) for policy in _verification_policies(self._verification)
+        )
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate safe policy projections for actor-independent Search rebuild."""
+
+        return tuple(
+            _policy_resource(policy) for policy in _verification_policies(self._verification)
+        )
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        del context
+        return _policy_resource(_policy_from_ref(self._verification, resource_id))
 
 
 class VerificationResourceService(ResourceService):
@@ -69,6 +104,25 @@ class VerificationResourceService(ResourceService):
         resources.sort(key=lambda item: (item[0].created_at, item[0].verification_id))
         return tuple(resource for _request, resource in resources)
 
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate all canonical requests with task scope for Search rebuild."""
+
+        resources: list[tuple[VerificationRequest, dict[str, JsonValue]]] = []
+        for task_id in await _task_ids(self._control_plane):
+            task = await self._control_plane._kernel.get_task(task_id)
+            for request, result in self._verification.history(task_id=task_id):
+                resources.append(
+                    (
+                        request,
+                        _search_scoped_resource(
+                            _verification_resource(request, result),
+                            task,
+                        ),
+                    )
+                )
+        resources.sort(key=lambda item: (item[0].created_at, item[0].verification_id))
+        return tuple(resource for _request, resource in resources)
+
     async def get_resource(
         self,
         context: RequestContext,
@@ -86,8 +140,89 @@ class VerificationResourceService(ResourceService):
         return _verification_resource(request, self._verification.result_for(resource_id))
 
 
+class VerificationResultResourceService(ResourceService):
+    """Task-scoped read view of canonical Verification Results."""
+
+    def __init__(
+        self,
+        control_plane: ControlPlane,
+        verification: VerificationService,
+    ) -> None:
+        self._control_plane = control_plane
+        self._verification = verification
+
+    async def list_resources(
+        self,
+        context: RequestContext,
+        query: PageQuery,
+    ) -> tuple[dict[str, JsonValue], ...]:
+        del query
+        resources: list[tuple[VerificationResult, dict[str, JsonValue]]] = []
+        for task_id in await _task_ids(self._control_plane):
+            task = await self._control_plane._kernel.get_task(task_id)
+            if not await _allowed_for_task(
+                self._control_plane,
+                context,
+                "verification-result:list",
+                task,
+                resource_ref=task_id,
+            ):
+                continue
+            for request, result in self._verification.history(task_id=task_id):
+                if result is not None:
+                    resources.append((result, _verification_result_resource(request, result)))
+        resources.sort(key=lambda item: (item[0].completed_at, item[0].verification_result_id))
+        return tuple(resource for _result, resource in resources)
+
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate privacy-safe canonical Result projections for Search rebuild."""
+
+        resources: list[tuple[VerificationResult, dict[str, JsonValue]]] = []
+        for task_id in await _task_ids(self._control_plane):
+            task = await self._control_plane._kernel.get_task(task_id)
+            for request, result in self._verification.history(task_id=task_id):
+                if result is None:
+                    continue
+                resources.append(
+                    (
+                        result,
+                        _search_scoped_resource(
+                            _verification_result_search_resource(request, result),
+                            task,
+                        ),
+                    )
+                )
+        resources.sort(key=lambda item: (item[0].completed_at, item[0].verification_result_id))
+        return tuple(resource for _result, resource in resources)
+
+    async def get_resource(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> dict[str, JsonValue]:
+        task, request, result = await _verification_result_entry(
+            self._control_plane,
+            self._verification,
+            resource_id,
+        )
+        await _authorize_for_task(
+            self._control_plane,
+            context,
+            "verification-result:read",
+            task,
+            resource_ref=result.verification_result_id,
+        )
+        return _verification_result_resource(request, result)
+
+
 class VerificationReviewQueueResourceService(ResourceService):
     """Authorized pending-human-review queue derived from canonical requests."""
+
+    # This collection is a filtered navigation view over the same canonical
+    # ``verification`` resources exposed by VERIFICATION_COLLECTION. Indexing it would
+    # duplicate one resource type across two canonical collections and create ambiguous
+    # Search authorization/canonical refs.
+    search_indexable = False
 
     def __init__(
         self,
@@ -180,6 +315,22 @@ class VerificationRequirementResourceService(ResourceService):
             resources.append(_requirement_resource(self._completion, task_id))
         return tuple(resources)
 
+    async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
+        """Enumerate all canonical requirements with task scope for Search rebuild."""
+
+        resources: list[dict[str, JsonValue]] = []
+        for task_id in await _task_ids(self._control_plane):
+            if self._completion.requirement_for(task_id) is None:
+                continue
+            task = await self._control_plane._kernel.get_task(task_id)
+            resources.append(
+                _search_scoped_resource(
+                    _requirement_resource(self._completion, task_id),
+                    task,
+                )
+            )
+        return tuple(resources)
+
     async def get_resource(
         self,
         context: RequestContext,
@@ -207,10 +358,12 @@ class VerificationCommandHandlers:
         control_plane: ControlPlane,
         verification: VerificationService,
         evidence: VerificationEvidenceResolver | None = None,
+        runtime: CanonicalVerificationRuntime | None = None,
     ) -> None:
         self._control_plane = control_plane
         self._verification = verification
         self._evidence = evidence
+        self._runtime = runtime
 
     async def accept(
         self,
@@ -328,28 +481,31 @@ class VerificationCommandHandlers:
                     severity="info" if outcome is VerificationOutcome.PASS else "warning",
                 ),
             )
-        result = self._verification.submit_result(
-            VerificationResult(
-                verification_id=verification_id,
-                verifier=VerifierIdentity(
-                    verifier_ref=context.actor.principal_ref,
-                    kind=VerifierKind.HUMAN,
-                    read_only=True,
-                ),
-                outcome=outcome,
-                subject=request.subject,
-                findings=findings,
-                evidence_artifact_ids=evidence_artifact_ids,
-                checks_executed=("human_review",),
-                metadata={
-                    "control_plane": {
-                        "idempotency_key": key,
-                        "payload_digest": digest,
-                        "actor_ref": context.actor.principal_ref,
-                        "action": action,
-                    }
-                },
-            )
+        proposed = VerificationResult(
+            verification_id=verification_id,
+            verifier=VerifierIdentity(
+                verifier_ref=context.actor.principal_ref,
+                kind=VerifierKind.HUMAN,
+                read_only=True,
+            ),
+            outcome=outcome,
+            subject=request.subject,
+            findings=findings,
+            evidence_artifact_ids=evidence_artifact_ids,
+            checks_executed=("human_review",),
+            metadata={
+                "control_plane": {
+                    "idempotency_key": key,
+                    "payload_digest": digest,
+                    "actor_ref": context.actor.principal_ref,
+                    "action": action,
+                }
+            },
+        )
+        result = (
+            await self._runtime.submit_result(proposed)
+            if self._runtime is not None
+            else self._verification.submit_result(proposed)
         )
         return _verification_resource(self._verification.get_request(verification_id), result)
 
@@ -359,12 +515,21 @@ def register_verification_control_plane(
     verification: VerificationService,
     completion: VerificationCompletionAuthority,
     evidence: VerificationEvidenceResolver | None = None,
+    runtime: CanonicalVerificationRuntime | None = None,
 ) -> None:
     """Register #86 read/review surfaces on the generic #32 extension seam."""
 
     control_plane.register_resource_service(
+        VERIFICATION_POLICY_COLLECTION,
+        VerificationPolicyResourceService(verification),
+    )
+    control_plane.register_resource_service(
         VERIFICATION_COLLECTION,
         VerificationResourceService(control_plane, verification),
+    )
+    control_plane.register_resource_service(
+        VERIFICATION_RESULT_COLLECTION,
+        VerificationResultResourceService(control_plane, verification),
     )
     control_plane.register_resource_service(
         VERIFICATION_REVIEW_COLLECTION,
@@ -374,7 +539,7 @@ def register_verification_control_plane(
         VERIFICATION_REQUIREMENT_COLLECTION,
         VerificationRequirementResourceService(control_plane, completion),
     )
-    handlers = VerificationCommandHandlers(control_plane, verification, evidence)
+    handlers = VerificationCommandHandlers(control_plane, verification, evidence, runtime)
     control_plane.register_command("verification.accept", handlers.accept)
     control_plane.register_command("verification.reject", handlers.reject)
     control_plane.register_command("verification.request-changes", handlers.request_changes)
@@ -386,6 +551,19 @@ async def _task_ids(control_plane: ControlPlane) -> tuple[str, ...]:
         for stream_id in await control_plane._events.list_stream_ids()
         if stream_id.startswith("task_")
     )
+
+
+async def _verification_result_entry(
+    control_plane: ControlPlane,
+    verification: VerificationService,
+    resource_id: str,
+) -> tuple[TaskState, VerificationRequest, VerificationResult]:
+    for task_id in await _task_ids(control_plane):
+        task = await control_plane._kernel.get_task(task_id)
+        for request, result in verification.history(task_id=task_id):
+            if result is not None and result.verification_result_id == resource_id:
+                return task, request, result
+    raise ContractError(ErrorCode.NOT_FOUND, "verification result was not found")
 
 
 async def _authorize_for_task(
@@ -424,6 +602,83 @@ async def _allowed_for_task(
         owner_id=task.task.owner_ref.id,
         project_id=task.task.project_id,
     )
+
+
+def _search_scoped_resource(
+    resource: dict[str, JsonValue],
+    task: TaskState,
+) -> dict[str, JsonValue]:
+    """Add only canonical task authorization scope to an internal Search projection."""
+
+    scoped = dict(resource)
+    scoped["owner_type"] = task.task.owner_ref.type
+    scoped["owner_id"] = task.task.owner_ref.id
+    scoped["project_id"] = task.task.project_id
+    return scoped
+
+
+def _verification_policies(
+    verification: VerificationService,
+) -> tuple[VerificationPolicy, ...]:
+    refs = {
+        (event.policy_id, event.policy_version)
+        for event in verification.audit_history()
+        if event.policy_id is not None and event.policy_version is not None
+    }
+    return tuple(verification.get_policy(policy_id, version) for policy_id, version in sorted(refs))
+
+
+def _policy_ref(policy: VerificationPolicy) -> str:
+    return f"{policy.policy_id}@{policy.version}"
+
+
+def _policy_from_ref(
+    verification: VerificationService,
+    resource_id: str,
+) -> VerificationPolicy:
+    policy_id, separator, raw_version = resource_id.rpartition("@")
+    if not separator or not policy_id or not raw_version:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found")
+    try:
+        version = int(raw_version)
+    except ValueError as exc:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found") from exc
+    if version < 1:
+        raise ContractError(ErrorCode.NOT_FOUND, "verification policy was not found")
+    return verification.get_policy(policy_id, version)
+
+
+def _policy_resource(policy: VerificationPolicy) -> dict[str, JsonValue]:
+    return {
+        "id": _policy_ref(policy),
+        "type": "verification_policy",
+        "policy_id": policy.policy_id,
+        "version": policy.version,
+        "name": policy.name,
+        "scope": {
+            "task_ids": list(policy.scope.task_ids),
+            "project_ids": list(policy.scope.project_ids),
+            "agent_ids": list(policy.scope.agent_ids),
+            "capability_ids": list(policy.scope.capability_ids),
+        },
+        "stages": [
+            {
+                "stage_id": stage.stage_id,
+                "verifier_kind": stage.verifier_kind.value,
+                "minimum_results": stage.minimum_results,
+                "accepted_outcomes": [outcome.value for outcome in stage.accepted_outcomes],
+                "capability_ref": stage.capability_ref,
+                "critical": stage.critical,
+            }
+            for stage in policy.stages
+        ],
+        "max_repair_attempts": policy.max_repair_attempts,
+        "request_timeout_seconds": policy.request_timeout_seconds,
+        "result_expiry_seconds": policy.result_expiry_seconds,
+        "failure_policy": policy.failure_policy.value,
+        "timeout_failure_policy": policy.timeout_failure_policy.value,
+        "created_at": policy.created_at.isoformat(),
+    }
 
 
 def _verification_resource(
@@ -497,6 +752,65 @@ def _result_resource(result: VerificationResult) -> dict[str, JsonValue]:
         "started_at": result.started_at.isoformat(),
         "completed_at": result.completed_at.isoformat(),
         "metadata": dict(result.metadata),
+    }
+
+
+def _verification_result_resource(
+    request: VerificationRequest,
+    result: VerificationResult,
+) -> dict[str, JsonValue]:
+    resource = _result_resource(result)
+    resource.update(
+        {
+            "type": "verification_result",
+            "task_id": request.task_id,
+            "run_id": request.run_id,
+            "result_id": request.result_id,
+            "artifact_ids": list(request.artifact_ids),
+            "capability_ids": list(request.capability_ids),
+            "policy_id": request.policy_id,
+            "policy_version": request.policy_version,
+            "stage_id": request.stage_id,
+        }
+    )
+    return resource
+
+
+def _verification_result_search_resource(
+    request: VerificationRequest,
+    result: VerificationResult,
+) -> dict[str, JsonValue]:
+    """Project Result discovery metadata without findings, evidence, digest or human refs."""
+
+    return {
+        "id": result.verification_result_id,
+        "type": "verification_result",
+        "verification_id": result.verification_id,
+        "task_id": request.task_id,
+        "run_id": request.run_id,
+        "result_id": request.result_id,
+        "artifact_ids": list(request.artifact_ids),
+        "capability_ids": list(request.capability_ids),
+        "policy_id": request.policy_id,
+        "policy_version": request.policy_version,
+        "stage_id": request.stage_id,
+        "status": result.outcome.value,
+        "outcome": result.outcome.value,
+        "subject": {
+            "type": result.subject.subject_type,
+            "id": result.subject.subject_id,
+            "revision": result.subject.revision,
+        },
+        "verifier": {
+            "kind": result.verifier.kind.value,
+            "agent_id": result.verifier.agent_id,
+            "agent_revision": result.verifier.agent_revision,
+            "model_config_id": result.verifier.model_config_id,
+            "provider_id": result.verifier.provider_id,
+            "read_only": result.verifier.read_only,
+        },
+        "started_at": result.started_at.isoformat(),
+        "completed_at": result.completed_at.isoformat(),
     }
 
 

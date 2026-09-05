@@ -7,9 +7,12 @@ import pytest
 from ai_multi_agent_platform.agents import (
     AgentInstructions,
     AgentProfile,
+    AgentRevisionRef,
     AgentRunStatus,
     AgentRuntime,
     AgentService,
+    AgentTeamMember,
+    AgentTeamProfile,
     InMemoryAgentRepository,
     InstructionSource,
 )
@@ -148,7 +151,7 @@ def test_reviewer_agent_records_verification_without_task_lifecycle_authority() 
             "digest": exact.digest,
         }
 
-        result = reviewer.complete_review(
+        result = await reviewer.complete_review(
             record.agent_run_id,
             outcome=VerificationOutcome.PASS,
         )
@@ -297,5 +300,55 @@ def test_agent_runtime_verification_context_is_immutable_after_start() -> None:
             agent_runtime.service.repository.get_agent_run(record.agent_run_id).status
             is AgentRunStatus.RUNNING
         )
+
+    asyncio.run(scenario())
+
+
+def test_reviewer_agent_can_be_pinned_to_exact_team_revision() -> None:
+    async def scenario() -> None:
+        service = AgentService(InMemoryAgentRepository())
+        agent = service.create_agent(
+            _profile("Team reviewer"),
+            owner_ref=OwnerRef(type="service", id="verification"),
+        )
+        team = service.create_team(
+            AgentTeamProfile(
+                name="Verification team",
+                members=(
+                    AgentTeamMember(
+                        agent=AgentRevisionRef(agent_id=agent.agent_id, revision=1),
+                        role="reviewer",
+                    ),
+                ),
+            ),
+            owner_ref=OwnerRef(type="service", id="verification"),
+        )
+        verification = VerificationService()
+        policy = verification.register_policy(_policy())
+        subject = _subject()
+        request = verification.request_verification(
+            task_id=new_id("task"),
+            policy_id=policy.policy_id,
+            policy_version=policy.version,
+            stage_id="review",
+            subject=subject,
+            result_id=subject.subject_id,
+            correlation_id="team-review",
+        )
+        reviewer = ReviewerAgentRuntime(verification, AgentRuntime(service))
+        record = await reviewer.start_review(
+            request.verification_id,
+            run_id=new_id("run"),
+            agent_id=agent.agent_id,
+            team_id=team.team_id,
+            team_revision=team.revision,
+        )
+        assert record.team is not None
+        assert record.team.team_id == team.team_id
+        assert record.team.revision == team.revision
+        result = await reviewer.complete_review(
+            record.agent_run_id, outcome=VerificationOutcome.PASS
+        )
+        assert result.verifier.agent_id == agent.agent_id
 
     asyncio.run(scenario())

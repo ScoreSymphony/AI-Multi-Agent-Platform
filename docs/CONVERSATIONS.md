@@ -26,8 +26,12 @@ A `Conversation` owns interaction metadata only:
 - open/archive/tombstone status;
 - optional canonical Agent/AgentTeam selection;
 - optional provider-neutral model-routing preference;
-- references to canonical Tasks, Runs and Artifacts;
+- references to canonical Tasks, Runs, Artifacts and Results;
 - audit-safe metadata and timestamps.
+
+Task, Run, Artifact and Result links are stored as stable canonical IDs. In particular,
+`result.attached` is materialized into `Conversation.result_ids` exactly like Run and
+Artifact linkage rather than existing only as transient chat presentation state.
 
 ### ConversationMessage
 
@@ -60,9 +64,11 @@ restart in the normal self-hosted profile. The same deployment injects its canon
 Agent service and File provider into the Conversation boundary rather than creating
 chat-private copies.
 
-A conversational response provider remains optional and separately replaceable. The
-single-node reference profile does not fabricate model output when no canonical model/
-responder runtime has been configured.
+Conversational generation is also replaceable. The reference single-node composition
+uses `ModelRuntimeConversationResponseProvider` when canonical model runtime support is
+configured. Agent and AgentTeam targets are resolved to immutable canonical revisions;
+model selection then flows through the platform ModelRuntime/router contracts rather
+than a provider-private chat session.
 
 ## Control Plane surface
 
@@ -134,6 +140,11 @@ transition remains the kernel-owned `task.resumed` event. The command is idempot
 first attempt against a Task that is not waiting fails through the canonical lifecycle
 conflict path without writing conversation-input metadata.
 
+A canonical `task.waiting` event is projected into the Conversation stream with a
+structured `attention` object. The object can include the Task ID, blocked flag, reason
+and verification-related identifiers. It is presentation metadata derived from the
+canonical event; the Chat layer does not resume the Task automatically.
+
 ## Live Task/Run event projection
 
 The Conversation shell projects the existing canonical Task event streams instead of
@@ -146,10 +157,14 @@ The SSE projection:
 1. authorizes the Conversation through the existing authenticated Control Plane boundary;
 2. reads the Conversation's durable `task_ids` links;
 3. subscribes to each canonical Task stream through `subscribe_task_events(...)`;
-4. multiplexes canonical `task.*` and `run.*` events into one Conversation stream;
+4. multiplexes canonical `task.*`, `run.*`, `artifact.attached` and `result.attached`
+   events into one Conversation stream;
 5. keeps the original canonical event unchanged inside the projection envelope;
 6. marks the projection as `authoritative: true` because lifecycle truth remains the
-   canonical Task/Run event stream.
+   canonical Task/Run event stream;
+7. exposes structured canonical `references` on lifecycle events;
+8. materializes newly observed Run, Artifact and Result IDs back into durable Conversation
+   context without taking ownership of their lifecycle.
 
 Reconnect state is represented by one opaque provider-neutral Conversation cursor. The
 cursor contains only per-Task canonical `event_*` positions and can be supplied with
@@ -161,6 +176,22 @@ Conversation SSE is composed above the current public Notification/Plugin/Automa
 Terminal ASGI stack. Existing lifespan handling, terminal WebSockets and authenticated
 stream preparation therefore remain intact rather than being reimplemented by #72.
 
+## Approval and input attention
+
+Chat does not implement a second Approval lifecycle. Approval requests are projected
+through the platform's canonical Notification/Approval integration. The browser loads the
+authorized notification inventory and selects `approval` and `agent_input` notifications
+whose canonical `task_id` belongs to the current Conversation.
+
+Approval cards link to the existing canonical Approval route and use only safe northbound
+Notification fields/actions. Proposed privileged payloads are not copied into Conversation
+state. Notification live events refresh this attention view, while the Approval domain
+remains authoritative for pending/resolved state and authorization.
+
+Together with structured `task.waiting` projections, this gives Chat provider-neutral
+visibility into both explicit input requirements and approval requirements without
+interpreting model text as an action request.
+
 ## Assistant/Agent response streaming
 
 Conversational model/agent output uses a second, deliberately non-authoritative stream:
@@ -171,6 +202,12 @@ The request addresses one already-durable authenticated user Message and require
 idempotency key. A replaceable `ConversationResponseProvider` receives only canonical
 Conversation history, target identity and provider-neutral routing preferences. No
 Hermes, Forge or model-provider session object is part of the public contract.
+
+For the reference runtime, `ModelRuntimeConversationResponseProvider` resolves Agent and
+AgentTeam targets through `AgentService`, including exact selected revisions, and submits
+a canonical model request through `ModelRuntime`. Project and Task targets remain
+provider-neutral context. No provider-native conversation/session identifier is persisted
+as platform state.
 
 During generation the server emits:
 
@@ -216,9 +253,9 @@ Conversation can use durable or time-bounded retention policy metadata managed b
 platform; northbound clients cannot write the reserved retention fields directly.
 
 Deleting a Conversation tombstones and redacts Conversation-owned message history. It
-does not delete Tasks, Runs, Artifacts or their canonical event history. Portable export
-returns Conversation-owned state plus canonical references without recursively copying
-referenced resources or provider-private data.
+does not delete Tasks, Runs, Artifacts, Results or their canonical event history. Portable
+export returns Conversation-owned state plus canonical references without recursively
+copying referenced resources or provider-private data.
 
 This distinction also keeps conversation history separate from long-term memory. Nothing
 in #72 automatically promotes a message into memory or Knowledge; a later memory policy
@@ -235,7 +272,9 @@ manifest. The page provides:
 - Conversation history with tombstone-safe rendering;
 - tentative live Assistant text/activity separated visually from durable messages;
 - authoritative Task/Run activity projected separately from chat output;
-- canonical Task/Run/Artifact links;
+- inline canonical Task/Run/Artifact/Result lifecycle references;
+- structured waiting/input attention from authoritative Task events;
+- canonical Approval and Agent-input notification attention for linked Tasks;
 - explicit create/attach/resume Task controls;
 - archive/reopen, export and tombstone actions.
 
@@ -262,7 +301,8 @@ permission to read the referenced content.
 Privileged lifecycle operations use their own canonical authorization. In particular,
 permission to append a message does not imply `task:resume` permission. Tentative
 assistant/model output is never interpreted as an authorization grant or privileged
-command.
+command. Approval notifications only project already-authorized canonical attention;
+Chat cannot create an alternate approval decision path.
 
 ## Acceptance coverage
 
@@ -271,7 +311,7 @@ The #72 implementation covers:
 - canonical Conversation/Message contracts;
 - Agent/AgentTeam targets with exact canonical revisions;
 - Project, Task and canonical orchestrator targeting;
-- provider-neutral model-routing preferences and model/provider validation;
+- provider-neutral model-routing preferences and canonical `ModelRuntime` generation;
 - typed File/Artifact/Knowledge/Task/Run/Result/Agent/Team references;
 - durable restart-safe Conversation persistence and paginated history;
 - Control Plane resources, commands, HTTP routes, authentication and authorization;
@@ -279,17 +319,20 @@ The #72 implementation covers:
 - canonical File attachment authorization;
 - canonical `knowledge_source_*` references through a replaceable `KnowledgeProvider`;
 - Task creation/attachment linkage without a second task engine;
-- Run and Artifact linking;
+- durable Run, Artifact and Result linkage projected from canonical lifecycle events;
 - normalized, restart-safe `Conversation.task_ids` linkage;
 - explicit waiting-Task input/resume with canonical provenance and kernel lifecycle;
+- structured `task.waiting` attention without implicit resume behavior;
+- canonical Approval/Agent-input attention through the existing Notification subsystem;
 - provider-neutral authoritative Task/Run SSE with opaque multi-Task reconnect cursors;
 - provider-neutral tentative Assistant/Agent response streaming with durable final commit;
 - response idempotency and replacement-provider tests with no private-session leakage;
 - retention, time-bounded policy, tombstone/deletion and portable export behavior;
-- frontend multi-conversation Chat area with explicit Task bridge and live response UI;
+- frontend multi-conversation Chat area with explicit Task bridge, lifecycle references,
+  approval/input attention and live response UI;
 - standard single-node Conversation activation and restart persistence;
 - compatibility with current authentication, authorization, Notification, Plugin,
   Automation, Terminal, Verification, Hermes and Forge composition boundaries.
 
-Durable work therefore remains represented by canonical Task/Run/Artifact/Event
+Durable work therefore remains represented by canonical Task/Run/Artifact/Result/Event
 contracts even when the user enters the platform through Chat.

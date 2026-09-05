@@ -354,6 +354,10 @@ def test_model_and_provider_attachment_restore_after_restart(tmp_path: Path) -> 
     assert model.location is ModelLocation.LOCAL
     provider = restored.models.get_provider("local-openai")
     assert provider.descriptor.provider_id == "local-openai"
+    assert restored.status(_context())["state"] == "needs_model"
+    assert restored.status(_context())["usable_golden_path_model_count"] == 0
+
+    asyncio.run(restored.models.refresh_health("local-openai"))
     assert restored.status(_context())["state"] == "needs_project"
     provider_document = json.loads((tmp_path / "model-providers.json").read_text(encoding="utf-8"))
     assert provider_document["schema_version"] == "1"

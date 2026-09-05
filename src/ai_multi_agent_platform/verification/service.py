@@ -26,6 +26,7 @@ from .models import (
 )
 
 _CANONICAL_SUBJECT_TOKEN = object()
+_CANONICAL_RESULT_TOKEN = object()
 
 
 class VerificationService:
@@ -37,8 +38,14 @@ class VerificationService:
     state; kernel integration consumes ``assess_completion`` as a deterministic gate.
     """
 
-    def __init__(self, *, require_canonical_subjects: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        require_canonical_subjects: bool = False,
+        require_canonical_results: bool = False,
+    ) -> None:
         self._require_canonical_subjects = require_canonical_subjects
+        self._require_canonical_results = require_canonical_results
         self._policies: dict[tuple[str, int], VerificationPolicy] = {}
         self._requests: dict[str, VerificationRequest] = {}
         self._results: dict[str, VerificationResult] = {}
@@ -287,7 +294,20 @@ class VerificationService:
         self._enforce_independence(policy, request, verifier)
         return verifier
 
-    def submit_result(self, result: VerificationResult) -> VerificationResult:
+    def submit_result(
+        self,
+        result: VerificationResult,
+        *,
+        _canonical_result_token: object | None = None,
+    ) -> VerificationResult:
+        if (
+            self._require_canonical_results
+            and _canonical_result_token is not _CANONICAL_RESULT_TOKEN
+        ):
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "raw verification results are disabled; use CanonicalVerificationRuntime",
+            )
         request = self.get_request(result.verification_id)
         if request.status is not VerificationRequestStatus.PENDING:
             raise ContractError(
@@ -823,12 +843,16 @@ class VerificationService:
                     "verification policy requires read-only reviewer-agent capabilities",
                 )
 
+        risk_forbids_self = (
+            policy.risk_classification in rules.forbid_self_verification_risk_classes
+        )
         requires_producer = (
             (rules.producer_agent_must_differ and verifier.kind is VerifierKind.AGENT)
             or rules.model_must_differ
             or rules.provider_must_differ
             or (rules.human_reviewer_must_differ and verifier.kind is VerifierKind.HUMAN)
             or rules.forbid_self_verification
+            or risk_forbids_self
         )
         if requires_producer and producer is None:
             raise ContractError(
@@ -882,7 +906,7 @@ class VerificationService:
                     "verification policy requires a separate human reviewer",
                 )
 
-        if rules.forbid_self_verification:
+        if rules.forbid_self_verification or risk_forbids_self:
             same_actor = verifier.verifier_ref == producer.actor_ref
             same_agent = (
                 verifier.kind is VerifierKind.AGENT

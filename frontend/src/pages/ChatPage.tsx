@@ -14,7 +14,8 @@ import {
   type ConversationTargetKind,
   type ConversationTaskEvent,
 } from "../api/conversations";
-import type { LiveConnectionState } from "../api/live";
+import { NotificationClient, type CanonicalNotification } from "../api/notifications";
+import { NotificationEventStream, type LiveConnectionState } from "../api/live";
 import type { JsonValue } from "../api/types";
 import { AppLink } from "../app/router";
 import {
@@ -53,10 +54,16 @@ export interface TentativeResponseState {
 }
 
 export function ChatPage({ client }: { client: ConversationClient }) {
+  const notificationClient = useMemo(
+    () => new NotificationClient({ baseUrl: client.baseUrl }),
+    [client.baseUrl],
+  );
   const [conversations, setConversations] = useState<CanonicalConversation[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<CanonicalConversationMessage[]>([]);
   const [activity, setActivity] = useState<ConversationTaskEvent[]>([]);
+  const [attentionNotifications, setAttentionNotifications] = useState<CanonicalNotification[]>([]);
+  const [attentionError, setAttentionError] = useState<string | null>(null);
   const [tentative, setTentative] = useState<TentativeResponseState | null>(null);
   const [liveState, setLiveState] = useState<LiveConnectionState>("closed");
   const [error, setError] = useState<unknown>(null);
@@ -115,17 +122,53 @@ export function ChatPage({ client }: { client: ConversationClient }) {
     }
   }, [client, selectedId]);
 
+  const loadAttention = useCallback(async () => {
+    const taskIds = new Set(selectedTaskKey ? selectedTaskKey.split("|") : []);
+    if (!selectedId || taskIds.size === 0) {
+      setAttentionNotifications([]);
+      setAttentionError(null);
+      return;
+    }
+    try {
+      const page = await notificationClient.list({
+        limit: 100,
+        sort: "updated_at",
+        direction: "desc",
+      });
+      setAttentionNotifications(
+        page.items.filter(
+          (item) =>
+            item.task_id !== null
+            && taskIds.has(item.task_id)
+            && (item.category === "approval" || item.category === "agent_input")
+            && item.state !== "dismissed"
+            && item.state !== "archived",
+        ),
+      );
+      setAttentionError(null);
+    } catch (nextError) {
+      setAttentionNotifications([]);
+      setAttentionError(attentionErrorMessage(nextError));
+    }
+  }, [notificationClient, selectedId, selectedTaskKey]);
+
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
 
   useEffect(() => {
     setActivity([]);
+    setAttentionNotifications([]);
+    setAttentionError(null);
     setTentative(null);
     setExported(null);
     setDeleteArmed(false);
     void loadSelected();
   }, [loadSelected]);
+
+  useEffect(() => {
+    void loadAttention();
+  }, [loadAttention]);
 
   useEffect(() => {
     if (!selectedId || selectedStatus === "tombstoned" || !selectedTaskKey) {
@@ -143,11 +186,25 @@ export function ChatPage({ client }: { client: ConversationClient }) {
           return [...current, event].slice(-100);
         });
         void loadSelected();
+        void loadAttention();
       },
     });
     stream.open();
     return () => stream.close();
-  }, [client.baseUrl, loadSelected, selectedId, selectedStatus, selectedTaskKey]);
+  }, [client.baseUrl, loadAttention, loadSelected, selectedId, selectedStatus, selectedTaskKey]);
+
+  useEffect(() => {
+    if (!selectedId || selectedStatus === "tombstoned" || !selectedTaskKey) return;
+    const stream = new NotificationEventStream({
+      baseUrl: client.baseUrl,
+      onEvent: () => {
+        void loadAttention();
+      },
+      onError: (nextError) => setAttentionError(attentionErrorMessage(nextError)),
+    });
+    stream.open();
+    return () => stream.close();
+  }, [client.baseUrl, loadAttention, selectedId, selectedStatus, selectedTaskKey]);
 
   const createConversation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -473,6 +530,7 @@ export function ChatPage({ client }: { client: ConversationClient }) {
                 <ReferenceGroup label="Tasks" kind="task" ids={selected.task_ids} />
                 <ReferenceGroup label="Runs" kind="run" ids={selected.run_ids} />
                 <ReferenceGroup label="Artifacts" kind="artifact" ids={selected.artifact_ids} />
+                <ReferenceGroup label="Results" kind="result" ids={selected.result_ids} />
                 {selected.project_id && (
                   <div className="chat-context-group">
                     <strong>Project</strong>
@@ -494,6 +552,22 @@ export function ChatPage({ client }: { client: ConversationClient }) {
               {activity.length === 0
                 ? <EmptyState title="No projected activity yet" />
                 : activity.map((item) => <ActivityItem key={item.id} item={item} />)}
+            </div>
+          </section>
+
+          <section className="card">
+            <h2>Approval &amp; input attention</h2>
+            <p className="chat-secondary">
+              Canonical Notifications project approval and agent-input requests for Tasks linked to
+              this Conversation. Approval state remains owned by the platform approval domain.
+            </p>
+            {attentionError && <p className="chat-secondary">{attentionError}</p>}
+            <div className="chat-activity-list" aria-live="polite">
+              {attentionNotifications.length === 0
+                ? <EmptyState title="No approval or input requests" />
+                : attentionNotifications.map((item) => (
+                  <AttentionNotificationItem key={item.id} item={item} />
+                ))}
             </div>
           </section>
 
@@ -624,7 +698,46 @@ export function ActivityItem({ item }: { item: ConversationTaskEvent }) {
         <span className="chat-authoritative">authoritative</span>
       </div>
       <AppLink href={`/tasks/${item.task_id}`}><CanonicalId value={item.task_id} /></AppLink>
+      {item.references.length > 0 && (
+        <div className="chat-reference-chips">
+          {item.references.map((reference) => (
+            <ReferenceChip key={`${item.id}:${reference.kind}:${reference.id}`} reference={reference} />
+          ))}
+        </div>
+      )}
+      {item.attention && (
+        <div role="status">
+          <strong>User input required</strong>
+          {item.attention.reason && <p>{item.attention.reason}</p>}
+          {item.attention.verification_state && (
+            <small>Verification: {item.attention.verification_state}</small>
+          )}
+        </div>
+      )}
       {occurredAt && <small>{formatDate(occurredAt)}</small>}
+    </div>
+  );
+}
+
+export function AttentionNotificationItem({ item }: { item: CanonicalNotification }) {
+  const summary = notificationAttentionSummary(item);
+  return (
+    <div className="chat-activity-item">
+      <div>
+        <strong>{item.title}</strong>
+        <span className="chat-authoritative">canonical {item.category}</span>
+      </div>
+      {item.task_id && (
+        <AppLink href={`/tasks/${item.task_id}`}><CanonicalId value={item.task_id} /></AppLink>
+      )}
+      {item.approval_id && (
+        <AppLink href={`/approvals/${item.approval_id}`}><CanonicalId value={item.approval_id} /></AppLink>
+      )}
+      {summary && <small>{summary}</small>}
+      {item.actions.filter((action) => action.href !== null).map((action) => (
+        <AppLink href={action.href ?? "#"} key={action.action_id}>{action.label}</AppLink>
+      ))}
+      <small>{formatDate(item.updated_at)}</small>
     </div>
   );
 }
@@ -754,6 +867,27 @@ function uniqueReferences(message: CanonicalConversationMessage): ConversationRe
   const unique = new Map<string, ConversationReference>();
   for (const reference of values) unique.set(`${reference.kind}:${reference.id}`, reference);
   return [...unique.values()];
+}
+
+function notificationAttentionSummary(item: CanonicalNotification): string | null {
+  const attention = item.summary.attention;
+  if (typeof attention === "string" && attention.trim()) return attention;
+  const action = item.summary.action;
+  const risk = item.summary.risk;
+  const parts = [
+    typeof action === "string" && action.trim() ? `Action: ${action}` : null,
+    typeof risk === "string" && risk.trim() ? `Risk: ${risk}` : null,
+  ].filter((value): value is string => value !== null);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function attentionErrorMessage(value: unknown): string {
+  if (value instanceof Error) return value.message;
+  if (value && typeof value === "object" && "message" in value) {
+    const message = (value as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  return "Canonical approval/input attention is temporarily unavailable.";
 }
 
 function targetLabel(conversation: CanonicalConversation): string {
