@@ -79,8 +79,7 @@ def test_single_node_wires_runnable_durable_evaluation_api(tmp_path: Path) -> No
         assert all(result["outcome"] == "passed" for result in results)
         snapshot = executed.body["snapshot"]
         identities = {
-            (reference["kind"], reference["ref_id"])
-            for reference in snapshot["references"]
+            (reference["kind"], reference["ref_id"]) for reference in snapshot["references"]
         }
         assert ("evaluation_suite", "single-node.reference.lifecycle") in identities
         assert any(kind == "orchestrator" for kind, _ in identities)
