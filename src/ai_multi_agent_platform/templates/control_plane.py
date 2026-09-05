@@ -28,6 +28,7 @@ from .environment import PlatformTemplateEnvironmentResolver
 from .models import TemplateContent, TemplateProvenance, TemplateTrust
 from .repository import TemplateRepository
 from .service import TemplateEnvironment
+from .target_scope import authorize_template_target_scopes
 
 TEMPLATE_COLLECTION = "templates"
 TEMPLATE_INSTANCE_COLLECTION = "template-instances"
@@ -394,6 +395,16 @@ class TemplateCommandHandlers:
             allow_draft=allow_draft,
             request_payload_digest=payload_digest,
         )
+        await authorize_template_target_scopes(
+            self.application,
+            self.scope_access,
+            context,
+            "template.preview",
+            resource_ref,
+            revision=revision,
+            allow_draft=allow_draft,
+            request_payload_digest=payload_digest,
+        )
         preview = self.application.preview(
             resource_ref,
             applied_by=_actor_owner(context),
@@ -415,6 +426,16 @@ class TemplateCommandHandlers:
         revision = _optional_positive_int(payload, "revision")
         payload_digest = _command_payload_digest(payload)
         await self._authorize_template_graph(
+            context,
+            "template.apply",
+            resource_ref,
+            revision=revision,
+            allow_draft=False,
+            request_payload_digest=payload_digest,
+        )
+        await authorize_template_target_scopes(
+            self.application,
+            self.scope_access,
             context,
             "template.apply",
             resource_ref,
@@ -450,6 +471,16 @@ class TemplateCommandHandlers:
         requested_revision = _optional_positive_int(payload, "revision")
         revision = previous.source.revision if requested_revision is None else requested_revision
         await self._authorize_template_graph(
+            context,
+            "template.reapply",
+            previous.source.template_id,
+            revision=revision,
+            allow_draft=False,
+            request_payload_digest=payload_digest,
+        )
+        await authorize_template_target_scopes(
+            self.application,
+            self.scope_access,
             context,
             "template.reapply",
             previous.source.template_id,
