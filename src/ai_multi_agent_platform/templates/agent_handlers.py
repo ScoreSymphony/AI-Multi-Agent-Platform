@@ -213,7 +213,7 @@ def portable_agent_profile_payload(profile: AgentProfile) -> Mapping[str, Frozen
             ErrorCode.UNSUPPORTED_CAPABILITY,
             "Agent Template export cannot preserve deployment-local Agent references "
             "without declared portable dependencies",
-            details={"fields": unsupported},
+            details={"fields": cast(JsonValue, unsupported)},
         )
 
     payload = dict(_freeze_json_object(json_value(profile), "Agent profile"))
