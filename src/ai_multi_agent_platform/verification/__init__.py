@@ -1,7 +1,11 @@
 """Canonical runtime verification, review and completion-policy subsystem."""
 
 from .audit import VerificationAuditEvent, VerificationAuditEventType
-from .deterministic import DeterministicCheck, ReferenceDeterministicVerifier
+from .deterministic import (
+    DeterministicCheck,
+    DeterministicVerifier,
+    ReferenceDeterministicVerifier,
+)
 from .evidence import (
     CanonicalVerificationRuntime,
     KernelFileVerificationEvidenceResolver,
@@ -49,6 +53,7 @@ __all__ = [
     "CanonicalVerificationRuntime",
     "OutputChangeAwareCompletionAuthority",
     "DeterministicCheck",
+    "DeterministicVerifier",
     "KernelFileVerificationEvidenceResolver",
     "ProducerIdentity",
     "ReferenceDeterministicVerifier",

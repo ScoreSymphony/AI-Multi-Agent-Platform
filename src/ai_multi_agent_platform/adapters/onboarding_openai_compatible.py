@@ -24,10 +24,12 @@ from ai_multi_agent_platform.security import SecretReference
 
 from .openai_compatible import (
     HttpJsonResponse,
-    OpenAICompatibleModelProvider,
     OpenAICompatibleProviderConfig,
     OpenAICompatibleTransport,
-    UrllibOpenAICompatibleTransport,
+)
+from .openai_compatible_streaming import (
+    OpenAICompatibleModelProvider,
+    UrllibOpenAICompatibleStreamingTransport,
 )
 
 OPENAI_COMPATIBLE_ONBOARDING_ADAPTER_ID = "openai-compatible"
@@ -93,7 +95,7 @@ class OpenAICompatibleOnboardingAdapter(OnboardingModelAdapter):
         self.secret_provider = secret_provider
 
     def build_provider(self, endpoint: OnboardingModelEndpoint) -> ModelProvider:
-        transport = self.transport or UrllibOpenAICompatibleTransport()
+        transport = self.transport or UrllibOpenAICompatibleStreamingTransport()
         if endpoint.credential_ref is not None:
             if self.secret_provider is None:
                 raise ContractError(

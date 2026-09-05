@@ -61,7 +61,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 ### Model Context Protocol Python SDK
 
 - **Purpose:** optional concrete MCP transport for stdio subprocess and Streamable HTTP tool providers.
-- **Status:** approved for integration in the #12 completion PR; integrated once that PR is merged.
+- **Status:** integrated through #12.
 - **Integration category/categories:** optional adapter/library dependency.
 - **Canonical upstream repository:** `https://github.com/modelcontextprotocol/python-sdk`.
 - **Pinned version/tag/commit or deployed revision:** `2.1.1`.
@@ -85,7 +85,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 ### LiteLLM
 
 - **Purpose:** optional model-gateway compatibility layer for in-process model calls or a separately deployed OpenAI-compatible proxy, behind the platform-owned `ModelProvider` and `ModelRouter` boundaries.
-- **Status:** approved for integration in #11; integrated once the corresponding PR is merged.
+- **Status:** integrated through #11.
 - **Integration category/categories:** optional adapter/library dependency; optional external service.
 - **Canonical upstream repository:** `https://github.com/BerriAI/litellm`.
 - **Pinned version/tag/commit or deployed revision:** `v1.99.0` / `fa647f742d7baefe8eb1181899d9c81b41559772`.
@@ -110,7 +110,7 @@ The machine-readable starting format is `upstream/PROVENANCE_TEMPLATE.yaml`.
 ### NousResearch Hermes Agent
 
 - **Purpose:** optional production-oriented orchestration/planning runtime behind the platform-owned `Orchestrator` and `AgentOrchestratorMapper` boundaries.
-- **Status:** approved for integration in #8; integrated once the corresponding PR is merged.
+- **Status:** integrated through #8.
 - **Integration category/categories:** optional external service; orchestrator adapter integration.
 - **Canonical upstream repository:** `https://github.com/NousResearch/hermes-agent`.
 - **Pinned version/tag/commit or deployed revision:** `63279301bcbdc185c1b07b98a9312eb0c862f26d`.
@@ -169,9 +169,10 @@ These packages are third-party software already declared by `pyproject.toml`. Pa
 | jsonschema | runtime capability schema validation | `==4.26.0` | `https://github.com/python-jsonschema/jsonschema` | MIT | yes; integrated for #12 |
 | mcp | optional MCP transport + CI integration coverage | `==2.1.1` | `https://github.com/modelcontextprotocol/python-sdk` | MIT | yes; optional adapter recorded above |
 | litellm | optional model gateway SDK / proxy compatibility target | `==1.99.0` | `https://github.com/BerriAI/litellm` | MIT outside `enterprise/`; `enterprise/` separately licensed | yes; optional adapter recorded above |
-| pytest | test runner | `>=8.3,<9` | `https://github.com/pytest-dev/pytest` | MIT | no |
+| uvicorn | optional ASGI server for HTTP API | `>=0.35,<1` | `https://github.com/encode/uvicorn` | BSD-3-Clause | no |
+| pytest | test runner | `>=8.3,<10` | `https://github.com/pytest-dev/pytest` | MIT | no |
 | ruff | linting | `>=0.12,<1` | `https://github.com/astral-sh/ruff` | MIT | no |
-| mypy | static type checking | `>=1.17,<2` | `https://github.com/python/mypy` | MIT | no |
+| mypy | static type checking | `>=1.17,<3` | `https://github.com/python/mypy` | MIT | no |
 
 The manifest currently uses version constraints rather than a repository lockfile for most packages, so exact resolved tool versions are environment-dependent. Architecture-significant #11/#12 dependencies are pinned directly; their transitive packages still resolve from upstream metadata until a repository-wide lock/reproducible-build policy is introduced.
 
