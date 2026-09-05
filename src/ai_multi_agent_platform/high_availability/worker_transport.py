@@ -80,13 +80,9 @@ class FencedTransportWorkerDispatcher(TransportWorkerDispatcher):
         grant = await self._authority_check()
         token = _require_ha_token(grant)
         if grant.instance_id != self._control_plane_instance_id:
-            raise StaleFencingToken(
-                "authority grant belongs to a different Control Plane instance"
-            )
+            raise StaleFencingToken("authority grant belongs to a different Control Plane instance")
         if token.instance_id != self._control_plane_instance_id:
-            raise StaleFencingToken(
-                "fencing token belongs to a different Control Plane instance"
-            )
+            raise StaleFencingToken("fencing token belongs to a different Control Plane instance")
         return _encode_fencing_token(token)
 
 
