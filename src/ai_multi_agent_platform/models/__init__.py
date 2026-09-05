@@ -18,6 +18,7 @@ from .protocol import (
 )
 from .registry import ModelRegistry
 from .router import DeterministicModelRouter
+from .routing_profile_assignment import ModelRoutingProfileAssignmentGate
 from .routing_profile_repository import (
     ROUTING_PROFILE_STORE_SCHEMA_VERSION,
     JsonModelRoutingProfileRepository,
@@ -63,6 +64,7 @@ __all__ = [
     "ModelRegistry",
     "ModelRole",
     "ModelRoute",
+    "ModelRoutingProfileAssignmentGate",
     "ModelRoutingProfileDefinition",
     "ModelRoutingProfilePolicy",
     "ModelRoutingProfileRef",
