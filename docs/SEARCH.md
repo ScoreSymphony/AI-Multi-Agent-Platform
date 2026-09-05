@@ -111,6 +111,7 @@ The current progressive path supports, when those domain services are registered
 - Usage Budgets;
 - Evaluation Suites;
 - Evaluation Runs;
+- Verification Policies, Requests and Results;
 - Connector Definitions;
 - privacy-safe Connections;
 - other future registered canonical collections that satisfy the same contract.
@@ -401,7 +402,6 @@ Remaining progressive work is intentionally gated on the owning canonical APIs a
 - Notifications where useful after the currently reopened #75 is stable;
 - Templates (#78);
 - Repository/Git and durable external-resource references (#82/#44);
-- Verification Requests/Results/Policies after the currently reopened #86 is stable;
 - Organizations/Memberships with membership-removal/suspension isolation (#87);
 - Organization-scoped Connector Connections after #87 visibility semantics are available;
 - durable/event-driven indexing, batching and stale-index checkpoints for larger deployments as an optimization over the correctness-first rebuild path;
