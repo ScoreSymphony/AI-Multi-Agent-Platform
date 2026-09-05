@@ -100,7 +100,9 @@ class ConversationResponseRequest:
             raise ValueError("conversation response source message must be the latest history item")
         if self.operation is not None:
             if self.operation.correlation_id != self.correlation_id:
-                raise ValueError("conversation response operation correlation_id must match request")
+                raise ValueError(
+                    "conversation response operation correlation_id must match request"
+                )
             if self.operation.project_id != self.project_id:
                 raise ValueError("conversation response operation project_id must match request")
 
