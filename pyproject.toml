@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-platform = "ai_multi_agent_platform.cli.issue_214:main"
+platform = "ai_multi_agent_platform.cli.issue_82:main"
 platform-completion = "ai_multi_agent_platform.cli.completion:main"
 platform-server = "ai_multi_agent_platform.adapters.single_node_app:main"
 platform-backup = "ai_multi_agent_platform.backup.cli:main"
