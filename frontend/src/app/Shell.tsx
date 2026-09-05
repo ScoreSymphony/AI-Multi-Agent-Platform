@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ApprovalClient } from "../api/approvals";
 import { AutomationClient } from "../api/automations";
 import { BrowserSessionClient } from "../api/browserSession";
 import { ControlPlaneClient } from "../api/client";
@@ -19,6 +20,7 @@ import type { APImanifest } from "../api/types";
 import { OnboardingCallout } from "../components/OnboardingCallout";
 import { LoadingState } from "../components/States";
 import { PermissionHintsProvider } from "../security/permissions";
+import { approvalDecisionManifestState } from "./approvalManifest";
 import { navigation } from "./navigation";
 import { AppLink, matchPath, useRouter } from "./router";
 import { templateManifestState } from "./templateManifest";
@@ -109,6 +111,10 @@ export function Shell() {
   );
   const collections = useMemo(
     () => new ControlPlaneCollectionClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const approvalClient = useMemo(
+    () => new ApprovalClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const conversationClient = useMemo(
@@ -202,6 +208,7 @@ export function Shell() {
   const referenceMatch = referenceRoute(path);
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
+  const approvalDecisionState = approvalDecisionManifestState(manifestState, manifest);
   const onboardingAvailable = manifest?.resources.includes("onboarding") ?? false;
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
@@ -532,13 +539,17 @@ export function Shell() {
   } else if (path === "/approvals") {
     content = (
       <ManifestResourcePage state={manifestState} manifest={manifest} label="Approvals" resource="approvals">
-        <ApprovalsPage client={collections} />
+        <ApprovalsPage client={approvalClient} decisionState={approvalDecisionState} />
       </ManifestResourcePage>
     );
   } else if (approvalMatch) {
     content = (
       <ManifestResourcePage state={manifestState} manifest={manifest} label="Approvals" resource="approvals">
-        <ApprovalDetailPage client={collections} approvalId={approvalMatch.approvalId} />
+        <ApprovalDetailPage
+          client={approvalClient}
+          approvalId={approvalMatch.approvalId}
+          decisionState={approvalDecisionState}
+        />
       </ManifestResourcePage>
     );
   } else if (path === "/notifications") {
