@@ -72,7 +72,8 @@ The hardening regression suite covers:
 - exact Result subjects derived from canonical terminal Run output;
 - exact file-backed Artifact subjects and checksum tamper detection;
 - Control Plane rejection of a forged subject and unknown Evidence Artifact;
-- real single-node Task completion blocking, human acceptance and durable restart recovery.
+- real single-node Task completion blocking, human acceptance and durable restart recovery;
+- fail-closed Result/Artifact output mutation when Verification invalidation fails before the kernel commit.
 
 ## Authority-integrity hardening
 
@@ -93,6 +94,8 @@ Because Verification is a cross-cutting completion authority, a green feature-br
 The production-shaped Verification service now requires both canonical request subjects and canonical result submissions. `CanonicalVerificationRuntime.submit_result()` re-resolves the current Result/Artifact subject and validates every evidence Artifact immediately before the immutable `VerificationResult` is recorded. A review that started on revision V1 therefore cannot certify V1 after canonical output has advanced to V2, and direct raw `submit_result()` calls fail closed in strict mode.
 
 Kernel `result.attached` and `artifact.attached` mutations notify completion authorities that opt into the output-change hook. Verification responds by clearing only the current Task→subject completion binding; historical requests/results remain immutable. A new exact subject must be canonically requested before Task completion can become accepted again.
+
+Output invalidation is ordered before the canonical `result.attached` / `artifact.attached` commit. If Verification invalidation cannot be completed, the changed output is not committed and the previously verified output remains canonical. If the kernel commit fails after a successful invalidation, the system instead fails closed: the old binding stays cleared and the unchanged output must be reverified rather than allowing an unverified output to inherit an older PASS.
 
 `VerificationPolicy.risk_classification` uses the existing #15 `RiskClassification` vocabulary. `ReviewerIndependence.forbid_self_verification_risk_classes` can forbid self-verification only for selected policy risk classes while preserving lower-risk policy behavior.
 
