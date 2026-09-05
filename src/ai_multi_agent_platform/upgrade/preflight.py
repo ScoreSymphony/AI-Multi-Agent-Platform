@@ -20,7 +20,7 @@ from .compatibility import (
     plugin_compatibility_checks,
 )
 from .migrations import JsonMigrationHistoryStore, MigrationError, MigrationRegistry
-from .models import CheckSeverity, PreflightCheck, PreflightReport, VersionSnapshot
+from .models import CheckSeverity, MigrationStatus, PreflightCheck, PreflightReport, VersionSnapshot
 
 SUPPORTED_HISTORICAL_EVENT_SCHEMA_VERSIONS = frozenset({"1.0", "2.0"})
 BackupVerifier = Callable[[Path], BackupVerification]
@@ -87,20 +87,32 @@ class UpgradePreflight:
         checks.extend(_version_checks(request.current, request.target))
         checks.extend(_storage_checks(request.data_dir, request.minimum_free_bytes))
 
-        failed = self.history.unresolved_failure()
-        if failed is not None:
-            matching = next((step for step in steps if step.revision == failed.revision), None)
+        unresolved = self.history.unresolved()
+        if unresolved is not None:
+            matching = next((step for step in steps if step.revision == unresolved.revision), None)
             resumable = request.resume_failed and matching is not None and matching.restart_safe
+            state_name = (
+                "interrupted"
+                if unresolved.status is MigrationStatus.STARTED
+                else "failed"
+            )
             checks.append(
                 PreflightCheck(
-                    code="migration.failed.resumable" if resumable else "migration.failed.unresolved",
+                    code=(
+                        f"migration.{state_name}.resumable"
+                        if resumable
+                        else f"migration.{state_name}.unresolved"
+                    ),
                     severity=CheckSeverity.WARNING if resumable else CheckSeverity.ERROR,
                     message=(
-                        f"failed migration {failed.revision} will be explicitly resumed"
+                        f"{state_name} migration {unresolved.revision} will be explicitly resumed"
                         if resumable
-                        else f"unresolved failed migration {failed.revision} blocks upgrade"
+                        else f"unresolved {state_name} migration {unresolved.revision} blocks upgrade"
                     ),
-                    details={"error": failed.error},
+                    details={
+                        "status": unresolved.status.value,
+                        "error": unresolved.error,
+                    },
                 )
             )
 
