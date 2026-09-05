@@ -21,9 +21,9 @@ describe("Approval decision manifest gating", () => {
   });
 
   it("keeps read-only Approval inspection when decision commands are absent", () => {
-    expect(approvalDecisionManifestState("ready", manifest(["approvals"], undefined))).toBe(
-      "unavailable",
-    );
+    expect(
+      approvalDecisionManifestState("ready", { ...manifest(), commands: undefined }),
+    ).toBe("unavailable");
     expect(
       approvalDecisionManifestState("ready", manifest(["approvals"], ["approval.approve"])),
     ).toBe("unavailable");
