@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 from typing import Literal, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -29,12 +29,15 @@ NetworkScope = Literal["loopback", "private", "public"]
 
 _FORBIDDEN_SECRET_KEYS = frozenset(
     {
+        "access_token",
         "api_key",
         "apikey",
+        "bearer_token",
         "credential",
         "credential_value",
         "password",
         "private_key",
+        "secret",
         "secret_value",
         "token",
     }
@@ -67,7 +70,7 @@ class WorkerHostBinding:
     host_ref: str
     connection_mode: ConnectionMode
     transport_endpoint_ref: str
-    workspace_root: Path
+    workspace_root: PurePath
     tls_required: bool
     credential_reference: SecretReference | None = None
 
@@ -87,7 +90,7 @@ class WorkerHostBinding:
                 "remote deployment bindings must require authenticated TLS transport"
             )
 
-    def workspace_path(self, workspace_id: str) -> Path:
+    def workspace_path(self, workspace_id: str) -> PurePath:
         """Map one canonical Workspace ID to a deterministic machine-local path."""
 
         validate_id(workspace_id, "workspace")
@@ -127,7 +130,9 @@ class DeploymentNode:
 
     def __post_init__(self) -> None:
         if not self.workers:
-            raise AdvancedDeploymentProfileError("deployment node must declare at least one Worker")
+            raise AdvancedDeploymentProfileError(
+                "deployment node must declare at least one Worker"
+            )
         worker_ids = {worker.worker_id for worker in self.workers}
         if len(worker_ids) != len(self.workers):
             raise AdvancedDeploymentProfileError("deployment node contains duplicate Worker IDs")
@@ -296,7 +301,9 @@ def _parse_host_binding(value: object) -> WorkerHostBinding:
         transport_endpoint_ref=_string(
             data.get("transport_endpoint_ref"), "deployment.transport_endpoint_ref"
         ),
-        workspace_root=Path(_string(data.get("workspace_root"), "deployment.workspace_root")),
+        workspace_root=_portable_absolute_path(
+            _string(data.get("workspace_root"), "deployment.workspace_root")
+        ),
         tls_required=_boolean(data.get("tls_required"), "deployment.tls_required"),
         credential_reference=credential,
     )
@@ -450,6 +457,18 @@ def _parse_optional_service(value: object) -> OptionalServiceBinding:
             data.get("network_scope", "private"), "optional_service.network_scope"
         ),
         endpoint_ref=_optional_string(data.get("endpoint_ref"), "optional_service.endpoint_ref"),
+    )
+
+
+def _portable_absolute_path(value: str) -> PurePath:
+    posix = PurePosixPath(value)
+    if posix.is_absolute():
+        return posix
+    windows = PureWindowsPath(value)
+    if windows.is_absolute():
+        return windows
+    raise AdvancedDeploymentProfileError(
+        "deployment workspace_root must be an absolute POSIX or Windows path"
     )
 
 
