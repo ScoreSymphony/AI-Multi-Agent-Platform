@@ -185,11 +185,6 @@ class ModelRuntimeConversationResponseProvider:
         if preference is not None and (
             preference.model_config_id is not None or preference.routing_requirements
         ):
-            if not agent_policy.allow_task_override:
-                raise ContractError(
-                    ErrorCode.FORBIDDEN,
-                    "conversation model override is not permitted by this Agent revision",
-                )
             requirements = _merge_requirements(
                 requirements,
                 _preference_requirements(
