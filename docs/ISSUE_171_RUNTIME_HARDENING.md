@@ -14,6 +14,8 @@ This hardening pass keeps #76 as the sole accounting authority and adds direct r
 - Workspace archive/latest-snapshot/deletion current-gauge semantics;
 - the current Control Plane automatically exposing canonical #76 usage resources when an `accounting_service` is configured and replacing only the read projection with #87 membership-aware visibility when an `organization_service` is also configured.
 
+The Control Plane consumes both accounting resource factories through the shared read-only `Mapping[str, ResourceService]` boundary. This keeps the base and Organization-aware projections substitutable without changing either factory's concrete return type.
+
 The same `AccountingService` instance continues through the existing #75 source composition for threshold attention. The Organization layer does not create another store, budget model, event stream or accounting authority.
 
 Single-node deployment activation of Accounting and Organization services is intentionally not introduced here: the deployment currently constructs neither service. #171 supplies and verifies the canonical combined Control Plane seam without silently changing which optional domains the deployment enables.
