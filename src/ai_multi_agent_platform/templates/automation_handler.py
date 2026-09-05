@@ -98,7 +98,7 @@ class AutomationTemplateHandler:
 
 @dataclass(slots=True)
 class AutomationTemplateExporter:
-    """Snapshot reusable Automation configuration without exporting runtime state or identity."""
+    """Snapshot reusable Automation configuration without runtime state, identity or source scope."""
 
     automations: AutomationService
     templates: TemplateService
@@ -112,21 +112,12 @@ class AutomationTemplateExporter:
         name: str | None = None,
     ) -> TemplateRevision:
         source = await self.automations.get_automation(automation_id)
-        workspace_prerequisites = tuple(
-            dict.fromkeys(
-                value
-                for value in (source.workspace_id, source.task_template.workspace_id)
-                if value is not None
-            )
-        )
         content = TemplateContent(
             name=name or source.name,
             description=f"Template exported from Automation {source.id}@{source.revision}",
             template_type=TemplateType.AUTOMATION,
             configuration=TemplateConfiguration(payload=_export_configuration(source)),
-            requirements=TemplateRequirements(
-                workspace_prerequisites=workspace_prerequisites,
-            ),
+            requirements=TemplateRequirements(),
             provenance=TemplateProvenance(
                 author=author,
                 source="canonical-automation-export",
@@ -135,6 +126,10 @@ class AutomationTemplateExporter:
                     "source_resource_type": "automation",
                     "source_resource_id": source.id,
                     "source_resource_revision": source.revision,
+                    "source_project_id": source.project_id,
+                    "source_workspace_id": source.workspace_id,
+                    "source_task_project_id": source.task_template.project_id,
+                    "source_task_workspace_id": source.task_template.workspace_id,
                 },
             ),
             tags=("automation", "exported"),
@@ -142,7 +137,6 @@ class AutomationTemplateExporter:
         return self.templates.create_draft(
             owner_ref=owner_ref,
             content=content,
-            project_id=source.project_id,
         )
 
 
@@ -257,8 +251,8 @@ def _export_configuration(source: Automation) -> Mapping[str, FrozenJsonValue]:
     task_template: dict[str, FrozenJsonValue] = {
         "title": source.task_template.title,
         "objective": source.task_template.objective,
-        "project_id": source.task_template.project_id,
-        "workspace_id": source.task_template.workspace_id,
+        "project_id": None,
+        "workspace_id": None,
         "payload": _freeze_json(source.task_template.payload),
     }
     return {
@@ -266,8 +260,8 @@ def _export_configuration(source: Automation) -> Mapping[str, FrozenJsonValue]:
         "description": source.description,
         "trigger": trigger,
         "task_template": task_template,
-        "project_id": source.project_id,
-        "workspace_id": source.workspace_id,
+        "project_id": None,
+        "workspace_id": None,
         "deduplication_strategy": source.deduplication_strategy,
         "retry_policy": {
             "max_attempts": source.retry_policy.max_attempts,
