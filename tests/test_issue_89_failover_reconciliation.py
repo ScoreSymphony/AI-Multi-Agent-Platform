@@ -203,9 +203,10 @@ def test_restart_promotion_reconciles_running_work_and_preserves_worker_identity
             record for record in observed if record.job.worker_job_id == job.worker_job_id
         )
         assert running.state is DispatchState.RUNNING
-        assert registry.active_reservations()
+        active_reservations = registry.active_reservations()
+        assert len(active_reservations) == 1
 
-        clock = MutableClock(NOW + RESERVATION_TTL + timedelta(milliseconds=1))
+        clock = MutableClock(active_reservations[0].expires_at + timedelta(milliseconds=1))
         restored_registry = DistributedRegistry(
             heartbeat_timeout=timedelta(minutes=1),
             reservation_ttl=RESERVATION_TTL,
