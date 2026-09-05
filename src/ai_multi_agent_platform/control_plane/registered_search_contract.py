@@ -64,6 +64,17 @@ class _SearchResourceEnumerator(Protocol):
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]: ...
 
 
+@runtime_checkable
+class _SearchResultAuthorizer(Protocol):
+    """Optional domain authorization seam for one indexed registered resource."""
+
+    async def search_result_allowed(
+        self,
+        context: RequestContext,
+        resource_id: str,
+    ) -> bool: ...
+
+
 class ControlPlane(_BaseSearchControlPlane):
     """Search foundation plus progressive discovery of canonical platform resources.
 
@@ -295,14 +306,19 @@ class ControlPlane(_BaseSearchControlPlane):
         if extension is None:
             return False
         collection, action = extension
-        return await self._allowed(
+        if not await self._allowed(
             context,
             action,
             collection,
             owner_type=result.owner_type,
             owner_id=result.owner_id,
             project_id=result.project_id,
-        )
+        ):
+            return False
+        service = self._registered_resource_service(collection)
+        if isinstance(service, _SearchResultAuthorizer):
+            return await service.search_result_allowed(context, result.resource_id)
+        return True
 
 
 def _collect_reference_search_state(
