@@ -102,6 +102,20 @@ class MemoryProvider(CoreMemoryProvider):
         context: DataAccessContext,
     ) -> tuple[MemoryEntry, ...]: ...
 
+    async def list_entries_for_discovery(self) -> tuple[MemoryEntry, ...]:
+        """Enumerate current canonical Memory entries for derived discovery rebuilds.
+
+        This is an internal, actor-independent snapshot seam for consumers such as
+        global Search. It is not a retrieval/ranking API and must never expose
+        provider-private index/vector identity. Providers that predate #290 degrade
+        explicitly until they implement canonical discovery enumeration.
+        """
+
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "memory provider does not support canonical discovery enumeration",
+        )
+
     @abstractmethod
     async def supersede_entry(
         self,
@@ -177,6 +191,27 @@ class KnowledgeProvider(CoreKnowledgeProvider):
         raise ContractError(
             ErrorCode.UNSUPPORTED_CAPABILITY,
             "knowledge provider does not support canonical source discovery",
+        )
+
+    async def list_sources_for_discovery(self) -> tuple[KnowledgeSource, ...]:
+        """Enumerate canonical source metadata for actor-independent derived indexes."""
+
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "knowledge provider does not support canonical discovery enumeration",
+        )
+
+    async def list_documents_for_discovery(self) -> tuple[KnowledgeDocument, ...]:
+        """Enumerate canonical Knowledge documents for metadata-only discovery.
+
+        Callers must derive privacy-safe projections and authorize results against the
+        owning KnowledgeSource. Provider-private index IDs, embeddings and vector state
+        are deliberately outside this contract.
+        """
+
+        raise ContractError(
+            ErrorCode.UNSUPPORTED_CAPABILITY,
+            "knowledge provider does not support canonical document discovery",
         )
 
     async def update_source(
