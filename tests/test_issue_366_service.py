@@ -6,12 +6,12 @@ from dataclasses import dataclass
 import pytest
 
 from ai_multi_agent_platform.capabilities import (
+    ECHO_CAPABILITY_ID,
     CapabilityRegistration,
     CapabilityRegistry,
     CapabilitySpec,
     CapabilityToolProvider,
     CredentialRequirement,
-    ECHO_CAPABILITY_ID,
     NativeEchoProvider,
     SafetyClassification,
 )
