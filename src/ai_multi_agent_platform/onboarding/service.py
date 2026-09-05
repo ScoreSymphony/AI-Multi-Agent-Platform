@@ -618,9 +618,15 @@ class OnboardingService:
                 "remain",
                 details={
                     "selection_kind": selection_kind,
-                    "candidate_project_ids": sorted({path.project_id for path in executable}),
-                    "candidate_workspace_ids": sorted({path.workspace_id for path in executable}),
-                    "candidate_agent_ids": sorted({path.agent_id for path in executable}),
+                    "candidate_project_ids": cast(
+                        JsonValue, sorted({path.project_id for path in executable})
+                    ),
+                    "candidate_workspace_ids": cast(
+                        JsonValue, sorted({path.workspace_id for path in executable})
+                    ),
+                    "candidate_agent_ids": cast(
+                        JsonValue, sorted({path.agent_id for path in executable})
+                    ),
                 },
             )
 
