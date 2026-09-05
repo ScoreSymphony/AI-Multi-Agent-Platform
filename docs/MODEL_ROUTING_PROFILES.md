@@ -23,7 +23,7 @@ A profile has a stable canonical ID with the prefix `model_routing_profile_`. Ea
 model_routing_profile_<uuid>@r3
 ```
 
-`ModelRoutingProfileRef.parse()` and `.canonical_ref` are the platform-owned representation of that reference. Agents, Tasks, Templates and later portability packages should persist exact revision references when they need reproducible policy behavior rather than a mutable "latest" pointer.
+`ModelRoutingProfileRef.parse()` and `.canonical_ref` are the platform-owned representation of that reference. Agents, Tasks, Templates and portability packages should persist exact revision references when they need reproducible policy behavior rather than a mutable "latest" pointer.
 
 The stable definition owns:
 
@@ -72,7 +72,9 @@ The router's `route_profile()` method consumes one exact `ModelRoutingProfileRev
 
 `JsonModelRoutingProfileRepository` is the dependency-free reference persistence implementation. It stores stable definitions and complete contiguous revision history, writes atomically and restores the same exact revision references after restart. Duplicate IDs, skipped/duplicate revisions and identity/scope mismatches fail canonically.
 
-Disabling a profile changes lifecycle state on the stable definition; it does not rewrite historical revisions. Management callers can require an enabled definition before resolving a revision for execution.
+Disabling a profile changes lifecycle state on the stable definition; it does not rewrite historical revisions. `delete_profile()` exists as a repository compensation seam for rollback-safe portability import and is not the normal lifecycle operation.
+
+`ModelRoutingProfileResolver` resolves an exact canonical revision, rejects mutable/non-canonical reference strings, requires the stable definition to be enabled and enforces Project scope before returning the immutable revision.
 
 ## Authorization and scope
 
@@ -80,13 +82,35 @@ Disabling a profile changes lifecycle state on the stable definition; it does no
 
 The repository itself does not make authorization decisions. This keeps storage reusable while ensuring application-facing lifecycle operations go through the existing authorization boundary.
 
-## Relationship to Agents, Templates and portability
+## Runtime consumption
+
+The standard single-node composition uses `DurableRoutingProfileAgentRuntime` and `DurableRoutingProfileConversationResponseProvider`. Both resolve the exact profile revision from the durable repository and then delegate selection to the existing `DeterministicModelRouter`.
+
+The older `Mapping[str, RoutingRequirements]` seam in the base Issue #33/#72 runtime remains available only as a compatibility surface for existing embeddings and tests. It is not the source of truth in the standard deployment.
+
+For an Agent with an exact `routing_profile_ref`, profile requirements are merged with Agent requirements and any allowed task-level override. The resulting effective constraints are applied to the same immutable profile revision, preserving that revision's ordered model preferences and fallback semantics.
+
+## Portability through #79
+
+Issue #79 consumes the #309 domain rather than defining another routing-policy resource.
+
+`ModelRoutingProfilePortableSnapshot` carries the stable definition plus the complete immutable revision history. `ModelRoutingProfilePortableCodec`:
+
+- uses resource type `model_routing_profile`;
+- reports the optional Project scope and all referenced canonical model configurations as dependencies;
+- preserves or remaps the stable profile ID according to the existing #79 import context;
+- remaps Project and canonical model references deterministically;
+- excludes provider-native identifiers, endpoint data, provider/node health, credentials and gateway-private state.
+
+`ModelRoutingProfileImportMutationHandler` replays the complete history through the canonical repository. A failed partial replay is compensated by removing the just-created profile, and the normal #79 import executor can also roll the resource back if a later package resource fails.
+
+The standard single-node portability workflow registers this codec and import handler whenever the routing-profile repository is available.
+
+## Relationship to Templates
 
 Existing Agent model policy contains `routing_profile_ref`; an exact `ModelRoutingProfileRef.canonical_ref` is the canonical value to place there when reproducibility is required. Templates can carry the same reference without becoming the profile source of truth.
 
-Issue #79 remains responsible for portability codecs, dependency analysis, ID preserve/regenerate behavior, remapping and dry-run conflict reporting. It should serialize/import this canonical resource rather than defining a second routing-policy domain.
-
-Issue #78 may package references to these profiles inside Templates, but Template persistence does not own profile identity or revision history.
+The standard Template environment advertises enabled routing profiles as exact current-revision references. Issue #78 can therefore validate Template model-policy requirements against canonical #309 inventory rather than model configuration IDs or gateway-private policy names.
 
 ## Example
 
