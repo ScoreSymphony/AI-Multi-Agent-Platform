@@ -49,6 +49,7 @@ class _FakeForgeConnector(ConnectorProvider):
                 "repository.read_tree",
                 "repository.branches",
                 "repository.tags",
+                "repository.commits",
                 "repository.status",
             ),
         )
@@ -113,6 +114,19 @@ class _FakeForgeConnector(ConnectorProvider):
             resources = ()
         elif invocation.action == "repository.tags":
             output = {"tags": ["v1.0.0"]}
+            resources = ()
+        elif invocation.action == "repository.commits":
+            assert invocation.arguments["revision"] == "main"
+            assert invocation.arguments["limit"] == 5
+            output = {
+                "commits": [
+                    {
+                        "revision": _SHA,
+                        "message": "initial",
+                        "parent_revisions": [],
+                    }
+                ]
+            }
             resources = ()
         elif invocation.action == "repository.status":
             output = {
@@ -209,6 +223,7 @@ def test_connector_repository_provider_is_provider_neutral_and_fail_closed() -> 
         assert repository.visibility.value == "private"
         assert repository.resolved_revision == _SHA
         assert provider.descriptor.provider_type == "repository"
+        assert any(capability.operation.value == "repository.inspect_refs" for capability in repository.capabilities)
 
         resolved = await provider.resolve_revision(repository, "main", context)
         assert resolved.requested_ref == "main"
@@ -221,6 +236,11 @@ def test_connector_repository_provider_is_provider_neutral_and_fail_closed() -> 
         assert tree.entries[0].data == b"# repository\n"
         assert await provider.branches(repository, context) == ("main", "feature/test")
         assert await provider.tags(repository, context) == ("v1.0.0",)
+        commits = await provider.commits(repository, context, revision="main", limit=5)
+        assert len(commits) == 1
+        assert commits[0].revision == _SHA
+        assert commits[0].message == "initial"
+        assert commits[0].parent_revisions == ()
         assert (await provider.status(repository, context)).clean
 
         with pytest.raises(ContractError) as exc_info:
