@@ -1,0 +1,99 @@
+name: issue-79-template-finalize
+
+on:
+  push:
+    branches:
+      - feat/issue-79-portability-final
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Complete Template portability wiring
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              if old not in text:
+                  raise SystemExit(f"missing anchor in {path}: {old!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace(
+              "src/ai_multi_agent_platform/portability/template_codecs.py",
+              "from ai_multi_agent_platform.templates import (\n    TemplateCompatibility,\n    TemplateContent,\n    TemplateDefinition,\n    TemplateDependency,\n    TemplateProvenance,\n    TemplateRepository,\n    TemplateRequirements,\n    TemplateRevision,\n    TemplateRevisionRef,\n    TemplateRevisionState,\n    TemplateTrust,\n    template_content_from_json,\n    template_content_to_json,\n    validate_template_configuration,\n)\n",
+              "from ai_multi_agent_platform.templates import (\n    TemplateContent,\n    TemplateDefinition,\n    TemplateRepository,\n    TemplateRevision,\n    TemplateRevisionState,\n    validate_template_configuration,\n)\nfrom ai_multi_agent_platform.templates.codec import (\n    template_content_from_json,\n    template_content_to_json,\n)\n",
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/templates/persistence.py",
+              "    def record_instantiation(self, instantiation: TemplateInstantiation) -> None:\n        super().record_instantiation(instantiation)\n        self._save()\n\n    def _save(self) -> None:",
+              "    def record_instantiation(self, instantiation: TemplateInstantiation) -> None:\n        super().record_instantiation(instantiation)\n        self._save()\n\n    def delete_template(self, template_id: str) -> None:\n        super().delete_template(template_id)\n        self._save()\n\n    def _save(self) -> None:",
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/portability/__init__.py",
+              "from .schema import PORTABLE_PACKAGE_SCHEMA_V1, validate_package_document\nfrom .validation import find_runtime_private_path, validate_portable_payload",
+              "from .schema import PORTABLE_PACKAGE_SCHEMA_V1, validate_package_document\nfrom .template_codecs import (\n    TEMPLATE_PORTABLE_SCHEMA_VERSION,\n    TEMPLATE_RESOURCE_TYPE,\n    TemplatePortableCodec,\n    TemplatePortableSnapshot,\n    register_template_portability_codec,\n    snapshot_template,\n)\nfrom .template_import import TemplateImportMutationHandler\nfrom .validation import find_runtime_private_path, validate_portable_payload",
+          )
+          replace(
+              "src/ai_multi_agent_platform/portability/__init__.py",
+              '    "TASK_HISTORY_RESOURCE_TYPE",\n    "AgentImportMutationHandler",',
+              '    "TASK_HISTORY_RESOURCE_TYPE",\n    "TEMPLATE_PORTABLE_SCHEMA_VERSION",\n    "TEMPLATE_RESOURCE_TYPE",\n    "AgentImportMutationHandler",',
+          )
+          replace(
+              "src/ai_multi_agent_platform/portability/__init__.py",
+              '    "TaskHistoryImportMutationHandler",\n    "TaskHistoryPortableCodec",',
+              '    "TaskHistoryImportMutationHandler",\n    "TaskHistoryPortableCodec",\n    "TemplateImportMutationHandler",\n    "TemplatePortableCodec",\n    "TemplatePortableSnapshot",',
+          )
+          replace(
+              "src/ai_multi_agent_platform/portability/__init__.py",
+              '    "register_task_history_portability_codec",\n    "resource_dependency",',
+              '    "register_task_history_portability_codec",\n    "register_template_portability_codec",\n    "resource_dependency",',
+          )
+          replace(
+              "src/ai_multi_agent_platform/portability/__init__.py",
+              '    "snapshot_task_history",\n    "validate_package_document",',
+              '    "snapshot_task_history",\n    "snapshot_template",\n    "validate_package_document",',
+          )
+
+          replace(
+              "tests/test_issue_79_single_node_portability.py",
+              'def test_single_node_composes_canonical_agent_portability(tmp_path: Path) -> None:',
+              'def test_single_node_composes_canonical_portability(tmp_path: Path) -> None:',
+          )
+          replace(
+              "tests/test_issue_79_single_node_portability.py",
+              '    assert workflow.export_resource_types == ("agent", "agent_team")',
+              '    assert workflow.export_resource_types == ("agent", "agent_team", "template")',
+          )
+          PY
+      - name: Install development dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Format and lint
+        run: |
+          ruff format src/ai_multi_agent_platform/portability src/ai_multi_agent_platform/templates/repository.py src/ai_multi_agent_platform/templates/persistence.py tests/test_issue_79_template_portability.py tests/test_issue_79_single_node_portability.py
+          ruff check --fix src/ai_multi_agent_platform/portability src/ai_multi_agent_platform/templates/repository.py src/ai_multi_agent_platform/templates/persistence.py tests/test_issue_79_template_portability.py tests/test_issue_79_single_node_portability.py
+      - name: Typecheck portability slice
+        run: mypy src/ai_multi_agent_platform/portability src/ai_multi_agent_platform/templates/repository.py src/ai_multi_agent_platform/templates/persistence.py
+      - name: Test portability slice
+        run: pytest -q tests/test_issue_79_template_portability.py tests/test_issue_79_single_node_portability.py tests/test_issue_79_control_plane_portability.py tests/test_issue_79_cli_portability.py
+      - name: Commit finalized Template portability and remove helper
+        run: |
+          git rm .github/workflows/issue-79-template-finalize.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src tests
+          git commit -m "feat(portability): add canonical Template migration"
+          git push origin HEAD:feat/issue-79-portability-final
