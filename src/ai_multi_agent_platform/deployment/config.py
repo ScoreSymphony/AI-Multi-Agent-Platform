@@ -81,6 +81,12 @@ class SingleNodeConfig:
         return self.data_dir / "workspaces"
 
     @property
+    def repositories_dir(self) -> Path:
+        """Adapter-private storage for managed local repository working trees."""
+
+        return self.data_dir / "repositories"
+
+    @property
     def executor_dir(self) -> Path:
         return self.data_dir / "executor"
 
@@ -90,6 +96,7 @@ class SingleNodeConfig:
             self.database_dir,
             self.files_dir,
             self.workspaces_dir,
+            self.repositories_dir,
             self.executor_dir,
         ):
             try:
