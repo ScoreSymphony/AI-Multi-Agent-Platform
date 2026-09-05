@@ -13,6 +13,7 @@ from ai_multi_agent_platform.agents import (
     register_agent_control_plane,
     register_standard_agent_control_plane,
 )
+from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
@@ -64,6 +65,7 @@ from ai_multi_agent_platform.templates import (
     AutomationTemplateExporter,
     ContextualTemplateHandlerRegistry,
     JsonTemplateRepository,
+    PlatformTemplateEnvironmentResolver,
     ProjectTemplateExporter,
     TemplateApplicationService,
     WorkspaceStructureTemplateExporter,
@@ -75,6 +77,7 @@ from ai_multi_agent_platform.templates import (
 from ai_multi_agent_platform.templates.agent_team_control_plane import (
     register_agent_team_template_control_plane,
 )
+from ai_multi_agent_platform.templates.compensation import register_template_compensators
 from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
 from ai_multi_agent_platform.templates.project_control_plane import (
     register_project_template_control_plane,
@@ -90,7 +93,7 @@ from ai_multi_agent_platform.verification import (
 )
 from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
-from ai_multi_agent_platform.workspaces import SqliteWorkspaceProvider
+from ai_multi_agent_platform.workspaces.compensation import CompensatingSqliteWorkspaceProvider
 
 from .config import SingleNodeConfig
 
@@ -120,10 +123,11 @@ class SingleNodeDeployment:
     kernel_repository: SqliteKernelRepository
     scopes: SqliteScopeStore
     files: LocalFileProvider
-    workspaces: SqliteWorkspaceProvider
+    workspaces: CompensatingSqliteWorkspaceProvider
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
+    capabilities: CapabilityRegistry
     models: ModelRegistry
     model_runtime: ModelRuntime
     onboarding: OnboardingService
@@ -239,7 +243,7 @@ def build_single_node_deployment(
     kernel_repository = SqliteKernelRepository(database_dir / "kernel.sqlite3")
     scopes = SqliteScopeStore(database_dir / "scopes.sqlite3")
     files = LocalFileProvider(config.files_dir, database_dir / "files.sqlite3")
-    workspaces = SqliteWorkspaceProvider(
+    workspaces = CompensatingSqliteWorkspaceProvider(
         config.workspaces_dir,
         files,
         database_dir / "workspaces.sqlite3",
@@ -248,6 +252,7 @@ def build_single_node_deployment(
     conversations = ConversationService(
         JsonConversationRepository(database_dir / "conversations.json")
     )
+    capabilities = CapabilityRegistry()
     models = ModelRegistry()
     onboarding = OnboardingService(
         models=models,
@@ -260,7 +265,11 @@ def build_single_node_deployment(
     )
     onboarding.restore()
     model_runtime = ModelRuntime(models)
-    agent_runtime = AgentRuntime(agents, model_registry=models)
+    agent_runtime = AgentRuntime(
+        agents,
+        model_registry=models,
+        capability_registry=capabilities,
+    )
     conversation_response_provider = ModelRuntimeConversationResponseProvider(
         model_runtime,
         agents,
@@ -271,6 +280,12 @@ def build_single_node_deployment(
     register_agent_template_handlers(template_handlers, agents)
     register_project_template_handler(template_handlers, scopes)
     register_workspace_structure_template_handler(template_handlers, workspaces, scopes)
+    register_template_compensators(
+        template_handlers,
+        agents=agents,
+        scopes=scopes,
+        workspaces=workspaces,
+    )
     templates = TemplateApplicationService(
         JsonTemplateRepository(database_dir / "templates.json"),
         template_handlers,
@@ -368,13 +383,25 @@ def build_single_node_deployment(
     register_standard_agent_control_plane(control_plane, agents)
     register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
     register_automation_template_handler(template_handlers, control_plane.automation_service)
+    register_template_compensators(
+        template_handlers,
+        automations=control_plane.automation_service,
+    )
     automation_template_exporter = AutomationTemplateExporter(
         control_plane.automation_service,
         templates.templates,
     )
+    template_environment = PlatformTemplateEnvironmentResolver(
+        workspaces=workspaces,
+        capabilities=lambda: (
+            capability.capability_id
+            for capability in capabilities.inventory_capabilities(include_unavailable=False)
+        ),
+    )
     register_template_control_plane(
         control_plane,
         templates,
+        environment_resolver=template_environment,
         agent_exporter=agent_template_exporter,
         automation_exporter=automation_template_exporter,
     )
@@ -418,6 +445,7 @@ def build_single_node_deployment(
         agents=agents,
         conversations=conversations,
         agent_runtime=agent_runtime,
+        capabilities=capabilities,
         models=models,
         model_runtime=model_runtime,
         onboarding=onboarding,
