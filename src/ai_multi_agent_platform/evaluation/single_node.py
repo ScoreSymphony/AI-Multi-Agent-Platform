@@ -55,6 +55,7 @@ from .rubric import ObservationRubricEvaluator
 from .runner import EvaluationRunner
 from .service import EvaluationService
 from .sqlite_repository import SqliteEvaluationRepository
+from .suite_assets import SqliteEvaluationSuiteAssetRepository
 from .workspace import WorkspaceEvaluationIsolation
 
 _SINGLE_NODE_EVALUATION_OWNER = "evaluation-single-node"
@@ -63,6 +64,7 @@ _SINGLE_NODE_EVALUATION_OWNER = "evaluation-single-node"
 @dataclass(frozen=True, slots=True)
 class SingleNodeEvaluationComposition:
     repository: SqliteEvaluationRepository
+    suite_assets: SqliteEvaluationSuiteAssetRepository
     service: EvaluationService
 
 
@@ -178,6 +180,7 @@ def build_single_node_evaluation(
     policies = (_reference_policy(), *assets.regression_policies)
     owner_ref = OwnerRef(type="service", id=_SINGLE_NODE_EVALUATION_OWNER)
     repository = SqliteEvaluationRepository(database_path)
+    suite_assets = SqliteEvaluationSuiteAssetRepository(database_path)
     fixture_resolver = DirectoryEvaluationFixtureResolver(
         fixture_root=Path(asset_dir) / "fixtures",
         files=files,
@@ -262,7 +265,12 @@ def build_single_node_evaluation(
             models=models,
         ),
     )
-    return SingleNodeEvaluationComposition(repository=repository, service=service)
+    service.attach_suite_assets(suite_assets)
+    return SingleNodeEvaluationComposition(
+        repository=repository,
+        suite_assets=suite_assets,
+        service=service,
+    )
 
 
 __all__ = ["SingleNodeEvaluationComposition", "build_single_node_evaluation"]
