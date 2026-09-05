@@ -45,7 +45,7 @@ class ControlPlane(_CurrentControlPlane):
         approval_gate: AuthorizationGate | None = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, approval_gate=approval_gate, **kwargs)
         self.approval_gate = approval_gate
         self._approval_decision_results: dict[
             tuple[str, str, str],
@@ -71,7 +71,7 @@ class ControlPlane(_CurrentControlPlane):
         resource_ref: str,
         payload: dict[str, JsonValue] | None = None,
     ) -> dict[str, JsonValue]:
-        if command not in APPROVAL_DECISION_COMMANDS:
+        if command not in APPROVAL_DECISION_COMMANDS or self.approval_gate is None:
             return await super().execute_command(context, command, resource_ref, payload)
         return await self._execute_approval_decision(
             context,
