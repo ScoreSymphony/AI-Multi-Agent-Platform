@@ -58,9 +58,7 @@ def execute_portability(
     client: ControlPlaneClient,
 ) -> ClientResponse:
     if args.command == "export":
-        resources: list[JsonValue] = [
-            _parse_resource_selection(value) for value in args.resource
-        ]
+        resources: list[JsonValue] = [_parse_resource_selection(value) for value in args.resource]
         body: dict[str, JsonValue] = {
             "resource_ref": "portability",
             "resources": resources,
