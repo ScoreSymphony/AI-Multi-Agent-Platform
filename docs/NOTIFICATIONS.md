@@ -46,6 +46,11 @@ second terminal Task notification.
 SQLite is a reference implementation choice, not a canonical requirement. The repository and
 runtime-state contracts remain replaceable.
 
+Notification repositories also expose canonical enumeration for internal rebuildable projections.
+This is not a public list-all endpoint and does not bypass recipient authorization; it exists so a
+derived Search index can be reconstructed after restart without inventing a privileged synthetic
+user.
+
 ## Recipient identity and current authorization
 
 Recipients are canonical platform identities. Provider-native account IDs, e-mail addresses, or
@@ -176,11 +181,44 @@ Commands:
 - `notification.delivery.retry`
 
 Notifications are **built-in private resources**, not generic extensions. They appear in the
-canonical manifest/OpenAPI but are excluded from generic extension discovery/global Search
-indexing. This prevents system-context enumeration of private recipient-scoped inboxes.
+canonical manifest/OpenAPI but remain excluded from generic extension discovery. Global Search
+uses a separate platform-owned, privacy-minimized derived projection rather than enumerating the
+recipient-scoped public collection with a synthetic system actor.
 
 OpenAPI publishes an `x-notifications` descriptor with recipient-scoped visibility,
-`search_indexed: false`, and `source_of_truth: false`.
+`search_indexed: true`, `search_projection: privacy-minimized-derived-state`, and
+`source_of_truth: false`.
+
+## Global Search
+
+Canonical global Search can discover Notifications by exact Notification ID and by safe metadata:
+category, severity, attention state, source-resource type/ID, project/workspace scope, and the
+canonical Task/Run/Approval/Verification/Node/Automation/Membership references when present.
+
+The Search document intentionally does **not** contain the Notification's structured summary,
+original title, action payloads, aggregation key, correlation/causation data, delivery metadata,
+delivery attempts, channel/provider data, or recipient identity as searchable text. The result
+title is a synthetic category/severity label and the result summary is empty.
+
+A provider candidate is never directly exposed. Before Search emits an item, count or snippet the
+Control Plane:
+
+1. derives the caller's canonical Notification recipient from the authenticated request context;
+2. requires an exact match with the indexed recipient owner scope;
+3. honors `in_app_enabled`;
+4. reloads the canonical Notification record;
+5. rejects stale state projections;
+6. rechecks current source-resource authorization; and
+7. rechecks canonical `notification:list` authorization.
+
+This makes exact-ID lookup non-disclosing: knowing another recipient's `notification_*` ID does not
+reveal its existence. Revoked source access also removes the candidate from visible Search counts
+without requiring Search to become an authorization authority.
+
+Search is derived state only. A full rebuild reads current canonical repository rows and therefore
+propagates state changes and repository deletion. Archived and expired Notifications are omitted
+from the rebuild snapshot, so retention/lifecycle changes cannot leave them discoverable in the
+reconstructed index. Search never mutates Notification or source-domain state.
 
 ## Live updates and application lifecycle
 
@@ -219,9 +257,10 @@ Structured notification summaries, delivery metadata, and live events pass throu
 redaction boundary. Approval projections intentionally omit proposed payload references and exact
 action digests from notification summaries.
 
-Unread counts and snippets are recipient-scoped and current-source-authorized. Private
-notifications are excluded from global Search indexing. Source navigation is not an authorization
-bypass.
+Unread counts, inbox resources, and Search results are recipient-scoped and current-source-
+authorized. Search indexes only the minimized derived metadata described above; inaccessible
+notifications cannot contribute to visible result counts, snippets, or exact-ID responses. Source
+navigation is not an authorization bypass.
 
 ## Frontend
 
@@ -258,5 +297,8 @@ Issue #75 hardening coverage includes:
 - acknowledged-state preservation under mark-read;
 - external delivery persistence and restart-safe dedupe;
 - SSE recipient isolation/reconnect behavior and ASGI dual-runtime lifecycle;
-- private-inbox exclusion from global Search/extension discovery;
+- exact-ID and safe metadata Notification Search;
+- Search recipient/source authorization and non-disclosing counts;
+- Search payload minimization plus archive/expiry/rebuild behavior;
+- private-inbox exclusion from generic extension discovery;
 - frontend typecheck/tests/build plus single-node installation smoke.
