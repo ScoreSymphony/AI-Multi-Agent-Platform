@@ -214,6 +214,29 @@ class NotificationService:
             return tuple(visible[query.offset :])
         return tuple(visible[query.offset : query.offset + query.limit])
 
+    async def list_search_snapshot(
+        self,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[Notification, ...]:
+        """Return canonical rows eligible for rebuildable derived Search state.
+
+        Search performs caller and current-source authorization separately before exposing
+        any result, count or snippet. This snapshot therefore enumerates canonical rows across
+        recipients but applies lifecycle/retention semantics that must be reflected in the
+        derived index: archived and expired notifications are excluded. Repository deletion is
+        naturally propagated because a rebuild can only see rows that still exist canonically.
+        """
+
+        current = _aware(now or datetime.now(UTC), "now")
+        items = await self._repository.list_all()
+        return tuple(
+            item
+            for item in items
+            if item.state is not NotificationState.ARCHIVED
+            and (item.expires_at is None or item.expires_at > current)
+        )
+
     async def unread_count(self, recipient: RecipientRef) -> int:
         if not self._preferences.get(recipient).in_app_enabled:
             return 0
