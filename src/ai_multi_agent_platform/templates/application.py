@@ -35,6 +35,7 @@ from .service import (
     TemplateResourceHandler,
     TemplateService,
 )
+from .trust import require_trusted_for_apply
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,8 +295,9 @@ class TemplateApplicationService:
             published_only=not allow_draft,
         )
         dependency_order, _ = self._resolve_dependency_order(root)
-        # Materialize every revision before the first handler is invoked. A missing or invalid
-        # binding therefore fails before any canonical resource can be created.
+        # Trust and binding validation both cover the complete graph before any handler can
+        # create a canonical resource.
+        require_trusted_for_apply(dependency_order)
         materialized_order = tuple(
             materialize_template_revision(item, environment) for item in dependency_order
         )

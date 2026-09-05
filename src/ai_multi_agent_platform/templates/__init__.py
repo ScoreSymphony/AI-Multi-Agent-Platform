@@ -55,6 +55,7 @@ from .service import (
     TemplateService,
     validate_template_configuration,
 )
+from .trust import activate_untrusted_revision
 from .workspace_structure_handler import (
     WorkspaceStructureTemplateExporter,
     WorkspaceStructureTemplateHandler,
@@ -104,6 +105,7 @@ __all__ = [
     "TemplateType",
     "WorkspaceStructureTemplateExporter",
     "WorkspaceStructureTemplateHandler",
+    "activate_untrusted_revision",
     "register_agent_template_handlers",
     "register_automation_template_handler",
     "register_project_template_handler",
