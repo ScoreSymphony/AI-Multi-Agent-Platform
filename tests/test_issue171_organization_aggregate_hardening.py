@@ -80,6 +80,21 @@ def test_real_organization_membership_grants_only_aggregate_visibility() -> None
                 unit="count",
                 quality=MeasurementQuality.MEASURED,
                 source="test",
+                quantity=7.0,
+                scope=UsageScope(
+                    organization_id=organization.id,
+                    task_id=new_id("task"),
+                    owner_type="organization",
+                    owner_id=organization.id,
+                ),
+            )
+        )
+        accounting.record(
+            UsageRecord(
+                metric_type="task.count",
+                unit="count",
+                quality=MeasurementQuality.MEASURED,
+                source="test",
                 quantity=100.0,
                 scope=UsageScope(
                     organization_id=other_organization.id,
@@ -100,7 +115,7 @@ def test_real_organization_membership_grants_only_aggregate_visibility() -> None
             and item["scope"].get("owner_type") == "organization"
         ]
         assert len(organization_aggregates) == 1
-        assert organization_aggregates[0]["total"] == 5.0
+        assert organization_aggregates[0]["total"] == 12.0
         assert organization_aggregates[0]["scope"].get("task_id") is None
         assert organization_aggregates[0]["scope"].get("run_id") is None
         assert organization_aggregates[0]["scope"].get("agent_id") is None
