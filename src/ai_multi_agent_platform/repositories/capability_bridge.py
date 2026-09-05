@@ -29,6 +29,7 @@ RepositoryActorResolver = Callable[[OperationContext], str]
 _TOOL_OPERATIONS = frozenset(
     {
         RepositoryOperation.READ,
+        RepositoryOperation.INSPECT_REFS,
         RepositoryOperation.STATUS,
         RepositoryOperation.DIFF,
         RepositoryOperation.FETCH,
@@ -146,6 +147,41 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
     ) -> dict[str, JsonValue]:
         if operation is RepositoryOperation.READ:
             return (await self._repositories.read(repository_id, context)).to_dict()
+        if operation is RepositoryOperation.INSPECT_REFS:
+            kind = _required_string(arguments, "kind")
+            if kind == "branches":
+                return {
+                    "repository_id": repository_id,
+                    "branches": list(await self._repositories.branches(repository_id, context)),
+                }
+            if kind == "tags":
+                return {
+                    "repository_id": repository_id,
+                    "tags": list(await self._repositories.tags(repository_id, context)),
+                }
+            if kind == "commits":
+                commits = await self._repositories.commits(
+                    repository_id,
+                    context,
+                    revision=_optional_string(arguments, "revision") or "HEAD",
+                    limit=_optional_int(arguments, "limit") or 50,
+                )
+                return {
+                    "repository_id": repository_id,
+                    "commits": [
+                        {
+                            "repository_id": commit.repository_id,
+                            "revision": commit.revision,
+                            "message": commit.message,
+                            "parent_revisions": list(commit.parent_revisions),
+                        }
+                        for commit in commits
+                    ],
+                }
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "repository inspect_refs kind must be branches, tags or commits",
+            )
         if operation is RepositoryOperation.STATUS:
             status = await self._repositories.status(repository_id, context)
             return {
@@ -234,7 +270,16 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
 def _input_schema(operation: RepositoryOperation) -> dict[str, JsonValue]:
     properties: dict[str, JsonValue] = {"repository_id": {"type": "string"}}
     required = ["repository_id"]
-    if operation is RepositoryOperation.DIFF:
+    if operation is RepositoryOperation.INSPECT_REFS:
+        properties.update(
+            {
+                "kind": {"type": "string", "enum": ["branches", "tags", "commits"]},
+                "revision": {"type": "string"},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+            }
+        )
+        required.append("kind")
+    elif operation is RepositoryOperation.DIFF:
         properties["base_revision"] = {"type": "string"}
     elif operation is RepositoryOperation.CREATE_BRANCH:
         properties.update(
@@ -298,6 +343,18 @@ def _optional_bool(arguments: dict[str, JsonValue], key: str) -> bool | None:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             f"repository capability argument {key} must be boolean or null",
+        )
+    return value
+
+
+def _optional_int(arguments: dict[str, JsonValue], key: str) -> int | None:
+    value = arguments.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"repository capability argument {key} must be integer or null",
         )
     return value
 
