@@ -20,7 +20,10 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Apply result discovery patch
-        run: python scripts/tmp_issue_291_result_patch.py
+        shell: bash
+        run: |
+          python scripts/tmp_issue_291_result_patch.py
+          python scripts/tmp_issue_291_result_test_fix.py
       - name: Bootstrap test environment
         shell: bash
         run: |
