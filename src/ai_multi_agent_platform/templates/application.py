@@ -135,7 +135,7 @@ class ContextualTemplateResourceHandler(Protocol):
 
 @runtime_checkable
 class CompensatingTemplateResourceHandler(Protocol):
-    """Optional guarded rollback seam for resources created by one Template handler."""
+    """Guarded rollback seam for resources created by one Template handler/type."""
 
     async def compensate(
         self,
@@ -168,10 +168,11 @@ class _PreviewHandlerAdapter:
 
 
 class ContextualTemplateHandlerRegistry:
-    """Registry shared by compatibility preview and integrated application."""
+    """Registry shared by compatibility preview, application and guarded compensation."""
 
     def __init__(self) -> None:
         self._handlers: dict[TemplateType, ContextualTemplateResourceHandler] = {}
+        self._compensators: dict[TemplateType, CompensatingTemplateResourceHandler] = {}
         self._preview_registry = TemplateHandlerRegistry()
 
     @property
@@ -188,8 +189,26 @@ class ContextualTemplateHandlerRegistry:
         adapter: TemplateResourceHandler = _PreviewHandlerAdapter(handler)
         self._preview_registry.register(adapter)
 
+    def register_compensator(
+        self,
+        template_type: TemplateType,
+        compensator: CompensatingTemplateResourceHandler,
+    ) -> None:
+        if template_type in self._compensators:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"Template compensator already registered: {template_type.value}",
+            )
+        self._compensators[template_type] = compensator
+
     def get(self, template_type: TemplateType) -> ContextualTemplateResourceHandler | None:
         return self._handlers.get(template_type)
+
+    def get_compensator(
+        self,
+        template_type: TemplateType,
+    ) -> CompensatingTemplateResourceHandler | None:
+        return self._compensators.get(template_type)
 
 
 class CompositeTemplateHandler:
@@ -209,14 +228,6 @@ class CompositeTemplateHandler:
     ) -> tuple[TemplateResourceRef, ...]:
         del revision, provenance, context
         return ()
-
-    async def compensate(
-        self,
-        resources: tuple[TemplateResourceRef, ...],
-        provenance: TemplateInstantiationProvenance,
-        context: TemplateInstantiationContext,
-    ) -> None:
-        del resources, provenance, context
 
 
 @dataclass(frozen=True, slots=True)
@@ -339,7 +350,12 @@ class TemplateApplicationService:
         uncompensated: list[JsonValue] = []
         for applied in reversed(applied_resources):
             handler = applied.handler
-            if not isinstance(handler, CompensatingTemplateResourceHandler):
+            compensator: CompensatingTemplateResourceHandler | None
+            if isinstance(handler, CompensatingTemplateResourceHandler):
+                compensator = handler
+            else:
+                compensator = self.handlers.get_compensator(handler.template_type)
+            if compensator is None:
                 uncompensated.extend(
                     {
                         "resource_type": resource.resource_type,
@@ -349,7 +365,7 @@ class TemplateApplicationService:
                 )
                 continue
             try:
-                await handler.compensate(
+                await compensator.compensate(
                     applied.resources,
                     applied.provenance,
                     applied.context,
