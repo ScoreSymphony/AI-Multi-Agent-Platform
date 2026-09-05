@@ -9,10 +9,14 @@ import pytest
 from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.accounting import AccountingService, InMemoryUsageStore
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
-from ai_multi_agent_platform.distributed import DistributedRegistry, DistributedRuntime
+from ai_multi_agent_platform.distributed import (
+    DispatchRecord,
+    DistributedRegistry,
+    DistributedRuntime,
+)
 from ai_multi_agent_platform.evaluation import ConfigurationSnapshot
 from ai_multi_agent_platform.observability import InMemoryExporter
-from ai_multi_agent_platform.security import ApprovalService
+from ai_multi_agent_platform.security import ApprovalRecord, ApprovalService
 
 
 class RecordingDistributedRuntime(DistributedRuntime):
@@ -20,7 +24,7 @@ class RecordingDistributedRuntime(DistributedRuntime):
         super().__init__(DistributedRegistry())
         self.records_called = False
 
-    def records(self):  # type: ignore[no-untyped-def]
+    def records(self) -> tuple[DispatchRecord, ...]:
         self.records_called = True
         return super().records()
 
@@ -94,7 +98,7 @@ def test_single_node_evaluation_uses_product_owned_evidence_sources(
         approval_reads: list[ApprovalService] = []
         original_all = ApprovalService.all
 
-        def recording_all(service: ApprovalService):
+        def recording_all(service: ApprovalService) -> tuple[ApprovalRecord, ...]:
             if service is deployment.approval_gate.approvals:
                 approval_reads.append(service)
             return original_all(service)
