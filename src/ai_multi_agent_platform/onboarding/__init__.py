@@ -17,12 +17,12 @@ from .persistence import (
     OnboardingCommandRecord,
 )
 from .providers import OnboardingModelAdapter, OnboardingModelEndpoint
+from .readiness import OnboardingService
 from .service import (
     FIRST_RUN_RESOURCE_ID,
     ONBOARDING_COLLECTION,
     ONBOARDING_COMMANDS,
     ONBOARDING_CONFIGURE_MODEL_COMMAND,
-    OnboardingService,
 )
 
 __all__ = [
