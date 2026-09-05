@@ -14,10 +14,13 @@ from ai_multi_agent_platform.portability import (
     AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
     AuthorizationPolicyProfilePortableCodec,
     AuthorizationPolicyProfilePortableSnapshot,
+    ExportSelection,
     IdPolicy,
     ImportContext,
     ImportSecurityFindingKind,
+    PortableResource,
     package_to_dict,
+    seal_resource,
     snapshot_authorization_policy_profile,
 )
 from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
@@ -110,20 +113,36 @@ def _source_profile(
     return definition
 
 
+def _portable_resource(
+    codec: AuthorizationPolicyProfilePortableCodec,
+    snapshot: AuthorizationPolicyProfilePortableSnapshot,
+) -> PortableResource:
+    exported = codec.serialize(snapshot)
+    return seal_resource(
+        PortableResource(
+            resource_type=AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
+            resource_id=exported.resource_id,
+            resource_version=exported.resource_version,
+            payload=exported.payload,
+            id_policy=exported.id_policy,
+            dependencies=exported.dependencies,
+        )
+    )
+
+
 def _workflow(
     repository: InMemoryAuthorizationPolicyProfileRepository,
     *,
     target_owner: OwnerRef,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
 ):
-    service = AuthorizationPolicyProfileService(repository, _management_gate())
     return build_agent_portability_workflow(
         agents=InMemoryAgentRepository(),
         models=ModelRegistry(),
         scopes=ScopeStore(),
         platform_version="0.0.1",
         policy_profiles=repository,
-        policy_profile_service=service,
+        policy_profile_service=AuthorizationPolicyProfileService(repository, _management_gate()),
         policy_profile_import_context=_context(),
         policy_profile_target_owner=target_owner,
         id_policy=id_policy,
@@ -133,19 +152,16 @@ def _workflow(
 def test_policy_profile_79_roundtrip_imports_dormant_untrusted_configuration_only() -> None:
     source = InMemoryAuthorizationPolicyProfileRepository()
     source_definition = _source_profile(source)
-    source_workflow = _workflow(source, target_owner=OwnerRef(type="user", id="source-owner"))
-
+    source_workflow = _workflow(
+        source,
+        target_owner=OwnerRef(type="user", id="source-owner"),
+    )
     exported = asyncio.run(
         source_workflow.export_package(
             (
-                (
-                    __import__(
-                        "ai_multi_agent_platform.portability.workflow",
-                        fromlist=["ExportSelection"],
-                    ).ExportSelection(
-                        AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
-                        source_definition.policy_profile_id,
-                    )
+                ExportSelection(
+                    AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
+                    source_definition.policy_profile_id,
                 ),
             )
         )
@@ -182,34 +198,25 @@ def test_policy_profile_79_roundtrip_imports_dormant_untrusted_configuration_onl
 def test_imported_profile_needs_separate_authorized_enable_and_assignment() -> None:
     source = InMemoryAuthorizationPolicyProfileRepository()
     source_definition = _source_profile(source)
-    snapshot = snapshot_authorization_policy_profile(source, source_definition.policy_profile_id)
     codec = AuthorizationPolicyProfilePortableCodec()
-    resource_export = codec.serialize(snapshot)
-    from ai_multi_agent_platform.portability.package import seal_resource
-    from ai_multi_agent_platform.portability.models import PortableResource
-
-    resource = seal_resource(
-        PortableResource(
-            resource_type=AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
-            resource_id=resource_export.resource_id,
-            resource_version=resource_export.resource_version,
-            payload=resource_export.payload,
-            id_policy=resource_export.id_policy,
-            dependencies=resource_export.dependencies,
-        )
+    decoded = codec.deserialize(
+        _portable_resource(
+            codec,
+            snapshot_authorization_policy_profile(source, source_definition.policy_profile_id),
+        ),
+        ImportContext(),
     )
-    decoded = codec.deserialize(resource, ImportContext())
     assert isinstance(decoded, AuthorizationPolicyProfilePortableSnapshot)
 
     destination = InMemoryAuthorizationPolicyProfileRepository()
     service = AuthorizationPolicyProfileService(destination, _management_gate())
     target_owner = OwnerRef(type="user", id="destination-owner")
-    definition = replace(decoded.definition, owner_ref=target_owner)
-    revisions = tuple(replace(item, owner_ref=target_owner) for item in decoded.revisions)
     imported = asyncio.run(
         service.import_profile(
-            definition=definition,
-            revisions=revisions,
+            definition=replace(decoded.definition, owner_ref=target_owner),
+            revisions=tuple(
+                replace(revision, owner_ref=target_owner) for revision in decoded.revisions
+            ),
             context=_context(),
         )
     )
@@ -244,32 +251,24 @@ def test_regenerated_import_remaps_profile_and_typed_scope_references() -> None:
     source_project = new_id("project")
     target_project = new_id("project")
     definition = _source_profile(source, project_id=source_project)
-    snapshot = snapshot_authorization_policy_profile(source, definition.policy_profile_id)
     codec = AuthorizationPolicyProfilePortableCodec(id_policy=IdPolicy.REGENERATE)
-    exported = codec.serialize(snapshot)
-    from ai_multi_agent_platform.portability.models import PortableResource
-    from ai_multi_agent_platform.portability.package import seal_resource
-
-    resource = seal_resource(
-        PortableResource(
-            resource_type=AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
-            resource_id=exported.resource_id,
-            resource_version=exported.resource_version,
-            payload=exported.payload,
-            id_policy=exported.id_policy,
-            dependencies=exported.dependencies,
-        )
-    )
     target_profile = new_id("authorization_policy_profile")
     decoded = codec.deserialize(
-        resource,
+        _portable_resource(
+            codec,
+            snapshot_authorization_policy_profile(source, definition.policy_profile_id),
+        ),
         ImportContext(
             id_mapping={
-                (AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE, definition.policy_profile_id): target_profile,
+                (
+                    AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
+                    definition.policy_profile_id,
+                ): target_profile,
                 ("project", source_project): target_project,
             }
         ),
     )
+
     assert isinstance(decoded, AuthorizationPolicyProfilePortableSnapshot)
     assert decoded.definition.policy_profile_id == target_profile
     assert decoded.definition.project_id == target_project
@@ -282,9 +281,9 @@ def test_preview_blocks_payload_that_attempts_to_transport_assignments() -> None
     source = InMemoryAuthorizationPolicyProfileRepository()
     definition = _source_profile(source)
     codec = AuthorizationPolicyProfilePortableCodec()
-    exported = codec.serialize(snapshot_authorization_policy_profile(source, definition.policy_profile_id))
-    from ai_multi_agent_platform.portability.models import PortableResource
-
+    exported = codec.serialize(
+        snapshot_authorization_policy_profile(source, definition.policy_profile_id)
+    )
     tampered = PortableResource(
         resource_type=AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
         resource_id=exported.resource_id,
@@ -300,31 +299,50 @@ def test_preview_blocks_payload_that_attempts_to_transport_assignments() -> None
     assert findings[0].blocking is True
 
 
-def test_import_compensation_cannot_remove_enabled_or_assigned_profile() -> None:
+def test_import_compensation_removes_only_dormant_unassigned_untrusted_profile() -> None:
     repository = InMemoryAuthorizationPolicyProfileRepository()
     source = InMemoryAuthorizationPolicyProfileRepository()
     source_definition = _source_profile(source)
     codec = AuthorizationPolicyProfilePortableCodec()
-    exported = codec.serialize(
-        snapshot_authorization_policy_profile(source, source_definition.policy_profile_id)
-    )
-    from ai_multi_agent_platform.portability.models import PortableResource
-    from ai_multi_agent_platform.portability.package import seal_resource
-
     decoded = codec.deserialize(
-        seal_resource(
-            PortableResource(
-                resource_type=AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE,
-                resource_id=exported.resource_id,
-                resource_version=exported.resource_version,
-                payload=exported.payload,
-                id_policy=exported.id_policy,
-                dependencies=exported.dependencies,
-            )
+        _portable_resource(
+            codec,
+            snapshot_authorization_policy_profile(source, source_definition.policy_profile_id),
         ),
         ImportContext(),
     )
     assert isinstance(decoded, AuthorizationPolicyProfilePortableSnapshot)
+
+    owner = OwnerRef(type="user", id="destination-owner")
+    service = AuthorizationPolicyProfileService(repository, _management_gate())
+    imported = asyncio.run(
+        service.import_profile(
+            definition=replace(decoded.definition, owner_ref=owner),
+            revisions=tuple(replace(item, owner_ref=owner) for item in decoded.revisions),
+            context=_context(),
+        )
+    )
+    service.compensate_import(imported.policy_profile_id)
+
+    with pytest.raises(ContractError) as captured:
+        repository.get_profile(imported.policy_profile_id)
+    assert captured.value.code is ErrorCode.NOT_FOUND
+
+
+def test_import_compensation_cannot_remove_enabled_profile() -> None:
+    repository = InMemoryAuthorizationPolicyProfileRepository()
+    source = InMemoryAuthorizationPolicyProfileRepository()
+    source_definition = _source_profile(source)
+    codec = AuthorizationPolicyProfilePortableCodec()
+    decoded = codec.deserialize(
+        _portable_resource(
+            codec,
+            snapshot_authorization_policy_profile(source, source_definition.policy_profile_id),
+        ),
+        ImportContext(),
+    )
+    assert isinstance(decoded, AuthorizationPolicyProfilePortableSnapshot)
+
     owner = OwnerRef(type="user", id="destination-owner")
     service = AuthorizationPolicyProfileService(repository, _management_gate())
     imported = asyncio.run(
