@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 from urllib.parse import parse_qsl, urlsplit
 
 from ai_multi_agent_platform.cli.client import RawResponse
@@ -156,7 +157,6 @@ def _invoke(
         transport=transport,
         stdout=stdout,
         stderr=stderr,
-        stdin=StringIO(),
     )
     payload = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
     assert isinstance(payload, dict)
@@ -243,7 +243,8 @@ def test_cli_compute_admin_requires_confirmation_and_uses_canonical_commands(
     config = tmp_path / "cli.json"
     transport, runtime, _, node, worker = _stack()
 
-    code, _, error = _invoke(config, transport, "node", "drain", node.node_id)
+    with patch("sys.stdin", StringIO()):
+        code, _, error = _invoke(config, transport, "node", "drain", node.node_id)
     assert code == 2
     assert "requires confirmation" in error
     assert runtime.registry.get_node(node.node_id).draining is False
