@@ -44,6 +44,7 @@ from .retention import (
     ConversationRetentionMode,
     ConversationRetentionPolicy,
 )
+from .routing_profile_response import DurableRoutingProfileConversationResponseProvider
 from .service import ConversationService, TaskCreator
 
 __all__ = [
@@ -68,6 +69,7 @@ __all__ = [
     "ConversationRetentionPolicy",
     "ConversationService",
     "ConversationStatus",
+    "DurableRoutingProfileConversationResponseProvider",
     "JsonConversationRepository",
     "MessageRole",
     "MessageStatus",
