@@ -202,6 +202,7 @@ class AgentTeamTemplateExporter:
                     }
                 )
         if failures:
+            cleanup_failures: list[JsonValue] = [dict(failure) for failure in failures]
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
                 (
@@ -211,7 +212,7 @@ class AgentTeamTemplateExporter:
                 details={
                     "export_error_type": type(export_error).__name__,
                     "export_error": str(export_error),
-                    "cleanup_failures": json_value(failures),
+                    "cleanup_failures": cleanup_failures,
                 },
             ) from export_error
 
