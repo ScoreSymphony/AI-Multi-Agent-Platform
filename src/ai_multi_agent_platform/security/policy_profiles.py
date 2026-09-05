@@ -839,6 +839,10 @@ class AuthorizationPolicyProfileService:
             AuthorizationAction.ADMINISTER,
             current,
             context,
+            payload_ref=AuthorizationPolicyProfileRef(
+                current.policy_profile_id,
+                current.current_revision,
+            ).token,
             side_effect="policy_profile_disable",
             risk=RiskClassification.HIGH,
         )
@@ -860,6 +864,10 @@ class AuthorizationPolicyProfileService:
             AuthorizationAction.ADMINISTER,
             current,
             context,
+            payload_ref=AuthorizationPolicyProfileRef(
+                current.policy_profile_id,
+                current.current_revision,
+            ).token,
             side_effect="policy_profile_enable",
             risk=RiskClassification.CRITICAL,
         )
