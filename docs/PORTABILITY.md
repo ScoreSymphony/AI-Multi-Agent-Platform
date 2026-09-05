@@ -306,4 +306,4 @@ The #79 portability stack verifies at least:
 - Automation identity-transfer rejection before mutation;
 - guarded Automation rollback for in-memory and SQLite repositories.
 
-Further canonical configuration codecs, import/export reports and Control Plane/CLI surfaces remain follow-up work within #79.
+Control Plane/CLI package, validation, preview, import and report surfaces are now implemented and documented in `PORTABILITY_CONTROL_PLANE.md`. The single-node composition currently wires Agent and Agent Team portability against canonical stores. Remaining canonical configuration codecs and production registry wiring continue within #79 as their owning persistence work lands.
