@@ -16,7 +16,9 @@ from ai_multi_agent_platform.repositories import (
     RepositoryConnection,
     RepositoryRegistry,
     RepositoryRegistryBootstrap,
+    RepositoryRunProvenance,
     SqliteRepositoryBindingCatalog,
+    SqliteRepositoryProvenanceStore,
     local_git_repository_factory,
 )
 from ai_multi_agent_platform.security import SecretReference
@@ -135,3 +137,51 @@ def test_repository_bootstrap_fails_closed_when_provider_factory_is_unavailable(
         assert error.value.provider_id == "local-git"
 
     asyncio.run(scenario())
+
+
+def test_repository_provenance_store_survives_restart_and_upsert(tmp_path: Path) -> None:
+    path = tmp_path / "repository-provenance.sqlite3"
+    run_id = new_id("run")
+    task_id = new_id("task")
+    repository_id = new_id("external_resource")
+    agent_id = new_id("agent")
+    artifact_id = new_id("artifact")
+    provider_resource_id = new_id("external_resource")
+    input_revision = "1" * 40
+    output_revision = "2" * 40
+
+    first = RepositoryRunProvenance(
+        run_id=run_id,
+        task_id=task_id,
+        repository_id=repository_id,
+        input_revision=input_revision,
+        branch_ref="main",
+        actor_ref="user:repository-user",
+        agent_id=agent_id,
+        provider_resource_ids=(provider_resource_id,),
+    )
+    store = SqliteRepositoryProvenanceStore(path)
+    store.record(first)
+    store.record(first)
+
+    restarted = SqliteRepositoryProvenanceStore(path)
+    assert restarted.get(run_id, repository_id) == first
+    assert restarted.for_run(run_id) == (first,)
+
+    updated = RepositoryRunProvenance(
+        run_id=run_id,
+        task_id=task_id,
+        repository_id=repository_id,
+        input_revision=input_revision,
+        branch_ref="main",
+        output_revision=output_revision,
+        actor_ref="user:repository-user",
+        agent_id=agent_id,
+        diff_artifact_ids=(artifact_id,),
+        provider_resource_ids=(provider_resource_id,),
+    )
+    restarted.upsert(updated)
+
+    second_restart = SqliteRepositoryProvenanceStore(path)
+    assert second_restart.get(run_id, repository_id) == updated
+    assert second_restart.for_run(run_id) == (updated,)
