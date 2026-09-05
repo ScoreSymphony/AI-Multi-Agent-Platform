@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import FrozenJsonValue
+from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, Plan, Provenance, Step, new_id
 
 from .models import (
@@ -216,7 +217,7 @@ class WorkflowService:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 "workflow admission contains undeclared parameters",
-                details={"parameters": sorted(unknown)},
+                details={"parameters": cast(JsonValue, sorted(unknown))},
             )
         missing = {
             name
@@ -227,7 +228,7 @@ class WorkflowService:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 "workflow admission is missing required parameters",
-                details={"parameters": sorted(missing)},
+                details={"parameters": cast(JsonValue, sorted(missing))},
             )
 
         source = f"workflow:{reference.workflow_id}@{reference.revision}"
