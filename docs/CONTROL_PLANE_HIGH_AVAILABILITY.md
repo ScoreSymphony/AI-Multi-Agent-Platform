@@ -61,6 +61,45 @@ is not restored by skipping reconciliation.
 The generic `FailoverReconciler` is the integration point. Concrete reconciliation must eventually
 cover the owning subsystems rather than inventing a second recovery model.
 
+## Authority-bearing runtime boundaries
+
+The optional HA composition does not rely on routing alone. It revalidates authority at runtime
+boundaries that can mutate canonical state or cause external effects:
+
+- Control Plane mutation/command authorization;
+- the autonomous Automation evaluation loop;
+- distributed scheduling/dispatch and failover actions;
+- HA Worker transport immediately before Worker dispatch/cancel side effects.
+
+The normal single-node composition does not instantiate these HA gates.
+
+## Worker fencing generation
+
+`AuthorityGatedDistributedRuntime` stops a standby or already-fenced Control Plane before it creates
+or dispatches work. That control-side check alone does not close the delayed-message race: an old
+leader could pass its check and then have its Worker command delayed until after another instance is
+promoted.
+
+For HA Worker transport, `FencedTransportWorkerDispatcher` therefore adds the current
+`FencingToken(instance_id, epoch)` to the operational message envelope for `dispatch` and `cancel`.
+The token is deliberately not added to canonical `WorkerJobRequest` identity/state.
+
+`FencedWorkerTransportEndpoint` validates that token through the same replaceable
+`CoordinationProvider` immediately before handing the command to the Worker dispatcher. It rejects:
+
+- missing/malformed fencing evidence;
+- source-instance/token identity mismatch;
+- stale epochs from an old Control Plane;
+- dispatch/cancel while coordination authority cannot be validated.
+
+This avoids a process-local highest-seen-epoch cache whose protection would disappear after Worker
+restart. The HA endpoint is optional; the existing Worker transport remains unchanged for non-HA
+profiles.
+
+Transport authentication and service identity remain responsibilities of the existing messaging and
+Worker security boundaries. Fencing proves current authority generation; it is not a substitute for
+cryptographic authentication.
+
 ## Failover behavior by subsystem
 
 | Area | Required behavior |
@@ -90,7 +129,8 @@ The HA profile must also document:
 - transactional/CAS semantics;
 - backup compatibility;
 - migration/maintenance behavior;
-- how routing discovers the current active instance.
+- how routing discovers the current active instance;
+- how Workers reach or otherwise validate the selected coordination authority.
 
 No specific database, broker, cloud, load balancer or Kubernetes component is mandated by the
 canonical architecture.
@@ -127,15 +167,21 @@ reconciled state according to the selected backend.
 
 ## Current implementation boundary
 
-The initial #89 slice provides:
+The current #89 branch provides:
 
 - platform-owned availability/coordination/fencing contracts;
 - a deterministic in-memory coordination fixture;
 - fail-closed active/passive/warm-standby service semantics;
 - promotion reconciliation barrier;
-- status suitable for later readiness/observability projection;
-- deterministic fencing/outage/promotion tests.
+- HA readiness/status projection;
+- authority gating for Control Plane mutation paths;
+- leadership-gated Automation runtime evaluation;
+- authority-gated distributed scheduling/dispatch/failover actions;
+- Worker-side stale-epoch rejection for HA dispatch and cancel transport;
+- deterministic fencing/outage/promotion/Automation/dispatch/Worker-epoch tests.
 
-Before #89 can close, the remaining issue-owned integrations must connect this authority boundary to
-the real Control Plane mutation/dispatch paths, Worker reconnect/reconciliation, Automation
-leadership, deployment profile and cross-process integration/chaos tests.
+Before #89 can close, remaining issue-owned work includes concrete Worker reconnect/re-registration
+and stale-reservation reconciliation after promotion, an optional production-shaped HA deployment
+composition with a suitable shared backend, fuller failover telemetry, and cross-process/chaos-style
+acceptance scenarios including running-task recovery, duplicate command handling, stream reconnect
+and authentication/session continuity.
