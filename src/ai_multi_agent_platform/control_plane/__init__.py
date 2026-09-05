@@ -4,11 +4,6 @@ from .approval_decision_composition import (
     APPROVAL_APPROVE_COMMAND,
     APPROVAL_DECISION_COMMANDS,
     APPROVAL_DENY_COMMAND,
-    AuthenticatedControlPlaneHTTP,
-    ControlPlane,
-    ControlPlaneASGI,
-    ControlPlaneHTTP,
-    build_openapi,
 )
 from .automation_api import (
     AUTOMATION_COLLECTION,
@@ -87,6 +82,17 @@ from .task_management_contract import (
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
 )
+from .task_project_reassignment import (
+    TASK_PROJECT_BULK_MOVE_COMMAND,
+    TASK_PROJECT_MOVE_ACTION,
+    TASK_PROJECT_MOVE_COMMAND,
+    TASK_PROJECT_MOVE_COMMANDS,
+    AuthenticatedControlPlaneHTTP,
+    ControlPlane,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
+)
 
 # Conversations remain optional runtime resources. Notifications are always-composed
 # canonical domains and therefore remain part of this static compatibility inventory.
@@ -160,6 +166,10 @@ __all__ = [
     "TASK_MANAGEMENT_BULK_UPDATE_COMMAND",
     "TASK_MANAGEMENT_COMMANDS",
     "TASK_MANAGEMENT_UPDATE_COMMAND",
+    "TASK_PROJECT_BULK_MOVE_COMMAND",
+    "TASK_PROJECT_MOVE_ACTION",
+    "TASK_PROJECT_MOVE_COMMAND",
+    "TASK_PROJECT_MOVE_COMMANDS",
     "TEAM_COLLECTION",
     "WorkspaceIdentity",
     "build_openapi",
