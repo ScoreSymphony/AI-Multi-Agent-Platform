@@ -165,10 +165,7 @@ def _remap_case(case: EvaluationCase, context: ImportContext) -> EvaluationCase:
 
 
 def _copy_json_object(value: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
-    copied = _copy_json(value)
-    if not isinstance(copied, dict):
-        raise TypeError("EvaluationCase input_template must remain a JSON object")
-    return copied
+    return {key: _copy_json(item) for key, item in value.items()}
 
 
 def _copy_json(value: JsonValue) -> JsonValue:
