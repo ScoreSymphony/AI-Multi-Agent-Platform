@@ -64,6 +64,12 @@ def _require_within_outer_scope(
         raise ValueError(f"{scope_name} contains value outside profile outer {scope_name}")
 
 
+def _approval_fingerprint(*values: object) -> str:
+    """Short-lived exact-action fingerprint for the #15 approval boundary."""
+
+    return hashlib.sha256(repr(values).encode("utf-8")).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class AuthorizationPolicyProfileRef:
     policy_profile_id: str
@@ -609,6 +615,32 @@ class AuthorizationPolicyProfileService:
         self._repository = repository
         self._authorization = authorization
 
+    def _resolve_create_profile_id(
+        self,
+        policy_profile_id: str | None,
+        context: AuthorizationPolicyProfileCallContext,
+    ) -> str:
+        if policy_profile_id is not None:
+            return policy_profile_id
+        if context.approval_id is None:
+            return new_id("authorization_policy_profile")
+
+        approval = self._authorization.approvals.get(context.approval_id)
+        expected_prefix = f"{approval.resource_id}@create:sha256:"
+        if (
+            approval.requester_ref != context.actor_ref
+            or approval.action != AuthorizationAction.CREATE.value
+            or approval.resource_type != ResourceType.GENERIC.value
+            or approval.payload_ref is None
+            or not approval.payload_ref.startswith(expected_prefix)
+        ):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "approval does not belong to an authorization policy profile create action",
+            )
+        validate_id(approval.resource_id, "authorization_policy_profile")
+        return approval.resource_id
+
     async def create(
         self,
         *,
@@ -620,7 +652,7 @@ class AuthorizationPolicyProfileService:
         team_id: str | None = None,
         policy_profile_id: str | None = None,
     ) -> AuthorizationPolicyProfileDefinition:
-        profile_id = policy_profile_id or new_id("authorization_policy_profile")
+        profile_id = self._resolve_create_profile_id(policy_profile_id, context)
         definition = AuthorizationPolicyProfileDefinition(
             policy_profile_id=profile_id,
             owner_ref=owner_ref,
@@ -639,6 +671,13 @@ class AuthorizationPolicyProfileService:
             team_id=team_id,
             created_at=definition.created_at,
         )
+        fingerprint = _approval_fingerprint(
+            owner_ref,
+            content,
+            project_id,
+            organization_id,
+            team_id,
+        )
         await self._enforce(
             action=AuthorizationAction.CREATE,
             resource_id=profile_id,
@@ -646,7 +685,7 @@ class AuthorizationPolicyProfileService:
             project_id=project_id,
             organization_id=organization_id,
             team_id=team_id,
-            payload_ref=revision.ref.token,
+            payload_ref=f"{profile_id}@create:sha256:{fingerprint}",
             side_effect="policy_profile_create",
             risk=RiskClassification.HIGH,
         )
@@ -663,7 +702,7 @@ class AuthorizationPolicyProfileService:
         """Authorize and atomically persist dormant, untrusted imported configuration."""
 
         self._validate_import_candidate(definition, revisions)
-        fingerprint = hashlib.sha256(repr((definition, revisions)).encode("utf-8")).hexdigest()
+        fingerprint = _approval_fingerprint(definition, revisions)
         await self._enforce(
             action=AuthorizationAction.CREATE,
             resource_id=definition.policy_profile_id,
@@ -761,18 +800,20 @@ class AuthorizationPolicyProfileService:
                     "current_revision": current.current_revision,
                 },
             )
+        next_revision = expected_revision + 1
+        fingerprint = _approval_fingerprint(content)
         await self._enforce_definition(
             AuthorizationAction.MODIFY,
             current,
             context,
-            payload_ref=f"{policy_profile_id}@{expected_revision + 1}",
+            payload_ref=f"{policy_profile_id}@{next_revision}:sha256:{fingerprint}",
             side_effect="policy_profile_revise",
             risk=RiskClassification.HIGH,
         )
         now = utc_now()
         updated = replace(
             current,
-            current_revision=expected_revision + 1,
+            current_revision=next_revision,
             updated_at=now,
         )
         revision = AuthorizationPolicyProfileRevision(
@@ -843,18 +884,29 @@ class AuthorizationPolicyProfileService:
         )
         if not definition.enabled:
             raise ContractError(ErrorCode.CONFLICT, "disabled policy profile cannot be assigned")
+        _non_blank(principal_ref, "principal_ref")
+        normalized_actor_types = tuple(actor_types)
+        if not normalized_actor_types:
+            raise ValueError("policy assignment requires at least one actor type")
+        if len(normalized_actor_types) != len(set(normalized_actor_types)):
+            raise ValueError("actor_types must not contain duplicates")
+        fingerprint = _approval_fingerprint(
+            profile_ref,
+            principal_ref,
+            tuple(actor_type.value for actor_type in normalized_actor_types),
+        )
         await self._enforce_definition(
             AuthorizationAction.ADMINISTER,
             definition,
             context,
-            payload_ref=profile_ref.token,
+            payload_ref=f"{profile_ref.token}@assign:sha256:{fingerprint}",
             side_effect="policy_profile_assign",
             risk=RiskClassification.CRITICAL,
         )
         assignment = AuthorizationPolicyAssignment(
             profile_ref=profile_ref,
             principal_ref=principal_ref,
-            actor_types=actor_types,
+            actor_types=normalized_actor_types,
             assigned_by=context.actor_ref,
             project_id=revision.project_id,
             organization_id=revision.organization_id,
