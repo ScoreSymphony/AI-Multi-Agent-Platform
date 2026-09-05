@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.onboarding import JsonModelProviderSetupStore
@@ -35,6 +36,9 @@ class BackupExternalDependency:
         object.__setattr__(self, "metadata", copied)
 
     def to_manifest(self) -> dict[str, JsonValue]:
+        metadata: dict[str, JsonValue] = {
+            key: value for key, value in self.metadata.items()
+        }
         return {
             "dependency_id": self.dependency_id,
             "kind": self.kind,
@@ -42,7 +46,7 @@ class BackupExternalDependency:
             "restore_blocking": self.restore_blocking,
             "source": self.source,
             "recovery_action": self.recovery_action,
-            "metadata": dict(self.metadata),
+            "metadata": metadata,
         }
 
 
@@ -100,13 +104,14 @@ def discover_single_node_external_dependencies(
                 ),
             )
 
-    optional_adapters = deployment_metadata.get("optional_adapters", ())
-    if optional_adapters is None:
-        optional_adapters = ()
-    if not isinstance(optional_adapters, (list, tuple)) or any(
-        not isinstance(item, str) or not item.strip() for item in optional_adapters
+    raw_optional_adapters = deployment_metadata.get("optional_adapters", ())
+    if raw_optional_adapters is None:
+        raw_optional_adapters = ()
+    if not isinstance(raw_optional_adapters, (list, tuple)) or any(
+        not isinstance(item, str) or not item.strip() for item in raw_optional_adapters
     ):
         raise DependencyInventoryError("optional_adapters metadata must be a list of strings")
+    optional_adapters = cast(list[str] | tuple[str, ...], raw_optional_adapters)
     for adapter_id in optional_adapters:
         normalized = adapter_id.strip()
         _add(
@@ -117,7 +122,9 @@ def discover_single_node_external_dependencies(
                 required=False,
                 restore_blocking=False,
                 source="deployment-metadata:optional_adapters",
-                recovery_action="reinstall or reconnect the optional adapter when its feature is needed",
+                recovery_action=(
+                    "reinstall or reconnect the optional adapter when its feature is needed"
+                ),
                 metadata={"adapter_id": normalized},
             ),
         )
