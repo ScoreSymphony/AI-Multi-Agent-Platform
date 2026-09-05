@@ -107,6 +107,7 @@ class ControlPlane(_CurrentControlPlane):
         portability_workflow: PortabilityWorkflowService | None = None,
         **kwargs: Any,
     ) -> None:
+        self._installing_portability = False
         if portability_workflow is not None:
             supplied_resources = kwargs.get("resource_services")
             if isinstance(supplied_resources, Mapping):
@@ -126,7 +127,6 @@ class ControlPlane(_CurrentControlPlane):
                     )
         super().__init__(*args, **kwargs)
         self._portability_workflow = portability_workflow
-        self._installing_portability = False
         if portability_workflow is None:
             return
 
