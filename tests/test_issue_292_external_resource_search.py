@@ -399,7 +399,8 @@ def test_detach_rebuild_and_connection_removal_delete_stale_derived_search_state
         assert (await _search(http, type="external-resource", id=stale.id))["total"] == 0
 
         remaining_ids = {
-            item.id for item in await repository.list_external_resources(connection_id=connection_id)
+            item.id
+            for item in await repository.list_external_resources(connection_id=connection_id)
         }
         assert remaining_ids
         removed = await http.handle(
@@ -472,8 +473,7 @@ def test_project_authorization_filters_direct_counts_exact_ids_and_search() -> N
         assert hidden_exact["total"] == 0
         assert hidden.id not in repr(hidden_exact)
         assert any(
-            call.action == "external-resource:list"
-            and call.context.project_id == hidden_project
+            call.action == "external-resource:list" and call.context.project_id == hidden_project
             for call in authorization.calls
         )
 

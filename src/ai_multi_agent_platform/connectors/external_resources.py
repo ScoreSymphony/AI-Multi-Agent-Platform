@@ -140,9 +140,7 @@ class ExternalResourceResourceService(ResourceService):
             "remote_deleted": False,
         }
 
-    async def _resource_or_not_found(
-        self, resource_id: str
-    ) -> ExternalResourceReference:
+    async def _resource_or_not_found(self, resource_id: str) -> ExternalResourceReference:
         try:
             return await self._connectors.repository.get_external_resource(resource_id)
         except ContractError as exc:
