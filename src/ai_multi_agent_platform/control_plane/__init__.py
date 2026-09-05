@@ -1,16 +1,5 @@
 """Versioned platform-owned northbound Control Plane."""
 
-from .task_project_reassignment import (
-    TASK_PROJECT_BULK_MOVE_COMMAND,
-    TASK_PROJECT_MOVE_ACTION,
-    TASK_PROJECT_MOVE_COMMAND,
-    TASK_PROJECT_MOVE_COMMANDS,
-    AuthenticatedControlPlaneHTTP,
-    ControlPlane,
-    ControlPlaneASGI,
-    ControlPlaneHTTP,
-    build_openapi,
-)
 from .approval_decision_composition import (
     APPROVAL_APPROVE_COMMAND,
     APPROVAL_DECISION_COMMANDS,
@@ -92,6 +81,17 @@ from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
     TASK_MANAGEMENT_COMMANDS,
     TASK_MANAGEMENT_UPDATE_COMMAND,
+)
+from .task_project_reassignment import (
+    TASK_PROJECT_BULK_MOVE_COMMAND,
+    TASK_PROJECT_MOVE_ACTION,
+    TASK_PROJECT_MOVE_COMMAND,
+    TASK_PROJECT_MOVE_COMMANDS,
+    AuthenticatedControlPlaneHTTP,
+    ControlPlane,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
 )
 
 # Conversations remain optional runtime resources. Notifications are always-composed
