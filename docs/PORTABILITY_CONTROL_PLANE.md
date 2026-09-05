@@ -39,6 +39,7 @@ The CLI is a client of those same `/api/v1` commands and resources:
 
 ```text
 platform portability export --resource agent:agent_123 --resource agent_team:team_123
+platform portability export --resource template:template_123
 platform portability validate package.json
 platform portability preview package_<checksum>
 platform --yes portability import preview_<digest>
@@ -51,11 +52,13 @@ platform portability report import_<digest>
 
 ## Current production composition
 
-The single-node deployment currently composes canonical Agent and Agent Team export/import against the durable Agent repository. Preview checks Model dependencies against the canonical `ModelRegistry` and Project/Workspace resource dependencies against `ScopeStore`.
+The single-node deployment composes canonical Agent, Agent Team and Template export/import against their durable repositories. Template portability reuses the canonical #78 Template repository and immutable revision model rather than defining a second Template lifecycle inside #79.
+
+Preview checks Model dependencies against the canonical `ModelRegistry`, Project/Workspace resource dependencies against `ScopeStore`, and existing Template dependencies against the canonical Template repository.
 
 Capability, plugin, connector and secret requirements remain fail-closed in this composition until their corresponding canonical production registries are explicitly wired. This is intentional: preview must not claim a dependency is available merely because its resource type exists somewhere in the codebase.
 
-Project portability itself remains blocked on #308, which must first complete canonical Project persistence. Routing-policy and authorization-policy portability similarly depend on their canonical persistence owners rather than creating duplicate stores inside #79.
+Project portability itself remains blocked on #308, which must first complete canonical Project persistence. Model-routing-policy portability remains blocked on #309, authorization-policy portability on #310, and Evaluation asset portability on #19. #79 does not create shadow persistence to bypass those domain owners.
 
 ## Execution boundary
 
@@ -77,4 +80,4 @@ canonical source resource
     -> ImportReport
 ```
 
-This workflow adds operational coordination state only. It does not become a second canonical store for Agent, Team, Project or any other imported resource.
+This workflow adds operational coordination state only. It does not become a second canonical store for Agent, Team, Template, Project or any other imported resource.
