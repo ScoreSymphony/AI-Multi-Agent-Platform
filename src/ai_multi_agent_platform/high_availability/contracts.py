@@ -21,6 +21,7 @@ class ControlPlaneRole(StrEnum):
 
     ACTIVE = "active"
     STANDBY = "standby"
+    PROMOTING = "promoting"
     FENCED = "fenced"
 
 
