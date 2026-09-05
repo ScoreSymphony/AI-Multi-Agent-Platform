@@ -10,6 +10,7 @@ from ai_multi_agent_platform.agents import (
     InMemoryAgentRepository,
     InstructionSource,
 )
+from ai_multi_agent_platform.control_plane import ScopeStore
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.evaluation import (
     DeterministicAssertionEvaluator,
@@ -31,7 +32,6 @@ from ai_multi_agent_platform.portability.evaluation_codecs import EVALUATION_SUI
 from ai_multi_agent_platform.portability.models import IdPolicy
 from ai_multi_agent_platform.portability.package import package_to_dict
 from ai_multi_agent_platform.portability.workflow import ExportSelection
-from ai_multi_agent_platform.control_plane import ScopeStore
 
 
 class StaticEvaluationExecutor:
@@ -150,7 +150,10 @@ def test_evaluation_suite_round_trip_uses_existing_portability_preview_and_remap
     assert target_agent_id != source_agent_id
 
     report = asyncio.run(destination_workflow.execute_import(preview.preview_id))
-    assert report.result.completed is True
+    assert tuple(item.resource_type for item in report.result.resources) == (
+        "agent",
+        EVALUATION_SUITE_RESOURCE_TYPE,
+    )
 
     imported = destination_evaluation.get_suite("portable.agent-suite@1.2")
     target = imported.cases[0].input_template["evaluation_target"]
