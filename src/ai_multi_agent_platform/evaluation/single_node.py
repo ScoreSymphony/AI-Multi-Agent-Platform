@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,6 +67,7 @@ class SingleNodeEvaluationComposition:
     repository: SqliteEvaluationRepository
     suite_assets: SqliteEvaluationSuiteAssetRepository
     service: EvaluationService
+    fixture_exists: Callable[[str], bool]
 
 
 def _reference_suite() -> EvaluationSuite:
@@ -207,6 +209,7 @@ def build_single_node_evaluation(
     case_executor: EvaluationCaseExecutor = AgentTargetValidatingCaseExecutor(
         kernel_executor,
         agents,
+        agent_runtime,
         models,
     )
     if evidence_providers:
@@ -270,6 +273,7 @@ def build_single_node_evaluation(
         repository=repository,
         suite_assets=suite_assets,
         service=service,
+        fixture_exists=fixture_resolver.fixture_exists,
     )
 
 
