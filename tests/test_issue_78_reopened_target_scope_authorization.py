@@ -105,7 +105,9 @@ class _WorkspaceProvider:
         try:
             return self.workspaces[workspace_id]
         except KeyError as exc:
-            raise ContractError(ErrorCode.NOT_FOUND, f"workspace not found: {workspace_id}") from exc
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"workspace not found: {workspace_id}"
+            ) from exc
 
 
 @dataclass
