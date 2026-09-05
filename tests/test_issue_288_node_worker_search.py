@@ -167,9 +167,7 @@ async def _search(
     http: ControlPlaneHTTP,
     query: dict[str, str],
 ) -> dict[str, object]:
-    response = await http.handle(
-        HTTPRequest(method="GET", path="/api/v1/search", query=query)
-    )
+    response = await http.handle(HTTPRequest(method="GET", path="/api/v1/search", query=query))
     assert response.status == 200
     assert isinstance(response.body, dict)
     return response.body
@@ -271,7 +269,9 @@ def test_search_projection_excludes_provider_private_metadata_and_accelerator_id
             for document in provider.last_documents
             if document.resource_type in {"node", "worker"}
         )
-        assert {(document.resource_type, document.resource_id) for document in node_worker_documents} == {
+        assert {
+            (document.resource_type, document.resource_id) for document in node_worker_documents
+        } == {
             ("node", node.node_id),
             ("worker", worker.worker_id),
         }
