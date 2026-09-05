@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.distributed.runtime import DispatchRecord, DistributedRuntime
+from ai_multi_agent_platform.distributed.runtime import DistributedRuntime
 from ai_multi_agent_platform.security.approvals import ApprovalRecord
 
 from .context import EvaluationExecutionContext
@@ -21,15 +21,6 @@ class ApprovalRecordReader(Protocol):
     """Minimal approval read boundary consumed by Evaluation evidence projection."""
 
     def all(self) -> tuple[ApprovalRecord, ...]: ...
-
-
-class DistributedRuntimeReader(Protocol):
-    """Minimal distributed-runtime read boundary consumed by Evaluation."""
-
-    def records(self) -> tuple[DispatchRecord, ...]: ...
-
-    @property
-    def registry(self) -> object: ...
 
 
 def _unique(values: tuple[str, ...]) -> tuple[str, ...]:
@@ -56,7 +47,9 @@ class ApprovalEvidenceCaseExecutor:
             execution_context=execution_context,
         )
         if _APPROVAL_KEY in observation.data:
-            raise ValueError("evaluation observation data must not shadow approval_behavior evidence")
+            raise ValueError(
+                "evaluation observation data must not shadow approval_behavior evidence"
+            )
         records = tuple(
             record
             for record in self._approvals.all()
