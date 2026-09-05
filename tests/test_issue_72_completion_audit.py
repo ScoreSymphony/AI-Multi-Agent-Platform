@@ -273,9 +273,7 @@ def test_binary_file_reference_is_metadata_only_even_when_bytes_are_utf8(tmp_pat
             content_type="application/octet-stream",
         )
     )
-    message = _message(
-        references=(ResourceReference(kind=ReferenceKind.FILE, id=record.file_id),)
-    )
+    message = _message(references=(ResourceReference(kind=ReferenceKind.FILE, id=record.file_id),))
 
     resolved = asyncio.run(
         resolve_conversation_context(
