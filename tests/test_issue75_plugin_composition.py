@@ -32,7 +32,7 @@ def test_public_control_plane_composes_notifications_above_current_plugin_termin
         events=repository,
     )
 
-    # Notifications are built-in private resources, not generic Search-indexed extensions.
+    # Notifications remain built-in private resources, not generic extension collections.
     assert NOTIFICATION_COLLECTION not in control_plane.registered_collections
     assert NOTIFICATION_PREFERENCE_COLLECTION not in control_plane.registered_collections
     assert all(
@@ -75,6 +75,9 @@ def test_public_manifest_and_openapi_publish_notifications_as_canonical_resource
         assert f"/api/v1/{NOTIFICATION_PREFERENCE_COLLECTION}" in paths
         assert openapi.body["x-registered-extension-collections"] == []
         assert openapi.body["x-registered-extension-commands"] == []
-        assert openapi.body["x-notifications"]["search_indexed"] is False
+        assert openapi.body["x-notifications"]["search_indexed"] is True
+        assert openapi.body["x-notifications"]["search_projection"] == (
+            "privacy-minimized-derived-state"
+        )
 
     asyncio.run(scenario())
