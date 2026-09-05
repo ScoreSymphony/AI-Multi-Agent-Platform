@@ -11,37 +11,82 @@ A Template is not a live Agent session, Run, worker job, provider session or exp
 runtime snapshot. Canonical Templates remain independent from one orchestrator, model
 provider, plugin implementation or deployment topology.
 
-The current core is implemented under `ai_multi_agent_platform.templates` and defines:
+The Template system lives under `ai_multi_agent_platform.templates` and provides:
 
 - stable Template IDs and immutable revision history;
-- draft and published revisions;
-- owner/project/organization scope hooks;
-- canonical payload or external configuration references;
+- editable draft revisions and immutable published revisions;
+- owner/project/organization scope;
+- canonical inline configuration payloads or external configuration references;
 - Template-to-Template dependencies;
 - capability, plugin, connector, model-policy, permission, workspace and placeholder
   requirements;
 - author/source/trust provenance and clone/fork lineage;
 - compatibility metadata;
-- dependency/compatibility preview;
-- pluggable resource handlers that instantiate ordinary canonical resources;
-- source-revision provenance for each instantiation.
+- dependency/compatibility/security preview;
+- durable Template and instantiation persistence;
+- Control Plane resources and commands;
+- concrete handlers that instantiate ordinary canonical resources;
+- source-revision provenance for every Template instantiation;
+- a browser Template management surface at `/templates`.
+
+## Supported Template types
+
+The canonical type vocabulary is intentionally broader than the resource services that
+exist in every deployment:
+
+- `agent`
+- `agent_team`
+- `workflow_plan`
+- `project`
+- `workspace_structure`
+- `automation`
+- `model_routing_policy`
+- `capability_assignment`
+- `composite`
+
+The current platform has concrete canonical handlers for:
+
+- Agent -> `AgentService`;
+- Agent Team -> `AgentService` with portable member/delegation remapping;
+- Automation -> the canonical Automation service;
+- Project -> `ScopeStore`;
+- Workspace structure -> the canonical `WorkspaceProvider`, optionally depending on a
+  Project Template so generated Workspaces bind to the newly generated Project ID;
+- Composite -> dependency coordination only; it creates no private composite runtime
+  object of its own.
+
+`workflow_plan`, `model_routing_policy` and `capability_assignment` remain valid Template
+types, but they are not given synthetic persistence or shadow runtime objects. Until the
+platform exposes matching ordinary canonical resource services for those concepts,
+preview reports their missing handler type and application is blocked. This preserves the
+architectural rule that Templates configure canonical resources rather than becoming a
+second resource system.
 
 ## Versioning
 
-Every stored revision is immutable. Editing creates a new draft revision. Publishing also
-creates a new immutable revision instead of mutating the draft in place. The stable
-Template definition tracks both the latest revision and latest published revision.
+Every stored revision is immutable. Editing appends a new draft revision. This is allowed
+whether the current revision is a draft or already published. Publishing also appends a
+new immutable published revision instead of mutating the draft in place.
 
-This means an instance created from `template_x@2` remains linked to that exact source
-even if `template_x@4` is later published. There is no automatic mutation of prior
-instances.
+The stable Template definition tracks both the current revision and the latest published
+revision. Therefore an instance created from `template_x@2` remains linked to exactly
+`template_x@2` even if later revisions are created or published.
+
+There is no automatic mutation of prior instances.
+
+Clone and fork create independent Template identities while retaining explicit lineage to
+the source Template revision. Reapply creates a new Template instance and new canonical
+resources; it never mutates the resources produced by an earlier instance.
 
 ## Dependency resolution
 
-Composite Templates declare explicit Template dependencies. Dependencies can pin an
-exact published revision or resolve the latest published revision. Resolution is
-recursive and deterministic, rejects cycles and orders dependencies before the root
-Template. Optional missing dependencies are reported but do not block application.
+Composite and other Templates can declare explicit Template dependencies. Dependencies
+may pin an exact published revision or resolve the latest published revision. Resolution
+is recursive and deterministic, rejects cycles and orders dependencies before the root
+Template.
+
+Missing optional dependencies are reported but do not block application. Missing required
+dependencies block preview/application.
 
 ## Preview before apply
 
@@ -55,12 +100,34 @@ created. The report includes:
 - missing workspace prerequisites;
 - unresolved ordinary and secret-reference placeholders;
 - external configuration references that have not been validated;
-- missing Template resource handlers;
+- missing canonical Template resource handlers;
 - privileged capabilities;
 - exact resource changes reported by handlers.
 
-`TemplateService.apply()` refuses to instantiate when blocking compatibility checks fail.
-Permission escalation is reported as a canonical `FORBIDDEN` error.
+Draft revisions may be previewed explicitly so users can inspect compatibility before
+publishing. Application uses published revisions only. `TemplateService.apply()` refuses
+to instantiate when blocking compatibility checks fail. Permission escalation is reported
+as a canonical `FORBIDDEN` error.
+
+## Server-resolved environment
+
+Compatibility and authorization environment state is server-owned. Control Plane clients
+cannot claim that capabilities, plugins, connectors, model policies, permissions,
+Workspaces, placeholders, secret references or external configuration references are
+available. Supplying those fields in a Template preview/apply command is rejected.
+
+`PlatformTemplateEnvironmentResolver` provides the integration seam for trusted deployment
+state. It is conservative by default: an inventory that is not connected is empty rather
+than assumed to be available.
+
+When the composed Control Plane exposes a canonical `workspace_provider`, Template
+registration automatically uses it for Workspace prerequisite resolution. Workspaces are
+filtered to the request actor's owner identity, so a foreign Workspace is not treated as a
+satisfied prerequisite merely because its ID exists in the deployment.
+
+Other inventories can be injected through matching canonical providers. Model
+configuration IDs are deliberately not treated as model-routing-policy references because
+the concepts have different semantics.
 
 ## Security rules
 
@@ -70,17 +137,20 @@ backend-private runtime/session fields are rejected as well.
 
 Secret references are allowed. For example, a payload may contain a `credential_ref`, but
 the corresponding secret-reference placeholder must be resolved by the target deployment
-before application. Secret values themselves are not part of the Template.
+before application. Secret values themselves are never part of the Template.
 
 An external configuration reference is allowed in the canonical model, but application
 is blocked until the deployment reports that the referenced configuration has been
 validated. This prevents an opaque external reference from bypassing Template validation.
 
-## Resource handlers
+A Template cannot grant permissions the applying actor is not allowed to grant. Privileged
+capabilities remain visible in preview instead of being silently accepted.
+
+## Resource handlers and canonical ID semantics
 
 The Template engine does not create provider-private objects directly. Instead,
-`TemplateResourceHandler` implementations map one canonical Template type to the ordinary
-canonical resource service that owns that resource.
+context-aware Template resource handlers map one Template type to the ordinary canonical
+resource service that owns that resource.
 
 The required direction is:
 
@@ -88,18 +158,105 @@ The required direction is:
 Template revision
     -> dependency / compatibility / permission preview
     -> TemplateResourceHandler
-    -> ordinary canonical Agent / Team / Automation / Project / ... service
+    -> ordinary canonical Agent / Team / Automation / Project / Workspace / ... service
     -> canonical resource IDs
 ```
 
 Handlers receive `TemplateInstantiationProvenance` with the exact source Template revision
-and applying actor. This is the linkage used to keep instantiated resources explainable
-after later Template edits.
+and applying actor. A shared `TemplateInstantiationContext` carries canonical resources
+created earlier in the dependency graph so later handlers can remap portable references.
+For example, an Agent Team Template points to Agent Template dependencies rather than
+persisting source Agent IDs; the Team handler resolves those dependencies to the new Agent
+IDs created in the same Template instance.
 
-## Next integration layer
+The same rule is used by Workspace structures that depend on a Project Template.
 
-The core intentionally keeps Control Plane and frontend concerns outside its domain
-models. The next integration layer should register concrete handlers for the supported
-canonical resource services, persist Templates in the production repository path, expose
-list/detail/create/clone/version/preview/apply endpoints and add the Template management
-surface to the frontend without redefining the contracts above.
+## Durable repository
+
+`JsonTemplateRepository` persists Template definitions, complete immutable revision
+histories and Template instantiation records using a versioned JSON document. Single-node
+composition stores this repository in the normal deployment data path and restores it on
+restart.
+
+Persistence contains canonical Template configuration and provenance only. It does not
+serialize provider sessions, worker jobs, active runs, credentials or plaintext secrets.
+
+## Control Plane API
+
+The composed Control Plane exposes the canonical collections:
+
+- `templates`
+- `template-instances`
+
+Core commands are:
+
+- `template.create`
+- `template.revise`
+- `template.publish`
+- `template.clone`
+- `template.fork`
+- `template.preview`
+- `template.apply`
+- `template.reapply`
+
+Creation from existing canonical resources is supported for the resource sets currently
+owned by concrete handlers:
+
+- `template.create-from-agent`
+- `template.create-from-agent-team`
+- `template.create-from-automation`
+- `template.create-from-project`
+- `template.create-from-workspaces`
+
+All commands run through the normal Control Plane authorization and idempotency path.
+Template list/detail and Template-instance list/detail are ordinary Control Plane
+resources rather than provider-specific endpoints.
+
+## Frontend
+
+The browser UI exposes Template management at `/templates` and Template detail at
+`/templates/:templateId`.
+
+The surface includes:
+
+- Template library/list;
+- creation from Agent, Agent Team, Automation, Project and Workspace structures;
+- advanced canonical Template JSON creation for composite/extensible types;
+- revision, scope, compatibility and provenance details;
+- dependency and requirement display;
+- server-resolved compatibility/permission preview;
+- explicit privileged-capability warnings and blocking reasons;
+- publish, edit/version, clone and fork;
+- apply only after a successful preview of the current published revision;
+- revision history;
+- Template instances and links to generated canonical resources.
+
+The browser never sends its own environment claims. Mutating Template commands use the
+same authenticated browser-session/CSRF Control Plane transport as the rest of the web UI.
+
+## Examples
+
+Validated example Template-content documents live under `examples/templates/`. They are
+examples of portable configuration contracts, not mandatory platform roles or built-in
+business-domain presets.
+
+## Verification
+
+Issue #78 tests cover the required lifecycle and safety cases, including:
+
+- create/revise/publish and immutable histories;
+- clone/fork lineage;
+- composite dependency ordering and cycle/missing-dependency handling;
+- missing capability/plugin/connector/model-policy/workspace requirements;
+- permission escalation rejection;
+- privileged capability preview;
+- plaintext-secret and backend-runtime-state exclusion;
+- secret-reference and external-reference validation;
+- canonical Agent, Agent Team, Automation, Project and Workspace instantiation;
+- portable Team member/leader/delegation ID remapping;
+- provenance linkage to exact Template revision;
+- reapply/new-version behavior without silent mutation;
+- durable repository restart restoration;
+- server-resolved environment behavior and owner-scoped Workspace inventory;
+- provider/orchestrator replacement compatibility;
+- frontend command contracts, type checking, tests and production build.
