@@ -42,6 +42,12 @@ from .evidence import (
     InMemoryObservabilityEvaluationEvidenceProvider,
     LogReferenceResolver,
 )
+from .hardening import (
+    ResourceLimitEvaluator,
+    merge_snapshot_references,
+    observation_assertion_payload,
+    validate_snapshot_reference_kinds,
+)
 from .history import EvaluationHistoryService, EvaluationTrendPoint
 from .model_judge import ModelJudgeEvaluator
 from .models import (
@@ -155,6 +161,7 @@ __all__ = [
     "RegressionRule",
     "RegressionRuleKind",
     "ResolvedEvaluationFixtures",
+    "ResourceLimitEvaluator",
     "ResultAggregator",
     "RubricCriterion",
     "SafeEvaluator",
@@ -170,9 +177,12 @@ __all__ = [
     "load_evaluation_baseline",
     "load_evaluation_suite",
     "load_regression_policy",
+    "merge_snapshot_references",
+    "observation_assertion_payload",
     "parse_aggregation_policy",
     "parse_evaluation_suite",
     "parse_regression_policy",
     "regression_policy_ref",
     "run_reference_ci_gate",
+    "validate_snapshot_reference_kinds",
 ]
