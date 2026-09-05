@@ -107,10 +107,16 @@ class InMemoryUsageStore(UsageStore):
 
     def set_threshold_level(self, budget_id: str, level: ThresholdLevel | None) -> None:
         with self._lock:
+            previous = self._levels.get(budget_id)
             if level is None:
+                if previous is not None and budget_id not in self._threshold_generations:
+                    self._threshold_generations[budget_id] = 1
                 self._levels.pop(budget_id, None)
-            else:
-                self._levels[budget_id] = level
+                return
+            if previous is None:
+                current = self._threshold_generations.get(budget_id, 0)
+                self._threshold_generations[budget_id] = current + 1
+            self._levels[budget_id] = level
 
     def get_threshold_generation(self, budget_id: str) -> int:
         with self._lock:
@@ -259,15 +265,45 @@ class SQLiteUsageStore(UsageStore):
 
     def set_threshold_level(self, budget_id: str, level: ThresholdLevel | None) -> None:
         with self._lock, self._connect() as connection:
+            previous = connection.execute(
+                "SELECT level FROM usage_threshold_state WHERE budget_id = ?",
+                (budget_id,),
+            ).fetchone()
             if level is None:
+                if previous is not None:
+                    generation = connection.execute(
+                        "SELECT generation FROM usage_threshold_generation WHERE budget_id = ?",
+                        (budget_id,),
+                    ).fetchone()
+                    if generation is None:
+                        connection.execute(
+                            """
+                            INSERT INTO usage_threshold_generation(budget_id, generation)
+                            VALUES (?, 1)
+                            """,
+                            (budget_id,),
+                        )
                 connection.execute(
                     "DELETE FROM usage_threshold_state WHERE budget_id = ?", (budget_id,)
                 )
-            else:
+                return
+            if previous is None:
+                generation = connection.execute(
+                    "SELECT generation FROM usage_threshold_generation WHERE budget_id = ?",
+                    (budget_id,),
+                ).fetchone()
+                current = 0 if generation is None else int(generation["generation"])
                 connection.execute(
-                    "INSERT OR REPLACE INTO usage_threshold_state(budget_id, level) VALUES (?, ?)",
-                    (budget_id, level.value),
+                    """
+                    INSERT OR REPLACE INTO usage_threshold_generation(budget_id, generation)
+                    VALUES (?, ?)
+                    """,
+                    (budget_id, current + 1),
                 )
+            connection.execute(
+                "INSERT OR REPLACE INTO usage_threshold_state(budget_id, level) VALUES (?, ?)",
+                (budget_id, level.value),
+            )
 
     def get_threshold_generation(self, budget_id: str) -> int:
         with self._lock, self._connect() as connection:
