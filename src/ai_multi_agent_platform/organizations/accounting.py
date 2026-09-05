@@ -28,7 +28,8 @@ class OrganizationAccountingVisibility:
     The Control Plane authorization provider still gates the request itself. This helper
     only prevents the accounting read model from widening that decision to stale or
     unrelated Organization/Team scopes. Cross-member aggregates require either canonical
-    Organization administration or an explicit membership policy reference.
+    Organization administration or an explicit membership policy reference. That aggregate
+    grant never widens raw UsageRecord visibility beyond the exact canonical owner.
     """
 
     def __init__(
@@ -43,13 +44,7 @@ class OrganizationAccountingVisibility:
         self.aggregate_policy_ref = aggregate_policy_ref
 
     async def raw_record_visible(self, context: RequestContext, record: UsageRecord) -> bool:
-        if _exact_owner(context, record.scope):
-            return True
-        if record.scope.owner_type == "organization" and record.scope.owner_id is not None:
-            return await self.can_aggregate_organization(context, record.scope.owner_id)
-        if record.scope.owner_type == "team" and record.scope.owner_id is not None:
-            return await self.can_aggregate_team(context, record.scope.owner_id)
-        return False
+        return _exact_owner(context, record.scope)
 
     async def budget_visible(self, context: RequestContext, budget: UsageBudget) -> bool:
         if _exact_budget_owner(context, budget):
@@ -147,7 +142,7 @@ class OrganizationAccountingVisibility:
 
 
 class OrganizationUsageRecordResourceService:
-    """Raw accounting records with exact-owner and explicit shared-owner visibility."""
+    """Raw accounting records remain exact-owner isolated."""
 
     search_indexable = False
 
