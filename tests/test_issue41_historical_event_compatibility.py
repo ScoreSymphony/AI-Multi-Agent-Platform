@@ -37,9 +37,7 @@ def test_supported_historical_event_versions_remain_interpretable(tmp_path: Path
     )
 
     assert report.ok
-    check = next(
-        item for item in report.checks if item.code == "history.event_schema.supported"
-    )
+    check = next(item for item in report.checks if item.code == "history.event_schema.supported")
     assert check.details["versions"] == sorted(SUPPORTED_HISTORICAL_EVENT_SCHEMA_VERSIONS)
 
 
