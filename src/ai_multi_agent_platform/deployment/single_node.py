@@ -51,6 +51,30 @@ from ai_multi_agent_platform.security import (
 )
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
+from ai_multi_agent_platform.templates import (
+    AgentTeamTemplateExporter,
+    AgentTemplateExporter,
+    AutomationTemplateExporter,
+    ContextualTemplateHandlerRegistry,
+    JsonTemplateRepository,
+    ProjectTemplateExporter,
+    TemplateApplicationService,
+    WorkspaceStructureTemplateExporter,
+    register_agent_template_handlers,
+    register_automation_template_handler,
+    register_project_template_handler,
+    register_workspace_structure_template_handler,
+)
+from ai_multi_agent_platform.templates.agent_team_control_plane import (
+    register_agent_team_template_control_plane,
+)
+from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
+from ai_multi_agent_platform.templates.project_control_plane import (
+    register_project_template_control_plane,
+)
+from ai_multi_agent_platform.templates.workspace_structure_control_plane import (
+    register_workspace_structure_template_control_plane,
+)
 from ai_multi_agent_platform.verification import (
     CanonicalVerificationRuntime,
     KernelFileVerificationEvidenceResolver,
@@ -98,6 +122,7 @@ class SingleNodeDeployment:
     onboarding: OnboardingService
     first_task: FirstRunTaskService
     secrets: SecretProvider | None
+    templates: TemplateApplicationService
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
     verification: SqliteVerificationService
@@ -185,7 +210,7 @@ class SingleNodeDeployment:
             )
         return SingleNodeSmokeResult(
             task_id=task.task_id,
-            run_id=run.run_id,
+            run_id=refreshed.run_id,
             task_status=persisted_task.status,
             run_status=refreshed.status,
         )
@@ -228,6 +253,22 @@ def build_single_node_deployment(
     model_runtime = ModelRuntime(models)
     agent_runtime = AgentRuntime(agents, model_registry=models)
     conversation_response_provider = ModelRuntimeConversationResponseProvider(model_runtime, agents)
+
+    template_handlers = ContextualTemplateHandlerRegistry()
+    register_agent_template_handlers(template_handlers, agents)
+    register_project_template_handler(template_handlers, scopes)
+    register_workspace_structure_template_handler(template_handlers, workspaces, scopes)
+    templates = TemplateApplicationService(
+        JsonTemplateRepository(database_dir / "templates.json"),
+        template_handlers,
+    )
+    agent_template_exporter = AgentTemplateExporter(agents, templates.templates)
+    agent_team_template_exporter = AgentTeamTemplateExporter(agents, templates.templates)
+    project_template_exporter = ProjectTemplateExporter(scopes, templates.templates)
+    workspace_template_exporter = WorkspaceStructureTemplateExporter(
+        workspaces,
+        templates.templates,
+    )
 
     execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
@@ -290,6 +331,32 @@ def build_single_node_deployment(
     register_agent_control_plane(control_plane, agents, runtime=agent_runtime)
     register_standard_agent_control_plane(control_plane, agents)
     register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
+    register_automation_template_handler(template_handlers, control_plane.automation_service)
+    automation_template_exporter = AutomationTemplateExporter(
+        control_plane.automation_service,
+        templates.templates,
+    )
+    register_template_control_plane(
+        control_plane,
+        templates,
+        agent_exporter=agent_template_exporter,
+        automation_exporter=automation_template_exporter,
+    )
+    register_agent_team_template_control_plane(
+        control_plane,
+        templates.repository,
+        agent_team_template_exporter,
+    )
+    register_project_template_control_plane(
+        control_plane,
+        templates.repository,
+        project_template_exporter,
+    )
+    register_workspace_structure_template_control_plane(
+        control_plane,
+        templates.repository,
+        workspace_template_exporter,
+    )
     register_verification_control_plane(
         control_plane,
         verification,
@@ -320,6 +387,7 @@ def build_single_node_deployment(
         onboarding=onboarding,
         first_task=first_task,
         secrets=secret_provider,
+        templates=templates,
         authentication=authentication,
         authorization=authorization,
         verification=verification,

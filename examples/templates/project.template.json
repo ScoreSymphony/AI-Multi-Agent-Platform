@@ -1,0 +1,45 @@
+{
+  "name": "Reusable Project",
+  "description": "Minimal portable Project Template using the canonical Project handler.",
+  "template_type": "project",
+  "configuration": {
+    "payload": {
+      "name": "Reusable Project"
+    },
+    "reference": null
+  },
+  "dependencies": [],
+  "requirements": {
+    "capabilities": [],
+    "plugin_ids": [],
+    "connector_ids": [],
+    "model_policy_refs": [],
+    "permission_actions": [],
+    "workspace_prerequisites": [],
+    "placeholders": [],
+    "secret_reference_placeholders": []
+  },
+  "compatibility": {
+    "platform_version_range": null,
+    "contract_versions": {},
+    "orchestrator_agnostic": true,
+    "provider_agnostic": true,
+    "metadata": {}
+  },
+  "provenance": {
+    "author": "platform-example",
+    "source": "examples/templates/project.template.json",
+    "trust": "local",
+    "source_template": null,
+    "metadata": {
+      "example": true
+    }
+  },
+  "tags": [
+    "example",
+    "project"
+  ],
+  "categories": [
+    "starter"
+  ]
+}

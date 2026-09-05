@@ -2,6 +2,8 @@
 
 # ruff: noqa: I001
 
+from collections.abc import Mapping
+
 from .models import (
     AgentCapabilityPolicy,
     AgentDataAccess,
@@ -51,6 +53,8 @@ from .control_plane import (
     AgentTeamResourceService,
     register_agent_control_plane,
 )
+from .control_plane import _profile_from_json as _agent_profile_from_json
+from .control_plane import _team_profile_from_json as _agent_team_profile_from_json
 from .standards import (
     STANDARD_AGENT_IDS,
     STANDARD_AGENT_TEMPLATES,
@@ -86,6 +90,34 @@ from .standards_control_plane import (
     StandardAgentTeamCatalogResourceService,
     register_standard_agent_control_plane,
 )
+
+
+def agent_profile_from_json(value: object) -> AgentProfile:
+    """Parse the canonical Agent profile representation used by exports and Control Plane.
+
+    Domain profiles represent an omitted description as an empty string. The northbound
+    parser represents the same optional value as null/omitted, so normalize that one
+    serialization detail before delegating to the shared canonical parser.
+    """
+
+    if isinstance(value, Mapping):
+        normalized = dict(value)
+        if normalized.get("description") == "":
+            normalized["description"] = None
+        return _agent_profile_from_json(normalized)
+    return _agent_profile_from_json(value)
+
+
+def agent_team_profile_from_json(value: object) -> AgentTeamProfile:
+    """Parse the canonical Agent Team profile representation."""
+
+    if isinstance(value, Mapping):
+        normalized = dict(value)
+        if normalized.get("description") == "":
+            normalized["description"] = None
+        return _agent_team_profile_from_json(normalized)
+    return _agent_team_profile_from_json(value)
+
 
 __all__ = [
     "AGENT_COLLECTION",
@@ -152,6 +184,8 @@ __all__ = [
     "StandardTeamTemplate",
     "StarterBootstrapResult",
     "UnavailableMemberPolicy",
+    "agent_profile_from_json",
+    "agent_team_profile_from_json",
     "assess_standard_agent_capabilities",
     "bootstrap_standard_agents",
     "clone_standard_agent",

@@ -10,6 +10,7 @@ import { IntegrationsClient } from "../api/integrations";
 import { MemoryKnowledgeClient } from "../api/memoryKnowledge";
 import { NotificationClient } from "../api/notifications";
 import { PluginsClient } from "../api/plugins";
+import { TemplateClient } from "../api/templates";
 import { VerificationClient } from "../api/verification";
 import type { ReferenceCollection } from "../api/references";
 import type { APImanifest } from "../api/types";
@@ -17,6 +18,7 @@ import { LoadingState } from "../components/States";
 import { PermissionHintsProvider } from "../security/permissions";
 import { navigation } from "./navigation";
 import { AppLink, matchPath, useRouter } from "./router";
+import { templateManifestState } from "./templateManifest";
 import {
   AgentDetailPage,
   AgentsPage,
@@ -70,6 +72,7 @@ import { RunsPage } from "../pages/RunListPage";
 import { SearchPage } from "../pages/SearchPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { ManagedTasksPage, TaskManagementDetailPage } from "../pages/TaskManagementPages";
+import { TemplateDetailPage, TemplatesPage } from "../pages/TemplatesPage";
 import { TerminalPage } from "../pages/TerminalPage";
 import { UsagePage } from "../pages/UsagePage";
 import { VerificationDetailPage, VerificationPage } from "../pages/VerificationPage";
@@ -131,6 +134,10 @@ export function Shell() {
     () => new PluginsClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
+  const templateClient = useMemo(
+    () => new TemplateClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
   const verificationClient = useMemo(
     () => new VerificationClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
@@ -176,6 +183,7 @@ export function Shell() {
   const pluginCandidateMatch = matchPath("/plugins/candidates/:pluginId", path);
   const pluginMatch = matchPath("/plugins/:pluginId", path);
   const automationMatch = matchPath("/automations/:automationId", path);
+  const templateMatch = matchPath("/templates/:templateId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const verificationMatch = matchPath("/verification/:verificationId", path);
   const referenceMatch = referenceRoute(path);
@@ -220,6 +228,29 @@ export function Shell() {
         verificationClient={verificationClient}
         runId={runMatch.runId}
       />
+    );
+  }
+  else if (path === "/templates") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Templates"
+        resource="templates"
+      >
+        <TemplatesPage client={templateClient} />
+      </ManifestResourcePage>
+    );
+  } else if (templateMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Templates"
+        resource="templates"
+      >
+        <TemplateDetailPage client={templateClient} templateId={templateMatch.templateId} />
+      </ManifestResourcePage>
     );
   }
   else if (path === "/agents") {
@@ -546,7 +577,9 @@ function ManifestResourcePage({
   resource: string;
   children: ReactNode;
 }) {
-  const resourceState = manifestResourceState(state, manifest, resource);
+  const resourceState = resource === "templates"
+    ? templateManifestState(state, manifest)
+    : manifestResourceState(state, manifest, resource);
   if (resourceState === "loading") return <LoadingState label={`Checking ${label} availability…`} />;
   if (resourceState === "unavailable") {
     return <UnavailablePage item={{ label, apiResource: resource }} manifest={manifest} />;
