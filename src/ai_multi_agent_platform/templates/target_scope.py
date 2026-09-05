@@ -119,7 +119,9 @@ def _target_scope_refs(revision: TemplateRevision) -> tuple[set[str], set[str]]:
     if revision.content.template_type is TemplateType.AGENT:
         profile = _optional_mapping(payload, "profile", path="configuration")
         if profile is not None:
-            defaults = _optional_mapping(profile, "workspace_defaults", path="configuration.profile")
+            defaults = _optional_mapping(
+                profile, "workspace_defaults", path="configuration.profile"
+            )
             if defaults is not None:
                 _collect_pair(
                     defaults,
