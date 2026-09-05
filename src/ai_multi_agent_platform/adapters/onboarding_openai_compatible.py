@@ -91,7 +91,7 @@ class _SecretResolvingOpenAICompatibleTransport(OpenAICompatibleTransport):
 
 
 class _SecretResolvingOpenAICompatibleStreamingTransport(
-    _SecretResolvingOpenAICompatibleTransport
+    _SecretResolvingOpenAICompatibleTransport,
 ):
     """Preserve native streaming while resolving credentials at request time."""
 
