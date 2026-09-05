@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.portability import (
     ExportSourceRegistry,
@@ -13,8 +13,8 @@ from ai_multi_agent_platform.portability import (
     ImportExecutor,
     ImportMutationRegistry,
     ImportPreviewService,
-    PortableResource,
     PortabilityWorkflowService,
+    PortableResource,
     ResourceExport,
     ResourceSerializerRegistry,
 )
