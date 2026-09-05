@@ -191,7 +191,11 @@ class OnboardingService:
         )
 
         health = await provider.health()
-        if health is not HealthStatus.HEALTHY:
+        try:
+            native_models = await adapter.list_native_models(provider)
+        except ContractError:
+            if health is HealthStatus.HEALTHY:
+                raise
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
                 "model endpoint did not pass the first-run health check",
@@ -206,8 +210,7 @@ class OnboardingService:
                         "ModelProvider adapter can inspect its native model inventory."
                     ),
                 },
-            )
-        native_models = await adapter.list_native_models(provider)
+            ) from None
         if provider_model not in native_models:
             raise ContractError(
                 ErrorCode.MODEL_UNAVAILABLE,
@@ -216,6 +219,22 @@ class OnboardingService:
                 details={
                     "provider_model": provider_model,
                     "available_provider_models": list(native_models),
+                },
+            )
+        if health is not HealthStatus.HEALTHY:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "model endpoint did not pass the first-run health check",
+                retryable=True,
+                provider_id=provider_id,
+                details={
+                    "provider_id": provider_id,
+                    "location": location.value,
+                    "guidance": (
+                        "Verify that the endpoint is running, that any referenced canonical secret "
+                        "is provisioned for the selected SecretProvider, and that the installed "
+                        "ModelProvider adapter can inspect its native model inventory."
+                    ),
                 },
             )
 
