@@ -46,9 +46,34 @@ Changes to `main` use pull requests. A pull request must reference its issue, re
 
 Security-sensitive and architecture-significant changes require code-owner review. Self-review is useful evidence but does not replace an independent approval when repository rules require one.
 
+Squash merge is the repository merge strategy. The pull-request title becomes the permanent main-history entry, so it must describe the delivered outcome clearly. Merge commits and rebase merges are disabled, and merged head branches are deleted automatically.
+
+## Pull-request lifecycle
+
+Repository work must remain attributable and current:
+
+- new pull requests target initial triage within seven calendar days;
+- a draft with no update for 14 days receives a status request;
+- work with no response or meaningful progress for 30 days may be marked stale in a maintainer comment;
+- after 45 days without a viable completion path, maintainers may close abandoned work with a reason and instructions for reopening;
+- security fixes, release candidates and work explicitly waiting on an active hard dependency are exempt from time-based closure while their status remains documented; and
+- a contributor may request reopening when the branch is updated against current main and the original outcome is still required.
+
+When a pull request is superseded, the maintainer must compare its remaining unique diff against current main, link the replacement, record whether any unique work remains and then close the older pull request. Conflict resolution must not restore code, tests, documentation or contracts already replaced on main.
+
+Closing stale or superseded work is repository housekeeping, not a rejection of the contributor. Decisions are based on the current canonical contract and demonstrable remaining value.
+
 ## Triage cadence
 
-At least weekly, the maintainer should review:
+The repository uses the following operating cadence:
+
+- **Weekly:** review new/unclassified issues, pull requests awaiting a decision, Dependabot updates and security alerts.
+- **Every two weeks:** reconcile milestone progress, blocked hard dependencies and roadmap statements against current GitHub state.
+- **Monthly:** review stale/superseded pull requests, abandoned branches, support trends and dependency update backlog.
+- **Quarterly:** review collaborator permissions, CODEOWNERS, branch protection, security reporting, the threat model and governance documents.
+- **Before every release:** execute the release checklist, verify provenance/licenses, review unresolved security findings and confirm rollback evidence.
+
+The weekly review includes:
 
 - new and unclassified issues;
 - blocked issues and stale hard dependencies;
@@ -56,6 +81,8 @@ At least weekly, the maintainer should review:
 - Dependabot and security findings;
 - pull requests without an owner or decision; and
 - roadmap statements that no longer match GitHub state.
+
+The maintainer records material decisions in the affected issue, pull request, advisory or ADR. A cadence review does not require a new tracking issue when no action is needed.
 
 Milestones close only when their documented exit criteria are satisfied. Dates may be added when there is a real delivery commitment; they must not be invented solely for appearance.
 
