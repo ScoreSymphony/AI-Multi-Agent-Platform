@@ -29,6 +29,8 @@ from ai_multi_agent_platform.repositories import (
     RepositoryConnection,
 )
 
+_PASSWORD = "correct horse battery staple"
+
 
 def test_verified_repository_event_enters_normal_single_node_automation_runtime(
     tmp_path: Path,
@@ -37,16 +39,18 @@ def test_verified_repository_event_enters_normal_single_node_automation_runtime(
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "single-node", secure_cookie=False)
         )
+        admin = deployment.bootstrap_admin("repository-user", _PASSWORD)
+        owner_id = admin.user_id
         project = deployment.scopes.create_project(
             key="issue-82-runtime-event-project",
             name="Repository runtime event project",
             owner_type="user",
-            owner_id="repository-user",
+            owner_id=owner_id,
         )
         operation = OperationContext(
             correlation_id="issue-82-runtime-event",
             owner_type="user",
-            owner_id="repository-user",
+            owner_id=owner_id,
             project_id=project.id,
         )
         connection = RepositoryConnection(
@@ -55,7 +59,7 @@ def test_verified_repository_event_enters_normal_single_node_automation_runtime(
                 connector_type_id="local-git",
                 connector_version="1.0",
                 owner_type="user",
-                owner_id="repository-user",
+                owner_id=owner_id,
                 display_name="Repository runtime event fixture",
                 project_id=project.id,
             ),
@@ -70,9 +74,9 @@ def test_verified_repository_event_enters_normal_single_node_automation_runtime(
             name="Repository push runtime watcher",
             description="Create a canonical task from the normal platform event runtime.",
             identity=IdentityContext(
-                principal_ref="user:repository-user",
+                principal_ref=owner_id,
                 owner_type="user",
-                owner_id="repository-user",
+                owner_id=owner_id,
             ),
             trigger=TriggerDefinition(
                 type=TriggerType.PLATFORM_EVENT,
