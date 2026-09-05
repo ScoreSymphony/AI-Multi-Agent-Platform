@@ -35,9 +35,12 @@ class ModelRoutingProfileAssignmentGate:
         *,
         principal_ref: str,
         context: OperationContext,
+        actor_type: str = "service",
     ) -> ModelRoutingProfileRevision:
         if not principal_ref.strip():
             raise ContractError(ErrorCode.UNAUTHORIZED, "principal_ref must not be blank")
+        if not actor_type.strip():
+            raise ContractError(ErrorCode.INVALID_REQUEST, "actor_type must not be blank")
 
         definition = self.repository.get_definition(ref.profile_id)
         if definition.project_id is not None and context.project_id != definition.project_id:
@@ -58,7 +61,7 @@ class ModelRoutingProfileAssignmentGate:
             )
 
         if self.authorization is None:
-            if context.owner_type is not None and (
+            if (
                 context.owner_type != definition.owner_ref.type
                 or context.owner_id != definition.owner_ref.id
             ):
@@ -75,7 +78,7 @@ class ModelRoutingProfileAssignmentGate:
                         action="model-routing-profile:assign",
                         resource_ref=ref.canonical_ref,
                         context=context,
-                        actor_type=context.owner_type or "service",
+                        actor_type=actor_type,
                         resource_type="model_routing_profile",
                         organization_id=(
                             definition.owner_ref.id
