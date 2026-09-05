@@ -1,0 +1,59 @@
+name: issue-79-cli-patch
+
+on:
+  push:
+    branches:
+      - feat/issue-79-control-plane-portability
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Wire portability CLI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/ai_multi_agent_platform/cli/main.py")
+          text = path.read_text()
+          replacements = (
+              (
+                  "from .onboarding import add_onboarding_parser, execute_onboarding\nfrom .plugins import add_plugin_parser, execute_plugin\n",
+                  "from .onboarding import add_onboarding_parser, execute_onboarding\nfrom .plugins import add_plugin_parser, execute_plugin\nfrom .portability import add_portability_parser, execute_portability\n",
+              ),
+              (
+                  "    add_memory_knowledge_parsers(areas)\n    add_onboarding_parser(areas)\n\n    profile = areas.add_parser",
+                  "    add_memory_knowledge_parsers(areas)\n    add_onboarding_parser(areas)\n    add_portability_parser(areas)\n\n    profile = areas.add_parser",
+              ),
+              (
+                  "    if args.area == \"knowledge\":\n        return CommandResult(execute_knowledge(args, client, _require_confirmation))\n    if args.area == \"project\":",
+                  "    if args.area == \"knowledge\":\n        return CommandResult(execute_knowledge(args, client, _require_confirmation))\n    if args.area == \"portability\":\n        return CommandResult(execute_portability(args, client))\n    if args.area == \"project\":",
+              ),
+          )
+          for old, new in replacements:
+              if old not in text:
+                  raise SystemExit(f"expected CLI anchor not found: {old!r}")
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+      - name: Format and lint CLI
+        run: |
+          python -m pip install "ruff>=0.12,<1"
+          ruff check --fix src/ai_multi_agent_platform/cli/main.py src/ai_multi_agent_platform/cli/portability.py
+          ruff format src/ai_multi_agent_platform/cli/main.py src/ai_multi_agent_platform/cli/portability.py
+      - name: Commit CLI wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ai_multi_agent_platform/cli/main.py src/ai_multi_agent_platform/cli/portability.py
+          git commit -m "feat(cli): wire portability commands"
+          git push origin HEAD:feat/issue-79-control-plane-portability
