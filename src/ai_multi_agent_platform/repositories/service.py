@@ -19,6 +19,7 @@ from ai_multi_agent_platform.security import (
 from .contracts import RepositoryProvider
 from .models import (
     RepositoryCommit,
+    RepositoryCommitInfo,
     RepositoryConnection,
     RepositoryDiff,
     RepositoryOperation,
@@ -132,6 +133,51 @@ class RepositoryService:
             operation = await self._enforce(binding, RepositoryOperation.READ, context)
             visible.append(await binding.provider.read(binding.reference, operation))
         return tuple(visible)
+
+    async def branches(
+        self,
+        repository_id: str,
+        context: RepositoryCallContext,
+    ) -> tuple[str, ...]:
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(binding, RepositoryOperation.INSPECT_REFS, context)
+        return await binding.provider.branches(binding.reference, operation)
+
+    async def tags(
+        self,
+        repository_id: str,
+        context: RepositoryCallContext,
+    ) -> tuple[str, ...]:
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(binding, RepositoryOperation.INSPECT_REFS, context)
+        return await binding.provider.tags(binding.reference, operation)
+
+    async def commits(
+        self,
+        repository_id: str,
+        context: RepositoryCallContext,
+        *,
+        revision: str = "HEAD",
+        limit: int = 50,
+    ) -> tuple[RepositoryCommitInfo, ...]:
+        if not revision.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "repository commit revision must not be blank",
+            )
+        if limit < 1 or limit > 100:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "repository commit history limit must be between 1 and 100",
+            )
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(binding, RepositoryOperation.INSPECT_REFS, context)
+        return await binding.provider.commits(
+            binding.reference,
+            operation,
+            revision=revision,
+            limit=limit,
+        )
 
     async def status(self, repository_id: str, context: RepositoryCallContext) -> RepositoryStatus:
         binding = self._registry.resolve(repository_id)
