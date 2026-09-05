@@ -78,7 +78,9 @@ class WorkerResourceService:
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
         """Enumerate privacy-safe canonical Worker metadata for derived global Search."""
 
-        return tuple(_worker_search_resource(worker) for worker in self.runtime.registry.list_workers())
+        return tuple(
+            _worker_search_resource(worker) for worker in self.runtime.registry.list_workers()
+        )
 
     async def get_resource(
         self,
