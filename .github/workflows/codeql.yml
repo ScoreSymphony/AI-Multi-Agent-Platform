@@ -31,3 +31,29 @@ jobs:
         uses: github/codeql-action/autobuild@v4
       - name: Analyze
         uses: github/codeql-action/analyze@v4
+      - name: Summarize CodeQL findings for alert triage
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import glob
+          import json
+
+          for sarif_path in glob.glob("../results/*.sarif"):
+              with open(sarif_path, encoding="utf-8") as handle:
+                  sarif = json.load(handle)
+              for run in sarif.get("runs", []):
+                  for result in run.get("results", []):
+                      locations = result.get("locations") or [{}]
+                      physical = locations[0].get("physicalLocation", {})
+                      artifact = physical.get("artifactLocation", {})
+                      region = physical.get("region", {})
+                      message = result.get("message", {}).get("text", "")
+                      print(
+                          "CODEQL_RESULT "
+                          f"rule={result.get('ruleId', '')} "
+                          f"path={artifact.get('uri', '')} "
+                          f"line={region.get('startLine', '')} "
+                          f"message={message}"
+                      )
+          PY
