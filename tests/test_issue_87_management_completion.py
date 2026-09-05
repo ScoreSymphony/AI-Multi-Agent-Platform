@@ -218,7 +218,9 @@ def test_organization_owner_transfer_requires_current_owner_and_active_target() 
             {},
         )
         assert left["status"] == MembershipStatus.LEFT.value
-        assert (await repository.get_membership(owner_membership.id)).status is MembershipStatus.LEFT
+        assert (
+            await repository.get_membership(owner_membership.id)
+        ).status is MembershipStatus.LEFT
 
     asyncio.run(scenario())
 
