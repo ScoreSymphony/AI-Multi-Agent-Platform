@@ -310,7 +310,7 @@ def _execute_auth(
                 {
                     "authenticated": True,
                     "profile": profile_name,
-                    "actor": cast(JsonValue, body.get("actor")),
+                    "actor": body.get("actor"),
                     "expires_at": expires_at,
                 },
             )
@@ -424,26 +424,30 @@ def _execute_auth(
             renderer.success(client.get("/auth/credentials"))
             return 0
         if args.credential_command == "create":
-            body: dict[str, JsonValue] = {"purpose": args.purpose}
+            credential_body: dict[str, JsonValue] = {"purpose": args.purpose}
             if args.expires_at:
-                body["expires_at"] = args.expires_at
+                credential_body["expires_at"] = args.expires_at
             if args.scope_json:
                 scope = json.loads(args.scope_json)
                 if not isinstance(scope, dict):
                     raise ProfileError("--scope-json must decode to a JSON object")
-                body["scope"] = cast(dict[str, JsonValue], scope)
-            response = client.post("/auth/credentials", body=body)
+                credential_body["scope"] = cast(dict[str, JsonValue], scope)
+            response = client.post("/auth/credentials", body=credential_body)
             response_body = _object_body(response)
             secret = _body_string(response_body, "secret")
             credential_id = _body_string(response_body, "id")
-            expires_at = response_body.get("expires_at")
+            credential_expires_at = response_body.get("expires_at")
             credentials.set(
                 profile_name,
                 CredentialState(
                     mode="bearer",
                     bearer_token=secret,
                     credential_id=credential_id,
-                    expires_at=expires_at if isinstance(expires_at, str) else None,
+                    expires_at=(
+                        credential_expires_at
+                        if isinstance(credential_expires_at, str)
+                        else None
+                    ),
                 ),
             )
             safe_body = dict(response_body)
