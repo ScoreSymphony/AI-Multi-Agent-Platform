@@ -8,6 +8,7 @@ from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.templates import TemplateRepository
 
 from .agent_codecs import (
     AGENT_RESOURCE_TYPE,
@@ -22,6 +23,12 @@ from .executor import ImportExecutor, ImportMutationRegistry
 from .models import DependencyKind, DependencyRequirement, IdPolicy
 from .planner import ImportPreviewService
 from .registry import ResourceSerializerRegistry
+from .template_codecs import (
+    TEMPLATE_RESOURCE_TYPE,
+    register_template_portability_codec,
+    snapshot_template,
+)
+from .template_import import TemplateImportMutationHandler
 from .workflow import ExportSourceRegistry, PortabilityWorkflowService
 
 
@@ -31,15 +38,16 @@ def build_agent_portability_workflow(
     models: ModelRegistry,
     scopes: ScopeStore,
     platform_version: str,
+    templates: TemplateRepository | None = None,
     source_instance_id: str | None = None,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
 ) -> PortabilityWorkflowService:
-    """Compose production-safe Agent/Team portability against canonical stores.
+    """Compose production-safe portability against supplied canonical stores.
 
-    Only dependencies whose canonical destination registries are supplied here are
-    considered available. Capability, plugin, connector and secret requirements stay
-    unavailable until their respective production registries are explicitly composed.
-    This prevents preview from making optimistic assumptions about target state.
+    Agent and Agent Team are always available. Template portability is enabled only
+    when the canonical #78 repository is supplied. Dependencies without a supplied
+    destination registry remain unavailable so import preview fails closed rather
+    than making optimistic assumptions about target state.
     """
 
     serializers = ResourceSerializerRegistry()
@@ -48,6 +56,8 @@ def build_agent_portability_workflow(
         agent_id_policy=id_policy,
         team_id_policy=id_policy,
     )
+    if templates is not None:
+        register_template_portability_codec(serializers, id_policy=id_policy)
 
     export_sources = ExportSourceRegistry()
 
@@ -59,16 +69,26 @@ def build_agent_portability_workflow(
 
     export_sources.register(AGENT_RESOURCE_TYPE, load_agent)
     export_sources.register(AGENT_TEAM_RESOURCE_TYPE, load_team)
+    if templates is not None:
+
+        async def load_template(resource_id: str) -> object:
+            return snapshot_template(templates, resource_id)
+
+        export_sources.register(TEMPLATE_RESOURCE_TYPE, load_template)
 
     mutations = ImportMutationRegistry()
     mutations.register(AgentImportMutationHandler(agents))
     mutations.register(AgentTeamImportMutationHandler(agents))
+    if templates is not None:
+        mutations.register(TemplateImportMutationHandler(templates))
 
     def resource_exists(resource_type: str, resource_id: str) -> bool:
         if resource_type == AGENT_RESOURCE_TYPE:
             return _canonical_exists(lambda: agents.get_agent(resource_id))
         if resource_type == AGENT_TEAM_RESOURCE_TYPE:
             return _canonical_exists(lambda: agents.get_team(resource_id))
+        if resource_type == TEMPLATE_RESOURCE_TYPE and templates is not None:
+            return _canonical_exists(lambda: templates.get_template(resource_id))
         if resource_type == "project":
             return _canonical_exists(lambda: scopes.get_project(resource_id))
         if resource_type == "workspace":
