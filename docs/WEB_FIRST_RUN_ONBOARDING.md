@@ -74,19 +74,19 @@ POST /api/v1/commands/standard-agent.bootstrap
 POST /api/v1/commands/standard-agent.clone
 ```
 
-Bootstrap remains explicit. The clone uses `resource_ref=general_assistant` and the selected canonical Project/Workspace scope. The resulting Agent remains an ordinary editable user-owned Agent and is visible in the normal Agents product surface.
+Bootstrap remains explicit. For cloning, the user selects a canonical Workspace candidate and the browser reads that Workspace through the Control Plane, then derives its canonical `project_id`. It never lets independent Project and Workspace dropdowns manufacture a mismatched scope pair. The clone uses `resource_ref=general_assistant` plus that bound Project/Workspace scope. The resulting Agent remains an ordinary editable user-owned Agent and is visible in the normal Agents product surface.
 
 Existing General Assistant preflight blockers are rendered as server-provided execution blockers rather than being reinterpreted in the browser.
 
 ## Selection and first Task
 
-When #397 reports `needs_selection`, the browser displays the returned canonical Project, Workspace and Agent candidate IDs. It does not choose among multiple candidates automatically. Selected IDs are passed to:
+When #397 reports `needs_selection`, the returned candidate IDs remain authoritative. Every executable first-run path contains a scoped General Assistant, so the browser asks the user to select an explicit canonical Agent candidate rather than independently combining Project, Workspace and Agent IDs from flat candidate lists. The selected Agent identity is passed to:
 
 ```text
 POST /api/v1/commands/onboarding.run-first-task
 ```
 
-The server still resolves ownership/scope and performs the exact shared first-run execution preflight before creating a Task. The browser never treats a selected dropdown value as authorization or proof of executability.
+The shared server resolver then filters the execution-precise paths by that Agent and validates its canonical Project/Workspace binding, ownership and execution preflight before creating a Task. When a Project or Workspace is already uniquely implied, the browser may include that unique canonical ID as well. It does not reconstruct the server's executability rules and never treats a selected dropdown value as authorization or proof of executability.
 
 A successful command returns the canonical Task, Run and Result identifiers plus Run output. The page displays these identifiers and links to the existing Task, Run and Result detail routes instead of creating a separate first-run result store.
 
@@ -112,14 +112,16 @@ If one of these surfaces is absent, the journey renders an explicit unavailable/
 
 Focused frontend tests verify:
 
-- first-run state mapping for all canonical #250 states;
+- first-run state mapping for all canonical #250 states and fresh-install `needs_model` rendering;
 - canonical `/api/v1/onboarding/first-run` reads;
 - `onboarding.configure-model`, starter and first-Task command URLs;
 - BrowserSession CSRF propagation and idempotency headers;
 - SecretReference-only credential configuration;
-- execution-precise explicit selection payloads;
-- no guessing among multiple executable candidates;
+- Workspace-to-Project scope binding for General Assistant cloning;
+- execution-precise explicit Agent selection without manufacturing mixed Project/Workspace pairs;
+- no guessing among multiple executable Agent candidates;
 - unique-path first-Task payload construction;
+- canonical Task/Run/Result rendering and normal detail links;
 - restart `needs_model` representation with persisted local model inventory;
 - manifest gating for the `onboarding` resource;
 - absence of direct model-backend/Hermes/Forge/LiteLLM URLs in the onboarding client tests.
