@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from types import MappingProxyType
+from typing import cast
 
 import pytest
 
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.evaluation import (
     ComparisonOperator,
     ConfigurationSnapshot,
@@ -88,6 +92,47 @@ def test_deterministic_assertions_can_address_canonical_non_output_behavior() ->
 
     assert result.outcome is EvaluationOutcome.PASSED
     assert all(assertion.passed for assertion in result.assertions)
+
+
+def test_deterministic_assertion_results_thaw_nested_immutable_domain_evidence() -> None:
+    immutable_output = cast(
+        JsonValue,
+        MappingProxyType(
+            {
+                "nested": (
+                    MappingProxyType({"status": "ok"}),
+                    MappingProxyType({"status": "complete"}),
+                )
+            }
+        ),
+    )
+    case = EvaluationCase(
+        case_id="case.strict-json",
+        name="strict JSON evidence",
+        version="1",
+        assertions=(
+            DeterministicAssertion(
+                "run-output",
+                "run.output",
+                ComparisonOperator.EXISTS,
+            ),
+        ),
+    )
+
+    result = DeterministicAssertionEvaluator().evaluate(
+        evaluation_run_id="evaluation_run_strict_json",
+        case=case,
+        observation=EvaluationObservation(data={"run": {"output": immutable_output}}),
+    )
+
+    actual = result.assertions[0].actual
+    assert actual == {
+        "nested": [
+            {"status": "ok"},
+            {"status": "complete"},
+        ]
+    }
+    assert json.loads(json.dumps(actual, allow_nan=False)) == actual
 
 
 def test_resource_limits_are_deterministic_maximum_metric_checks() -> None:
