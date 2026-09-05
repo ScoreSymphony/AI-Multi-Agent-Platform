@@ -220,3 +220,41 @@ def test_execute_rejects_incompatible_protocol() -> None:
 
     with pytest.raises(RuntimeError, match="incompatible protocol"):
         asyncio.run(client(IncompatibleExecutionTransport()).execute(forge_request()))
+
+
+def test_execute_rejects_wrong_correlation_identity() -> None:
+    class WrongCorrelationTransport(ScriptedTransport):
+        async def request_json(
+            self,
+            method: str,
+            url: str,
+            *,
+            payload: Mapping[str, JsonValue] | None,
+            timeout_seconds: float,
+        ) -> ForgeHttpResponse:
+            if method == "POST" and url.endswith("/v1/executions"):
+                snapshot = self._snapshot("succeeded")
+                snapshot["correlation_id"] = "wrong-correlation"
+                return ForgeHttpResponse(202, snapshot)
+            return await super().request_json(
+                method,
+                url,
+                payload=payload,
+                timeout_seconds=timeout_seconds,
+            )
+
+    with pytest.raises(RuntimeError, match="wrong correlation_id"):
+        asyncio.run(client(WrongCorrelationTransport()).execute(forge_request()))
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    (
+        "https://127.0.0.1:8787",
+        "http://localhost:8787",
+        "http://forge.example:8787",
+    ),
+)
+def test_config_rejects_non_loopback_or_authenticated_transport(base_url: str) -> None:
+    with pytest.raises(ValueError):
+        ForgeHttpClientConfig(base_url=base_url, executor_type="null")

@@ -143,6 +143,22 @@ class StaticProvider(CapabilityToolProvider):
         return ToolResult(invocation_id=invocation.invocation_id, output={"ok": True})
 
 
+class MultiRegistrationProvider(StaticProvider):
+    def __init__(self, provider_id: str, specs: tuple[CapabilitySpec, ...]) -> None:
+        super().__init__(provider_id, specs[0])
+        self._specs = specs
+
+    async def capability_registrations(self) -> tuple[CapabilityRegistration, ...]:
+        return tuple(
+            CapabilityRegistration(
+                capability=spec,
+                provider_id=self._provider_id,
+                provider_tool_ref="test.tool",
+            )
+            for spec in self._specs
+        )
+
+
 class FakeMCPClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, JsonValue]]] = []
@@ -433,6 +449,31 @@ def test_conflicting_capability_registration_is_rejected() -> None:
         with pytest.raises(ContractError) as caught:
             await registry.register_provider(StaticProvider("b", second, priority=1))
         assert caught.value.code is ErrorCode.CONFLICT
+
+    asyncio.run(scenario())
+
+
+def test_conflicting_registrations_from_one_provider_are_rejected() -> None:
+    async def scenario() -> None:
+        first = CapabilitySpec(
+            capability_id="tool.same-provider",
+            name="Same provider",
+            input_schema={"type": "object"},
+            health=HealthStatus.HEALTHY,
+        )
+        second = CapabilitySpec(
+            capability_id="tool.same-provider",
+            name="Same provider",
+            input_schema={"type": "string"},
+            health=HealthStatus.HEALTHY,
+        )
+        registry = CapabilityRegistry()
+        with pytest.raises(ContractError) as caught:
+            await registry.register_provider(
+                MultiRegistrationProvider("same-provider", (first, second))
+            )
+        assert caught.value.code is ErrorCode.CONFLICT
+        assert registry.inventory_providers() == ()
 
     asyncio.run(scenario())
 

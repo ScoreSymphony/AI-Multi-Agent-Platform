@@ -129,6 +129,16 @@ Agent dependencies describe canonical model assignments, capabilities, project/w
 
 Import reconstructs revision history through the normal Agent repository boundary. Agent/Team mutation handlers self-compensate if a multi-revision write fails part-way through.
 
+## Project semantics
+
+Portable `project` resources preserve the complete canonical `Project` snapshot: canonical ID, name, owner reference, creation/update timestamps, schema version, provenance (including nested JSON-safe details), and external references.
+
+Project identity follows the ordinary `IdPolicy`: preserve keeps the canonical Project ID when conflict-free, while regenerate allocates a deterministic destination Project ID through the server-owned preview and rewrites the decoded Project identity through `ImportContext`.
+
+Import uses the canonical `ScopeStore.store_project_snapshot(...)` seam completed by #308. There is no portability-specific Project database or reduced reconstruction path. A destination restart therefore reconstructs the same canonical Project metadata through `SqliteScopeStore`.
+
+Project compensation is intentionally fail-closed. `ScopeStore.compensate_project(...)` refuses deletion when Workspace dependencies exist and also requires an explicit cross-domain dependency audit. If a deployment cannot prove that an imported Project is unreferenced, package rollback reports incomplete compensation rather than risking deletion of referenced canonical state.
+
 ## File and Artifact semantics
 
 Portable `file` resources contain canonical `FileRecord` metadata plus Base64 transport bytes. They never use filesystem paths or object-store keys as identity.
@@ -306,4 +316,4 @@ The #79 portability stack verifies at least:
 - Automation identity-transfer rejection before mutation;
 - guarded Automation rollback for in-memory and SQLite repositories.
 
-Template full-revision round trip, canonical Template dependency/reference remapping, guarded Template compensation, replay-safe import reports and Control Plane/CLI workflows are covered by the current #79 implementation. Remaining resource-family integrations are intentionally dependency-gated: Project portability waits for #308, durable model-routing-policy portability for #309, reusable authorization-policy portability for #310, and Evaluation suite/result portability for #19. #79 must consume those canonical contracts rather than inventing shadow persistence.
+#79 is complete and closed. Agent/Team, Template and Project round trips, canonical dependency/reference remapping, guarded compensation, replay-safe import reports and the Control Plane/CLI workflow form the completed portability surface. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. #309 and #310 remain independent follow-up domain work for durable model-routing and authorization-policy resources; they are not blockers to the completed #79 Definition of Done. #19 is currently reopened for its own outstanding Evaluation-framework acceptance work. Configured EvaluationSuite assets currently remain deployment/configuration inputs rather than a mutable canonical repository, so any future cross-deployment Evaluation-suite import must consume a stable owning-domain mutation seam instead of introducing portability-specific shadow persistence.

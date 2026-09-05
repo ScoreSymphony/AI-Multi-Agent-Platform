@@ -18,15 +18,17 @@ The single-node source must contain the durable `db/`, `files/`, and `workspaces
 - `db/authentication.sqlite3`
 - `db/authorization.sqlite3`
 - `db/automation.sqlite3`
+- `db/notifications.sqlite3`
 
-Lazy JSON stores remain inside the durable `db/` scope and are included whenever present. A path that merely exists but does not have the required deployment layout is rejected rather than producing a formally valid but incomplete backup.
+Lazy JSON stores remain inside the durable `db/` scope and are included whenever present. The authoritative inventory includes Agent, Conversation, model/provider, onboarding-command and Template repositories; in particular `db/templates.json` is durable platform state rather than an incidental file. A path that merely exists but does not have the required deployment layout is rejected rather than producing a formally valid but incomplete backup.
 
 ## V1 scope
 
 Included:
 
 - all SQLite state under `data_dir/db`, including canonical kernel/event history and the other configured single-node stores;
-- non-SQLite durable state under `data_dir/db`, including Agent, Conversation, model and onboarding configuration stores when present;
+- non-SQLite durable state under `data_dir/db`, including Agent, Conversation, model, onboarding and Template stores when present;
+- durable Notification inbox/preferences/delivery/projection state in `db/notifications.sqlite3`;
 - durable files under `data_dir/files`;
 - durable workspace data under `data_dir/workspaces`;
 - non-secret deployment metadata needed to identify the deployment profile;
@@ -89,7 +91,9 @@ The directory form is intentional for v1: operators may subsequently encrypt/pac
 
 ## Compatibility boundary
 
-V1 restore requires an exact platform release version by default through the installed `platform-backup` CLI. The manifest also records the source commit when supplied. Operators who need an exact-build restore can additionally pass `--expected-platform-commit`; a mismatch is rejected before any restore target is written.
+V1 restore requires an exact platform release version through the installed `platform-backup` CLI. New operator-created backups also require an exact build commit. The CLI resolves that commit, in order, from an explicit `--platform-commit`/`--expected-platform-commit`, `AI_MULTI_AGENT_PLATFORM_BUILD_COMMIT`, or the current Git checkout. This prevents two materially different development builds that both report the package version `0.0.1` from being treated as equivalent merely because their release string matches.
+
+A pinned backup is restored only when the running build commit matches. Older v1 backups whose historical manifest contains `platform.commit=null` remain schema-valid, but the operator CLI refuses to restore them silently. A trusted legacy backup requires the explicit `--allow-unpinned-backup` opt-in. This preserves format-v1 readability while keeping new disaster-recovery operations deterministic.
 
 The per-database `PRAGMA user_version` values are not treated as decorative metadata: backup verification compares them with the actual payload databases, and restore compares them again with the restored SQLite files before publishing the restored data root. Cross-version migrations and supported translation between different database revisions belong to #41 rather than being silently inferred by #40.
 
@@ -98,7 +102,16 @@ The per-database `PRAGMA user_version` values are not treated as decorative meta
 The backup CLI is separate from the live API-first `platform` CLI because create/restore are offline host operations and must not depend on a running Control Plane.
 
 ```bash
-# Stop the platform first.
+# Stop the platform first. In a Git checkout the commit is auto-detected.
+platform-backup create \
+  --data-dir /srv/ai-map/data \
+  --destination /srv/backups/ai-map-2026-09-04 \
+  --quiesced
+
+# Packaged deployments can provide the immutable build commit through the environment.
+export AI_MULTI_AGENT_PLATFORM_BUILD_COMMIT=<git-sha>
+
+# An explicit pin remains available and overrides auto-detection.
 platform-backup create \
   --data-dir /srv/ai-map/data \
   --destination /srv/backups/ai-map-2026-09-04 \
@@ -107,14 +120,19 @@ platform-backup create \
 
 platform-backup verify /srv/backups/ai-map-2026-09-04
 
-# Restore to a clean path; this can be on different compatible hardware.
+# Restore to a clean path; pinned backups require the same running build commit.
 platform-backup restore /srv/backups/ai-map-2026-09-04 \
   --target-data-dir /srv/ai-map-restored/data
 
-# Optional exact-build pin in addition to the normal exact release-version check.
+# Explicit current-build pin when auto-detection/environment is unavailable.
 platform-backup restore /srv/backups/ai-map-2026-09-04 \
   --target-data-dir /srv/ai-map-restored/data \
   --expected-platform-commit <git-sha>
+
+# Trusted legacy v1 backups with platform.commit=null require explicit acceptance.
+platform-backup restore /srv/backups/legacy-v1 \
+  --target-data-dir /srv/ai-map-restored/data \
+  --allow-unpinned-backup
 ```
 
 Restore refuses an existing target directory. It verifies the entire manifest/payload before writing, restores through a sibling `.restore-partial` directory, invalidates persisted authentication sessions, recreates the executor directory empty, re-runs durable-layout/SQLite-integrity/schema-version checks, writes a recovery-required marker, and then atomically publishes the restored data directory. A stale partial restore directory is deleted on retry.
@@ -145,8 +163,10 @@ The recovery sequence is:
 6. validate Agent/Team/AgentRun and Conversation/Message canonical references;
 7. validate the actual `SqliteWorkspaceProvider` state, including Workspace→Project, head/base/parent snapshots, snapshot File references/checksums, Artifact references and snapshot-source references;
 8. validate cross-store Authorization policy, Automation, Authentication credential-owner and Verification references wherever the current single-node composition owns the corresponding canonical registry;
-9. run the composed Control Plane provider health probe and require `status=healthy` and `ready=true`;
-10. write `recovery/restore-report.json` with the reconciliation result, validation checks and `ready_for_service` decision.
+9. validate durable Notifications, Notification preferences, delivery attempts and processed-event cursor references against current canonical Tasks/Runs/Projects/Workspaces/Automations/Verifications/Events and other owned registries;
+10. reconstruct `db/templates.json` when present and validate Template owners/scopes, Template dependency/provenance revision references and instantiated canonical resource references;
+11. run the composed Control Plane provider health probe and require `status=healthy` and `ready=true`;
+12. write `recovery/restore-report.json` with the reconciliation result, validation checks and `ready_for_service` decision.
 
 The cross-store gate deliberately does not invent authority for identities or resources that the current single-node composition does not own. For example, opaque service/worker identities are not rejected merely because there is no single-node service/worker registry, and optional runtime-provider availability is not confused with integrity of persisted canonical model configuration.
 
@@ -209,7 +229,7 @@ The fully packaged heterogeneous/multi-device deployment profiles remain owned b
 
 ### Total control-plane host loss
 
-Provision a replacement host, install a compatible platform version, restore to a new data root, recover protected dependencies/secrets separately, run post-restore recovery, resolve any orphaned Runs explicitly, re-register workers, then run the reference smoke.
+Provision a replacement host, install a compatible platform version/build, restore to a new data root, recover protected dependencies/secrets separately, run post-restore recovery, resolve any orphaned Runs explicitly, re-register workers, then run the reference smoke.
 
 ### Database corruption
 
@@ -249,10 +269,10 @@ The v1 implementation covers:
 - canonical user/Task/Run history preservation on the replacement installation;
 - SQLite WAL checkpoint/self-contained snapshot behavior;
 - runtime JSON-Schema validation using the schema included in installed packages;
-- authoritative initialized durable-store completeness checks;
+- authoritative initialized durable-store completeness checks, including current Notification persistence and lazy Template persistence;
 - checksum corruption and missing-file detection;
 - SQLite `PRAGMA integrity_check`, `PRAGMA foreign_key_check` and payload/manifest/restored `user_version` agreement;
-- manifest/schema/platform compatibility rejection and optional exact-commit pinning;
+- manifest/schema/platform compatibility rejection, exact operator build provenance, and explicit legacy-unpinned restore opt-in;
 - structured, non-secret external dependency inventory with backward-compatible v1 schema validation;
 - clean-target restore and interrupted-restore retry;
 - authentication-session invalidation;
@@ -263,6 +283,8 @@ The v1 implementation covers:
 - safe offline failure/cancellation resolution for Runs explicitly named as orphaned by the blocked restore report;
 - post-restore Task/Run/Project/File/Agent/Team/Conversation reference validation;
 - post-restore `SqliteWorkspaceProvider`, Authorization, Automation, Authentication-owner and Verification cross-store reference validation;
+- post-restore Notification inbox/preference/delivery/event-cursor reference validation;
+- post-restore Template owner/scope/dependency/provenance/instantiation reference validation;
 - provider health/readiness gating before normal serving;
 - distributed stale-reservation removal and Worker re-registration semantics;
 - restore while an optional adapter/runtime is unavailable;

@@ -191,6 +191,29 @@ def test_first_general_assistant_task_produces_visible_canonical_result_and_surv
         assert generation_payload is not None
         assert generation_payload["model"] == "qwen-local"
 
+        alternate_project = deployment.scopes.create_project(
+            key="issue-250-alternate-project",
+            name="Alternate local workspace",
+            owner_type="user",
+            owner_id=admin.user_id,
+        )
+        alternate_workspace = deployment.scopes.create_workspace(
+            key="issue-250-alternate-workspace",
+            project_id=alternate_project.id,
+        )
+        deployment.agents.clone_agent(
+            STANDARD_AGENT_IDS["general_assistant"],
+            revision=1,
+            owner_ref=OwnerRef(type="user", id=admin.user_id),
+            project_id=alternate_project.id,
+            workspace_id=alternate_workspace.id,
+            name="Alternate General Assistant",
+        )
+        selection_status = deployment.onboarding.status(_context(admin.user_id, "selection-status"))
+        assert selection_status["state"] == "needs_selection"
+        assert selection_status["selection_kind"] == "project"
+        assert selection_status["selection_required"] is True
+
         restarted_transport = FirstTaskTransport(answer="second local answer")
         restarted = _build(data_dir, restarted_transport)
         restarted_task = await restarted.kernel.get_task(task_id)
@@ -214,12 +237,11 @@ def test_first_general_assistant_task_produces_visible_canonical_result_and_surv
             _context(admin.user_id, "restart-provider-health"),
             "local-openai",
         )
-        assert (
-            restarted.onboarding.status(_context(admin.user_id, "restart-status-after-health"))[
-                "state"
-            ]
-            == "ready_for_task"
+        after_health = restarted.onboarding.status(
+            _context(admin.user_id, "restart-status-after-health")
         )
+        assert after_health["state"] == "needs_selection"
+        assert after_health["selection_kind"] == "project"
 
         second = await restarted.control_plane.execute_command(
             _context(admin.user_id, "issue-250-second-task"),
