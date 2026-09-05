@@ -9,6 +9,7 @@ from typing import cast
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
     FrozenJsonValue,
+    JsonValue,
     OperationContext,
     OperationControl,
 )
@@ -83,32 +84,57 @@ class WorkspaceStructureTemplateHandler:
         project = _resolve_project(revision, payload, context, self.scopes)
         specs = _workspace_specs(payload)
         resources: list[TemplateResourceRef] = []
-        for index, spec in enumerate(specs):
-            key = (
-                f"template:{context.instance_id}:{revision.template_id}:"
-                f"{revision.revision}:workspace:{index}"
-            )
-            data_context = DataAccessContext(
-                operation=OperationContext(
-                    correlation_id=f"template:{context.instance_id}",
-                    owner_type=project.owner_ref.type,
-                    owner_id=project.owner_ref.id,
+        try:
+            for index, spec in enumerate(specs):
+                key = (
+                    f"template:{context.instance_id}:{revision.template_id}:"
+                    f"{revision.revision}:workspace:{index}"
+                )
+                data_context = DataAccessContext(
+                    operation=OperationContext(
+                        correlation_id=f"template:{context.instance_id}",
+                        owner_type=project.owner_ref.type,
+                        owner_id=project.owner_ref.id,
+                        project_id=project.id,
+                        control=OperationControl(idempotency_key=key),
+                    ),
+                    actor_ref=provenance.applied_by.id,
+                )
+                workspace = await self.provider.create_workspace(
                     project_id=project.id,
-                    control=OperationControl(idempotency_key=key),
-                ),
-                actor_ref=provenance.applied_by.id,
-            )
-            workspace = await self.provider.create_workspace(
-                project_id=project.id,
-                owner_ref=project.owner_ref,
-                workspace_type=spec.workspace_type,
-                context=data_context,
-                access_mode=spec.access_mode,
-                retention=spec.retention,
-            )
-            resources.append(
-                TemplateResourceRef(resource_type="workspace", resource_id=workspace.id)
-            )
+                    owner_ref=project.owner_ref,
+                    workspace_type=spec.workspace_type,
+                    context=data_context,
+                    access_mode=spec.access_mode,
+                    retention=spec.retention,
+                )
+                resources.append(
+                    TemplateResourceRef(resource_type="workspace", resource_id=workspace.id)
+                )
+        except Exception as creation_error:
+            failures: list[JsonValue] = []
+            for resource in reversed(resources):
+                try:
+                    await self.provider.compensate_workspace(resource.resource_id)
+                except Exception as compensation_error:
+                    failures.append(
+                        {
+                            "workspace_id": resource.resource_id,
+                            "error_type": type(compensation_error).__name__,
+                            "error": str(compensation_error),
+                        }
+                    )
+            if failures:
+                raise ContractError(
+                    ErrorCode.BACKEND_ERROR,
+                    "Workspace Template creation failed and partial creation could not be fully compensated",
+                    details={
+                        "creation_error_type": type(creation_error).__name__,
+                        "creation_error": str(creation_error),
+                        "compensation_failures": failures,
+                    },
+                ) from creation_error
+            raise
         return tuple(resources)
 
 
