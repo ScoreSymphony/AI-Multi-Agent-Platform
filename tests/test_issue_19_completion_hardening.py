@@ -105,16 +105,12 @@ def test_resource_limits_are_deterministic_maximum_metric_checks() -> None:
     passing = evaluator.evaluate(
         evaluation_run_id="evaluation_run_pass",
         case=case,
-        observation=EvaluationObservation(
-            metrics={"latency_ms": 250.0, "dispatch_attempts": 1.0}
-        ),
+        observation=EvaluationObservation(metrics={"latency_ms": 250.0, "dispatch_attempts": 1.0}),
     )
     failing = evaluator.evaluate(
         evaluation_run_id="evaluation_run_fail",
         case=case,
-        observation=EvaluationObservation(
-            metrics={"latency_ms": 750.0, "dispatch_attempts": 1.0}
-        ),
+        observation=EvaluationObservation(metrics={"latency_ms": 750.0, "dispatch_attempts": 1.0}),
     )
     missing = evaluator.evaluate(
         evaluation_run_id="evaluation_run_missing",
@@ -124,7 +120,10 @@ def test_resource_limits_are_deterministic_maximum_metric_checks() -> None:
 
     assert passing.outcome is EvaluationOutcome.PASSED
     assert failing.outcome is EvaluationOutcome.FAILED
-    assert next(metric for metric in failing.metrics if metric.metric_name == "latency_ms").passed is False
+    assert (
+        next(metric for metric in failing.metrics if metric.metric_name == "latency_ms").passed
+        is False
+    )
     assert missing.outcome is EvaluationOutcome.FAILED
     assert {metric.metric_name for metric in missing.metrics} == {"latency_ms"}
 
