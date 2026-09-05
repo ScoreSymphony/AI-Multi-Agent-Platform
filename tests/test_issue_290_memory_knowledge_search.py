@@ -29,6 +29,7 @@ from ai_multi_agent_platform.data import (
     new_memory_id,
 )
 from ai_multi_agent_platform.data.control_plane import data_resource_services
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import (
     FakeAuthorizationProvider,
@@ -323,10 +324,11 @@ def test_user_agent_project_and_organization_scope_authorization_filters_before_
             owner_ref="user:bob",
             value="hidden-user-memory",
         )
+        hidden_agent_id = new_id("agent")
         hidden_agent = await _memory(
             providers.memory,
             scope=MemoryScope.AGENT,
-            scope_id="agent_hidden",
+            scope_id=hidden_agent_id,
             owner_ref="user:alice",
             value="hidden-agent-memory",
             origin=MemoryOrigin.AGENT_DERIVED,
@@ -362,7 +364,7 @@ def test_user_agent_project_and_organization_scope_authorization_filters_before_
         )
 
         authorization = DataSearchAuthorization(
-            denied_owner_ids=frozenset({"bob", "agent_hidden", "org_hidden"}),
+            denied_owner_ids=frozenset({"bob", hidden_agent_id, "org_hidden"}),
             denied_project_ids=frozenset({hidden_project.id}),
         )
         _control_plane, http = _stack(providers, scopes, authorization)
@@ -391,7 +393,7 @@ def test_user_agent_project_and_organization_scope_authorization_filters_before_
         assert any(
             call.action == "memory:list"
             and call.context.owner_type == "agent"
-            and call.context.owner_id == "agent_hidden"
+            and call.context.owner_id == hidden_agent_id
             for call in authorization.calls
         )
         assert any(
