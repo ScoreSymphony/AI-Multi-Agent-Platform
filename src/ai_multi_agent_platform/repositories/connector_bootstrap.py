@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ai_multi_agent_platform.connectors import (
+    Connection,
     ConnectionStatus,
     ConnectorRegistry,
     ConnectorRepository,
@@ -103,15 +104,8 @@ async def restore_connector_repositories(
     return tuple(restored)
 
 
-def _require_usable_connection(connection: object) -> None:
-    if not hasattr(connection, "enabled") or not hasattr(connection, "status"):
-        raise ContractError(
-            ErrorCode.CONTRACT_VIOLATION,
-            "repository connector bootstrap received a noncanonical Connection",
-        )
-    enabled = getattr(connection, "enabled")
-    status = getattr(connection, "status")
-    if enabled is not True or status is ConnectionStatus.DISABLED:
+def _require_usable_connection(connection: Connection) -> None:
+    if not connection.enabled or connection.status is ConnectionStatus.DISABLED:
         raise ContractError(
             ErrorCode.UNAVAILABLE,
             "repository connector connection is disabled",
