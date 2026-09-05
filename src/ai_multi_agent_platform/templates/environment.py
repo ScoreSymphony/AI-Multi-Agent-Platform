@@ -37,7 +37,8 @@ class PlatformTemplateEnvironmentResolver:
     Optional inventory callbacks deliberately expose only IDs with matching semantics.
     For example, model configuration IDs must not be supplied as ``model_policy_refs``.
     Binding callbacks are server-owned and are the only source from which apply materializes
-    placeholder values, SecretReferences, or external configuration payloads.
+    placeholder values, SecretReferences, or external configuration payloads. Mere declarations
+    that a binding name/reference is "resolved" are intentionally insufficient.
     """
 
     workspaces: WorkspaceProvider | None = None
@@ -47,9 +48,6 @@ class PlatformTemplateEnvironmentResolver:
     connectors: InventoryProvider | None = None
     model_policies: InventoryProvider | None = None
     grantable_permissions: ScopedInventoryProvider | None = None
-    placeholders: ScopedInventoryProvider | None = None
-    secret_reference_placeholders: ScopedInventoryProvider | None = None
-    validated_configuration_refs: ScopedInventoryProvider | None = None
     placeholder_bindings: PlaceholderBindingProvider | None = None
     secret_reference_bindings: SecretReferenceBindingProvider | None = None
     configuration_payloads: ConfigurationPayloadProvider | None = None
@@ -90,17 +88,9 @@ class PlatformTemplateEnvironmentResolver:
             model_policy_refs=_inventory(self.model_policies),
             grantable_permissions=_scoped_inventory(self.grantable_permissions, context),
             workspace_prerequisites=workspace_ids,
-            resolved_placeholders=(
-                _scoped_inventory(self.placeholders, context) | frozenset(placeholder_bindings)
-            ),
-            resolved_secret_reference_placeholders=(
-                _scoped_inventory(self.secret_reference_placeholders, context)
-                | frozenset(secret_reference_bindings)
-            ),
-            validated_configuration_refs=(
-                _scoped_inventory(self.validated_configuration_refs, context)
-                | frozenset(configuration_payloads)
-            ),
+            resolved_placeholders=frozenset(placeholder_bindings),
+            resolved_secret_reference_placeholders=frozenset(secret_reference_bindings),
+            validated_configuration_refs=frozenset(configuration_payloads),
             placeholder_bindings=placeholder_bindings,
             secret_reference_bindings=secret_reference_bindings,
             configuration_payloads=configuration_payloads,
