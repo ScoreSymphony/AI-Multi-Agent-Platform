@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[issue-291-patched]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +46,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/tmp_issue_291_port.yml scripts/tmp_issue_291_patch.py
+          git restore scripts/tmp_issue_291_patch.py
           git add -A
           git commit -m "feat: complete privacy-safe verification discovery (#291) [issue-291-patched]"
           git push origin HEAD:feat/issue-291-verification-search
