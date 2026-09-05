@@ -55,7 +55,6 @@ class CapabilityAssignmentService:
         organization_id: str | None = None,
         assignment_id: str | None = None,
     ) -> CapabilityAssignmentRevision:
-        resolved_target = self._validate(content, project_id, organization_id)
         canonical_id = assignment_id or new_id("cap_assignment")
         now = utc_now()
         policy = CapabilityAssignmentPolicy(
@@ -76,17 +75,22 @@ class CapabilityAssignmentService:
             organization_id=organization_id,
             created_at=now,
         )
+        provisional_scope = ResolvedCapabilityAssignmentTarget(
+            project_id=project_id,
+            organization_id=organization_id,
+        )
         await self.authorization.enforce(
             self._action(
                 access,
                 AuthorizationAction.CREATE,
                 policy,
                 revision,
-                resolved_target,
+                provisional_scope,
             ),
             approval_id=access.approval_id,
             risk=assignment_risk(content),
         )
+        self._validate(content, project_id, organization_id)
         self.repository.create(policy, revision)
         return revision
 
@@ -99,20 +103,6 @@ class CapabilityAssignmentService:
         expected_revision: int | None = None,
     ) -> CapabilityAssignmentRevision:
         current = self.repository.get(assignment_id)
-        if expected_revision is not None and expected_revision != current.current_revision:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "capability assignment revision precondition failed",
-                details={
-                    "expected_revision": expected_revision,
-                    "current_revision": current.current_revision,
-                },
-            )
-        resolved_target = self._validate(
-            content,
-            current.project_id,
-            current.organization_id,
-        )
         now = utc_now()
         revision = CapabilityAssignmentRevision(
             assignment_id=current.assignment_id,
@@ -128,16 +118,34 @@ class CapabilityAssignmentService:
             current_revision=revision.revision,
             updated_at=now,
         )
+        provisional_scope = ResolvedCapabilityAssignmentTarget(
+            project_id=current.project_id,
+            organization_id=current.organization_id,
+        )
         await self.authorization.enforce(
             self._action(
                 access,
                 AuthorizationAction.MODIFY,
                 updated,
                 revision,
-                resolved_target,
+                provisional_scope,
             ),
             approval_id=access.approval_id,
             risk=assignment_risk(content),
+        )
+        if expected_revision is not None and expected_revision != current.current_revision:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "capability assignment revision precondition failed",
+                details={
+                    "expected_revision": expected_revision,
+                    "current_revision": current.current_revision,
+                },
+            )
+        self._validate(
+            content,
+            current.project_id,
+            current.organization_id,
         )
         self.repository.append_revision(updated, revision)
         return revision
@@ -150,9 +158,12 @@ class CapabilityAssignmentService:
     ) -> CapabilityAssignmentPolicy:
         policy = self.repository.get(assignment_id)
         revision = self.repository.get_revision(assignment_id, policy.current_revision)
-        resolved_target = self.targets.resolve(revision.content.target)
+        stored_scope = ResolvedCapabilityAssignmentTarget(
+            project_id=policy.project_id,
+            organization_id=policy.organization_id,
+        )
         await self.authorization.enforce(
-            self._action(access, AuthorizationAction.READ, policy, revision, resolved_target),
+            self._action(access, AuthorizationAction.READ, policy, revision, stored_scope),
             approval_id=access.approval_id,
             risk=RiskClassification.STANDARD,
         )
@@ -167,9 +178,12 @@ class CapabilityAssignmentService:
     ) -> CapabilityAssignmentRevision:
         policy = self.repository.get(assignment_id)
         item = self.repository.get_revision(assignment_id, revision)
-        resolved_target = self.targets.resolve(item.content.target)
+        stored_scope = ResolvedCapabilityAssignmentTarget(
+            project_id=policy.project_id,
+            organization_id=policy.organization_id,
+        )
         await self.authorization.enforce(
-            self._action(access, AuthorizationAction.READ, policy, item, resolved_target),
+            self._action(access, AuthorizationAction.READ, policy, item, stored_scope),
             approval_id=access.approval_id,
             risk=RiskClassification.STANDARD,
         )
@@ -189,14 +203,17 @@ class CapabilityAssignmentService:
             if organization_id is not None and policy.organization_id != organization_id:
                 continue
             revision = self.repository.get_revision(policy.assignment_id, policy.current_revision)
-            resolved_target = self.targets.resolve(revision.content.target)
+            stored_scope = ResolvedCapabilityAssignmentTarget(
+                project_id=policy.project_id,
+                organization_id=policy.organization_id,
+            )
             decision = await self.authorization.decide(
                 self._action(
                     access,
                     AuthorizationAction.READ,
                     policy,
                     revision,
-                    resolved_target,
+                    stored_scope,
                 ),
                 approval_id=access.approval_id,
                 risk=RiskClassification.STANDARD,
