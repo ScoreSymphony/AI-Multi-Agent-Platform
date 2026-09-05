@@ -9,12 +9,15 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 
 from .management import RepositoryManagementService
 from .models import (
+    RepositoryChangeRequestState,
     RepositoryCommit,
     RepositoryCommitInfo,
     RepositoryDiff,
+    RepositoryIssueState,
     RepositoryReference,
     RepositoryRevision,
 )
+from .references import collaboration_reference_from_json
 from .service import RepositoryCallContext, RepositoryService
 
 REPOSITORY_COLLECTION = "repositories"
@@ -22,6 +25,12 @@ REPOSITORY_COMMANDS = (
     "repository.branches",
     "repository.tags",
     "repository.commits",
+    "repository.issue.read",
+    "repository.issue.open",
+    "repository.issue.update",
+    "repository.change_request.read",
+    "repository.change_request.open",
+    "repository.change_request.update",
     "repository.status",
     "repository.diff",
     "repository.fetch",
@@ -118,6 +127,119 @@ def register_repository_control_plane(
             "repository_id": resource_ref,
             "commits": [_commit_info_resource(value) for value in values],
         }
+
+    async def read_issue(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"resource", "approval_id"})
+        issue = collaboration_reference_from_json(
+            payload.get("resource"),
+            expected_resource_type="repository_issue",
+        )
+        return (
+            await repositories.read_issue(
+                resource_ref,
+                issue,
+                _call_context(context, payload),
+            )
+        ).to_dict()
+
+    async def open_issue(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"title", "body", "approval_id"})
+        return (
+            await repositories.open_issue(
+                resource_ref,
+                _required_string(payload, "title"),
+                _call_context(context, payload),
+                body=_optional_text(payload.get("body"), "body"),
+            )
+        ).to_dict()
+
+    async def update_issue(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"resource", "title", "body", "state", "approval_id"})
+        issue = collaboration_reference_from_json(
+            payload.get("resource"),
+            expected_resource_type="repository_issue",
+        )
+        return (
+            await repositories.update_issue(
+                resource_ref,
+                issue,
+                _call_context(context, payload),
+                title=_optional_string(payload.get("title"), "title"),
+                body=_optional_text(payload.get("body"), "body"),
+                state=_optional_issue_state(payload.get("state")),
+            )
+        ).to_dict()
+
+    async def read_change_request(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"resource", "approval_id"})
+        change_request = collaboration_reference_from_json(
+            payload.get("resource"),
+            expected_resource_type="repository_change_request",
+        )
+        return (
+            await repositories.read_change_request(
+                resource_ref,
+                change_request,
+                _call_context(context, payload),
+            )
+        ).to_dict()
+
+    async def open_change_request(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(
+            payload,
+            {"title", "head_ref", "base_ref", "body", "approval_id"},
+        )
+        return (
+            await repositories.open_change_request(
+                resource_ref,
+                _required_string(payload, "title"),
+                _required_string(payload, "head_ref"),
+                _required_string(payload, "base_ref"),
+                _call_context(context, payload),
+                body=_optional_text(payload.get("body"), "body"),
+            )
+        ).to_dict()
+
+    async def update_change_request(
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        _reject_unknown(payload, {"resource", "title", "body", "state", "approval_id"})
+        change_request = collaboration_reference_from_json(
+            payload.get("resource"),
+            expected_resource_type="repository_change_request",
+        )
+        return (
+            await repositories.update_change_request(
+                resource_ref,
+                change_request,
+                _call_context(context, payload),
+                title=_optional_string(payload.get("title"), "title"),
+                body=_optional_text(payload.get("body"), "body"),
+                state=_optional_change_request_state(payload.get("state")),
+            )
+        ).to_dict()
 
     async def status(
         context: RequestContext,
@@ -224,6 +346,12 @@ def register_repository_control_plane(
     control_plane.register_command("repository.branches", branches)
     control_plane.register_command("repository.tags", tags)
     control_plane.register_command("repository.commits", commits)
+    control_plane.register_command("repository.issue.read", read_issue)
+    control_plane.register_command("repository.issue.open", open_issue)
+    control_plane.register_command("repository.issue.update", update_issue)
+    control_plane.register_command("repository.change_request.read", read_change_request)
+    control_plane.register_command("repository.change_request.open", open_change_request)
+    control_plane.register_command("repository.change_request.update", update_change_request)
     control_plane.register_command("repository.status", status)
     control_plane.register_command("repository.diff", diff)
     control_plane.register_command("repository.fetch", fetch)
@@ -393,6 +521,17 @@ def _optional_string(value: JsonValue, field_name: str) -> str | None:
     return value
 
 
+def _optional_text(value: JsonValue, field_name: str) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"repository command field {field_name} must be string or null",
+        )
+    return value
+
+
 def _optional_bool(value: JsonValue, field_name: str) -> bool | None:
     if value is None:
         return None
@@ -413,3 +552,29 @@ def _optional_int(value: JsonValue, field_name: str) -> int | None:
             f"repository command field {field_name} must be integer or null",
         )
     return value
+
+
+def _optional_issue_state(value: JsonValue) -> RepositoryIssueState | None:
+    raw = _optional_string(value, "state")
+    if raw is None:
+        return None
+    try:
+        return RepositoryIssueState(raw)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "repository command field state is not a valid issue state",
+        ) from exc
+
+
+def _optional_change_request_state(value: JsonValue) -> RepositoryChangeRequestState | None:
+    raw = _optional_string(value, "state")
+    if raw is None:
+        return None
+    try:
+        return RepositoryChangeRequestState(raw)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "repository command field state is not a valid change-request state",
+        ) from exc
