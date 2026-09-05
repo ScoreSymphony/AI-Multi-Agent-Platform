@@ -121,9 +121,7 @@ def test_external_policy_scope_dependencies_fail_closed_then_resolve_canonically
     destination = InMemoryAuthorizationPolicyProfileRepository()
     destination_owner = OwnerRef(type="user", id="destination-owner")
     without_external_view = _workflow(destination, target_owner=destination_owner)
-    inspection = without_external_view.validate_package_document(
-        package_to_dict(exported.package)
-    )
+    inspection = without_external_view.validate_package_document(package_to_dict(exported.package))
     blocked = without_external_view.preview_import(inspection.package_id)
     assert blocked.ready is False
     missing_types = {
@@ -141,10 +139,12 @@ def test_external_policy_scope_dependencies_fail_closed_then_resolve_canonically
         destination,
         target_owner=destination_owner,
         additional_resource_exists=lambda resource_type, resource_id: (
-            resource_type,
-            resource_id,
-        )
-        in known,
+            (
+                resource_type,
+                resource_id,
+            )
+            in known
+        ),
     )
     inspection = with_external_view.validate_package_document(package_to_dict(exported.package))
     preview = with_external_view.preview_import(inspection.package_id)
