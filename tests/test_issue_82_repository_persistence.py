@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from ai_multi_agent_platform import repositories
+import ai_multi_agent_platform.repositories as repositories
 
 
 _INPUT_REVISION = "1" * 40
