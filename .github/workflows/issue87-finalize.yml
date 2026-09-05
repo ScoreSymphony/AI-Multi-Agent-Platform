@@ -27,18 +27,20 @@ jobs:
         shell: bash
         run: |
           set +e
-          python tools/issue87_finalize.py > issue87-patch-diagnostic.txt 2>&1
+          python tools/issue87_finalize_v2.py > issue87-patch-diagnostic.txt 2>&1
           status=$?
           cat issue87-patch-diagnostic.txt
           if [ "$status" -ne 0 ]; then
             git config user.name "Score Symphony"
             git config user.email "scoresymphony@gmail.com"
             git add issue87-patch-diagnostic.txt
-            git commit -m "chore: capture issue 87 patch diagnostic"
-            git push origin HEAD:feat/issue-87-organization-membership
+            if ! git diff --cached --quiet; then
+              git commit -m "chore: capture issue 87 patch diagnostic"
+              git push origin HEAD:feat/issue-87-organization-membership
+            fi
             exit "$status"
           fi
-          rm issue87-patch-diagnostic.txt
+          rm -f issue87-patch-diagnostic.txt
       - name: Bootstrap Python environment
         shell: bash
         run: |
