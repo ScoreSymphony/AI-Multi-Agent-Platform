@@ -55,7 +55,10 @@ def _forge() -> int:
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) != 1 or args[0] not in {"B", "C"}:
-        print("usage: python -m ai_multi_agent_platform.conformance.external_profile B|C", file=sys.stderr)
+        print(
+            "usage: python -m ai_multi_agent_platform.conformance.external_profile B|C",
+            file=sys.stderr,
+        )
         return 2
     return _hermes() if args[0] == "B" else _forge()
 
