@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import replace
 from time import perf_counter
 from typing import Protocol, runtime_checkable
 
@@ -68,6 +69,10 @@ class CapabilityInvoker:
     ``canonical_binding_hook`` is the ordinary platform identity seam. When configured, it is
     applied to every resolved invocation before policy/approval and provider execution so a
     successful, denied or failed call can retain the same canonical ``tool_invocation_*`` subject.
+    Immediately before provider execution that canonical ToolInvocation becomes the direct
+    ``OperationContext.causation_id``. Downstream Executor/Worker adapters can therefore preserve
+    Run -> ToolInvocation -> WorkerJob lineage without re-deriving platform identity from a
+    provider-private invocation handle.
 
     ``governance_binding_hook`` is retained as the backwards-compatible approval-only fallback
     for callers that have not yet adopted ordinary canonical binding.
@@ -214,18 +219,29 @@ class CapabilityInvoker:
         )
         timeout = capability.timeout_seconds or request.context.control.timeout_seconds
         provider_started = perf_counter()
+        execution_invocation = provider_invocation
 
         try:
             if canonical_invocation is not None:
                 validate_tool_invocation_binding(provider_invocation, canonical_invocation)
+                execution_invocation = replace(
+                    provider_invocation,
+                    context=replace(
+                        provider_invocation.context,
+                        causation_id=canonical_invocation.id,
+                    ),
+                )
             if timeout is None:
-                tool_result = await provider.invoke(provider_invocation)
+                tool_result = await provider.invoke(execution_invocation)
             else:
-                tool_result = await asyncio.wait_for(provider.invoke(provider_invocation), timeout)
+                tool_result = await asyncio.wait_for(
+                    provider.invoke(execution_invocation),
+                    timeout,
+                )
         except TimeoutError as exc:
             adapter_metadata = self._provider_failure_metadata(
                 provider,
-                provider_invocation,
+                execution_invocation,
                 error_code=ErrorCode.TIMEOUT.value,
                 started=provider_started,
             )
@@ -248,7 +264,7 @@ class CapabilityInvoker:
         except asyncio.CancelledError as exc:
             adapter_metadata = self._provider_failure_metadata(
                 provider,
-                provider_invocation,
+                execution_invocation,
                 error_code=ErrorCode.CANCELLED.value,
                 started=provider_started,
             )
