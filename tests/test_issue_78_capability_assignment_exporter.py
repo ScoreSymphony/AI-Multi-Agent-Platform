@@ -25,7 +25,12 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
-from ai_multi_agent_platform.security import ActorIdentity, ActorType, ProposedAction, RiskClassification
+from ai_multi_agent_platform.security import (
+    ActorIdentity,
+    ActorType,
+    ProposedAction,
+    RiskClassification,
+)
 from ai_multi_agent_platform.templates import (
     CapabilityAssignmentTemplateExporter,
     InMemoryTemplateRepository,
