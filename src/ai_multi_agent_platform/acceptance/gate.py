@@ -106,9 +106,27 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
                 _pytest("tests/test_issue_251_lifecycle_commands.py"),
             ),
             AcceptanceCheck(
-                "web-cli-canonical-state",
-                "#17/#395 clients",
-                "browser client projections stay on canonical Control Plane state",
+                "memory-delete-not-found",
+                "#251/#252 data acceptance",
+                "Memory is retrieved with provenance, deleted, then unavailable as NOT_FOUND",
+                _pytest(
+                    "tests/test_issue_252_acceptance_gate.py::"
+                    "test_memory_acceptance_create_retrieve_provenance_delete_not_found"
+                ),
+            ),
+            AcceptanceCheck(
+                "cli-canonical-state",
+                "#17/#252 CLI client",
+                "CLI reads the shared canonical Task fixture through the versioned Control Plane path",
+                _pytest(
+                    "tests/test_issue_252_acceptance_gate.py::"
+                    "test_cli_and_web_share_canonical_task_fixture_and_route"
+                ),
+            ),
+            AcceptanceCheck(
+                "web-canonical-state",
+                "#17/#395 Web client",
+                "Web reads the same canonical Task fixture through the same versioned resource path",
                 (
                     "npm",
                     "--prefix",
