@@ -33,4 +33,4 @@ def test_compatibility_matrix_matches_governed_upstream_pins() -> None:
 def test_release_compatibility_metadata_has_no_floating_latest_pin() -> None:
     raw = COMPATIBILITY_PATH.read_text(encoding="utf-8").lower()
     assert '"revision": "latest"' not in raw
-    assert ':latest' not in raw
+    assert ":latest" not in raw
