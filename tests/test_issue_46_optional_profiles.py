@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from ai_multi_agent_platform.cli.conformance import (
+    _parse_component_versions,
+    _parse_optional,
+)
+from ai_multi_agent_platform.conformance import (
+    CompatibilityResult,
+    ConformanceProfile,
+    ConformanceStatus,
+    activate_optional_scenarios,
+    optional_evidence_ids,
+    profile_scenarios,
+    run_conformance,
+)
+from ai_multi_agent_platform.conformance.external_profile import main as external_profile_main
+
+
+def _by_id(profile: ConformanceProfile, enabled: tuple[str, ...] = ()):
+    return {
+        scenario.scenario_id: scenario
+        for scenario in activate_optional_scenarios(profile, enabled)
+    }
+
+
+def test_optional_claims_remain_disabled_by_default() -> None:
+    scenarios = {
+        scenario.scenario_id: scenario
+        for scenario in profile_scenarios(ConformanceProfile.RELEASE)
+    }
+    for scenario_id in ("B", "C", "E", "N", "Q", "R", "S", "T", "V", "X", "Y"):
+        scenario = scenarios[scenario_id]
+        assert scenario.required is False
+        assert scenario.command is None
+        assert scenario.unavailable_status in {
+            ConformanceStatus.DISABLED,
+            ConformanceStatus.UNSUPPORTED,
+        }
+
+
+def test_maintained_optional_evidence_registry_is_explicit() -> None:
+    assert optional_evidence_ids() == ("B", "C", "E", "N", "R", "T", "V", "X")
+
+
+def test_enabling_supported_optional_claim_makes_it_required_and_executable() -> None:
+    scenarios = _by_id(ConformanceProfile.RELEASE, ("N", "R", "T", "V", "X"))
+    for scenario_id in ("N", "R", "T", "V", "X"):
+        assert scenarios[scenario_id].required is True
+        assert scenarios[scenario_id].command is not None
+        assert scenarios[scenario_id].unavailable_reason is None
+
+    assert "test_event_provider_projects_task_event_and_replay_aggregates_safely" in " ".join(
+        scenarios["N"].command or ()
+    )
+    assert "test_failure_rolls_back_applied_resources_and_tracks_recovery" in " ".join(
+        scenarios["R"].command or ()
+    )
+    assert "test_task_run_materializes_repository_revision_and_returns_change_artifact" in " ".join(
+        scenarios["T"].command or ()
+    )
+    assert "test_resource_ownership_sharing_revoke_and_cross_org_isolation" in " ".join(
+        scenarios["V"].command or ()
+    )
+    assert "test_restart_promotion_reconciles_running_work_and_preserves_worker_identity" in " ".join(
+        scenarios["X"].command or ()
+    )
+
+
+def test_distributed_profile_covers_security_result_identity_and_trace_safe_telemetry() -> None:
+    scenario = _by_id(ConformanceProfile.RELEASE, ("E",))["E"]
+    command = " ".join(scenario.command or ())
+    assert scenario.required is True
+    assert "test_dispatch_authorization_receives_canonical_worker_context_and_grant" in command
+    assert "test_terminal_result_recovery_and_timeout_diagnostics_are_canonical" in command
+    assert "test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry" in command
+
+
+def test_enabling_unregistered_optional_claim_blocks_compatibility(tmp_path: Path) -> None:
+    scenario = _by_id(ConformanceProfile.RELEASE, ("Q",))["Q"]
+    assert scenario.required is True
+    assert scenario.command is None
+    assert scenario.unavailable_status is ConformanceStatus.NOT_IMPLEMENTED
+
+    report = run_conformance(
+        ConformanceProfile.RELEASE,
+        repository_root=tmp_path,
+        scenarios=(scenario,),
+    )
+    assert report.passed is False
+    assert report.compatibility_result == CompatibilityResult.INCOMPLETE.value
+    assert report.scenarios[0].status == ConformanceStatus.NOT_IMPLEMENTED.value
+
+
+def test_activation_rejects_unknown_or_already_required_scenarios() -> None:
+    with pytest.raises(ValueError, match="not present"):
+        activate_optional_scenarios(ConformanceProfile.INTEGRATION, ("N",))
+    with pytest.raises(ValueError, match="already required"):
+        activate_optional_scenarios(ConformanceProfile.RELEASE, ("G",))
+
+
+def test_cli_optional_and_component_version_parsing_is_deterministic() -> None:
+    assert _parse_optional(["n,r", "X", " t "]) == ("N", "R", "X", "T")
+    assert _parse_component_versions(
+        ["hermes-agent=6327930", "forge-sidecar=00b821b"],
+        "--adapter-version",
+    ) == {
+        "hermes-agent": "6327930",
+        "forge-sidecar": "00b821b",
+    }
+    with pytest.raises(ValueError, match="NAME=VERSION"):
+        _parse_component_versions(["missing-version"], "--adapter-version")
+    with pytest.raises(ValueError, match="repeats component"):
+        _parse_component_versions(["same=1", "same=2"], "--adapter-version")
+
+
+def test_external_adapter_profiles_fail_closed_without_real_environment(monkeypatch) -> None:
+    for variable in (
+        "HERMES_UPSTREAM_DIR",
+        "HERMES_UPSTREAM_REVISION",
+        "FORGE_SIDECAR_BASE_URL",
+        "FORGE_SIDECAR_WORKSPACE_ROOT",
+    ):
+        monkeypatch.delenv(variable, raising=False)
+    assert external_profile_main(["B"]) == 2
+    assert external_profile_main(["C"]) == 2
