@@ -36,6 +36,7 @@ type ExportKind =
   | "agent_team"
   | "workflow"
   | "capability_assignment"
+  | "model_routing_profile"
   | "automation"
   | "project"
   | "workspaces";
@@ -82,6 +83,8 @@ export function TemplatesPage({ client }: { client: TemplateClient }) {
         created = await client.createFromWorkflow(sourceRef, { name });
       } else if (exportKind === "capability_assignment") {
         created = await client.createFromCapabilityAssignment(sourceRef, { name });
+      } else if (exportKind === "model_routing_profile") {
+        created = await client.createFromModelRoutingProfile(sourceRef, { name });
       } else if (exportKind === "automation") {
         created = await client.createFromAutomation(sourceRef, { name });
       } else if (exportKind === "project") {
@@ -161,6 +164,7 @@ export function TemplatesPage({ client }: { client: TemplateClient }) {
               <option value="agent_team">Agent Team</option>
               <option value="workflow">Workflow</option>
               <option value="capability_assignment">Capability Assignment</option>
+              <option value="model_routing_profile">Model Routing Profile</option>
               <option value="automation">Automation</option>
               <option value="project">Project</option>
               <option value="workspaces">Workspace structure</option>
