@@ -54,9 +54,9 @@ def validate_item(
             findings.append(_error("signature_failure", "artifact signature validation failed"))
         elif context.signature_valid is None:
             findings.append(
-                _warning(
+                _error(
                     "signature_unverified",
-                    "signature metadata is present but no verification result was supplied",
+                    "signature metadata is present but no trusted verifier could validate it",
                 )
             )
 
