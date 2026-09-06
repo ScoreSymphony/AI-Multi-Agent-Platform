@@ -22,7 +22,7 @@ from .items import RegistryItem
 
 
 class PluginRegistryArtifactInstaller:
-    """Install a verified manifest through #20 without importing arbitrary runtime code."""
+    """Install or explicitly update a verified manifest through the canonical #20 owner."""
 
     def __init__(self, registry: PluginRegistry) -> None:
         self._registry = registry
@@ -63,13 +63,10 @@ class PluginRegistryArtifactInstaller:
         else:
             if current.plugin_version == manifest.plugin_version:
                 return current
-            self._registry.validate_update(manifest.plugin_id, manifest)
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                (
-                    "plugin update passed #20 compatibility validation but requires the explicit "
-                    "plugin lifecycle update path; Registry will not replace installed code silently"
-                ),
+            return self._registry.apply_update(
+                manifest.plugin_id,
+                manifest,
+                install_source=install_source,
             )
         return self._registry.install(manifest, install_source=install_source)
 
