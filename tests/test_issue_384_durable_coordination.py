@@ -12,10 +12,10 @@ from ai_multi_agent_platform.coordination import (
     CoordinationPhase,
     DurablePlanStepCoordinator,
     InMemoryCoordinatorRepository,
-    PredecessorFailurePolicy,
     ReconciliationDisposition,
     StepRetryPolicy,
     StepWait,
+    WaitResolution,
     WaitType,
 )
 from ai_multi_agent_platform.domain import (
@@ -120,8 +120,11 @@ class FakeKernel:
             return self.runs[run_id]
         self.start_keys.add(idempotency_key)
         current = await self.get_run(task_id, run_id)
-        running = replace(current.run, status=RunStatus.RUNNING)
-        state = replace(current, run=running, revision=current.revision + 1)
+        state = replace(
+            current,
+            run=replace(current.run, status=RunStatus.RUNNING),
+            revision=current.revision + 1,
+        )
         self.runs[run_id] = state
         if self.task.status is TaskStatus.READY:
             self.task = replace(
@@ -145,8 +148,11 @@ class FakeKernel:
             return self.runs[run_id]
         self.cancel_keys.add(idempotency_key)
         current = await self.get_run(task_id, run_id)
-        cancelled = replace(current.run, status=RunStatus.CANCELLED)
-        state = replace(current, run=cancelled, revision=current.revision + 1)
+        state = replace(
+            current,
+            run=replace(current.run, status=RunStatus.CANCELLED),
+            revision=current.revision + 1,
+        )
         self.runs[run_id] = state
         return state
 
@@ -274,10 +280,7 @@ def _coordinator(
 def test_rejects_cycles_before_any_run_is_created() -> None:
     async def scenario() -> None:
         plan, steps = _plan_and_steps(((), (0,)))
-        cyclic = (
-            replace(steps[0], depends_on=(steps[1].id,)),
-            steps[1],
-        )
+        cyclic = (replace(steps[0], depends_on=(steps[1].id,)), steps[1])
         coordinator, _, kernel, _ = _coordinator(plan, cyclic)
         with pytest.raises(ContractError, match="cycle"):
             await coordinator.register_plan(plan, cyclic)
@@ -288,7 +291,6 @@ def test_rejects_cycles_before_any_run_is_created() -> None:
 
 def test_diamond_fan_out_fan_in_and_duplicate_run_observation_are_exactly_once() -> None:
     async def scenario() -> None:
-        # A -> B/C -> D
         plan, steps = _plan_and_steps(((), (0,), (0,), (1, 2)))
         coordinator, store, kernel, exporter = _coordinator(plan, steps)
         projection = await coordinator.register_plan(plan, steps)
@@ -310,8 +312,6 @@ def test_diamond_fan_out_fan_in_and_duplicate_run_observation_are_exactly_once()
         assert kernel.create_calls == 3
         d = {step.step_id: step for step in projection.steps}[steps[3].id]
         assert d.satisfied_dependency_ids == (steps[1].id,)
-
-        # At-least-once duplicate does not create another downstream Run.
         await coordinator.observe_run(task_id=plan.task_id, run_id=run_b)
         assert kernel.create_calls == 3
 
@@ -350,7 +350,9 @@ def test_step_retry_uses_persisted_deadline_and_distinct_canonical_run_attempt()
             retryable_categories=("transient",),
         )
         projection = await coordinator.register_plan(
-            plan, steps, retry_policies={steps[0].id: policy}
+            plan,
+            steps,
+            retry_policies={steps[0].id: policy},
         )
         first_run = cast(str, projection.steps[0].latest_run_id)
         kernel.finish(first_run, RunStatus.FAILED)
@@ -369,16 +371,14 @@ def test_step_retry_uses_persisted_deadline_and_distinct_canonical_run_attempt()
         await coordinator.process_due(now=t0 + timedelta(seconds=9))
         assert kernel.create_calls == 1
         await coordinator.process_due(now=t0 + timedelta(seconds=10))
-        projection = coordinator.projection(plan.id)
-        second = projection.steps[0]
+        second = coordinator.projection(plan.id).steps[0]
         assert second.status is StepStatus.RUNNING
         assert second.current_attempt == 2
         assert second.latest_run_id != first_run
         assert kernel.create_calls == 2
-
-        # Duplicate wakeup is a no-op.
         await coordinator.process_due(now=t0 + timedelta(seconds=11))
         assert kernel.create_calls == 2
+
         second_run = cast(str, second.latest_run_id)
         kernel.finish(second_run, RunStatus.SUCCEEDED)
         await coordinator.observe_run(task_id=plan.task_id, run_id=second_run)
@@ -427,7 +427,6 @@ def test_event_wait_rejects_foreign_scope_and_resumes_once() -> None:
             project_id=steps[0].project_id,
         )
         assert projection.steps[0].status is StepStatus.RUNNING
-        # At-least-once duplicate delivery after the wait has already been cleared is harmless.
         duplicate = await coordinator.resolve_event(
             step_id=steps[0].id,
             event_id="event-1",
@@ -504,6 +503,54 @@ def test_approval_wait_is_bound_to_exact_subject_action_and_duplicate_decision()
     asyncio.run(scenario())
 
 
+def test_external_job_wait_uses_exact_reference_and_scope() -> None:
+    async def scenario() -> None:
+        plan, steps = _plan_and_steps(((),))
+        coordinator, _, _, _ = _coordinator(plan, steps)
+        await coordinator.register_plan(plan, steps)
+        await coordinator.wait_step(
+            StepWait(
+                wait_key="job-wait-1",
+                wait_type=WaitType.EXTERNAL_JOB,
+                task_id=plan.task_id,
+                plan_id=plan.id,
+                step_id=steps[0].id,
+                owner_ref=steps[0].owner_ref,
+                project_id=steps[0].project_id,
+                external_job_ref="adapter-job-42",
+            )
+        )
+        with pytest.raises(ContractError, match="reference"):
+            await coordinator.resolve_external_job(
+                step_id=steps[0].id,
+                external_job_ref="adapter-job-foreign",
+                resolution=WaitResolution.SATISFIED,
+                resolution_key="job-result-1",
+                owner_ref=steps[0].owner_ref,
+                project_id=steps[0].project_id,
+            )
+        projection = await coordinator.resolve_external_job(
+            step_id=steps[0].id,
+            external_job_ref="adapter-job-42",
+            resolution=WaitResolution.SATISFIED,
+            resolution_key="job-result-1",
+            owner_ref=steps[0].owner_ref,
+            project_id=steps[0].project_id,
+        )
+        assert projection.steps[0].status is StepStatus.RUNNING
+        duplicate = await coordinator.resolve_external_job(
+            step_id=steps[0].id,
+            external_job_ref="adapter-job-42",
+            resolution=WaitResolution.SATISFIED,
+            resolution_key="job-result-1",
+            owner_ref=steps[0].owner_ref,
+            project_id=steps[0].project_id,
+        )
+        assert duplicate.steps[0].status is StepStatus.RUNNING
+
+    asyncio.run(scenario())
+
+
 def test_cancellation_suppresses_pending_retry_and_propagates_to_task() -> None:
     async def scenario() -> None:
         plan, steps = _plan_and_steps(((),))
@@ -515,7 +562,9 @@ def test_cancellation_suppresses_pending_retry_and_propagates_to_task() -> None:
             retryable_categories=("transient",),
         )
         projection = await coordinator.register_plan(
-            plan, steps, retry_policies={steps[0].id: policy}
+            plan,
+            steps,
+            retry_policies={steps[0].id: policy},
         )
         run_id = cast(str, projection.steps[0].latest_run_id)
         kernel.finish(run_id, RunStatus.FAILED)
