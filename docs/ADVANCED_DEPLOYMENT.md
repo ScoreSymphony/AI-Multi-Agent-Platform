@@ -102,6 +102,8 @@ The reporter:
 7. deregisters its Worker best-effort during graceful shutdown.
 
 Remote registration cannot self-grant Control-Plane-owned trust, drain or maintenance state.
+Registration/liveness/state-change timestamps remain Control-Plane-owned and are not accepted as
+Worker-authored wire state.
 
 ### Control-Plane attachment
 
@@ -122,6 +124,8 @@ DistributedRuntime.attach_worker(...)
 
 Re-registration on the same running Control Plane does not replace an already attached dispatcher,
 which prevents heartbeat/reconnect traffic from discarding in-flight materialization/result state.
+After explicit graceful deregistration the deployment binding is released so the same canonical
+Worker ID can be attached again on a later re-registration.
 
 ## Network transport
 
@@ -179,14 +183,15 @@ WorkspaceBoundLocalWorker
 result manifest / changed files
         |
         v
-canonical FileProvider + artifact refs
+canonical FileProvider + preserved artifact refs
         |
         v
 cleanup / retain according to outcome
 ```
 
-Changed output files are reconstructed as canonical files/artifacts before terminal Worker result
-state becomes authoritative at the Control Plane.
+Changed output files are reconstructed as canonical `FileRecord` state. Canonical artifact
+references already attached to the Worker job/result remain references and survive the remote
+transport/result path; this layer does not invent a second artifact-registration model.
 
 ## Network and exposure matrix
 
@@ -385,10 +390,12 @@ service. Advanced distributed deployment itself does not introduce a paid API de
 The #240 suite covers profile parsing/secret rejection, canonical registration and scheduling,
 resource/capability placement, drain/maintenance and heartbeat behavior, Worker-protocol HTTP,
 Worker process registration/heartbeat/shutdown, transport dispatch, automatic Control-Plane
-attachment and #39 regression. The #388/#433 suites additionally exercise real TCP transport,
-reconnect/redelivery, exact remote Workspace transfer, process isolation, checksums, result
+attachment, two independent Worker OS processes, graceful re-registration, TCP loss with liveness
+expiry and same-ID restart, and #39 regression. The #388/#433 suites additionally exercise real
+TCP reconnect/redelivery, exact remote Workspace transfer, process isolation, checksums, result
 collection and cleanup.
 
-The remaining acceptance bar for closing #240 is evaluated against the actual composed path, not
-merely against profile parsing: scheduler -> network Worker dispatch -> exact Workspace
-materialization -> execution -> canonical result/artifact collection -> reconciliation/cleanup.
+The composed #240 socket acceptance path exercises scheduler -> network Worker dispatch -> exact
+Workspace materialization -> execution -> canonical result/file collection -> cleanup, while the
+network-loss acceptance path verifies scheduler exclusion during offline state and execution again
+after same-ID re-registration.
