@@ -19,9 +19,11 @@ from ai_multi_agent_platform.deployment.advanced_profiles import (
     load_advanced_deployment_profile,
 )
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
+from ai_multi_agent_platform.deployment.distributed_admin import register_distributed_worker_admin
 from ai_multi_agent_platform.deployment.distributed_control_plane import build_worker_protocol_app
 from ai_multi_agent_platform.deployment.server import main as run_server
 from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment
+from ai_multi_agent_platform.distributed import register_distributed_control_plane
 from ai_multi_agent_platform.messaging import TcpMessageTransport
 
 from .single_node_app import build_default_single_node_deployment
@@ -37,9 +39,10 @@ def build_distributed_control_plane_deployment(
     """Build one Control Plane whose canonical Runs and Worker protocol share one runtime."""
 
     resolved_profile = profile_path or os.environ.get(_PROFILE_ENV)
-    if resolved_profile is not None:
-        profile = load_advanced_deployment_profile(resolved_profile)
-        _validate_runnable_profile(profile)
+    if resolved_profile is None:
+        raise ValueError("distributed Control Plane requires an explicit deployment profile")
+    profile = load_advanced_deployment_profile(resolved_profile)
+    _validate_runnable_profile(profile)
 
     host = os.environ.get("PLATFORM_MESSAGE_BROKER_HOST", "127.0.0.1")
     port_raw = os.environ.get("PLATFORM_MESSAGE_BROKER_PORT", "")
@@ -66,6 +69,18 @@ def build_distributed_control_plane_deployment(
     runtime = deployment.distributed_runtime
     if runtime is None:
         raise RuntimeError("distributed deployment was built without a distributed runtime")
+
+    # The shipped distributed server exposes the already-existing canonical #14 compute resources
+    # and admin commands. Runtime inspection/drain/maintenance therefore use the same northbound
+    # Control Plane as the rest of the platform rather than a deployment-private shortcut.
+    register_distributed_control_plane(deployment.control_plane, runtime)
+    register_distributed_worker_admin(
+        deployment.control_plane,
+        profile=profile,
+        authentication=deployment.authentication,
+        authorization=deployment.authorization,
+    )
+
     app, _service = build_worker_protocol_app(
         downstream=deployment.app,
         runtime=runtime,
