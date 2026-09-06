@@ -51,9 +51,7 @@ def main(argv: list[str] | None = None) -> int:
 async def _run_single_node(args: argparse.Namespace) -> int:
     thresholds = RegressionThresholds(
         max_p95_latency_regression_ratio=_percentage_ratio(args.max_p95_regression_percent),
-        max_throughput_regression_ratio=_percentage_ratio(
-            args.max_throughput_regression_percent
-        ),
+        max_throughput_regression_ratio=_percentage_ratio(args.max_throughput_regression_percent),
     )
     spec = BenchmarkSpec(
         benchmark_id="single-node.reference.lifecycle",
