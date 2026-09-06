@@ -3,6 +3,8 @@ import re
 from importlib.resources import files
 from pathlib import Path
 
+from ai_multi_agent_platform.upgrade.versioning import current_release_versions
+
 ROOT = Path(__file__).resolve().parents[2]
 COMPATIBILITY_PATH = ROOT / "release" / "compatibility.json"
 TRACKED_UPSTREAMS = (
@@ -31,6 +33,13 @@ def test_compatibility_matrix_matches_governed_upstream_pins() -> None:
         assert by_source[source]["revision"] == pinned_revision
 
 
+def test_compatibility_matrix_binds_complete_canonical_version_vector() -> None:
+    document = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
+    assert document["schema_version"] == "2"
+    assert document["platform_release"] == document["versions"]["platform_release"]
+    assert document["versions"] == current_release_versions().to_dict()
+
+
 def test_packaged_compatibility_inventory_matches_repository_snapshot() -> None:
     repository = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
     packaged = json.loads(
@@ -43,6 +52,23 @@ def test_packaged_compatibility_inventory_matches_repository_snapshot() -> None:
 
 def test_compatibility_matrix_contains_operator_query_fields() -> None:
     document = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
+    versions = document["versions"]
+    for name in (
+        "platform_release",
+        "domain_schema",
+        "api",
+        "migration_revision",
+        "plugin_manifest",
+        "portable_format",
+        "template_schema",
+        "backup_format",
+        "worker_protocol",
+        "message_protocol",
+        "adapter_versions",
+        "plugin_interface_versions",
+    ):
+        assert name in versions
+
     for component in document["components"]:
         assert component["license"]
         assert component["integration_mode"]
