@@ -24,19 +24,22 @@ jobs:
             tests/test_issue_440_benchmarking.py \
             tests/test_issue_440_sweep.py \
             tests/test_issue_440_workloads.py \
-            tests/test_issue_440_endurance.py
+            tests/test_issue_440_endurance.py \
+            tests/test_issue_440_stress_fault.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking \
             tests/test_issue_440_benchmarking.py \
             tests/test_issue_440_sweep.py \
             tests/test_issue_440_workloads.py \
-            tests/test_issue_440_endurance.py
+            tests/test_issue_440_endurance.py \
+            tests/test_issue_440_stress_fault.py
           mypy src/ai_multi_agent_platform/benchmarking
           pytest \
             tests/test_issue_440_benchmarking.py \
             tests/test_issue_440_sweep.py \
             tests/test_issue_440_workloads.py \
-            tests/test_issue_440_endurance.py
+            tests/test_issue_440_endurance.py \
+            tests/test_issue_440_stress_fault.py
       - name: Run deterministic single-node performance smoke
         run: |
           mkdir -p artifacts/benchmarks
@@ -88,6 +91,28 @@ jobs:
             --warmup-operations 0 \
             --platform-commit "$GITHUB_SHA" \
             --output artifacts/benchmarks/pr-endurance/soak.json
+      - name: Run tiny stress and fault-under-load profiles
+        run: |
+          platform-benchmark single-node-stress \
+            --concurrency-levels 1,2 \
+            --operations-per-level 2 \
+            --warmup-operations 0 \
+            --safety-max-concurrency 4 \
+            --safety-max-operations-per-level 4 \
+            --platform-commit "$GITHUB_SHA" \
+            --output-dir artifacts/benchmarks/pr-stress
+          platform-benchmark single-node-fault-under-load \
+            --operations 6 \
+            --concurrency 2 \
+            --fault-after-operations 3 \
+            --seed-tasks 2 \
+            --warmup-operations 0 \
+            --safety-max-operations 10 \
+            --safety-max-concurrency 4 \
+            --read-weight 2 \
+            --write-weight 1 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-fault.json
       - name: Validate benchmark report schemas and correctness
         run: |
           python - <<'PY'
@@ -141,6 +166,31 @@ jobs:
               assert endurance["benchmark"]["scenario"] == scenario
               assert endurance["correctness"]["passed"] is True
               assert len(endurance["snapshots"]) >= 2
+
+          stress = json.loads(Path("artifacts/benchmarks/pr-stress/summary.json").read_text())
+          stress_schema = json.loads(
+              Path("docs/schemas/benchmark-stress.v1.schema.json").read_text()
+          )
+          Draft202012Validator(stress_schema).validate(stress)
+          assert stress["correctness_passed"] is True
+          assert stress["completed_levels"] == [1, 2]
+          for point in stress["points"]:
+              point_report = json.loads(
+                  (Path("artifacts/benchmarks/pr-stress") / point["report_file"]).read_text()
+              )
+              Draft202012Validator(report_schema).validate(point_report)
+              assert point_report["correctness"]["passed"] is True
+
+          fault = json.loads(Path("artifacts/benchmarks/pr-fault.json").read_text())
+          fault_schema = json.loads(
+              Path("docs/schemas/benchmark-fault-under-load.v1.schema.json").read_text()
+          )
+          Draft202012Validator(fault_schema).validate(fault)
+          assert fault["benchmark"]["scenario"] == "control-plane-restart"
+          assert fault["correctness"]["passed"] is True
+          assert fault["correctness"]["pre_fault_completed_operations"] > 0
+          assert fault["correctness"]["post_fault_completed_operations"] > 0
+          assert fault["correctness"]["unauthorized_access_blocked"] is True
           PY
       - name: Upload benchmark evidence
         if: always()
