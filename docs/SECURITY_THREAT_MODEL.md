@@ -382,6 +382,38 @@ A sufficiently capable model may still be manipulated into proposing harmful but
 - revocation/quarantine for compromised workers;
 - worker results treated according to trust/policy and validated before privileged reuse.
 
+### Durable Plan/Step coordination
+
+**Threats**
+
+- an attacker forges an Event identity or correlation key to wake a Step belonging to another task, project or owner;
+- a valid Approval is replayed against a different subject, action or Step wait;
+- duplicate webhook/Event/Approval delivery causes repeated wakeups or duplicate canonical Runs;
+- a stale or spoofed coordinator claim commits after another coordinator has taken ownership;
+- an unauthorized caller invokes reconciliation, repair or cancellation as a way to force runtime progress;
+- restart repair blindly recreates a missing Run and duplicates a canonical side effect;
+- provider/webhook payloads, credentials or secrets leak into coordinator persistence or telemetry;
+- a future external durable-workflow adapter is treated as an authority source rather than a replaceable runtime mechanism.
+
+**Required mitigations for #384**
+
+- durable waits bind to canonical Task/Plan/Step identity plus exact owner/project scope;
+- Approval waits bind to the exact Approval ID, subject type, subject ID and action;
+- Event waits require the expected canonical event type and correlation key and reject foreign scope;
+- wakeups and Run observations use stable processed/idempotency keys so replay is a no-op;
+- canonical Run creation/start uses deterministic kernel idempotency keys at crash boundaries;
+- coordinator writes use optimistic revisions plus expiring claims and monotonically increasing fencing tokens;
+- stale/expired claims cannot commit after takeover;
+- reconciliation first delegates canonical Run/Worker recovery to the kernel and marks unresolved contradictions explicitly inconsistent instead of blindly dispatching;
+- Control Plane repair/reconcile/cancel commands remain behind the canonical authorization and idempotency boundary;
+- coordinator state stores only backend-neutral wait descriptors/references, policy/version, dedupe, dependency and reconciliation metadata, never raw provider/webhook payloads or secret material;
+- coordination telemetry uses canonical references and redacted/safe attributes only;
+- an optional future Temporal/DBOS/other engine adapter cannot redefine canonical identity, authorization, approval, Run/Event truth or security ownership.
+
+**Residual risk**
+
+A compromised process with direct write access to the coordinator SQLite store can still corrupt runtime metadata. Deployment filesystem/database permissions, backup integrity and later distributed-store hardening remain necessary. Contradictions that cannot be proven safe are intentionally surfaced as `INCONSISTENT` and require an authorized repair path rather than speculative execution.
+
 ## 11. Residual risks
 
 The baseline does not claim to eliminate:
@@ -443,6 +475,7 @@ The following issues must revisit this document and add subsystem-specific tests
 - #79 import/export package threats;
 - #81 registry/distribution trust;
 - #82 repository/Git side effects;
+- #384 durable Plan/Step coordination, replay, repair and fencing threats;
 - #46 end-to-end conformance of the accumulated security invariants.
 
 Use [`SECURITY_EXTENSION_CHECKLIST.md`](SECURITY_EXTENSION_CHECKLIST.md) for every security-sensitive subsystem.
@@ -459,5 +492,7 @@ Use [`SECURITY_EXTENSION_CHECKLIST.md`](SECURITY_EXTENSION_CHECKLIST.md) for eve
 - deny-by-default decisions;
 - adapter-private metadata cannot grant authority;
 - optional adapter absence does not alter canonical security ownership.
+
+Issue #384 extends the same regression baseline with coordinator-specific coverage for foreign-scope Event/wait resolution, exact Approval subject/action binding, duplicate/replayed wakeups, stale fencing tokens, conservative reconciliation and safe coordinator persistence/telemetry descriptors.
 
 Future subsystem tests should extend this baseline rather than create separate, incompatible security rules.
