@@ -133,9 +133,10 @@ def test_sqlite_repository_reconstructs_connection_definition_and_revision_guard
         await first.save_connection(connection)
 
         reconstructed = SqliteConnectorRepository(path)
-        assert await reconstructed.get_definition(
-            definition.connector_type_id, definition.version
-        ) == definition
+        assert (
+            await reconstructed.get_definition(definition.connector_type_id, definition.version)
+            == definition
+        )
         assert await reconstructed.get_connection(connection.id) == connection
         assert reconstructed.schema_version == 1
 
@@ -192,7 +193,8 @@ def test_checkpoint_rebuild_detach_and_connection_cascade_survive_restart(tmp_pa
 
         after_rebuild = SqliteConnectorRepository(path)
         assert [
-            item.id for item in await after_rebuild.list_external_resources(connection_id=connection.id)
+            item.id
+            for item in await after_rebuild.list_external_resources(connection_id=connection.id)
         ] == [alpha.id]
         with pytest.raises(ContractError) as stale:
             await after_rebuild.get_external_resource(beta.id)
@@ -327,7 +329,9 @@ def test_public_single_node_composition_uses_durable_connector_repository(tmp_pa
         config = SingleNodeConfig(data_dir=tmp_path / "single-node", secure_cookie=False)
         first = build_single_node_deployment(config)
         assert isinstance(first.connector_repository, SqliteConnectorRepository)
-        assert first.connector_repository.database_path == config.database_dir / "connectors.sqlite3"
+        assert (
+            first.connector_repository.database_path == config.database_dir / "connectors.sqlite3"
+        )
 
         connection = _connection()
         await first.connector_repository.save_connection(connection)
