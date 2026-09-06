@@ -37,9 +37,9 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
     "C": _external("C"),
     "E": _pytest(
         "tests/test_issue_14_security_result_recovery.py::"
-        "test_dispatch_authorization_receives_canonical_worker_context_and_grant",
+        "test_dispatch_authorization_denial_releases_reservation_before_worker_execution",
         "tests/test_issue_14_security_result_recovery.py::"
-        "test_terminal_result_recovery_and_timeout_diagnostics_are_canonical",
+        "test_terminal_result_is_recovered_after_restart_and_then_survives_without_worker",
         "tests/test_issue_14_distributed_telemetry.py::"
         "test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry",
     ),
@@ -56,17 +56,17 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "tests/test_portability.py::test_plaintext_secret_bearing_field_is_rejected",
         "tests/test_portability.py::test_backend_private_runtime_state_is_rejected_recursively",
         "tests/test_issue_79_import_executor.py::"
-        "test_successful_import_persists_mapping_and_imported_resources",
+        "test_executor_imports_agent_then_team_with_full_revision_history",
         "tests/test_issue_79_import_executor.py::"
-        "test_failure_rolls_back_applied_resources_and_tracks_recovery",
+        "test_executor_rolls_back_real_team_and_agent_in_reverse_order",
     ),
     "T": _pytest(
+        "tests/test_issue_82_repository_control_plane_provenance.py::"
+        "test_control_plane_records_repository_input_before_start_and_on_retry",
         "tests/test_issue_82_repository_run_integration.py::"
-        "test_task_run_materializes_repository_revision_and_returns_change_artifact",
+        "test_repository_run_records_exact_input_and_returns_changed_file_artifacts",
         "tests/test_issue_82_repository_run_integration.py::"
-        "test_retry_run_preserves_repository_provenance_identity",
-        "tests/test_issue_82_repository_run_integration.py::"
-        "test_provider_specific_ids_remain_external_metadata",
+        "test_run_input_recovers_materialized_sha_when_snapshot_keeps_symbolic_ref",
     ),
     "V": _pytest(
         "tests/test_issue_87_organization_domain.py::"
