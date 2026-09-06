@@ -5,8 +5,7 @@ from ai_multi_agent_platform.conformance import ConformanceProfile, profile_scen
 
 def test_authenticated_reference_vertical_slice_is_required_release_evidence() -> None:
     scenarios = {
-        scenario.scenario_id: scenario
-        for scenario in profile_scenarios(ConformanceProfile.RELEASE)
+        scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.RELEASE)
     }
 
     scenario = scenarios["REL-VERTICAL"]
@@ -16,6 +15,5 @@ def test_authenticated_reference_vertical_slice_is_required_release_evidence() -
     command = " ".join(scenario.command)
     assert "tests/test_issue_46_reference_vertical_slice.py" in command
     assert (
-        "test_authenticated_reference_vertical_preserves_canonical_evidence_end_to_end"
-        in command
+        "test_authenticated_reference_vertical_preserves_canonical_evidence_end_to_end" in command
     )
