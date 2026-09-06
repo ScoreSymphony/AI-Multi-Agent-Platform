@@ -37,6 +37,7 @@ from .repository import AgentRepository, InMemoryAgentRepository
 from .runtime import AgentOrchestratorMapper, AgentRuntime, ReferenceOrchestratorMapper
 from .routing_profile_runtime import DurableRoutingProfileAgentRuntime
 from .service import AgentService
+from .capability_turn import AgentCapabilityTurn, AgentCapabilityTurnResult
 
 # AgentService must be initialized before control_plane imports. Real Forge/Hermes
 # compatibility exercises import this package through execution adapters and otherwise
@@ -141,6 +142,8 @@ __all__ = [
     "STARTER_OWNER",
     "STARTER_PLATFORM_RELEASE",
     "AgentCapabilityPolicy",
+    "AgentCapabilityTurn",
+    "AgentCapabilityTurnResult",
     "AgentCommandHandlers",
     "AgentDataAccess",
     "AgentDefinition",
