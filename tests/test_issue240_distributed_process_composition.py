@@ -169,7 +169,9 @@ def test_worker_process_registers_heartbeats_dispatches_and_deregisters(tmp_path
     asyncio.run(scenario())
 
 
-def test_authenticated_registration_attaches_transport_dispatcher_to_runtime(tmp_path: Path) -> None:
+def test_authenticated_registration_attaches_transport_dispatcher_to_runtime(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         registration = _registration()
         worker = registration.workers[0]
