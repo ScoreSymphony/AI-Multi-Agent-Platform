@@ -101,7 +101,7 @@ class AgentCapabilityTurn:
         invocation_refs: list[str] = []
         artifact_refs: list[str] = []
         results: list[dict[str, JsonValue]] = []
-        for call in response.tool_calls:
+        for ordinal, call in enumerate(response.tool_calls, start=1):
             capability_id = tool_names.get(call.tool_name)
             if capability_id is None:
                 raise ContractError(
@@ -115,7 +115,7 @@ class AgentCapabilityTurn:
                     ErrorCode.CONTRACT_VIOLATION,
                     f"AgentRun did not pin a version for capability {capability_id!r}",
                 )
-            invocation_id = f"{run_id}:{call.call_id}"
+            invocation_id = f"{run_id}:capability:{ordinal}"
             operation = replace(context, causation_id=response.request_id)
             result = await self._invoker.invoke(
                 CapabilityInvocation(
@@ -134,11 +134,14 @@ class AgentCapabilityTurn:
                     ),
                 )
             )
-            invocation_refs.append(result.canonical_tool_invocation_id or result.invocation_id)
+            invocation_ref = result.canonical_tool_invocation_id or result.invocation_id
+            invocation_refs.append(invocation_ref)
             artifact_refs.extend(result.artifact_refs)
             results.append(
                 {
                     "invocation_id": result.invocation_id,
+                    "canonical_tool_invocation_id": result.canonical_tool_invocation_id,
+                    "model_tool_call_id": call.call_id,
                     "capability_id": result.capability_id,
                     "capability_version": result.capability_version,
                     "provider_id": result.provider_id,
