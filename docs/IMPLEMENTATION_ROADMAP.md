@@ -1,159 +1,201 @@
 # Dependency-Driven Implementation Roadmap
 
-> Status baseline: 2026-09-04
+> Status baseline: 2026-09-06
 
-This roadmap orders the remaining work toward two distinct outcomes:
+This roadmap describes the remaining work from the current `main` branch toward the ideal end-state platform. It no longer treats the early prototype lanes as future work: the usable single-node prototype acceptance gate (#252) has passed, and most originally planned M1/M2/M3 platform domains now have concrete implementations.
 
-1. a genuinely usable, local-first single-node prototype; and
-2. the broader operational and distributed platform described by the product vision.
-
-GitHub issue state and the current wording of each issue remain the source of truth. The normative product and architecture baseline is:
+GitHub issue state and the current wording of each issue remain the point-in-time source of truth. The normative product and architecture baseline remains:
 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md)
 - [`ARCHITECTURE_PRINCIPLES.md`](ARCHITECTURE_PRINCIPLES.md)
 - accepted ADRs under [`adr/`](adr/README.md)
 
-## Planning model
+## Current maturity
 
-Work is grouped into four milestones:
+### Reached
 
-| Milestone | Outcome |
-|---|---|
-| M1 - Architecture Foundation | Stable canonical domain, contracts and security boundaries |
-| M2 - Usable Single-Node Prototype | A new user can install locally, configure a local model, perform useful Agent work and recover state after restart |
-| M3 - Operational v1 | Complete product domains, operations, integrations and full conformance |
-| M4 - Distributed & Ecosystem | Optional Registry, heterogeneous deployment and HA capabilities |
+The repository now has a broad canonical platform baseline covering:
 
-Labels use three orthogonal dimensions: `type:*` for the kind of work, `area:*` for canonical ownership and `stage:*` for the target maturity level.
+- product/repository/provenance foundations;
+- canonical Task/Plan/Step/Run/Event domain and Task/Run kernel;
+- replaceable orchestration, execution, model, capability/tool and persistence/provider contracts;
+- reference execution plus Hermes, Forge and LiteLLM compatibility paths;
+- Control Plane, authentication, authorization/approvals and secret-reference handling;
+- Agents and Agent Teams;
+- Projects, Workspaces, Files, Artifacts, Memory and Knowledge;
+- Automations, global Search, Verification/Review and Notifications;
+- Browser, Terminal, Chat, Web UI and CLI client paths;
+- Organizations/Teams/Memberships and practical Task-management metadata;
+- accounting foundations and resource-attribution integrations;
+- Connectors and Repository/Git integration;
+- reusable workflow definitions and portable import/export;
+- supported single-node deployment plus optional Control Plane HA/failover;
+- a reusable no-paid-service single-node prototype acceptance gate (#252).
 
-Hard dependencies block issue completion. Follow-up integrations and related work do not block unless an issue explicitly says otherwise. Canonical contracts merge before their UI, CLI, adapter or deployment consumers.
+Closed issues may still have extracted follow-up issues. A closed first implementation is not treated as proof that every later cross-domain or hardening concern is complete.
 
-## Completed foundation
+### Still open
 
-The main branch already contains the substantive M1 baseline:
+As of this snapshot, 17 issues remain open:
 
-- product, repository and provenance foundations: #1, #2, #3;
-- canonical domain, replaceable interfaces, kernel and reference executor: #4, #5, #6, #7;
-- adapters and provider boundaries: #8, #9, #10, #11, #12, #13;
-- identity, authorization, observability and the initial Web shell: #15, #16, #17;
-- automations, evaluation and plugins: #18, #19, #20;
-- Control Plane, Agents, configuration, transport, authentication and Workspaces: #32, #33, #34, #35, #36, #37;
-- CLI and supported single-node deployment: #38, #39;
-- Browser, Terminal, starter Agents, accounting and practical Task management: #73, #74, #76, #77, #88.
+`#42, #46, #78, #81, #171, #240, #384, #414, #416, #421, #439, #440, #443, #444, #445, #446, #447`.
 
-Closed issues can still have extracted follow-ups. In particular, #17 owns the completed initial shell; progressive domain coverage is now owned by #236 and the prototype gate #252.
+Only one pull request is currently open: draft PR #386 for #240 distributed/heterogeneous deployment profiles.
 
-## M2 - Usable Single-Node Prototype
+## Remaining dependency lanes
 
-The project previously had broad platform acceptance in #46 but no smaller gate proving that the current product is useful before Registry, HA or distributed infrastructure exists. M2 closes that gap.
+### Lane A — Model-routing profile completion
 
-### Critical prototype lane
-
-```text
-closed foundations (#7, #10, #12, #15, #17, #32, #34, #36, #37, #38, #39, #77)
-        |
-        +--> #72 Task-centric Chat -------------------+
-        +--> #86 Verification/Review -----------------+
-        +--> #250 First-run and local-model path -----+--> #252 usable-prototype acceptance gate
-        +--> #251 Memory/Knowledge lifecycle ---------+
-        +--> required progressive UI slices in #236 -+
-```
-
-### Required outcome
-
-#252 is the release gate for the prototype. It must demonstrate, without a recurring paid service:
-
-- a clean supported single-node installation;
-- first-user authentication and Project/Workspace selection;
-- a local or self-hosted model configuration;
-- an editable General Assistant;
-- Chat or Task execution through canonical APIs;
-- one safe capability and a visible result/artifact;
-- distinct Approval and Verification behavior;
-- a minimal Memory/Knowledge lifecycle;
-- actionable degraded states; and
-- persistence across restart.
-
-#72, #86 and #236 may deliver the slices consumed by #252 before their broader issues close, provided the consumed contracts are merged, stable and covered by owning tests.
-
-### Explicit non-blockers for M2
-
-The following capabilities are valuable but must not block the usable prototype:
-
-- distributed scheduling beyond local/reference execution (#14);
-- external Connectors and hosted Repository integration (#44, #82);
-- Notifications, Organizations and cross-scope collaboration (#75, #87, #157, #171);
-- Templates and portable distribution (#78, #79, #81);
-- full backup, upgrade and release automation (#40, #41, #42);
-- heterogeneous deployments and HA (#240, #89).
-
-## M3 - Operational v1
-
-M3 completes the product and operational domains around the proven single-node path.
-
-### Runtime and workflow decisions
-
-- #14 defines Node/Worker scheduling semantics for distributed execution.
-- #21 evaluates durable workflow-engine adoption after #14; it remains an ADR/evidence issue and must not introduce Temporal by assumption.
-- #214 integrates upstream lifecycle contracts without making an upstream project canonical.
-
-### Product and collaboration domains
-
-- #44 owns external Connector contracts; #82 consumes them for hosted Repository providers.
-- #45 expands platform-wide search over canonical resources.
-- #75 owns Notifications and user-attention delivery.
-- #78 and #79 own reusable Templates and portable Import/Export.
-- #87 owns Organization, Team and Membership semantics.
-- #157 consumes #87 for safe cross-scope Task moves.
-- #171 consumes #75 and #87 for the remaining accounting integrations.
-- #236 completes progressive Web UI coverage without creating client-private domain contracts.
-- #241 verifies Forge compatibility against platform-owned contracts.
-
-### Operations chain
+The canonical routing-profile core is implemented and #441/#442 hardening has landed. The remaining work is a compact follow-up cluster:
 
 ```text
-#39 single-node deployment
+routing-profile core complete
         |
-        v
-#40 backup/restore --> #41 migrations/upgrades --> #42 release/update synchronization
+        +--> #443 authorized management endpoints / real #15 composition
+        +--> #444 monotonic revision chronology
+        +--> #445 assignment coverage beyond Agents
+        +--> #446 provenance immutability / schema-history consistency
+        +--> #447 deletion/compensation reference safety
 ```
 
-The chain may consume Templates/Import-Export where useful, but operational backup must remain distinct from portable resource export.
+These issues are intentionally separate so repository invariants, Control Plane exposure and cross-domain assignment safety do not become one oversized patch. They can be advanced largely in parallel where they do not touch the same persistence invariants.
 
-### Full conformance
+### Lane B — Durable task-bound workflows
 
-#46 remains the final cross-platform and cross-domain conformance suite. It is not the prototype gate. Optional Registry, HA and distributed scenarios belong in conditional profiles and cannot make the reference single-node baseline fail.
+ADR 0008 / #21 selected a narrow platform-owned durable coordination layer rather than adopting Temporal/DBOS/Forge workflow state as canonical authority.
 
-## M4 - Distributed & Ecosystem
+```text
+#384 durable Plan/Step coordinator
+        |
+        +--> #421 Web/CLI workflow-progress surfaces
+        +--> #439 autonomous goal decomposition + bounded replanning
+        |
+        +--> #440 workflow performance profiles
+```
 
-M4 contains optional expansion work:
+#384 is the central dependency. It owns restart-safe Step progression, fan-out/fan-in, waits, retries, cancellation and reconciliation while preserving canonical Task/Plan/Step/Run/Event ownership.
 
-- #81 optional Registry/Marketplace for shareable platform extensions;
-- #89 Control Plane HA and failover architecture;
-- #240 distributed and heterogeneous deployment profiles.
+#421 must consume only #384's backend-neutral Control Plane projections. #439 may generate/revise canonical Plans but must leave durable execution to #384. The workflow portions of #440 become meaningful after #384 is stable.
 
-Disabling all M4 components must leave the M2 single-node product usable and the M3 operational baseline valid.
+### Lane C — Distributed and heterogeneous deployment
 
-## Recommended execution order
+#14 canonical Node/Worker scheduling semantics and #35 network-capable message transport are complete. #433 concrete remote Workspace materialization is also merged.
 
-1. Finish the four M2 product gaps: #72, #86, #250 and #251.
-2. Integrate only their required Web slices through #236.
-3. Run and pass #252; publish the first prototype only after this gate is reproducible.
-4. In parallel where ownership is independent, advance #14, #44, #45, #75, #78, #79, #87 and #241.
-5. Complete dependent integrations #82, #157, #171 and #214.
-6. Drive the operational chain #40 -> #41 -> #42.
-7. Close M3 through #46 full conformance.
-8. Build #81, #89 and #240 only as optional M4 profiles.
+The current deployment lane is therefore:
 
-## Consistency rules for every issue
+```text
+#14 + #35 + #36 + #37 + #433 complete
+                |
+                v
+       #240 advanced deployment profiles
+          (draft PR #386)
+                |
+                +--> #440 distributed/load profiles
 
-Each implementation issue should contain:
+#414 Node/Worker canonical state-change timestamps
+      can progress independently of most #240 packaging work
+```
+
+#240 must finish real deployable multi-process/cross-host composition and acceptance without creating a second Worker, Workspace or scheduler model. #414 fixes canonical modification-time semantics so Search/observability do not overload heartbeat time.
+
+### Lane D — Persistence and cross-domain completion
+
+Two remaining issues close real production-shaped persistence/integration gaps:
+
+- **#416 Connector persistence:** make canonical Connector/Connection/ExternalResourceReference/SyncCheckpoint state restart-durable in the normal runtime while keeping Search derived.
+- **#171 accounting integrations:** close the remaining configured-deployment wiring, unavailable-vs-zero resource semantics, route protection and explicit combined acceptance regressions.
+
+These can progress independently of #384 and #240 except where shared Node/Worker semantics from #414 affect accounting timestamps or resource metadata.
+
+### Lane E — Template completion
+
+#78 has a substantial implementation but remains open because later canonical domains exposed follow-up gaps.
+
+The remaining work includes:
+
+- rollback/compensation for capability-assignment creation during composite apply;
+- `workflow_plan` integration through the canonical reusable Workflow domain;
+- create-from-existing support for newer canonical resource types;
+- Web/API exposure for those export paths;
+- final documentation and acceptance reconciliation.
+
+#78 should close before #81 becomes a serious distribution target, because the optional Registry/Marketplace must distribute canonical portable assets rather than incomplete Template-private substitutes.
+
+### Lane F — Performance, release and full conformance
+
+```text
+#440 performance/load/scalability evidence
+#42  release/update/upstream synchronization
+          \      /
+           \    /
+            #46 full platform conformance
+```
+
+These issues may be developed incrementally now, but final claims must consume the mature owning domains rather than fabricate acceptance-only shortcuts.
+
+- **#440** establishes measured operating envelopes, regression baselines, stress/soak profiles and safe-degradation evidence.
+- **#42** turns the existing provenance/update policy into a repeatable release and upstream-synchronization system.
+- **#46** remains the final end-to-end architecture and product acceptance standard across reference, adapter, distributed, security, recovery and client profiles.
+
+The prototype acceptance gate #252 is already complete and remains the smaller regression gate for the ordinary single-node path. #46 must not replace it with a heavier mandatory environment.
+
+### Lane G — Optional Registry / ecosystem
+
+#81 remains intentionally optional.
+
+It depends on the already completed plugin/import-export foundations plus final Template completion. The platform must remain fully operable with the Registry disabled or absent.
+
+## Recommended execution order from current `main`
+
+The remaining work should be prioritized by dependency leverage rather than issue number:
+
+1. **Finish the routing-profile follow-ups #443–#447** while their newly implemented domain is still fresh and isolated.
+2. **Advance #384 durable Plan/Step coordination** as the largest remaining canonical runtime capability.
+3. **Finish #240 / PR #386** now that #433 remote Workspace materialization is merged; run the real deployable Worker acceptance path before closing it.
+4. **Complete #414, #416 and #171** as independent correctness/persistence lanes.
+5. **Close #78** using the canonical workflow/capability-assignment domains already merged.
+6. **Build #421 and #439 after #384 exposes stable contracts.**
+7. **Establish #440 performance evidence** progressively: single-node now, workflow after #384, distributed after #240.
+8. **Complete #42 release/update mechanics** and reconcile the first formal release target.
+9. **Drive #46 to final platform conformance** using the accumulated subsystem evidence rather than a parallel test-only stack.
+10. **Build #81 only as an optional ecosystem layer** after the portable/template/plugin contracts it distributes are stable.
+
+## Parallel work that is safe now
+
+A practical high-throughput split is:
+
+| Track | Issues | Notes |
+|---|---|---|
+| A | #443–#447 | Routing-profile follow-up cluster; coordinate persistence-touching changes |
+| B | #384 | Durable workflow coordinator |
+| C | #240 | Distributed deployment / PR #386 |
+| D | #414 | Node/Worker update timestamp semantics |
+| E | #416 | Durable Connector persistence |
+| F | #171 | Accounting residual integrations |
+| G | #78 | Template follow-up completion |
+| H | #440 | Start deterministic single-node benchmark foundation; defer workflow/distributed profiles until dependencies land |
+| I | #42 | Release/update tooling can progress without blocking runtime lanes |
+
+#421 and #439 should not outrun #384's canonical contracts. #81 should not outrun #78. #46 can accumulate fixtures and invariant checks but should be the convergence lane, not the owner of missing production behavior.
+
+## Release interpretation
+
+The planned `0.1.0` prerequisite (#252) has passed, but no GitHub release is published yet. A formal prototype release therefore still requires the publication checklist in [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md), current changelog/provenance and an exact passing release commit.
+
+The planned `1.0.0` operational baseline remains tied to #46 full conformance. Optional Registry and other ecosystem features must not become hidden prerequisites for the local/self-hosted baseline.
+
+## Consistency rules for every remaining issue
+
+Each implementation must continue to preserve:
 
 - exactly one canonical owner and no competing private contract;
-- an explicit `Hard dependencies` section;
-- separate `Follow-up integrations` or `Related work` sections for non-blockers;
-- acceptance criteria and required tests proportional to its risk;
-- one `type:*`, one `area:*` and one `stage:*` label; and
-- the milestone whose outcome the issue is required to satisfy.
+- explicit hard dependencies separated from follow-up integrations;
+- provider/model/hardware/deployment neutrality in canonical state;
+- self-hostable reference behavior without a recurring paid AI/API dependency;
+- security and verification as authoritative platform boundaries rather than planner/orchestrator hints;
+- restart/deduplication semantics where durable state is involved;
+- backend-neutral Control Plane projections for Web/CLI clients;
+- tests proportional to the failure mode being closed;
+- no acceptance-only bypass that hides a production integration gap.
 
-When a broad issue contains a smaller milestone-critical slice, the broad issue may stay open after that slice lands. The consuming gate must name the stable contracts it uses and may not silently duplicate the owner issue.
+When this roadmap and a GitHub issue diverge, the current issue wording and merged code are authoritative until the roadmap is refreshed again.
