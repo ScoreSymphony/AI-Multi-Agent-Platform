@@ -45,7 +45,7 @@ class ModelRoutingProfileImportMutationHandler:
     ) -> object:
         del resource, context
         snapshot = _require_snapshot(value)
-        created = False
+        applied_revision = 0
         try:
             for index, revision in enumerate(snapshot.revisions):
                 definition = _definition_at(
@@ -56,19 +56,25 @@ class ModelRoutingProfileImportMutationHandler:
                 )
                 if index == 0:
                     self._repository.create_profile(definition, revision)
-                    created = True
                 else:
                     self._repository.update_profile(definition, revision)
+                applied_revision = revision.revision
             return snapshot.definition.profile_id
         except Exception:
-            if created:
+            if applied_revision:
                 try:
-                    self._repository.delete_profile(snapshot.definition.profile_id)
+                    self._repository.compensate_profile_creation(
+                        snapshot.definition.profile_id,
+                        expected_current_revision=applied_revision,
+                    )
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,
                         "routing profile import failed and internal compensation also failed",
-                        details={"profile_id": snapshot.definition.profile_id},
+                        details={
+                            "profile_id": snapshot.definition.profile_id,
+                            "expected_current_revision": applied_revision,
+                        },
                     ) from rollback_error
             raise
 
@@ -79,13 +85,17 @@ class ModelRoutingProfileImportMutationHandler:
         token: object,
         context: ImportContext,
     ) -> None:
-        del resource, value, context
-        if not isinstance(token, str):
+        del resource, context
+        snapshot = _require_snapshot(value)
+        if not isinstance(token, str) or token != snapshot.definition.profile_id:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
-                "routing profile rollback token must be the imported profile ID",
+                "routing profile rollback token must match the imported profile ID",
             )
-        self._repository.delete_profile(token)
+        self._repository.compensate_profile_creation(
+            token,
+            expected_current_revision=snapshot.definition.current_revision,
+        )
 
 
 def _definition_at(
