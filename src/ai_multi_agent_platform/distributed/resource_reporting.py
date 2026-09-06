@@ -42,8 +42,7 @@ class ResourceReportingState:
         overlap = self.reported_fields & self.unavailable_fields
         if overlap:
             raise ValueError(
-                "resource fields cannot be both reported and unavailable: "
-                f"{sorted(overlap)!r}"
+                f"resource fields cannot be both reported and unavailable: {sorted(overlap)!r}"
             )
 
     def is_reported(self, field: str, value: float | int) -> bool:
@@ -111,11 +110,7 @@ def resource_reporting_state(
 def _field_values(value: JsonValue | None) -> set[str]:
     if not isinstance(value, list):
         return set()
-    return {
-        item
-        for item in value
-        if isinstance(item, str) and item in RESOURCE_REPORTING_FIELDS
-    }
+    return {item for item in value if isinstance(item, str) and item in RESOURCE_REPORTING_FIELDS}
 
 
 __all__ = [
