@@ -155,13 +155,23 @@ def compare_with_baseline(
         ("benchmark_id", report.benchmark.benchmark_id),
         ("benchmark_version", report.benchmark.benchmark_version),
         ("deployment_profile", report.benchmark.deployment_profile),
+        ("operation_count", report.benchmark.operation_count),
         ("concurrency", report.benchmark.concurrency),
+        ("warmup_operations", report.benchmark.warmup_operations),
     ):
         if baseline_benchmark.get(key) != expected:
             reasons.append(f"baseline {key} is not comparable")
 
     baseline_environment = _mapping(baseline.get("environment"))
-    for key in ("python_implementation", "python_major_minor", "system"):
+    for key in (
+        "python_implementation",
+        "python_major_minor",
+        "system",
+        "machine",
+        "cpu_count",
+        "cpu_model",
+        "memory_total_bytes",
+    ):
         if baseline_environment.get(key) != report.environment.get(key):
             reasons.append(f"baseline environment differs for {key}")
 
