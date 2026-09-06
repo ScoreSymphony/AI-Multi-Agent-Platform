@@ -38,8 +38,17 @@ from ai_multi_agent_platform.distributed.resource_reporting import (
 )
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
-from ai_multi_agent_platform.notifications import NotificationQuery, NotificationState, RecipientRef, RecipientType
-from ai_multi_agent_platform.observability import AccountingBridgeExporter, InMemoryExporter, Telemetry
+from ai_multi_agent_platform.notifications import (
+    NotificationQuery,
+    NotificationState,
+    RecipientRef,
+    RecipientType,
+)
+from ai_multi_agent_platform.observability import (
+    AccountingBridgeExporter,
+    InMemoryExporter,
+    Telemetry,
+)
 from ai_multi_agent_platform.organizations.accounting import DEFAULT_ACCOUNTING_AGGREGATE_POLICY_REF
 from ai_multi_agent_platform.organizations.models import Membership, Organization
 from ai_multi_agent_platform.organizations.repository import InMemoryOrganizationRepository
@@ -224,7 +233,9 @@ def test_archived_threshold_attention_is_not_resurrected_after_restart(tmp_path)
         )
         assert accounting.store.get_threshold_level(budget.id) is ThresholdLevel.WARNING
         first_tick = await control_plane.run_notification_runtime_once()
-        active = await control_plane.notification_service.list(NotificationQuery(recipient=recipient))
+        active = await control_plane.notification_service.list(
+            NotificationQuery(recipient=recipient)
+        )
         assert first_tick.reminder_notifications == 1
         assert len(active) == 1
         aggregation_key = active[0].aggregation_key
@@ -390,20 +401,18 @@ def test_distributed_provider_and_transport_replacement_preserves_node_worker_at
     emit("provider-a", "transport-a", 1)
     emit("provider-b", "transport-b", 2)
 
-    node_records = accounting.query(
-        UsageQuery(metric_type="node.cpu.cores.capacity", unit="cores")
-    )
-    worker_records = accounting.query(
-        UsageQuery(metric_type="worker.jobs.active", unit="count")
-    )
+    node_records = accounting.query(UsageQuery(metric_type="node.cpu.cores.capacity", unit="cores"))
+    worker_records = accounting.query(UsageQuery(metric_type="worker.jobs.active", unit="count"))
     assert len(node_records) == 2
     assert len(worker_records) == 2
     assert {record.scope.node_id for record in node_records} == {node_id}
     assert {record.scope.node_id for record in worker_records} == {node_id}
     assert {record.scope.worker_id for record in worker_records} == {worker_id}
-    assert accounting.aggregate(
-        UsageQuery(metric_type="node.cpu.cores.capacity", unit="cores")
-    ).total == 8.0
-    assert accounting.aggregate(
-        UsageQuery(metric_type="worker.jobs.active", unit="count")
-    ).total == 2.0
+    assert (
+        accounting.aggregate(UsageQuery(metric_type="node.cpu.cores.capacity", unit="cores")).total
+        == 8.0
+    )
+    assert (
+        accounting.aggregate(UsageQuery(metric_type="worker.jobs.active", unit="count")).total
+        == 2.0
+    )
