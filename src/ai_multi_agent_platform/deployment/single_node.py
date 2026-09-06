@@ -614,6 +614,7 @@ def build_single_node_deployment(
         conversation_response_provider=conversation_response_provider,
         portability_workflow=portability_workflow,
         approval_gate=approval_gate,
+        accounting_service=accounting_service,
     )
     resolvers = control_plane.workspace_source_resolvers
     if resolvers is None:
