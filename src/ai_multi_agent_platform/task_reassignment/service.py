@@ -11,7 +11,7 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -322,7 +322,7 @@ class TaskProjectReassignmentService:
                     anchor_id,
                     {
                         "batch_digest": digest,
-                        "moves": moves,
+                        "moves": cast(JsonValue, moves),
                         "atomic": False,
                     },
                     (),
