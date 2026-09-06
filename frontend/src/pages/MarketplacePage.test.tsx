@@ -13,6 +13,12 @@ describe("MarketplacePage", () => {
     expect(html).toContain("Search");
     expect(html).toContain("All types");
     expect(html).toContain("All trust states");
+    expect(html).toContain("Tags");
+    expect(html).toContain("Categories");
+    expect(html).toContain("License");
+    expect(html).toContain("Publisher");
+    expect(html).toContain("Required capability");
+    expect(html).toContain("Platform version");
     expect(html).toContain("Updates only");
     expect(html).toContain("Loading Marketplace");
   });
