@@ -72,9 +72,9 @@ def test_optional_disabled_scenario_does_not_break_reference_compatibility(tmp_p
 
 def test_required_unimplemented_scenario_blocks_compatibility_claim(tmp_path: Path) -> None:
     scenario = ConformanceScenario(
-        scenario_id="G",
-        owner="#46 failure/retry",
-        criterion="failure/retry acceptance path exists",
+        scenario_id="future-required",
+        owner="#46 future required scenario",
+        criterion="required acceptance path exists",
         command=None,
         required=True,
         unavailable_status=ConformanceStatus.NOT_IMPLEMENTED,
@@ -92,7 +92,7 @@ def test_required_unimplemented_scenario_blocks_compatibility_claim(tmp_path: Pa
     assert report.scenarios[0].failure_category == ConformanceStatus.NOT_IMPLEMENTED.value
 
 
-def test_release_profile_has_only_failure_retry_pending() -> None:
+def test_release_profile_has_no_required_placeholders() -> None:
     scenarios = profile_scenarios(ConformanceProfile.RELEASE)
     pending_required = {
         scenario.scenario_id
@@ -100,7 +100,7 @@ def test_release_profile_has_only_failure_retry_pending() -> None:
         if scenario.required and scenario.command is None
     }
 
-    assert pending_required == {"G"}
+    assert pending_required == set()
 
 
 def test_operational_release_paths_are_bound_to_owning_acceptance_evidence() -> None:
@@ -109,6 +109,7 @@ def test_operational_release_paths_are_bound_to_owning_acceptance_evidence() -> 
         for scenario in profile_scenarios(ConformanceProfile.RELEASE)
     }
     expected_evidence = {
+        "G": "test_controlled_failure_retry_preserves_canonical_history_and_retry_telemetry",
         "I": "test_one_time_schedule_creates_canonical_task_with_provenance",
         "K": "test_message_to_task_handoff_is_canonical_and_bidirectionally_linked",
         "L": "test_terminal_http_resource_and_command_use_standard_composition_and_",
