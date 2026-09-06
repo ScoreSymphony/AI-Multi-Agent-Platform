@@ -40,15 +40,15 @@ Supported item types are Agents, Agent Teams, Tools, Plugins, Workflows, Templat
 
 ## Discovery
 
-`RegistryQuery` supports text, item type, tags/categories, license, publisher, required capabilities, platform compatibility, trust state and update-item filtering. The Control Plane maps the Marketplace query into this domain contract before generic pagination; provider-specific discovery filters are therefore not discarded or applied a second time as primitive field equality.
+`RegistryQuery` supports text, item type, tags/categories, license, publisher, required capabilities, platform compatibility, trust state and update-item filtering. The shipped Control Plane composition maps the Marketplace query into this domain contract before generic pagination; provider-specific discovery filters are therefore not discarded or applied a second time as primitive field equality.
 
-`LocalRegistryProvider` remains the deterministic in-memory reference provider. `FilesystemRegistryProvider` is the operator-facing local/offline catalog and loads versioned metadata and artifacts from a configured directory without a hosted service. Ratings, popularity and recommendation ranking are not canonical requirements.
+`LocalRegistryProvider` remains the deterministic in-memory reference provider. `FilesystemRegistryProvider` is the operator-facing local/offline catalog and loads versioned metadata and artifacts from a configured directory without a hosted service. Local text search covers canonical ID, name, description, publisher, license, tags and categories so the graphical search box matches the metadata it advertises. Ratings, popularity and recommendation ranking are not canonical requirements.
 
 ## Safe activation workflow
 
 `DistributionService.preview()` fetches metadata and the exact artifact and validates it before mutation. Validation covers platform compatibility, yanked/deprecated releases, checksum integrity, authoritative signature verification, dependency availability, requested permissions, required capabilities/plugins/connectors/models, installed-version pins and license/provenance changes. Untrusted content remains visibly untrusted.
 
-`preview()` never activates content. Async `activate()` requires explicit authorization, re-fetches the exact metadata/artifact, re-runs server-side validation to prevent preview/apply drift, and only then delegates to the owner domain through `DistributionRouter`. Installation state is recorded only after the owner handoff succeeds.
+`preview()` never activates content. Async `activate()` requires explicit authorization, re-fetches the exact metadata/artifact, re-runs server-side validation to prevent preview/apply drift, and only then delegates to the owner domain through `DistributionRouter`. Installation state is recorded only after the owner handoff succeeds. The durable installation snapshot records a SHA-256 digest of the exact bytes that were successfully handed to the owner, even when the Registry metadata did not require its own checksum.
 
 `CanonicalDistributionRouter` is the reference owner handoff. Portable Registry assets must be UTF-8 JSON portable packages. The router sends them through the canonical #79 `validate_package_document()` -> `preview_import()` -> `execute_import()` workflow; it never writes Templates, Agents, Teams, Workflows or other imported resources itself.
 
@@ -56,11 +56,13 @@ Plugin artifacts are intentionally different. `PluginRegistryArtifactInstaller` 
 
 Documentation assets have no automatic activation path. A provider change or metadata change between preview and activation fails closed. Privileged content is never silently auto-installed or updated.
 
-## Durable installations, updates and pinning
+## Durable installations, restart reconciliation, updates and pinning
 
-`JsonRegistryInstallationStore` persists Registry distribution state independently from the provider. Each installed item records current version, provider, source repository/package reference/revision, license and provenance. Replacing a version appends the prior snapshot to durable history so source and rollback evidence survive restart.
+`JsonRegistryInstallationStore` persists Registry distribution state independently from the provider. Each installed item records current version, item type, provider, source repository/package reference/revision, license, provenance and the exact installed-artifact digest. Replacing a version appends the prior snapshot to durable history so source and rollback evidence survive restart. State version 2 remains able to read the earlier version-1 installation documents.
 
-Pins are explicit durable state. `registry.pin` can pin only the currently installed version; `registry.unpin` removes that constraint. Discovery can expose `update_available`, but it never applies a candidate automatically. License/provenance changes and pins are validated before activation.
+Registry distribution state is not allowed to claim a plugin that the canonical #20 owner has forgotten after a process restart. During Registry-enabled single-node startup, `reconcile_registry_plugins()` restores only previously persisted plugin installations into the same canonical `PluginRegistry`. Reconciliation requires the configured provider to reproduce the persisted item/version/source/license/provenance and exact artifact digest; declared signatures are rechecked as well. A mismatch fails closed. Restoration never enables a runtime and never restores permission grants.
+
+Pins are explicit durable application policy. `registry.pin` can pin only the currently installed version; `registry.unpin` removes that constraint. A pin does **not** hide newer releases: discovery and `update_available` still report a newer candidate, while preview returns `version_pinned` and blocks application until the pin is removed. Updates are never applied automatically. License/provenance changes and pins are validated before activation.
 
 The graphical Marketplace shows installed version, pin state, update availability and changelog. Issue #42 may additionally surface the same update availability through the wider platform update experience; it does not change the no-silent-update rule.
 
@@ -78,9 +80,9 @@ When an operator configures a local catalog, the default composition connects:
 
 `FilesystemRegistryProvider -> DistributionService -> CanonicalDistributionRouter -> #20/#79`
 
-and supplies durable installation state plus `PlatformRegistryValidationContextResolver`. The resolver derives platform version, installed Registry dependencies, capabilities, plugins, models and grantable permissions from server-side platform state rather than accepting those claims from a client. Optional signature keys add the reference HMAC verifier at the same composition boundary.
+and supplies durable installation state plus `PlatformRegistryValidationContextResolver`. The resolver derives platform version, installed Registry dependencies, capabilities, plugins, **ConnectorDefinition IDs**, models and grantable permissions from live server-side platform state rather than accepting those claims from a client. Connector requirements therefore use the same canonical `ConnectorRegistry` inventory as the rest of the single-node platform. Optional signature keys add the reference HMAC verifier at the same composition boundary.
 
-The configured single-node composition attaches exactly one canonical #20 `PluginRegistry` to the Control Plane and gives that same instance to the Registry plugin artifact installer. Marketplace-installed plugins therefore appear through the normal `plugins` resource and lifecycle instead of creating a Registry-private parallel plugin state.
+The configured single-node composition attaches exactly one canonical #20 `PluginRegistry` to the Control Plane and gives that same instance to both the Registry plugin artifact installer and restart reconciliation. Marketplace-installed plugins therefore appear through the normal `plugins` resource and remain represented there after restart instead of creating a Registry-private or distribution-only plugin state.
 
 ## Control Plane, CLI and graphical Marketplace
 
@@ -90,4 +92,4 @@ The generic Control Plane performs the existing #15 authorization check before r
 
 The installed CLI exposes discovery, exact-version inspection, preview, activation, pin and unpin through the same API boundary.
 
-The web application exposes `/marketplace` as a first-class graphical product route. It is manifest-gated on `registry-items`, so deployments without Registry support show the canonical unavailable state rather than attempting a private backend fallback. When available it provides search/filter discovery, item type and trust filters, update-only discovery, install/update/pin badges, source/license/provenance/signature metadata, dependencies and requested privileges, changelog, server-side validation findings, explicit preview, explicit activation/update, and pin/unpin controls. Browser session, CSRF, idempotency and server-side authorization remain the same boundaries used by other Control Plane mutations.
+The web application exposes `/marketplace` as a first-class graphical product route. It is manifest-gated on `registry-items`, so deployments without Registry support show the canonical unavailable state rather than attempting a private backend fallback. When available it provides text search plus graphical item-type, trust, tag, category, license, publisher, required-capability, platform-version and update-only filters; cursor-based continued browsing; install/update/pin badges; source/license/provenance/signature metadata; generic Registry dependencies and required permissions/capabilities/plugins/connectors/models; changelog; server-side validation findings; explicit preview; explicit activation/update; and pin/unpin controls. Browser session, CSRF, idempotency and server-side authorization remain the same boundaries used by other Control Plane mutations.
