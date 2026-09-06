@@ -79,8 +79,8 @@ class _PortableStage:
                 revision=self.agent_template_revision,
                 resource_type="agent",
             )
-            revision = agents.get_agent_revision(resource.resource_id)
-            agent = AgentRevisionRef(revision.agent_id, revision.revision)
+            agent_revision = agents.get_agent_revision(resource.resource_id)
+            agent = AgentRevisionRef(agent_revision.agent_id, agent_revision.revision)
         elif self.team_template_id is not None:
             if agents is None:
                 raise ContractError(
@@ -92,8 +92,8 @@ class _PortableStage:
                 revision=self.team_template_revision,
                 resource_type="agent_team",
             )
-            revision = agents.get_team_revision(resource.resource_id)
-            team = AgentTeamRevisionRef(revision.team_id, revision.revision)
+            team_revision = agents.get_team_revision(resource.resource_id)
+            team = AgentTeamRevisionRef(team_revision.team_id, team_revision.revision)
         return WorkflowStage(
             stage_id=self.stage_id,
             title=self.title,
