@@ -241,7 +241,7 @@ def test_tcp_loss_expires_worker_and_same_identity_reregisters_after_restart(
                 _credentials(secret, "issue-240-network-register-2", reregistered_at),
                 now=reregistered_at,
             )
-            assert runtime.registry.get_worker(worker_id).status is WorkerStatus.ONLINE
+            assert runtime.registry.get_worker(worker_id).status is WorkerStatus.HEALTHY
 
             after_restart = _job(project_id, "after-restart")
             second_record = await runtime.dispatch(after_restart, now=reregistered_at)
