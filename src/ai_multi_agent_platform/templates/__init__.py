@@ -36,6 +36,10 @@ from .capability_assignment_handler import (
 from .control_plane import TemplateEnvironmentResolver
 from .control_plane import register_template_control_plane as _register_template_control_plane
 from .environment import PlatformTemplateEnvironmentResolver
+from .model_routing_control_plane import (
+    register_model_routing_policy_template_export_control_plane,
+)
+from .model_routing_exporter import ModelRoutingPolicyTemplateExporter
 from .model_routing_handler import (
     ModelRoutingPolicyTemplateHandler,
     register_model_routing_policy_template_handler,
@@ -133,17 +137,22 @@ def register_template_control_plane(
             ),
         )
 
-    if (
-        application.handlers.get(TemplateType.MODEL_ROUTING_POLICY) is None
-        and MODEL_ROUTING_PROFILE_COLLECTION in control_plane.registered_collections
-    ):
+    if MODEL_ROUTING_PROFILE_COLLECTION in control_plane.registered_collections:
         resource_service = control_plane._registered_resource_service(
             MODEL_ROUTING_PROFILE_COLLECTION
         )
         if isinstance(resource_service, ModelRoutingProfileResourceService):
-            register_model_routing_policy_template_handler(
-                application.handlers,
-                resource_service.service,
+            if application.handlers.get(TemplateType.MODEL_ROUTING_POLICY) is None:
+                register_model_routing_policy_template_handler(
+                    application.handlers,
+                    resource_service.service,
+                )
+            register_model_routing_policy_template_export_control_plane(
+                control_plane,
+                ModelRoutingPolicyTemplateExporter(
+                    resource_service.service,
+                    application.templates,
+                ),
             )
 
 
@@ -162,6 +171,7 @@ __all__ = [
     "ContextualTemplateResourceHandler",
     "InMemoryTemplateRepository",
     "JsonTemplateRepository",
+    "ModelRoutingPolicyTemplateExporter",
     "ModelRoutingPolicyTemplateHandler",
     "PlatformTemplateEnvironmentResolver",
     "ProjectTemplateExporter",

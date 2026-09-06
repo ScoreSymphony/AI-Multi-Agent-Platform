@@ -19,6 +19,7 @@ export const TEMPLATE_REQUIRED_COMMANDS = [
   "template.create-from-agent-team",
   "template.create-from-workflow",
   "template.create-from-capability-assignment",
+  "template.create-from-model-routing-profile",
   "template.create-from-automation",
   "template.create-from-project",
   "template.create-from-workspaces",

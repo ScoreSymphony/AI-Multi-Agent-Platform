@@ -261,6 +261,22 @@ export class TemplateClient {
     );
   }
 
+  createFromModelRoutingProfile(
+    profileId: string,
+    options: { revision?: number; name?: string } = {},
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<CanonicalTemplate> {
+    return this.command(
+      "template.create-from-model-routing-profile",
+      TEMPLATES,
+      compact({
+        profile_id: requireRef(profileId, "Model Routing Profile"),
+        ...options,
+      }),
+      idempotencyKey,
+    );
+  }
+
   createFromAutomation(
     automationId: string,
     options: { name?: string } = {},
