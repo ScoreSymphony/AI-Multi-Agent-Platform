@@ -9,6 +9,9 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.workflows import WorkflowCallContext
+from ai_multi_agent_platform.workflows.control_plane import (
+    register_workflow_resource_control_plane,
+)
 
 from .control_plane import (
     TEMPLATE_COLLECTION,
@@ -55,6 +58,7 @@ def register_workflow_template_export_control_plane(
     repository: TemplateRepository,
     exporter: WorkflowTemplateExporter,
 ) -> None:
+    register_workflow_resource_control_plane(control_plane, exporter.workflows)
     handler = WorkflowTemplateCommandHandler(repository, exporter)
     control_plane.register_command(
         WORKFLOW_TEMPLATE_EXPORT_COMMAND,
