@@ -24,9 +24,7 @@ from .model_runtime_response import (
 from .responses import ConversationResponseRequest
 
 
-class DurableRoutingProfileConversationResponseProvider(
-    ModelRuntimeConversationResponseProvider
-):
+class DurableRoutingProfileConversationResponseProvider(ModelRuntimeConversationResponseProvider):
     """Use #309 as the routing-policy source of truth for interactive responses."""
 
     def __init__(
@@ -42,9 +40,7 @@ class DurableRoutingProfileConversationResponseProvider(
             agents,
             instruction_resolver=instruction_resolver,
         )
-        self._routing_profile_resolver = ModelRoutingProfileResolver(
-            routing_profile_repository
-        )
+        self._routing_profile_resolver = ModelRoutingProfileResolver(routing_profile_repository)
 
     def _effective_routing(
         self,
@@ -79,9 +75,7 @@ class DurableRoutingProfileConversationResponseProvider(
             profile,
             policy=replace(profile.policy, requirements=requirements),
         )
-        route = DeterministicModelRouter(self._runtime.registry).route_profile(
-            effective_profile
-        )
+        route = DeterministicModelRouter(self._runtime.registry).route_profile(effective_profile)
         return route.model_config_id, _routing_requirements_json(requirements)
 
     def _target_project_id(self, request: ConversationResponseRequest) -> str | None:

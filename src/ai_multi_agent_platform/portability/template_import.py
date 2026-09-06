@@ -9,6 +9,7 @@ from ai_multi_agent_platform.templates import (
     TemplateDefinition,
     TemplateRepository,
     TemplateRevisionState,
+    TemplateTrust,
     validate_template_configuration,
 )
 
@@ -44,7 +45,10 @@ class TemplateImportMutationHandler:
         context: ImportContext,
     ) -> object:
         del resource, context
-        snapshot = _require_snapshot(value)
+        # Cross-deployment trust is never inherited implicitly. Preserve the source trust in
+        # provenance metadata, but import every revision as untrusted until the target
+        # deployment performs an explicit validation/activation step.
+        snapshot = _as_untrusted_import(_require_snapshot(value))
         created = False
         latest_published: int | None = None
         try:
@@ -89,6 +93,28 @@ class TemplateImportMutationHandler:
                 "portable Template rollback token must be the imported Template ID",
             )
         self._repository.delete_template(token)
+
+
+def _as_untrusted_import(snapshot: TemplatePortableSnapshot) -> TemplatePortableSnapshot:
+    revisions = []
+    for revision in snapshot.revisions:
+        provenance = revision.content.provenance
+        metadata = dict(provenance.metadata)
+        metadata["imported_source_trust"] = provenance.trust.value
+        revisions.append(
+            replace(
+                revision,
+                content=replace(
+                    revision.content,
+                    provenance=replace(
+                        provenance,
+                        trust=TemplateTrust.UNTRUSTED,
+                        metadata=metadata,
+                    ),
+                ),
+            )
+        )
+    return TemplatePortableSnapshot(snapshot.definition, tuple(revisions))
 
 
 def _definition_at(

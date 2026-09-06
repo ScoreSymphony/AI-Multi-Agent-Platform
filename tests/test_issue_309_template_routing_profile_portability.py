@@ -66,8 +66,7 @@ def test_template_exact_routing_profile_ref_uses_canonical_dependency_and_remapp
     assert reference.resource_id == source_profile_id
     assert dependency.version_constraint == "==4"
     assert not any(
-        reference.resource_type == "model_routing_policy"
-        and reference.resource_id == exact_ref
+        reference.resource_type == "model_routing_policy" and reference.resource_id == exact_ref
         for reference, _ in resource_dependencies
     )
 

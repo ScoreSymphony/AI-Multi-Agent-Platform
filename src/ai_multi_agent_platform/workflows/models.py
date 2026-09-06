@@ -12,10 +12,50 @@ from datetime import UTC, datetime
 from types import MappingProxyType
 
 from ai_multi_agent_platform.agents import AgentRevisionRef, AgentTeamRevisionRef
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue
 from ai_multi_agent_platform.domain import OwnerRef, new_id, validate_id
 
 WORKFLOW_SCHEMA_VERSION = "1"
+
+_FORBIDDEN_RUNTIME_KEYS = frozenset(
+    {
+        "runtime_state",
+        "provider_id",
+        "orchestrator_id",
+        "backend_id",
+        "provider_session_id",
+        "orchestrator_session_id",
+        "backend_session_id",
+        "provider_tool_ref",
+        "orchestrator_plan_id",
+        "active_run_id",
+        "agent_run_id",
+        "worker_job_id",
+        "provider_handle",
+        "orchestrator_handle",
+        "authorization",
+        "client_secret",
+        "cookie",
+        "set_cookie",
+        "credential",
+        "credentials",
+        "password",
+        "private_key",
+        "secret",
+        "token",
+        "api_key",
+        "access_token",
+        "refresh_token",
+    }
+)
+_FORBIDDEN_SENSITIVE_SUFFIXES = (
+    "_password",
+    "_secret",
+    "_token",
+    "_api_key",
+    "_private_key",
+)
 
 
 def utc_now() -> datetime:
@@ -44,6 +84,33 @@ def _freeze_value(value: FrozenJsonValue) -> FrozenJsonValue:
 
 def _freeze_mapping(value: Mapping[str, FrozenJsonValue]) -> Mapping[str, FrozenJsonValue]:
     return MappingProxyType({key: _freeze_value(item) for key, item in value.items()})
+
+
+def _normalize_key(key: str) -> str:
+    return key.strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def _is_forbidden_metadata_key(key: str) -> bool:
+    normalized = _normalize_key(key)
+    if normalized in _FORBIDDEN_RUNTIME_KEYS:
+        return True
+    return any(normalized.endswith(suffix) for suffix in _FORBIDDEN_SENSITIVE_SUFFIXES)
+
+
+def _scan_safe_value(value: FrozenJsonValue, path: str) -> None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            current_path = f"{path}.{key}" if path else key
+            if _is_forbidden_metadata_key(key):
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "workflow contains runtime-private or secret-bearing metadata",
+                    details={"path": current_path},
+                )
+            _scan_safe_value(item, current_path)
+    elif isinstance(value, tuple):
+        for index, item in enumerate(value):
+            _scan_safe_value(item, f"{path}[{index}]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +281,16 @@ class WorkflowContent:
             visit(stage_id)
 
 
+def validate_workflow_content(content: WorkflowContent) -> None:
+    """Reject provider/orchestrator-private state and plaintext secret material."""
+
+    _scan_safe_value(content.metadata, "metadata")
+    _scan_safe_value(content.compatibility.metadata, "compatibility.metadata")
+    _scan_safe_value(content.provenance.metadata, "provenance.metadata")
+    for stage in content.stages:
+        _scan_safe_value(stage.metadata, f"stages.{stage.stage_id}.metadata")
+
+
 @dataclass(frozen=True, slots=True)
 class WorkflowDefinition:
     workflow_id: str
@@ -231,7 +308,7 @@ class WorkflowDefinition:
         if self.project_id is not None:
             validate_id(self.project_id, "project")
         if self.organization_id is not None:
-            _require_nonblank(self.organization_id, "organization_id")
+            validate_id(self.organization_id, "organization")
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,7 +328,8 @@ class WorkflowRevision:
         if self.project_id is not None:
             validate_id(self.project_id, "project")
         if self.organization_id is not None:
-            _require_nonblank(self.organization_id, "organization_id")
+            validate_id(self.organization_id, "organization")
+        validate_workflow_content(self.content)
 
     @property
     def ref(self) -> WorkflowRevisionRef:

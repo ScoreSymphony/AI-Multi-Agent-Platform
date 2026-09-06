@@ -5,7 +5,12 @@ import {
   TaskEventStream,
   type LiveConnectionState,
 } from "../api/live";
-import type { CanonicalRun, CanonicalTask, TimelineItem } from "../api/types";
+import type {
+  CanonicalProject,
+  CanonicalRun,
+  CanonicalTask,
+  TimelineItem,
+} from "../api/types";
 import { AppLink } from "../app/router";
 import {
   CanonicalId,
@@ -42,11 +47,14 @@ export function TaskDetailPage({
   const [task, setTask] = useState<CanonicalTask | null>(null);
   const [runs, setRuns] = useState<CanonicalRun[]>([]);
   const [events, setEvents] = useState<TimelineItem[]>([]);
+  const [projects, setProjects] = useState<CanonicalProject[]>([]);
+  const [destinationProjectId, setDestinationProjectId] = useState("");
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [liveState, setLiveState] = useState<LiveConnectionState>("connecting");
   const [liveError, setLiveError] = useState<string | null>(null);
   const permission = usePermissionHint("task:command", taskId);
+  const movePermission = usePermissionHint("task:move-project", taskId);
 
   const load = useCallback(async () => {
     if (!isCanonicalId(taskId)) {
@@ -67,6 +75,25 @@ export function TaskDetailPage({
       setError(nextError);
     }
   }, [client, taskId]);
+
+  useEffect(() => {
+    let active = true;
+    void client
+      .listProjects({ limit: 100, sort: "name", direction: "asc" })
+      .then((page) => {
+        if (active) setProjects(page.items);
+      })
+      .catch(() => {
+        if (active) setProjects([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [client]);
+
+  useEffect(() => {
+    if (task !== null) setDestinationProjectId(task.project_id ?? "");
+  }, [task?.project_id]);
 
   useEffect(() => {
     void load();
@@ -102,6 +129,21 @@ export function TaskDetailPage({
     }
   };
 
+  const moveTask = async () => {
+    if (task === null) return;
+    const destination = destinationProjectId || null;
+    if (destination === task.project_id) return;
+    setBusy(true);
+    try {
+      await client.moveTaskProject(taskId, destination);
+      await load();
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (error && !task) return <ErrorState error={error} onRetry={() => void load()} />;
   if (!task) return <LoadingState />;
 
@@ -109,6 +151,10 @@ export function TaskDetailPage({
   const canStart = task.status === "ready";
   const canCancel = ["draft", "ready", "running", "waiting"].includes(task.status);
   const canRetry = task.status === "failed";
+  const canMove = !["running", "waiting"].includes(task.status);
+  const selectedProjectId = destinationProjectId || null;
+  const currentProjectMissing =
+    task.project_id !== null && !projects.some((project) => project.id === task.project_id);
 
   return (
     <div className="stack">
@@ -143,6 +189,42 @@ export function TaskDetailPage({
         {canRetry ? <button className="primary" disabled={busy} onClick={() => void command("retry")}>Retry</button> : null}
         <button disabled={busy} onClick={() => void load()}>Refresh</button>
       </div>
+      <Card title="Project reassignment">
+        {movePermission === "denied" ? (
+          <DegradedState
+            title="Permission hint"
+            detail="The current client hint marks Task Project reassignment as denied. The server remains authoritative."
+          />
+        ) : null}
+        <label htmlFor={`task-project-${taskId}`}>Destination Project</label>
+        <div className="actions">
+          <select
+            id={`task-project-${taskId}`}
+            value={destinationProjectId}
+            disabled={busy || !canMove}
+            onChange={(event) => setDestinationProjectId(event.target.value)}
+          >
+            <option value="">No Project</option>
+            {currentProjectMissing ? (
+              <option value={task.project_id ?? ""}>{task.project_id} (current)</option>
+            ) : null}
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>{project.name}</option>
+            ))}
+          </select>
+          <button
+            className="primary"
+            disabled={busy || !canMove || selectedProjectId === task.project_id}
+            onClick={() => void moveTask()}
+          >
+            Move Task
+          </button>
+        </div>
+        <small>
+          This changes the canonical Task Project scope. Historical Events and Runs keep their
+          original Project attribution; future execution uses the selected destination.
+        </small>
+      </Card>
       <div className="grid-two">
         <Card title="Task details">
           <DefinitionList

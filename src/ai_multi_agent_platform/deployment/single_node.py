@@ -18,6 +18,11 @@ from ai_multi_agent_platform.agents.routing_profile_control_plane import (
     register_routing_profile_aware_agent_control_plane,
 )
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
+from ai_multi_agent_platform.capability_assignments import (
+    CallableCapabilityAssignmentTargetResolver,
+    CapabilityAssignmentService,
+    JsonCapabilityAssignmentRepository,
+)
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
@@ -91,6 +96,7 @@ from ai_multi_agent_platform.templates import (
     WorkspaceStructureTemplateExporter,
     register_agent_template_handlers,
     register_automation_template_handler,
+    register_capability_assignment_template_handler,
     register_project_template_handler,
     register_workspace_structure_template_handler,
 )
@@ -152,6 +158,7 @@ class SingleNodeDeployment:
     conversations: ConversationService
     agent_runtime: AgentRuntime
     capabilities: CapabilityRegistry
+    capability_assignments: CapabilityAssignmentService
     models: ModelRegistry
     routing_profile_repository: JsonModelRoutingProfileRepository
     routing_profiles: ModelRoutingProfileService
@@ -398,6 +405,17 @@ def build_single_node_deployment(
         authorization=authorization,
     )
     approval_gate = AuthorizationGate(authorization)
+    capability_assignments = CapabilityAssignmentService(
+        repository=JsonCapabilityAssignmentRepository(database_dir / "capability-assignments.json"),
+        capabilities=capabilities,
+        targets=CallableCapabilityAssignmentTargetResolver(
+            get_agent=agents.repository.get_agent,
+            get_team=agents.repository.get_team,
+            get_project=scopes.get_project,
+        ),
+        authorization=approval_gate,
+    )
+    register_capability_assignment_template_handler(template_handlers, capability_assignments)
 
     evaluation_evidence_providers: list[EvaluationEvidenceProvider] = []
     if accounting_service is not None:
@@ -432,9 +450,11 @@ def build_single_node_deployment(
         models=models,
         scopes=scopes,
         platform_version=__version__,
+        capabilities=capabilities,
         templates=templates.repository,
         routing_profiles=routing_profile_repository,
         evaluation=evaluation_composition.service,
+        evaluation_fixture_exists=evaluation_composition.fixture_exists,
     )
 
     control_plane = ControlPlane(
@@ -481,11 +501,23 @@ def build_single_node_deployment(
             capability.capability_id
             for capability in capabilities.inventory_capabilities(include_unavailable=False)
         ),
+        capability_versions=lambda: (
+            (capability.capability_id, capability.version)
+            for capability in capabilities.inventory_capabilities(include_unavailable=False)
+        ),
         model_policies=lambda: (
             ModelRoutingProfileRef(definition.profile_id, definition.current_revision).canonical_ref
             for definition in routing_profile_repository.list_definitions()
             if definition.enabled
         ),
+        grantable_permissions=lambda context: (
+            action.value
+            for action in authorization.globally_grantable_actions(
+                context.actor.principal_ref,
+                actor_type=context.actor.actor_type,
+            )
+        ),
+        platform_version=__version__,
     )
     register_template_control_plane(
         control_plane,
@@ -536,6 +568,7 @@ def build_single_node_deployment(
         conversations=conversations,
         agent_runtime=agent_runtime,
         capabilities=capabilities,
+        capability_assignments=capability_assignments,
         models=models,
         routing_profile_repository=routing_profile_repository,
         routing_profiles=routing_profiles,

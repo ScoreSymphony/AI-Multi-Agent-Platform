@@ -147,6 +147,18 @@ export class ControlPlaneClient {
     });
   }
 
+  moveTaskProject(
+    taskId: string,
+    destinationProjectId: string | null,
+  ): Promise<CanonicalTask> {
+    return this.command<CanonicalTask>("/commands/task.project.move", {
+      body: {
+        resource_ref: taskId,
+        destination_project_id: destinationProjectId,
+      },
+    });
+  }
+
   queueTask(taskId: string): Promise<CanonicalTask> {
     return this.command<CanonicalTask>(`/tasks/${encodeURIComponent(taskId)}:queue`);
   }

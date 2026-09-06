@@ -18,8 +18,10 @@ from .contracts import (
     ReconciliationResult,
     StaleFencingToken,
 )
+from .reconciliation import DistributedRuntimeFailoverReconciler
 from .reference import InMemoryCoordinationProvider
 from .service import ControlPlaneFailoverService
+from .telemetry import HighAvailabilityTelemetry
 
 __all__ = [
     "AuthorityGrant",
@@ -32,8 +34,10 @@ __all__ = [
     "CoordinationProvider",
     "CoordinationState",
     "CoordinationUnavailable",
+    "DistributedRuntimeFailoverReconciler",
     "FailoverReconciler",
     "FencingToken",
+    "HighAvailabilityTelemetry",
     "InMemoryCoordinationProvider",
     "LeadershipConflict",
     "NotLeaderError",

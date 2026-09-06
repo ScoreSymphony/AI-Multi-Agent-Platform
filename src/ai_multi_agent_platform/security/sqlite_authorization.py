@@ -46,6 +46,37 @@ class SqliteLocalAuthorizationProvider(LocalAuthorizationProvider):
     def has_policy(self, principal_ref: str) -> bool:
         return principal_ref in self._policies
 
+    def globally_grantable_actions(
+        self,
+        principal_ref: str,
+        *,
+        actor_type: str | None = None,
+    ) -> frozenset[AuthorizationAction]:
+        """Return only actions safely grantable without a concrete resource scope.
+
+        Template preview needs a conservative environment-wide permission ceiling before
+        canonical resources exist. Scoped policies cannot be generalized to arbitrary target
+        Projects/Organizations/Teams/Workspaces, so they intentionally return no grants here.
+        Approval-gated actions are also excluded: requiring approval is not equivalent to an
+        immediately grantable permission. Actor type must come from trusted authentication
+        context; without it the result is fail-closed.
+        """
+
+        policy = self._policies.get(principal_ref)
+        if policy is None or actor_type is None:
+            return frozenset()
+        try:
+            canonical_actor_type = ActorType(actor_type)
+        except ValueError:
+            return frozenset()
+        if canonical_actor_type not in policy.actor_types:
+            return frozenset()
+        if policy.project_ids or policy.organization_ids or policy.team_ids or policy.workspace_ids:
+            return frozenset()
+        if policy.administrator:
+            return frozenset(AuthorizationAction)
+        return policy.allowed_actions
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)
         connection.execute("PRAGMA busy_timeout = 5000")

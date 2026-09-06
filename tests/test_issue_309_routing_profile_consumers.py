@@ -11,7 +11,12 @@ from ai_multi_agent_platform.agents import (
     InMemoryAgentRepository,
     InstructionSource,
 )
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, HealthStatus, OperationContext
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    HealthStatus,
+    OperationContext,
+)
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.models import (
     DeterministicModelRouter,

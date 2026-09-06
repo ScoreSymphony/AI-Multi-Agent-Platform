@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -27,6 +28,7 @@ from .models import (
     utc_now,
 )
 from .repository import TemplateRepository
+from .versioning import any_version_satisfies, version_satisfies
 
 _FORBIDDEN_SECRET_KEYS = frozenset(
     {
@@ -96,6 +98,7 @@ def validate_template_configuration(configuration: TemplateConfiguration) -> Non
 @dataclass(frozen=True, slots=True)
 class TemplateEnvironment:
     capability_ids: frozenset[str] = frozenset()
+    capability_versions: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     plugin_ids: frozenset[str] = frozenset()
     connector_ids: frozenset[str] = frozenset()
     model_policy_refs: frozenset[str] = frozenset()
@@ -104,6 +107,32 @@ class TemplateEnvironment:
     resolved_placeholders: frozenset[str] = frozenset()
     resolved_secret_reference_placeholders: frozenset[str] = frozenset()
     validated_configuration_refs: frozenset[str] = frozenset()
+    platform_version: str | None = None
+    contract_versions: Mapping[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        capability_versions = {
+            capability_id: tuple(versions)
+            for capability_id, versions in self.capability_versions.items()
+        }
+        if any(not capability_id.strip() for capability_id in capability_versions):
+            raise ValueError("Template capability version inventory IDs must be non-blank")
+        for capability_id, versions in capability_versions.items():
+            if any(not version.strip() for version in versions):
+                raise ValueError(f"Template capability versions must be non-blank: {capability_id}")
+            if len(set(versions)) != len(versions):
+                raise ValueError(f"Template capability versions must be unique: {capability_id}")
+        contracts = dict(self.contract_versions)
+        if any(not name.strip() or not version.strip() for name, version in contracts.items()):
+            raise ValueError("Template contract version inventory must use non-blank values")
+        if self.platform_version is not None and not self.platform_version.strip():
+            raise ValueError("Template platform version must be non-blank when provided")
+        object.__setattr__(
+            self,
+            "capability_versions",
+            MappingProxyType(capability_versions),
+        )
+        object.__setattr__(self, "contract_versions", MappingProxyType(contracts))
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +141,11 @@ class TemplatePreview:
     dependency_order: tuple[TemplateRevisionRef, ...]
     missing_required_capability_ids: tuple[str, ...] = ()
     missing_optional_capability_ids: tuple[str, ...] = ()
+    incompatible_capability_versions: tuple[str, ...] = ()
+    incompatible_optional_capability_versions: tuple[str, ...] = ()
+    incompatible_platform_versions: tuple[str, ...] = ()
+    missing_contract_versions: tuple[str, ...] = ()
+    incompatible_contract_versions: tuple[str, ...] = ()
     missing_plugin_ids: tuple[str, ...] = ()
     missing_connector_ids: tuple[str, ...] = ()
     missing_model_policy_refs: tuple[str, ...] = ()
@@ -130,6 +164,10 @@ class TemplatePreview:
         return not any(
             (
                 self.missing_required_capability_ids,
+                self.incompatible_capability_versions,
+                self.incompatible_platform_versions,
+                self.missing_contract_versions,
+                self.incompatible_contract_versions,
                 self.missing_plugin_ids,
                 self.missing_connector_ids,
                 self.missing_model_policy_refs,
@@ -353,6 +391,11 @@ class TemplateService:
 
         missing_required_capabilities: set[str] = set()
         missing_optional_capabilities: set[str] = set()
+        incompatible_capabilities: set[str] = set()
+        incompatible_optional_capabilities: set[str] = set()
+        incompatible_platform_versions: set[str] = set()
+        missing_contract_versions: set[str] = set()
+        incompatible_contract_versions: set[str] = set()
         missing_plugins: set[str] = set()
         missing_connectors: set[str] = set()
         missing_models: set[str] = set()
@@ -366,6 +409,37 @@ class TemplateService:
         resource_changes: list[TemplateResourceChange] = []
 
         for item in dependency_order:
+            compatibility = item.content.compatibility
+            platform_range = compatibility.platform_version_range
+            if platform_range is not None and (
+                environment.platform_version is None
+                or not version_satisfies(environment.platform_version, platform_range)
+            ):
+                incompatible_platform_versions.add(
+                    _compatibility_display(
+                        item,
+                        "platform",
+                        platform_range,
+                        environment.platform_version,
+                    )
+                )
+
+            for contract_name, constraint in compatibility.contract_versions.items():
+                actual_contract_version = environment.contract_versions.get(contract_name)
+                if actual_contract_version is None:
+                    missing_contract_versions.add(
+                        _compatibility_display(item, contract_name, constraint, None)
+                    )
+                elif not version_satisfies(actual_contract_version, constraint):
+                    incompatible_contract_versions.add(
+                        _compatibility_display(
+                            item,
+                            contract_name,
+                            constraint,
+                            actual_contract_version,
+                        )
+                    )
+
             requirements = item.content.requirements
             for capability in requirements.capabilities:
                 if capability.privileged:
@@ -377,6 +451,28 @@ class TemplateService:
                         else missing_required_capabilities
                     )
                     target.add(capability.capability_id)
+                    continue
+                if capability.version_constraint is not None:
+                    available_versions = environment.capability_versions.get(
+                        capability.capability_id,
+                        (),
+                    )
+                    if not any_version_satisfies(
+                        available_versions,
+                        capability.version_constraint,
+                    ):
+                        target = (
+                            incompatible_optional_capabilities
+                            if capability.optional
+                            else incompatible_capabilities
+                        )
+                        target.add(
+                            _capability_version_display(
+                                capability.capability_id,
+                                capability.version_constraint,
+                                available_versions,
+                            )
+                        )
             missing_plugins.update(set(requirements.plugin_ids) - environment.plugin_ids)
             missing_connectors.update(set(requirements.connector_ids) - environment.connector_ids)
             missing_models.update(
@@ -411,6 +507,13 @@ class TemplateService:
             dependency_order=tuple(item.ref for item in dependency_order),
             missing_required_capability_ids=tuple(sorted(missing_required_capabilities)),
             missing_optional_capability_ids=tuple(sorted(missing_optional_capabilities)),
+            incompatible_capability_versions=tuple(sorted(incompatible_capabilities)),
+            incompatible_optional_capability_versions=tuple(
+                sorted(incompatible_optional_capabilities)
+            ),
+            incompatible_platform_versions=tuple(sorted(incompatible_platform_versions)),
+            missing_contract_versions=tuple(sorted(missing_contract_versions)),
+            incompatible_contract_versions=tuple(sorted(incompatible_contract_versions)),
             missing_plugin_ids=tuple(sorted(missing_plugins)),
             missing_connector_ids=tuple(sorted(missing_connectors)),
             missing_model_policy_refs=tuple(sorted(missing_models)),
@@ -453,6 +556,12 @@ class TemplateService:
                 "template is not compatible with the target environment",
                 details={
                     "missing_capabilities": list(preview.missing_required_capability_ids),
+                    "incompatible_capability_versions": list(
+                        preview.incompatible_capability_versions
+                    ),
+                    "incompatible_platform_versions": list(preview.incompatible_platform_versions),
+                    "missing_contract_versions": list(preview.missing_contract_versions),
+                    "incompatible_contract_versions": list(preview.incompatible_contract_versions),
                     "missing_plugins": list(preview.missing_plugin_ids),
                     "missing_connectors": list(preview.missing_connector_ids),
                     "missing_model_policies": list(preview.missing_model_policy_refs),
@@ -568,3 +677,25 @@ class TemplateService:
                 missing_optional.add(f"{dependency.template_id}@{suffix}")
                 return None
             raise
+
+
+def _compatibility_display(
+    revision: TemplateRevision,
+    subject: str,
+    constraint: str,
+    actual: str | None,
+) -> str:
+    available = "unknown" if actual is None else actual
+    return (
+        f"{revision.template_id}@{revision.revision}:{subject} "
+        f"requires {constraint}; available {available}"
+    )
+
+
+def _capability_version_display(
+    capability_id: str,
+    constraint: str,
+    available_versions: tuple[str, ...],
+) -> str:
+    available = ",".join(available_versions) if available_versions else "unknown"
+    return f"{capability_id} requires {constraint}; available {available}"

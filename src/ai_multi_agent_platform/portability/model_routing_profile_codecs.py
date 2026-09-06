@@ -105,7 +105,10 @@ class ModelRoutingProfilePortableCodec:
                 f"routing profile codec cannot deserialize {resource.resource_type!r}",
             )
         try:
-            if resource.payload.get("schema_version") != MODEL_ROUTING_PROFILE_PORTABLE_SCHEMA_VERSION:
+            if (
+                resource.payload.get("schema_version")
+                != MODEL_ROUTING_PROFILE_PORTABLE_SCHEMA_VERSION
+            ):
                 raise ContractError(
                     ErrorCode.UNSUPPORTED_CAPABILITY,
                     "unsupported portable routing profile schema version",

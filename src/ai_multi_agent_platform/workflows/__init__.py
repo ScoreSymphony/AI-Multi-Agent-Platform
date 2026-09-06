@@ -13,10 +13,11 @@ from .models import (
     WorkflowRevisionRef,
     WorkflowStage,
     new_workflow_id,
+    validate_workflow_content,
 )
 from .persistence import WORKFLOW_REPOSITORY_SCHEMA_VERSION, JsonWorkflowRepository
 from .repository import InMemoryWorkflowRepository, WorkflowRepository
-from .service import WorkflowAdmission, WorkflowService, validate_workflow_content
+from .service import WorkflowAdmission, WorkflowService
 
 __all__ = [
     "WORKFLOW_REPOSITORY_SCHEMA_VERSION",
