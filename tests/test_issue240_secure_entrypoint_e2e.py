@@ -314,7 +314,8 @@ def test_secure_profile_provisioning_worker_entrypoint_and_task_run(
         worker_id = str(node["workers"][0]["worker_id"])
         host_ref = str(node["deployment"]["host_ref"])
 
-        deployment = build_distributed_control_plane_deployment(
+        deployment = await asyncio.to_thread(
+            build_distributed_control_plane_deployment,
             SingleNodeConfig(data_dir=tmp_path / "control-plane", secure_cookie=False),
             profile_path=str(profile_path),
         )
