@@ -151,7 +151,9 @@ class DistributionService:
         if self._installations is not None:
             resolved = replace(
                 resolved,
-                installed_items=tuple(record.as_installed() for record in self._installations.list()),
+                installed_items=tuple(
+                    record.as_installed() for record in self._installations.list()
+                ),
             )
         if item.integrity.signature is not None:
             signature_valid = (
