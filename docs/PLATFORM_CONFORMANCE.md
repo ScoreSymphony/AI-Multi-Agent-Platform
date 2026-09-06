@@ -58,6 +58,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | A — reference baseline | authenticated single-node Task/Run/Result restart-safe smoke | #39 / #252 |
 | D-model — local model | loopback OpenAI-compatible local/self-hosted ModelProvider fixture | #10 / #250 / #252 |
 | D-capability — capability boundary | capability discovery/invocation contract suite | #12 |
+| D-vertical — local model + native capability | authenticated AgentRun -> real loopback OpenAI-compatible model tool call -> pinned `tool.echo@1.0` -> canonical CapabilityInvoker -> NativeEchoProvider evidence | #46 / #10 / #12 |
 | F — approval gate | exact-action approval and changed-payload rejection | #15 |
 | H — restart/persistence | #252 persistence acceptance profile | #39 / #250 / #251 / #86 |
 | J-cli — client consistency | CLI canonical Task route/fixture parity | #17 / #252 |
@@ -109,7 +110,7 @@ The release tier also has explicit claim-blocking lifecycle and cross-layer chec
 
 All four are `required=true` whenever `--profile release` is selected. A release report therefore cannot be `compatible` merely because these capabilities have unit tests elsewhere; the representative acceptance commands must pass inside the same #46 release claim.
 
-`REL-VERTICAL` is intentionally the strongest maintained **continuous reference slice currently available**, not a declaration that the ideal full #46 path is complete. The current Agent lifecycle still executes Agent/Model work directly while the reference Executor/Worker path is a separate lifecycle path. Until one production-valid canonical flow also crosses `Capability/Tool -> Executor -> Worker/Node` without test-only shortcuts, that boundary remains an explicit #46 closure blocker.
+`REL-VERTICAL` is intentionally the strongest maintained **continuous reference slice currently available**, not a declaration that the ideal full #46 path is complete. `D-vertical` now separately proves that an authenticated AgentRun can cross the real local-model HTTP boundary and execute a pinned native capability through `CapabilityInvoker`. The remaining gap is after that capability boundary: reference capability execution still does not continue through a canonical `Executor -> Worker/Node` subexecution in the same production-valid flow. Until one canonical path crosses `Capability/Tool -> Executor -> Worker/Node` without test-only shortcuts or unsafe Run-ID reuse, that boundary remains an explicit #46 closure blocker.
 
 ## Optional compatibility evidence
 
