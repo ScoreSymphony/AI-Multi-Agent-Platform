@@ -1201,7 +1201,7 @@ def _materialization_ref(worker_id: str, request: RemoteMaterializationRequest) 
         (
             f"{worker_id}\0{request.workspace_id}\0{request.snapshot_id}\0"
             f"{request.expected_checksum}\0{request.access_mode.value}"
-        ).encode("utf-8")
+        ).encode()
     ).hexdigest()
     return f"remote-materialization-{digest[:32]}"
 
