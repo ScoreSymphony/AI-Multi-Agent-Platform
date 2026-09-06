@@ -22,7 +22,7 @@ No GitHub release or semantic-version tag has been published yet. Passing #252 t
 
 The release/update system itself is no longer only policy documentation. The merged #42 work provides release-manifest validation, compatibility inventory, advisory upstream discovery, fail-closed adoption/release gates, operator-visible release status and the upstream review workflow. PR #492 further hardened this foundation with manifest schema v2, cryptographic dependency/artifact provenance, typed gate evidence, exact source-commit binding and complete canonical `VersionSnapshot` compatibility state.
 
-#42 intentionally remains open for operationalization: deterministic manifest generation, persistence of reviewed advisory discovery results into operator/runtime/UI state, stronger frontend typing for schema-v2 release data and optional provider-neutral scheduled discovery adapters are still outstanding. These items improve repeatability and operator experience; update discovery remains advisory and cannot silently mutate production pins, approve, merge or deploy changes.
+The remaining #42 operationalization is implemented through deterministic `platform-release generate`, restart-persistent reviewed advisory discovery, explicit schema-v2 browser types and an optional provider-neutral scheduled Git discovery workflow. Discovery remains advisory: it cannot mutate production pins, approve or merge changes, deploy a release or replace #41 as the authority for persisted upgrade/version state.
 
 The `1.0.0` operational target remains gated by #46 full platform conformance. Current open implementation work may add capabilities before that point, but compatibility must not be claimed beyond the profiles that have explicit evidence.
 
@@ -50,13 +50,17 @@ The `1.0.0` operational target remains gated by #46 full platform conformance. C
 3. Create a release candidate without modifying the already-tested source tree.
 4. Freeze exact dependency lock/resolved sets and record their cryptographic digests.
 5. Verify generated artifacts and checksums.
-6. Populate the immutable release manifest, including the complete version vector, dependency sets, SBOM/provenance and typed gate evidence, and run `platform-release validate`.
+6. Populate a reviewed generation-input document with the exact SBOM/provenance references and typed gate evidence, then run `platform-release generate` for the exact release commit and validate the generated manifest.
 7. Tag the accepted commit with the semantic version.
 8. Publish a GitHub release using the matching changelog section.
 9. Record artifact checksums, canonical source revision and tested compatibility profiles.
 10. Verify a clean installation using the published artifacts.
 
-Until deterministic `platform-release generate` (or equivalent workflow integration) is complete under #42, manifest population may remain an explicit reviewed release step. The absence of automated generation must not weaken the required manifest-v2 validation or evidence binding.
+`platform-release generate` performs deterministic assembly and hashing; it does not infer that a gate passed or synthesize approval evidence. Missing, stale or failed required evidence therefore continues to block the generated release manifest rather than weakening the manifest-v2 contract.
+
+## Upstream discovery
+
+The optional scheduled discovery workflow resolves Git remote HEADs without cloning or mutating the production baseline, emits provider-neutral observation JSON and evaluates it through the same advisory discovery contract. Changed revisions remain `unknown` until reviewed. A reviewed report can be persisted explicitly with `platform-release upstream-check --data-dir <path> --reviewed-at <timestamp>` so the Control Plane and Settings UI retain candidate state across restarts. This persistence is separate from #41 version state and never performs update adoption.
 
 ## Rollback
 

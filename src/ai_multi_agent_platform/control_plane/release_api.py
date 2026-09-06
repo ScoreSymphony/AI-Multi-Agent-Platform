@@ -35,7 +35,7 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
         if release_operator is None:
             from ai_multi_agent_platform.release.operator import ReleaseOperatorService
 
-            release_operator = ReleaseOperatorService.packaged_defaults()
+            release_operator = ReleaseOperatorService.runtime_defaults()
         self._release_operator = release_operator
 
     @property

@@ -1,0 +1,63 @@
+name: Release manifest
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Exact full Git commit SHA to bind the release candidate to
+        required: true
+        type: string
+      generation_input:
+        description: Repository path to reviewed release generation-input JSON
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_commit }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare release evidence paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ inputs.source_commit }}"
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir .release-evidence/dist
+          python - <<'PY'
+          from pathlib import Path
+          wheels = sorted(Path('.release-evidence/dist').glob('*.whl'))
+          if len(wheels) != 1:
+              raise SystemExit(f'expected exactly one wheel, found {len(wheels)}')
+          target = Path('.release-evidence/platform.whl')
+          target.parent.mkdir(parents=True, exist_ok=True)
+          wheels[0].replace(target)
+          PY
+          python -m venv .release-evidence/runtime-venv
+          .release-evidence/runtime-venv/bin/python -m pip install --upgrade pip
+          .release-evidence/runtime-venv/bin/python -m pip install .
+          .release-evidence/runtime-venv/bin/python -m pip freeze --all > .release-evidence/python-resolved.txt
+          python -m pip install .
+      - name: Generate and validate manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          platform-release generate --source-commit "${{ inputs.source_commit }}" --input "${{ inputs.generation_input }}" --inventory release/compatibility.json --output release-manifest.json --json > release-manifest.generated.json
+          platform-release validate --manifest release-manifest.json --json > release-manifest.validation.json
+          sha256sum release-manifest.json > release-manifest.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ inputs.source_commit }}
+          if-no-files-found: error
+          path: |
+            release-manifest.json
+            release-manifest.sha256
+            release-manifest.generated.json
+            release-manifest.validation.json
+            .release-evidence/platform.whl
+            .release-evidence/python-resolved.txt

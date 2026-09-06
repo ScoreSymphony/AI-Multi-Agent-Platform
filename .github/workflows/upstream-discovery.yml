@@ -1,0 +1,52 @@
+name: Upstream discovery advisory
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install release tooling
+        run: python -m pip install .
+      - name: Create advisory Git observations
+        id: discover
+        shell: bash
+        run: |
+          set +e
+          observed_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          platform-release upstream-discover-git --inventory release/compatibility.json --observed-at "$observed_at" --output upstream-observations.json --json > upstream-discovery.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Evaluate observations without adopting them
+        id: evaluate
+        if: always() && hashFiles('upstream-observations.json') != ''
+        shell: bash
+        run: |
+          set +e
+          platform-release upstream-check --inventory release/compatibility.json --observations upstream-observations.json --json > upstream-report.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Upload advisory report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-discovery-advisory
+          if-no-files-found: warn
+          path: |
+            upstream-observations.json
+            upstream-discovery.json
+            upstream-report.json
+      - name: Surface provider or validation failures
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.discover.outputs.exit_code || '0' }}" = "0"
+          test "${{ steps.evaluate.outputs.exit_code || '0' }}" = "0"

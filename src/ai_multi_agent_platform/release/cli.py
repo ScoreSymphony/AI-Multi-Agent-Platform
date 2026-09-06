@@ -16,6 +16,13 @@ from .discovery import (
     load_compatibility_inventory,
     load_observations,
 )
+from .generator import (
+    ReleaseGenerationError,
+    generate_release_manifest_from_file,
+    write_release_manifest,
+)
+from .persistence import JsonDiscoveryReportStore, StoredDiscoveryReport
+from .providers import discover_git_heads, write_git_discovery_result
 from .service import evaluate_release, release_metadata
 
 
@@ -26,6 +33,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subcommands = parser.add_subparsers(dest="command", required=True)
 
+    generate = subcommands.add_parser(
+        "generate",
+        help="Deterministically assemble and validate a release-manifest v2",
+    )
+    generate.add_argument("--source-commit", required=True)
+    generate.add_argument("--input", required=True)
+    generate.add_argument("--inventory")
+    generate.add_argument("--output", required=True)
+    generate.add_argument("--json", action="store_true")
+
     validate = subcommands.add_parser("validate", help="Validate a release manifest and gates")
     validate.add_argument("--manifest", required=True)
     validate.add_argument("--json", action="store_true")
@@ -34,20 +51,25 @@ def build_parser() -> argparse.ArgumentParser:
     status.add_argument("--manifest", required=True)
     status.add_argument("--json", action="store_true")
 
+    git_discovery = subcommands.add_parser(
+        "upstream-discover-git",
+        help="Create provider-neutral advisory observations from Git remote HEADs",
+    )
+    git_discovery.add_argument("--inventory")
+    git_discovery.add_argument("--observed-at", required=True)
+    git_discovery.add_argument("--output", required=True)
+    git_discovery.add_argument("--json", action="store_true")
+
     upstream = subcommands.add_parser(
         "upstream-check",
         help="Compare pinned upstream inventory with advisory observations",
     )
-    upstream.add_argument(
-        "--inventory",
-        help="Compatibility inventory JSON; packaged inventory is used when omitted",
-    )
-    upstream.add_argument(
-        "--observations",
-        help="Observed upstream candidate JSON produced manually or by CI/provider tooling",
-    )
+    upstream.add_argument("--inventory")
+    upstream.add_argument("--observations")
     upstream.add_argument("--disabled", action="store_true")
     upstream.add_argument("--offline", action="store_true")
+    upstream.add_argument("--data-dir")
+    upstream.add_argument("--reviewed-at")
     upstream.add_argument("--json", action="store_true")
     return parser
 
@@ -55,6 +77,10 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
 
+    if args.command == "generate":
+        return _generate(args)
+    if args.command == "upstream-discover-git":
+        return _upstream_discover_git(args)
     if args.command == "upstream-check":
         return _upstream_check(args)
 
@@ -97,9 +123,50 @@ def main(argv: Sequence[str] | None = None) -> int:
     raise AssertionError(f"unhandled release command: {args.command}")
 
 
+def _generate(args: argparse.Namespace) -> int:
+    try:
+        manifest = generate_release_manifest_from_file(
+            source_commit=str(args.source_commit),
+            input_path=str(args.input),
+            inventory_path=args.inventory,
+        )
+        write_release_manifest(manifest, str(args.output))
+    except (ReleaseGenerationError, UpdateDiscoveryError) as exc:
+        print(f"release manifest generation failed: {exc}", file=sys.stderr)
+        return 2
+    if bool(args.json):
+        print(json.dumps(manifest.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(f"generated release manifest: {args.output}")
+        print(f"release: {manifest.release_version}")
+        print(f"source commit: {manifest.source_commit}")
+    return 0
+
+
+def _upstream_discover_git(args: argparse.Namespace) -> int:
+    try:
+        inventory = load_compatibility_inventory(args.inventory)
+        result = discover_git_heads(inventory, observed_at=str(args.observed_at))
+        write_git_discovery_result(result, str(args.output))
+    except UpdateDiscoveryError as exc:
+        print(f"upstream Git discovery failed: {exc}", file=sys.stderr)
+        return 2
+
+    if bool(args.json):
+        print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(f"wrote {len(result.observations)} upstream observations to {args.output}")
+        for component, error in sorted(result.errors.items()):
+            print(f"WARNING: {component}: {error}")
+    return 5 if result.errors else 0
+
+
 def _upstream_check(args: argparse.Namespace) -> int:
     if bool(args.disabled) and bool(args.offline):
         print("--disabled and --offline are mutually exclusive", file=sys.stderr)
+        return 2
+    if bool(args.data_dir) != bool(args.reviewed_at):
+        print("--data-dir and --reviewed-at must be supplied together", file=sys.stderr)
         return 2
     try:
         inventory = load_compatibility_inventory(args.inventory)
@@ -120,6 +187,10 @@ def _upstream_check(args: argparse.Namespace) -> int:
             enabled=not bool(args.disabled),
             offline=bool(args.offline),
         )
+        if args.data_dir:
+            JsonDiscoveryReportStore.for_data_dir(str(args.data_dir)).write(
+                StoredDiscoveryReport(reviewed_at=str(args.reviewed_at), report=report)
+            )
     except UpdateDiscoveryError as exc:
         print(f"upstream discovery input invalid: {exc}", file=sys.stderr)
         return 2

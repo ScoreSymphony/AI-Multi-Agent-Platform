@@ -9,6 +9,9 @@ This directory contains operator-facing, machine-readable release metadata for i
   version maps where those are claimed.
 - `upstream-observations.example.json` documents the provider/CI-neutral input format for advisory
   update discovery.
+- `release-generation-input.example.json` documents the reviewed inputs consumed by deterministic
+  release-manifest generation. It is a template: placeholder evidence must be replaced before a
+  release candidate can pass validation.
 - Runtime release manifests use release-manifest schema v2 shipped with
   `ai_multi_agent_platform.release`.
 - Manifest v2 binds exact dependency lockfiles/resolved dependency sets, typed gate evidence,
@@ -17,9 +20,24 @@ This directory contains operator-facing, machine-readable release metadata for i
   exact reviewed revision and attach release-specific hashes/SBOM/provenance rather than replacing
   those governance records.
 
+Use `platform-release generate --source-commit <sha> --input <path> --output <path>` to assemble a
+manifest from the exact source commit, canonical `VersionSnapshot`, reviewed compatibility inventory,
+dependency/artifact files and explicit typed gate evidence. Generation hashes the supplied files and
+validates the resulting manifest fail-closed; it does not invent passed gates, approvals, SBOMs or
+provenance.
+
 Use `platform-release upstream-check --observations <path>` to compare an observation snapshot with
 reviewed pins. `--disabled` and `--offline` make those states explicit without claiming that an
-upstream is current. Candidate discovery never rewrites this directory or a running deployment.
+upstream is current. Supplying `--data-dir <AI_MAP_DATA_DIR> --reviewed-at <RFC3339>` explicitly
+persists the evaluated advisory report under the deployment data root. The operator service reloads
+the latest persisted report after restart; malformed advisory state becomes an operator warning and
+does not change production pins or #41 upgrade/version state.
+
+`platform-release upstream-discover-git` is an optional provider-neutral Git-remote discovery
+adapter. It uses immutable remote HEADs only as advisory observations. A changed revision is
+classified `unknown` and therefore still requires manual review and the normal validation gates.
+The scheduled workflow uploads observations/reports as CI artifacts; it never commits pin changes,
+approves an update or deploys production.
 
 A release candidate is accepted only through `platform-release validate --manifest <path>` after
 its evidence has been populated by the release workflow. Commit-bound gates must reference the
