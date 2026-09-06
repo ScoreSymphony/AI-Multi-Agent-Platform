@@ -38,6 +38,14 @@ def add_registry_parser(
     _add_item_version_arguments(activate)
     activate.add_argument("--idempotency-key")
 
+    pin = commands.add_parser("pin", help="pin the currently installed Registry item version")
+    _add_item_version_arguments(pin)
+    pin.add_argument("--idempotency-key")
+
+    unpin = commands.add_parser("unpin", help="remove the version pin from an installed item")
+    unpin.add_argument("item_id")
+    unpin.add_argument("--idempotency-key")
+
 
 def execute_registry(
     args: argparse.Namespace,
@@ -48,20 +56,25 @@ def execute_registry(
         return client.get("/registry-items", query=_page_query(args))
 
     item_id = str(args.item_id)
-    version = str(args.version)
     if args.command == "show":
-        resource_id = quote(f"{item_id}@{version}", safe="")
+        show_version = str(args.version)
+        resource_id = quote(f"{item_id}@{show_version}", safe="")
         return client.get(f"/registry-items/{resource_id}")
 
+    version: str | None
     if args.command == "activate":
+        version = str(args.version)
         confirm(args, "activate registry item", f"{item_id}@{version}")
-    elif args.command != "preview":
+    elif args.command in {"preview", "pin"}:
+        version = str(args.version)
+    elif args.command == "unpin":
+        version = None
+    else:
         raise ProfileError(f"unsupported registry command: {args.command}")
 
-    body: dict[str, JsonValue] = {
-        "resource_ref": item_id,
-        "version": version,
-    }
+    body: dict[str, JsonValue] = {"resource_ref": item_id}
+    if version is not None:
+        body["version"] = version
     return client.post(
         f"/commands/registry.{args.command}",
         body=body,
