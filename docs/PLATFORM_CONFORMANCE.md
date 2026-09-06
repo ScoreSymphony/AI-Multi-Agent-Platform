@@ -58,7 +58,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | A — reference baseline | authenticated single-node Task/Run/Result restart-safe smoke | #39 / #252 |
 | D-model — local model | loopback OpenAI-compatible local/self-hosted ModelProvider fixture | #10 / #250 / #252 |
 | D-capability — capability boundary | capability discovery/invocation contract suite | #12 |
-| D-vertical — local model + native capability | authenticated AgentRun -> real loopback OpenAI-compatible model tool call -> pinned `tool.echo@1.0` -> canonical CapabilityInvoker -> NativeEchoProvider evidence | #46 / #10 / #12 |
+| D-vertical — local model + distributed capability | authenticated AgentRun -> real loopback OpenAI-compatible model tool call -> pinned `tool.echo@1.0` -> canonical CapabilityInvoker/ToolInvocation -> DistributedExecutorEchoProvider -> ReferenceExecutor -> exact Worker/Node while preserving the root Run and Workspace/Snapshot binding | #46 / #10 / #12 / #7 / #14 |
 | F — approval gate | exact-action approval and changed-payload rejection | #15 |
 | H — restart/persistence | #252 persistence acceptance profile | #39 / #250 / #251 / #86 |
 | J-cli — client consistency | CLI canonical Task route/fixture parity | #17 / #252 |
@@ -66,7 +66,7 @@ The deterministic PR tier maintains the critical local/reference cross-product s
 | U — runtime verification | Verification independently gates completion | #86 |
 | ARCH — architecture invariants | optional backend isolation + mandatory-dependency guard | #46 |
 
-The fast tier is intentionally local/reference-only and deterministic. It requires no paid AI/API service and no Hermes, Forge, LiteLLM, Registry, distributed Worker or HA deployment.
+The fast tier is intentionally local/reference-only and deterministic. It requires no paid AI/API service and no Hermes, Forge, LiteLLM, Registry, remote distributed deployment or HA service. D-vertical does instantiate an in-process local Worker/Node fixture so the canonical Executor/Worker boundary is continuously exercised without claiming the optional distributed deployment profile.
 
 ### `integration`
 
@@ -110,7 +110,7 @@ The release tier also has explicit claim-blocking lifecycle and cross-layer chec
 
 All four are `required=true` whenever `--profile release` is selected. A release report therefore cannot be `compatible` merely because these capabilities have unit tests elsewhere; the representative acceptance commands must pass inside the same #46 release claim.
 
-`REL-VERTICAL` is intentionally the strongest maintained **continuous reference slice currently available**, not a declaration that the ideal full #46 path is complete. `D-vertical` separately proves that an authenticated AgentRun can cross the real local-model HTTP boundary and execute a pinned native capability through `CapabilityInvoker`. #518 now also defines the canonical same-Run lineage from a `tool_invocation_*` cause to a distinct `worker_job_*` child identity without inventing a second Run. The remaining gap is behavioral: reference capability execution still does not dispatch that canonical tool subexecution through `Executor -> Worker/Node` in the same production-valid flow. Until one canonical path actually crosses that boundary without test-only shortcuts, the full vertical remains an explicit #46 closure blocker.
+`REL-VERTICAL` is intentionally the strongest maintained **continuous reference slice currently available**, not a declaration that the ideal full #46 path is complete. `D-vertical` now separately proves that one authenticated AgentRun crosses the real local-model HTTP boundary, binds the model tool call to a canonical `tool_invocation_*`, executes the pinned capability through `DistributedExecutorEchoProvider -> ReferenceExecutor -> Worker/Node`, and retains the original canonical Run plus exact Workspace/Snapshot binding. #518's same-Run lineage is therefore exercised behaviorally rather than only as a helper contract: the `worker_job_*` is a child subexecution caused by the canonical ToolInvocation and never becomes a second Run. The remaining vertical gap is now the return path: Worker-produced Workspace/File content still needs to come back through canonical remote materialization, become canonical Artifact evidence through the existing File/Artifact contracts, and feed that exact evidence into Verification in the same maintained `REL-VERTICAL` flow. Until that Worker -> Workspace/File -> Artifact -> Verification path is continuous, #46 remains open.
 
 ## Optional compatibility evidence
 
