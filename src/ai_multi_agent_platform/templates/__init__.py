@@ -33,10 +33,8 @@ from .capability_assignment_handler import (
     CapabilityAssignmentTemplateHandler,
     register_capability_assignment_template_handler,
 )
-from .control_plane import (
-    TemplateEnvironmentResolver,
-    register_template_control_plane as _register_template_control_plane,
-)
+from .control_plane import TemplateEnvironmentResolver
+from .control_plane import register_template_control_plane as _register_template_control_plane
 from .environment import PlatformTemplateEnvironmentResolver
 from .model_routing_handler import (
     ModelRoutingPolicyTemplateHandler,
