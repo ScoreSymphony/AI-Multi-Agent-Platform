@@ -55,6 +55,7 @@ def _request() -> RequestContext:
 def _agent_profile(routing_profile_ref: str) -> AgentProfile:
     return AgentProfile(
         name="Authorized routing consumer",
+        description="Exercises routing-profile assignment authorization.",
         role="researcher",
         instructions=AgentInstructions(
             role=InstructionSource(content="Use the assigned model-routing profile.")
