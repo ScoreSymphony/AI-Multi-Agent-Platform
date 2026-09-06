@@ -1,8 +1,8 @@
 """Advanced distributed Control-Plane entrypoint for issue #240.
 
-The normal #39 single-node composition remains the fallback.  This adapter adds a #14 distributed
-runtime, a configured #35 network transport and the authenticated Worker-protocol ASGI surface at
-the outer deployment boundary.
+The normal #39 single-node composition remains the fallback. This adapter opts the same canonical
+Task/Run kernel into #14 distributed execution, then exposes the authenticated Worker protocol and
+#35 network transport at the outer deployment boundary.
 """
 
 from __future__ import annotations
@@ -17,14 +17,13 @@ from ai_multi_agent_platform.deployment.config import SingleNodeConfig
 from ai_multi_agent_platform.deployment.distributed_control_plane import build_worker_protocol_app
 from ai_multi_agent_platform.deployment.server import main as run_server
 from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment
-from ai_multi_agent_platform.distributed import DistributedRegistry, DistributedRuntime
 from ai_multi_agent_platform.messaging import TcpMessageTransport
 
 from .single_node_app import build_default_single_node_deployment
 
 
 def build_distributed_control_plane_deployment(config: SingleNodeConfig) -> SingleNodeDeployment:
-    """Build the shipped Control Plane and attach the advanced remote-Worker boundary."""
+    """Build one Control Plane whose canonical Runs and Worker protocol share one runtime."""
 
     host = os.environ.get("PLATFORM_MESSAGE_BROKER_HOST", "127.0.0.1")
     port_raw = os.environ.get("PLATFORM_MESSAGE_BROKER_PORT", "")
@@ -44,11 +43,13 @@ def build_distributed_control_plane_deployment(config: SingleNodeConfig) -> Sing
         authentication_key=os.environ.get("PLATFORM_TRANSPORT_AUTH_KEY") or None,
         provider_id="distributed-control-plane",
     )
-    deployment = build_default_single_node_deployment(config)
-    runtime = DistributedRuntime(
-        DistributedRegistry(),
-        authorization=deployment.authorization,
+    deployment = build_default_single_node_deployment(
+        config,
+        enable_distributed_execution=True,
     )
+    runtime = deployment.distributed_runtime
+    if runtime is None:
+        raise RuntimeError("distributed deployment was built without a distributed runtime")
     app, _service = build_worker_protocol_app(
         downstream=deployment.app,
         runtime=runtime,
@@ -58,8 +59,7 @@ def build_distributed_control_plane_deployment(config: SingleNodeConfig) -> Sing
         workspaces=deployment.workspaces,
         files=deployment.files,
     )
-    deployment.distributed_runtime = runtime
-    # ``SingleNodeDeployment`` intentionally types its Stage-1 app as ControlPlaneASGI.  The
+    # ``SingleNodeDeployment`` intentionally types its Stage-1 app as ControlPlaneASGI. The
     # advanced adapter wraps that same ASGI app without changing the Stage-1 contract.
     cast(Any, deployment).app = app
     return deployment
