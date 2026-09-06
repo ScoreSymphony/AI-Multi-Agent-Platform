@@ -39,6 +39,15 @@ def _inventory() -> CompatibilityInventory:
     )
 
 
+def _passed_validation() -> dict[str, GateStatus]:
+    return {
+        "adapter_contract_tests": GateStatus.PASSED,
+        "eval_regression": GateStatus.PASSED,
+        "security": GateStatus.PASSED,
+        "compatibility_review": GateStatus.PASSED,
+    }
+
+
 def _observed(
     *,
     revision: str = "v1.1.0",
@@ -135,7 +144,10 @@ def test_disabled_and_offline_modes_do_not_claim_an_update() -> None:
 
 def test_reviewed_candidate_can_produce_new_matrix_without_mutating_old_one() -> None:
     inventory = _inventory()
-    candidate = evaluate_update_candidates(inventory, (_observed(),)).candidates[0]
+    candidate = evaluate_update_candidates(
+        inventory,
+        (_observed(validation=_passed_validation()),),
+    ).candidates[0]
     updated = record_reviewed_candidate(
         inventory,
         candidate,
@@ -147,12 +159,49 @@ def test_reviewed_candidate_can_produce_new_matrix_without_mutating_old_one() ->
     assert updated.last_reviewed_at == "2026-09-06T00:00:00Z"
 
 
+def test_candidate_cannot_be_adopted_with_missing_validation_gate() -> None:
+    validation = _passed_validation()
+    validation.pop("security")
+    candidate = evaluate_update_candidates(
+        _inventory(),
+        (_observed(validation=validation),),
+    ).candidates[0]
+    with pytest.raises(UpdateDiscoveryError, match="security"):
+        record_reviewed_candidate(
+            _inventory(),
+            candidate,
+            compatibility_status="tested",
+            reviewed_at="2026-09-06T00:00:00Z",
+        )
+
+
+def test_candidate_cannot_be_adopted_with_not_run_validation_gate() -> None:
+    validation = _passed_validation()
+    validation["compatibility_review"] = GateStatus.NOT_RUN
+    candidate = evaluate_update_candidates(
+        _inventory(),
+        (_observed(validation=validation),),
+    ).candidates[0]
+    with pytest.raises(UpdateDiscoveryError, match="compatibility_review"):
+        record_reviewed_candidate(
+            _inventory(),
+            candidate,
+            compatibility_status="tested",
+            reviewed_at="2026-09-06T00:00:00Z",
+        )
+
+
 def test_manual_review_candidate_cannot_be_recorded_without_approval() -> None:
     candidate = evaluate_update_candidates(
         _inventory(),
-        (_observed(classifications=(UpdateClassification.UNKNOWN,)),),
+        (
+            _observed(
+                classifications=(UpdateClassification.UNKNOWN,),
+                validation=_passed_validation(),
+            ),
+        ),
     ).candidates[0]
-    with pytest.raises(UpdateDiscoveryError):
+    with pytest.raises(UpdateDiscoveryError, match="manual review approval"):
         record_reviewed_candidate(
             _inventory(),
             candidate,
