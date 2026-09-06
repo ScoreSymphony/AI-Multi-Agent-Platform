@@ -262,6 +262,11 @@ class PluginRegistry:
         record = self._record(plugin_id)
         if manifest.plugin_id != record.manifest.plugin_id:
             raise ContractError(ErrorCode.CONFLICT, "plugin update cannot change plugin_id")
+        if _version_key(manifest.plugin_version) <= _version_key(record.manifest.plugin_version):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "plugin update version must be newer than the installed version",
+            )
         self._validate_compatibility(manifest)
 
         if (
@@ -300,6 +305,58 @@ class PluginRegistry:
                 from_version=record.manifest.state_version,
                 to_version=manifest.state_version,
             )
+
+    def apply_update(
+        self,
+        plugin_id: str,
+        manifest: PluginManifest,
+        *,
+        install_source: str | None = None,
+        state_migration_applied: bool = False,
+    ) -> PluginSnapshot:
+        """Apply one explicitly validated plugin update while the runtime is stopped.
+
+        Configuration is retained only when it validates against the candidate manifest. Runtime
+        permission grants and health are reset so a later enable must pass authorization again.
+        State-version changes require the owning deployment to run the declared migration before
+        committing the new manifest.
+        """
+
+        record = self._record(plugin_id)
+        self.validate_update(plugin_id, manifest)
+        if record.runtime is not None or record.extensions or record.state is PluginState.ENABLED:
+            raise ContractError(ErrorCode.CONFLICT, "disable plugin before applying an update")
+        if manifest.state_version != record.manifest.state_version and not state_migration_applied:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "plugin state migration must complete before applying this update",
+                details={
+                    "current_state_version": record.manifest.state_version,
+                    "candidate_state_version": manifest.state_version,
+                },
+            )
+
+        resolved_install_source = install_source or manifest.provenance.source
+        if not resolved_install_source.strip():
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "plugin update install source must be non-blank",
+            )
+
+        was_disabled = record.state is PluginState.DISABLED
+        record.manifest = deepcopy(manifest)
+        record.install_source = resolved_install_source
+        record.compatibility = CompatibilityState.COMPATIBLE
+        record.health = PluginHealth.UNKNOWN
+        record.health_detail = None
+        record.granted_permissions = frozenset()
+        if was_disabled:
+            record.state = PluginState.DISABLED
+        elif record.configured:
+            record.state = PluginState.CONFIGURED
+        else:
+            record.state = PluginState.INSTALLED
+        return self.get(plugin_id)
 
     def remove(self, plugin_id: str) -> None:
         record = self._record(plugin_id)
@@ -482,3 +539,9 @@ class PluginRegistry:
                     f"plugin {manifest.plugin_id!r} contains a cyclic state migration path",
                 )
             visited.add(current)
+
+
+def _version_key(value: str) -> tuple[int, int, int]:
+    parts = [int(part) for part in value.split(".")]
+    parts.extend([0] * (3 - len(parts)))
+    return parts[0], parts[1], parts[2]
