@@ -56,6 +56,9 @@ The package exposes four independent deployment modes/commands:
 The distributed commands are deployment adapters. They do not replace any canonical interface.
 `platform-distributed-server` always requires an explicit runnable profile through `--profile` or
 `PLATFORM_DISTRIBUTED_PROFILE`; a description-only or reporter-less profile is rejected at startup.
+After the distributed-only `--profile` option is consumed, the command uses the ordinary #39 server
+subcommands, so a Control Plane is started with `serve`. Listener configuration remains owned by
+the normal single-node configuration rather than by distributed-only `--host`/`--port` flags.
 
 ## Reference profiles
 
@@ -229,8 +232,7 @@ export PLATFORM_MESSAGE_BROKER_HOST=127.0.0.1
 export PLATFORM_MESSAGE_BROKER_PORT=8765
 platform-distributed-server \
   --profile deploy/distributed/profiles/multi-local-workers.json \
-  --host 127.0.0.1 \
-  --port 8000
+  serve
 
 # terminal 3: reporter Worker
 export PLATFORM_WORKER_TOKEN='<runtime-only-worker-credential>'
@@ -288,8 +290,7 @@ export PLATFORM_MESSAGE_BROKER_HOST=127.0.0.1
 export PLATFORM_MESSAGE_BROKER_PORT=8765
 platform-distributed-server \
   --profile deploy/distributed/profiles/heterogeneous-three-node.json \
-  --host 127.0.0.1 \
-  --port 8000
+  serve
 ```
 
 For non-loopback Workers, replace the loopback endpoints with private reachable endpoints and
@@ -309,7 +310,7 @@ A physical two-host deployment uses the same composition with network security e
    (and `--client-ca-file` when using mTLS);
 5. configure `PLATFORM_MESSAGE_BROKER_HOST`, `PLATFORM_MESSAGE_BROKER_PORT`, CA/client TLS values
    and optionally `PLATFORM_TRANSPORT_AUTH_KEY` for `platform-distributed-server`;
-6. start `platform-distributed-server --profile <selected-profile> ...`;
+6. start `platform-distributed-server --profile <selected-profile> serve`;
 7. expose the Control Plane through an HTTPS reverse proxy/private TLS edge; the standard HTTP
    application remains deployment-neutral and does not own certificate termination.
 
