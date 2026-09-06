@@ -116,7 +116,9 @@ class ReleaseOperatorService:
                 raise ValueError("discovery persistence is not configured")
             if reviewed_at is None:
                 raise ValueError("reviewed_at is required when persisting discovery")
-            self.discovery_store.write(StoredDiscoveryReport(reviewed_at=reviewed_at, report=report))
+            self.discovery_store.write(
+                StoredDiscoveryReport(reviewed_at=reviewed_at, report=report)
+            )
         self.discovery = report
         self.discovery_reviewed_at = reviewed_at
         self.discovery_load_error = None
