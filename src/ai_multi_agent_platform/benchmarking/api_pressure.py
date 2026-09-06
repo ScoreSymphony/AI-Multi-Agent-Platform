@@ -80,7 +80,9 @@ class APIPressureBenchmarkSpec:
         if self.seed_tasks > self.safety_max_seed_tasks:
             raise ValueError("seed_tasks exceeds configured API pressure safety bound")
         if self.repetition_count != 1:
-            raise ValueError("one API pressure report represents exactly one fresh-state repetition")
+            raise ValueError(
+                "one API pressure report represents exactly one fresh-state repetition"
+            )
         if self.deployment_profile != "single-node-reference":
             raise ValueError("API pressure v1 requires single-node-reference deployment")
 
