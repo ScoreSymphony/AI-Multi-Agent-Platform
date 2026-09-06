@@ -113,15 +113,36 @@ def _headers(secret: str, nonce: str, *, when: datetime | None = None) -> dict[s
     }
 
 
+def _assert_worker_report(decoded: WorkerRecord, source: WorkerRecord) -> None:
+    """Compare Worker-owned report fields, excluding Control-Plane liveness timestamps."""
+
+    assert decoded.worker_id == source.worker_id
+    assert decoded.node_id == source.node_id
+    assert decoded.worker_type == source.worker_type
+    assert decoded.supported_executors == source.supported_executors
+    assert decoded.capability_refs == source.capability_refs
+    assert decoded.supported_runtimes == source.supported_runtimes
+    assert decoded.model_refs == source.model_refs
+    assert decoded.concurrency_limit == source.concurrency_limit
+    assert decoded.active_jobs == source.active_jobs
+    assert decoded.status is source.status
+    assert decoded.protocol_version == source.protocol_version
+    assert decoded.worker_version == source.worker_version
+    assert decoded.locality_refs == source.locality_refs
+    assert decoded.adapter_metadata == source.adapter_metadata
+
+
 def test_worker_protocol_codec_preserves_registration_and_heartbeat_reports() -> None:
     registration = _registration()
-    decoded_registration = WorkerProtocolCodec.decode_registration(
-        WorkerProtocolCodec.encode_registration(registration)
-    )
+    encoded_registration = WorkerProtocolCodec.encode_registration(registration)
+    decoded_registration = WorkerProtocolCodec.decode_registration(encoded_registration)
     assert decoded_registration.node.node_id == registration.node.node_id
     assert decoded_registration.node.resources == registration.node.resources
-    assert decoded_registration.workers == registration.workers
+    _assert_worker_report(decoded_registration.workers[0], registration.workers[0])
     assert decoded_registration.service_identity_ref == WORKER_ID
+    serialized_registration = repr(encoded_registration)
+    assert "registered_at" not in serialized_registration
+    assert "last_heartbeat_at" not in serialized_registration
 
     heartbeat = WorkerHeartbeatRequest(
         heartbeat=Heartbeat(
@@ -133,10 +154,21 @@ def test_worker_protocol_codec_preserves_registration_and_heartbeat_reports() ->
         ),
         service_identity_ref=WORKER_ID,
     )
-    decoded_heartbeat = WorkerProtocolCodec.decode_heartbeat(
-        WorkerProtocolCodec.encode_heartbeat(heartbeat)
+    encoded_heartbeat = WorkerProtocolCodec.encode_heartbeat(heartbeat)
+    decoded_heartbeat = WorkerProtocolCodec.decode_heartbeat(encoded_heartbeat)
+    assert decoded_heartbeat.service_identity_ref == heartbeat.service_identity_ref
+    assert decoded_heartbeat.heartbeat.node_id == heartbeat.heartbeat.node_id
+    assert decoded_heartbeat.heartbeat.observed_at == heartbeat.heartbeat.observed_at
+    assert decoded_heartbeat.heartbeat.sequence == heartbeat.heartbeat.sequence
+    assert decoded_heartbeat.heartbeat.resources == heartbeat.heartbeat.resources
+    assert decoded_heartbeat.heartbeat.node_status == heartbeat.heartbeat.node_status
+    assert decoded_heartbeat.heartbeat.protocol_version == heartbeat.heartbeat.protocol_version
+    _assert_worker_report(
+        decoded_heartbeat.heartbeat.workers[0], heartbeat.heartbeat.workers[0]
     )
-    assert decoded_heartbeat == heartbeat
+    serialized_heartbeat = repr(encoded_heartbeat)
+    assert "registered_at" not in serialized_heartbeat
+    assert "last_heartbeat_at" not in serialized_heartbeat
 
 
 def test_private_http_surface_registers_heartbeats_and_rejects_replay() -> None:
