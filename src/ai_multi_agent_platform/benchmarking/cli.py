@@ -453,7 +453,9 @@ async def _run_transport_fault(args: argparse.Namespace) -> int:
         fault_operations = 1 if args.fault_operations is None else args.fault_operations
     elif args.scenario == "outage":
         max_queue_size = args.batch_size * 2 if args.max_queue_size is None else args.max_queue_size
-        fault_operations = args.batch_size if args.fault_operations is None else args.fault_operations
+        fault_operations = (
+            args.batch_size if args.fault_operations is None else args.fault_operations
+        )
     else:
         max_queue_size = args.batch_size + 1 if args.max_queue_size is None else args.max_queue_size
         fault_operations = 0 if args.fault_operations is None else args.fault_operations
