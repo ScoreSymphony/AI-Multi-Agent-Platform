@@ -1,6 +1,6 @@
 """Deployment-only Worker reachability probes over the existing #35 transport.
 
-A Node reporter remains the sole owner of canonical Node heartbeat state.  These probes provide
+A Node reporter remains the sole owner of canonical Node heartbeat state. These probes provide
 transport reachability evidence for independently running sibling Worker processes so a live
 reporter cannot accidentally keep a dead sibling schedulable.
 """
@@ -12,7 +12,6 @@ from collections.abc import Mapping
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts import ContractError
-from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.messaging import (
     MessageKind,
     MessageTransport,
