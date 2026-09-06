@@ -460,9 +460,7 @@ def test_secure_profile_provisioning_worker_entrypoint_and_task_run(
             assert task.status is TaskStatus.SUCCEEDED
 
             matching_records = [
-                record
-                for record in runtime.records()
-                if record.job.execution.run_id == run_id
+                record for record in runtime.records() if record.job.execution.run_id == run_id
             ]
             assert len(matching_records) == 1
             assert matching_records[0].worker_id == worker_id
