@@ -108,7 +108,7 @@ def test_plugin_and_template_use_separate_owner_routes() -> None:
     assert template_router.calls == [("portable", template.item_id)]
 
 
-def test_pinned_version_blocks_other_update() -> None:
+def test_pinned_version_blocks_other_update_application_but_not_discovery() -> None:
     item = _item(RegistryItemType.PLUGIN, "2.0.0")
     installed = InstalledRegistryItem(
         item_id=item.item_id,
@@ -116,7 +116,9 @@ def test_pinned_version_blocks_other_update() -> None:
         source_registry="local",
         pinned_version="1.0.0",
     )
-    assert installed.accepts_update(item) is False
+    assert installed.has_update(item) is True
+    assert installed.accepts_update(item) is True
+    assert installed.can_apply_update(item) is False
     findings = validate_item(
         item,
         f"{item.item_type.value}:{item.version}".encode(),

@@ -138,12 +138,28 @@ class InstalledRegistryItem:
         if self.provenance is not None:
             _require_text(self.provenance, "installed provenance")
 
+    def has_update(self, candidate: RegistryItem) -> bool:
+        """Return whether the candidate is a newer release, independent from update policy."""
+
+        return candidate.item_id == self.item_id and version_key(candidate.version) > version_key(
+            self.version
+        )
+
     def accepts_update(self, candidate: RegistryItem) -> bool:
-        if candidate.item_id != self.item_id:
+        """Backward-compatible discovery predicate for a newer candidate.
+
+        Pins are application policy, not discovery policy. Activation validation remains the
+        authoritative place that blocks a candidate while the installed version is pinned.
+        """
+
+        return self.has_update(candidate)
+
+    def can_apply_update(self, candidate: RegistryItem) -> bool:
+        """Return whether a newer candidate is not blocked by the current version pin."""
+
+        if not self.has_update(candidate):
             return False
-        if self.pinned_version is not None and candidate.version != self.pinned_version:
-            return False
-        return version_key(candidate.version) > version_key(self.version)
+        return self.pinned_version is None or candidate.version == self.pinned_version
 
 
 def _require_id(value: str, field_name: str) -> None:

@@ -88,7 +88,15 @@ class LocalRegistryProvider:
         if query.text:
             needle = query.text.casefold()
             haystack = " ".join(
-                (item.item_id, item.name, item.description, *sorted(item.tags))
+                (
+                    item.item_id,
+                    item.name,
+                    item.description,
+                    item.publisher,
+                    item.license,
+                    *sorted(item.tags),
+                    *sorted(item.categories),
+                )
             ).casefold()
             if needle not in haystack:
                 return False
