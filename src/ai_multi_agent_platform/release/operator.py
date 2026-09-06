@@ -37,14 +37,19 @@ class ReleaseOperatorService:
         )
         manifest_metadata = None if self.manifest is None else release_metadata(self.manifest)
         warnings: list[str] = []
-        if self.inventory.platform_release != versions.platform_release:
+        running_vector = versions.to_dict()
+        reviewed_vector = self.inventory.versions.to_dict()
+        if reviewed_vector != running_vector:
+            mismatched = sorted(
+                name for name in running_vector if running_vector[name] != reviewed_vector.get(name)
+            )
             warnings.append(
-                "compatibility inventory platform_release does not match "
-                "the running platform release"
+                "compatibility inventory version vector does not match the running platform: "
+                + ", ".join(mismatched)
             )
         return {
             "platform_release": versions.platform_release,
-            "versions": versions.to_dict(),
+            "versions": running_vector,
             "release_manifest": manifest_metadata,
             "compatibility_inventory": self.inventory.to_dict(),
             "update_discovery": discovery.to_dict(),
