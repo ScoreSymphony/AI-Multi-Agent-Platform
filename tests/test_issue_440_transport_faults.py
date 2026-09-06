@@ -15,9 +15,7 @@ from ai_multi_agent_platform.benchmarking.transport_faults import (
 
 def _schema() -> dict[str, object]:
     payload = json.loads(
-        Path("docs/schemas/benchmark-transport-fault.v1.schema.json").read_text(
-            encoding="utf-8"
-        )
+        Path("docs/schemas/benchmark-transport-fault.v1.schema.json").read_text(encoding="utf-8")
     )
     assert isinstance(payload, dict)
     return payload
