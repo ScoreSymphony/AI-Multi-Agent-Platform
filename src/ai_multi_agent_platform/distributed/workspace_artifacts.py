@@ -88,7 +88,20 @@ class CanonicalWorkspaceArtifactPublisher:
         for change in result.changes:
             if change.file_id is None:
                 continue
-            artifact_id = _artifact_id(job, result, change.relative_path, change.sha256 or "")
+            if change.sha256 is None:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Worker Workspace File evidence is missing its immutable checksum",
+                )
+            record = await self._files.get_file(change.file_id, context)
+            if record.sha256 != change.sha256 or not await self._files.verify_checksum(
+                change.file_id, context
+            ):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Worker Workspace File evidence failed canonical checksum verification",
+                )
+            artifact_id = _artifact_id(job, result, change.relative_path, change.sha256)
             await self._files.link_artifact(change.file_id, artifact_id, context)
             await self._kernel.attach_artifact(
                 idempotency_key=f"worker-output:{job.worker_job_id}:{artifact_id}",
