@@ -24,12 +24,6 @@ from ai_multi_agent_platform.capability_assignments import (
     JsonCapabilityAssignmentRepository,
 )
 from ai_multi_agent_platform.configuration import SecretProvider
-from ai_multi_agent_platform.coordination import (
-    DurablePlanStepCoordinator,
-    SQLiteCoordinatorRepository,
-    coordination_command_handlers,
-    coordination_resource_services,
-)
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlaneASGI,
@@ -42,6 +36,12 @@ from ai_multi_agent_platform.conversations import (
     ConversationService,
     DurableRoutingProfileConversationResponseProvider,
     JsonConversationRepository,
+)
+from ai_multi_agent_platform.coordination import (
+    DurablePlanStepCoordinator,
+    SQLiteCoordinatorRepository,
+    coordination_command_handlers,
+    coordination_resource_services,
 )
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime

@@ -367,8 +367,9 @@ class SQLiteCoordinatorRepository:
             )
             for step, record in zip(steps, records, strict=True):
                 connection.execute(
-                    "INSERT INTO coordinator_steps(step_id, plan_id, step_json, record_json, revision) "
-                    "VALUES(?, ?, ?, ?, ?)",
+                    "INSERT INTO coordinator_steps("
+                    "step_id, plan_id, step_json, record_json, revision"
+                    ") VALUES(?, ?, ?, ?, ?)",
                     (
                         step.id,
                         plan.id,
@@ -493,7 +494,8 @@ class SQLiteCoordinatorRepository:
             if updated.rowcount != 1:
                 raise ContractError(ErrorCode.CONFLICT, "concurrent coordinator update")
             connection.execute(
-                "UPDATE coordinator_plans SET store_revision = store_revision + 1 WHERE plan_id = ?",
+                "UPDATE coordinator_plans SET store_revision = store_revision + 1 "
+                "WHERE plan_id = ?",
                 (step.plan_id,),
             )
             return saved
