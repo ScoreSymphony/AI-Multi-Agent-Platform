@@ -3,17 +3,27 @@
 ## Version policy
 
 - `0.1.0` is the first usable single-node prototype and requires the M2 acceptance gate in #252.
-- `1.0.0` is the operational baseline and requires the M3 conformance gate in #46.
+- `1.0.0` is the operational baseline and requires the full conformance gate in #46.
 - Patch versions contain backward-compatible fixes.
 - Minor versions add backward-compatible capabilities.
 - Major versions may change public or canonical contracts and require migration guidance.
 
-M4 capabilities are optional extensions. Their availability does not redefine the M2 or M3 baseline.
+Optional ecosystem and advanced-deployment capabilities do not redefine the ordinary local/self-hosted baseline unless a release explicitly claims support for the corresponding profile.
+
+## Current status
+
+> Status snapshot: 2026-09-06
+
+The #252 usable single-node prototype gate has passed and is maintained by the repository's prototype-acceptance profiles. This satisfies the major functional prerequisite previously assigned to the planned `0.1.0` release.
+
+No GitHub release or semantic-version tag has been published yet. Passing #252 therefore does **not** by itself mean that `0.1.0` has been released: publication still requires an exact release commit, the checklist below, current changelog/provenance and verification of the produced artifacts.
+
+The `1.0.0` operational target remains gated by #46 full platform conformance. Current open implementation work may add capabilities before that point, but compatibility must not be claimed beyond the profiles that have explicit evidence.
 
 ## Release candidate checklist
 
-- [ ] The target milestone has no unresolved required issues.
-- [ ] The relevant acceptance or conformance gate passed on the release commit.
+- [ ] The target release's required issues and explicitly claimed capability profiles have no unresolved release blockers.
+- [ ] The relevant acceptance or conformance gate passed on the exact release commit.
 - [ ] Required CI, compatibility, CodeQL and dependency-review checks passed.
 - [ ] Database, configuration and public-contract migrations are documented.
 - [ ] Backup, restore and rollback procedures were exercised where affected.
@@ -22,15 +32,18 @@ M4 capabilities are optional extensions. Their availability does not redefine th
 - [ ] Security findings were triaged and no known release-blocking issue remains.
 - [ ] `CHANGELOG.md` contains user-visible changes, known limitations and security notes.
 - [ ] Package, container and other published artifacts use the same version and source revision.
+- [ ] The compatibility/acceptance report names the exact enabled optional profiles rather than implying untested support.
 
 ## Publication
 
-1. Create a release candidate from the exact commit that passed the release gate.
-2. Verify generated artifacts without modifying the source tree.
-3. Tag the accepted commit with the semantic version.
-4. Publish a GitHub release using the matching changelog section.
-5. Record artifact checksums and the canonical source revision.
-6. Verify a clean installation using the published artifacts.
+1. Select the exact source commit intended for release.
+2. Run the required acceptance/conformance profile and release checks against that commit.
+3. Create a release candidate without modifying the already-tested source tree.
+4. Verify generated artifacts and checksums.
+5. Tag the accepted commit with the semantic version.
+6. Publish a GitHub release using the matching changelog section.
+7. Record artifact checksums, canonical source revision and tested compatibility profiles.
+8. Verify a clean installation using the published artifacts.
 
 ## Rollback
 
