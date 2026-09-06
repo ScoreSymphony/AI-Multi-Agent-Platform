@@ -64,7 +64,9 @@ class CapabilityAssignmentTemplateExporter:
             template_type=TemplateType.CAPABILITY_ASSIGNMENT,
             configuration=TemplateConfiguration(payload=_configuration_payload(source)),
             requirements=TemplateRequirements(
-                capabilities=tuple(_capability_requirement(rule) for rule in source.content.all_rules)
+                capabilities=tuple(
+                    _capability_requirement(rule) for rule in source.content.all_rules
+                )
             ),
             provenance=TemplateProvenance(
                 author=author,
