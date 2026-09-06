@@ -9,6 +9,7 @@ from typing import cast
 from ai_multi_agent_platform.agents import AgentRevisionRef, AgentService, AgentTeamRevisionRef
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
+from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.workflows import (
     AuthorizedWorkflowService,
     WorkflowCallContext,
@@ -409,8 +410,14 @@ def _call_context(
             owner_id=owner.id,
             project_id=revision.project_id,
         ),
-        actor_ref=owner.id,
+        actor_ref=_actor_ref(owner),
     )
+
+
+def _actor_ref(owner: OwnerRef) -> str:
+    if owner.id.startswith(f"{owner.type}_") or owner.id.startswith(f"{owner.type}:"):
+        return owner.id
+    return f"{owner.type}:{owner.id}"
 
 
 def _mapping(value: object, name: str) -> Mapping[str, object]:
