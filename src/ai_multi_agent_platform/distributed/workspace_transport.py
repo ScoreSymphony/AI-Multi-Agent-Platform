@@ -14,8 +14,9 @@ import hashlib
 import json
 import os
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, cast
 from uuid import NAMESPACE_URL, uuid5
@@ -30,8 +31,7 @@ from ai_multi_agent_platform.contracts import (
     RetryMode,
 )
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.data import DataAccessContext, FileProvider
-from ai_multi_agent_platform.domain import new_id
+from ai_multi_agent_platform.data import DataAccessContext, FileProvider, FileRecord
 from ai_multi_agent_platform.messaging import (
     MessageKind,
     MessageTransport,
@@ -51,7 +51,6 @@ from ai_multi_agent_platform.workspaces import (
     WorkspaceAccessMode,
     WorkspaceChange,
     WorkspaceChangeKind,
-    WorkspaceFile,
     WorkspaceProvider,
     validate_relative_path,
 )
@@ -213,7 +212,9 @@ class WorkerWorkspaceMaterializationStore:
     ) -> None:
         transfer = self._transfer(materialization_ref)
         entry = self._entry(transfer, relative_path)
-        expected_chunks = max(1, (entry.size_bytes + transfer.chunk_bytes - 1) // transfer.chunk_bytes)
+        expected_chunks = max(
+            1, (entry.size_bytes + transfer.chunk_bytes - 1) // transfer.chunk_bytes
+        )
         if total_chunks != expected_chunks:
             raise RegistryError("workspace transfer chunk count does not match file size")
         if not 0 <= chunk_index < total_chunks:
@@ -254,9 +255,7 @@ class WorkerWorkspaceMaterializationStore:
                 data.extend(await asyncio.to_thread(chunk.read_bytes))
             raw = bytes(data)
             if len(raw) != entry.size_bytes:
-                raise RegistryError(
-                    f"workspace transfer size mismatch for {entry.relative_path}"
-                )
+                raise RegistryError(f"workspace transfer size mismatch for {entry.relative_path}")
             if hashlib.sha256(raw).hexdigest() != entry.sha256:
                 raise RegistryError(
                     f"workspace transfer checksum mismatch for {entry.relative_path}"
@@ -345,9 +344,7 @@ class WorkerWorkspaceMaterializationStore:
     ) -> tuple[bytes, int]:
         if chunk_bytes < 1024:
             raise RegistryError("workspace result chunk_bytes must be at least 1024")
-        _request, _manifest = await asyncio.to_thread(
-            self._read_state, receipt.materialization_ref
-        )
+        _request, _manifest = await asyncio.to_thread(self._read_state, receipt.materialization_ref)
         root = self._final_root(receipt.workspace_id, receipt.snapshot_id)
         target = self._safe_target(root, relative_path)
         if not target.is_file() or target.is_symlink():
@@ -376,7 +373,7 @@ class WorkerWorkspaceMaterializationStore:
         try:
             await asyncio.to_thread(self._remove_materialization, root)
             state_path = self._state_path(receipt.materialization_ref)
-            await asyncio.to_thread(state_path.unlink, True)
+            await asyncio.to_thread(state_path.unlink, missing_ok=True)
         except OSError:
             return RemoteCleanupAcknowledgement(
                 workspace_id=receipt.workspace_id,
@@ -519,12 +516,12 @@ class WorkerWorkspaceMaterializationStore:
         return files
 
     @classmethod
-    def _install_files(cls, cls_files_root: Path, final_root: Path) -> None:
+    def _install_files(cls, files_root: Path, final_root: Path) -> None:
         if final_root.exists():
             cls._make_writable(final_root)
             shutil.rmtree(final_root)
         final_root.parent.mkdir(parents=True, exist_ok=True)
-        cls_files_root.replace(final_root)
+        files_root.replace(final_root)
         cls._reject_symlinks(final_root)
 
     @staticmethod
@@ -1166,7 +1163,7 @@ async def _create_or_reuse_file(
     context: DataAccessContext,
     *,
     metadata: dict[str, JsonValue],
-):
+) -> FileRecord:
     try:
         existing = await files.get_file(file_id, context)
     except ContractError as exc:
@@ -1407,9 +1404,7 @@ def _boolean(value: object, name: str) -> bool:
     return value
 
 
-def _datetime(value: object):
-    from datetime import datetime
-
+def _datetime(value: object) -> datetime:
     if not isinstance(value, str):
         raise RegistryError("remote Workspace timestamp must be a string")
     try:
