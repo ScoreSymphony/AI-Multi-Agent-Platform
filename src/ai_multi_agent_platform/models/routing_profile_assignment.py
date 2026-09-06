@@ -86,9 +86,7 @@ class ModelRoutingProfileAssignmentGate:
                             else None
                         ),
                         team_id=(
-                            definition.owner_ref.id
-                            if definition.owner_ref.type == "team"
-                            else None
+                            definition.owner_ref.id if definition.owner_ref.type == "team" else None
                         ),
                     )
                 )
