@@ -142,7 +142,7 @@ def test_worker_rejects_symlink_escape_during_result_scan(tmp_path: Path) -> Non
     asyncio.run(scenario())
 
 
-def test_duplicate_prepare_and_chunk_are_idempotent_and_conflicts_are_rejected(
+def test_duplicate_prepare_chunk_and_commit_are_idempotent_and_conflicts_are_rejected(
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
@@ -180,6 +180,15 @@ def test_duplicate_prepare_and_chunk_are_idempotent_and_conflicts_are_rejected(
         target = tmp_path / "worker" / request.workspace_id / request.snapshot_id / "src/input.txt"
         assert target.read_bytes() == data
         assert receipt.materialization_ref == first
+        assert receipt.cache_hit is False
+
+        repeated_commit = await store.commit(first)
+        assert repeated_commit.materialization_ref == first
+        assert repeated_commit.workspace_id == receipt.workspace_id
+        assert repeated_commit.snapshot_id == receipt.snapshot_id
+        assert repeated_commit.observed_checksum == receipt.observed_checksum
+        assert repeated_commit.cache_hit is True
+        assert target.read_bytes() == data
 
     asyncio.run(scenario())
 
