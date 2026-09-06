@@ -133,9 +133,7 @@ class ExecutorWorker:
             execution=self._snapshot(accepted.request, accepted.result),
             artifact_refs=accepted.request.artifact_refs,
             error_category=(
-                None
-                if accepted.result.error is None
-                else accepted.result.error.category.value
+                None if accepted.result.error is None else accepted.result.error.category.value
             ),
         )
 
