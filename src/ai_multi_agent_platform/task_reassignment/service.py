@@ -7,9 +7,11 @@ and active execution before asking the platform kernel to append the move event.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -30,6 +32,9 @@ TaskIdProvider = Callable[[], tuple[str, ...] | Awaitable[tuple[str, ...]]]
 
 _MOVE_OPERATION = "move_task_project"
 _MOVE_EVENT = "task.project_reassigned"
+_BULK_SCOPE = "task-project-reassignment:bulk"
+_BULK_OPERATION = "move_task_project_bulk"
+_BULK_EVENT = "task.project_bulk_move_reserved"
 
 
 @dataclass(frozen=True, slots=True)
@@ -204,21 +209,7 @@ class TaskProjectReassignmentService:
         self,
         requests: Sequence[TaskProjectMoveRequest],
     ) -> tuple[PreparedTaskProjectMove, ...]:
-        if not requests:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "Task Project move batch is empty")
-        if len(requests) > 100:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                "Task Project move batches are limited to 100 Tasks",
-            )
-        destinations: dict[str, str | None] = {}
-        for request in requests:
-            if request.task_id in destinations:
-                raise ContractError(
-                    ErrorCode.INVALID_REQUEST,
-                    f"duplicate Task in Project move batch: {request.task_id}",
-                )
-            destinations[request.task_id] = request.destination_project_id
+        destinations = self._batch_destinations(requests)
 
         states = await self._load_task_graph()
         prepared: list[PreparedTaskProjectMove] = []
@@ -265,6 +256,111 @@ class TaskProjectReassignmentService:
 
         await self._validate_relationships(states, destinations)
         return tuple(prepared)
+
+    async def batch_reserved(
+        self,
+        requests: Sequence[TaskProjectMoveRequest],
+        *,
+        idempotency_key: str,
+    ) -> bool:
+        digest, _ = self._batch_contract(requests)
+        record = await self._kernel._existing_command(
+            _BULK_SCOPE,
+            idempotency_key,
+            _BULK_OPERATION,
+        )
+        if record is None:
+            return False
+        if record.result_id != digest:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Idempotency-Key is already bound to a different Task Project bulk move set",
+            )
+        event = next(
+            (
+                item
+                for item in await self._kernel.history(record.stream_id)
+                if item.id == record.event_id
+            ),
+            None,
+        )
+        if (
+            event is None
+            or event.event_type != _BULK_EVENT
+            or event.payload.get("batch_digest") != digest
+        ):
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "Task Project bulk idempotency record has no matching reservation event",
+            )
+        return True
+
+    async def reserve_batch(
+        self,
+        requests: Sequence[TaskProjectMoveRequest],
+        *,
+        idempotency_key: str,
+        actor_ref: str | None,
+        source: str = "task-project-reassignment",
+    ) -> None:
+        digest, moves = self._batch_contract(requests)
+        if await self.batch_reserved(requests, idempotency_key=idempotency_key):
+            return
+
+        anchor_id = moves[0]["task_id"]
+        assert isinstance(anchor_id, str)
+        anchor = await self._kernel.get_task(anchor_id)
+        events = self._kernel._build_events(
+            task=anchor,
+            causation_id=idempotency_key,
+            actor_ref=actor_ref,
+            source=source,
+            event_specs=(
+                (
+                    _BULK_EVENT,
+                    "task",
+                    anchor_id,
+                    {
+                        "batch_digest": digest,
+                        "moves": cast(JsonValue, moves),
+                        "atomic": False,
+                    },
+                    (),
+                ),
+            ),
+        )
+        command = self._kernel._command(
+            scope=_BULK_SCOPE,
+            key=idempotency_key,
+            operation=_BULK_OPERATION,
+            stream_id=anchor_id,
+            result_id=digest,
+            event=events[0],
+        )
+        result = await self._kernel._repository.commit(
+            stream_id=anchor_id,
+            expected_revision=anchor.revision,
+            events=events,
+            command=command,
+        )
+        if not result.applied:
+            await self.batch_reserved(requests, idempotency_key=idempotency_key)
+            return
+        await self._kernel._mirror(events)
+
+    async def replayed_move(
+        self,
+        request: TaskProjectMoveRequest,
+        *,
+        idempotency_key: str,
+    ) -> TaskState | None:
+        if not await self._existing_move(
+            request.task_id,
+            idempotency_key,
+            request.destination_project_id,
+        ):
+            return None
+        return await self._kernel.get_task(request.task_id)
 
     async def commit(
         self,
@@ -359,6 +455,48 @@ class TaskProjectReassignmentService:
                 "Idempotency-Key is already bound to a different Task Project destination",
             )
         return True
+
+    def _batch_contract(
+        self,
+        requests: Sequence[TaskProjectMoveRequest],
+    ) -> tuple[str, list[dict[str, JsonValue]]]:
+        destinations = self._batch_destinations(requests)
+        moves: list[dict[str, JsonValue]] = [
+            {
+                "task_id": task_id,
+                "destination_project_id": destinations[task_id],
+            }
+            for task_id in sorted(destinations)
+        ]
+        encoded = json.dumps(
+            moves,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest(), moves
+
+    @staticmethod
+    def _batch_destinations(
+        requests: Sequence[TaskProjectMoveRequest],
+    ) -> dict[str, str | None]:
+        if not requests:
+            raise ContractError(ErrorCode.INVALID_REQUEST, "Task Project move batch is empty")
+        if len(requests) > 100:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "Task Project move batches are limited to 100 Tasks",
+            )
+        destinations: dict[str, str | None] = {}
+        for request in requests:
+            if request.task_id in destinations:
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    f"duplicate Task in Project move batch: {request.task_id}",
+                )
+            destinations[request.task_id] = request.destination_project_id
+        return destinations
 
     async def _validate_relationships(
         self,

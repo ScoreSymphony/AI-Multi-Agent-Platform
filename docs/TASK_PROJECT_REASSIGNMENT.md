@@ -7,7 +7,7 @@ Issue #157 defines Project reassignment as a canonical Task mutation. It is not 
 - `task.project.move` moves one canonical Task.
 - `task.project.bulk-move` preflights a set of independent Task moves before appending any move event.
 
-Both commands require an `Idempotency-Key`. The single move binds the key to the requested destination and rejects reuse for a different destination.
+Both commands require an `Idempotency-Key`. The single move binds the key to the requested destination and rejects reuse for a different destination. Bulk moves bind the key to a digest of the complete canonical move set after whole-set authorization and relationship preflight. An exact retry reuses that reservation, skips already committed item moves and resumes only missing items. Reusing the key with a changed Task/destination set is rejected before another move is appended.
 
 ## Canonical event
 
@@ -50,6 +50,10 @@ Authorization remains authoritative for whether the actor may perform the move; 
 
 The current `EventRepository` contract supports atomic append per stream, not a transaction spanning multiple Task streams. Therefore `task.project.bulk-move` reports `atomic: false`.
 
-The command still performs authorization and relationship preflight for the entire requested set before the first append. Independent Tasks can be moved safely. A batch containing a parent/dependency edge between Tasks in the same batch is rejected with `required_capability = multi_stream_atomic_commit`: sequentially appending such a connected move could otherwise leave a cross-Project graph if a later append failed.
+The command still performs authorization and relationship preflight for the entire requested set before the first append. After that preflight it appends one durable `task.project_bulk_move_reserved` audit event to a deterministic Task stream. The reservation stores the canonical batch digest and move set and is associated with the bulk `Idempotency-Key`. It does not change `Task.project_id`.
+
+Independent Tasks can then be moved safely. If a later per-Task append fails, an exact retry detects the existing reservation, re-authorizes the full request, recognizes already committed item moves through their canonical move records and prepares only the remaining items. A changed batch with the same key fails against the stored digest.
+
+A batch containing a parent/dependency edge between Tasks in the same batch is rejected with `required_capability = multi_stream_atomic_commit`: sequentially appending such a connected move could otherwise leave a cross-Project graph if a later append failed.
 
 This fail-closed behavior is deliberate. Connected bulk moves may be enabled later if the canonical persistence boundary gains a real multi-stream atomic commit capability; callers must not infer such a guarantee today.
