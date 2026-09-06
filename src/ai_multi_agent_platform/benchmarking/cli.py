@@ -13,8 +13,10 @@ from typing import Any
 from ai_multi_agent_platform.deployment import SingleNodeConfig
 
 from .endurance import EnduranceBenchmarkSpec, SingleNodeEnduranceHarness
+from .faults import FaultUnderLoadSpec, SingleNodeFaultUnderLoadHarness
 from .models import BenchmarkSpec, RegressionThresholds, compare_with_baseline
 from .single_node import SingleNodeBenchmarkHarness, attach_baseline_comparison
+from .stress import SingleNodeStressHarness, StressBenchmarkSpec
 from .sweep import SingleNodeSweepHarness
 from .workloads import SingleNodeWorkloadHarness, WorkloadBenchmarkSpec
 
@@ -92,6 +94,39 @@ def _parser() -> argparse.ArgumentParser:
     endurance.add_argument("--write-weight", type=int)
     endurance.add_argument("--output", type=Path, required=True)
     endurance.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
+
+    stress = subparsers.add_parser(
+        "single-node-stress",
+        help="run an explicitly bounded concurrency-saturation sweep",
+    )
+    stress.add_argument("--data-root", type=Path)
+    stress.add_argument("--concurrency-levels", default="10,25,50,100")
+    stress.add_argument("--operations-per-level", type=int, default=100)
+    stress.add_argument("--warmup-operations", type=int, default=5)
+    stress.add_argument("--timeout-seconds", type=float, default=30.0)
+    stress.add_argument("--safety-max-concurrency", type=int, default=256)
+    stress.add_argument("--safety-max-operations-per-level", type=int, default=1000)
+    stress.add_argument("--continue-after-correctness-failure", action="store_true")
+    stress.add_argument("--output-dir", type=Path, required=True)
+    stress.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
+
+    fault = subparsers.add_parser(
+        "single-node-fault-under-load",
+        help="run bounded load before and after a real single-node deployment restart",
+    )
+    fault.add_argument("--data-dir", type=Path)
+    fault.add_argument("--operations", type=int, default=40)
+    fault.add_argument("--concurrency", type=int, default=4)
+    fault.add_argument("--fault-after-operations", type=int)
+    fault.add_argument("--seed-tasks", type=int, default=10)
+    fault.add_argument("--warmup-operations", type=int, default=2)
+    fault.add_argument("--timeout-seconds", type=float, default=30.0)
+    fault.add_argument("--safety-max-operations", type=int, default=1000)
+    fault.add_argument("--safety-max-concurrency", type=int, default=64)
+    fault.add_argument("--read-weight", type=int, default=4)
+    fault.add_argument("--write-weight", type=int, default=1)
+    fault.add_argument("--output", type=Path, required=True)
+    fault.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
     return parser
 
 
@@ -105,6 +140,10 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_run_single_node_workload(args))
     if args.command == "single-node-endurance":
         return asyncio.run(_run_single_node_endurance(args))
+    if args.command == "single-node-stress":
+        return asyncio.run(_run_single_node_stress(args))
+    if args.command == "single-node-fault-under-load":
+        return asyncio.run(_run_single_node_fault_under_load(args))
     raise AssertionError(f"unsupported benchmark command: {args.command}")
 
 
@@ -287,6 +326,93 @@ async def _run_single_node_endurance(args: argparse.Namespace) -> int:
             SingleNodeConfig(data_dir=data_dir, secure_cookie=False),
             platform_commit=args.platform_commit,
         ).run(spec)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return 0 if report.correctness.passed else 2
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+
+
+async def _run_single_node_stress(args: argparse.Namespace) -> int:
+    concurrency_levels = _parse_concurrency_levels(args.concurrency_levels)
+    temporary: tempfile.TemporaryDirectory[str] | None = None
+    if args.data_root is None:
+        temporary = tempfile.TemporaryDirectory(prefix="ai-map-benchmark-stress-")
+        data_root = Path(temporary.name)
+    else:
+        data_root = args.data_root
+
+    spec = StressBenchmarkSpec(
+        benchmark_id="single-node.reference.lifecycle.stress",
+        benchmark_version="1.0",
+        deployment_profile="single-node-reference",
+        persistence_profile="sqlite-reference",
+        concurrency_levels=concurrency_levels,
+        operations_per_level=args.operations_per_level,
+        warmup_operations=args.warmup_operations,
+        timeout_seconds=args.timeout_seconds,
+        safety_max_concurrency=args.safety_max_concurrency,
+        safety_max_operations_per_level=args.safety_max_operations_per_level,
+        stop_on_correctness_failure=not args.continue_after_correctness_failure,
+    )
+    try:
+        execution = await SingleNodeStressHarness(
+            data_root,
+            platform_commit=args.platform_commit,
+        ).run(spec)
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        for point, report in execution.point_reports:
+            (args.output_dir / point.report_file).write_text(
+                json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        (args.output_dir / "summary.json").write_text(
+            json.dumps(execution.summary.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return 0 if execution.summary.correctness_passed else 2
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+
+
+async def _run_single_node_fault_under_load(args: argparse.Namespace) -> int:
+    temporary: tempfile.TemporaryDirectory[str] | None = None
+    if args.data_dir is None:
+        temporary = tempfile.TemporaryDirectory(prefix="ai-map-benchmark-fault-")
+        data_dir = Path(temporary.name)
+    else:
+        data_dir = args.data_dir
+
+    fault_after = args.fault_after_operations
+    if fault_after is None:
+        fault_after = max(1, args.operations // 2)
+    spec = FaultUnderLoadSpec(
+        benchmark_id="single-node.fault.control-plane-restart-under-load",
+        benchmark_version="1.0",
+        scenario="control-plane-restart",
+        deployment_profile="single-node-reference",
+        persistence_profile="sqlite-reference",
+        operation_count=args.operations,
+        concurrency=args.concurrency,
+        fault_after_operations=fault_after,
+        seed_tasks=args.seed_tasks,
+        warmup_operations=args.warmup_operations,
+        timeout_seconds=args.timeout_seconds,
+        safety_max_operations=args.safety_max_operations,
+        safety_max_concurrency=args.safety_max_concurrency,
+        read_weight=args.read_weight,
+        write_weight=args.write_weight,
+    )
+    try:
+        report = await SingleNodeFaultUnderLoadHarness(
+            SingleNodeConfig(data_dir=data_dir, secure_cookie=False),
+            platform_commit=args.platform_commit,
+        ).run_fault(spec)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(
             json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
