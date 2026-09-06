@@ -91,13 +91,16 @@ def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployme
     installations = JsonRegistryInstallationStore(
         deployment.config.database_dir / "registry-installations.json"
     )
-    plugin_registry = PluginRegistry(
-        platform_version=__version__,
-        supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
-        binders={
-            ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities)
-        },
-    )
+    plugin_registry = deployment.control_plane.plugin_registry
+    if plugin_registry is None:
+        plugin_registry = PluginRegistry(
+            platform_version=__version__,
+            supported_interfaces={ExtensionType.CAPABILITY_PROVIDER: frozenset({"1.0"})},
+            binders={
+                ExtensionType.CAPABILITY_PROVIDER: CapabilityRegistryBinder(deployment.capabilities)
+            },
+        )
+        deployment.control_plane.attach_plugin_runtime(plugin_registry)
     plugin_installer = PluginRegistryArtifactInstaller(plugin_registry)
     portability = deployment.control_plane.portability_workflow
     if portability is None:
