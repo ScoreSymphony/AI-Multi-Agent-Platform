@@ -414,9 +414,7 @@ def _storage_checks(data_dir: Path, minimum_free_bytes: int) -> tuple[PreflightC
         checks.append(
             PreflightCheck(
                 code="storage.disk.free",
-                severity=(
-                    CheckSeverity.ERROR if free < minimum_free_bytes else CheckSeverity.INFO
-                ),
+                severity=(CheckSeverity.ERROR if free < minimum_free_bytes else CheckSeverity.INFO),
                 message=f"{free} bytes free in data filesystem",
                 details={"free_bytes": free, "minimum_free_bytes": minimum_free_bytes},
             )
