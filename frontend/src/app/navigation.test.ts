@@ -17,6 +17,7 @@ describe("#17 stable navigation baseline", () => {
       "/integrations",
       "/models",
       "/evaluations",
+      "/marketplace",
       "/compute",
       "/terminal",
       "/plugins",
@@ -33,6 +34,7 @@ describe("#17 stable navigation baseline", () => {
     const tools = navigation.find((item) => item.path === "/tools");
     const integrations = navigation.find((item) => item.path === "/integrations");
     const evaluations = navigation.find((item) => item.path === "/evaluations");
+    const marketplace = navigation.find((item) => item.path === "/marketplace");
     const compute = navigation.find((item) => item.path === "/compute");
     const plugins = navigation.find((item) => item.path === "/plugins");
 
@@ -40,13 +42,15 @@ describe("#17 stable navigation baseline", () => {
     expect(tools?.apiResource).toBe("capabilities");
     expect(integrations?.apiResource).toBe("connector-definitions");
     expect(evaluations?.apiResource).toBe("evaluation-suites");
+    expect(marketplace?.apiResource).toBe("registry-items");
     expect(compute?.apiResource).toBe("nodes");
     expect(plugins?.apiResource).toBe("plugins");
   });
 
-  it("does not expose optional Registry or HA navigation in the baseline shell", () => {
+  it("keeps Marketplace availability manifest-gated and HA routes out of the baseline shell", () => {
+    const marketplace = navigation.find((item) => item.path === "/marketplace");
     const paths = navigation.map((item) => item.path);
-    expect(paths.some((path) => path.includes("registry"))).toBe(false);
+    expect(marketplace?.apiResource).toBe("registry-items");
     expect(paths.some((path) => path.includes("failover") || path.includes("/ha"))).toBe(false);
   });
 });
