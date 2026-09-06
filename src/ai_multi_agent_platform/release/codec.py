@@ -8,7 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import cast
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator, FormatChecker
 
 from ai_multi_agent_platform.upgrade.versioning import version_snapshot_from_dict
 
@@ -47,7 +47,7 @@ def load_release_manifest(path: str | Path) -> ReleaseManifest:
         raise ReleaseManifestError("release manifest must be a JSON object")
     document = cast(dict[str, object], raw)
     errors = sorted(
-        Draft202012Validator(_schema()).iter_errors(document),
+        Draft202012Validator(_schema(), format_checker=FormatChecker()).iter_errors(document),
         key=lambda item: list(item.path),
     )
     if errors:
@@ -77,6 +77,7 @@ def release_manifest_from_dict(value: Mapping[str, object]) -> ReleaseManifest:
         gates=gates,
         sbom_ref=_string(value, "sbom_ref"),
         provenance_ref=_string(value, "provenance_ref"),
+        artifact_hashes=_string_map(value, "artifact_hashes"),
     )
 
 
@@ -122,6 +123,16 @@ def _decode_gate(value: Mapping[str, object]) -> ReleaseGate:
         evidence=_string(value, "evidence"),
         required=_bool(value, "required"),
     )
+
+
+def _string_map(value: Mapping[str, object], name: str) -> dict[str, str]:
+    raw = _mapping(value, name)
+    result: dict[str, str] = {}
+    for key, item in raw.items():
+        if not isinstance(key, str) or not key or not isinstance(item, str) or not item:
+            raise ReleaseManifestError(f"{name} must map non-empty strings to non-empty strings")
+        result[key] = item
+    return result
 
 
 def _mapping(value: Mapping[str, object], name: str) -> Mapping[str, object]:
