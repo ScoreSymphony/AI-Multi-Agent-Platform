@@ -28,6 +28,16 @@ class WorkerWorkspaceResolver(Protocol):
     async def resolve(self, job: WorkerJobRequest) -> RemoteMaterializationRequest | None: ...
 
 
+class WorkerWorkspaceResultIntegrator(Protocol):
+    """Promote collected remote Workspace evidence through platform-owned output contracts."""
+
+    async def integrate(
+        self,
+        job: WorkerJobRequest,
+        result: RemoteMaterializationResult,
+    ) -> RemoteMaterializationResult: ...
+
+
 class WorkspaceJobMaterializationResolver:
     """Build #37 remote requests from canonical workspace state without host paths."""
 
@@ -75,7 +85,9 @@ class MaterializingWorkerDispatcher:
 
     The materializer and wrapped dispatcher are deployment adapters bound to the same
     canonical Worker. The wrapper never exposes or constructs a host-local path; it
-    carries only the opaque receipt/result references defined by #37.
+    carries only the opaque receipt/result references defined by #37. An optional result
+    integrator may promote collected canonical File evidence into higher-level platform
+    evidence such as Artifacts without teaching the transport layer about lifecycle storage.
     """
 
     def __init__(
@@ -83,10 +95,12 @@ class MaterializingWorkerDispatcher:
         dispatcher: WorkerDispatcher,
         materializer: RemoteWorkspaceMaterializer,
         resolver: WorkerWorkspaceResolver,
+        result_integrator: WorkerWorkspaceResultIntegrator | None = None,
     ) -> None:
         self._dispatcher = dispatcher
         self._materializer = materializer
         self._resolver = resolver
+        self._result_integrator = result_integrator
         self._jobs: dict[str, _WorkspaceDispatchState] = {}
 
     @property
@@ -172,6 +186,9 @@ class MaterializingWorkerDispatcher:
         if result is None:
             result = await self._materializer.collect_result(receipt)
             self._validate_result(receipt, result)
+            if self._result_integrator is not None:
+                result = await self._result_integrator.integrate(state.request, result)
+                self._validate_result(receipt, result)
             state = replace(state, result=result)
             self._jobs[worker_job_id] = state
         cleanup = await self._materializer.cleanup(receipt, _materialization_outcome(status))
