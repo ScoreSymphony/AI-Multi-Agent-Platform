@@ -39,6 +39,9 @@ if TYPE_CHECKING:
     from ai_multi_agent_platform.accounting.service import AccountingService
 
 ORGANIZATION_RUNTIME_COMMANDS = ORGANIZATION_COMMANDS + ORGANIZATION_MANAGEMENT_COMMANDS
+_CANONICAL_ACCOUNTING_COLLECTIONS = frozenset(
+    {"usage-records", "usage-aggregates", "usage-budgets"}
+)
 
 _CANONICAL_OWNER_COMMAND_TYPES = {
     "agent.create": "agent",
@@ -165,6 +168,10 @@ class ControlPlane(_CurrentControlPlane):
         if collection in ORGANIZATION_COLLECTIONS:
             raise ValueError(
                 f"extension collection conflicts with canonical organization route: {collection}"
+            )
+        if self._accounting_service is not None and collection in _CANONICAL_ACCOUNTING_COLLECTIONS:
+            raise ValueError(
+                f"extension collection conflicts with canonical accounting route: {collection}"
             )
         super().register_resource_service(collection, service)
 

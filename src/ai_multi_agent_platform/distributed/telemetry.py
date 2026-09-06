@@ -21,6 +21,7 @@ from .models import (
     WorkerJobRequest,
     WorkerRecord,
 )
+from .resource_reporting import resource_reporting_state
 
 
 class DistributedTelemetry:
@@ -288,38 +289,89 @@ class DistributedTelemetry:
 
     def _node_resources(self, node: NodeRecord, *, context: TelemetryContext) -> None:
         resources = node.resources
+        reporting = resource_reporting_state(node.adapter_metadata)
         accelerator_total = sum(item.memory_total_bytes for item in resources.accelerators)
         accelerator_available = sum(item.memory_available_bytes for item in resources.accelerators)
-        for name, value, unit in (
-            ("platform.node.cpu_cores_total", resources.cpu_cores_total, "cores"),
-            ("platform.node.cpu_cores_available", resources.cpu_cores_available, "cores"),
-            ("platform.node.ram_total_bytes", resources.ram_total_bytes, "bytes"),
-            ("platform.node.ram_available_bytes", resources.ram_available_bytes, "bytes"),
-            ("platform.node.storage_total_bytes", resources.storage_total_bytes, "bytes"),
+        measurements = (
+            (
+                "platform.node.cpu_cores_total",
+                "cpu_cores_total",
+                resources.cpu_cores_total,
+                "cores",
+            ),
+            (
+                "platform.node.cpu_cores_available",
+                "cpu_cores_available",
+                resources.cpu_cores_available,
+                "cores",
+            ),
+            (
+                "platform.node.ram_total_bytes",
+                "ram_total_bytes",
+                resources.ram_total_bytes,
+                "bytes",
+            ),
+            (
+                "platform.node.ram_available_bytes",
+                "ram_available_bytes",
+                resources.ram_available_bytes,
+                "bytes",
+            ),
+            (
+                "platform.node.storage_total_bytes",
+                "storage_total_bytes",
+                resources.storage_total_bytes,
+                "bytes",
+            ),
             (
                 "platform.node.storage_available_bytes",
+                "storage_available_bytes",
                 resources.storage_available_bytes,
                 "bytes",
             ),
-            ("platform.node.accelerator_memory_total_bytes", accelerator_total, "bytes"),
+            (
+                "platform.node.accelerator_memory_total_bytes",
+                "accelerator_memory_total_bytes",
+                accelerator_total,
+                "bytes",
+            ),
             (
                 "platform.node.accelerator_memory_available_total_bytes",
+                "accelerator_memory_available_total_bytes",
                 accelerator_available,
                 "bytes",
             ),
-        ):
-            self.telemetry.metric(name, float(value), context=context, unit=unit)
+        )
+        for name, field, value, unit in measurements:
+            if reporting.is_reported(field, value):
+                self.telemetry.metric(name, float(value), context=context, unit=unit)
+                continue
+            if reporting.is_unavailable(field):
+                self.telemetry.metric(
+                    "platform.node.resource_unavailable",
+                    1.0,
+                    context=context,
+                    attributes={
+                        "resource_metric": name,
+                        "resource_key": field,
+                        "resource_unit": unit,
+                    },
+                )
 
         # Keep the pre-existing scheduler-oriented max-single-accelerator gauge explicit.
-        # Accounting intentionally consumes the summed *_available_total_bytes metric above,
-        # not this placement-oriented maximum.
-        self.telemetry.metric(
-            "platform.node.accelerator_memory_available_bytes",
-            float(resources.max_available_accelerator_memory_bytes),
-            context=context,
-            unit="bytes",
-            attributes={"aggregation": "max_single_accelerator"},
-        )
+        # It is emitted only when accelerator availability itself was reliably reported;
+        # accounting consumes the summed *_available_total_bytes metric above.
+        if reporting.is_reported(
+            "accelerator_memory_available_total_bytes",
+            accelerator_available,
+        ):
+            self.telemetry.metric(
+                "platform.node.accelerator_memory_available_bytes",
+                float(resources.max_available_accelerator_memory_bytes),
+                context=context,
+                unit="bytes",
+                attributes={"aggregation": "max_single_accelerator"},
+            )
 
 
 def _job_context(
