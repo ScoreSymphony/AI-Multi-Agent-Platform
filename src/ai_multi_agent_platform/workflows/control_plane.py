@@ -37,7 +37,10 @@ class WorkflowResourceService:
         for definition in await self.service.list(context=call_context):
             if project_filter is not None and definition.project_id != project_filter:
                 continue
-            if organization_filter is not None and definition.organization_id != organization_filter:
+            if (
+                organization_filter is not None
+                and definition.organization_id != organization_filter
+            ):
                 continue
             revision = await self.service.resolve(
                 WorkflowRevisionRef(definition.workflow_id, definition.current_revision),
