@@ -161,7 +161,10 @@ def test_verification_search_survives_canonical_restart_and_rebuild(tmp_path: Pa
         assert restored_verification.get_request(request.verification_id).verification_id == (
             request.verification_id
         )
-        assert restored_completion.assess_task_completion(task.task_id).state is CompletionState.ACCEPTED
+        assert (
+            restored_completion.assess_task_completion(task.task_id).state
+            is CompletionState.ACCEPTED
+        )
 
         rebuilt = await restored_control_plane.rebuild_search_index(
             correlation_id="issue-291-restart-rebuild"
