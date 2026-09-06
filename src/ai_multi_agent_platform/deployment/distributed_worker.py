@@ -229,6 +229,10 @@ def build_worker_process_from_deployment_node(
     for the same Node run execution/Workspace/presence endpoints with ``reporting=False`` while
     the reporter owns the complete Node heartbeat snapshot. Local and remote reporters use the
     same authenticated Worker-protocol contract; ``connection_mode`` is locality metadata only.
+
+    The profile's ``workspace_root`` is a host-level parent. Every independently running Worker
+    receives a private child root named by its canonical ``worker_id`` so sibling processes cannot
+    replace or clean up one another's materialized Workspace trees.
     """
 
     worker_ids = {worker.worker_id for worker in node.workers}
@@ -244,7 +248,7 @@ def build_worker_process_from_deployment_node(
         DistributedWorkerProcessConfig(
             registration=registration,
             worker_id=worker_id,
-            workspace_root=Path(str(node.binding.workspace_root)),
+            workspace_root=Path(str(node.binding.workspace_root)) / worker_id,
             heartbeat_interval_seconds=heartbeat_interval_seconds,
             reporting=reporting,
         ),
