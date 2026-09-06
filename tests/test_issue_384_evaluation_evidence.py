@@ -77,7 +77,7 @@ def test_coordination_state_is_deterministic_evaluation_evidence() -> None:
                 step_id=waiting.id,
                 phase=CoordinationPhase.WAITING,
                 wait=wait,
-                latest_run_id="run-waiting",
+                latest_run_id=new_id("run"),
             ),
             StepCoordinationRecord(
                 task_id=plan.task_id,
