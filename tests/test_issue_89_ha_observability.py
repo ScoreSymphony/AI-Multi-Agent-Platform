@@ -138,8 +138,7 @@ def test_promotion_and_renewal_emit_backend_neutral_ha_telemetry() -> None:
         assert status.seconds_since_last_renewal == pytest.approx(3.0)
         assert status.lease_age_seconds == pytest.approx(5.0)
         assert any(
-            metric.name == "platform.control_plane.ha.lease_renewals"
-            for metric in exporter.metrics
+            metric.name == "platform.control_plane.ha.lease_renewals" for metric in exporter.metrics
         )
 
     asyncio.run(scenario())
