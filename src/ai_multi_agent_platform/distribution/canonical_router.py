@@ -21,12 +21,16 @@ class PluginArtifactInstaller(Protocol):
 
 
 class PortablePackageInspection(Protocol):
-    package_id: str
+    @property
+    def package_id(self) -> str: ...
 
 
 class PortableImportPreview(Protocol):
-    preview_id: str
-    ready: bool
+    @property
+    def preview_id(self) -> str: ...
+
+    @property
+    def ready(self) -> bool: ...
 
 
 class PortabilityImportOwner(Protocol):
