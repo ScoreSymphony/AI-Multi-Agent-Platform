@@ -7,6 +7,7 @@ import hashlib
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.plugins import PluginRegistry
 
+from .items import RegistryItem
 from .models import RegistryItemType
 from .plugin_adapter import PluginRegistryArtifactInstaller
 from .provider import RegistryProvider
@@ -107,12 +108,8 @@ async def reconcile_registry_plugins(
 def _validate_snapshot(
     provider_id: str,
     snapshot: RegistryInstallationSnapshot,
-    item: object,
+    item: RegistryItem,
 ) -> None:
-    from .items import RegistryItem
-
-    if not isinstance(item, RegistryItem):  # defensive for non-conforming third-party providers
-        raise RegistryPluginReconciliationError("Registry provider returned an invalid item")
     mismatches: list[str] = []
     if snapshot.source_registry != provider_id:
         mismatches.append("registry provider")
