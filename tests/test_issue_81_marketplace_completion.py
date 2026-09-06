@@ -124,9 +124,7 @@ def test_registry_resource_service_applies_domain_filters_and_update_availabilit
     )
     installations = JsonRegistryInstallationStore(tmp_path / "installations.json")
     installations.record(old, provider_id=provider.provider_id)
-    service = RegistryResourceService(
-        DistributionService(provider, installations=installations)
-    )
+    service = RegistryResourceService(DistributionService(provider, installations=installations))
 
     resources = asyncio.run(
         service.list_resources(
