@@ -144,7 +144,9 @@ def _job(project_id: str, marker: str) -> WorkerJobRequest:
     )
 
 
-def test_tcp_loss_expires_worker_and_same_identity_reregisters_after_restart(tmp_path: Path) -> None:
+def test_tcp_loss_expires_worker_and_same_identity_reregisters_after_restart(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         registration = _registration()
         worker_id = registration.workers[0].worker_id
@@ -173,7 +175,9 @@ def test_tcp_loss_expires_worker_and_same_identity_reregisters_after_restart(tmp
             ),
         )
 
-        async def start_worker(instance: str) -> tuple[
+        async def start_worker(
+            instance: str,
+        ) -> tuple[
             DistributedWorkerProcess,
             asyncio.Task[None],
             TcpMessageTransport,
