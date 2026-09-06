@@ -26,6 +26,13 @@ from .models import (
     ResourceMetrics,
     compare_with_baseline,
 )
+from .persistence import (
+    PERSISTENCE_SWEEP_REPORT_SCHEMA_VERSION,
+    PersistenceScaleExecution,
+    PersistenceScalePoint,
+    PersistenceScaleReport,
+    SingleNodePersistenceScaleHarness,
+)
 from .single_node import SingleNodeBenchmarkHarness, attach_baseline_comparison
 from .stress import (
     STRESS_REPORT_SCHEMA_VERSION,
@@ -62,6 +69,7 @@ __all__ = [
     "BENCHMARK_REPORT_SCHEMA_VERSION",
     "ENDURANCE_REPORT_SCHEMA_VERSION",
     "FAULT_REPORT_SCHEMA_VERSION",
+    "PERSISTENCE_SWEEP_REPORT_SCHEMA_VERSION",
     "STRESS_REPORT_SCHEMA_VERSION",
     "SWEEP_REPORT_SCHEMA_VERSION",
     "TRANSPORT_FAULT_REPORT_SCHEMA_VERSION",
@@ -77,12 +85,16 @@ __all__ = [
     "FaultUnderLoadReport",
     "FaultUnderLoadSpec",
     "LatencyDistribution",
+    "PersistenceScaleExecution",
+    "PersistenceScalePoint",
+    "PersistenceScaleReport",
     "RegressionThresholds",
     "ResourceMetrics",
     "ResourceSnapshot",
     "SingleNodeBenchmarkHarness",
     "SingleNodeEnduranceHarness",
     "SingleNodeFaultUnderLoadHarness",
+    "SingleNodePersistenceScaleHarness",
     "SingleNodeStressExecution",
     "SingleNodeStressHarness",
     "SingleNodeSweepExecution",
