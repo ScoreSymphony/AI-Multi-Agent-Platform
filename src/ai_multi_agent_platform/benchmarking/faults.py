@@ -248,12 +248,12 @@ class SingleNodeFaultUnderLoadHarness(SingleNodeWorkloadHarness):
         health_recovered, health_status = await self._status_probe(
             deployment,
             headers=headers,
-            path="/health",
+            path="/api/v1/health",
         )
         readiness_recovered, readiness_status = await self._status_probe(
             deployment,
             headers=headers,
-            path="/readiness",
+            path="/api/v1/readiness",
         )
 
         await self._run_phase(
