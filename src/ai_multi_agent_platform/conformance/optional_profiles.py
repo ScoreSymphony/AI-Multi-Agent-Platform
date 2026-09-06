@@ -124,6 +124,18 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_attempt_barrier_and_cancellation_evidence_is_explicit",
         "tests/test_issue_384_observability_completeness.py::"
         "test_claim_conflicts_are_emitted_from_the_shared_claim_boundary",
+        "tests/test_issue_384_distributed_worker_integration.py::"
+        "test_lost_worker_ack_reconciles_through_real_distributed_worker_without_redispatch",
+        "tests/test_issue_384_distributed_worker_integration.py::"
+        "test_plan_cancellation_reaches_worker_and_late_worker_success_cannot_revive_state",
+        "tests/test_issue_384_orchestrator_replacement.py::"
+        "test_orchestrator_replacement_does_not_change_durable_step_identity_or_state",
+        "tests/test_issue_384_control_plane_authorization.py::"
+        "test_coordination_repair_commands_are_authorized_before_handler_execution",
+        "tests/test_issue_384_operator_repair.py::"
+        "test_operator_can_cancel_only_an_explicit_missing_run_inconsistency_idempotently",
+        "tests/test_issue_384_operator_repair.py::"
+        "test_operator_repair_refuses_to_cancel_when_the_canonical_run_exists",
     ),
 }
 
