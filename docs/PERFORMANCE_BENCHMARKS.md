@@ -40,14 +40,14 @@ The v1 report records:
 - process CPU seconds during the measured window;
 - Python traced current/peak memory;
 - peak resident set size where the host exposes it;
-- data-root bytes before/after and storage growth;
+- data-root bytes immediately before/after the measured window and measured storage growth;
 - open file descriptor count where the host exposes `/proc/self/fd`;
 - attempted/completed/failed operation counts;
 - duplicate Task/Run ID detection;
 - timeline correctness failures;
-- safe environment fingerprint metadata.
+- safe environment fingerprint metadata, including CPU model/count and host memory where available.
 
-Unavailable host-specific metrics are reported as `null`; the harness does not fabricate values.
+Setup and warmup happen before CPU, traced-memory and storage-growth measurement starts. Unavailable host-specific metrics are reported as `null`; the harness does not fabricate values.
 
 The machine-readable schema is `docs/schemas/benchmark-report.v1.schema.json`.
 
@@ -63,7 +63,7 @@ platform-benchmark single-node \
   --output artifacts/benchmarks/single-node.json
 ```
 
-If `--data-dir` is omitted, the command uses an isolated temporary data root and removes it after the report is written. A supplied data root should be dedicated to benchmarking; do not point load tests at unrelated platform state.
+If `--data-dir` is omitted, the command uses an isolated temporary data root and removes it after the report is written. A supplied `--data-dir` must be a fresh, empty directory dedicated to one benchmark run. This protects unrelated platform state, prevents benchmark credentials from being reused, and gives every reference run the same clean persistence starting point.
 
 For a concurrency sweep, run separate reports so each point preserves its own environment and workload metadata:
 
@@ -102,7 +102,7 @@ platform-benchmark single-node \
   --output current.json
 ```
 
-A baseline is rejected as incomparable when the benchmark ID/version/profile/concurrency or core runtime environment fingerprint does not match.
+A baseline is rejected as incomparable when its benchmark ID/version/profile, operation count, concurrency, warmup count or core runtime/hardware fingerprint differs. Platform version and commit are intentionally allowed to differ because cross-version comparison is the purpose of a regression baseline.
 
 ## CI tiers
 
