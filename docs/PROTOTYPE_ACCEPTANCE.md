@@ -19,7 +19,11 @@ A failed check makes the command exit non-zero. The terminal summary names the o
 
 ### A — reference
 
-Uses the deterministic single-node reference path and canonical subsystem tests. It proves the authenticated Task/Run/Result path, observable capability execution, exact-action approval boundaries, independent runtime verification, Memory/Knowledge lifecycle behavior and browser canonical-state projection.
+Uses the deterministic single-node reference path and canonical subsystem tests. It proves the authenticated Task/Run/Result path, observable capability execution, exact-action approval boundaries, independent runtime verification and Memory/Knowledge lifecycle behavior.
+
+The reference profile also binds CLI and Web contract evidence to the same `frontend/src/api/__fixtures__/canonical-task.json` snapshot. The Python CLI client must decode that snapshot through `/api/v1/tasks/{id}`, while the frontend parity test must read the same snapshot through the same versioned resource path. Neither client is allowed to invent a private Task representation.
+
+For Memory, the acceptance-specific check performs the complete required sequence: create a user-owned entry with provenance, retrieve/query it, delete it and verify that a subsequent retrieval fails canonically with `NOT_FOUND`.
 
 ### B — local AI
 
@@ -45,9 +49,10 @@ Reconstructs the single-node/reference services against durable state and checks
 | observable capability/tool evidence | reference single-node smoke | #12 / #16 |
 | high-risk action requires exact approval | `test_issue_15_final_boundaries.py` | #15 |
 | verification independently gates concrete completion | `test_issue_86_kernel_gate.py` | #86 |
-| Memory/Knowledge lifecycle including provenance and deletion | `test_issue_251_lifecycle_commands.py` | #251 |
+| Memory create/retrieve/provenance/delete/not-found lifecycle | #252 exact Memory acceptance test | #251 / #252 |
+| Knowledge registration/update/ingest/reindex/removal lifecycle | `test_issue_251_lifecycle_commands.py` | #251 |
 | canonical state survives restart | persistence profile | #39 / #250 / #251 / #86 |
-| Web projection uses canonical state rather than a private model | frontend `canonicalStateParity.test.ts` | #17 / #395 |
+| CLI and Web consume the same canonical Task snapshot/path | shared Task fixture + Python CLI parity + frontend parity | #17 / #395 / #252 |
 | unavailable provider/component fails closed and actionably | degraded profile | #250 / #397 |
 | no paid provider, fixed model product or fixed hardware dependency | local-AI fixture + #250 policy tests | #10 / #250 |
 | no `docker exec`, direct database edit or private backend in the acceptance path | registry contract test + canonical subsystem boundaries | #252 |
