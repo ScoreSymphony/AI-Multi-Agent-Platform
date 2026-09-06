@@ -65,15 +65,16 @@ actually register it.
 
 For a Worker topology:
 
-1. provision each Node reporter's scoped #36 Worker credential outside source control;
+1. provision each Node reporter's scoped #36 Worker credential outside source control with
+   `platform --yes worker provision <reporter_worker_id> --secret-file <worker-token-file>`;
 2. provision the #35 transport HMAC key and/or mTLS material outside source control;
 3. start `platform-message-broker` on the selected loopback/private endpoint;
 4. configure `PLATFORM_MESSAGE_BROKER_HOST` and `PLATFORM_MESSAGE_BROKER_PORT` for
    `platform-distributed-server` and start it with the same `--profile` used by the Workers;
 5. expose the Control Plane Worker-protocol route through HTTPS for a non-loopback Worker;
-6. export the actual Worker credential only in the reporter Worker process environment and run
-   `platform-worker --profile ... --host-ref ... --worker-id ... --control-plane-url ...
-   --broker-host ... --broker-port ...`;
+6. inject the actual Worker credential from the selected secret file only in the reporter Worker
+   process environment and run `platform-worker --profile ... --host-ref ... --worker-id ...
+   --control-plane-url ... --broker-host ... --broker-port ...`;
 7. start sibling Worker processes for the same Node with their own `--worker-id`; only the
    declared reporter performs Node registration/heartbeat;
 8. let authenticated registration attach `TransportWorkerDispatcher`,
@@ -82,8 +83,8 @@ For a Worker topology:
 
 The Worker process starts both `WorkerTransportEndpoint` and
 `WorkerWorkspaceTransportEndpoint`. Canonical Workspace/snapshot/artifact references cross the
-transport; the destination machine reconstructs content beneath its own configured
-`workspace_root`.
+transport; the destination machine reconstructs Workspace/File content beneath its own configured
+host-level `workspace_root` and a private child directory for that Worker identity.
 
 A normal Control Plane Task does not need distributed-specific Task logic. With the advanced
 composition enabled, the existing kernel `LifecycleBackend` seam routes the canonical Run into
@@ -106,13 +107,21 @@ Local Workers use the same #36 Worker identity and #14 registration semantics as
 an unauthenticated local Worker model. The reference local profiles therefore use loopback TCP,
 a reporter and a credential reference rather than an unused in-process transport declaration.
 
+The Node-level `workspace_root` is only a host parent. `platform-worker` derives
+`<workspace_root>/<worker_id>` for every independent process. Sibling Workers therefore cannot
+share, replace or clean up the same materialization tree by accident.
+
 ## Workspace rule
 
 Each Worker host declares one absolute machine-local `workspace_root`. Worker jobs carry only
 workspace, snapshot and artifact references; they never carry the Control Plane's local
 filesystem path. #37 materialization transfers the exact canonical snapshot to a Worker-local
-`<workspace_root>/<workspace_id>/<snapshot_id>` execution tree and collects changed files back as
-canonical file/artifact records.
+`<workspace_root>/<worker_id>/<workspace_id>/<snapshot_id>` execution tree and collects changed
+files back through the canonical File boundary.
+
+`artifact_refs` remain opaque canonical identifiers across Worker transport. Artifact content is
+not inferred from an `artifact_*` ID; content required by an executor must be reachable through the
+canonical Workspace/File materialization boundary rather than a deployment-local artifact store.
 
 When a normal Run already has a canonical `RunWorkspaceBinding`, the distributed lifecycle adapter
 copies only its canonical Workspace ID and exact snapshot ID into the Worker Job. No local path is

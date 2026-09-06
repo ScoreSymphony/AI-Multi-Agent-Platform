@@ -147,17 +147,21 @@ shortcut.
 ## Reporter credential provisioning and rotation
 
 Committed profiles contain only credential references/metadata, never bearer values. The shipped
-distributed Control Plane adds two profile-bound operator commands:
+distributed Control Plane adds two profile-bound operator commands. The CLI deliberately requires
+an explicit local secret file and removes the bearer value from normal rendered output:
 
 ```bash
-platform --yes worker provision <reporter_worker_id>
-platform --yes worker rotate-credential <reporter_worker_id> \
-  --credential-id <credential_id>
+platform --yes worker provision <reporter_worker_id> \
+  --secret-file <worker-token-file>
+platform --yes worker rotate-credential <reporter_id> \
+  --credential-id <credential_id> \
+  --secret-file <worker-token-file>
 ```
 
 Authenticate the normal CLI first with `platform auth login ...`, `platform auth token activate
 --token-stdin`, or a process-local `AI_PLATFORM_TOKEN`. CLI secret state stays outside ordinary
-non-secret profile configuration.
+non-secret profile configuration. The CLI writes the one-time secret to the explicitly selected
+file with restrictive permissions where the operating system supports POSIX-style modes.
 
 Provisioning is restricted to the selected profile's reporter Worker. It:
 
@@ -167,10 +171,11 @@ Provisioning is restricted to the selected profile's reporter Worker. It:
 - further constrains the credential to exactly the profile Node ID and Worker IDs represented by
   that reporter.
 
-The bearer secret is returned once. A repeated provision call does **not** mint another active
-credential and does not recover the old secret; it returns safe active credential IDs instead. If
-the one-time secret was lost, rotate the named credential and inject the replacement secret into
-the reporter process. Rotation revokes the old credential.
+The bearer secret is available only on the one-time provisioning/rotation response and is persisted
+by the CLI only to the requested `--secret-file`. A repeated provision call does **not** mint
+another active credential and does not recover the old secret; it returns safe active credential
+IDs instead. If the one-time secret was lost, rotate the named credential and inject the
+replacement secret into the reporter process. Rotation revokes the old credential.
 
 Never commit Worker tokens, transport HMAC keys or private keys to profile JSON, source control,
 compose files or service-unit arguments.
@@ -208,10 +213,23 @@ Only canonical references cross the Worker job boundary: `workspace_ref`, `snaps
 `artifact_refs` and secret references. A Control-Plane filesystem path never becomes remote
 Workspace identity.
 
+The profile's `workspace_root` is a host-level parent only. The shipped Worker composition derives a
+private root for every process, so the actual materialization path is
+`<workspace_root>/<worker_id>/<workspace_id>/<snapshot_id>`. Two sibling Worker processes can
+therefore materialize the same canonical Workspace/snapshot concurrently without sharing the same
+filesystem tree or deleting each other's cleanup target.
+
 `TransportRemoteWorkspaceMaterializer` streams the exact canonical Workspace snapshot through #35.
 The Worker validates paths/checksums, executes in its machine-local root, and returns a result
-manifest/changed files. Changed files are reconstructed through the canonical `FileProvider` and
-existing artifact references remain references rather than creating a second artifact model.
+manifest/changed files. Changed files are reconstructed through the canonical `FileProvider`.
+
+Artifact references are opaque canonical identities at this boundary. Existing `artifact_refs`
+remain references and are preserved through Worker dispatch/result without creating a second
+Artifact model. Artifact content is not inferred from an `artifact_*` identifier. Content that a
+remote executor must read is materialized through the canonical Workspace/File boundary; a future
+artifact-content adapter, if required by an artifact-producing subsystem, must resolve through the
+existing File/Artifact contracts rather than teaching #240 a second storage model.
+
 Zero-byte input and result files use the same prepare/chunk/commit/result contracts and have an
 explicit regression test.
 
@@ -233,10 +251,11 @@ platform-distributed-server \
   serve
 
 # 3. from an authenticated operator CLI, issue reporter credential once
-platform --yes worker provision worker_00000000-0000-4000-8000-000000000241
+platform --yes worker provision worker_00000000-0000-4000-8000-000000000241 \
+  --secret-file ./worker-reporter.token
 
-# 4. inject the returned one-time secret outside source control
-export PLATFORM_WORKER_TOKEN='<runtime-only-worker-credential>'
+# 4. inject the one-time secret outside source control
+export PLATFORM_WORKER_TOKEN="$(cat ./worker-reporter.token)"
 platform-worker \
   --profile deploy/distributed/profiles/multi-local-workers.json \
   --host-ref device-a \
@@ -256,7 +275,8 @@ platform-worker \
 ```
 
 The sibling still owns its own presence/execution/Workspace endpoints. Its liveness is verified by
-the Control Plane through #35 and is not inferred from the reporter process alone.
+the Control Plane through #35 and is not inferred from the reporter process alone. Both processes
+use the profile's host-level Workspace parent but receive different worker-ID child roots.
 
 ## CPU + accelerator and heterogeneous examples
 
@@ -291,9 +311,10 @@ A physical two-host installation uses the same composition:
 5. configure `PLATFORM_MESSAGE_BROKER_HOST`, `PLATFORM_MESSAGE_BROKER_PORT`, TLS client values and
    optional `PLATFORM_TRANSPORT_AUTH_KEY` for the Control Plane;
 6. start `platform-distributed-server --profile <selected-profile> serve`;
-7. authenticate an operator CLI and provision each profile reporter credential;
-8. transfer only each one-time secret and required CA/client identity to the corresponding Worker
-   host through the operator's runtime secret mechanism.
+7. authenticate an operator CLI and provision each profile reporter credential with an explicit
+   local `--secret-file`;
+8. transfer only each secret file's one-time bearer value and required CA/client identity to the
+   corresponding Worker host through the operator's runtime secret mechanism.
 
 ### Machine B — Worker
 
@@ -340,7 +361,7 @@ when the Control Plane is unavailable.
 
 1. declare canonical IDs and capability/resource metadata in the selected profile;
 2. start/update the profile-aware Control Plane;
-3. provision the declared reporter with `platform --yes worker provision <reporter_id>`;
+3. provision the declared reporter with `platform --yes worker provision <reporter_id> --secret-file <worker-token-file>`;
 4. inject the one-time credential and transport identity outside source control;
 5. start the Worker process(es);
 6. verify with `platform node list`, `platform worker list` and the relevant `show` commands.
@@ -355,11 +376,12 @@ policy permits; machine-local paths/hardware metadata can change without changin
 
 ```bash
 platform --yes worker rotate-credential <reporter_id> \
-  --credential-id <old_credential_id>
+  --credential-id <old_credential_id> \
+  --secret-file <worker-token-file>
 ```
 
-Inject the returned replacement token into the reporter process and restart/reload it as required.
-The old credential is revoked by the rotation operation.
+Inject the replacement token from the selected secret file into the reporter process and
+restart/reload it as required. The old credential is revoked by the rotation operation.
 
 ### Move an optional service
 
@@ -391,6 +413,7 @@ The combined #14/#35/#37/#240 suite covers:
 - drain/maintenance exclusion;
 - network loss, liveness expiry and reconciliation;
 - exact Workspace transfer, artifact-reference preservation, result collection and cleanup;
+- per-Worker Workspace-root isolation for same-host sibling processes;
 - zero-byte Workspace input/result files;
 - optional-service absence/degraded behavior;
 - unchanged #39 single-node regression;
@@ -402,6 +425,10 @@ The combined #14/#35/#37/#240 suite covers:
 - secure end-to-end acceptance through the shipped Worker entrypoint: profile-bound provisioning,
   HTTPS/mTLS registration, separate Worker OS process, mTLS TCP dispatch, and normal canonical
   Task/Run completion.
+
+Artifact reference preservation is deliberately distinct from Artifact-content transport. The
+reference profiles require no second Artifact storage protocol; content needed for remote execution
+is carried through the canonical Workspace/File materialization boundary.
 
 The advanced deployment therefore extends #39 through canonical capability-based Worker contracts
 and replaceable secure networking while leaving the ordinary single-node installation valid and
