@@ -11,7 +11,12 @@ from pathlib import Path
 from typing import Any, Literal, cast
 
 from ai_multi_agent_platform import __version__
-from ai_multi_agent_platform.contracts import ContractError, PlanRequest, PlanResponse, PlanStepProposal
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    PlanRequest,
+    PlanResponse,
+    PlanStepProposal,
+)
 from ai_multi_agent_platform.coordination import (
     CoordinatorClaim,
     DurablePlanStepCoordinator,
@@ -19,7 +24,15 @@ from ai_multi_agent_platform.coordination import (
     SQLiteCoordinatorRepository,
     StepCoordinationProjection,
 )
-from ai_multi_agent_platform.domain import Event, Plan, RunStatus, Step, StepStatus, TaskStatus, new_id
+from ai_multi_agent_platform.domain import (
+    Event,
+    Plan,
+    RunStatus,
+    Step,
+    StepStatus,
+    TaskStatus,
+    new_id,
+)
 from ai_multi_agent_platform.kernel import PlatformKernel, SqliteKernelRepository
 from ai_multi_agent_platform.kernel.models import TaskState
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
@@ -153,9 +166,7 @@ class CoordinationContentionReport:
                     "registration_latency": asdict(self.registration_latency),
                     "outcome_persistence_latency": asdict(self.outcome_persistence_latency),
                     "blocked_observation_latency": asdict(self.blocked_observation_latency),
-                    "completion_observation_latency": asdict(
-                        self.completion_observation_latency
-                    ),
+                    "completion_observation_latency": asdict(self.completion_observation_latency),
                     "resources": asdict(self.resources),
                     "correctness": asdict(self.correctness),
                     "task_ids": self.task_ids,
