@@ -1,5 +1,11 @@
 """Reusable, versioned configuration Templates."""
 
+from ai_multi_agent_platform.control_plane.extensions import ControlPlane
+from ai_multi_agent_platform.models.routing_profile_control_plane import (
+    MODEL_ROUTING_PROFILE_COLLECTION,
+    ModelRoutingProfileResourceService,
+)
+
 from .agent_handlers import (
     AgentTeamTemplateHandler,
     AgentTemplateExporter,
@@ -19,12 +25,18 @@ from .automation_handler import (
     AutomationTemplateHandler,
     register_automation_template_handler,
 )
+from .capability_assignment_control_plane import (
+    register_capability_assignment_template_export_control_plane,
+)
 from .capability_assignment_exporter import CapabilityAssignmentTemplateExporter
 from .capability_assignment_handler import (
     CapabilityAssignmentTemplateHandler,
     register_capability_assignment_template_handler,
 )
-from .control_plane import register_template_control_plane
+from .control_plane import (
+    TemplateEnvironmentResolver,
+    register_template_control_plane as _register_template_control_plane,
+)
 from .environment import PlatformTemplateEnvironmentResolver
 from .model_routing_handler import (
     ModelRoutingPolicyTemplateHandler,
@@ -65,6 +77,7 @@ from .service import (
     validate_template_configuration,
 )
 from .trust import activate_untrusted_revision
+from .workflow_control_plane import register_workflow_template_export_control_plane
 from .workflow_exporter import WorkflowTemplateExporter
 from .workflow_handler import WorkflowTemplateHandler, register_workflow_template_handler
 from .workspace_structure_handler import (
@@ -72,6 +85,66 @@ from .workspace_structure_handler import (
     WorkspaceStructureTemplateHandler,
     register_workspace_structure_template_handler,
 )
+
+
+def register_template_control_plane(
+    control_plane: ControlPlane,
+    application: TemplateApplicationService,
+    *,
+    environment_resolver: TemplateEnvironmentResolver | None = None,
+    agent_exporter: AgentTemplateExporter | None = None,
+    automation_exporter: AutomationTemplateExporter | None = None,
+) -> None:
+    """Register the Template surface plus integrations for composed canonical owner domains.
+
+    Optional create-from-existing commands are derived from the same contextual handlers
+    that own Template application. This keeps the standard deployment from maintaining a
+    second service graph solely for Template export.
+    """
+
+    _register_template_control_plane(
+        control_plane,
+        application,
+        environment_resolver=environment_resolver,
+        agent_exporter=agent_exporter,
+        automation_exporter=automation_exporter,
+    )
+
+    capability_handler = application.handlers.get(TemplateType.CAPABILITY_ASSIGNMENT)
+    if isinstance(capability_handler, CapabilityAssignmentTemplateHandler):
+        register_capability_assignment_template_export_control_plane(
+            control_plane,
+            CapabilityAssignmentTemplateExporter(
+                capability_handler.service,
+                application.templates,
+            ),
+        )
+
+    workflow_handler = application.handlers.get(TemplateType.WORKFLOW_PLAN)
+    if isinstance(workflow_handler, WorkflowTemplateHandler) and workflow_handler.agents is not None:
+        register_workflow_template_export_control_plane(
+            control_plane,
+            application.repository,
+            WorkflowTemplateExporter(
+                workflow_handler.service,
+                workflow_handler.agents,
+                application.templates,
+            ),
+        )
+
+    if (
+        application.handlers.get(TemplateType.MODEL_ROUTING_POLICY) is None
+        and MODEL_ROUTING_PROFILE_COLLECTION in control_plane.registered_collections
+    ):
+        resource_service = control_plane._registered_resource_service(
+            MODEL_ROUTING_PROFILE_COLLECTION
+        )
+        if isinstance(resource_service, ModelRoutingProfileResourceService):
+            register_model_routing_policy_template_handler(
+                application.handlers,
+                resource_service.service,
+            )
+
 
 __all__ = [
     "AgentTeamTemplateExporter",
