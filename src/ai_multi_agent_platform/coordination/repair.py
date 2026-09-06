@@ -92,7 +92,10 @@ class CoordinatorRepairService:
                 if step.status in _TERMINAL_STEPS:
                     raise ContractError(
                         ErrorCode.CONFLICT,
-                        "canonical Step is already terminal; acknowledge canonical terminal instead",
+                        (
+                            "canonical Step is already terminal; "
+                            "acknowledge canonical terminal instead"
+                        ),
                     )
                 if current.latest_run_id is not None:
                     try:
