@@ -7,9 +7,14 @@ import pytest
 
 from ai_multi_agent_platform.capabilities import (
     CapabilityInvocation,
+    CapabilityInvoker,
     CapabilityRegistration,
+    CapabilityRegistry,
     CapabilitySpec,
+    InvocationRecord,
+    InvocationStatus,
     InvocationTrace,
+    NativeEchoProvider,
     bind_canonical_capability_invocation,
     canonical_tool_id,
     canonical_tool_invocation_id,
@@ -17,6 +22,14 @@ from ai_multi_agent_platform.capabilities import (
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import ToolInvocation
 from ai_multi_agent_platform.domain import new_id, validate_id
+
+
+class _RecordingObserver:
+    def __init__(self) -> None:
+        self.records: list[InvocationRecord] = []
+
+    async def record(self, record: InvocationRecord) -> None:
+        self.records.append(record)
 
 
 def _request(*, arguments: dict[str, str] | None = None) -> CapabilityInvocation:
@@ -105,11 +118,40 @@ def test_canonical_tool_identity_is_stable_across_provider_handles() -> None:
     )
 
     assert first.tool_id == second.tool_id == canonical_tool_id("tool.echo", "1.0")
+    assert canonical_tool_id("tool.echo", "2.0") != first.tool_id
     assert first.id == second.id
     validate_id(first.tool_id, "tool")
     validate_id(first.id, "tool_invocation")
     assert {ref.value for ref in first.external_refs} == {"provider-call-a", "native.echo"}
     assert {ref.value for ref in second.external_refs} == {"provider-call-b", "mcp.echo"}
+
+
+def test_canonical_binding_preserves_owner_project_trace_and_external_refs() -> None:
+    request = _request()
+    registration = _registration("provider-a", "native.echo")
+    provider_call = _provider_invocation(
+        request,
+        invocation_id="provider-call-a",
+        tool_ref=registration.provider_tool_ref,
+    )
+
+    bound = asyncio.run(
+        bind_canonical_capability_invocation(
+            request,
+            registration,
+            provider_call,
+        )
+    )
+
+    assert bound.owner_ref.type == "user"
+    assert bound.owner_ref.id == "issue-46-owner"
+    assert bound.project_id == request.context.project_id
+    assert bound.correlation_id == request.context.correlation_id
+    assert bound.causation_id == request.context.causation_id
+    assert {(ref.system, ref.kind, ref.value) for ref in bound.external_refs} == {
+        ("tool_provider", "invocation_id", "provider-call-a"),
+        ("tool_provider", "tool_ref", "native.echo"),
+    }
 
 
 def test_changed_arguments_change_canonical_invocation_identity() -> None:
@@ -133,6 +175,36 @@ def test_changed_arguments_change_canonical_invocation_identity() -> None:
     assert first_id != changed_id
     validate_id(first_id, "tool_invocation")
     validate_id(changed_id, "tool_invocation")
+
+
+def test_invocation_observer_retains_canonical_tool_invocation_identity() -> None:
+    async def scenario() -> None:
+        registry = CapabilityRegistry()
+        await registry.register_provider(NativeEchoProvider())
+        request = _request(arguments={"message": "canonical observer evidence"})
+        observer = _RecordingObserver()
+
+        result = await CapabilityInvoker(
+            registry,
+            canonical_binding_hook=bind_canonical_capability_invocation,
+            observer=observer,
+        ).invoke(request)
+
+        canonical_id = result.canonical_tool_invocation_id
+        assert canonical_id is not None
+        assert canonical_id != request.invocation_id
+        assert validate_id(canonical_id, "tool_invocation") == canonical_id
+        assert result.output == {"message": "canonical observer evidence"}
+        assert [record.status for record in observer.records] == [
+            InvocationStatus.RUNNING,
+            InvocationStatus.SUCCEEDED,
+        ]
+        assert {record.canonical_tool_invocation_id for record in observer.records} == {
+            canonical_id
+        }
+        assert all(record.trace == request.trace for record in observer.records)
+
+    asyncio.run(scenario())
 
 
 def test_canonical_binding_fails_closed_without_owner_context() -> None:
