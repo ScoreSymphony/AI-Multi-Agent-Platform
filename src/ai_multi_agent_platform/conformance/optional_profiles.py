@@ -26,8 +26,7 @@ def _pytest(*nodes: str) -> tuple[str, ...]:
 def _external(profile_id: str) -> tuple[str, ...]:
     return (
         sys.executable,
-        "-m",
-        "ai_multi_agent_platform.conformance.external_profile",
+        "scripts/ci/issue46_external_profile.py",
         profile_id,
     )
 
