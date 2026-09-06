@@ -28,6 +28,7 @@ platform-upgrade = "ai_multi_agent_platform.upgrade.cli:main"
 platform-benchmark = "ai_multi_agent_platform.benchmarking.cli:main"
 platform-provider-fault = "ai_multi_agent_platform.benchmarking.provider_fault_cli:main"
 platform-plan-step = "ai_multi_agent_platform.benchmarking.plan_step_cli:main"
+platform-coordination-pressure = "ai_multi_agent_platform.benchmarking.coordination_pressure_cli:main"
 platform-release = "ai_multi_agent_platform.release.cli:main"
 
 [project.optional-dependencies]
