@@ -241,7 +241,27 @@ class ModelRoutingProfileService:
                 "routing profile is not eligible for Template compensation",
                 details={"profile_id": profile_id},
             )
-        self.repository.delete_profile(profile_id)
+
+        compensate_profile_creation = getattr(
+            self.repository,
+            "compensate_profile_creation",
+            None,
+        )
+        if callable(compensate_profile_creation):
+            compensate_profile_creation(
+                profile_id,
+                expected_current_revision=1,
+            )
+            return
+
+        delete_profile = getattr(self.repository, "delete_profile", None)
+        if not callable(delete_profile):
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "routing profile repository exposes no supported compensation primitive",
+                details={"profile_id": profile_id},
+            )
+        delete_profile(profile_id)
 
     @staticmethod
     def _require_project_scope(project_id: str | None, context: OperationContext) -> None:
