@@ -73,9 +73,7 @@ def test_enabling_supported_optional_claim_makes_it_required_and_executable() ->
         "test_restart_promotion_reconciles_running_work_and_preserves_worker_identity"
         in " ".join(scenarios["X"].command or ())
     )
-    assert "test_sqlite_partial_fan_in_survives_restart" in " ".join(
-        scenarios["Y"].command or ()
-    )
+    assert "test_sqlite_partial_fan_in_survives_restart" in " ".join(scenarios["Y"].command or ())
     assert (
         "test_lost_worker_acknowledgement_delegates_to_kernel_without_blind_redispatch"
         in " ".join(scenarios["Y"].command or ())
