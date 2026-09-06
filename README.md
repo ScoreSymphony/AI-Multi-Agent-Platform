@@ -45,21 +45,24 @@ The policy is exercised against multiple integration models in [`docs/UPSTREAM_P
 
 ## Status
 
-> Status snapshot: 2026-09-06
+> Status snapshot: 2026-09-06, after PR #493
 
-The project is well beyond its initial architecture baseline. The usable single-node prototype acceptance gate (#252) is complete, and the main branch now includes the canonical kernel and Control Plane, reference execution, model routing, capabilities/tools, Agents and Agent Teams, authentication and authorization/approvals, Workspaces/files, Memory and Knowledge, Search, Automations, Notifications, Organizations/Teams/Memberships, Chat, Browser and Terminal entry points, reusable workflow definitions, Verification/Review, accounting foundations, HA/failover support, portable import/export, repository integration and extensive Web/CLI coverage.
+The project is now in late integration, hardening and acceptance work rather than foundational platform construction. The usable single-node prototype acceptance gate (#252) is complete, and `main` contains the canonical kernel and Control Plane, reference execution, model routing, capabilities/tools, Agents and Agent Teams, authentication and authorization/approvals, Workspaces/files, Memory and Knowledge, Search, Automations, Notifications, Organizations/Teams/Memberships, Chat, Browser and Terminal entry points, reusable workflow definitions, Verification/Review, accounting, durable Connector state, portable import/export, Repository/Git integration, optional HA/failover support, extensive Web/CLI coverage and concrete distributed Workspace/Worker paths.
 
-Several domains remain intentionally open because post-merge audits extracted concrete hardening or integration work rather than treating the first implementation as final. In particular, Templates (#78) and accounting integration (#171) have substantial shipped implementations but still have explicit remaining acceptance work.
+The latest hardening wave also completed the routing-profile follow-ups #443–#447, Node/Worker timestamp semantics (#414), durable Connector persistence (#416) and the remaining accounting integration work (#171). Significant implementation has landed for durable task-bound Plan/Step coordination (#384), distributed deployment (#240), Templates (#78), the optional Registry (#81), performance/load evidence (#440), release/update mechanics (#42) and platform conformance (#46), but those issues remain open until their remaining acceptance or operationalization work is finished.
 
-There are currently 17 open issues. The highest-leverage implementation frontier is:
+There are currently **9 open issues out of 98 repository issues** (89 closed; about 90.8% closed by issue count), and **no open pull requests**:
 
-- **Durable task-bound workflows:** #384, followed by #421 client workflow progress and #439 autonomous planning/replanning.
-- **Distributed deployment:** #240, with the advanced deployment PR #386 still open; the concrete remote Workspace materialization prerequisite #433 is already merged. #414 owns the remaining canonical Node/Worker state-change timestamp semantics.
-- **Persistence/integration completion:** #416 durable Connector persistence and the remaining #171 accounting integration gaps.
-- **Template completion:** #78 remaining rollback, workflow-template and create-from-existing integration work.
-- **Model-routing hardening:** #443–#447 cover authorized management, chronology, cross-consumer assignment, provenance/schema consistency and compensation-reference safety after the completed routing-profile core.
-- **Quality and release:** #440 performance/load/scalability evidence, #42 release/upstream synchronization and #46 final end-to-end platform conformance.
-- **Optional ecosystem:** #81 Registry/Marketplace remains optional and must not become a baseline dependency.
+`#42, #46, #78, #81, #240, #384, #421, #439, #440`
+
+The current implementation frontier is:
+
+- **Completion/audit:** #78 Templates, #81 optional Registry and #384 durable Plan/Step coordination have major merged implementations and now need their remaining Definition-of-Done/acceptance reconciliation.
+- **Distributed deployment:** #240 has the real distributed integration path merged; remaining work is focused on deployment hardening and final acceptance rather than inventing new canonical Worker/Workspace contracts.
+- **Workflow product layer:** #421 Web/CLI workflow-progress surfaces and #439 autonomous goal decomposition/planning/replanning are the main newly unlocked product/runtime capabilities downstream of #384.
+- **Performance:** #440 already has deterministic single-node, concurrency, history/restart, endurance/stress and transport-fault profiles; workflow/distributed/further fault-under-load evidence remains.
+- **Release/update:** #42 has the release/provenance/compatibility foundation and hardening merged; deterministic manifest generation and persistent operator-facing update discovery remain among the operationalization gaps.
+- **Final convergence:** #46 already has a release-profile conformance framework and substantial canonical scenario evidence, but remains the final platform-wide acceptance gate and must consume the finished production paths rather than substitute test-only shortcuts.
 
 No GitHub release has been published yet. The prototype gate required for the planned `0.1.0` release has passed, while the full operational `1.0.0` target remains tied to #46 and the release process in [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
 
