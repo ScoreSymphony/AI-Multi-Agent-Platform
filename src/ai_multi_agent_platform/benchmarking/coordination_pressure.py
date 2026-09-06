@@ -388,9 +388,7 @@ class CoordinationPressureHarness:
             transition_latency=LatencyDistribution.from_seconds(transition_samples),
             resume_or_reconcile_latency=LatencyDistribution.from_seconds(resume_samples),
             outcome_persistence_latency=LatencyDistribution.from_seconds(outcome_samples),
-            coordination_observation_latency=LatencyDistribution.from_seconds(
-                observation_samples
-            ),
+            coordination_observation_latency=LatencyDistribution.from_seconds(observation_samples),
             resources=ResourceMetrics(
                 process_cpu_seconds=round(process_cpu_seconds, 6),
                 traced_memory_current_bytes=traced_current,
@@ -720,8 +718,7 @@ def _materialize_plan(
     if len(planned.step_ids) != len(proposals):
         raise RuntimeError("canonical planning Step count differs from deterministic proposal")
     ids_by_key = {
-        proposal.key: step_id
-        for proposal, step_id in zip(proposals, planned.step_ids, strict=True)
+        proposal.key: step_id for proposal, step_id in zip(proposals, planned.step_ids, strict=True)
     }
     plan = Plan(
         id=planned.plan_ref,
