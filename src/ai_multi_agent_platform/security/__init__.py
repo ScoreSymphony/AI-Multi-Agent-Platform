@@ -57,14 +57,6 @@ from .data_enforcement_lifecycle import (
     AuthorizedDataKnowledgeProvider,
     AuthorizedDataMemoryProvider,
 )
-from .enforced_providers import (
-    AuthorizedFileProvider,
-    AuthorizedKnowledgeProvider,
-    AuthorizedLifecycleBackend,
-    AuthorizedMemoryProvider,
-    AuthorizedSecretProvider,
-    AuthorizedToolProvider,
-)
 from .enforcement import AuthorizationAuditSink, AuthorizationGate
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
@@ -98,6 +90,14 @@ from .types import (
     SecurityAuditEvent,
     SecurityContext,
     SecurityDecision,
+)
+from .enforced_providers import (
+    AuthorizedFileProvider,
+    AuthorizedKnowledgeProvider,
+    AuthorizedLifecycleBackend,
+    AuthorizedMemoryProvider,
+    AuthorizedSecretProvider,
+    AuthorizedToolProvider,
 )
 from .validation import UntrustedInputError, validate_untrusted_json
 
