@@ -7,14 +7,17 @@ scheduler/ownership authority.
 
 from __future__ import annotations
 
+import asyncio
+from dataclasses import replace
 from datetime import datetime
 
 from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
-from ai_multi_agent_platform.distributed import DistributedRuntime
-from ai_multi_agent_platform.distributed.models import RegistrationRequest
+from ai_multi_agent_platform.distributed import DistributedRuntime, WorkerStatus
+from ai_multi_agent_platform.distributed.models import RegistrationRequest, WorkerRecord
 from ai_multi_agent_platform.distributed.transport import TransportWorkerDispatcher
 from ai_multi_agent_platform.distributed.worker_protocol import (
+    WorkerHeartbeatRequest,
     WorkerProtocolReceipt,
     WorkerProtocolService,
     WorkerRequestAuthenticator,
@@ -36,15 +39,18 @@ from ai_multi_agent_platform.distributed.workspace_transport import (
 from ai_multi_agent_platform.messaging import MessageTransport
 from ai_multi_agent_platform.workspaces import Workspace, WorkspaceProvider
 
+from .worker_presence import TransportWorkerPresenceProbe
+
 WorkspaceContextResolver = WorkspaceDataContextResolver
 
 
 class DeploymentWorkerProtocolService(WorkerProtocolService):
     """Attach authenticated registered Workers to the canonical distributed runtime.
 
-    Registration remains owned by ``WorkerProtocolService``.  This subclass adds only the
-    deployment consequence: once canonical Worker records exist, each one receives the standard
-    transport dispatcher wrapped by the standard remote Workspace materializer.
+    Registration remains owned by ``WorkerProtocolService``. This subclass adds deployment
+    consequences only: each canonical Worker receives the standard transport dispatcher and the
+    reported Worker status is bounded by real #35 endpoint reachability. A live Node reporter can
+    therefore no longer keep a dead sibling Worker schedulable by repeating a static profile.
     """
 
     def __init__(
@@ -58,6 +64,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         files: FileProvider,
         context_resolver: WorkspaceContextResolver,
         initial_trust_level: str = "untrusted",
+        presence_timeout_seconds: float = 1.0,
     ) -> None:
         super().__init__(
             runtime,
@@ -70,6 +77,10 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         self._files = files
         self._context_resolver = context_resolver
         self._attached: set[str] = set()
+        self._presence = TransportWorkerPresenceProbe(
+            transport,
+            timeout_seconds=presence_timeout_seconds,
+        )
 
     async def register(
         self,
@@ -78,10 +89,29 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         *,
         now: datetime | None = None,
     ) -> WorkerProtocolReceipt:
-        receipt = await super().register(request, credentials, now=now)
+        presence_workers = await self._presence_workers(request.workers)
+        receipt = await super().register(
+            replace(request, workers=presence_workers),
+            credentials,
+            now=now,
+        )
         for worker_id in receipt.worker_ids:
             self._attach(worker_id)
         return receipt
+
+    async def heartbeat(
+        self,
+        request: WorkerHeartbeatRequest,
+        credentials: WorkerRequestCredentials,
+        *,
+        now: datetime | None = None,
+    ) -> WorkerProtocolReceipt:
+        presence_workers = await self._presence_workers(request.heartbeat.workers)
+        safe_request = replace(
+            request,
+            heartbeat=replace(request.heartbeat, workers=presence_workers),
+        )
+        return await super().heartbeat(safe_request, credentials, now=now)
 
     async def deregister_worker(
         self,
@@ -98,6 +128,18 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             now=now,
         )
         self._attached.discard(worker_id)
+
+    async def _presence_workers(
+        self,
+        workers: tuple[WorkerRecord, ...],
+    ) -> tuple[WorkerRecord, ...]:
+        reachable = await asyncio.gather(
+            *(self._presence.reachable(worker.worker_id) for worker in workers)
+        )
+        return tuple(
+            worker if is_reachable else replace(worker, status=WorkerStatus.OFFLINE)
+            for worker, is_reachable in zip(workers, reachable, strict=True)
+        )
 
     def _attach(self, worker_id: str) -> None:
         if worker_id in self._attached:
