@@ -177,11 +177,17 @@ class DistributedRegistry:
                 f"{request.protocol_version!r} != {WORKER_PROTOCOL_VERSION!r}"
             )
         self._assert_worker_protocol_versions(request.workers)
+        existing_node = self._nodes.get(request.node.node_id)
+        node_updated_at = (
+            timestamp
+            if existing_node is None
+            else _state_timestamp(existing_node.updated_at, timestamp)
+        )
         node = replace(
             request.node,
             registered_at=timestamp,
             last_heartbeat_at=timestamp,
-            updated_at=timestamp,
+            updated_at=node_updated_at,
             status=NodeStatus.MAINTENANCE if request.node.maintenance else NodeStatus.ONLINE,
             worker_refs=tuple(sorted(worker.worker_id for worker in request.workers)),
         )
@@ -205,11 +211,17 @@ class DistributedRegistry:
                 updated_at=_state_timestamp(stale.updated_at, timestamp),
             )
         for worker in request.workers:
+            existing_worker = self._workers.get(worker.worker_id)
+            worker_updated_at = (
+                timestamp
+                if existing_worker is None
+                else _state_timestamp(existing_worker.updated_at, timestamp)
+            )
             self._workers[worker.worker_id] = replace(
                 worker,
                 registered_at=timestamp,
                 last_heartbeat_at=timestamp,
-                updated_at=timestamp,
+                updated_at=worker_updated_at,
             )
         return node
 

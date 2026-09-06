@@ -16,11 +16,13 @@ Conversely, advancing a generic modification timestamp for every otherwise uncha
 
 `last_heartbeat_at` means only the latest accepted liveness report. `updated_at` means the latest canonical caller-visible state change. A pure heartbeat refresh advances `last_heartbeat_at` only. A heartbeat that changes canonical health, resources, capacity or Worker metadata advances both timestamps. Registration and re-registration establish a new state timestamp. Administrative drain/maintenance changes and liveness-expiry transitions advance `updated_at` without fabricating a heartbeat. No-op administrative mutations do not advance it.
 
-State timestamps advance monotonically within the registry with `max(previous_updated_at, event_time)`, so delayed or regressed event clocks cannot move modification history backwards. All canonical runtime timestamps must be timezone-aware.
+State timestamps advance monotonically within the registry with `max(previous_updated_at, event_time)`, including re-registration, so delayed or regressed event clocks cannot move modification history backwards. Registration still establishes fresh `registered_at` and liveness evidence at the accepted registration time; only canonical state-change history is protected from regression. All canonical runtime timestamps must be timezone-aware.
 
 Worker heartbeat payload timestamps are not trusted as Control-Plane modification truth. Existing Worker `registered_at` and canonical `updated_at` are preserved unless the accepted heartbeat actually changes canonical Worker state; a Worker first introduced through the generic registry heartbeat path receives the accepted heartbeat observation time.
 
 On Control-Plane restart, persisted health is normalized to offline because persisted health is not fresh liveness evidence. When that normalization changes visible state, restore time advances `updated_at` while preserving `last_heartbeat_at`. Already-offline restored records retain their prior `updated_at`.
+
+Deregistration removes the deregistered resource from canonical runtime state, so that removed Node or Worker no longer has an externally visible `updated_at`. Deregistering a Worker also changes its surviving parent Node's canonical `worker_refs`; that parent Node therefore advances `updated_at` monotonically without changing `last_heartbeat_at`. Deregistering a Node removes the Node and its owned Workers rather than fabricating terminal timestamps for resources that no longer exist.
 
 Distributed-state schema v3 persists the new field. The reference decoder remains compatible with v1/v2 snapshots by deriving missing `updated_at` as the later of `registered_at` and `last_heartbeat_at` before conservative restart normalization.
 

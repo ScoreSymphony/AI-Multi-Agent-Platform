@@ -72,9 +72,9 @@ def test_optional_disabled_scenario_does_not_break_reference_compatibility(tmp_p
 
 def test_required_unimplemented_scenario_blocks_compatibility_claim(tmp_path: Path) -> None:
     scenario = ConformanceScenario(
-        scenario_id="G",
-        owner="#46 failure/retry",
-        criterion="failure/retry acceptance path exists",
+        scenario_id="future-required",
+        owner="#46 future required scenario",
+        criterion="required acceptance path exists",
         command=None,
         required=True,
         unavailable_status=ConformanceStatus.NOT_IMPLEMENTED,
@@ -92,7 +92,7 @@ def test_required_unimplemented_scenario_blocks_compatibility_claim(tmp_path: Pa
     assert report.scenarios[0].failure_category == ConformanceStatus.NOT_IMPLEMENTED.value
 
 
-def test_release_profile_cannot_pass_while_required_paths_are_pending() -> None:
+def test_release_profile_has_no_required_placeholders() -> None:
     scenarios = profile_scenarios(ConformanceProfile.RELEASE)
     pending_required = {
         scenario.scenario_id
@@ -100,7 +100,40 @@ def test_release_profile_cannot_pass_while_required_paths_are_pending() -> None:
         if scenario.required and scenario.command is None
     }
 
-    assert {"G", "I", "K", "L", "M", "O", "P", "W"} <= pending_required
+    assert pending_required == set()
+
+
+def test_operational_release_paths_are_bound_to_owning_acceptance_evidence() -> None:
+    scenarios = {
+        scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.RELEASE)
+    }
+    expected_evidence = {
+        "G": "test_controlled_failure_retry_preserves_canonical_history_and_retry_telemetry",
+        "I": "test_one_time_schedule_creates_canonical_task_with_provenance",
+        "K": "test_message_to_task_handoff_is_canonical_and_bidirectionally_linked",
+        "L": "test_terminal_http_resource_and_command_use_standard_composition_and_",
+        "M": "test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file",
+        "O": "test_task_run_executor_accounting_is_idempotent_and_aggregated",
+        "P": "test_standard_catalog_lifecycle_uses_real_control_plane_http_command_path",
+        "W": "test_dependency_satisfaction_cycle_cross_project_and_blocked_reason",
+    }
+
+    for scenario_id, marker in expected_evidence.items():
+        scenario = scenarios[scenario_id]
+        assert scenario.required is True
+        assert scenario.command is not None
+        assert marker in " ".join(scenario.command)
+
+    browser_command = " ".join(scenarios["M"].command or ())
+    assert "test_download_enters_canonical_file_and_artifact_path_with_redacted_provenance" in (
+        browser_command
+    )
+    task_management_command = " ".join(scenarios["W"].command or ())
+    assert "test_priority_deadline_not_before_and_query_projection" in task_management_command
+    assert (
+        "test_responsibility_reassignment_and_agent_assignment_are_permission_neutral"
+        in task_management_command
+    )
 
 
 def test_optional_profiles_are_explicit_in_integration_registry() -> None:
