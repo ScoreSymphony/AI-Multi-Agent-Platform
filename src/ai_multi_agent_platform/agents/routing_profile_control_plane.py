@@ -12,6 +12,10 @@ from ai_multi_agent_platform.models import (
     ModelRoutingProfileAssignmentGate,
     ModelRoutingProfileRef,
 )
+from ai_multi_agent_platform.models.routing_profile_control_plane import (
+    register_model_routing_profile_control_plane,
+)
+from ai_multi_agent_platform.models.routing_profile_service import ModelRoutingProfileService
 
 from .control_plane import (
     AGENT_COLLECTION,
@@ -154,8 +158,15 @@ def register_routing_profile_aware_agent_control_plane(
     orchestrator_mappers: Mapping[str, AgentOrchestratorMapper] | None = None,
     execution_environment_resolver: AgentExecutionEnvironmentResolver | None = None,
 ) -> None:
-    """Register #33 resources with #309 assignment authorization at mutation boundaries."""
+    """Register #309 management plus #33 assignment-aware Agent boundaries."""
 
+    register_model_routing_profile_control_plane(
+        control_plane,
+        ModelRoutingProfileService(
+            assignment_gate.repository,
+            authorization=assignment_gate.authorization,
+        ),
+    )
     control_plane.register_resource_service(AGENT_COLLECTION, AgentResourceService(service))
     control_plane.register_resource_service(
         AGENT_TEAM_COLLECTION,
