@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
 
@@ -18,14 +19,27 @@ from .model_routing_profile_codecs import (
 from .models import PortableResource
 from .registry import ImportContext
 
+RoutingProfileDependencyAudit = Callable[[str], tuple[str, ...] | None]
+
 
 class ModelRoutingProfileImportMutationHandler:
-    """Restore one complete routing-profile history through its canonical repository."""
+    """Restore one complete routing-profile history through its canonical repository.
+
+    Profile deletion is transaction compensation only. Compensation is fail-closed and
+    requires a cross-domain dependency audit that can prove no canonical resource still
+    references the imported profile.
+    """
 
     resource_type = MODEL_ROUTING_PROFILE_RESOURCE_TYPE
 
-    def __init__(self, repository: ModelRoutingProfileRepository) -> None:
+    def __init__(
+        self,
+        repository: ModelRoutingProfileRepository,
+        *,
+        dependency_audit: RoutingProfileDependencyAudit | None = None,
+    ) -> None:
         self._repository = repository
+        self._dependency_audit = dependency_audit
 
     async def preflight(
         self,
@@ -63,7 +77,7 @@ class ModelRoutingProfileImportMutationHandler:
         except Exception:
             if created:
                 try:
-                    self._repository.delete_profile(snapshot.definition.profile_id)
+                    self._compensate(snapshot.definition.profile_id)
                 except Exception as rollback_error:
                     raise ContractError(
                         ErrorCode.BACKEND_ERROR,
@@ -85,7 +99,28 @@ class ModelRoutingProfileImportMutationHandler:
                 ErrorCode.CONTRACT_VIOLATION,
                 "routing profile rollback token must be the imported profile ID",
             )
-        self._repository.delete_profile(token)
+        self._compensate(token)
+
+    def _compensate(self, profile_id: str) -> None:
+        dependencies = (
+            None if self._dependency_audit is None else self._dependency_audit(profile_id)
+        )
+        if dependencies is None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "routing profile compensation requires a complete cross-domain reference audit",
+                details={"profile_id": profile_id},
+            )
+        if dependencies:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "routing profile cannot be compensated while canonical resources reference it",
+                details={
+                    "profile_id": profile_id,
+                    "dependencies": list(dependencies),
+                },
+            )
+        self._repository.delete_profile(profile_id)
 
 
 def _definition_at(
@@ -130,4 +165,7 @@ def _require_missing_profile(
     )
 
 
-__all__ = ["ModelRoutingProfileImportMutationHandler"]
+__all__ = [
+    "ModelRoutingProfileImportMutationHandler",
+    "RoutingProfileDependencyAudit",
+]
