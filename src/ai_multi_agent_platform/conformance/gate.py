@@ -187,6 +187,18 @@ def _fast_scenarios() -> tuple[ConformanceScenario, ...]:
             _pytest("tests/test_issue_12_reopen.py"),
         ),
         ConformanceScenario(
+            "D-vertical",
+            "#46/#10/#12 local model + capability",
+            (
+                "one authenticated AgentRun crosses a real loopback local-model HTTP boundary "
+                "and executes its pinned native capability through CapabilityInvoker"
+            ),
+            _pytest(
+                "tests/test_issue_46_local_model_native_capability_e2e.py::"
+                "test_authenticated_local_model_executes_native_capability_end_to_end"
+            ),
+        ),
+        ConformanceScenario(
             "F",
             "#15 authorization/approval",
             "approval is exact-action bound and changed-payload reuse is rejected",
