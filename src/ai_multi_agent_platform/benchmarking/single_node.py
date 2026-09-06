@@ -189,7 +189,9 @@ class SingleNodeBenchmarkHarness:
                 headers={**headers, "idempotency-key": f"{operation_key}:create"},
                 body={
                     "title": "Deterministic benchmark task",
-                    "objective": "Measure canonical platform overhead without external model latency",
+                    "objective": (
+                        "Measure canonical platform overhead without external model latency"
+                    ),
                     "owner_type": "user",
                     "owner_id": owner_id,
                     "project_id": project_id,
