@@ -8,6 +8,7 @@ from ai_multi_agent_platform.contracts.authorization import AuthorizationRequest
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.security import ActorType, AuthorizationAction, ResourceType
+from ai_multi_agent_platform.security.control_plane_bridge import canonical_control_plane_vocabulary
 
 PASSWORD = "correct horse battery staple"
 
@@ -20,6 +21,25 @@ def _headers(token: str, *, key: str | None = None) -> dict[str, str]:
     if key is not None:
         headers["idempotency-key"] = key
     return headers
+
+
+def test_routing_profile_control_plane_aliases_map_to_exact_authorization_vocabulary() -> None:
+    assert canonical_control_plane_vocabulary("model-routing-profile.create") == (
+        AuthorizationAction.MODEL_ROUTING_PROFILE_CREATE,
+        ResourceType.MODEL_ROUTING_PROFILE,
+    )
+    assert canonical_control_plane_vocabulary("model-routing-profile.version") == (
+        AuthorizationAction.MODEL_ROUTING_PROFILE_VERSION,
+        ResourceType.MODEL_ROUTING_PROFILE,
+    )
+    assert canonical_control_plane_vocabulary("model-routing-profile:read") == (
+        AuthorizationAction.MODEL_ROUTING_PROFILE_READ,
+        ResourceType.MODEL_ROUTING_PROFILE,
+    )
+    assert canonical_control_plane_vocabulary("model-routing-profile:assign") == (
+        AuthorizationAction.MODEL_ROUTING_PROFILE_ASSIGN,
+        ResourceType.MODEL_ROUTING_PROFILE,
+    )
 
 
 def test_single_node_routes_profile_management_through_real_authorization(tmp_path: Path) -> None:
@@ -40,16 +60,16 @@ def test_single_node_routes_profile_management_through_real_authorization(tmp_pa
 
         assert "model-routing-profiles" in deployment.control_plane.registered_collections
         assert {
-            "model-routing-profile:create",
-            "model-routing-profile:version",
-            "model-routing-profile:enable",
-            "model-routing-profile:disable",
+            "model-routing-profile.create",
+            "model-routing-profile.version",
+            "model-routing-profile.enable",
+            "model-routing-profile.disable",
         }.issubset(deployment.control_plane.registered_commands)
 
         created = await deployment.http.handle(
             HTTPRequest(
                 method="POST",
-                path="/api/v1/commands/model-routing-profile:create",
+                path="/api/v1/commands/model-routing-profile.create",
                 headers=_headers(token.secret, key="issue-443-create"),
                 body={
                     "resource_ref": "model-routing-profiles",
@@ -101,7 +121,7 @@ def test_single_node_routes_profile_management_through_real_authorization(tmp_pa
         versioned = await deployment.http.handle(
             HTTPRequest(
                 method="POST",
-                path="/api/v1/commands/model-routing-profile:version",
+                path="/api/v1/commands/model-routing-profile.version",
                 headers=_headers(token.secret, key="issue-443-version"),
                 body={
                     "resource_ref": profile_id,
@@ -141,7 +161,7 @@ def test_single_node_routes_profile_management_through_real_authorization(tmp_pa
         disabled = await deployment.http.handle(
             HTTPRequest(
                 method="POST",
-                path="/api/v1/commands/model-routing-profile:disable",
+                path="/api/v1/commands/model-routing-profile.disable",
                 headers=_headers(token.secret, key="issue-443-disable"),
                 body={"resource_ref": profile_id},
             )
@@ -153,7 +173,7 @@ def test_single_node_routes_profile_management_through_real_authorization(tmp_pa
         enabled = await deployment.http.handle(
             HTTPRequest(
                 method="POST",
-                path="/api/v1/commands/model-routing-profile:enable",
+                path="/api/v1/commands/model-routing-profile.enable",
                 headers=_headers(token.secret, key="issue-443-enable"),
                 body={"resource_ref": profile_id},
             )
