@@ -10,9 +10,12 @@ from ai_multi_agent_platform.accounting import AccountingService
 from ai_multi_agent_platform.agents import (
     AgentRuntime,
     AgentService,
+    DurableRoutingProfileAgentRuntime,
     JsonAgentRepository,
-    register_agent_control_plane,
     register_standard_agent_control_plane,
+)
+from ai_multi_agent_platform.agents.routing_profile_control_plane import (
+    register_routing_profile_aware_agent_control_plane,
 )
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.capability_assignments import (
@@ -31,8 +34,8 @@ from ai_multi_agent_platform.control_plane.approval_portability_composition impo
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
     ConversationService,
+    DurableRoutingProfileConversationResponseProvider,
     JsonConversationRepository,
-    ModelRuntimeConversationResponseProvider,
 )
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
@@ -51,7 +54,15 @@ from ai_multi_agent_platform.kernel import (
     PlatformKernel,
     SqliteKernelRepository,
 )
-from ai_multi_agent_platform.models import JsonModelRegistryStore, ModelRegistry, ModelRuntime
+from ai_multi_agent_platform.models import (
+    JsonModelRegistryStore,
+    JsonModelRoutingProfileRepository,
+    ModelRegistry,
+    ModelRoutingProfileAssignmentGate,
+    ModelRoutingProfileRef,
+    ModelRoutingProfileService,
+    ModelRuntime,
+)
 from ai_multi_agent_platform.observability import (
     AggregatedHealthProvider,
     InMemoryExporter,
@@ -190,6 +201,8 @@ class SingleNodeDeployment:
     capabilities: CapabilityRegistry
     capability_assignments: CapabilityAssignmentService
     models: ModelRegistry
+    routing_profile_repository: JsonModelRoutingProfileRepository
+    routing_profiles: ModelRoutingProfileService
     model_runtime: ModelRuntime
     onboarding: OnboardingService
     first_task: FirstRunTaskService
@@ -353,8 +366,12 @@ def build_single_node_deployment(
     )
     capabilities = CapabilityRegistry()
     models = ModelRegistry()
-    agent_runtime = AgentRuntime(
+    routing_profile_repository = JsonModelRoutingProfileRepository(
+        database_dir / "model-routing-profiles.json"
+    )
+    agent_runtime = DurableRoutingProfileAgentRuntime(
         agents,
+        routing_profile_repository=routing_profile_repository,
         model_registry=models,
         capability_registry=capabilities,
     )
@@ -370,10 +387,10 @@ def build_single_node_deployment(
     )
     onboarding.restore()
     model_runtime = ModelRuntime(models)
-    conversation_response_provider = ModelRuntimeConversationResponseProvider(
+    conversation_response_provider = DurableRoutingProfileConversationResponseProvider(
         model_runtime,
         agents,
-        routing_profiles=agent_runtime.routing_profiles,
+        routing_profile_repository=routing_profile_repository,
     )
 
     effective_observability_exporter = observability_exporter or InMemoryExporter()
@@ -381,6 +398,14 @@ def build_single_node_deployment(
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
+    routing_profiles = ModelRoutingProfileService(
+        routing_profile_repository,
+        authorization=authorization,
+    )
+    routing_profile_assignment_gate = ModelRoutingProfileAssignmentGate(
+        routing_profile_repository,
+        authorization=authorization,
+    )
     if not authorization.has_policy(_EVALUATION_PRINCIPAL):
         authorization.register(
             LocalPrincipalPolicy(
@@ -560,6 +585,7 @@ def build_single_node_deployment(
         platform_version=__version__,
         capabilities=capabilities,
         templates=templates.repository,
+        routing_profiles=routing_profile_repository,
         evaluation=evaluation_composition.service,
         evaluation_fixture_exists=evaluation_composition.fixture_exists,
     )
@@ -605,7 +631,12 @@ def build_single_node_deployment(
         control_plane.register_resource_service(collection, service)
     for command, handler in evaluation_command_handlers(evaluation_composition.service).items():
         control_plane.register_command(command, handler)
-    register_agent_control_plane(control_plane, agents, runtime=agent_runtime)
+    register_routing_profile_aware_agent_control_plane(
+        control_plane,
+        agents,
+        routing_profile_assignment_gate,
+        runtime=agent_runtime,
+    )
     register_standard_agent_control_plane(control_plane, agents)
     register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
     register_automation_template_handler(template_handlers, control_plane.automation_service)
@@ -626,6 +657,11 @@ def build_single_node_deployment(
         capability_versions=lambda: (
             (capability.capability_id, capability.version)
             for capability in capabilities.inventory_capabilities(include_unavailable=False)
+        ),
+        model_policies=lambda: (
+            ModelRoutingProfileRef(definition.profile_id, definition.current_revision).canonical_ref
+            for definition in routing_profile_repository.list_definitions()
+            if definition.enabled
         ),
         grantable_permissions=lambda context: (
             action.value
@@ -702,6 +738,8 @@ def build_single_node_deployment(
         capabilities=capabilities,
         capability_assignments=capability_assignments,
         models=models,
+        routing_profile_repository=routing_profile_repository,
+        routing_profiles=routing_profiles,
         model_runtime=model_runtime,
         onboarding=onboarding,
         first_task=first_task,
