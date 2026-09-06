@@ -184,7 +184,7 @@ class ModelRoutingProfileService:
         definitions = tuple(
             item
             for item in self.repository.list_definitions()
-            if item.project_id == context.project_id
+            if item.project_id is None or item.project_id == context.project_id
         )
         visible: list[ModelRoutingProfileDefinition] = []
         for definition in definitions:
