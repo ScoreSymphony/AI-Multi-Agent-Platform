@@ -10,7 +10,7 @@
 
 Optional ecosystem and advanced-deployment capabilities do not redefine the ordinary local/self-hosted baseline unless a release explicitly claims support for the corresponding profile.
 
-The detailed release-manifest, provenance/SBOM, compatibility-state, upstream-update and fail-closed gate rules are defined in [`RELEASE_AND_UPSTREAM_POLICY.md`](RELEASE_AND_UPSTREAM_POLICY.md). Security-sensitive releases additionally follow [`SECURITY_HOTFIX_RELEASE_RUNBOOK.md`](SECURITY_HOTFIX_RELEASE_RUNBOOK.md). These documents extend this publication process; they do not create a separate versioning authority.
+The detailed release-manifest, dependency/provenance/SBOM, compatibility-state, upstream-update and fail-closed gate rules are defined in [`RELEASE_AND_UPSTREAM_POLICY.md`](RELEASE_AND_UPSTREAM_POLICY.md). Security-sensitive releases additionally follow [`SECURITY_HOTFIX_RELEASE_RUNBOOK.md`](SECURITY_HOTFIX_RELEASE_RUNBOOK.md). These documents extend this publication process; they do not create a separate versioning authority.
 
 ## Current status
 
@@ -31,23 +31,26 @@ The `1.0.0` operational target remains gated by #46 full platform conformance. C
 - [ ] Backup, restore and rollback procedures were exercised where affected.
 - [ ] Supported installation and upgrade paths were tested from documented instructions.
 - [ ] Upstream revisions, licenses, notices and provenance records are current.
+- [ ] Exact dependency lockfiles or resolved dependency sets are frozen and cryptographically bound to the release manifest.
 - [ ] Security findings were triaged and no known release-blocking issue remains.
 - [ ] `CHANGELOG.md` contains user-visible changes, known limitations and security notes.
 - [ ] Package, container and other published artifacts use the same version and source revision.
 - [ ] The compatibility/acceptance report names the exact enabled optional profiles rather than implying untested support.
-- [ ] A release manifest with concrete evidence passes `platform-release validate`.
+- [ ] The compatibility matrix records the complete canonical `VersionSnapshot` for the tested combination.
+- [ ] A release-manifest v2 with typed evidence passes `platform-release validate`.
 
 ## Publication
 
 1. Select the exact source commit intended for release.
 2. Run the required acceptance/conformance profile and release checks against that commit.
 3. Create a release candidate without modifying the already-tested source tree.
-4. Verify generated artifacts and checksums.
-5. Populate the immutable release manifest, including SBOM/provenance and gate evidence, and run `platform-release validate`.
-6. Tag the accepted commit with the semantic version.
-7. Publish a GitHub release using the matching changelog section.
-8. Record artifact checksums, canonical source revision and tested compatibility profiles.
-9. Verify a clean installation using the published artifacts.
+4. Freeze exact dependency lock/resolved sets and record their cryptographic digests.
+5. Verify generated artifacts and checksums.
+6. Populate the immutable release manifest, including the complete version vector, dependency sets, SBOM/provenance and typed gate evidence, and run `platform-release validate`.
+7. Tag the accepted commit with the semantic version.
+8. Publish a GitHub release using the matching changelog section.
+9. Record artifact checksums, canonical source revision and tested compatibility profiles.
+10. Verify a clean installation using the published artifacts.
 
 ## Rollback
 
