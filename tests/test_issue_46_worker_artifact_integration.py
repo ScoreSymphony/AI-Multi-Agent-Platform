@@ -7,7 +7,8 @@ from pathlib import Path
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.distributed import (
-    CanonicalWorkerArtifactIntegrator,
+    ArtifactPublishingWorkerDispatcher,
+    CanonicalWorkspaceArtifactPublisher,
     ExecutorWorker,
     MaterializingWorkerDispatcher,
     WorkerJobRequest,
@@ -103,11 +104,19 @@ def test_remote_worker_file_becomes_canonical_run_artifact(tmp_path: Path) -> No
             workspace="unused",
             workspace_resolver=execution_workspace,
         )
-        dispatcher = MaterializingWorkerDispatcher(
+        materializing = MaterializingWorkerDispatcher(
             worker,
             materializer,
             WorkspaceJobMaterializationResolver(workspaces),
-            result_integrator=CanonicalWorkerArtifactIntegrator(files, kernel),
+        )
+        dispatcher = ArtifactPublishingWorkerDispatcher(
+            materializing,
+            CanonicalWorkspaceArtifactPublisher(
+                workspaces,
+                files,
+                kernel,
+                lambda _workspace: data_context,
+            ),
         )
         job = WorkerJobRequest(
             execution=ExecutionRequest(
@@ -159,13 +168,13 @@ def test_remote_worker_file_becomes_canonical_run_artifact(tmp_path: Path) -> No
             )
             assert content == b"canonical Worker evidence"
 
-            repeated = await CanonicalWorkerArtifactIntegrator(files, kernel).integrate(
-                job,
-                evidence.result,
-            )
-            assert repeated.artifact_ids == (artifact_id,)
+            repeated = await dispatcher.result(job.worker_job_id)
+            assert repeated is not None
+            assert repeated.artifact_refs == (artifact_id,)
             repeated_task = await kernel.get_task(task.task_id)
+            repeated_run = await kernel.get_run(task.task_id, run.run_id)
             assert repeated_task.artifact_ids.count(artifact_id) == 1
+            assert repeated_run.artifact_ids.count(artifact_id) == 1
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
