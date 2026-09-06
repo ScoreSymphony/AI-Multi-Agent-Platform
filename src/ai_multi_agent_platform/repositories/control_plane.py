@@ -130,6 +130,14 @@ def register_repository_control_plane(
         REPOSITORY_COLLECTION,
         RepositoryResourceService(repositories),
     )
+    if management is not None:
+        # #44 discovers this hook dynamically at Connection-removal time, so registration order
+        # does not matter and repository bindings cannot outlive their canonical Connection.
+        setattr(  # noqa: B010
+            control_plane,
+            "connector_connection_removal_hook",
+            management.detach_connection,
+        )
 
     async def branches(
         context: RequestContext,
@@ -535,6 +543,7 @@ def _repository_search_resource(binding: RepositoryBinding) -> dict[str, JsonVal
         "owner_type": connection.owner_type,
         "owner_id": connection.owner_id,
         "project_id": connection.project_id,
+        "connection_id": connection.id,
         "organization_id": connection.organization_id,
         "status": reference.visibility.value,
         "revision": revision,

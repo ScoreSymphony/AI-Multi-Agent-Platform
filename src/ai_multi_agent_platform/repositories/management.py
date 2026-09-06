@@ -235,6 +235,39 @@ class RepositoryManagementService:
         self._registry.unregister(repository_id)
         return binding.reference
 
+    async def detach_connection(
+        self,
+        connection: Connection,
+    ) -> tuple[RepositoryReference, ...]:
+        """Prune all canonical repository bindings before their Connection is removed.
+
+        Connection deletion is already authorized by #44. This lifecycle hook only removes
+        platform-owned routing/catalog state and never deletes provider-owned repository content.
+        It is idempotent with respect to missing in-memory bindings and also cleans transient
+        registry-only bindings so a Search rebuild cannot retain stale repository discovery.
+        """
+
+        detached: list[RepositoryReference] = []
+        persisted_ids: set[str] = set()
+        for record in self._catalog.list(connection_id=connection.id):
+            persisted_ids.add(record.repository_id)
+            self._catalog.delete(record.repository_id)
+            try:
+                binding = self._registry.unregister(record.repository_id)
+            except ContractError as exc:
+                if exc.code is not ErrorCode.NOT_FOUND:
+                    raise
+                detached.append(record.reference)
+            else:
+                detached.append(binding.reference)
+
+        for binding in tuple(self._registry.list(connection_id=connection.id)):
+            if binding.reference.id in persisted_ids:
+                continue
+            self._registry.unregister(binding.reference.id)
+            detached.append(binding.reference)
+        return tuple(detached)
+
     async def _resolve_discovery(
         self,
         connection_id: str,

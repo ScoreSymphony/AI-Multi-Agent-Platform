@@ -77,7 +77,14 @@ async def restore_connector_repositories(
     for record in catalog.list():
         if record.local:
             continue
-        connection = await connections.get_connection(record.connection_id)
+        try:
+            connection = await connections.get_connection(record.connection_id)
+        except ContractError as exc:
+            if exc.code is not ErrorCode.NOT_FOUND:
+                raise
+            # A removed canonical Connection cannot retain repository routing/search state.
+            catalog.delete(record.repository_id)
+            continue
         _require_usable_connection(connection)
         connector = connectors.resolve(
             connection.connector_type_id,

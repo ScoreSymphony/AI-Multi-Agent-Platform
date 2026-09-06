@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from typing import cast
@@ -38,6 +39,8 @@ from .models import (
 from .provider import ConnectorProvider
 from .registry import ConnectorRegistry
 from .repository import ConnectorRepository
+
+ConnectionRemovalHook = Callable[[Connection], Awaitable[None]]
 
 
 class ConnectorService:
@@ -177,6 +180,7 @@ class ConnectorService:
         actor: ActorIdentity,
         context: OperationContext,
         approval_id: str | None = None,
+        before_remove: ConnectionRemovalHook | None = None,
     ) -> None:
         connection = await self.repository.get_connection(connection_id)
         self._validate_scope(connection, context)
@@ -189,6 +193,11 @@ class ConnectorService:
             approval_id=approval_id,
             payload={"connection_id": connection.id, "remove": True},
         )
+        if before_remove is not None:
+            # Run cross-domain cleanup only after DELETE authorization has succeeded and before
+            # the canonical Connection disappears, so a cleanup failure leaves lifecycle state
+            # fail-closed and retryable.
+            await before_remove(connection)
         await self.repository.delete_connection(connection_id)
 
     async def check_health(

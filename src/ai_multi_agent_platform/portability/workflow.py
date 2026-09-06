@@ -261,6 +261,9 @@ class PortabilityWorkflowService:
                 details={
                     "conflict_count": len(stored.preview.conflicts),
                     "missing_dependency_count": len(stored.preview.missing_dependencies),
+                    "blocking_security_finding_count": sum(
+                        1 for item in stored.preview.security_findings if item.blocking
+                    ),
                 },
             )
         inspection = self.package(stored.package_id)
@@ -361,6 +364,16 @@ def import_preview_to_dict(stored: StoredImportPreview) -> dict[str, JsonValue]:
                 "detail": item.detail,
             }
             for item in preview.conflicts
+        ],
+        "security_findings": [
+            {
+                "kind": item.kind.value,
+                "resource_type": item.resource_type,
+                "resource_id": item.resource_id,
+                "detail": item.detail,
+                "blocking": item.blocking,
+            }
+            for item in preview.security_findings
         ],
     }
 

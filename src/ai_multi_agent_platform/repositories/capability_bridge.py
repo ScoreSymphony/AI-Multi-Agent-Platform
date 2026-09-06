@@ -376,7 +376,7 @@ class RepositoryCapabilityProvider(CapabilityToolProvider):
 
 def _input_schema(operation: RepositoryOperation) -> dict[str, JsonValue]:
     properties: dict[str, JsonValue] = {"repository_id": {"type": "string"}}
-    required = ["repository_id"]
+    required: list[JsonValue] = ["repository_id"]
     if operation is RepositoryOperation.INSPECT_REFS:
         properties.update(
             {

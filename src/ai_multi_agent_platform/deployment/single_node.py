@@ -65,6 +65,7 @@ from ai_multi_agent_platform.onboarding import (
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
 from ai_multi_agent_platform.repositories import (
+    RepositoryDiscoveryResolver,
     RepositoryEventRuntimeIngress,
     RepositoryManagementService,
     RepositoryRegistry,
@@ -80,6 +81,7 @@ from ai_multi_agent_platform.repositories.control_plane import register_reposito
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthorizationGate,
+    ControlPlaneAuthorizationBridge,
     LocalAuthenticationService,
     LocalPrincipalPolicy,
     LocalUserAccount,
@@ -282,6 +284,7 @@ def build_single_node_deployment(
     accounting_service: AccountingService | None = None,
     observability_exporter: InMemoryExporter | None = None,
     distributed_runtime: DistributedRuntime | None = None,
+    repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
 ) -> SingleNodeDeployment:
     """Build the durable Stage-1 profile without optional external services."""
 
@@ -421,12 +424,14 @@ def build_single_node_deployment(
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
     approval_gate = AuthorizationGate(authorization)
+    control_plane_authorization = ControlPlaneAuthorizationBridge(approval_gate)
     repositories = RepositoryService(repository_registry, approval_gate)
     repository_management = RepositoryManagementService(
         repository_registry,
         repository_catalog,
         approval_gate,
         managed_local_root=config.repositories_dir,
+        discovery_resolver=repository_discovery_resolver,
     )
     repository_run_integration = RepositoryRunIntegration(
         repository_registry,
@@ -491,7 +496,7 @@ def build_single_node_deployment(
         kernel=kernel,
         events=kernel_repository,
         scopes=scopes,
-        authorization=authorization,
+        authorization=control_plane_authorization,
         workspace_provider=workspaces,
         run_workspace_bindings=run_workspace_bindings,
         health_providers=(orchestrator, lifecycle, files),
