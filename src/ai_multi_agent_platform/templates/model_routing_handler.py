@@ -39,8 +39,7 @@ class ModelRoutingPolicyTemplateHandler:
                 resource_type="model_routing_profile",
                 action="create",
                 description=(
-                    f"Create Model Routing Profile from "
-                    f"{revision.template_id}@{revision.revision}"
+                    f"Create Model Routing Profile from {revision.template_id}@{revision.revision}"
                 ),
             ),
         )
