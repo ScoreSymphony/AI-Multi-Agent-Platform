@@ -12,10 +12,17 @@
       "deployment": {
         "host_ref": "device-a",
         "connection_mode": "local",
-        "transport_endpoint_ref": "deployment:in-process-transport",
+        "transport_endpoint_ref": "deployment:loopback-worker-transport",
         "workspace_root": "/var/lib/ai-multi-agent-platform/workspaces",
         "tls_required": false,
-        "credential_reference": null
+        "credential_reference": {
+          "provider": "local-reference",
+          "secret_id": "worker-device-a-service-credential",
+          "scope": "worker_protocol",
+          "metadata": {
+            "purpose": "worker service identity reference only"
+          }
+        }
       },
       "canonical": {
         "node_id": "node_00000000-0000-4000-8000-000000000240",
@@ -56,7 +63,7 @@
           "worker_version": "0"
         }
       ],
-      "reporter_worker_id": null
+      "reporter_worker_id": "worker_00000000-0000-4000-8000-000000000241"
     }
   ],
   "optional_services": [

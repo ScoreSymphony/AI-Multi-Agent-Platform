@@ -37,14 +37,19 @@ def _repository_actor_ref(context: OperationContext) -> str:
     return context.owner_id
 
 
-def build_default_single_node_deployment(config: SingleNodeConfig) -> SingleNodeDeployment:
-    """Build the shipped single-node profile with installed adapter bridges only."""
+def build_default_single_node_deployment(
+    config: SingleNodeConfig,
+    *,
+    enable_distributed_execution: bool = False,
+) -> SingleNodeDeployment:
+    """Build the shipped profile with installed bridges and optional #240 execution routing."""
 
     secrets = LocalSecretProvider()
     deployment = build_single_node_deployment(
         config,
         onboarding_model_adapters=(OpenAICompatibleOnboardingAdapter(secret_provider=secrets),),
         secret_provider=secrets,
+        enable_distributed_execution=enable_distributed_execution,
     )
     asyncio.run(
         deployment.capabilities.register_provider(
