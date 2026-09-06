@@ -10,14 +10,10 @@ from pathlib import Path
 from typing import TextIO
 
 from .compatibility import FormatTranslatorRegistry
-from .migrations import (
-    JsonMigrationHistoryStore,
-    MigrationError,
-    MigrationRegistry,
-    MigrationRunner,
-)
+from .coordination import CoordinatorAwareMigrationRunner, CoordinatorAwareUpgradePreflight
+from .migrations import JsonMigrationHistoryStore, MigrationError, MigrationRegistry
 from .models import VersionSnapshot
-from .preflight import PreflightRequest, UpgradePreflight
+from .preflight import PreflightRequest
 from .service import JsonUpgradeHistoryStore, MaintenanceStateStore, UpgradeError, UpgradeService
 from .versioning import JsonVersionStateStore, VersionStateError, current_release_versions
 
@@ -69,7 +65,7 @@ def run_cli(
         target = _target_snapshot(current, registry)
         portable = FormatTranslatorRegistry(target.portable_format)
         template = FormatTranslatorRegistry(target.template_schema)
-        preflight = UpgradePreflight(
+        preflight = CoordinatorAwareUpgradePreflight(
             registry,
             history,
             portable_translators=portable,
@@ -93,7 +89,7 @@ def run_cli(
         if args.command == "apply":
             service = UpgradeService(
                 migrations=registry,
-                runner=MigrationRunner(history),
+                runner=CoordinatorAwareMigrationRunner(history),
                 preflight=preflight,
                 version_state=state,
                 maintenance=MaintenanceStateStore.for_data_dir(data_dir),

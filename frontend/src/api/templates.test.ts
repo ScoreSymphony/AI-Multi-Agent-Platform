@@ -89,6 +89,11 @@ describe("TemplateClient", () => {
       { revision: 3, name: "Capability policy" },
       "capability-assignment-key",
     );
+    await client.createFromModelRoutingProfile(
+      "model_routing_profile-1",
+      { revision: 4, name: "Routing policy" },
+      "routing-profile-key",
+    );
     await client.createFromAutomation("automation-1", {}, "automation-key");
     await client.createFromProject("project-1", {}, "project-key");
     await client.createFromWorkspaces(
@@ -106,6 +111,7 @@ describe("TemplateClient", () => {
       "/api/v1/commands/template.create-from-agent-team",
       "/api/v1/commands/template.create-from-workflow",
       "/api/v1/commands/template.create-from-capability-assignment",
+      "/api/v1/commands/template.create-from-model-routing-profile",
       "/api/v1/commands/template.create-from-automation",
       "/api/v1/commands/template.create-from-project",
       "/api/v1/commands/template.create-from-workspaces",
@@ -122,7 +128,13 @@ describe("TemplateClient", () => {
       revision: 3,
       name: "Capability policy",
     });
-    expect(calls[6]?.body).toEqual({
+    expect(calls[4]?.body).toEqual({
+      resource_ref: "templates",
+      profile_id: "model_routing_profile-1",
+      revision: 4,
+      name: "Routing policy",
+    });
+    expect(calls[7]?.body).toEqual({
       resource_ref: "templates",
       workspace_ids: ["workspace-1", "workspace-2"],
       name: "Workspace setup",

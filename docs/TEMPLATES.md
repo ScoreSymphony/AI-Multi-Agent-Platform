@@ -98,6 +98,11 @@ Control Plane rather than constructing a second routing-policy owner. Template p
 records the exact source revision and Template instance. Guarded compensation can remove
 only an untouched revision-1 profile created by that exact failed Template application.
 
+Create-from-existing uses that same authorized #309 service to read an exact routing-profile
+revision and reconstruct only its canonical policy intent. The resulting Template records
+source profile ID/revision provenance but does not copy provider runtime state, sessions or
+backend-private identifiers.
+
 ## Versioning
 
 Every stored revision is immutable. Editing appends a new draft revision. Publishing also
@@ -168,17 +173,22 @@ Caller-supplied environment claims are rejected.
 `PlatformTemplateEnvironmentResolver` is conservative by default: an inventory that is not
 connected is empty rather than assumed present.
 
-The standard Single-Node composition resolves:
+The standard public Single-Node composition resolves:
 
 - Capability IDs and versions from the canonical Capability Registry;
+- live Connector Definition IDs from the composed canonical Connector Registry;
 - enabled model-routing policy references from the canonical #309 repository;
 - platform version from the running package;
 - globally grantable actions from persisted authorization state;
 - Workspace prerequisites from the composed canonical Workspace provider.
 
-Plugin, connector and named contract inventories are connected only when a canonical
-provider with matching semantics exists. Adjacent state is never fabricated into a
-compatibility claim.
+`TemplateRequirements.connector_ids` therefore uses canonical `ConnectorDefinition.id`
+values, preserving the exact connector type/version identity. A durable Connector Definition
+without a currently registered implementation is not treated as available; registration and
+unregistration are reflected dynamically in subsequent Template preview/apply resolution.
+
+Plugin and named contract inventories are connected only when a canonical provider with
+matching semantics exists. Adjacent state is never fabricated into a compatibility claim.
 
 ## Materialization
 
@@ -298,15 +308,18 @@ Create-from-existing commands in the standard composition include:
 - `template.create-from-agent-team`
 - `template.create-from-workflow`
 - `template.create-from-capability-assignment`
+- `template.create-from-model-routing-profile`
 - `template.create-from-automation`
 - `template.create-from-project`
 - `template.create-from-workspaces`
 
-The Workflow and Capability Assignment export commands are registered only when their
-canonical handlers/services are actually composed. This keeps optional deployments
-fail-closed instead of advertising unsupported operations.
+Workflow, Capability Assignment and Model Routing Profile export commands are registered
+only when their canonical handlers/services are actually composed. This keeps optional
+deployments fail-closed instead of advertising unsupported operations.
 
-All commands use the ordinary Control Plane authorization and idempotency path.
+All commands use the ordinary Control Plane authorization and idempotency path. Routing
+profile export additionally performs its source read through the authorized #309 service
+before any Template draft is persisted.
 
 ## Frontend
 
@@ -316,8 +329,8 @@ The browser UI exposes Template management at `/templates` and detail at
 The surface includes:
 
 - Template library/list;
-- creation from Agent, Agent Team, Workflow, Capability Assignment, Automation, Project and
-  Workspace structures;
+- creation from Agent, Agent Team, Workflow, Capability Assignment, Model Routing Profile,
+  Automation, Project and Workspace structures;
 - advanced canonical Template JSON creation for composite/extensible types;
 - revision, scope, compatibility and provenance details;
 - dependency and requirement display;
@@ -331,9 +344,9 @@ The surface includes:
 - Template instances and links to generated canonical resources.
 
 The Template route is manifest-gated. It is considered available only when the complete
-required resource/command contract, including Workflow and Capability Assignment
-create-from-existing commands, is present. The browser never invents missing backend
-capability.
+required resource/command contract, including Workflow, Capability Assignment and Model
+Routing Profile create-from-existing commands, is present. The browser never invents
+missing backend capability.
 
 Mutating Template commands use the shared authenticated BrowserSession/CSRF/idempotency
 transport.
@@ -361,12 +374,13 @@ Issue #78 regression coverage includes:
   Capability Assignment and Model Routing Policy instantiation;
 - Workflow Agent/Team dependency remapping and exact Template-instance provenance;
 - guarded Workflow, Capability Assignment and routing-profile compensation;
-- Capability Assignment and Workflow create-from-existing exporters;
-- source-read authorization before Workflow export mutation;
+- Capability Assignment, Workflow and Model Routing Profile create-from-existing exporters;
+- source-read authorization before canonical owner-domain export mutation;
+- live Connector Definition inventory in the public Single-Node Template environment;
 - Agent Team export compensation;
 - untrusted import downgrade, explicit activation and promotion-bypass prevention;
 - durable restart behavior;
-- standard Single-Node Template composition for #309/#364/#366;
+- standard Single-Node Template composition for #309/#364/#366 and #44 Connector inventory;
 - frontend typed create-from-existing commands, manifest gating, preview diagnostics,
   activation, tests and production build;
 - provider/orchestrator replacement compatibility.
