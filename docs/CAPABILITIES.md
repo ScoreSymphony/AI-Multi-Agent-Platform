@@ -21,9 +21,9 @@ CapabilityRegistry.resolve()
 CapabilityInvoker
         |
         +-- JSON Schema input validation
+        +-- optional canonical ToolInvocation binding for every resolved call
         +-- policy hook
-        +-- canonical governance binding when approval is required
-        +-- approval hook bound to tool_invocation_* identity
+        +-- approval hook bound to tool_invocation_* identity when required
         +-- pre-execution binding verification
         +-- timeout / cancellation
         |
@@ -82,15 +82,19 @@ This classification is deliberately separate from safety sensitivity, side-effec
 
 The capability contract contains **no secret value, secret reference, secret provider, vault type or backend credential object**. Secret storage/retrieval remains outside #12 and belongs to the dedicated configuration/secrets and authorization boundaries.
 
-## Capability identity versus governed invocation identity
+## Capability identity versus canonical invocation identity
 
-`CapabilityInvocation.invocation_id` is the provider-neutral request handle used to correlate one provider call. It is not the canonical governance identity defined by the domain model.
+`CapabilityInvocation.invocation_id` is the provider-neutral request handle used to correlate one provider call. It is not itself the canonical domain ToolInvocation identity.
 
-When policy or capability metadata requires approval, `GovernanceBindingHook` must map the resolved provider invocation to the existing canonical domain `ToolInvocation` (`tool_invocation_*`). The binding uses the existing contract/domain mapping rules, including the immutable argument digest introduced by ADR 0001.
+`CapabilityInvoker` now exposes `CanonicalInvocationBindingHook` as the ordinary identity seam. When configured, the hook runs for every resolved invocation before policy, approval and provider execution. Lifecycle records and successful results can therefore retain one canonical `tool_invocation_*` subject for allowed, denied, failed, timed-out and successful calls instead of creating canonical identity only when approval happens to be required.
 
-The invocation pipeline calls `validate_tool_invocation_binding(...)` after the canonical mapping and again immediately before provider execution. An approval therefore applies to the exact resolved provider tool, context and argument snapshot rather than to a reusable capability or mutable request handle.
+The reference Agent composition uses `bind_canonical_capability_invocation(...)`. It derives a stable canonical `tool_*` identity from canonical capability ID plus exact version, and a stable `tool_invocation_*` identity from the canonical Run, the platform-owned invocation key, canonical Tool identity and immutable argument digest. Provider/model invocation handles and `provider_tool_ref` remain external references only and do not determine canonical identity. The binder requires owner context from the canonical runtime and fails closed rather than inventing ownership.
 
-If approval is required but no canonical governance binding is configured, execution fails with a canonical contract violation rather than bypassing governance. Lifecycle audit records preserve the approval decision when applicable.
+For Agent model tool calls, the platform invocation key is derived from the canonical Run plus the tool-call ordinal (`<run_id>:capability:<ordinal>`). A model/provider `call_id` is retained only as evidence in the normalized capability result and never becomes `AgentRun.tool_invocation_refs`.
+
+The shared contract/domain mapping records the immutable argument digest introduced by ADR 0001. `validate_tool_invocation_binding(...)` runs after canonical mapping and again immediately before provider execution, proving that the resolved provider tool, provider invocation handle, context and argument snapshot still match the canonical ToolInvocation.
+
+`GovernanceBindingHook` remains supported as a backwards-compatible approval-only fallback. If approval is required and no ordinary canonical binding exists, the governance hook may create the same canonical domain `ToolInvocation`. If neither canonical nor governance binding is available, approval-required execution fails with a contract violation instead of bypassing governance.
 
 ## Reference native capability
 

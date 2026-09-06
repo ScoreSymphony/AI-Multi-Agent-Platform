@@ -14,7 +14,10 @@ from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     decode_agent_execution_binding,
 )
-from ai_multi_agent_platform.capabilities import CapabilityInvoker
+from ai_multi_agent_platform.capabilities import (
+    CapabilityInvoker,
+    bind_canonical_capability_invocation,
+)
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,
@@ -94,8 +97,9 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
     When an AgentRun pins capabilities, ``AgentCapabilityTurn`` composes the existing rich
     Model protocol with the canonical CapabilityInvoker. The standard deployment needs no
     second registry: the turn is lazily composed from the CapabilityRegistry already attached
-    to AgentRuntime. Runs without capability bindings retain the established direct ModelRuntime
-    path.
+    to AgentRuntime. The reference composition also installs the platform-owned canonical
+    ToolInvocation binder so provider/model call handles never become AgentRun identity.
+    Runs without capability bindings retain the established direct ModelRuntime path.
     """
 
     def __init__(
@@ -337,7 +341,10 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         self._capability_turn = AgentCapabilityTurn(
             self._models,
             registry,
-            CapabilityInvoker(registry),
+            CapabilityInvoker(
+                registry,
+                canonical_binding_hook=bind_canonical_capability_invocation,
+            ),
         )
         return self._capability_turn
 

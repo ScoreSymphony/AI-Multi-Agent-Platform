@@ -24,6 +24,7 @@ from ai_multi_agent_platform.capabilities import (
     CapabilityInvoker,
     CapabilityRegistry,
     NativeEchoProvider,
+    bind_canonical_capability_invocation,
 )
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
@@ -34,7 +35,7 @@ from ai_multi_agent_platform.contracts import (
     ModelResponse,
     OperationContext,
 )
-from ai_multi_agent_platform.domain import OwnerRef, Task, new_id
+from ai_multi_agent_platform.domain import OwnerRef, Task, new_id, validate_id
 from ai_multi_agent_platform.kernel.models import TaskState
 from ai_multi_agent_platform.models import (
     ModelCapabilities,
@@ -150,7 +151,10 @@ def test_agent_model_tool_call_executes_pinned_capability_through_invoker() -> N
         turn = AgentCapabilityTurn(
             model_runtime,
             capabilities,
-            CapabilityInvoker(capabilities),
+            CapabilityInvoker(
+                capabilities,
+                canonical_binding_hook=bind_canonical_capability_invocation,
+            ),
         )
 
         result = await turn.execute(
@@ -172,11 +176,16 @@ def test_agent_model_tool_call_executes_pinned_capability_through_invoker() -> N
 
         assert result.model_ref == "model-tool-capable"
         assert result.model_call_refs == (f"{run_id}:model",)
-        assert result.tool_invocation_refs == (f"{run_id}:call-echo",)
+        assert len(result.tool_invocation_refs) == 1
+        tool_invocation_id = result.tool_invocation_refs[0]
+        validate_id(tool_invocation_id, "tool_invocation")
         assert result.artifact_refs == ()
         assert result.model_usage == {"total_tokens": 7}
         assert len(result.capability_results) == 1
         capability_result = result.capability_results[0]
+        assert capability_result["invocation_id"] == f"{run_id}:capability:1"
+        assert capability_result["canonical_tool_invocation_id"] == tool_invocation_id
+        assert capability_result["model_tool_call_id"] == "call-echo"
         assert capability_result["capability_id"] == ECHO_CAPABILITY_ID
         assert capability_result["capability_version"] == "1.0"
         assert capability_result["status"] == "succeeded"
@@ -256,9 +265,17 @@ def test_bound_agent_run_lazily_composes_and_records_capability_execution() -> N
         assert handle.run_id == run_id
         assert snapshot.status is ExecutionStatus.SUCCEEDED
         assert snapshot.output["model_ref"] == "model-tool-capable"
-        assert snapshot.output["tool_invocation_refs"] == [f"{run_id}:call-echo"]
+        tool_invocation_refs = snapshot.output["tool_invocation_refs"]
+        assert isinstance(tool_invocation_refs, list)
+        assert len(tool_invocation_refs) == 1
+        tool_invocation_id = tool_invocation_refs[0]
+        assert isinstance(tool_invocation_id, str)
+        validate_id(tool_invocation_id, "tool_invocation")
         capability_results = snapshot.output["capability_results"]
         assert isinstance(capability_results, list)
+        assert capability_results[0]["invocation_id"] == f"{run_id}:capability:1"
+        assert capability_results[0]["canonical_tool_invocation_id"] == tool_invocation_id
+        assert capability_results[0]["model_tool_call_id"] == "call-echo"
         assert capability_results[0]["output"] == {"message": "hello from model"}
 
         agent_run_id = snapshot.output["agent_run_id"]
@@ -270,7 +287,7 @@ def test_bound_agent_run_lazily_composes_and_records_capability_execution() -> N
         assert agent_run.capability_ids == (ECHO_CAPABILITY_ID,)
         assert dict(agent_run.capability_versions) == {ECHO_CAPABILITY_ID: "1.0"}
         assert agent_run.model_call_refs == (f"{run_id}:model",)
-        assert agent_run.tool_invocation_refs == (f"{run_id}:call-echo",)
+        assert agent_run.tool_invocation_refs == (tool_invocation_id,)
         assert agent_run.telemetry["capability_invocation_count"] == 1
 
     asyncio.run(scenario())
