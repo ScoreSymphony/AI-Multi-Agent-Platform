@@ -15,7 +15,7 @@ class RecordingClient:
 
     def get(self, path: str, *, query: dict[str, str] | None = None) -> ClientResponse:
         self.calls.append(("GET", path, query, None))
-        return ClientResponse(status=200, body={"ok": True})
+        return _response()
 
     def post(
         self,
@@ -25,7 +25,17 @@ class RecordingClient:
         idempotency_key: str | None = None,
     ) -> ClientResponse:
         self.calls.append(("POST", path, body, idempotency_key))
-        return ClientResponse(status=200, body={"ok": True})
+        return _response()
+
+
+def _response() -> ClientResponse:
+    return ClientResponse(
+        status=200,
+        body={"ok": True},
+        request_id="req_registry",
+        correlation_id="corr_registry",
+        api_version="v1",
+    )
 
 
 def _parser() -> argparse.ArgumentParser:
