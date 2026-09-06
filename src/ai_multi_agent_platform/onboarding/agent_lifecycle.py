@@ -14,6 +14,7 @@ from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     decode_agent_execution_binding,
 )
+from ai_multi_agent_platform.capabilities import CapabilityInvoker
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,
@@ -90,9 +91,11 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
     Evaluation select an exact Agent/model/capability configuration without introducing a
     second lifecycle implementation. Unmarked Runs are delegated unchanged.
 
-    When an AgentRun pins capabilities, the optional ``AgentCapabilityTurn`` composes the
-    existing rich Model protocol with the canonical CapabilityInvoker. Runs without capability
-    bindings retain the established direct ModelRuntime path.
+    When an AgentRun pins capabilities, ``AgentCapabilityTurn`` composes the existing rich
+    Model protocol with the canonical CapabilityInvoker. The standard deployment needs no
+    second registry: the turn is lazily composed from the CapabilityRegistry already attached
+    to AgentRuntime. Runs without capability bindings retain the established direct ModelRuntime
+    path.
     """
 
     def __init__(
@@ -220,12 +223,8 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                 )
 
             if agent_run.capability_ids:
-                if self._capability_turn is None:
-                    raise ContractError(
-                        ErrorCode.INVALID_CONFIGURATION,
-                        "Agent execution selected capabilities but no capability turn is composed",
-                    )
-                turn = await self._capability_turn.execute(
+                capability_turn = self._resolve_capability_turn()
+                turn = await capability_turn.execute(
                     task_id=task.task_id,
                     run_id=request.run_id,
                     agent_id=agent_run.agent.agent_id,
@@ -325,6 +324,22 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         if snapshot is not None:
             return snapshot
         return await self._delegate.cancel(run_id, context)
+
+    def _resolve_capability_turn(self) -> AgentCapabilityTurn:
+        if self._capability_turn is not None:
+            return self._capability_turn
+        registry = self._agents.capability_registry
+        if registry is None:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "Agent execution selected capabilities but AgentRuntime has no CapabilityRegistry",
+            )
+        self._capability_turn = AgentCapabilityTurn(
+            self._models,
+            registry,
+            CapabilityInvoker(registry),
+        )
+        return self._capability_turn
 
     def _handle(self, run_id: str) -> ExecutionHandle:
         return ExecutionHandle(
