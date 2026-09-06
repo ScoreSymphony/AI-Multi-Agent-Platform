@@ -164,7 +164,10 @@ class JsonRegistryInstallationStore:
         if not self._path.exists():
             return
         document = json.loads(self._path.read_text(encoding="utf-8"))
-        if not isinstance(document, dict) or document.get("version") not in _SUPPORTED_STATE_VERSIONS:
+        if (
+            not isinstance(document, dict)
+            or document.get("version") not in _SUPPORTED_STATE_VERSIONS
+        ):
             raise ValueError("unsupported registry installation state")
         raw_records = document.get("installations", [])
         if not isinstance(raw_records, list):
