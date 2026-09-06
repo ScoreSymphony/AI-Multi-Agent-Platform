@@ -125,7 +125,7 @@ class CapabilityAssignmentTemplateHandler:
                         "resource_id": resource.resource_id,
                     },
                 )
-            self.service.repository.compensate_created(
+            self.service.compensate_created(
                 resource.resource_id,
                 expected_owner_ref=provenance.applied_by,
                 expected_source=expected_source,
