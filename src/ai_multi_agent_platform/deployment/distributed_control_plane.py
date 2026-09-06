@@ -1,7 +1,7 @@
 """Control-Plane composition for deployable #240 remote Workers.
 
 The deployment layer binds authenticated #14 registration to the already-existing #35 Worker
-transport and #37 Workspace materializer.  The canonical distributed runtime remains the sole
+transport and #37 Workspace materializer. The canonical distributed runtime remains the sole
 scheduler/ownership authority.
 """
 
@@ -48,9 +48,9 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
     """Attach authenticated registered Workers to the canonical distributed runtime.
 
     Registration remains owned by ``WorkerProtocolService``. This subclass adds deployment
-    consequences only: each canonical Worker receives the standard transport dispatcher and the
-    reported Worker status is bounded by real #35 endpoint reachability. A live Node reporter can
-    therefore no longer keep a dead sibling Worker schedulable by repeating a static profile.
+    consequences only: each canonical Worker receives the standard transport dispatcher. Shipped
+    multi-process composition additionally enables #35 presence enforcement so a live Node
+    reporter cannot keep a dead sibling schedulable by repeating a static profile snapshot.
     """
 
     def __init__(
@@ -64,7 +64,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         files: FileProvider,
         context_resolver: WorkspaceContextResolver,
         initial_trust_level: str = "untrusted",
-        presence_timeout_seconds: float = 1.0,
+        presence_timeout_seconds: float | None = None,
     ) -> None:
         super().__init__(
             runtime,
@@ -77,9 +77,13 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         self._files = files
         self._context_resolver = context_resolver
         self._attached: set[str] = set()
-        self._presence = TransportWorkerPresenceProbe(
-            transport,
-            timeout_seconds=presence_timeout_seconds,
+        self._presence = (
+            None
+            if presence_timeout_seconds is None
+            else TransportWorkerPresenceProbe(
+                transport,
+                timeout_seconds=presence_timeout_seconds,
+            )
         )
 
     async def register(
@@ -133,6 +137,8 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         self,
         workers: tuple[WorkerRecord, ...],
     ) -> tuple[WorkerRecord, ...]:
+        if self._presence is None:
+            return workers
         reachable = await asyncio.gather(
             *(self._presence.reachable(worker.worker_id) for worker in workers)
         )
@@ -194,6 +200,7 @@ def build_worker_protocol_app(
         workspaces=workspaces,
         files=files,
         context_resolver=context_resolver,
+        presence_timeout_seconds=1.0,
     )
     app = WorkerProtocolASGI(
         WorkerProtocolHTTP(service),
