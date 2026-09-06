@@ -63,12 +63,33 @@ class ControlPlane(_BaseControlPlane):
             "role": status.role.value,
             "leader_instance_id": status.leader_instance_id,
             "epoch": status.epoch,
+            "lease_acquired_at": (
+                status.lease_acquired_at.isoformat()
+                if status.lease_acquired_at is not None
+                else None
+            ),
             "lease_expires_at": (
                 status.lease_expires_at.isoformat() if status.lease_expires_at is not None else None
             ),
+            "lease_age_seconds": status.lease_age_seconds,
+            "last_renewed_at": (
+                status.last_renewed_at.isoformat() if status.last_renewed_at is not None else None
+            ),
+            "seconds_since_last_renewal": status.seconds_since_last_renewal,
             "coordination_available": status.coordination_available,
             "promotion_count": status.promotion_count,
             "last_promotion_reason": status.last_promotion_reason,
+            "reconciliation_in_progress": status.reconciliation_in_progress,
+            "last_reconciliation": (
+                None
+                if status.last_reconciliation is None
+                else {
+                    "recovered_items": status.last_reconciliation.recovered_items,
+                    "rejected_stale_items": status.last_reconciliation.rejected_stale_items,
+                    "details": list(status.last_reconciliation.details),
+                }
+            ),
+            "last_error_code": status.last_error_code,
         }
         return health
 

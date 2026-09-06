@@ -175,6 +175,12 @@ class ControlPlaneHAStatus:
     promotion_count: int
     last_promotion_reason: str | None
     last_reconciliation: ReconciliationResult | None
+    lease_acquired_at: datetime | None = None
+    last_renewed_at: datetime | None = None
+    lease_age_seconds: float | None = None
+    seconds_since_last_renewal: float | None = None
+    reconciliation_in_progress: bool = False
+    last_error_code: str | None = None
 
     def __post_init__(self) -> None:
         if not self.instance_id.strip():
@@ -185,3 +191,9 @@ class ControlPlaneHAStatus:
             raise ValueError("promotion_count must not be negative")
         if self.last_promotion_reason is not None and not self.last_promotion_reason.strip():
             raise ValueError("last_promotion_reason must not be blank")
+        if self.lease_age_seconds is not None and self.lease_age_seconds < 0:
+            raise ValueError("lease_age_seconds must not be negative")
+        if self.seconds_since_last_renewal is not None and self.seconds_since_last_renewal < 0:
+            raise ValueError("seconds_since_last_renewal must not be negative")
+        if self.last_error_code is not None and not self.last_error_code.strip():
+            raise ValueError("last_error_code must not be blank")
