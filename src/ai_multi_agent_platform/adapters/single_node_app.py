@@ -122,7 +122,9 @@ def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployme
         installations=installations,
         capabilities=lambda: (
             capability.capability_id
-            for capability in deployment.capabilities.inventory_capabilities(include_unavailable=False)
+            for capability in deployment.capabilities.inventory_capabilities(
+                include_unavailable=False
+            )
         ),
         plugins=lambda: (snapshot.plugin_id for snapshot in plugin_registry.list_plugins()),
         models=lambda: (model.config_id for model in deployment.models.list_models(enabled=True)),
