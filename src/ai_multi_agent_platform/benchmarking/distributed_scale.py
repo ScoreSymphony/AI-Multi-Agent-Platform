@@ -328,9 +328,7 @@ class DistributedWorkerWorkspaceScaleHarness:
 
                         reconcile_started = time.perf_counter()
                         reconciled = await runtime.reconcile()
-                        reconciliation_batch_samples.append(
-                            time.perf_counter() - reconcile_started
-                        )
+                        reconciliation_batch_samples.append(time.perf_counter() - reconcile_started)
                         current_ids = {job.worker_job_id for job in jobs}
                         current_records = tuple(
                             record
