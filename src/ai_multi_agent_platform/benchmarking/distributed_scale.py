@@ -12,10 +12,13 @@ from pathlib import Path
 from typing import Any, cast
 
 from ai_multi_agent_platform import __version__
-from ai_multi_agent_platform.adapters.single_node_app import build_default_single_node_deployment
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext
-from ai_multi_agent_platform.deployment import SingleNodeConfig, SingleNodeDeployment
+from ai_multi_agent_platform.deployment import (
+    SingleNodeConfig,
+    SingleNodeDeployment,
+    build_single_node_deployment,
+)
 from ai_multi_agent_platform.deployment.distributed_control_plane import (
     DeploymentWorkerProtocolService,
     platform_workspace_context,
@@ -227,7 +230,7 @@ class DistributedWorkerWorkspaceScaleHarness:
         _require_fresh_data_root(self._data_dir)
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
-        deployment = build_default_single_node_deployment(
+        deployment = build_single_node_deployment(
             SingleNodeConfig(
                 data_dir=self._data_dir / "control-plane",
                 secure_cookie=False,
