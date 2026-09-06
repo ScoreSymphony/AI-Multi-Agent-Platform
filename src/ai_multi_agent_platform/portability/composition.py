@@ -45,7 +45,10 @@ from .model_routing_profile_codecs import (
     register_model_routing_profile_portability_codec,
     snapshot_model_routing_profile,
 )
-from .model_routing_profile_import import ModelRoutingProfileImportMutationHandler
+from .model_routing_profile_import import (
+    ModelRoutingProfileImportMutationHandler,
+    RoutingProfileDependencyAudit,
+)
 from .models import DependencyKind, DependencyRequirement, IdPolicy, PortableResource
 from .planner import ImportPreviewService, ImportSecurityFinding
 from .policy_profile_codecs import (
@@ -58,6 +61,7 @@ from .policy_profile_import import AuthorizationPolicyProfileImportMutationHandl
 from .project_codecs import PROJECT_RESOURCE_TYPE, register_project_portability_codec
 from .project_import import ProjectDependencyAudit, ProjectImportMutationHandler
 from .registry import ResourceSerializerRegistry
+from .routing_profile_reference_audit import build_routing_profile_dependency_audit
 from .routing_profile_reference_codecs import (
     register_routing_profile_aware_agent_portability_codecs,
     register_routing_profile_aware_template_portability_codec,
@@ -89,6 +93,7 @@ def build_agent_portability_workflow(
     source_instance_id: str | None = None,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
     project_dependency_audit: ProjectDependencyAudit | None = None,
+    routing_profile_dependency_audit: RoutingProfileDependencyAudit | None = None,
     additional_resource_exists: Callable[[str, str], bool] | None = None,
 ) -> PortabilityWorkflowService:
     """Compose production-safe portability against supplied canonical stores.
@@ -100,8 +105,11 @@ def build_agent_portability_workflow(
     owner are supplied together.
 
     Project rollback deliberately fails closed unless the caller supplies a cross-domain
-    dependency audit that can prove removal is safe. Resource domains not owned directly by
-    this composition can expose a synchronous canonical existence view through
+    dependency audit that can prove removal is safe. Routing-profile compensation always
+    receives a canonical audit over Agent revisions and, when supplied, Template revisions;
+    callers can extend that proof to additional canonical consumer domains through
+    ``routing_profile_dependency_audit``. Resource domains not owned directly by this
+    composition can expose a synchronous canonical existence view through
     ``additional_resource_exists``. Without that view, dependencies remain unavailable and
     import preview fails closed rather than making optimistic assumptions about target state.
     """
@@ -206,7 +214,16 @@ def build_agent_portability_workflow(
     if templates is not None:
         mutations.register(TemplateImportMutationHandler(templates))
     if routing_profiles is not None:
-        mutations.register(ModelRoutingProfileImportMutationHandler(routing_profiles))
+        mutations.register(
+            ModelRoutingProfileImportMutationHandler(
+                routing_profiles,
+                dependency_audit=build_routing_profile_dependency_audit(
+                    agents=agents,
+                    templates=templates,
+                    additional_audit=routing_profile_dependency_audit,
+                ),
+            )
+        )
     if evaluation is not None:
         mutations.register(EvaluationSuiteImportMutationHandler(evaluation))
     if (
@@ -243,11 +260,7 @@ def build_agent_portability_workflow(
         if resource_type == EVALUATION_SUITE_RESOURCE_TYPE and evaluation is not None:
             return _canonical_exists(lambda: evaluation.get_suite(resource_id))
         if resource_type == EVALUATION_FIXTURE_RESOURCE_TYPE:
-            return (
-                False
-                if evaluation_fixture_exists is None
-                else evaluation_fixture_exists(resource_id)
-            )
+            return False if evaluation_fixture_exists is None else evaluation_fixture_exists(resource_id)
         if resource_type == "workspace":
             return _canonical_exists(lambda: scopes.get_workspace(resource_id))
         if additional_resource_exists is not None:
@@ -261,11 +274,7 @@ def build_agent_portability_workflow(
         if requirement.kind is DependencyKind.MODEL:
             return _canonical_exists(lambda: models.get_model(requirement.identifier))
         if requirement.kind is DependencyKind.CAPABILITY:
-            return (
-                False
-                if capabilities is None
-                else _capability_dependency_available(capabilities, requirement)
-            )
+            return False if capabilities is None else _capability_dependency_available(capabilities, requirement)
         return False
 
     def inspect_security(
@@ -310,11 +319,7 @@ def _capability_dependency_available(
         for raw_clause in requirement.version_constraint.split(","):
             clause = raw_clause.strip()
             if clause.startswith("==") and len(clause) > 2:
-                if (
-                    exact_version is not None
-                    or minimum_version is not None
-                    or maximum_version is not None
-                ):
+                if exact_version is not None or minimum_version is not None or maximum_version is not None:
                     return False
                 exact_version = clause[2:]
             elif clause.startswith(">=") and len(clause) > 2:
@@ -328,20 +333,9 @@ def _capability_dependency_available(
             else:
                 return False
 
-    compatibility = (
-        None
-        if minimum_version is None and maximum_version is None
-        else CapabilityCompatibilityRequest(
-            minimum_version=minimum_version,
-            maximum_version=maximum_version,
-        )
-    )
-    granted_permissions = frozenset(
-        permission for capability in inventory for permission in capability.required_permissions
-    )
-    worker_capabilities = frozenset(
-        worker for capability in inventory for worker in capability.required_worker_capabilities
-    )
+    compatibility = None if minimum_version is None and maximum_version is None else CapabilityCompatibilityRequest(minimum_version=minimum_version, maximum_version=maximum_version)
+    granted_permissions = frozenset(permission for capability in inventory for permission in capability.required_permissions)
+    worker_capabilities = frozenset(worker for capability in inventory for worker in capability.required_worker_capabilities)
     try:
         capabilities.resolve(
             requirement.identifier,
@@ -351,12 +345,7 @@ def _capability_dependency_available(
             available_worker_capabilities=worker_capabilities,
         )
     except ContractError as exc:
-        if exc.code in {
-            ErrorCode.CONFLICT,
-            ErrorCode.FORBIDDEN,
-            ErrorCode.UNAVAILABLE,
-            ErrorCode.UNSUPPORTED_CAPABILITY,
-        }:
+        if exc.code in {ErrorCode.CONFLICT, ErrorCode.FORBIDDEN, ErrorCode.UNAVAILABLE, ErrorCode.UNSUPPORTED_CAPABILITY}:
             return False
         raise
     return True
