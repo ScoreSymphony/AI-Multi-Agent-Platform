@@ -407,9 +407,7 @@ class ProviderFaultBenchmarkHarness:
         )
         if expected_code is not None:
             expected_retryable_counts = (
-                Counter({expected_code.value: expected_faults})
-                if expected_retryable
-                else Counter()
+                Counter({expected_code.value: expected_faults}) if expected_retryable else Counter()
             )
             passed = passed and error_counts == Counter({expected_code.value: expected_faults})
             passed = passed and retryable_counts == expected_retryable_counts
