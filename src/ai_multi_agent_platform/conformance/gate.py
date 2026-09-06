@@ -281,8 +281,14 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         return integration
 
     return integration + (
-        _pending(
-            "G", "#46 failure/retry", "controlled failures preserve canonical retries and telemetry"
+        ConformanceScenario(
+            "G",
+            "#46 failure/retry",
+            "controlled failures preserve canonical retries and telemetry",
+            _pytest(
+                "tests/test_issue_46_failure_retry_e2e.py::"
+                "test_controlled_failure_retry_preserves_canonical_history_and_retry_telemetry"
+            ),
         ),
         ConformanceScenario(
             "I",
