@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import Protocol
 
 from .items import InstalledRegistryItem, RegistryItem
-from .models import version_key
+from .models import RegistryItemType, version_key
 
-_STATE_VERSION = "1"
+_STATE_VERSION = "2"
+_SUPPORTED_STATE_VERSIONS = frozenset({"1", _STATE_VERSION})
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +24,8 @@ class RegistryInstallationSnapshot:
     revision: str | None
     license: str
     provenance: str
+    item_type: RegistryItemType | None = None
+    artifact_sha256: str | None = None
 
     def __post_init__(self) -> None:
         InstalledRegistryItem(
@@ -38,6 +41,13 @@ class RegistryInstallationSnapshot:
             raise ValueError("package_reference must be non-blank")
         if self.revision is not None and not self.revision.strip():
             raise ValueError("revision must be non-blank when provided")
+        if self.artifact_sha256 is not None:
+            if len(self.artifact_sha256) != 64:
+                raise ValueError("artifact_sha256 must be a SHA-256 hex digest")
+            try:
+                bytes.fromhex(self.artifact_sha256)
+            except ValueError as exc:
+                raise ValueError("artifact_sha256 must be a SHA-256 hex digest") from exc
 
     def as_installed(self, *, pinned_version: str | None = None) -> InstalledRegistryItem:
         return InstalledRegistryItem(
@@ -69,7 +79,13 @@ class RegistryInstallationStore(Protocol):
 
     def get(self, item_id: str) -> RegistryInstallation | None: ...
 
-    def record(self, item: RegistryItem, *, provider_id: str) -> RegistryInstallation: ...
+    def record(
+        self,
+        item: RegistryItem,
+        *,
+        provider_id: str,
+        artifact_sha256: str | None = None,
+    ) -> RegistryInstallation: ...
 
     def pin(self, item_id: str, version: str) -> RegistryInstallation: ...
 
@@ -90,7 +106,13 @@ class JsonRegistryInstallationStore:
     def get(self, item_id: str) -> RegistryInstallation | None:
         return self._records.get(item_id)
 
-    def record(self, item: RegistryItem, *, provider_id: str) -> RegistryInstallation:
+    def record(
+        self,
+        item: RegistryItem,
+        *,
+        provider_id: str,
+        artifact_sha256: str | None = None,
+    ) -> RegistryInstallation:
         current = RegistryInstallationSnapshot(
             item_id=item.item_id,
             version=item.version,
@@ -100,6 +122,8 @@ class JsonRegistryInstallationStore:
             revision=item.source.revision,
             license=item.license,
             provenance=item.provenance,
+            item_type=item.item_type,
+            artifact_sha256=artifact_sha256 or item.integrity.sha256,
         )
         previous = self._records.get(item.item_id)
         history = previous.history if previous is not None else ()
@@ -140,7 +164,7 @@ class JsonRegistryInstallationStore:
         if not self._path.exists():
             return
         document = json.loads(self._path.read_text(encoding="utf-8"))
-        if not isinstance(document, dict) or document.get("version") != _STATE_VERSION:
+        if not isinstance(document, dict) or document.get("version") not in _SUPPORTED_STATE_VERSIONS:
             raise ValueError("unsupported registry installation state")
         raw_records = document.get("installations", [])
         if not isinstance(raw_records, list):
@@ -178,6 +202,8 @@ def _snapshot_to_json(snapshot: RegistryInstallationSnapshot) -> dict[str, objec
         "revision": snapshot.revision,
         "license": snapshot.license,
         "provenance": snapshot.provenance,
+        "item_type": snapshot.item_type.value if snapshot.item_type is not None else None,
+        "artifact_sha256": snapshot.artifact_sha256,
     }
 
 
@@ -193,6 +219,8 @@ def _snapshot_from_json(value: object) -> RegistryInstallationSnapshot:
         revision=_optional_string(value, "revision"),
         license=_string(value, "license"),
         provenance=_string(value, "provenance"),
+        item_type=_optional_item_type(value, "item_type"),
+        artifact_sha256=_optional_string(value, "artifact_sha256"),
     )
 
 
@@ -231,3 +259,18 @@ def _optional_string(value: dict[object, object], key: str) -> str | None:
     if not isinstance(result, str) or not result.strip():
         raise ValueError(f"registry installation field {key!r} must be null or non-blank string")
     return result
+
+
+def _optional_item_type(
+    value: dict[object, object],
+    key: str,
+) -> RegistryItemType | None:
+    result = value.get(key)
+    if result is None:
+        return None
+    if not isinstance(result, str):
+        raise ValueError(f"registry installation field {key!r} must be null or a string")
+    try:
+        return RegistryItemType(result)
+    except ValueError as exc:
+        raise ValueError(f"registry installation field {key!r} has an invalid item type") from exc
