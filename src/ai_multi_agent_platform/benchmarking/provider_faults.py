@@ -74,7 +74,7 @@ class ProviderFaultBenchmarkSpec:
     concurrency: int
     fault_delay_seconds: float = 0.05
     tool_timeout_seconds: float = 0.01
-    cancel_after_seconds: float = 0.01
+    cancel_after_seconds: float = 0.005
     operation_timeout_seconds: float = 2.0
     safety_max_operations_per_phase: int = 1000
     safety_max_concurrency: int = 64
@@ -121,12 +121,17 @@ class ProviderFaultBenchmarkSpec:
             raise ValueError("cancel_after_seconds must be positive")
         if self.operation_timeout_seconds <= 0:
             raise ValueError("operation_timeout_seconds must be positive")
-        if self.scenario == "tool-timeout" and self.fault_delay_seconds <= self.tool_timeout_seconds:
+        if (
+            self.scenario == "tool-timeout"
+            and self.fault_delay_seconds <= self.tool_timeout_seconds
+        ):
             raise ValueError("tool-timeout requires fault_delay_seconds > tool_timeout_seconds")
         if self.scenario.endswith("cancelled") and (
             self.fault_delay_seconds <= self.cancel_after_seconds
         ):
-            raise ValueError("cancelled scenarios require fault_delay_seconds > cancel_after_seconds")
+            raise ValueError(
+                "cancelled scenarios require fault_delay_seconds > cancel_after_seconds"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -551,7 +556,12 @@ class ProviderFaultBenchmarkHarness:
         self,
         spec: ProviderFaultBenchmarkSpec,
     ) -> tuple[dict[str, _PhaseEvidence], int]:
-        provider = _BenchmarkToolProvider(timeout_seconds=spec.tool_timeout_seconds)
+        capability_timeout = (
+            spec.tool_timeout_seconds
+            if spec.scenario == "tool-timeout"
+            else spec.operation_timeout_seconds
+        )
+        provider = _BenchmarkToolProvider(timeout_seconds=capability_timeout)
         registry = CapabilityRegistry()
         await registry.register_provider(provider)
         invoker = CapabilityInvoker(registry)
