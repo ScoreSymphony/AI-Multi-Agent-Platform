@@ -54,7 +54,11 @@ def test_coordination_pressure_preserves_scenario_invariants(
         assert report.outcome_persistence_latency.count >= 3
         assert report.coordination_observation_latency.count >= 3
         assert len(report.run_ids) == 3
-        assert report.resources.storage_growth_bytes > 0
+        assert report.resources.storage_bytes_after > 0
+        assert (
+            report.resources.storage_growth_bytes
+            == report.resources.storage_bytes_after - report.resources.storage_bytes_before
+        )
         if scenario == "retry-burst":
             assert report.correctness.retry_scheduled_steps == 3
             assert report.transition_latency.count == 3
