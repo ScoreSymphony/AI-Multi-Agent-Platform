@@ -167,9 +167,7 @@ def test_composite_failure_compensates_earlier_capability_assignment() -> None:
                     "required": ({"capability_id": "tool.echo"},),
                 }
             ),
-            requirements=TemplateRequirements(
-                capabilities=(CapabilityRequirement("tool.echo"),)
-            ),
+            requirements=TemplateRequirements(capabilities=(CapabilityRequirement("tool.echo"),)),
         ),
     )
     failing = _publish(
@@ -201,9 +199,7 @@ def test_composite_failure_compensates_earlier_capability_assignment() -> None:
                 composite.template_id,
                 applied_by=OWNER,
                 revision=composite.revision,
-                environment=TemplateEnvironment(
-                    capability_ids=frozenset({"tool.echo"})
-                ),
+                environment=TemplateEnvironment(capability_ids=frozenset({"tool.echo"})),
             )
         )
 
