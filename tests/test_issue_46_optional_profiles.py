@@ -22,15 +22,13 @@ from ai_multi_agent_platform.conformance.external_profile import main as externa
 
 def _by_id(profile: ConformanceProfile, enabled: tuple[str, ...] = ()):
     return {
-        scenario.scenario_id: scenario
-        for scenario in activate_optional_scenarios(profile, enabled)
+        scenario.scenario_id: scenario for scenario in activate_optional_scenarios(profile, enabled)
     }
 
 
 def test_optional_claims_remain_disabled_by_default() -> None:
     scenarios = {
-        scenario.scenario_id: scenario
-        for scenario in profile_scenarios(ConformanceProfile.RELEASE)
+        scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.RELEASE)
     }
     for scenario_id in ("B", "C", "E", "N", "Q", "R", "S", "T", "V", "X", "Y"):
         scenario = scenarios[scenario_id]
@@ -65,8 +63,9 @@ def test_enabling_supported_optional_claim_makes_it_required_and_executable() ->
     assert "test_resource_ownership_sharing_revoke_and_cross_org_isolation" in " ".join(
         scenarios["V"].command or ()
     )
-    assert "test_restart_promotion_reconciles_running_work_and_preserves_worker_identity" in " ".join(
-        scenarios["X"].command or ()
+    assert (
+        "test_restart_promotion_reconciles_running_work_and_preserves_worker_identity"
+        in " ".join(scenarios["X"].command or ())
     )
 
 
@@ -78,7 +77,8 @@ def test_distributed_profile_covers_security_result_identity_and_trace_safe_tele
         "test_dispatch_authorization_denial_releases_reservation_before_worker_execution" in command
     )
     assert (
-        "test_terminal_result_is_recovered_after_restart_and_then_survives_without_worker" in command
+        "test_terminal_result_is_recovered_after_restart_and_then_survives_without_worker"
+        in command
     )
     assert "test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry" in command
 
