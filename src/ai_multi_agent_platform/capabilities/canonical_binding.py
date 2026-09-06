@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from typing import Literal, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from ai_multi_agent_platform.contracts.domain_mapping import (
@@ -25,6 +26,8 @@ from .types import CapabilityInvocation, CapabilityRegistration
 
 _TOOL_NAMESPACE = "ai-multi-agent-platform:canonical-capability-tool"
 _TOOL_INVOCATION_NAMESPACE = "ai-multi-agent-platform:canonical-capability-tool-invocation"
+_OWNER_TYPES = frozenset({"user", "organization", "team", "service"})
+type CanonicalOwnerType = Literal["user", "organization", "team", "service"]
 
 
 def canonical_tool_id(capability_id: str, capability_version: str) -> str:
@@ -93,7 +96,14 @@ async def bind_canonical_capability_invocation(
             "canonical capability invocation binding requires owner context",
             provider_id=registration.provider_id,
         )
-    owner_ref = OwnerRef(type=context.owner_type, id=context.owner_id)
+    if context.owner_type not in _OWNER_TYPES:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            f"unsupported canonical capability owner type: {context.owner_type}",
+            provider_id=registration.provider_id,
+        )
+    owner_type = cast(CanonicalOwnerType, context.owner_type)
+    owner_ref = OwnerRef(type=owner_type, id=context.owner_id)
     mapped = map_tool_invocation_to_domain(
         provider_invocation,
         canonical_tool_id=canonical_tool_id(
