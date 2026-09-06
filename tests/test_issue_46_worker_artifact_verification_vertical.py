@@ -29,6 +29,7 @@ from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.data import DataAccessContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.distributed import (
+    WORKSPACE_ARTIFACT_CAPABILITY_ID,
     ArtifactPublishingWorkerDispatcher,
     CanonicalWorkspaceArtifactPublisher,
     DistributedExecutorArtifactProvider,
@@ -38,7 +39,6 @@ from ai_multi_agent_platform.distributed import (
     MaterializingWorkerDispatcher,
     NodeRecord,
     RegistrationRequest,
-    WORKSPACE_ARTIFACT_CAPABILITY_ID,
     WorkerJobRequest,
     WorkerRecord,
     WorkspaceJobMaterializationResolver,
