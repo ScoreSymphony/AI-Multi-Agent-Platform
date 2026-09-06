@@ -17,9 +17,9 @@ RegistryItem metadata + artifact
         v
 preview / validation
         |
-        +-- plugin ----------> #20 plugin lifecycle
+        +-- plugin ----------> explicit #20 artifact installer
         |
-        +-- canonical asset -> #79 portability / #78 templates
+        +-- canonical asset -> #79 package preview/import -> #78/domain owners
         |
         +-- documentation ---> manual consumption only
 ```
@@ -42,11 +42,13 @@ Supported initial item types are Agents, Agent Teams, Tools, Plugins, Workflows,
 
 `DistributionService.preview()` fetches metadata and the exact artifact and validates it before mutation. Validation covers platform compatibility, yanked/deprecated releases, checksum integrity, dependency availability, requested permissions, required capabilities/plugins/connectors/models, installed-version pins and license/provenance changes. Untrusted content remains visibly untrusted.
 
-`preview()` never activates content. `activate()` requires an explicit authorization result, re-fetches the exact metadata/artifact, re-runs validation to prevent preview/apply drift, and only then delegates to the owner domain through `DistributionRouter`.
+`preview()` never activates content. Async `activate()` requires an explicit authorization result, re-fetches the exact metadata/artifact, re-runs validation to prevent preview/apply drift, and only then delegates to the owner domain through `DistributionRouter`.
 
-Plugin content must be routed into #20. Portable configuration, templates, Agents, Teams, Workflows and similar canonical definitions must be routed into #79/#78 rather than written directly by the registry. Documentation assets have no automatic activation path.
+`CanonicalDistributionRouter` is the reference owner handoff. Portable Registry assets must be UTF-8 JSON portable packages. The router sends them through the canonical #79 `validate_package_document()` -> `preview_import()` -> `execute_import()` workflow; it never writes Templates, Agents, Teams, Workflows or other imported resources itself.
 
-A provider change or metadata change between preview and activation fails closed. Privileged content is never silently auto-installed.
+Plugin artifacts are intentionally different. The Registry layer does not deserialize plugin manifests, resolve entrypoints, construct runtimes or call `PluginRegistry.install()` directly. A deployment must provide a `PluginArtifactInstaller` that composes the verified artifact through the canonical #20 plugin packaging/discovery boundary. Without that owner adapter plugin activation fails closed as an unsupported capability.
+
+Documentation assets have no automatic activation path. A provider change or metadata change between preview and activation fails closed. Privileged content is never silently auto-installed.
 
 ## Updates and pinning
 
@@ -66,8 +68,8 @@ Northbound clients consume registry operations through the provider-neutral `Dis
 
 `register_distribution_control_plane()` is optional by construction. When no provider is configured it registers no collection or command, so registry availability is not part of core startup. With a provider it registers the read-only `registry-items` collection. `registry.preview` is registered only when the deployment supplies a `RegistryValidationContextResolver`, which resolves platform version, installed dependencies, capabilities, models, connectors and grantable permissions from authoritative server-side state rather than trusting client-supplied compatibility inputs.
 
-The generic Control Plane performs the existing #15 authorization check before registered resource reads or commands execute. The distribution adapter does not implement a parallel authorization system.
+`registry.activate` is stricter: it is registered only when both the authoritative validation-context resolver and an activation router are configured. The handler performs a fresh server-side preview immediately before activation, rejects validation failures, and then awaits the canonical owner-domain handoff.
 
-There is intentionally no `registry.activate` Control Plane command in this slice. Activation remains behind `DistributionRouter` and must be composed with the canonical owner-domain mutation paths from #20 and #79/#78. This prevents a marketplace adapter from becoming an alternate plugin installer or configuration writer merely because discovery is enabled.
+The generic Control Plane performs the existing #15 authorization check before registered resource reads or commands execute. A successful Control Plane command authorization is the explicit northbound authorization supplied to `DistributionService.activate()`; the distribution adapter does not implement a parallel authorization system.
 
-CLI and UI integrations can therefore discover exact versioned resources (`<item-id>@<version>`) and request the same canonical preview result through the Control Plane without coupling themselves to a hosted marketplace. Deployments that do not expose these adapters remain fully functional offline.
+CLI and UI integrations can therefore discover exact versioned resources (`<item-id>@<version>`), request canonical preview results, and invoke activation only on deployments that deliberately expose a safe owner-domain composition. Deployments without those adapters remain fully functional offline and expose no Registry mutation command.
