@@ -1,0 +1,117 @@
+name: Performance smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  performance-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install benchmark environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Validate benchmark implementation
+        run: |
+          ruff format --check \
+            src/ai_multi_agent_platform/benchmarking \
+            tests/test_issue_440_benchmarking.py \
+            tests/test_issue_440_sweep.py \
+            tests/test_issue_440_workloads.py
+          ruff check \
+            src/ai_multi_agent_platform/benchmarking \
+            tests/test_issue_440_benchmarking.py \
+            tests/test_issue_440_sweep.py \
+            tests/test_issue_440_workloads.py
+          mypy src/ai_multi_agent_platform/benchmarking
+          pytest \
+            tests/test_issue_440_benchmarking.py \
+            tests/test_issue_440_sweep.py \
+            tests/test_issue_440_workloads.py
+      - name: Run deterministic single-node performance smoke
+        run: |
+          mkdir -p artifacts/benchmarks
+          platform-benchmark single-node \
+            --operations 5 \
+            --concurrency 2 \
+            --warmup-operations 1 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-single-node.json
+      - name: Run tiny single-node concurrency sweep
+        run: |
+          platform-benchmark single-node-sweep \
+            --concurrency-levels 1,2 \
+            --operations-per-level 2 \
+            --warmup-operations 0 \
+            --repetitions 1 \
+            --platform-commit "$GITHUB_SHA" \
+            --output-dir artifacts/benchmarks/pr-sweep
+      - name: Run tiny single-node workload profiles
+        shell: bash
+        run: |
+          mkdir -p artifacts/benchmarks/pr-workloads
+          for scenario in read-heavy mixed history restart; do
+            platform-benchmark single-node-workload \
+              --scenario "$scenario" \
+              --operations 5 \
+              --concurrency 2 \
+              --seed-tasks 2 \
+              --warmup-operations 0 \
+              --platform-commit "$GITHUB_SHA" \
+              --output "artifacts/benchmarks/pr-workloads/${scenario}.json"
+          done
+      - name: Validate benchmark report schemas and correctness
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from jsonschema import Draft202012Validator
+
+          report = json.loads(Path("artifacts/benchmarks/pr-single-node.json").read_text())
+          report_schema = json.loads(
+              Path("docs/schemas/benchmark-report.v1.schema.json").read_text()
+          )
+          Draft202012Validator(report_schema).validate(report)
+          assert report["correctness"]["passed"] is True
+          assert report["benchmark"]["deployment_profile"] == "single-node-reference"
+
+          sweep = json.loads(Path("artifacts/benchmarks/pr-sweep/summary.json").read_text())
+          sweep_schema = json.loads(
+              Path("docs/schemas/benchmark-sweep.v1.schema.json").read_text()
+          )
+          Draft202012Validator(sweep_schema).validate(sweep)
+          assert sweep["correctness_passed"] is True
+          assert sweep["concurrency_levels"] == [1, 2]
+          assert len(sweep["points"]) == 2
+
+          for point in sweep["points"]:
+              point_report = json.loads(
+                  (Path("artifacts/benchmarks/pr-sweep") / point["report_file"]).read_text()
+              )
+              Draft202012Validator(report_schema).validate(point_report)
+              assert point_report["correctness"]["passed"] is True
+
+          workload_schema = json.loads(
+              Path("docs/schemas/benchmark-workload.v1.schema.json").read_text()
+          )
+          for scenario in ("read-heavy", "mixed", "history", "restart"):
+              workload = json.loads(
+                  Path(f"artifacts/benchmarks/pr-workloads/{scenario}.json").read_text()
+              )
+              Draft202012Validator(workload_schema).validate(workload)
+              assert workload["benchmark"]["scenario"] == scenario
+              assert workload["correctness"]["passed"] is True
+          PY
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-single-node-benchmark
+          path: artifacts/benchmarks
+          if-no-files-found: ignore

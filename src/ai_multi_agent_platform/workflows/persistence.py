@@ -55,6 +55,22 @@ class JsonWorkflowRepository(InMemoryWorkflowRepository):
         super().append_revision(definition, revision)
         self._save()
 
+    def compensate_created(
+        self,
+        workflow_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+        expected_instance_id: str,
+    ) -> None:
+        super().compensate_created(
+            workflow_id,
+            expected_owner_ref=expected_owner_ref,
+            expected_source=expected_source,
+            expected_instance_id=expected_instance_id,
+        )
+        self._save()
+
     def _save(self) -> None:
         document: dict[str, JsonValue] = {
             "schema_version": WORKFLOW_REPOSITORY_SCHEMA_VERSION,

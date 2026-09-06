@@ -21,6 +21,11 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+def _require_aware(value: datetime, field_name: str) -> None:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{field_name} must be timezone-aware")
+
+
 class NodeStatus(StrEnum):
     ONLINE = "online"
     DEGRADED = "degraded"
@@ -141,6 +146,7 @@ class NodeRecord:
     status: NodeStatus = NodeStatus.ONLINE
     registered_at: datetime = field(default_factory=utc_now)
     last_heartbeat_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
     labels: tuple[str, ...] = ()
     os_name: str | None = None
     platform: str | None = None
@@ -162,6 +168,9 @@ class NodeRecord:
             raise ValueError("node display_name must not be blank")
         if not self.trust_level.strip():
             raise ValueError("node trust_level must not be blank")
+        _require_aware(self.registered_at, "node registered_at")
+        _require_aware(self.last_heartbeat_at, "node last_heartbeat_at")
+        _require_aware(self.updated_at, "node updated_at")
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +191,7 @@ class WorkerRecord:
     worker_version: str = "0"
     registered_at: datetime = field(default_factory=utc_now)
     last_heartbeat_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
     draining: bool = False
     locality_refs: tuple[str, ...] = ()
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
@@ -197,6 +207,9 @@ class WorkerRecord:
             raise ValueError("worker active_jobs must be non-negative")
         if not self.protocol_version.strip():
             raise ValueError("worker protocol_version must not be blank")
+        _require_aware(self.registered_at, "worker registered_at")
+        _require_aware(self.last_heartbeat_at, "worker last_heartbeat_at")
+        _require_aware(self.updated_at, "worker updated_at")
 
 
 @dataclass(frozen=True, slots=True)
@@ -319,6 +332,7 @@ class Heartbeat:
         validate_id(self.node_id, "node")
         if self.sequence < 1:
             raise ValueError("heartbeat sequence must be >= 1")
+        _require_aware(self.observed_at, "heartbeat observed_at")
         if any(worker.node_id != self.node_id for worker in self.workers):
             raise ValueError("heartbeat worker node_id mismatch")
 

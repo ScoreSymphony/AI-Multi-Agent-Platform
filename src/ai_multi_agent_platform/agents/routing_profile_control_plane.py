@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from types import MethodType
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -12,6 +13,14 @@ from ai_multi_agent_platform.models import (
     ModelRoutingProfileAssignmentGate,
     ModelRoutingProfileRef,
 )
+from ai_multi_agent_platform.models.routing_profile_assignment_context import (
+    RoutingProfileAssignmentAccess,
+    activate_routing_profile_assignment_access,
+)
+from ai_multi_agent_platform.models.routing_profile_control_plane import (
+    register_model_routing_profile_control_plane,
+)
+from ai_multi_agent_platform.models.routing_profile_service import ModelRoutingProfileService
 
 from .control_plane import (
     AGENT_COLLECTION,
@@ -141,7 +150,7 @@ class RoutingProfileAwareAgentCommandHandlers(AgentCommandHandlers):
                 owner_id=context.actor.owner_id,
                 project_id=project_id,
             ),
-            actor_type=context.actor.actor_type or "service",
+            actor_type=_authorization_actor_type(context),
         )
 
 
@@ -154,8 +163,17 @@ def register_routing_profile_aware_agent_control_plane(
     orchestrator_mappers: Mapping[str, AgentOrchestratorMapper] | None = None,
     execution_environment_resolver: AgentExecutionEnvironmentResolver | None = None,
 ) -> None:
-    """Register #33 resources with #309 assignment authorization at mutation boundaries."""
+    """Register #309 management plus #33 assignment-aware Agent boundaries."""
 
+    _install_nested_assignment_context(control_plane, assignment_gate)
+
+    register_model_routing_profile_control_plane(
+        control_plane,
+        ModelRoutingProfileService(
+            assignment_gate.repository,
+            authorization=assignment_gate.authorization,
+        ),
+    )
     control_plane.register_resource_service(AGENT_COLLECTION, AgentResourceService(service))
     control_plane.register_resource_service(
         AGENT_TEAM_COLLECTION,
@@ -184,6 +202,49 @@ def register_routing_profile_aware_agent_control_plane(
     control_plane.register_command("agent-team.rollback", handlers.rollback_team)
     if runtime is not None:
         control_plane.register_command("agent-team.start", handlers.start_team)
+
+
+def _install_nested_assignment_context(
+    control_plane: ControlPlane,
+    assignment_gate: ModelRoutingProfileAssignmentGate,
+) -> None:
+    """Project authenticated command identity to nested Template/import consumers."""
+
+    if getattr(control_plane, "_routing_profile_assignment_context_installed", False):
+        return
+    original_execute_command = control_plane.execute_command
+
+    async def execute_with_assignment_context(
+        _self: ControlPlane,
+        context: RequestContext,
+        command: str,
+        resource_ref: str,
+        payload: dict[str, JsonValue] | None = None,
+    ) -> dict[str, JsonValue]:
+        access = RoutingProfileAssignmentAccess(
+            gate=assignment_gate,
+            principal_ref=context.actor.principal_ref,
+            actor_type=_authorization_actor_type(context),
+            correlation_id=context.correlation_id,
+            causation_id=context.request_id,
+        )
+        with activate_routing_profile_assignment_access(access):
+            return await original_execute_command(context, command, resource_ref, payload)
+
+    object.__setattr__(
+        control_plane,
+        "execute_command",
+        MethodType(execute_with_assignment_context, control_plane),
+    )
+    object.__setattr__(control_plane, "_routing_profile_assignment_context_installed", True)
+
+
+def _authorization_actor_type(context: RequestContext) -> str:
+    if context.actor.actor_type is not None:
+        return context.actor.actor_type
+    if context.actor.owner_type in {"user", "organization", "team"}:
+        return "human"
+    return "service"
 
 
 __all__ = [

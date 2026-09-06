@@ -18,9 +18,14 @@ dependencies = [
 platform = "ai_multi_agent_platform.cli.issue_82:main"
 platform-completion = "ai_multi_agent_platform.cli.completion:main"
 platform-server = "ai_multi_agent_platform.adapters.single_node_app:main"
+platform-distributed-server = "ai_multi_agent_platform.adapters.distributed_control_plane_app:main"
+platform-worker = "ai_multi_agent_platform.deployment.distributed_worker:main"
+platform-message-broker = "ai_multi_agent_platform.deployment.message_broker:main"
 platform-backup = "ai_multi_agent_platform.backup.cli:main"
 platform-acceptance = "ai_multi_agent_platform.cli.acceptance:main"
+platform-conformance = "ai_multi_agent_platform.cli.conformance:main"
 platform-upgrade = "ai_multi_agent_platform.upgrade.cli:main"
+platform-benchmark = "ai_multi_agent_platform.benchmarking.cli:main"
 
 [project.optional-dependencies]
 server = [

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from ai_multi_agent_platform.contracts import AuthorizationDecision
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -334,5 +334,84 @@ def test_distributed_registration_preserves_search_provider_degraded_behavior() 
         assert isinstance(response.body, dict)
         assert response.body["code"] == "unavailable"
         assert response.body["retryable"] is True
+
+    asyncio.run(scenario())
+
+
+def test_search_updated_at_tracks_canonical_state_changes_not_heartbeats() -> None:
+    async def scenario() -> None:
+        _, http, runtime, node, _ = _stack()
+        mutation_at = NOW + timedelta(minutes=5)
+        heartbeat_before = runtime.registry.get_node(node.node_id).last_heartbeat_at
+
+        runtime.registry.set_node_draining(node.node_id, draining=True, now=mutation_at)
+        canonical = runtime.registry.get_node(node.node_id)
+        assert canonical.last_heartbeat_at == heartbeat_before == NOW
+        assert canonical.updated_at == mutation_at
+
+        exact = await _search(http, {"id": node.node_id, "type": "node"})
+        exact_item = _items(exact)[0]
+        assert exact_item["updated_at"] == mutation_at.isoformat()
+
+        included = await _search(
+            http,
+            {"type": "node", "updated_after": mutation_at.isoformat()},
+        )
+        assert {item["resource_id"] for item in _items(included)} == {node.node_id}
+
+        excluded = await _search(
+            http,
+            {
+                "type": "node",
+                "updated_before": (mutation_at - timedelta(seconds=1)).isoformat(),
+            },
+        )
+        assert node.node_id not in {item["resource_id"] for item in _items(excluded)}
+
+    asyncio.run(scenario())
+
+
+def test_search_updated_at_sorting_and_worker_filters_use_canonical_state_time() -> None:
+    async def scenario() -> None:
+        _, http, runtime, node, worker = _stack()
+        node_mutation_at = NOW + timedelta(minutes=5)
+        worker_mutation_at = NOW + timedelta(minutes=10)
+        runtime.registry.set_node_draining(
+            node.node_id,
+            draining=True,
+            now=node_mutation_at,
+        )
+        runtime.registry.set_worker_draining(
+            worker.worker_id,
+            draining=True,
+            now=worker_mutation_at,
+        )
+
+        worker_exact = await _search(http, {"id": worker.worker_id, "type": "worker"})
+        assert _items(worker_exact)[0]["updated_at"] == worker_mutation_at.isoformat()
+
+        worker_after = await _search(
+            http,
+            {"type": "worker", "updated_after": worker_mutation_at.isoformat()},
+        )
+        assert {item["resource_id"] for item in _items(worker_after)} == {worker.worker_id}
+
+        ascending = await _search(
+            http,
+            {"type": "node,worker", "sort": "updated_at", "direction": "asc"},
+        )
+        assert [item["resource_id"] for item in _items(ascending)] == [
+            node.node_id,
+            worker.worker_id,
+        ]
+
+        descending = await _search(
+            http,
+            {"type": "node,worker", "sort": "updated_at", "direction": "desc"},
+        )
+        assert [item["resource_id"] for item in _items(descending)] == [
+            worker.worker_id,
+            node.node_id,
+        ]
 
     asyncio.run(scenario())
