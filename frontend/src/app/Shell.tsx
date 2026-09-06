@@ -38,6 +38,7 @@ import {
   CapabilityDetailPage,
   CapabilityProviderDetailPage,
 } from "../pages/CapabilitiesPage";
+import { CanonicalConfigurationDetailPage } from "../pages/CanonicalConfigurationDetailPage";
 import { ChatPage } from "../pages/ChatPage";
 import {
   ComputeNodeDetailPage,
@@ -210,6 +211,9 @@ export function Shell() {
   const pluginMatch = matchPath("/plugins/:pluginId", path);
   const automationMatch = matchPath("/automations/:automationId", path);
   const templateMatch = matchPath("/templates/:templateId", path);
+  const workflowMatch = matchPath("/workflows/:workflowId", path);
+  const capabilityAssignmentMatch = matchPath("/capability-assignments/:assignmentId", path);
+  const modelRoutingProfileMatch = matchPath("/model-routing-profiles/:profileId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const verificationMatch = matchPath("/verification/:verificationId", path);
   const referenceMatch = referenceRoute(path);
@@ -320,6 +324,51 @@ export function Shell() {
         resource="templates"
       >
         <TemplateDetailPage client={templateClient} templateId={templateMatch.templateId} />
+      </ManifestResourcePage>
+    );
+  } else if (workflowMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Workflow"
+        resource="workflows"
+      >
+        <CanonicalConfigurationDetailPage
+          client={collections}
+          collection="workflows"
+          resourceId={workflowMatch.workflowId}
+        />
+      </ManifestResourcePage>
+    );
+  } else if (capabilityAssignmentMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Capability Assignment"
+        resource="capability-assignments"
+      >
+        <CanonicalConfigurationDetailPage
+          client={collections}
+          collection="capability-assignments"
+          resourceId={capabilityAssignmentMatch.assignmentId}
+        />
+      </ManifestResourcePage>
+    );
+  } else if (modelRoutingProfileMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Model Routing Profile"
+        resource="model-routing-profiles"
+      >
+        <CanonicalConfigurationDetailPage
+          client={collections}
+          collection="model-routing-profiles"
+          resourceId={modelRoutingProfileMatch.profileId}
+        />
       </ManifestResourcePage>
     );
   }
