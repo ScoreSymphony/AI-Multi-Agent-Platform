@@ -61,7 +61,7 @@ class JsonDiscoveryReportStore:
 
     def write(self, stored: StoredDiscoveryReport) -> None:
         _validate_timestamp(stored.reviewed_at, "reviewed_at")
-        _decode_report(cast(dict[str, object], stored.report.to_dict()))
+        _decode_report(stored.report.to_dict())
         temporary = self.path.with_suffix(f"{self.path.suffix}.tmp")
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
