@@ -169,9 +169,7 @@ def test_enable_state_rolls_back_when_persist_fails(tmp_path, monkeypatch) -> No
     assert repository.get_definition(profile.profile_id).enabled is True
 
 
-def test_compensation_rolls_back_complete_history_when_persist_fails(
-    tmp_path, monkeypatch
-) -> None:
+def test_compensation_rolls_back_complete_history_when_persist_fails(tmp_path, monkeypatch) -> None:
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
     service = ModelRoutingProfileService(repository)
     first = asyncio.run(
