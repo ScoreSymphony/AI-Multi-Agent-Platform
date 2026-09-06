@@ -210,8 +210,10 @@ def _registry_query(query: PageQuery) -> tuple[RegistryQuery, bool | None]:
     )
     platform_version = filters.pop("platform_version", None)
     update_for_item_id = filters.pop("update_for_item_id", None)
-    include_deprecated = _optional_bool(filters.pop("include_deprecated", None), default=False)
-    include_yanked = _optional_bool(filters.pop("include_yanked", None), default=False)
+    include_deprecated = bool(
+        _optional_bool(filters.pop("include_deprecated", None), default=False)
+    )
+    include_yanked = bool(_optional_bool(filters.pop("include_yanked", None), default=False))
     update_available = _optional_bool(filters.pop("update_available", None), default=None)
     if filters:
         raise ContractError(
