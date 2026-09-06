@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import cast
+from typing import Literal, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -271,10 +271,11 @@ def _owner_ref(value: JsonValue | None, context: RequestContext) -> OwnerRef:
         owner_id = _required_string(data, "id")
         if owner_type not in {"user", "organization", "team", "service"}:
             raise ContractError(ErrorCode.INVALID_REQUEST, "owner_ref.type is not supported")
-        return OwnerRef(
-            type=cast("str", owner_type),
-            id=owner_id,
+        typed_owner_type = cast(
+            Literal["user", "organization", "team", "service"],
+            owner_type,
         )
+        return OwnerRef(type=typed_owner_type, id=owner_id)
     if context.actor.owner_type is None or context.actor.owner_id is None:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
@@ -292,20 +293,14 @@ def _policy(value: JsonValue | None) -> ModelRoutingProfilePolicy:
         return ModelRoutingProfilePolicy(
             requirements=RoutingRequirements(
                 explicit_model_id=_optional_string(requirements_data, "explicit_model_id"),
-                min_context_window=_optional_positive_int(
-                    requirements_data, "min_context_window"
-                ),
+                min_context_window=_optional_positive_int(requirements_data, "min_context_window"),
                 tool_calling=_boolean(requirements_data, "tool_calling", default=False),
-                structured_output=_boolean(
-                    requirements_data, "structured_output", default=False
-                ),
+                structured_output=_boolean(requirements_data, "structured_output", default=False),
                 streaming=_boolean(requirements_data, "streaming", default=False),
                 modalities=_string_tuple(requirements_data, "modalities"),
                 reasoning=_string_tuple(requirements_data, "reasoning"),
                 local_only=_boolean(requirements_data, "local_only", default=False),
-                self_hosted_only=_boolean(
-                    requirements_data, "self_hosted_only", default=False
-                ),
+                self_hosted_only=_boolean(requirements_data, "self_hosted_only", default=False),
             ),
             preferred_model_ids=_string_tuple(data, "preferred_model_ids"),
             fallback=RoutingProfileFallbackPolicy(
