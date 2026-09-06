@@ -251,7 +251,6 @@ class DurablePlanStepCoordinator:
 
         claim = self._claim(record.step_id, current_time)
         if claim is None:
-            self._emit("coordination.claim.conflict", task_id, record.plan_id, record.step_id)
             return self.projection(record.plan_id)
         try:
             state = self.repository.get_plan(record.plan_id)
@@ -568,6 +567,15 @@ class DurablePlanStepCoordinator:
                     claim=claim,
                     now=current_time,
                 )
+                self._emit(
+                    "coordination.step.cancelled",
+                    current.task_id,
+                    current.plan_id,
+                    current.step_id,
+                    run_id=current.latest_run_id,
+                    outcome=TelemetryOutcome.CANCELLED,
+                    attributes={"source": "plan_cancellation"},
+                )
             finally:
                 self.repository.release_claim(claim)
         task = await self.kernel.get_task(state.plan.task_id)
@@ -627,6 +635,14 @@ class DurablePlanStepCoordinator:
                     task_id=record.task_id,
                     run_id=run.run_id,
                     source="platform-coordinator",
+                )
+                self._emit(
+                    "coordination.attempt.dispatched",
+                    record.task_id,
+                    plan_id,
+                    record.step_id,
+                    run_id=run.run_id,
+                    attributes={"attempt": run.attempt, "reconciled": True},
                 )
                 self._emit(
                     "coordination.reconciliation.run_started",
@@ -772,6 +788,14 @@ class DurablePlanStepCoordinator:
                 )
                 if updated.phase is CoordinationPhase.READY:
                     self._emit(
+                        "coordination.barrier.completed",
+                        current.task_id,
+                        current.plan_id,
+                        current.step_id,
+                        outcome=TelemetryOutcome.SUCCEEDED,
+                        attributes={"required": len(current.dependency_ids)},
+                    )
+                    self._emit(
                         "coordination.step.ready",
                         current.task_id,
                         current.plan_id,
@@ -841,6 +865,14 @@ class DurablePlanStepCoordinator:
                     "kernel Run attempt does not match coordinator attempt",
                     details={"expected_attempt": attempt, "run_attempt": run.attempt},
                 )
+            self._emit(
+                "coordination.attempt.created",
+                current.task_id,
+                current.plan_id,
+                current.step_id,
+                run_id=run.run_id,
+                attributes={"attempt": attempt},
+            )
             running = current_step.transition_to(StepStatus.RUNNING)
             updated = replace(
                 current,
@@ -863,6 +895,14 @@ class DurablePlanStepCoordinator:
                 task_id=current.task_id,
                 run_id=run.run_id,
                 source="platform-coordinator",
+            )
+            self._emit(
+                "coordination.attempt.dispatched",
+                current.task_id,
+                current.plan_id,
+                current.step_id,
+                run_id=run.run_id,
+                attributes={"attempt": attempt, "reconciled": False},
             )
             self._emit(
                 "coordination.run.started",
@@ -1054,7 +1094,7 @@ class DurablePlanStepCoordinator:
                 current.step_id,
                 run_id=current.latest_run_id,
                 outcome=TelemetryOutcome.FAILED,
-                attributes={"disposition": disposition.value},
+                attributes={"disposition": disposition.value, "detail": detail},
             )
         finally:
             self.repository.release_claim(claim)
@@ -1101,12 +1141,23 @@ class DurablePlanStepCoordinator:
             )
 
     def _claim(self, step_id: str, now: datetime) -> CoordinatorClaim | None:
-        return self.repository.acquire_claim(
+        claim = self.repository.acquire_claim(
             step_id=step_id,
             owner_id=self.coordinator_id,
             ttl=self.claim_ttl,
             now=now,
         )
+        if claim is None:
+            record = self.repository.get_step_record(step_id)
+            self._emit(
+                "coordination.claim.conflict",
+                record.task_id,
+                record.plan_id,
+                record.step_id,
+                outcome=TelemetryOutcome.FAILED,
+                attributes={"coordinator_id": self.coordinator_id},
+            )
+        return claim
 
     def _required_claim(self, step_id: str, now: datetime) -> CoordinatorClaim:
         claim = self._claim(step_id, now)
