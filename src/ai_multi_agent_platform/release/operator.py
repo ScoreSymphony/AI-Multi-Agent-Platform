@@ -39,7 +39,8 @@ class ReleaseOperatorService:
         warnings: list[str] = []
         if self.inventory.platform_release != versions.platform_release:
             warnings.append(
-                "compatibility inventory platform_release does not match the running platform release"
+                "compatibility inventory platform_release does not match "
+                "the running platform release"
             )
         return {
             "platform_release": versions.platform_release,

@@ -408,7 +408,9 @@ def _not_checked(
 ) -> UpdateCandidate:
     reason = {
         UpdateDisposition.DISABLED: "upstream discovery is disabled by operator policy",
-        UpdateDisposition.OFFLINE: "upstream discovery is offline; production pin remains unchanged",
+        UpdateDisposition.OFFLINE: (
+            "upstream discovery is offline; production pin remains unchanged"
+        ),
         UpdateDisposition.NOT_CHECKED: "no observation was provided for this upstream",
     }[disposition]
     return UpdateCandidate(

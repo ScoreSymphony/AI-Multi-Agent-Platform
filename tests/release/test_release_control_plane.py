@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 
-from ai_multi_agent_platform.control_plane import HTTPRequest, RELEASE_STATUS_PATH, build_openapi
+from ai_multi_agent_platform.control_plane import RELEASE_STATUS_PATH, HTTPRequest, build_openapi
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.release import (
     ObservedUpstream,
