@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 from .codec import ReleaseManifestError, load_release_manifest
 from .discovery import (
+    ObservedUpstream,
     UpdateDiscoveryError,
     UpdateDisposition,
     evaluate_update_candidates,
@@ -103,7 +104,7 @@ def _upstream_check(args: argparse.Namespace) -> int:
     try:
         inventory = load_compatibility_inventory(args.inventory)
         observed_at: str | None = None
-        observations = ()
+        observations: tuple[ObservedUpstream, ...] = ()
         if not bool(args.disabled) and not bool(args.offline):
             if not args.observations:
                 print(
