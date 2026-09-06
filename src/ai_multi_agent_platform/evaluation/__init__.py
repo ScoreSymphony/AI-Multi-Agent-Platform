@@ -33,6 +33,7 @@ from .contracts import (
     Evaluator,
     EvaluatorLike,
 )
+from .coordination_evidence import CoordinationEvaluationEvidenceProvider
 from .evaluators import (
     DeterministicAssertionEvaluator,
     MetricThresholdEvaluator,
@@ -130,6 +131,7 @@ __all__ = [
     "ComparisonReport",
     "CompositeEvaluationEvidenceProvider",
     "ConfigurationSnapshot",
+    "CoordinationEvaluationEvidenceProvider",
     "DeterministicAssertion",
     "DeterministicAssertionEvaluator",
     "DistributedRuntimeEvidenceCaseExecutor",
