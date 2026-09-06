@@ -24,6 +24,31 @@ export interface RegistryDependency {
   optional: boolean;
 }
 
+export interface RegistryInstallationHistory {
+  version: string;
+  source_registry: string;
+  source_repository: string;
+  package_reference: string;
+  revision: string | null;
+  license: string;
+  provenance: string;
+}
+
+export interface RegistryInstallation {
+  id: string;
+  type: "registry-installation";
+  item_id: string;
+  version: string;
+  pinned_version: string | null;
+  source_registry: string;
+  source_repository: string;
+  package_reference: string;
+  revision: string | null;
+  license: string;
+  provenance: string;
+  history: RegistryInstallationHistory[];
+}
+
 export interface RegistryItem {
   id: string;
   type: "registry-item";
@@ -62,11 +87,16 @@ export interface RegistryItem {
     signature_present: boolean;
     signature_key_id: string | null;
   };
+  installed: boolean;
+  installed_version: string | null;
+  pinned_version: string | null;
+  update_available: boolean;
+  installation: RegistryInstallation | null;
 }
 
 export interface RegistryFinding {
   code: string;
-  severity: string;
+  severity: "warning" | "error";
   message: string;
 }
 
@@ -85,6 +115,7 @@ export interface RegistryActivation {
   type: "registry-activation";
   status: "applied";
   route: RegistryRoute;
+  installation: RegistryInstallation | null;
 }
 
 export interface RegistryClientOptions {
@@ -93,6 +124,12 @@ export interface RegistryClientOptions {
 }
 
 const REGISTRY_ITEMS = "registry-items";
+
+type RegistryCommand =
+  | "registry.preview"
+  | "registry.activate"
+  | "registry.pin"
+  | "registry.unpin";
 
 export class RegistryClient {
   readonly baseUrl: string;
@@ -116,30 +153,64 @@ export class RegistryClient {
     );
   }
 
-  preview(
+  async preview(
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
   ): Promise<RegistryPreview> {
-    return this.command<RegistryPreview>("registry.preview", itemId, version, idempotencyKey);
+    return this.command<RegistryPreview>(
+      "registry.preview",
+      itemId,
+      { version: requireText(version, "Registry version") },
+      idempotencyKey,
+    );
   }
 
-  activate(
+  async activate(
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
   ): Promise<RegistryActivation> {
-    return this.command<RegistryActivation>("registry.activate", itemId, version, idempotencyKey);
+    return this.command<RegistryActivation>(
+      "registry.activate",
+      itemId,
+      { version: requireText(version, "Registry version") },
+      idempotencyKey,
+    );
+  }
+
+  async pin(
+    itemId: string,
+    version: string,
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<RegistryInstallation> {
+    return this.command<RegistryInstallation>(
+      "registry.pin",
+      itemId,
+      { version: requireText(version, "Registry version") },
+      idempotencyKey,
+    );
+  }
+
+  async unpin(
+    itemId: string,
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<RegistryInstallation> {
+    return this.command<RegistryInstallation>(
+      "registry.unpin",
+      itemId,
+      {},
+      idempotencyKey,
+    );
   }
 
   private async command<T>(
-    command: "registry.preview" | "registry.activate",
+    command: RegistryCommand,
     itemId: string,
-    version: string,
+    commandPayload: Record<string, JsonValue>,
     idempotencyKey: string,
   ): Promise<T> {
     const resourceRef = requireText(itemId, "Registry item ID");
-    const exactVersion = requireText(version, "Registry version");
     if (!idempotencyKey.trim()) throw new Error("Registry idempotency key is required");
 
     const headers = new Headers({
@@ -150,7 +221,7 @@ export class RegistryClient {
     });
     const payload: Record<string, JsonValue> = {
       resource_ref: resourceRef,
-      version: exactVersion,
+      ...commandPayload,
     };
     const response = await this.fetchImpl(
       `${this.baseUrl}/api/v1/commands/${encodeURIComponent(command)}`,

@@ -645,13 +645,16 @@ function ResourceLink({ resource }: { resource: TemplateResourceRef }) {
   return <AppLink href={href}>{resource.resource_type}: <CanonicalId value={resource.resource_id} /></AppLink>;
 }
 
-function canonicalResourceHref(resource: TemplateResourceRef): string | null {
+export function canonicalResourceHref(resource: TemplateResourceRef): string | null {
   const id = encodeURIComponent(resource.resource_id);
   if (resource.resource_type === "agent") return `/agents/${id}`;
   if (resource.resource_type === "agent_team") return `/agent-teams/${id}`;
   if (resource.resource_type === "automation") return `/automations/${id}`;
   if (resource.resource_type === "project") return `/projects/${id}`;
   if (resource.resource_type === "workspace") return `/workspaces/${id}`;
+  if (resource.resource_type === "workflow") return `/workflows/${id}`;
+  if (resource.resource_type === "capability_assignment") return `/capability-assignments/${id}`;
+  if (resource.resource_type === "model_routing_profile") return `/model-routing-profiles/${id}`;
   return null;
 }
 

@@ -30,6 +30,7 @@ from .models import (
     WaitResolution,
     WaitType,
 )
+from .repair import CoordinatorRepairAction, CoordinatorRepairService
 from .repository import CoordinatorRepository, InMemoryCoordinatorRepository
 from .service import CanonicalRunKernel, DurablePlanStepCoordinator
 from .sqlite_repository_v2 import SQLiteCoordinatorRepository
@@ -44,6 +45,8 @@ __all__ = [
     "CoordinatorCommandHandlers",
     "CoordinatorMigrationError",
     "CoordinatorPlanResourceService",
+    "CoordinatorRepairAction",
+    "CoordinatorRepairService",
     "CoordinatorRepository",
     "CoordinatorStoreMetadata",
     "DurablePlanStepCoordinator",

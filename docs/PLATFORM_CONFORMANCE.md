@@ -22,7 +22,7 @@ Optional compatibility claims are opt-in and claim-blocking:
 platform-conformance \
   --profile release \
   --deployment-profile reference-single-node-extended \
-  --enable-optional E,N,R,T,V,X \
+  --enable-optional E,N,Q,R,S,T,V,X,Y \
   --json-report conformance-extended-reference.json
 ```
 
@@ -110,11 +110,11 @@ The release tier also has explicit claim-blocking lifecycle and cross-layer chec
 
 All four are `required=true` whenever `--profile release` is selected. A release report therefore cannot be `compatible` merely because these capabilities have unit tests elsewhere; the representative acceptance commands must pass inside the same #46 release claim.
 
-`REL-VERTICAL` is intentionally the strongest maintained **continuous reference slice currently available**, not a declaration that the ideal full #46 path is complete. `D-vertical` now separately proves that an authenticated AgentRun can cross the real local-model HTTP boundary and execute a pinned native capability through `CapabilityInvoker`. The remaining gap is after that capability boundary: reference capability execution still does not continue through a canonical `Executor -> Worker/Node` subexecution in the same production-valid flow. Until one canonical path crosses `Capability/Tool -> Executor -> Worker/Node` without test-only shortcuts or unsafe Run-ID reuse, that boundary remains an explicit #46 closure blocker.
+`REL-VERTICAL` is intentionally the strongest maintained **continuous reference slice currently available**, not a declaration that the ideal full #46 path is complete. `D-vertical` separately proves that an authenticated AgentRun can cross the real local-model HTTP boundary and execute a pinned native capability through `CapabilityInvoker`. #518 now also defines the canonical same-Run lineage from a `tool_invocation_*` cause to a distinct `worker_job_*` child identity without inventing a second Run. The remaining gap is behavioral: reference capability execution still does not dispatch that canonical tool subexecution through `Executor -> Worker/Node` in the same production-valid flow. Until one canonical path actually crosses that boundary without test-only shortcuts, the full vertical remains an explicit #46 closure blocker.
 
 ## Optional compatibility evidence
 
-The following optional scenarios now have maintained executable #46 evidence and can be promoted from `disabled` to claim-blocking with `--enable-optional`:
+The following optional scenarios have maintained executable #46 evidence and can be promoted from a non-claim to claim-blocking with `--enable-optional`:
 
 | Scenario | Representative evidence |
 | --- | --- |
@@ -122,18 +122,17 @@ The following optional scenarios now have maintained executable #46 evidence and
 | C — Forge | real execution-only Forge Rust sidecar integration test |
 | E — Distributed Worker | authorization context + canonical terminal result identity + correlated safe distributed telemetry |
 | N — Notifications | recipient scope, authenticated anti-spoofing, idempotent inbox commands and replay-safe event projection |
+| Q — Templates | exact-source reapply authorization, dependency denial before side effects, compatibility/version blockers, secret rejection before instantiation, guarded composite compensation and final Single-Node owner-domain composition |
 | R — Import/export | package integrity, secret/runtime-state exclusion, successful import and rollback on failed import |
+| S — Registry | Registry-disabled single-node startup, configured local/offline composition sharing canonical plugin lifecycle, server-resolved preview validation and authoritative signature verification |
 | T — Repository/Git | exact repository revision -> canonical Workspace/Run -> change Artifact/commit provenance and retry identity |
 | V — Organizations | membership suspension/removal plus resource sharing/revocation and cross-organization isolation |
 | X — HA | stale-leader fencing, promotion reconciliation preserving Worker identity and duplicate-command replay without duplicate Task/Run |
+| Y — durable Plan/Step coordination | crash/restart-safe Run creation, waits/retries/fan-in, stale-fence rejection, lost-Worker reconciliation, restore/history consistency and explicit coordination observability |
 
-The following remain deliberately unavailable as compatibility claims:
+Q, S and Y were previously unavailable while their owning implementation issues were still open. Their owning work is now complete and each has retained executable evidence. They remain optional deployment claims rather than becoming implicit requirements of the reference release profile.
 
-- Q — Templates: #78 is reopened and still has unresolved authorization/compatibility/rollback integration gaps;
-- S — Registry: #81 is reopened and still has unresolved deployment-grade registry/install/trust/update gaps;
-- Y — durable Plan/Step coordination: the coordinator core is present, but the profile remains unsupported until #384's remaining hardening and acceptance work is complete.
-
-Explicitly enabling Q, S or Y therefore blocks compatibility with `not_implemented`; it does not convert unfinished subsystem work into a conformance claim.
+B and C still require prepared external Hermes/Forge environments. Explicit activation remains fail-closed when those external preconditions are absent.
 
 ## Compatibility semantics
 
@@ -193,7 +192,7 @@ The repository treats conformance as three different cost/coverage tiers rather 
 
 - `conformance-fast`;
 - `conformance-release` for the reference single-node release claim;
-- `conformance-extended-reference`, which additionally enables E/N/R/T/V/X and therefore treats all six as required.
+- `conformance-extended-reference`, which additionally enables E/N/Q/R/S/T/V/X/Y and therefore treats all nine as required.
 
 Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE`, `REL-EVAL` and `REL-VERTICAL` automatically because those checks are required members of the release profile rather than separately enabled options.
 

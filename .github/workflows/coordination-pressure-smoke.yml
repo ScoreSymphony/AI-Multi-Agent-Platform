@@ -1,0 +1,121 @@
+name: Coordination pressure smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  coordination-pressure-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install benchmark environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Validate coordination pressure implementation
+        run: |
+          ruff format --check \
+            src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
+            src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py \
+            tests/test_issue_440_coordination_pressure.py
+          ruff check \
+            src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
+            src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py \
+            tests/test_issue_440_coordination_pressure.py
+          mypy \
+            src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
+            src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py
+          pytest tests/test_issue_440_coordination_pressure.py
+      - name: Run tiny coordination pressure profiles
+        run: |
+          mkdir -p artifacts/benchmarks/pr-coordination-pressure
+          platform-coordination-pressure \
+            --scenario retry-burst \
+            --size 3 \
+            --retry-delay-seconds 0.01 \
+            --timeout-seconds 5 \
+            --safety-max-size 8 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-coordination-pressure/retry-burst.json
+          platform-coordination-pressure \
+            --scenario deadline-wait-burst \
+            --size 3 \
+            --wait-delay-seconds 0.01 \
+            --timeout-seconds 5 \
+            --safety-max-size 8 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-coordination-pressure/deadline-wait-burst.json
+          platform-coordination-pressure \
+            --scenario restart-reconcile \
+            --size 3 \
+            --timeout-seconds 5 \
+            --safety-max-size 8 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-coordination-pressure/restart-reconcile.json
+      - name: Validate coordination pressure reports
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from jsonschema import Draft202012Validator
+
+          schema = json.loads(
+              Path("docs/schemas/benchmark-coordination-pressure.v1.schema.json").read_text()
+          )
+          expected_runs = {
+              "retry-burst": 6,
+              "deadline-wait-burst": 3,
+              "restart-reconcile": 3,
+          }
+          expected_attempt = {
+              "retry-burst": 2,
+              "deadline-wait-burst": 1,
+              "restart-reconcile": 1,
+          }
+          for scenario in ("retry-burst", "deadline-wait-burst", "restart-reconcile"):
+              report = json.loads(
+                  Path(f"artifacts/benchmarks/pr-coordination-pressure/{scenario}.json").read_text()
+              )
+              Draft202012Validator(schema).validate(report)
+              correctness = report["correctness"]
+              assert report["benchmark"]["scenario"] == scenario
+              assert correctness["passed"] is True
+              assert correctness["expected_steps"] == 3
+              assert correctness["succeeded_steps"] == 3
+              assert correctness["run_created_events"] == expected_runs[scenario]
+              assert correctness["unique_run_ids"] == expected_runs[scenario]
+              assert correctness["maximum_attempt"] == expected_attempt[scenario]
+              assert correctness["task_succeeded"] is True
+              assert report["resume_or_reconcile_latency"]["count"] == 1
+          retry = json.loads(
+              Path("artifacts/benchmarks/pr-coordination-pressure/retry-burst.json").read_text()
+          )
+          assert retry["correctness"]["retry_scheduled_steps"] == 3
+          wait = json.loads(
+              Path(
+                  "artifacts/benchmarks/pr-coordination-pressure/deadline-wait-burst.json"
+              ).read_text()
+          )
+          assert wait["correctness"]["wait_entered_steps"] == 3
+          assert wait["correctness"]["wait_resolved_steps"] == 3
+          restart = json.loads(
+              Path(
+                  "artifacts/benchmarks/pr-coordination-pressure/restart-reconcile.json"
+              ).read_text()
+          )
+          assert restart["correctness"]["reconciled_running_steps"] == 3
+          assert restart["correctness"]["run_identity_preserved"] is True
+          PY
+      - name: Upload coordination pressure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-coordination-pressure-benchmarks
+          path: artifacts/benchmarks/pr-coordination-pressure
+          if-no-files-found: ignore

@@ -13,6 +13,7 @@ import { NotificationClient } from "../api/notifications";
 import { OnboardingClient } from "../api/onboarding";
 import { OrganizationClient } from "../api/organizations";
 import { PluginsClient } from "../api/plugins";
+import { RegistryClient } from "../api/registry";
 import { RepositoryCollectionClient } from "../api/repositories";
 import { TemplateClient } from "../api/templates";
 import { VerificationClient } from "../api/verification";
@@ -38,6 +39,7 @@ import {
   CapabilityDetailPage,
   CapabilityProviderDetailPage,
 } from "../pages/CapabilitiesPage";
+import { CanonicalConfigurationDetailPage } from "../pages/CanonicalConfigurationDetailPage";
 import { ChatPage } from "../pages/ChatPage";
 import {
   ComputeNodeDetailPage,
@@ -55,6 +57,7 @@ import {
   ConnectorDefinitionDetailPage,
   IntegrationsPage,
 } from "../pages/IntegrationsPage";
+import { MarketplacePage } from "../pages/MarketplacePage";
 import {
   KnowledgeDetailPage,
   KnowledgePage,
@@ -159,6 +162,10 @@ export function Shell() {
     () => new PluginsClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
+  const registryClient = useMemo(
+    () => new RegistryClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
   const templateClient = useMemo(
     () => new TemplateClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
@@ -210,6 +217,9 @@ export function Shell() {
   const pluginMatch = matchPath("/plugins/:pluginId", path);
   const automationMatch = matchPath("/automations/:automationId", path);
   const templateMatch = matchPath("/templates/:templateId", path);
+  const workflowMatch = matchPath("/workflows/:workflowId", path);
+  const capabilityAssignmentMatch = matchPath("/capability-assignments/:assignmentId", path);
+  const modelRoutingProfileMatch = matchPath("/model-routing-profiles/:profileId", path);
   const approvalMatch = matchPath("/approvals/:approvalId", path);
   const verificationMatch = matchPath("/verification/:verificationId", path);
   const referenceMatch = referenceRoute(path);
@@ -320,6 +330,51 @@ export function Shell() {
         resource="templates"
       >
         <TemplateDetailPage client={templateClient} templateId={templateMatch.templateId} />
+      </ManifestResourcePage>
+    );
+  } else if (workflowMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Workflow"
+        resource="workflows"
+      >
+        <CanonicalConfigurationDetailPage
+          client={collections}
+          collection="workflows"
+          resourceId={workflowMatch.workflowId}
+        />
+      </ManifestResourcePage>
+    );
+  } else if (capabilityAssignmentMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Capability Assignment"
+        resource="capability-assignments"
+      >
+        <CanonicalConfigurationDetailPage
+          client={collections}
+          collection="capability-assignments"
+          resourceId={capabilityAssignmentMatch.assignmentId}
+        />
+      </ManifestResourcePage>
+    );
+  } else if (modelRoutingProfileMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Model Routing Profile"
+        resource="model-routing-profiles"
+      >
+        <CanonicalConfigurationDetailPage
+          client={collections}
+          collection="model-routing-profiles"
+          resourceId={modelRoutingProfileMatch.profileId}
+        />
       </ManifestResourcePage>
     );
   }
@@ -486,6 +541,17 @@ export function Shell() {
       <ManifestResourcesPage state={manifestState} manifest={manifest} label="Evaluations" resources={EVALUATION_RESOURCES}>
         <EvaluationRunDetailPage client={evaluationClient} evaluationRunId={evaluationRunMatch.evaluationRunId} />
       </ManifestResourcesPage>
+    );
+  } else if (path === "/marketplace") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Marketplace"
+        resource="registry-items"
+      >
+        <MarketplacePage client={registryClient} />
+      </ManifestResourcePage>
     );
   } else if (path === "/compute") {
     content = (

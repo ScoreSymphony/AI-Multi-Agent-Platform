@@ -1,5 +1,13 @@
 """Release/provenance public API."""
 
+from .adoption import (
+    UPDATE_VALIDATION_EVIDENCE_SCHEMA_VERSION,
+    UpdateGateEvidence,
+    UpdateValidationEvidenceError,
+    UpdateValidationEvidenceSet,
+    load_update_validation_evidence,
+    validate_update_adoption_evidence,
+)
 from .codec import ReleaseManifestError, load_release_manifest, release_manifest_from_dict
 from .discovery import (
     COMPATIBILITY_INVENTORY_SCHEMA_VERSION,
@@ -70,6 +78,7 @@ __all__ = [
     "RELEASE_MANIFEST_SCHEMA_VERSION",
     "REQUIRED_RELEASE_GATES",
     "UPDATE_OBSERVATION_SCHEMA_VERSION",
+    "UPDATE_VALIDATION_EVIDENCE_SCHEMA_VERSION",
     "ArtifactSource",
     "CompatibilityInventory",
     "CompatibilityRecord",
@@ -97,6 +106,9 @@ __all__ = [
     "UpdateDiscoveryError",
     "UpdateDiscoveryReport",
     "UpdateDisposition",
+    "UpdateGateEvidence",
+    "UpdateValidationEvidenceError",
+    "UpdateValidationEvidenceSet",
     "UpstreamInventoryEntry",
     "UpstreamProvenance",
     "discover_git_heads",
@@ -109,9 +121,11 @@ __all__ = [
     "load_observations",
     "load_release_generation_inputs",
     "load_release_manifest",
+    "load_update_validation_evidence",
     "record_reviewed_candidate",
     "release_manifest_from_dict",
     "release_metadata",
+    "validate_update_adoption_evidence",
     "write_git_discovery_result",
     "write_release_manifest",
 ]

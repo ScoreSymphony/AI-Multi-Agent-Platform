@@ -12,6 +12,11 @@ from typing import cast
 
 from ai_multi_agent_platform.upgrade.models import VersionSnapshot
 
+from .adoption import (
+    UpdateValidationEvidenceError,
+    UpdateValidationEvidenceSet,
+    validate_update_adoption_evidence,
+)
 from .models import GateStatus
 
 COMPATIBILITY_INVENTORY_SCHEMA_VERSION = "2"
@@ -271,6 +276,7 @@ def record_reviewed_candidate(
     *,
     compatibility_status: str,
     reviewed_at: str,
+    validation_evidence: UpdateValidationEvidenceSet,
     manual_review_approved: bool = False,
 ) -> CompatibilityInventory:
     """Return updated compatibility metadata after an explicit review decision.
@@ -292,14 +298,16 @@ def record_reviewed_candidate(
     if candidate.candidate_revision is None:
         raise UpdateDiscoveryError("candidate revision is missing")
 
-    validation = candidate.validation or {}
-    adoption_blockers = sorted(
-        name for name in REQUIRED_ADOPTION_GATES if validation.get(name) is not GateStatus.PASSED
-    )
-    if adoption_blockers:
-        raise UpdateDiscoveryError(
-            "candidate adoption requires passed validation gates: " + ", ".join(adoption_blockers)
+    try:
+        validate_update_adoption_evidence(
+            component=candidate.component,
+            candidate_revision=candidate.candidate_revision,
+            validation=candidate.validation,
+            evidence=validation_evidence,
+            required_gates=REQUIRED_ADOPTION_GATES,
         )
+    except UpdateValidationEvidenceError as exc:
+        raise UpdateDiscoveryError(str(exc)) from exc
 
     if candidate.manual_review_required and not manual_review_approved:
         raise UpdateDiscoveryError("manual review approval is required before recording candidate")

@@ -6,6 +6,16 @@ from typing import Any
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
+from .items import RegistryItem
+from .models import (
+    ArtifactIntegrity,
+    RegistryDependency,
+    RegistryItemType,
+    RegistrySource,
+    TrustStatus,
+    VersionRange,
+)
+
 REGISTRY_ITEM_SCHEMA_VERSION = "1"
 REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -128,3 +138,60 @@ REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
 
 def validate_registry_item_document(document: dict[str, Any]) -> None:
     Draft202012Validator(REGISTRY_ITEM_SCHEMA_V1).validate(document)
+
+
+def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
+    """Validate and construct one canonical RegistryItem from provider JSON metadata."""
+
+    validate_registry_item_document(document)
+    source = document["source"]
+    supported_platform = document["supported_platform"]
+    integrity = document["integrity"]
+    dependencies = tuple(
+        RegistryDependency(
+            item_id=dependency["item_id"],
+            version_range=VersionRange(
+                dependency["version_range"].get("minimum"),
+                dependency["version_range"].get("maximum"),
+            ),
+            optional=dependency["optional"],
+        )
+        for dependency in document["dependencies"]
+    )
+    return RegistryItem(
+        item_id=document["item_id"],
+        item_type=RegistryItemType(document["item_type"]),
+        name=document["name"],
+        description=document["description"],
+        version=document["version"],
+        publisher=document["publisher"],
+        source=RegistrySource(
+            repository=source["repository"],
+            package_reference=source["package_reference"],
+            revision=source.get("revision"),
+        ),
+        license=document["license"],
+        provenance=document["provenance"],
+        supported_platform=VersionRange(
+            supported_platform.get("minimum"), supported_platform.get("maximum")
+        ),
+        dependencies=dependencies,
+        requested_permissions=frozenset(document["requested_permissions"]),
+        required_capabilities=frozenset(document["required_capabilities"]),
+        required_plugins=tuple(document.get("required_plugins", [])),
+        required_connectors=tuple(document.get("required_connectors", [])),
+        required_models=tuple(document.get("required_models", [])),
+        tags=frozenset(document.get("tags", [])),
+        categories=frozenset(document.get("categories", [])),
+        integrity=ArtifactIntegrity(
+            sha256=integrity.get("sha256"),
+            signature=integrity.get("signature"),
+            signature_key_id=integrity.get("signature_key_id"),
+        ),
+        trust_status=TrustStatus(document["trust_status"]),
+        review_reference=document.get("review_reference"),
+        released_at=document.get("released_at"),
+        changelog=document.get("changelog"),
+        deprecated=document["deprecated"],
+        yanked=document["yanked"],
+    )

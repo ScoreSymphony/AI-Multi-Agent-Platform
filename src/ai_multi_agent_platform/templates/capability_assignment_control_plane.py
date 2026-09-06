@@ -5,6 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.capability_assignments import CapabilityAssignmentAccessContext
+from ai_multi_agent_platform.capability_assignments.control_plane import (
+    register_capability_assignment_resource_control_plane,
+)
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
@@ -58,6 +61,7 @@ def register_capability_assignment_template_export_control_plane(
     control_plane: ControlPlane,
     exporter: CapabilityAssignmentTemplateExporter,
 ) -> None:
+    register_capability_assignment_resource_control_plane(control_plane, exporter.assignments)
     control_plane.register_command(
         CAPABILITY_ASSIGNMENT_TEMPLATE_EXPORT_COMMAND,
         CapabilityAssignmentTemplateExportCommand(control_plane, exporter),

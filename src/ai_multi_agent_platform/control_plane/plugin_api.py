@@ -135,6 +135,45 @@ class ControlPlane(_CurrentControlPlane):
     def plugin_catalog(self) -> PluginCatalog | None:
         return self._plugin_catalog
 
+    def attach_plugin_runtime(
+        self,
+        plugin_registry: PluginRegistry,
+        *,
+        plugin_catalog: PluginCatalog | None = None,
+        plugin_permission_resolver: PluginPermissionResolver | None = None,
+    ) -> None:
+        """Attach the optional #20 lifecycle once after outer composition is available.
+
+        Some production compositions can only construct plugin binders after their canonical
+        registries (for example the Capability Registry) exist. This seam preserves one #20
+        PluginRegistry while still allowing that outer composition to happen after Control Plane
+        construction. It may be called only when no plugin runtime was configured initially.
+        """
+
+        if (
+            self._plugin_registry is not None
+            or self._plugin_catalog is not None
+            or self._plugin_permission_resolver is not None
+        ):
+            raise ValueError("plugin runtime is already configured")
+        self._plugin_registry = plugin_registry
+        self._plugin_catalog = plugin_catalog
+        self._plugin_permission_resolver = plugin_permission_resolver
+
+        super().register_resource_service(PLUGIN_COLLECTION, _PluginResources(plugin_registry))
+        if plugin_catalog is not None:
+            super().register_resource_service(
+                PLUGIN_CANDIDATE_COLLECTION,
+                _PluginCandidateResources(plugin_catalog),
+            )
+        super().register_command("plugin.install", self._plugin_install_command)
+        super().register_command("plugin.configure", self._plugin_configure_command)
+        super().register_command("plugin.enable", self._plugin_enable_command)
+        super().register_command("plugin.disable", self._plugin_disable_command)
+        super().register_command("plugin.refresh-health", self._plugin_refresh_health_command)
+        super().register_command("plugin.validate-update", self._plugin_validate_update_command)
+        super().register_command("plugin.remove", self._plugin_remove_command)
+
     def register_resource_service(self, collection: str, service: ResourceService) -> None:
         if collection in PLUGIN_COLLECTIONS:
             raise ValueError(
