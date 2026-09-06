@@ -170,9 +170,7 @@ def compare_with_baseline(
 
     baseline_latency = _mapping(baseline.get("operation_latency"))
     baseline_p95 = _positive_float(baseline_latency.get("p95_ms"))
-    baseline_throughput = _positive_float(
-        baseline.get("throughput_operations_per_second")
-    )
+    baseline_throughput = _positive_float(baseline.get("throughput_operations_per_second"))
     if baseline_p95 is None or baseline_throughput is None:
         return BaselineComparison(
             False,
