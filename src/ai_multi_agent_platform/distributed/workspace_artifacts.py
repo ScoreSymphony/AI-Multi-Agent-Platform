@@ -16,7 +16,11 @@ from ai_multi_agent_platform.contracts import (
 )
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
 from ai_multi_agent_platform.kernel import PlatformKernel
-from ai_multi_agent_platform.workspaces import RemoteMaterializationResult, Workspace, WorkspaceProvider
+from ai_multi_agent_platform.workspaces import (
+    RemoteMaterializationResult,
+    Workspace,
+    WorkspaceProvider,
+)
 
 from .models import JobResultStatus, WorkerJobRequest, WorkerJobResult
 from .registry import RegistryError
