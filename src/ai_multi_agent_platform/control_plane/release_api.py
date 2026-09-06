@@ -56,7 +56,7 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
             and response.status == 200
             and isinstance(response.body, dict)
         ):
-            body = cast(dict[str, JsonValue], deepcopy(response.body))
+            body = deepcopy(response.body)
             body["release_status"] = RELEASE_STATUS_PATH
             return HTTPResponse(
                 status=response.status,
@@ -89,14 +89,16 @@ class AuthenticatedControlPlaneHTTP(_CurrentAuthenticatedControlPlaneHTTP):
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self._current_http = ControlPlaneHTTP(
+        release_status_http = ControlPlaneHTTP(
             self._control_plane,
             release_operator=release_operator,
         )
+        self._release_status_http = release_status_http
+        self._current_http = release_status_http
 
     @property
     def release_operator(self) -> ReleaseOperatorService:
-        return self._current_http.release_operator
+        return self._release_status_http.release_operator
 
 
 def _augment_openapi(specification: dict[str, Any]) -> None:
