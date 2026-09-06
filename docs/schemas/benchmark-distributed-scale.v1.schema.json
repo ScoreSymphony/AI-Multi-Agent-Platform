@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchmark-distributed-scale.v1.schema.json",
+  "title": "Distributed Worker and Workspace Scale Benchmark Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "benchmark",
+    "platform_version",
+    "platform_commit",
+    "started_at",
+    "duration_seconds",
+    "environment",
+    "throughput_jobs_per_second",
+    "registration_latency",
+    "heartbeat_latency",
+    "dispatch_latency",
+    "terminal_latency",
+    "placement_counts",
+    "payload_operation_counts",
+    "resources",
+    "correctness",
+    "node_ids",
+    "worker_ids",
+    "worker_job_ids",
+    "run_ids",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "worker_count",
+        "rounds",
+        "payload_sizes_bytes",
+        "chunk_bytes",
+        "timeout_seconds",
+        "safety_max_operations",
+        "safety_max_payload_bytes",
+        "benchmark_id",
+        "benchmark_version",
+        "deployment_profile",
+        "transport_profile",
+        "operation_count",
+        "max_payload_bytes",
+        "expected_invariants",
+        "captured_metrics"
+      ],
+      "properties": {
+        "worker_count": {"type": "integer", "minimum": 1},
+        "rounds": {"type": "integer", "minimum": 1},
+        "payload_sizes_bytes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "chunk_bytes": {"type": "integer", "minimum": 1024},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "safety_max_operations": {"type": "integer", "minimum": 1},
+        "safety_max_payload_bytes": {"type": "integer", "minimum": 1},
+        "benchmark_id": {"const": "distributed.worker-workspace.scale"},
+        "benchmark_version": {"const": "1.0"},
+        "deployment_profile": {"const": "distributed-reference-in-process-transport"},
+        "transport_profile": {"const": "in-process-message-transport"},
+        "operation_count": {"type": "integer", "minimum": 1},
+        "max_payload_bytes": {"type": "integer", "minimum": 1},
+        "expected_invariants": {"type": "array", "items": {"type": "string"}},
+        "captured_metrics": {"type": "array", "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "platform_version": {"type": "string", "minLength": 1},
+    "platform_commit": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "minLength": 1},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "environment": {"type": "object"},
+    "throughput_jobs_per_second": {"type": "number", "minimum": 0},
+    "registration_latency": {"$ref": "#/$defs/latency"},
+    "heartbeat_latency": {"$ref": "#/$defs/latency"},
+    "dispatch_latency": {"$ref": "#/$defs/latency"},
+    "terminal_latency": {"$ref": "#/$defs/latency"},
+    "placement_counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "payload_operation_counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "resources": {"$ref": "#/$defs/resources"},
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_workers",
+        "registered_workers",
+        "heartbeat_workers",
+        "expected_jobs",
+        "terminal_jobs",
+        "unique_worker_job_ids",
+        "unique_run_ids",
+        "workers_used",
+        "balanced_rounds",
+        "expected_balanced_rounds",
+        "cleaned_materializations",
+        "passed"
+      ],
+      "properties": {
+        "expected_workers": {"type": "integer", "minimum": 1},
+        "registered_workers": {"type": "integer", "minimum": 0},
+        "heartbeat_workers": {"type": "integer", "minimum": 0},
+        "expected_jobs": {"type": "integer", "minimum": 1},
+        "terminal_jobs": {"type": "integer", "minimum": 0},
+        "unique_worker_job_ids": {"type": "integer", "minimum": 0},
+        "unique_run_ids": {"type": "integer", "minimum": 0},
+        "workers_used": {"type": "integer", "minimum": 0},
+        "balanced_rounds": {"type": "integer", "minimum": 0},
+        "expected_balanced_rounds": {"type": "integer", "minimum": 1},
+        "cleaned_materializations": {"type": "integer", "minimum": 0},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "node_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "worker_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "worker_job_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "run_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "min_ms", "mean_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "min_ms": {"type": "number", "minimum": 0},
+        "mean_ms": {"type": "number", "minimum": 0},
+        "p50_ms": {"type": "number", "minimum": 0},
+        "p95_ms": {"type": "number", "minimum": 0},
+        "p99_ms": {"type": "number", "minimum": 0},
+        "max_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "process_cpu_seconds",
+        "traced_memory_current_bytes",
+        "traced_memory_peak_bytes",
+        "peak_rss_bytes",
+        "storage_bytes_before",
+        "storage_bytes_after",
+        "storage_growth_bytes",
+        "open_file_descriptors"
+      ],
+      "properties": {
+        "process_cpu_seconds": {"type": "number", "minimum": 0},
+        "traced_memory_current_bytes": {"type": "integer", "minimum": 0},
+        "traced_memory_peak_bytes": {"type": "integer", "minimum": 0},
+        "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "storage_bytes_before": {"type": "integer", "minimum": 0},
+        "storage_bytes_after": {"type": "integer", "minimum": 0},
+        "storage_growth_bytes": {"type": "integer"},
+        "open_file_descriptors": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  }
+}
