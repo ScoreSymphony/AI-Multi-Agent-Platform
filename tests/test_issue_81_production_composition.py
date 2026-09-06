@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 
-from ai_multi_agent_platform.adapters.single_node_app import build_default_single_node_deployment
+from ai_multi_agent_platform.adapters.single_node_app import (
+    build_default_single_node_deployment,
+)
 from ai_multi_agent_platform.deployment import SingleNodeConfig
 from ai_multi_agent_platform.distribution import (
     REGISTRY_ACTIVATE_COMMAND,
