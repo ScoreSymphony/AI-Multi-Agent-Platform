@@ -54,7 +54,10 @@ def test_single_node_benchmark_report_is_correct_and_schema_valid(tmp_path: Path
         assert report.admission_latency.count == 3
         assert report.execution_latency.count == 3
         assert report.inspection_latency.count == 3
-        assert report.resources.storage_growth_bytes > 0
+        assert report.resources.storage_bytes_after > 0
+        assert report.resources.storage_growth_bytes == (
+            report.resources.storage_bytes_after - report.resources.storage_bytes_before
+        )
         assert report.platform_commit == "test-sha"
         assert "cpu_model" in report.environment
         assert "memory_total_bytes" in report.environment
