@@ -132,7 +132,8 @@ def validate_update_adoption_evidence(
 ) -> None:
     if evidence.component != component:
         raise UpdateValidationEvidenceError(
-            f"update evidence component {evidence.component!r} does not match candidate {component!r}"
+            f"update evidence component {evidence.component!r} "
+            f"does not match candidate {component!r}"
         )
     if evidence.candidate_revision != candidate_revision:
         raise UpdateValidationEvidenceError(
