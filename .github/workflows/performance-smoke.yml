@@ -17,6 +17,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
+      - name: Validate benchmark implementation
+        run: |
+          ruff format --check \
+            src/ai_multi_agent_platform/benchmarking \
+            tests/test_issue_440_benchmarking.py
+          ruff check \
+            src/ai_multi_agent_platform/benchmarking \
+            tests/test_issue_440_benchmarking.py
+          mypy src/ai_multi_agent_platform/benchmarking
+          pytest tests/test_issue_440_benchmarking.py
       - name: Run deterministic single-node performance smoke
         run: |
           mkdir -p artifacts/benchmarks
