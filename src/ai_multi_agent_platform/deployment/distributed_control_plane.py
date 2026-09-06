@@ -83,6 +83,22 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             self._attach(worker_id)
         return receipt
 
+    async def deregister_worker(
+        self,
+        worker_id: str,
+        node_id: str,
+        credentials: WorkerRequestCredentials,
+        *,
+        now: datetime | None = None,
+    ) -> None:
+        await super().deregister_worker(
+            worker_id,
+            node_id,
+            credentials,
+            now=now,
+        )
+        self._attached.discard(worker_id)
+
     def _attach(self, worker_id: str) -> None:
         if worker_id in self._attached:
             return
