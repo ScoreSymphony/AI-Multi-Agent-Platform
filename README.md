@@ -25,7 +25,7 @@ The dependency-driven implementation order, current parallel work lanes and conv
 
 Material implementation choices and architecture refinements are recorded through [`docs/adr/`](docs/adr/README.md). Implementations must not silently contradict the normative product or architecture documents.
 
-The platform-owned kernel under `src/ai_multi_agent_platform/kernel/` is the authoritative source for externally visible Task/Run lifecycle state. Orchestrators and executors integrate through contracts and must not become implicit lifecycle owners. The platform-owned durable Plan/Step coordinator from #384 is accepted for restart-safe task-bound workflow progression, including durable dependency/wait/retry state, canonical Run reconciliation, distributed Worker cancellation/recovery evidence, orchestrator-replacement invariance and conservative authorized repair of inconsistent coordination state. Genuine multi-Control-Plane authority remains a deployment/HA concern behind the existing replaceable coordination/fencing contracts rather than a second workflow lifecycle.
+The platform-owned kernel under `src/ai_multi_agent_platform/kernel/` is the authoritative source for externally visible Task/Run lifecycle state. Orchestrators and executors integrate through contracts and must not become implicit lifecycle owners. The platform-owned durable Plan/Step coordinator from #384 is accepted for restart-safe task-bound workflow progression, including durable dependency/wait/retry state, canonical Run reconciliation, distributed Worker cancellation/recovery evidence, orchestrator-replacement invariance, backup/restore and upgrade integration, observability and conservative authorized repair of inconsistent coordination state. Genuine multi-Control-Plane authority remains a deployment/HA concern behind replaceable coordination/fencing contracts rather than a second workflow lifecycle.
 
 ## Development
 
@@ -45,25 +45,24 @@ The policy is exercised against multiple integration models in [`docs/UPSTREAM_P
 
 ## Status
 
-> Status snapshot: 2026-09-06, after PR #494
+> Status snapshot: 2026-09-07, after the September 6 completion/hardening wave
 
-The project is now in late integration, hardening and acceptance work rather than foundational platform construction. The usable single-node prototype acceptance gate (#252) is complete, and `main` contains the canonical kernel and Control Plane, reference execution, model routing, capabilities/tools, Agents and Agent Teams, authentication and authorization/approvals, Workspaces/files, Memory and Knowledge, Search, Automations, Notifications, Organizations/Teams/Memberships, Chat, Browser and Terminal entry points, reusable workflow definitions, Verification/Review, accounting, durable Connector state, portable import/export, Repository/Git integration, optional HA/failover support, extensive Web/CLI coverage and concrete distributed Workspace/Worker paths.
+The repository is now in late product integration, acceptance and operating-envelope work rather than foundational platform construction. The usable single-node prototype gate (#252) is complete, and `main` contains the canonical kernel and Control Plane, reference execution, model routing, capabilities/tools, Agents and Agent Teams, authentication and authorization/approvals, Workspaces/files/Artifacts, Memory and Knowledge, Search, Automations, Notifications, Organizations/Teams/Memberships, Chat, Browser and Terminal entry points, reusable workflow definitions, Verification/Review, accounting, durable Connectors, portable import/export, Repository/Git integration, optional HA/failover, extensive Web/CLI coverage, distributed Worker/Workspace execution, the durable Plan/Step coordinator, Registry/Marketplace support and the release/update system.
 
-The latest hardening wave also completed the routing-profile follow-ups #443–#447, Node/Worker timestamp semantics (#414), durable Connector persistence (#416) and the remaining accounting integration work (#171). Significant implementation has landed for durable task-bound Plan/Step coordination (#384), distributed deployment (#240), Templates (#78), the optional Registry (#81), performance/load evidence (#440), release/update mechanics (#42) and platform conformance (#46), but those issues remain open until their remaining acceptance or operationalization work is finished.
+Since the previous status snapshot, four former frontier issues have completed: **#42 release/update operationalization, #81 Registry/Marketplace, #240 distributed deployment and #384 durable Plan/Step coordination**. Their completion unlocks the remaining product-facing workflow/planning work and allows performance/conformance to exercise the real production paths instead of provisional seams.
 
-At this snapshot there are **9 open issues out of 98 repository issues** (89 closed; about 90.8% closed by issue count):
+There are currently **9 open issues out of 105 repository issues** (96 closed; about **91.4% closed by issue count**):
 
-`#42, #46, #78, #81, #240, #384, #421, #439, #440`
+`#46, #78, #388, #421, #439, #440, #500, #501, #502`
 
-The current implementation frontier is:
+The current frontier is split deliberately:
 
-- **Completion/audit:** #78 Templates, #81 optional Registry and #384 durable Plan/Step coordination have major merged implementations and now need their remaining Definition-of-Done/acceptance reconciliation.
-- **Distributed deployment:** #240 has the real distributed integration path merged; remaining work is focused on deployment hardening and final acceptance rather than inventing new canonical Worker/Workspace contracts.
-- **Workflow product layer:** #421 Web/CLI workflow-progress surfaces and #439 autonomous goal decomposition/planning/replanning are the main newly unlocked product/runtime capabilities downstream of #384.
-- **Performance:** #440 already has deterministic single-node, concurrency, history/restart, endurance/stress and transport-fault profiles; workflow/distributed/further fault-under-load evidence remains.
-- **Release/update:** #42 has the release/provenance/compatibility foundation and hardening merged; deterministic manifest generation and persistent operator-facing update discovery remain among the operationalization gaps.
-- **Final convergence:** #46 already has a release-profile conformance framework and substantial canonical scenario evidence, but remains the final platform-wide acceptance gate and must consume the finished production paths rather than substitute test-only shortcuts.
+- **Operational-v1/core convergence:** #46 full conformance, #78 final Template frontend/documentation reconciliation, #421 workflow-progress Web/CLI, #439 autonomous planning/replanning, #440 remaining performance/operating-envelope evidence and #500 host-pressure telemetry/admission control.
+- **Advanced distributed acceptance:** #388 is reopened only for the still-unproven real two-host encrypted transport acceptance and artifact/evidence-reference return path; the network transport implementation itself already exists.
+- **Optional ideal-end-state expansion:** #501 adds Proposal/Specification governance and #502 adds repository/code-intelligence providers/catalog integration. Both preserve the ordinary direct Task and baseline repository paths when disabled.
 
-No GitHub release has been published yet. The prototype gate required for the planned `0.1.0` release has passed, while the full operational `1.0.0` target remains tied to #46 and the release process in [`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
+Two active implementation PRs represent the immediate convergence work: #536 closes the strongest remaining same-Run Agent/Model -> Capability -> Executor -> Worker -> Workspace/File/Artifact -> Verification vertical for #46, while #534 adds the first distributed Worker/remote Workspace scale profile for #440. These PRs must still satisfy the repository's normal protected checks before merge.
 
-Current implementation work should follow [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) and each issue's explicit hard dependencies rather than numeric issue order. GitHub issue state and current issue wording remain the point-in-time source of truth when a status snapshot becomes stale.
+No GitHub release has been published yet. The release/update machinery is implemented, but a published release still requires the repository release process, validated evidence/manifest and an exact accepted release commit. The operational `1.0.0` baseline remains tied to the supported M3 profile and #46 conformance rather than to optional M4 ecosystem features.
+
+Current implementation work should follow [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) and each issue's current wording/comments rather than numeric issue order. GitHub issue state and merged code remain the point-in-time source of truth when a documentation snapshot becomes stale.
