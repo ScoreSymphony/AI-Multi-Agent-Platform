@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from ai_multi_agent_platform.distributed import (
     DistributedRegistry,
+    DistributedRuntime,
     Heartbeat,
+    JsonDistributedStateStore,
     NodeRecord,
     NodeStatus,
     RegistrationRequest,
+    RegistryError,
     ResourceSnapshot,
     WorkerRecord,
     WorkerStatus,
@@ -176,3 +181,92 @@ def test_node_worker_and_heartbeat_timestamps_require_timezone_awareness() -> No
         replace(worker, updated_at=naive)
     with pytest.raises(ValueError, match="heartbeat observed_at must be timezone-aware"):
         Heartbeat(node_id=node.node_id, observed_at=naive)
+
+
+def test_reregistration_never_moves_state_timestamp_backwards() -> None:
+    registry, node, worker = _registered_registry()
+    registry.set_node_draining(node.node_id, draining=True, now=T3)
+    registry.set_worker_draining(worker.worker_id, draining=True, now=T3)
+
+    current_node = registry.get_node(node.node_id)
+    current_worker = registry.get_worker(worker.worker_id)
+    registry.register(
+        RegistrationRequest(node=current_node, workers=(current_worker,)),
+        now=T2,
+    )
+
+    reregistered_node = registry.get_node(node.node_id)
+    reregistered_worker = registry.get_worker(worker.worker_id)
+    assert reregistered_node.registered_at == T2
+    assert reregistered_node.last_heartbeat_at == T2
+    assert reregistered_node.updated_at == T3
+    assert reregistered_worker.registered_at == T2
+    assert reregistered_worker.last_heartbeat_at == T2
+    assert reregistered_worker.updated_at == T3
+
+
+@pytest.mark.parametrize("schema_version", ["1", "2"])
+def test_legacy_snapshot_without_updated_at_derives_conservative_state_time(
+    tmp_path: Path,
+    schema_version: str,
+) -> None:
+    state_path = tmp_path / f"distributed-v{schema_version}-without-updated-at.json"
+    registry, node, worker = _registered_registry()
+    registry.heartbeat(
+        Heartbeat(
+            node_id=node.node_id,
+            observed_at=T1,
+            sequence=1,
+            workers=(worker,),
+        )
+    )
+    expiry = T1 + timedelta(seconds=31)
+    registry.expire_heartbeats(now=expiry)
+
+    store = JsonDistributedStateStore(state_path)
+    store.save(registry, DistributedRuntime(registry))
+    document = json.loads(state_path.read_text(encoding="utf-8"))
+    document["schema_version"] = schema_version
+    for record in document["registry"]["nodes"]:
+        record.pop("updated_at", None)
+    for record in document["registry"]["workers"]:
+        record.pop("updated_at", None)
+    if schema_version == "1":
+        for record in document["dispatch_records"]:
+            record.pop("result", None)
+    state_path.write_text(json.dumps(document), encoding="utf-8")
+
+    restored_registry = DistributedRegistry()
+    restored_runtime = DistributedRuntime(restored_registry)
+    assert store.restore(restored_registry, restored_runtime) is True
+
+    restored_node = restored_registry.get_node(node.node_id)
+    restored_worker = restored_registry.get_worker(worker.worker_id)
+    assert restored_node.status is NodeStatus.OFFLINE
+    assert restored_worker.status is WorkerStatus.OFFLINE
+    assert restored_node.last_heartbeat_at == T1
+    assert restored_worker.last_heartbeat_at == T1
+    assert restored_node.updated_at == T1
+    assert restored_worker.updated_at == T1
+
+
+def test_worker_deregistration_updates_parent_node_state_time_only() -> None:
+    registry, node, worker = _registered_registry()
+
+    registry.deregister_worker(worker.worker_id, now=T1)
+    parent = registry.get_node(node.node_id)
+    assert worker.worker_id not in parent.worker_refs
+    assert parent.last_heartbeat_at == T0
+    assert parent.updated_at == T1
+    with pytest.raises(RegistryError, match="unknown worker"):
+        registry.get_worker(worker.worker_id)
+
+
+def test_node_deregistration_removes_node_and_owned_workers() -> None:
+    registry, node, worker = _registered_registry()
+
+    registry.deregister_node(node.node_id, now=T1)
+    with pytest.raises(RegistryError, match="unknown node"):
+        registry.get_node(node.node_id)
+    with pytest.raises(RegistryError, match="unknown worker"):
+        registry.get_worker(worker.worker_id)

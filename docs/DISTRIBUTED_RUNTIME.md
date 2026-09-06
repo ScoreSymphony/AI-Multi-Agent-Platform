@@ -97,7 +97,8 @@ Remote reports never control administrative trust state. For a new remotely enro
 - drain/maintenance changes advance `updated_at` without changing `last_heartbeat_at`;
 - liveness expiry/offline transitions advance `updated_at` without rewriting the last accepted heartbeat;
 - no-op administrative mutations preserve the previous state-change timestamp;
-- state-change time is monotonic within the registry and all runtime timestamps are timezone-aware;
+- state-change time is monotonic within the registry, including re-registration, and all runtime timestamps are timezone-aware;
+- deregistering a Worker advances the surviving parent Node's `updated_at` when `worker_refs` changes, without changing heartbeat evidence; deregistered resources themselves leave canonical state;
 - restart health normalization to offline is a canonical state change when the persisted record was not already offline, but it is not a heartbeat.
 
 Derived Search projections use canonical `updated_at`, so modification-time filters and ordering do not depend on heartbeat frequency.
