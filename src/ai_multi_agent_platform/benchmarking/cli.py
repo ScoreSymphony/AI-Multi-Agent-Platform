@@ -12,6 +12,7 @@ from typing import Any
 
 from ai_multi_agent_platform.deployment import SingleNodeConfig
 
+from .endurance import EnduranceBenchmarkSpec, SingleNodeEnduranceHarness
 from .models import BenchmarkSpec, RegressionThresholds, compare_with_baseline
 from .single_node import SingleNodeBenchmarkHarness, attach_baseline_comparison
 from .sweep import SingleNodeSweepHarness
@@ -73,6 +74,24 @@ def _parser() -> argparse.ArgumentParser:
     workload.add_argument("--write-weight", type=int, default=1)
     workload.add_argument("--output", type=Path, required=True)
     workload.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
+
+    endurance = subparsers.add_parser(
+        "single-node-endurance",
+        help="measure idle footprint or bounded single-node soak stability",
+    )
+    endurance.add_argument("--scenario", choices=("idle", "soak"), required=True)
+    endurance.add_argument("--data-dir", type=Path)
+    endurance.add_argument("--duration-seconds", type=float, default=300.0)
+    endurance.add_argument("--sample-interval-seconds", type=float, default=10.0)
+    endurance.add_argument("--max-operations", type=int)
+    endurance.add_argument("--concurrency", type=int)
+    endurance.add_argument("--seed-tasks", type=int)
+    endurance.add_argument("--warmup-operations", type=int)
+    endurance.add_argument("--timeout-seconds", type=float, default=30.0)
+    endurance.add_argument("--read-weight", type=int)
+    endurance.add_argument("--write-weight", type=int)
+    endurance.add_argument("--output", type=Path, required=True)
+    endurance.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
     return parser
 
 
@@ -84,6 +103,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_run_single_node_sweep(args))
     if args.command == "single-node-workload":
         return asyncio.run(_run_single_node_workload(args))
+    if args.command == "single-node-endurance":
+        return asyncio.run(_run_single_node_endurance(args))
     raise AssertionError(f"unsupported benchmark command: {args.command}")
 
 
@@ -206,6 +227,63 @@ async def _run_single_node_workload(args: argparse.Namespace) -> int:
     )
     try:
         report = await SingleNodeWorkloadHarness(
+            SingleNodeConfig(data_dir=data_dir, secure_cookie=False),
+            platform_commit=args.platform_commit,
+        ).run(spec)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return 0 if report.correctness.passed else 2
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+
+
+async def _run_single_node_endurance(args: argparse.Namespace) -> int:
+    temporary: tempfile.TemporaryDirectory[str] | None = None
+    if args.data_dir is None:
+        temporary = tempfile.TemporaryDirectory(prefix="ai-map-benchmark-endurance-")
+        data_dir = Path(temporary.name)
+    else:
+        data_dir = args.data_dir
+
+    if args.scenario == "idle":
+        benchmark_id = "single-node.idle.footprint"
+        max_operations = 0 if args.max_operations is None else args.max_operations
+        concurrency = 1 if args.concurrency is None else args.concurrency
+        seed_tasks = 0 if args.seed_tasks is None else args.seed_tasks
+        warmup_operations = 0 if args.warmup_operations is None else args.warmup_operations
+        read_weight = 0 if args.read_weight is None else args.read_weight
+        write_weight = 0 if args.write_weight is None else args.write_weight
+    else:
+        benchmark_id = "single-node.soak.mixed"
+        max_operations = 10000 if args.max_operations is None else args.max_operations
+        concurrency = 4 if args.concurrency is None else args.concurrency
+        seed_tasks = 10 if args.seed_tasks is None else args.seed_tasks
+        warmup_operations = 5 if args.warmup_operations is None else args.warmup_operations
+        read_weight = 4 if args.read_weight is None else args.read_weight
+        write_weight = 1 if args.write_weight is None else args.write_weight
+
+    spec = EnduranceBenchmarkSpec(
+        benchmark_id=benchmark_id,
+        benchmark_version="1.0",
+        scenario=args.scenario,
+        deployment_profile="single-node-reference",
+        persistence_profile="sqlite-reference",
+        duration_seconds=args.duration_seconds,
+        sample_interval_seconds=args.sample_interval_seconds,
+        max_operations=max_operations,
+        concurrency=concurrency,
+        seed_tasks=seed_tasks,
+        warmup_operations=warmup_operations,
+        timeout_seconds=args.timeout_seconds,
+        read_weight=read_weight,
+        write_weight=write_weight,
+    )
+    try:
+        report = await SingleNodeEnduranceHarness(
             SingleNodeConfig(data_dir=data_dir, secure_cookie=False),
             platform_commit=args.platform_commit,
         ).run(spec)

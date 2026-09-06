@@ -90,21 +90,46 @@ platform-benchmark single-node-workload \
 
 Seeding and warmup happen before the measured window. The restart profile is the exception for process-composition reconstruction: the restart itself is intentionally measured and emitted as its own latency distribution.
 
-The workload report records:
+The workload report records a versioned scenario/configuration, persistence and deployment profiles, workload distribution, throughput and p50/p95/p99 latency distributions, resource evidence, observed canonical totals, duplicate-write detection, bounded canonical samples, errors and a correctness verdict. Its schema is `docs/schemas/benchmark-workload.v1.schema.json`.
 
-- a versioned benchmark ID/scenario;
-- deployment and persistence profiles;
-- workload distribution, operation count, concurrency, seed size, warmup and timeout;
-- repetition semantics;
-- optional-subsystem declarations;
-- explicit expected correctness invariants and captured metric names;
-- throughput and operation/read/write/restart p50/p95/p99 distributions;
-- CPU, memory, storage and descriptor evidence;
-- observed canonical Task/Run totals and duplicate-write detection;
-- bounded sample canonical Task/Run references;
-- errors and correctness verdict.
+## Idle footprint and soak/endurance
 
-The schema is `docs/schemas/benchmark-workload.v1.schema.json`. One workload report represents one fresh-state repetition; repeated comparative measurements should use separate fresh data roots rather than silently reusing accumulated state.
+`platform-benchmark single-node-endurance` adds two single-process profiles that answer questions the request/operation reports cannot answer reliably:
+
+- `idle` constructs and initializes the production-shaped single-node deployment, creates the benchmark administrator/project context, executes no Task/Run workload, and samples CPU, Python traced memory, optional peak RSS, storage and open descriptors for the configured duration;
+- `soak` keeps one deployment instance alive, seeds canonical state before measurement, optionally warms read paths, then performs a deterministic bounded read/write mix while periodically sampling resources and windowed latency.
+
+Idle example:
+
+```bash
+platform-benchmark single-node-endurance \
+  --scenario idle \
+  --duration-seconds 60 \
+  --sample-interval-seconds 5 \
+  --output artifacts/benchmarks/idle.json
+```
+
+Longer soak example:
+
+```bash
+platform-benchmark single-node-endurance \
+  --scenario soak \
+  --duration-seconds 3600 \
+  --sample-interval-seconds 30 \
+  --max-operations 100000 \
+  --concurrency 8 \
+  --seed-tasks 100 \
+  --warmup-operations 20 \
+  --read-weight 4 \
+  --write-weight 1 \
+  --output artifacts/benchmarks/soak.json
+```
+
+A soak always has two independent bounds: requested duration and `max_operations`. The first bound reached stops the workload. The operation cap is a harness-safety boundary, not a claimed platform capacity. To run a true duration-dominated soak, choose a sufficiently high operation cap for the target environment.
+
+Each report stores startup latency, aggregate operation/read/write p50/p95/p99, throughput, initial/final resource evidence and periodic snapshots. Snapshot latency is windowed since the previous sample, allowing latency drift to be inspected instead of hiding it inside one cumulative percentile. The report also records traced-memory growth, optional peak-RSS growth, optional descriptor growth, storage growth and a first-to-last window p95 drift ratio when at least two populated windows exist.
+
+Correctness remains mandatory. Idle fails if canonical Tasks or Runs appear. Soak fails on operation errors, missing canonical state or duplicate write identities. The schema is `docs/schemas/benchmark-endurance.v1.schema.json`.
 
 ## Baseline comparison
 
@@ -124,19 +149,17 @@ A baseline is rejected as incomparable when its benchmark ID/version/profile, op
 
 ## CI tiers
 
-- **PR smoke:** small deterministic lifecycle, tiny 1/2 sweep and tiny workload-profile fixtures; correctness and schemas mandatory, artifacts retained; no noisy universal latency budget.
-- **integration/nightly/manual performance work:** full 1/10/50/100+ sweeps, realistic read/mixed/history/restart sizes and comparative baselines.
-- **release qualification:** stress, soak/endurance, fault-under-load and supported distributed profiles.
+- **PR smoke:** small deterministic lifecycle, tiny 1/2 sweep, tiny workload fixtures and contract-sized idle/soak runs; correctness and schemas mandatory, artifacts retained; no noisy universal latency budget.
+- **integration/nightly/manual performance work:** full 1/10/50/100+ sweeps, realistic read/mixed/history/restart sizes, longer resource-sampling windows and comparative baselines.
+- **release qualification:** meaningful soak/endurance durations, stress/saturation, fault-under-load and supported distributed profiles.
 
-Full scale, soak and saturation runs do not belong in every ordinary PR.
+Tiny endurance runs in PRs prove semantics only. They are not evidence of long-term memory stability. Full scale, soak and saturation runs do not belong in every ordinary PR.
 
 ## Progressive #440 profiles
 
 The suite still does not claim completion of #440. Remaining progressive work includes:
 
-- idle-footprint evidence;
 - bounded admission/persistence saturation stress profiles;
-- longer-running memory/descriptor/queue soak profiles;
 - deterministic fault-under-load profiles;
 - durable Plan/Step long-linear, fan-out/fan-in, retry and reconciliation workloads after #384;
 - local/remote Worker dispatch, heartbeat and Workspace materialization workloads after #240/#433;
