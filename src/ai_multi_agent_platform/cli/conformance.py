@@ -72,10 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _parse_optional(values: list[str]) -> tuple[str, ...]:
     return tuple(
-        item.strip().upper()
-        for value in values
-        for item in value.split(",")
-        if item.strip()
+        item.strip().upper() for value in values for item in value.split(",") if item.strip()
     )
 
 
