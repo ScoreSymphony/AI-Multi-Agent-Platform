@@ -614,23 +614,23 @@ class TransportRemoteWorkspaceMaterializer(RemoteWorkspaceMaterializer):
         context = self._context(workspace)
         manifest: list[_ManifestEntry] = []
         portable_files: dict[str, bytes] = {}
-        for entry in snapshot.files:
-            portable = await snapshot_file(self.files, entry.file_id, context)
-            if portable.record.sha256 != entry.sha256:
+        for workspace_file in snapshot.files:
+            portable = await snapshot_file(self.files, workspace_file.file_id, context)
+            if portable.record.sha256 != workspace_file.sha256:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
                     "canonical Workspace File checksum differs from snapshot manifest",
-                    details={"file_id": entry.file_id},
+                    details={"file_id": workspace_file.file_id},
                 )
             manifest.append(
                 _ManifestEntry(
-                    relative_path=entry.relative_path,
-                    file_id=entry.file_id,
-                    sha256=entry.sha256,
+                    relative_path=workspace_file.relative_path,
+                    file_id=workspace_file.file_id,
+                    sha256=workspace_file.sha256,
                     size_bytes=len(portable.data),
                 )
             )
-            portable_files[entry.relative_path] = portable.data
+            portable_files[workspace_file.relative_path] = portable.data
 
         prepared = await self._request(
             request,
