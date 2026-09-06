@@ -1,6 +1,6 @@
 """Operator-facing Worker credential lifecycle for advanced #240 deployments.
 
-The runtime Control Plane already owns authenticated administration.  This adapter binds
+The runtime Control Plane already owns authenticated administration. This adapter binds
 credential issuance to the selected deployment profile so an administrator can provision or
 rotate the reporter identity required by ``platform-worker`` without test-only Python calls.
 Canonical Worker authentication remains #36 and authorization remains #15.
@@ -22,6 +22,7 @@ from ai_multi_agent_platform.security import (
     LocalAuthenticationService,
     LocalPrincipalPolicy,
     ResourceType,
+    StoredCredential,
 )
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
 
@@ -175,7 +176,7 @@ class DistributedWorkerAdmin:
         worker_id: str,
         *,
         now: datetime,
-    ) -> tuple[object, ...]:
+    ) -> tuple[StoredCredential, ...]:
         return tuple(
             credential
             for credential in self._authentication.list_credentials(worker_id)
