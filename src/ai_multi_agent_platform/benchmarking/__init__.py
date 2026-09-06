@@ -19,10 +19,18 @@ from .sweep import (
     SingleNodeSweepReport,
     SweepPoint,
 )
+from .workloads import (
+    WORKLOAD_REPORT_SCHEMA_VERSION,
+    SingleNodeWorkloadHarness,
+    WorkloadBenchmarkReport,
+    WorkloadBenchmarkSpec,
+    WorkloadCorrectnessSummary,
+)
 
 __all__ = [
     "BENCHMARK_REPORT_SCHEMA_VERSION",
     "SWEEP_REPORT_SCHEMA_VERSION",
+    "WORKLOAD_REPORT_SCHEMA_VERSION",
     "BaselineComparison",
     "BenchmarkReport",
     "BenchmarkSpec",
@@ -34,7 +42,11 @@ __all__ = [
     "SingleNodeSweepExecution",
     "SingleNodeSweepHarness",
     "SingleNodeSweepReport",
+    "SingleNodeWorkloadHarness",
     "SweepPoint",
+    "WorkloadBenchmarkReport",
+    "WorkloadBenchmarkSpec",
+    "WorkloadCorrectnessSummary",
     "attach_baseline_comparison",
     "compare_with_baseline",
 ]
