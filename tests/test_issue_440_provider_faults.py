@@ -22,19 +22,20 @@ def _schema() -> dict[str, object]:
 
 
 @pytest.mark.parametrize(
-    ("scenario", "expected_code"),
+    ("scenario", "expected_code", "expected_retryable"),
     [
-        ("model-latency", None),
-        ("model-unavailable", "unavailable"),
-        ("model-cancelled", "cancelled"),
-        ("tool-unavailable", "unavailable"),
-        ("tool-timeout", "timeout"),
-        ("tool-cancelled", "cancelled"),
+        ("model-latency", None, None),
+        ("model-unavailable", "unavailable", True),
+        ("model-cancelled", "cancelled", False),
+        ("tool-unavailable", "unavailable", True),
+        ("tool-timeout", "timeout", True),
+        ("tool-cancelled", "cancelled", True),
     ],
 )
 def test_provider_fault_profiles_are_correct_and_schema_valid(
     scenario: str,
     expected_code: str | None,
+    expected_retryable: bool | None,
 ) -> None:
     async def run() -> None:
         spec = ProviderFaultBenchmarkSpec(
@@ -75,11 +76,15 @@ def test_provider_fault_profiles_are_correct_and_schema_valid(
             assert report.error_counts == {}
             assert report.retryable_error_counts == {}
         else:
+            expected_retryable_failures = 2 if expected_retryable else 0
+            expected_retryable_errors = (
+                {expected_code: 2} if expected_retryable else {}
+            )
             assert report.correctness.fault_successes == 0
             assert report.correctness.expected_failures == 2
-            assert report.correctness.retryable_failures == 2
+            assert report.correctness.retryable_failures == expected_retryable_failures
             assert report.error_counts == {expected_code: 2}
-            assert report.retryable_error_counts == {expected_code: 2}
+            assert report.retryable_error_counts == expected_retryable_errors
 
         if scenario == "model-latency":
             assert report.provider_service_latency["fault"].p50_ms >= 10
