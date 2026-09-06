@@ -338,7 +338,9 @@ class SqliteConnectorRepository(ConnectorRepository):
         with self._connect() as database:
             database.execute("BEGIN IMMEDIATE")
             self._require_connection(database, connection_id)
-            canonical = tuple(self._canonical_external_resource(database, item) for item in resources)
+            canonical = tuple(
+                self._canonical_external_resource(database, item) for item in resources
+            )
             if len({resource.id for resource in canonical}) != len(canonical):
                 raise ContractError(
                     ErrorCode.CONFLICT,
@@ -536,10 +538,7 @@ def _json_object(value: Mapping[str, object]) -> dict[str, JsonValue]:
 
 
 def _adapter_metadata_to_json(metadata: tuple[AdapterMetadata, ...]) -> list[JsonValue]:
-    return [
-        {"namespace": item.namespace, "values": _json_object(item.values)}
-        for item in metadata
-    ]
+    return [{"namespace": item.namespace, "values": _json_object(item.values)} for item in metadata]
 
 
 def _adapter_metadata_from_json(value: object) -> tuple[AdapterMetadata, ...]:
@@ -584,7 +583,9 @@ def _definition_from_json(encoded: str) -> ConnectorDefinition:
         name=_string(data, "name"),
         version=_string(data, "version"),
         description=_string_allow_blank(data, "description"),
-        supported_operations=_string_tuple(data.get("supported_operations"), "supported_operations"),
+        supported_operations=_string_tuple(
+            data.get("supported_operations"), "supported_operations"
+        ),
         features=_string_tuple(data.get("features"), "features"),
         authentication_requirements=_string_tuple(
             data.get("authentication_requirements"), "authentication_requirements"
@@ -627,7 +628,9 @@ def _connection_to_json(connection: Connection) -> dict[str, JsonValue]:
         "created_at": connection.created_at.isoformat(),
         "updated_at": connection.updated_at.isoformat(),
         "last_checked_at": (
-            connection.last_checked_at.isoformat() if connection.last_checked_at is not None else None
+            connection.last_checked_at.isoformat()
+            if connection.last_checked_at is not None
+            else None
         ),
         "revision": connection.revision,
         "adapter_metadata": _adapter_metadata_to_json(connection.adapter_metadata),
