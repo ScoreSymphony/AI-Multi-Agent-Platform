@@ -41,6 +41,23 @@ def add_compute_parsers(
         action.add_argument("worker_id")
         action.add_argument("--idempotency-key")
 
+    provision = worker_commands.add_parser(
+        "provision",
+        help="provision the profile reporter Worker credential and minimal #15 policy",
+    )
+    provision.add_argument("worker_id")
+    provision.add_argument("--purpose")
+    provision.add_argument("--idempotency-key")
+
+    rotate = worker_commands.add_parser(
+        "rotate-credential",
+        help="rotate one profile reporter Worker credential",
+    )
+    rotate.add_argument("worker_id")
+    rotate.add_argument("--credential-id", required=True)
+    rotate.add_argument("--purpose")
+    rotate.add_argument("--idempotency-key")
+
     worker_job = areas.add_parser("worker-job", help="inspect canonical WorkerJob dispatch state")
     worker_job.set_defaults(area="worker-job")
     worker_job_commands = worker_job.add_subparsers(dest="command", required=True)
@@ -182,6 +199,31 @@ def _execute_worker(
         return client.post(
             f"/commands/worker.{args.command}",
             body={"resource_ref": worker_id},
+            idempotency_key=args.idempotency_key,
+        )
+    if args.command == "provision":
+        worker_id = str(args.worker_id)
+        confirm(args, "provision Worker credential", worker_id)
+        body: dict[str, JsonValue] = {"resource_ref": worker_id}
+        if args.purpose:
+            body["purpose"] = str(args.purpose)
+        return client.post(
+            "/commands/worker.provision",
+            body=body,
+            idempotency_key=args.idempotency_key,
+        )
+    if args.command == "rotate-credential":
+        worker_id = str(args.worker_id)
+        confirm(args, "rotate Worker credential", worker_id)
+        body = {
+            "resource_ref": worker_id,
+            "credential_id": str(args.credential_id),
+        }
+        if args.purpose:
+            body["purpose"] = str(args.purpose)
+        return client.post(
+            "/commands/worker.rotate-credential",
+            body=body,
             idempotency_key=args.idempotency_key,
         )
     raise ProfileError(f"unsupported worker command: {args.command}")
