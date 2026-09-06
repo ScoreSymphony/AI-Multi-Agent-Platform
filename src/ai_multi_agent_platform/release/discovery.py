@@ -205,9 +205,7 @@ def load_observations(path: str | Path) -> tuple[str, tuple[ObservedUpstream, ..
     if _string(raw, "schema_version") != UPDATE_OBSERVATION_SCHEMA_VERSION:
         raise UpdateDiscoveryError("unsupported upstream observation schema_version")
     observed_at = _string(raw, "observed_at")
-    return observed_at, tuple(
-        _decode_observation(item) for item in _object_list(raw, "components")
-    )
+    return observed_at, tuple(_decode_observation(item) for item in _object_list(raw, "components"))
 
 
 def evaluate_update_candidates(
@@ -318,7 +316,9 @@ def record_reviewed_candidate(
             )
         )
     if not found:
-        raise UpdateDiscoveryError(f"candidate component not present in inventory: {candidate.component}")
+        raise UpdateDiscoveryError(
+            f"candidate component not present in inventory: {candidate.component}"
+        )
     return replace(
         inventory,
         last_reviewed_at=reviewed_at,
@@ -368,9 +368,7 @@ def _evaluate_candidate(
         reasons.append("local patch conflicts: " + ", ".join(observed.patch_conflicts))
 
     failed_validation = sorted(
-        name
-        for name, status in (observed.validation or {}).items()
-        if status is GateStatus.FAILED
+        name for name, status in (observed.validation or {}).items() if status is GateStatus.FAILED
     )
     if failed_validation:
         reasons.append("candidate validation failed: " + ", ".join(failed_validation))
@@ -454,7 +452,9 @@ def _decode_observation(value: Mapping[str, object]) -> ObservedUpstream:
         try:
             validation[name] = GateStatus(status)
         except ValueError as exc:
-            raise UpdateDiscoveryError(f"invalid validation status for {name!r}: {status!r}") from exc
+            raise UpdateDiscoveryError(
+                f"invalid validation status for {name!r}: {status!r}"
+            ) from exc
 
     raw_classes = _string_list(value, "classifications")
     try:
