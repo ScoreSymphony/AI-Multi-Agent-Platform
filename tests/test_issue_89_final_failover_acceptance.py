@@ -154,8 +154,7 @@ def test_client_stream_reconnect_after_promotion_resumes_from_durable_cursor(
         )
 
         replayed = [
-            event
-            async for event in promoted_events.subscribe(task.task_id, after_event_id=cursor)
+            event async for event in promoted_events.subscribe(task.task_id, after_event_id=cursor)
         ]
         assert replayed
         assert all(event.id != cursor for event in replayed)
