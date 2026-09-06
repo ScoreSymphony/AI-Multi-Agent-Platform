@@ -23,6 +23,15 @@ def _require_nonblank(value: str, name: str) -> None:
         raise ValueError(f"{name} must not be blank")
 
 
+def _require_supported_schema_version(value: str) -> None:
+    _require_nonblank(value, "routing profile schema_version")
+    if value != MODEL_ROUTING_PROFILE_SCHEMA_VERSION:
+        raise ValueError(
+            "unsupported routing profile schema_version: "
+            f"{value!r}; expected {MODEL_ROUTING_PROFILE_SCHEMA_VERSION!r}"
+        )
+
+
 def new_model_routing_profile_id() -> str:
     """Create one stable canonical routing-profile identity."""
 
@@ -72,7 +81,7 @@ class ModelRoutingProfileDefinition:
             validate_id(self.project_id, "project")
         if self.updated_at < self.created_at:
             raise ValueError("routing profile updated_at cannot precede created_at")
-        _require_nonblank(self.schema_version, "routing profile schema_version")
+        _require_supported_schema_version(self.schema_version)
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +106,7 @@ class ModelRoutingProfileRevision:
         _require_nonblank(self.name, "routing profile name")
         if self.project_id is not None:
             validate_id(self.project_id, "project")
-        _require_nonblank(self.schema_version, "routing profile schema_version")
+        _require_supported_schema_version(self.schema_version)
 
     @property
     def ref(self) -> ModelRoutingProfileRef:
