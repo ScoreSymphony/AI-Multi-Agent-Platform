@@ -119,6 +119,16 @@ jobs:
           )
           replace_once(
               "src/ai_multi_agent_platform/deployment/single_node.py",
+              '''    ActorType,\n    AuthorizationGate,\n    LocalAuthenticationService,''',
+              '''    ActorType,\n    AuthorizationGate,\n    ControlPlaneAuthorizationBridge,\n    LocalAuthenticationService,''',
+          )
+          replace_once(
+              "src/ai_multi_agent_platform/deployment/single_node.py",
+              '''    authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")\n    approval_gate = AuthorizationGate(authorization)\n    repositories = RepositoryService(repository_registry, approval_gate)''',
+              '''    authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")\n    approval_gate = AuthorizationGate(authorization)\n    control_plane_authorization = ControlPlaneAuthorizationBridge(approval_gate)\n    repositories = RepositoryService(repository_registry, approval_gate)''',
+          )
+          replace_once(
+              "src/ai_multi_agent_platform/deployment/single_node.py",
               '''    distributed_runtime: DistributedRuntime | None = None,\n) -> SingleNodeDeployment:''',
               '''    distributed_runtime: DistributedRuntime | None = None,\n    repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,\n) -> SingleNodeDeployment:''',
           )
@@ -131,6 +141,11 @@ jobs:
               "src/ai_multi_agent_platform/deployment/single_node.py",
               '''        scopes=scopes,\n        platform_version=__version__,\n        templates=templates.repository,\n        evaluation=evaluation_composition.service,\n    )''',
               '''        scopes=scopes,\n        platform_version=__version__,\n        capabilities=capabilities,\n        templates=templates.repository,\n        evaluation=evaluation_composition.service,\n        evaluation_fixture_exists=evaluation_composition.fixture_exists,\n    )''',
+          )
+          replace_once(
+              "src/ai_multi_agent_platform/deployment/single_node.py",
+              '''        scopes=scopes,\n        authorization=authorization,\n        workspace_provider=workspaces,''',
+              '''        scopes=scopes,\n        authorization=control_plane_authorization,\n        workspace_provider=workspaces,''',
           )
           replace_once(
               "tests/test_issue_82_search_lifecycle_hardening.py",
@@ -153,6 +168,7 @@ jobs:
         shell: bash
         run: |
           git rm .github/workflows/issue-82-finalize.yml
+          git rm -f .github/issue-82-retrigger.txt || true
           git add -A
           git commit -m "fix(repositories): close operational lifecycle gaps (#82)"
           git push origin HEAD:feat/issue-82-operational-completion
