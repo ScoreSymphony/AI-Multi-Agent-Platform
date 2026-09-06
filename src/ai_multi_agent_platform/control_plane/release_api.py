@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
-from ai_multi_agent_platform.release.operator import ReleaseOperatorService
 
 from .http import HTTPRequest, HTTPResponse
 from .models import API_VERSION
@@ -16,6 +15,9 @@ from .task_project_reassignment import (
 from .task_project_reassignment import ControlPlane, ControlPlaneASGI
 from .task_project_reassignment import ControlPlaneHTTP as _CurrentControlPlaneHTTP
 from .task_project_reassignment import build_openapi as _build_current_openapi
+
+if TYPE_CHECKING:
+    from ai_multi_agent_platform.release.operator import ReleaseOperatorService
 
 RELEASE_STATUS_PATH = f"/api/{API_VERSION}/release/status"
 
@@ -30,7 +32,11 @@ class ControlPlaneHTTP(_CurrentControlPlaneHTTP):
         release_operator: ReleaseOperatorService | None = None,
     ) -> None:
         super().__init__(control_plane)
-        self._release_operator = release_operator or ReleaseOperatorService.packaged_defaults()
+        if release_operator is None:
+            from ai_multi_agent_platform.release.operator import ReleaseOperatorService
+
+            release_operator = ReleaseOperatorService.packaged_defaults()
+        self._release_operator = release_operator
 
     @property
     def release_operator(self) -> ReleaseOperatorService:
