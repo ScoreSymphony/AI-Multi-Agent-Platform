@@ -1,0 +1,78 @@
+{
+  "schema_version": "1",
+  "profile_id": "control-plane-plus-remote-worker",
+  "description": "Control Plane on one host with one authenticated remote execution Worker on another device.",
+  "control_plane": {
+    "endpoint_ref": "deployment:control-plane-private-tls",
+    "network_scope": "private",
+    "tls_required": true
+  },
+  "nodes": [
+    {
+      "deployment": {
+        "host_ref": "device-b",
+        "connection_mode": "remote",
+        "transport_endpoint_ref": "deployment:private-worker-transport",
+        "workspace_root": "/var/lib/ai-multi-agent-platform-worker/workspaces",
+        "tls_required": true,
+        "credential_reference": {
+          "provider": "local-reference",
+          "secret_id": "worker-device-b-service-credential",
+          "scope": "worker_protocol",
+          "metadata": {
+            "purpose": "worker service identity reference only"
+          }
+        }
+      },
+      "canonical": {
+        "node_id": "node_00000000-0000-4000-8000-000000000250",
+        "display_name": "Remote execution node",
+        "labels": ["placement:remote"],
+        "supported_runtimes": ["python"],
+        "model_refs": [],
+        "capability_refs": ["execution:general"],
+        "locality_refs": [],
+        "resources": {
+          "cpu_cores": 8,
+          "ram_bytes": 17179869184,
+          "storage_bytes": 214748364800,
+          "accelerators": []
+        }
+      },
+      "workers": [
+        {
+          "worker_id": "worker_00000000-0000-4000-8000-000000000251",
+          "worker_type": "execution",
+          "supported_executors": ["reference"],
+          "capability_refs": ["execution:general"],
+          "supported_runtimes": ["python"],
+          "model_refs": [],
+          "concurrency_limit": 2,
+          "locality_refs": [],
+          "worker_version": "0"
+        }
+      ],
+      "reporter_worker_id": "worker_00000000-0000-4000-8000-000000000251"
+    }
+  ],
+  "optional_services": [
+    {
+      "service_id": "model-endpoint",
+      "enabled": false,
+      "network_scope": "private",
+      "endpoint_ref": null
+    },
+    {
+      "service_id": "browser-service",
+      "enabled": false,
+      "network_scope": "private",
+      "endpoint_ref": null
+    },
+    {
+      "service_id": "connector-service",
+      "enabled": false,
+      "network_scope": "private",
+      "endpoint_ref": null
+    }
+  ]
+}

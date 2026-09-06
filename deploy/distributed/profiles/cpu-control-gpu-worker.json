@@ -1,0 +1,125 @@
+{
+  "schema_version": "1",
+  "profile_id": "cpu-control-plus-accelerator-worker",
+  "description": "CPU-only server with a general Worker plus a remote accelerator-capable Worker selected by canonical resource requirements.",
+  "control_plane": {
+    "endpoint_ref": "deployment:control-plane-private-tls",
+    "network_scope": "private",
+    "tls_required": true
+  },
+  "nodes": [
+    {
+      "deployment": {
+        "host_ref": "device-cpu",
+        "connection_mode": "local",
+        "transport_endpoint_ref": "deployment:in-process-transport",
+        "workspace_root": "/var/lib/ai-multi-agent-platform/workspaces",
+        "tls_required": false,
+        "credential_reference": null
+      },
+      "canonical": {
+        "node_id": "node_00000000-0000-4000-8000-000000000260",
+        "display_name": "General CPU execution node",
+        "labels": ["placement:server"],
+        "supported_runtimes": ["python"],
+        "model_refs": [],
+        "capability_refs": ["execution:general"],
+        "locality_refs": ["workspace:primary"],
+        "resources": {
+          "cpu_cores": 8,
+          "ram_bytes": 17179869184,
+          "storage_bytes": 214748364800,
+          "accelerators": []
+        }
+      },
+      "workers": [
+        {
+          "worker_id": "worker_00000000-0000-4000-8000-000000000262",
+          "worker_type": "execution",
+          "supported_executors": ["reference"],
+          "capability_refs": ["execution:general"],
+          "supported_runtimes": ["python"],
+          "model_refs": [],
+          "concurrency_limit": 2,
+          "locality_refs": ["workspace:primary"],
+          "worker_version": "0"
+        }
+      ],
+      "reporter_worker_id": null
+    },
+    {
+      "deployment": {
+        "host_ref": "device-accelerated",
+        "connection_mode": "remote",
+        "transport_endpoint_ref": "deployment:private-worker-transport",
+        "workspace_root": "/var/lib/ai-multi-agent-platform-worker/workspaces",
+        "tls_required": true,
+        "credential_reference": {
+          "provider": "local-reference",
+          "secret_id": "worker-device-accelerated-service-credential",
+          "scope": "worker_protocol",
+          "metadata": {
+            "purpose": "worker service identity reference only"
+          }
+        }
+      },
+      "canonical": {
+        "node_id": "node_00000000-0000-4000-8000-000000000261",
+        "display_name": "Accelerator-capable execution node",
+        "labels": ["placement:accelerated"],
+        "supported_runtimes": ["python"],
+        "model_refs": ["model:local-large"],
+        "capability_refs": ["execution:general", "execution:accelerated"],
+        "locality_refs": [],
+        "resources": {
+          "cpu_cores": 16,
+          "ram_bytes": 68719476736,
+          "storage_bytes": 536870912000,
+          "accelerators": [
+            {
+              "accelerator_id": "accelerator-0",
+              "kind": "gpu",
+              "vendor": null,
+              "model": null,
+              "memory_bytes": 25769803776
+            }
+          ]
+        }
+      },
+      "workers": [
+        {
+          "worker_id": "worker_00000000-0000-4000-8000-000000000263",
+          "worker_type": "execution",
+          "supported_executors": ["reference"],
+          "capability_refs": ["execution:general", "execution:accelerated"],
+          "supported_runtimes": ["python"],
+          "model_refs": ["model:local-large"],
+          "concurrency_limit": 2,
+          "locality_refs": [],
+          "worker_version": "0"
+        }
+      ],
+      "reporter_worker_id": "worker_00000000-0000-4000-8000-000000000263"
+    }
+  ],
+  "optional_services": [
+    {
+      "service_id": "model-endpoint",
+      "enabled": true,
+      "network_scope": "private",
+      "endpoint_ref": "deployment:accelerated-local-model-endpoint"
+    },
+    {
+      "service_id": "browser-service",
+      "enabled": false,
+      "network_scope": "private",
+      "endpoint_ref": null
+    },
+    {
+      "service_id": "connector-service",
+      "enabled": false,
+      "network_scope": "private",
+      "endpoint_ref": null
+    }
+  ]
+}
