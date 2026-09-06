@@ -1,0 +1,36 @@
+name: Issue 384 autoformat
+
+on:
+  push:
+    branches:
+      - feat/384-durable-plan-step-coordinator
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/384-durable-plan-step-coordinator
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Install formatter
+        run: python -m pip install 'ruff==0.16.6'
+      - name: Apply Ruff formatter
+        run: ruff format src/ai_multi_agent_platform/coordination tests/test_issue_384_durable_coordination.py tests/test_issue_384_coordination_durability.py
+      - name: Commit formatting
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ai_multi_agent_platform/coordination tests/test_issue_384_durable_coordination.py tests/test_issue_384_coordination_durability.py
+          git commit -m 'style(#384): apply Ruff formatting'
+          git push origin HEAD:feat/384-durable-plan-step-coordinator
