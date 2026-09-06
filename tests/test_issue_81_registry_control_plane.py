@@ -5,11 +5,11 @@ import hashlib
 
 from ai_multi_agent_platform.control_plane.models import PageQuery
 from ai_multi_agent_platform.distribution import (
+    REGISTRY_COLLECTION,
+    REGISTRY_PREVIEW_COMMAND,
     ArtifactIntegrity,
     DistributionService,
     LocalRegistryProvider,
-    REGISTRY_COLLECTION,
-    REGISTRY_PREVIEW_COMMAND,
     RegistryItem,
     RegistryItemType,
     RegistrySource,
