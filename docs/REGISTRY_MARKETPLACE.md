@@ -1,14 +1,20 @@
 # Optional Registry and Marketplace
 
-Issue #81 adds a distribution layer for reusable platform assets without making a central service part of the platform runtime.
+Issue #81 adds a distribution layer and a first-class graphical Marketplace for reusable platform assets without making a central registry service part of the platform runtime.
 
 ## Decision
 
-The platform owns canonical distribution contracts. A registry is an optional provider behind `RegistryProvider`; deployments may configure none, the bundled local/offline provider, a private organizational implementation, or a public provider. Core startup and all non-registry platform features remain independent from registry connectivity.
+The Marketplace is a required product surface. Registry connectivity is not. The platform owns canonical distribution contracts and the graphical `/marketplace` route, while a registry remains an optional provider behind `RegistryProvider`. Deployments may configure none, a local/offline filesystem catalog, a private organizational implementation, a public provider, or another compatible implementation. Core startup and all non-registry platform features remain independent from registry connectivity.
 
-This is deliberately separate from the issue #20 plugin extension registry. The plugin registry owns installed runtime extensions and lifecycle state. The distribution registry owns discovery metadata and package acquisition before anything becomes installed platform state.
+This is deliberately separate from the issue #20 plugin extension registry. The plugin registry owns installed runtime extensions and lifecycle state. The distribution registry owns discovery metadata, package acquisition, validation, distribution provenance and controlled installation/update handoff before content becomes owner-domain state.
 
 ```text
+Graphical Marketplace / CLI
+        |
+        v
+versioned Control Plane
+        |
+        v
 RegistryProvider (optional)
         |
         v
@@ -17,7 +23,7 @@ RegistryItem metadata + artifact
         v
 preview / validation
         |
-        +-- plugin ----------> explicit #20 artifact installer
+        +-- plugin ----------> explicit #20 artifact install/update owner
         |
         +-- canonical asset -> #79 package preview/import -> #78/domain owners
         |
@@ -30,46 +36,56 @@ preview / validation
 
 The portable JSON contract is versioned separately as `REGISTRY_ITEM_SCHEMA_VERSION`. Registry trust status is informational input to a decision; it is never itself authorization.
 
-Supported initial item types are Agents, Agent Teams, Tools, Plugins, Workflows, Templates, Model configurations, Connectors, Evaluation assets, and documentation/example assets.
+Supported item types are Agents, Agent Teams, Tools, Plugins, Workflows, Templates, Model configurations, Connectors, Evaluation assets, and documentation/example assets.
 
 ## Discovery
 
-`RegistryQuery` supports text, item type, tags/categories, license, publisher, required capabilities, platform compatibility, trust state and update-item filtering. Ratings, popularity and recommendation ranking are intentionally not canonical requirements.
+`RegistryQuery` supports text, item type, tags/categories, license, publisher, required capabilities, platform compatibility, trust state and update-item filtering. The Control Plane maps the Marketplace query into this domain contract before generic pagination; provider-specific discovery filters are therefore not discarded or applied a second time as primitive field equality.
 
-`LocalRegistryProvider` is the reference provider and works entirely offline. It proves that discovery does not require a paid or hosted registry.
+`LocalRegistryProvider` remains the deterministic in-memory reference provider. `FilesystemRegistryProvider` is the operator-facing local/offline catalog and loads versioned metadata and artifacts from a configured directory without a hosted service. Ratings, popularity and recommendation ranking are not canonical requirements.
 
 ## Safe activation workflow
 
-`DistributionService.preview()` fetches metadata and the exact artifact and validates it before mutation. Validation covers platform compatibility, yanked/deprecated releases, checksum integrity, dependency availability, requested permissions, required capabilities/plugins/connectors/models, installed-version pins and license/provenance changes. Untrusted content remains visibly untrusted.
+`DistributionService.preview()` fetches metadata and the exact artifact and validates it before mutation. Validation covers platform compatibility, yanked/deprecated releases, checksum integrity, authoritative signature verification, dependency availability, requested permissions, required capabilities/plugins/connectors/models, installed-version pins and license/provenance changes. Untrusted content remains visibly untrusted.
 
-`preview()` never activates content. Async `activate()` requires an explicit authorization result, re-fetches the exact metadata/artifact, re-runs validation to prevent preview/apply drift, and only then delegates to the owner domain through `DistributionRouter`.
+`preview()` never activates content. Async `activate()` requires explicit authorization, re-fetches the exact metadata/artifact, re-runs server-side validation to prevent preview/apply drift, and only then delegates to the owner domain through `DistributionRouter`. Installation state is recorded only after the owner handoff succeeds.
 
 `CanonicalDistributionRouter` is the reference owner handoff. Portable Registry assets must be UTF-8 JSON portable packages. The router sends them through the canonical #79 `validate_package_document()` -> `preview_import()` -> `execute_import()` workflow; it never writes Templates, Agents, Teams, Workflows or other imported resources itself.
 
-Plugin artifacts are intentionally different. The Registry layer does not deserialize plugin manifests, resolve entrypoints, construct runtimes or call `PluginRegistry.install()` directly. A deployment must provide a `PluginArtifactInstaller` that composes the verified artifact through the canonical #20 plugin packaging/discovery boundary. Without that owner adapter plugin activation fails closed as an unsupported capability.
+Plugin artifacts are intentionally different. `PluginRegistryArtifactInstaller` validates the Registry artifact as a canonical #20 manifest, requires Registry ID/version/license agreement, and delegates installation or an explicit newer-version update to `PluginRegistry`. Updates require a stopped runtime, repeat #20 compatibility/configuration/state-version validation, clear old permission grants, and never silently re-enable code. A state-version change remains fail-closed until the declared owner-domain state migration has actually completed.
 
-Documentation assets have no automatic activation path. A provider change or metadata change between preview and activation fails closed. Privileged content is never silently auto-installed.
+Documentation assets have no automatic activation path. A provider change or metadata change between preview and activation fails closed. Privileged content is never silently auto-installed or updated.
 
-## Updates and pinning
+## Durable installations, updates and pinning
 
-`InstalledRegistryItem` stores local source/version/provenance metadata and an optional pinned version. New registry versions may be discovered, but discovery never applies them. A pin blocks a different candidate version. License and provenance changes are surfaced during validation before any update can proceed.
+`JsonRegistryInstallationStore` persists Registry distribution state independently from the provider. Each installed item records current version, provider, source repository/package reference/revision, license and provenance. Replacing a version appends the prior snapshot to durable history so source and rollback evidence survive restart.
 
-Issue #42 may later expose these available versions through the platform update experience; it does not change the no-silent-update rule.
+Pins are explicit durable state. `registry.pin` can pin only the currently installed version; `registry.unpin` removes that constraint. Discovery can expose `update_available`, but it never applies a candidate automatically. License/provenance changes and pins are validated before activation.
 
-## Trust and supply chain
+The graphical Marketplace shows installed version, pin state, update availability and changelog. Issue #42 may additionally surface the same update availability through the wider platform update experience; it does not change the no-silent-update rule.
 
-Registry content is not trusted merely because it is listed. Checksums are enforced when declared. Signature metadata is retained for verifier integrations. Requested permissions are compared with the permissions the authoritative platform layer is willing to grant. Dependency, license, provenance and compatibility changes are surfaced before activation.
+## Trust, signatures and supply chain
 
-The distribution layer does not replace repository/package provenance, plugin sandboxing, authorization policy or the broader supply-chain threat model in #43.
+Registry content is not trusted merely because it is listed. Checksums are enforced when declared. A signed artifact is activation-blocking unless a deployment-owned `RegistrySignatureVerifier` verifies it. The bundled self-hosted reference verifier uses HMAC-SHA256 with keys stored outside canonical Registry state; public/private Registry providers can supply asymmetric implementations behind the same interface.
 
-## Control Plane / CLI / UI integration seam
+Requested permissions are compared with grantable permissions resolved from authoritative platform state. Dependency, license, provenance and compatibility changes are surfaced before activation. The distribution layer does not replace repository/package provenance, plugin sandboxing, authorization policy or the broader supply-chain threat model in #43.
 
-Northbound clients consume registry operations through the provider-neutral `DistributionService`; concrete providers are not exposed to CLI/UI consumers.
+## Production composition
 
-`register_distribution_control_plane()` is optional by construction. When no provider is configured it registers no collection or command, so registry availability is not part of core startup. With a provider it registers the read-only `registry-items` collection. `registry.preview` is registered only when the deployment supplies a `RegistryValidationContextResolver`, which resolves platform version, installed dependencies, capabilities, models, connectors and grantable permissions from authoritative server-side state rather than trusting client-supplied compatibility inputs.
+The shipped single-node entrypoint keeps Registry support opt-in. When no registry catalog is configured, no `registry-items` collection or Registry mutation commands are registered and ordinary self-hosted operation is unchanged.
 
-`registry.activate` is stricter: it is registered only when both the authoritative validation-context resolver and an activation router are configured. The handler performs a fresh server-side preview immediately before activation, rejects validation failures, and then awaits the canonical owner-domain handoff.
+When an operator configures a local catalog, the default composition connects:
 
-The generic Control Plane performs the existing #15 authorization check before registered resource reads or commands execute. A successful Control Plane command authorization is the explicit northbound authorization supplied to `DistributionService.activate()`; the distribution adapter does not implement a parallel authorization system.
+`FilesystemRegistryProvider -> DistributionService -> CanonicalDistributionRouter -> #20/#79`
 
-CLI and UI integrations can therefore discover exact versioned resources (`<item-id>@<version>`), request canonical preview results, and invoke activation only on deployments that deliberately expose a safe owner-domain composition. Deployments without those adapters remain fully functional offline and expose no Registry mutation command.
+and supplies durable installation state plus `PlatformRegistryValidationContextResolver`. The resolver derives platform version, installed Registry dependencies, capabilities, plugins, models and grantable permissions from server-side platform state rather than accepting those claims from a client. Optional signature keys add the reference HMAC verifier at the same composition boundary.
+
+## Control Plane, CLI and graphical Marketplace
+
+`register_distribution_control_plane()` exposes provider-neutral Registry operations only when the required server-side pieces exist. With a provider it registers the read-only `registry-items` collection. `registry.preview` requires the authoritative validation resolver. `registry.activate` additionally requires the owner-domain router. `registry.pin` and `registry.unpin` additionally require durable installation state.
+
+The generic Control Plane performs the existing #15 authorization check before registered resource reads or commands execute. A successful Control Plane command authorization is the explicit northbound authorization supplied to `DistributionService.activate()`; the distribution layer does not implement a parallel authorization system.
+
+The installed CLI exposes discovery, exact-version inspection, preview, activation, pin and unpin through the same API boundary.
+
+The web application exposes `/marketplace` as a first-class graphical product route. It is manifest-gated on `registry-items`, so deployments without Registry support show the canonical unavailable state rather than attempting a private backend fallback. When available it provides search/filter discovery, item type and trust filters, update-only discovery, install/update/pin badges, source/license/provenance/signature metadata, dependencies and requested privileges, changelog, server-side validation findings, explicit preview, explicit activation/update, and pin/unpin controls. Browser session, CSRF, idempotency and server-side authorization remain the same boundaries used by other Control Plane mutations.
