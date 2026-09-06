@@ -101,6 +101,19 @@ class JsonModelRoutingProfileRepository:
                 ErrorCode.CONTRACT_VIOLATION,
                 "routing profile stable identity metadata cannot rewrite created_at",
             )
+        if (
+            definition.owner_ref != current.owner_ref
+            or definition.project_id != current.project_id
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "routing profile stable identity scope cannot be rewritten",
+                details={
+                    "profile_id": definition.profile_id,
+                    "current_project_id": current.project_id,
+                    "requested_project_id": definition.project_id,
+                },
+            )
         self._definitions[definition.profile_id] = definition
         self._revisions[(revision.profile_id, revision.revision)] = revision
         try:
