@@ -22,6 +22,7 @@ from ai_multi_agent_platform.conversations import (
     MessageStatus,
 )
 from ai_multi_agent_platform.search import SearchResult
+from ai_multi_agent_platform.security.authorization import AuthorizationAction
 
 from .conversation_api import CONVERSATION_COLLECTION, CONVERSATION_MESSAGE_COLLECTION
 from .extensions import ResourceService
@@ -166,7 +167,7 @@ async def conversation_search_result_allowed(
         return await _canonical_conversation_allowed(
             control_plane,
             context,
-            "conversation:list",
+            AuthorizationAction.VIEW.value,
             conversation,
         )
 
@@ -185,7 +186,7 @@ async def conversation_search_result_allowed(
         return await _canonical_conversation_allowed(
             control_plane,
             context,
-            "conversation-message:list",
+            AuthorizationAction.VIEW.value,
             conversation,
         )
 
