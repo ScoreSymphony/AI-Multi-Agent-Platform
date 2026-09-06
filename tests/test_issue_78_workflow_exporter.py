@@ -50,7 +50,11 @@ def _context() -> WorkflowCallContext:
 
 
 def _authorization(*, allow_read: bool = True) -> AuthorizationGate:
-    actions = frozenset({AuthorizationAction.READ}) if allow_read else frozenset()
+    actions = (
+        frozenset({AuthorizationAction.READ})
+        if allow_read
+        else frozenset({AuthorizationAction.MODIFY})
+    )
     return AuthorizationGate(
         LocalAuthorizationProvider(
             (
