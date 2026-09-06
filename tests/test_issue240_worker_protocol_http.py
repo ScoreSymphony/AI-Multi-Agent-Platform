@@ -163,9 +163,7 @@ def test_worker_protocol_codec_preserves_registration_and_heartbeat_reports() ->
     assert decoded_heartbeat.heartbeat.resources == heartbeat.heartbeat.resources
     assert decoded_heartbeat.heartbeat.node_status == heartbeat.heartbeat.node_status
     assert decoded_heartbeat.heartbeat.protocol_version == heartbeat.heartbeat.protocol_version
-    _assert_worker_report(
-        decoded_heartbeat.heartbeat.workers[0], heartbeat.heartbeat.workers[0]
-    )
+    _assert_worker_report(decoded_heartbeat.heartbeat.workers[0], heartbeat.heartbeat.workers[0])
     serialized_heartbeat = repr(encoded_heartbeat)
     assert "registered_at" not in serialized_heartbeat
     assert "last_heartbeat_at" not in serialized_heartbeat
