@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from pathlib import Path
+from typing import cast
 
 import pytest
 
 from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.adapters.single_node_app import build_default_single_node_deployment
 from ai_multi_agent_platform.connectors import ReferenceConnectorProvider
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 from ai_multi_agent_platform.control_plane.plugin_api import _manifest_document
 from ai_multi_agent_platform.deployment import SingleNodeConfig
@@ -30,6 +33,14 @@ from ai_multi_agent_platform.distribution import (
     registry_item_from_document,
 )
 from ai_multi_agent_platform.plugins import PluginState, reference_manifest
+
+
+class _RecordingRouter:
+    async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+        return item.item_id, bytes(artifact)
+
+    async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
+        return item.item_id, bytes(artifact)
 
 
 def _registry_metadata(
@@ -87,7 +98,11 @@ def _registry_metadata(
     }
 
 
-def _write_catalog(tmp_path, metadata: dict[str, object], artifact: bytes) -> tuple[object, object]:
+def _write_catalog(
+    tmp_path: Path,
+    metadata: dict[str, object],
+    artifact: bytes,
+) -> tuple[Path, Path]:
     artifact_path = tmp_path / "artifact.json"
     artifact_path.write_bytes(artifact)
     catalog_path = tmp_path / "catalog.json"
@@ -104,7 +119,93 @@ def _write_catalog(tmp_path, metadata: dict[str, object], artifact: bytes) -> tu
     return catalog_path, artifact_path
 
 
-def test_registry_plugin_owner_is_rehydrated_from_durable_installation(tmp_path) -> None:
+def _finding_codes(payload: dict[str, JsonValue]) -> set[str]:
+    findings = payload.get("findings")
+    assert isinstance(findings, list)
+    codes: set[str] = set()
+    for raw in findings:
+        assert isinstance(raw, dict)
+        code = raw.get("code")
+        assert isinstance(code, str)
+        codes.add(code)
+    return codes
+
+
+def test_registry_installation_store_migrates_v1_state_without_losing_evidence(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "registry-installations.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": "1",
+                "installations": [
+                    {
+                        "current": {
+                            "item_id": "example.legacy",
+                            "version": "1.0.0",
+                            "source_registry": "legacy-registry",
+                            "source_repository": "https://example.invalid/legacy",
+                            "package_reference": "example.legacy@1.0.0",
+                            "revision": "legacy-rev",
+                            "license": "MIT",
+                            "provenance": "legacy-source",
+                        },
+                        "pinned_version": "1.0.0",
+                        "history": [],
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = JsonRegistryInstallationStore(path)
+    record = store.get("example.legacy")
+
+    assert record is not None
+    assert record.current.source_registry == "legacy-registry"
+    assert record.current.item_type is None
+    assert record.current.artifact_sha256 is None
+    assert record.pinned_version == "1.0.0"
+
+    store.unpin("example.legacy")
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert persisted["version"] == "2"
+
+
+def test_successful_activation_persists_exact_artifact_digest(tmp_path: Path) -> None:
+    artifact = b"artifact-without-declared-checksum"
+    item = RegistryItem(
+        item_id="example.digest",
+        item_type=RegistryItemType.TEMPLATE,
+        name="Digest fixture",
+        description="Persists exact successful handoff bytes",
+        version="1.0.0",
+        publisher="example",
+        source=RegistrySource("https://example.invalid/digest", "example.digest@1.0.0"),
+        license="MIT",
+        provenance="source",
+        supported_platform=VersionRange(__version__, __version__),
+        integrity=ArtifactIntegrity(),
+        trust_status=TrustStatus.REVIEWED,
+    )
+    provider = LocalRegistryProvider((item,), {(item.item_id, item.version): artifact})
+    store = JsonRegistryInstallationStore(tmp_path / "installations.json")
+    service = DistributionService(provider, _RecordingRouter(), installations=store)
+    context = ValidationContext(__version__)
+    preview = service.preview(item.item_id, item.version, context)
+
+    assert preview.activation_allowed is True
+    asyncio.run(service.activate(preview, context, authorized=True))
+
+    installed = store.get(item.item_id)
+    assert installed is not None
+    assert installed.current.item_type is RegistryItemType.TEMPLATE
+    assert installed.current.artifact_sha256 == hashlib.sha256(artifact).hexdigest()
+
+
+def test_registry_plugin_owner_is_rehydrated_from_durable_installation(tmp_path: Path) -> None:
     manifest = reference_manifest()
     artifact = json.dumps(_manifest_document(manifest), sort_keys=True).encode("utf-8")
     metadata = _registry_metadata(
@@ -152,7 +253,7 @@ def test_registry_plugin_owner_is_rehydrated_from_durable_installation(tmp_path)
     assert restored.granted_permissions == ()
 
 
-def test_registry_plugin_restart_reconciliation_rejects_changed_artifact(tmp_path) -> None:
+def test_registry_plugin_restart_reconciliation_rejects_changed_artifact(tmp_path: Path) -> None:
     manifest = reference_manifest()
     artifact = json.dumps(_manifest_document(manifest), sort_keys=True).encode("utf-8")
     metadata = _registry_metadata(
@@ -188,7 +289,7 @@ def test_registry_plugin_restart_reconciliation_rejects_changed_artifact(tmp_pat
         )
 
 
-def test_production_registry_validation_uses_live_connector_inventory(tmp_path) -> None:
+def test_production_registry_validation_uses_live_connector_inventory(tmp_path: Path) -> None:
     connector = ReferenceConnectorProvider()
     artifact = b"{}"
     metadata = _registry_metadata(
@@ -216,29 +317,25 @@ def test_production_registry_validation_uses_live_connector_inventory(tmp_path) 
     handler = deployment.control_plane._command_handlers[REGISTRY_PREVIEW_COMMAND]
     context = RequestContext("request-1", "correlation-1")
 
-    before = asyncio.run(
-        handler(context, "example.connector-dependent", {"version": "1.0.0"})
+    before = cast(
+        dict[str, JsonValue],
+        asyncio.run(handler(context, "example.connector-dependent", {"version": "1.0.0"})),
     )
     assert before["activation_allowed"] is False
-    assert any(
-        finding["code"] == "missing_connector"
-        for finding in before["findings"]
-        if isinstance(finding, dict)
-    )
+    assert "missing_connector" in _finding_codes(before)
 
     deployment.connector_registry.register(connector)
-    after = asyncio.run(
-        handler(context, "example.connector-dependent", {"version": "1.0.0"})
+    after = cast(
+        dict[str, JsonValue],
+        asyncio.run(handler(context, "example.connector-dependent", {"version": "1.0.0"})),
     )
-    assert not any(
-        finding["code"] == "missing_connector"
-        for finding in after["findings"]
-        if isinstance(finding, dict)
-    )
+    assert "missing_connector" not in _finding_codes(after)
     assert after["activation_allowed"] is True
 
 
-def test_pinned_registry_item_still_exposes_newer_update_but_blocks_apply(tmp_path) -> None:
+def test_pinned_registry_item_still_exposes_newer_update_but_blocks_apply(
+    tmp_path: Path,
+) -> None:
     old_payload = b"old"
     new_payload = b"new"
     old = RegistryItem(
@@ -277,12 +374,16 @@ def test_pinned_registry_item_still_exposes_newer_update_but_blocks_apply(tmp_pa
         },
     )
     store = JsonRegistryInstallationStore(tmp_path / "installations.json")
-    store.record(old, provider_id=provider.provider_id, artifact_sha256=hashlib.sha256(old_payload).hexdigest())
+    store.record(
+        old,
+        provider_id=provider.provider_id,
+        artifact_sha256=hashlib.sha256(old_payload).hexdigest(),
+    )
     store.pin(old.item_id, old.version)
     distribution = DistributionService(provider, installations=store)
     resources = asyncio.run(
         RegistryResourceService(distribution).list_resources(
-            object(),
+            RequestContext("request-2", "correlation-2"),
             PageQuery(filters={"update_available": "true"}),
         )
     )
