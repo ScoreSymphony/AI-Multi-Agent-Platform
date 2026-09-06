@@ -1,7 +1,7 @@
 """Deployable Worker-process composition for advanced distributed profiles.
 
 This module composes existing #14 Worker contracts, #35 MessageTransport, #36 Worker
-credentials and #37 remote Workspace materialization.  It deliberately owns no canonical
+credentials and #37 remote Workspace materialization. It deliberately owns no canonical
 Task/Run/Node/Worker/Workspace identity of its own.
 """
 
@@ -40,6 +40,7 @@ from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, Referenc
 from ai_multi_agent_platform.messaging import MessageTransport, TcpMessageTransport
 
 from .advanced_profiles import DeploymentNode, load_advanced_deployment_profile
+from .worker_presence import WorkerPresenceEndpoint
 
 _DEFAULT_HEARTBEAT_SECONDS = 5.0
 _REFERENCE_WORKSPACE = "reference"
@@ -117,28 +118,36 @@ class DistributedWorkerProcess:
         )
         self.workspace_endpoint = WorkerWorkspaceTransportEndpoint(self.store, transport)
         self.worker_endpoint = WorkerTransportEndpoint(self.worker, transport)
+        self.presence_endpoint = WorkerPresenceEndpoint(config.worker_id, transport)
 
     async def run(self) -> None:
         """Serve until ``stop`` is requested or the hosting task is cancelled.
 
-        Endpoint tasks are cancelled together.  A reporting Worker deregisters best-effort on a
-        graceful stop; abrupt loss remains observable through canonical heartbeat expiry/reconcile.
+        Execution, Workspace and presence endpoints start before reporter registration. This makes
+        registration truthful: a Worker is not projected healthy before its #35 endpoint can
+        answer. A reporting Worker deregisters best-effort on graceful stop; abrupt sibling loss
+        is detected by the reporter's transport presence probes on the next Node heartbeat.
         """
 
-        if self.config.reporting:
-            await self._register()
+        registered = False
         try:
             async with asyncio.TaskGroup() as group:
                 group.create_task(self.workspace_endpoint.serve())
                 group.create_task(self.worker_endpoint.serve())
+                group.create_task(self.presence_endpoint.serve())
+                # Let subscription coroutines establish their transport consumers before the
+                # Control Plane probes reachability during registration.
+                await asyncio.sleep(0)
                 if self.config.reporting:
+                    await self._register()
+                    registered = True
                     group.create_task(self._heartbeat_loop())
                 await self._stop.wait()
                 raise _WorkerStop()
         except* _WorkerStop:
             pass
         finally:
-            if self.config.reporting:
+            if self.config.reporting and registered:
                 await self._deregister_best_effort()
 
     def stop(self) -> None:
@@ -166,9 +175,8 @@ class DistributedWorkerProcess:
                 await protocol.heartbeat(heartbeat)
             except WorkerProtocolHTTPClientError as exc:
                 if exc.retryable:
-                    # A transport outage is not evidence that Control-Plane state disappeared.
-                    # Keep the current remote dispatcher/materialization ownership intact and
-                    # retry heartbeat after the normal interval.
+                    # A Worker-protocol outage is not evidence that Control-Plane state vanished.
+                    # Keep retrying; #35 presence evidence independently bounds sibling liveness.
                     pass
                 elif exc.status == 400:
                     # A restarted Control Plane may have lost volatile Node/Worker registration.
@@ -194,7 +202,7 @@ class DistributedWorkerProcess:
             )
         except (WorkerProtocolHTTPClientError, OSError):
             # Loss of the Control Plane during shutdown must not prevent the Worker process from
-            # terminating.  The Control Plane will expire the last heartbeat and reconcile.
+            # terminating. The Control Plane will expire the last heartbeat and reconcile.
             return
 
     def _required_protocol(self) -> WorkerProtocolHTTPClient:
@@ -217,10 +225,10 @@ def build_worker_process_from_deployment_node(
 ) -> DistributedWorkerProcess:
     """Compose one process from a validated #240 deployment node.
 
-    Exactly the declared reporter performs registration/heartbeat.  Additional Worker processes
-    for the same Node can run execution endpoints with ``reporting=False`` while the reporter owns
-    the complete Node heartbeat snapshot. Local and remote reporters use the same authenticated
-    Worker-protocol contract; ``connection_mode`` only describes deployment locality.
+    Exactly the declared reporter performs registration/heartbeat. Additional Worker processes
+    for the same Node run execution/Workspace/presence endpoints with ``reporting=False`` while
+    the reporter owns the complete Node heartbeat snapshot. Local and remote reporters use the
+    same authenticated Worker-protocol contract; ``connection_mode`` is locality metadata only.
     """
 
     worker_ids = {worker.worker_id for worker in node.workers}
@@ -340,9 +348,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             await worker.run()
         finally:
-            close = getattr(transport, "close", None)
-            if close is not None:
-                await close(graceful=True)
+            await transport.close(graceful=True)
 
     try:
         asyncio.run(serve())
