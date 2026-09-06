@@ -234,7 +234,10 @@ class WorkerWorkspaceMaterializationStore:
         await asyncio.to_thread(destination.write_bytes, data)
 
     async def commit(self, materialization_ref: str) -> RemoteMaterializationReceipt:
-        transfer = self._transfer(materialization_ref)
+        try:
+            transfer = self._transfer(materialization_ref)
+        except RegistryError:
+            return await asyncio.to_thread(self._completed_receipt, materialization_ref)
         files_root = transfer.incoming_root / "files"
         await asyncio.to_thread(self._reset_directory, files_root)
         for entry in transfer.manifest:
@@ -396,6 +399,20 @@ class WorkerWorkspaceMaterializationStore:
         if transfer is None:
             raise RegistryError("unknown remote Workspace transfer")
         return transfer
+
+    def _completed_receipt(self, materialization_ref: str) -> RemoteMaterializationReceipt:
+        request, manifest = self._read_state(materialization_ref)
+        if _materialization_ref(self.worker_id, request) != materialization_ref:
+            raise RegistryError("completed remote Workspace materialization reference mismatch")
+        final_root = self._final_root(request.workspace_id, request.snapshot_id)
+        if not self._completed_matches(request, manifest, final_root):
+            raise RegistryError("completed remote Workspace materialization failed validation")
+        return _receipt(
+            self.worker_id,
+            request,
+            materialization_ref,
+            cache_hit=True,
+        )
 
     @staticmethod
     def _entry(transfer: _IncomingTransfer, relative_path: str) -> _ManifestEntry:
