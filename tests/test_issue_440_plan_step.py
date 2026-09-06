@@ -3,14 +3,16 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from ai_multi_agent_platform.benchmarking.plan_step import (
     PlanStepBenchmarkHarness,
     PlanStepBenchmarkSpec,
+    PlanStepScenario,
 )
-from ai_multi_agent_platform.benchmarking.cli import main as benchmark_main
+from ai_multi_agent_platform.benchmarking.plan_step_cli import main as plan_step_main
 
 
 @pytest.mark.parametrize(
@@ -34,7 +36,7 @@ def test_plan_step_harness_preserves_durable_coordination_invariants(
             platform_commit="test-commit",
         ).run(
             PlanStepBenchmarkSpec(
-                scenario=scenario,  # type: ignore[arg-type]
+                scenario=cast(PlanStepScenario, scenario),
                 size=size,
                 timeout_seconds=5,
             )
@@ -72,9 +74,8 @@ def test_plan_step_spec_enforces_safety_bounds() -> None:
 def test_plan_step_cli_writes_machine_readable_report(tmp_path: Path) -> None:
     output = tmp_path / "report.json"
     data_dir = tmp_path / "data"
-    exit_code = benchmark_main(
+    exit_code = plan_step_main(
         [
-            "plan-step-scale",
             "--scenario",
             "fan-in",
             "--size",
