@@ -121,7 +121,10 @@ def register_template_control_plane(
         )
 
     workflow_handler = application.handlers.get(TemplateType.WORKFLOW_PLAN)
-    if isinstance(workflow_handler, WorkflowTemplateHandler) and workflow_handler.agents is not None:
+    if (
+        isinstance(workflow_handler, WorkflowTemplateHandler)
+        and workflow_handler.agents is not None
+    ):
         register_workflow_template_export_control_plane(
             control_plane,
             application.repository,
