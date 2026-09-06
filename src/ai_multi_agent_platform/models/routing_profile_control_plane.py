@@ -23,10 +23,10 @@ from .types import RoutingRequirements
 
 MODEL_ROUTING_PROFILE_COLLECTION = "model-routing-profiles"
 MODEL_ROUTING_PROFILE_COMMANDS = (
-    "model-routing-profile:create",
-    "model-routing-profile:version",
-    "model-routing-profile:enable",
-    "model-routing-profile:disable",
+    "model-routing-profile.create",
+    "model-routing-profile.version",
+    "model-routing-profile.enable",
+    "model-routing-profile.disable",
 )
 
 
@@ -170,7 +170,7 @@ class ModelRoutingProfileCommandHandlers:
         *,
         enabled: bool,
     ) -> dict[str, JsonValue]:
-        _reject_unknown(payload, set())
+        _reject_unknown(payload, set[str]())
         definition = self.service.repository.get_definition(resource_ref)
         updated = await self.service.set_enabled(
             resource_ref,
@@ -196,10 +196,10 @@ def register_model_routing_profile_control_plane(
         ModelRoutingProfileResourceService(service),
     )
     handlers = ModelRoutingProfileCommandHandlers(service)
-    control_plane.register_command("model-routing-profile:create", handlers.create_profile)
-    control_plane.register_command("model-routing-profile:version", handlers.version_profile)
-    control_plane.register_command("model-routing-profile:enable", handlers.enable_profile)
-    control_plane.register_command("model-routing-profile:disable", handlers.disable_profile)
+    control_plane.register_command("model-routing-profile.create", handlers.create_profile)
+    control_plane.register_command("model-routing-profile.version", handlers.version_profile)
+    control_plane.register_command("model-routing-profile.enable", handlers.enable_profile)
+    control_plane.register_command("model-routing-profile.disable", handlers.disable_profile)
 
 
 def _operation_context(
