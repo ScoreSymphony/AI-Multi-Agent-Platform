@@ -52,7 +52,17 @@ from ai_multi_agent_platform.kernel import (
     SqliteKernelRepository,
 )
 from ai_multi_agent_platform.models import JsonModelRegistryStore, ModelRegistry, ModelRuntime
-from ai_multi_agent_platform.observability import InMemoryExporter
+from ai_multi_agent_platform.observability import (
+    AggregatedHealthProvider,
+    InMemoryExporter,
+    ObservabilityEventProvider,
+    ObservedAuthorizationProvider,
+    ObservedExecutor,
+    ObservedOrchestrator,
+    ProviderHealthDependency,
+    Telemetry,
+)
+from ai_multi_agent_platform.observability.composite import CompositeTimelineReader
 from ai_multi_agent_platform.onboarding import (
     FirstRunAgentLifecycleBackend,
     FirstRunTaskService,
@@ -80,11 +90,17 @@ from ai_multi_agent_platform.repositories import (
 from ai_multi_agent_platform.repositories.control_plane import register_repository_control_plane
 from ai_multi_agent_platform.security import (
     ActorType,
+    AuthorizationAction,
     AuthorizationGate,
+    AuthorizedLifecycleBackend,
+    AuthorizedSecretProvider,
     ControlPlaneAuthorizationBridge,
     LocalAuthenticationService,
     LocalPrincipalPolicy,
     LocalUserAccount,
+    ResourceType,
+    SqliteApprovalService,
+    SqliteAuthorizationAuditSink,
 )
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
@@ -136,6 +152,8 @@ _SMOKE_START_KEY = "deployment-smoke-start-v1"
 _SMOKE_REFRESH_KEY = "deployment-smoke-refresh-v1"
 _EVALUATION_PROJECT_KEY = "evaluation-system-project-v1"
 _EVALUATION_OWNER_ID = "evaluation-single-node"
+_EVALUATION_PRINCIPAL = f"service:{_EVALUATION_OWNER_ID}"
+_PLATFORM_SERVICE_PRINCIPAL = "service:platform"
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,10 +198,13 @@ class SingleNodeDeployment:
     evaluation_repository: SqliteEvaluationRepository
     evaluation: EvaluationService
     accounting_service: AccountingService | None
-    observability_exporter: InMemoryExporter | None
+    observability_exporter: InMemoryExporter
+    telemetry: Telemetry
+    health_provider: AggregatedHealthProvider
     distributed_runtime: DistributedRuntime | None
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
+    authorization_audit: SqliteAuthorizationAuditSink
     approval_gate: AuthorizationGate
     verification: SqliteVerificationService
     verification_runtime: CanonicalVerificationRuntime
@@ -355,6 +376,55 @@ def build_single_node_deployment(
         routing_profiles=agent_runtime.routing_profiles,
     )
 
+    effective_observability_exporter = observability_exporter or InMemoryExporter()
+    telemetry = Telemetry(effective_observability_exporter)
+    authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
+    authentication = LocalAuthenticationService(store=authentication_store)
+    authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
+    if not authorization.has_policy(_EVALUATION_PRINCIPAL):
+        authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=_EVALUATION_PRINCIPAL,
+                actor_types=frozenset({ActorType.SERVICE}),
+                allowed_actions=frozenset(
+                    {
+                        AuthorizationAction.EXECUTE,
+                        AuthorizationAction.READ,
+                        AuthorizationAction.MODIFY,
+                    }
+                ),
+                resource_types=frozenset({ResourceType.RUN}),
+            )
+        )
+    if not authorization.has_policy(_PLATFORM_SERVICE_PRINCIPAL):
+        authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=_PLATFORM_SERVICE_PRINCIPAL,
+                actor_types=frozenset({ActorType.SERVICE}),
+                allowed_actions=frozenset(
+                    {
+                        AuthorizationAction.READ,
+                        AuthorizationAction.MANAGE_CREDENTIALS,
+                    }
+                ),
+                resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
+            )
+        )
+    observed_authorization = ObservedAuthorizationProvider(authorization, telemetry)
+    approval_service = SqliteApprovalService(database_dir / "approvals.sqlite3")
+    authorization_audit = SqliteAuthorizationAuditSink(database_dir / "authorization-audit.sqlite3")
+    approval_gate = AuthorizationGate(
+        observed_authorization,
+        approvals=approval_service,
+        audit_sink=authorization_audit,
+    )
+    control_plane_authorization = ControlPlaneAuthorizationBridge(approval_gate)
+    protected_secret_provider: SecretProvider | None = (
+        AuthorizedSecretProvider(secret_provider, approval_gate)
+        if secret_provider is not None
+        else None
+    )
+
     template_handlers = ContextualTemplateHandlerRegistry()
     register_agent_template_handlers(template_handlers, agents)
     register_project_template_handler(template_handlers, scopes)
@@ -379,20 +449,26 @@ def build_single_node_deployment(
 
     execution_workspace = workspaces.materialization_root / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
-    orchestrator = ReferenceOrchestrator()
+    reference_orchestrator = ReferenceOrchestrator()
     reference_executor = ReferenceExecutor(workspaces.materialization_root)
+    orchestrator = ObservedOrchestrator(reference_orchestrator, telemetry)
+    observed_executor = ObservedExecutor(reference_executor, telemetry)
     reference_lifecycle = ExecutorLifecycleBackend(
-        reference_executor,
+        observed_executor,
         workspace=_REFERENCE_EXECUTION_WORKSPACE,
         action="echo",
         workspace_resolver=repository_workspace_execution.resolve_execution_workspace,
         terminal_result_observer=repository_workspace_execution.observe_terminal_result,
     )
-    lifecycle = FirstRunAgentLifecycleBackend(
-        delegate=reference_lifecycle,
-        tasks=EventSourcedTaskRepository(kernel_repository),
-        agents=agent_runtime,
-        models=model_runtime,
+    lifecycle = AuthorizedLifecycleBackend(
+        FirstRunAgentLifecycleBackend(
+            delegate=reference_lifecycle,
+            tasks=EventSourcedTaskRepository(kernel_repository),
+            agents=agent_runtime,
+            models=model_runtime,
+        ),
+        approval_gate,
+        allow_internal_service_reads=True,
     )
     verification_path = database_dir / "verification.sqlite3"
     verification = SqliteVerificationService(
@@ -401,10 +477,12 @@ def build_single_node_deployment(
         require_canonical_results=True,
     )
     verification_completion = SqliteVerificationCompletionAuthority(verification, verification_path)
+    observability_events = ObservabilityEventProvider(telemetry)
     kernel = PlatformKernel(
         orchestrator=orchestrator,
         lifecycle=lifecycle,
         repository=kernel_repository,
+        event_sink=observability_events,
         completion_authority=verification_completion,
     )
     verification_evidence = KernelFileVerificationEvidenceResolver(
@@ -420,11 +498,6 @@ def build_single_node_deployment(
         agents=agents,
     )
 
-    authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
-    authentication = LocalAuthenticationService(store=authentication_store)
-    authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
-    approval_gate = AuthorizationGate(authorization)
-    control_plane_authorization = ControlPlaneAuthorizationBridge(approval_gate)
     repositories = RepositoryService(repository_registry, approval_gate)
     repository_management = RepositoryManagementService(
         repository_registry,
@@ -458,10 +531,9 @@ def build_single_node_deployment(
         evaluation_evidence_providers.append(
             AccountingEvaluationEvidenceProvider(accounting_service)
         )
-    if observability_exporter is not None:
-        evaluation_evidence_providers.append(
-            InMemoryObservabilityEvaluationEvidenceProvider(observability_exporter)
-        )
+    evaluation_evidence_providers.append(
+        InMemoryObservabilityEvaluationEvidenceProvider(effective_observability_exporter)
+    )
     evaluation_composition = build_single_node_evaluation(
         database_path=database_dir / "evaluation.sqlite3",
         asset_dir=config.evaluation_dir,
@@ -470,7 +542,7 @@ def build_single_node_deployment(
         agent_runtime=agent_runtime,
         models=models,
         model_runtime=model_runtime,
-        orchestrator=orchestrator,
+        orchestrator=reference_orchestrator,
         executor=reference_executor,
         files=files,
         workspaces=workspaces,
@@ -492,6 +564,13 @@ def build_single_node_deployment(
         evaluation_fixture_exists=evaluation_composition.fixture_exists,
     )
 
+    health_provider = AggregatedHealthProvider(
+        (
+            ProviderHealthDependency(orchestrator, required=True, name="orchestrator"),
+            ProviderHealthDependency(lifecycle, required=True, name="lifecycle"),
+            ProviderHealthDependency(files, required=True, name="files"),
+        )
+    )
     control_plane = ControlPlane(
         kernel=kernel,
         events=kernel_repository,
@@ -499,7 +578,7 @@ def build_single_node_deployment(
         authorization=control_plane_authorization,
         workspace_provider=workspaces,
         run_workspace_bindings=run_workspace_bindings,
-        health_providers=(orchestrator, lifecycle, files),
+        health_providers=(health_provider,),
         model_registry=models,
         automation_state_path=database_dir / "automation.sqlite3",
         notification_state_path=database_dir / "notifications.sqlite3",
@@ -586,7 +665,14 @@ def build_single_node_deployment(
         verification_evidence,
         verification_runtime,
     )
-    control_plane.bind_observability_timeline(VerificationTimelineReader(verification))
+    control_plane.bind_observability_timeline(
+        CompositeTimelineReader(
+            (
+                effective_observability_exporter,
+                VerificationTimelineReader(verification),
+            )
+        )
+    )
 
     http = AuthenticatedControlPlaneHTTP(
         control_plane,
@@ -619,15 +705,18 @@ def build_single_node_deployment(
         model_runtime=model_runtime,
         onboarding=onboarding,
         first_task=first_task,
-        secrets=secret_provider,
+        secrets=protected_secret_provider,
         templates=templates,
         evaluation_repository=evaluation_composition.repository,
         evaluation=evaluation_composition.service,
         accounting_service=accounting_service,
-        observability_exporter=observability_exporter,
+        observability_exporter=effective_observability_exporter,
+        telemetry=telemetry,
+        health_provider=health_provider,
         distributed_runtime=distributed_runtime,
         authentication=authentication,
         authorization=authorization,
+        authorization_audit=authorization_audit,
         approval_gate=approval_gate,
         verification=verification,
         verification_runtime=verification_runtime,
