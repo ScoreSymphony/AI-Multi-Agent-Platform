@@ -38,6 +38,7 @@ from ai_multi_agent_platform.distributed import (
     WorkerRecord,
     WorkerRequestCredentials,
 )
+from ai_multi_agent_platform.distributed.workspace_transport import DEFAULT_WORKSPACE_CHUNK_BYTES
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 from ai_multi_agent_platform.security import (
@@ -72,10 +73,11 @@ class DistributedScaleSpec:
     worker_count: int
     rounds: int
     payload_sizes_bytes: tuple[int, ...]
-    chunk_bytes: int = 64 * 1024
+    chunk_bytes: int = DEFAULT_WORKSPACE_CHUNK_BYTES
     timeout_seconds: float = 30.0
     safety_max_operations: int = 2048
     safety_max_payload_bytes: int = 16 * 1024 * 1024
+    safety_max_fixture_bytes: int = 64 * 1024 * 1024
     benchmark_id: str = "distributed.worker-workspace.scale"
     benchmark_version: str = "1.0"
     deployment_profile: str = "distributed-reference-in-process-transport"
@@ -94,18 +96,24 @@ class DistributedScaleSpec:
             raise ValueError("payload sizes must be unique")
         if tuple(sorted(self.payload_sizes_bytes)) != self.payload_sizes_bytes:
             raise ValueError("payload sizes must be strictly increasing")
-        if self.chunk_bytes != 64 * 1024:
-            raise ValueError("distributed scale v1 uses the fixed 64 KiB production chunk size")
+        if self.chunk_bytes != DEFAULT_WORKSPACE_CHUNK_BYTES:
+            raise ValueError(
+                "distributed scale v1 records the fixed production Workspace chunk size"
+            )
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if self.safety_max_operations < 1:
             raise ValueError("safety_max_operations must be at least 1")
         if self.safety_max_payload_bytes < 1:
             raise ValueError("safety_max_payload_bytes must be at least 1")
+        if self.safety_max_fixture_bytes < 1:
+            raise ValueError("safety_max_fixture_bytes must be at least 1")
         if self.operation_count > self.safety_max_operations:
             raise ValueError("distributed workload exceeds configured operation safety bound")
         if self.max_payload_bytes > self.safety_max_payload_bytes:
             raise ValueError("distributed payload exceeds configured payload safety bound")
+        if self.fixture_bytes > self.safety_max_fixture_bytes:
+            raise ValueError("distributed fixture bytes exceed configured fixture safety bound")
 
     @property
     def operation_count(self) -> int:
@@ -115,11 +123,16 @@ class DistributedScaleSpec:
     def max_payload_bytes(self) -> int:
         return max(self.payload_sizes_bytes)
 
+    @property
+    def fixture_bytes(self) -> int:
+        return sum(self.payload_sizes_bytes)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             **asdict(self),
             "operation_count": self.operation_count,
             "max_payload_bytes": self.max_payload_bytes,
+            "fixture_bytes": self.fixture_bytes,
             "expected_invariants": [
                 "every configured Worker registers through the authenticated Worker protocol",
                 "every Worker heartbeat refreshes the same canonical Node/Worker identity",
@@ -132,7 +145,8 @@ class DistributedScaleSpec:
                 "authenticated Worker registration latency p50/p95/p99",
                 "authenticated heartbeat latency p50/p95/p99",
                 "workspace-aware dispatch latency p50/p95/p99",
-                "terminal reconciliation/result latency p50/p95/p99",
+                "full-round reconciliation batch latency p50/p95/p99",
+                "terminal result collection latency p50/p95/p99",
                 "Worker Job throughput and placement distribution",
                 "process CPU, memory, descriptor and storage evidence",
             ],
@@ -168,7 +182,8 @@ class DistributedScaleReport:
     registration_latency: LatencyDistribution
     heartbeat_latency: LatencyDistribution
     dispatch_latency: LatencyDistribution
-    terminal_latency: LatencyDistribution
+    reconciliation_batch_latency: LatencyDistribution
+    terminal_result_latency: LatencyDistribution
     placement_counts: dict[str, int]
     payload_operation_counts: dict[str, int]
     resources: ResourceMetrics
@@ -239,7 +254,8 @@ class DistributedWorkerWorkspaceScaleHarness:
         registration_samples: list[float] = []
         heartbeat_samples: list[float] = []
         dispatch_samples: list[float] = []
-        terminal_samples: list[float] = []
+        reconciliation_batch_samples: list[float] = []
+        terminal_result_samples: list[float] = []
         placement_counts: Counter[str] = Counter()
         payload_operation_counts: Counter[str] = Counter()
         worker_job_ids: list[str] = []
@@ -312,23 +328,23 @@ class DistributedWorkerWorkspaceScaleHarness:
 
                         reconcile_started = time.perf_counter()
                         reconciled = await runtime.reconcile()
-                        reconcile_elapsed = time.perf_counter() - reconcile_started
+                        reconciliation_batch_samples.append(
+                            time.perf_counter() - reconcile_started
+                        )
                         current_ids = {job.worker_job_id for job in jobs}
                         current_records = tuple(
                             record
                             for record in reconciled
                             if record.job.worker_job_id in current_ids
                         )
-                        terminal_samples.extend(
-                            reconcile_elapsed / max(1, len(current_records))
-                            for _record in current_records
-                        )
                         for record in current_records:
                             if record.state is not DispatchState.TERMINAL:
                                 errors.append(
                                     f"worker job did not become terminal: {record.job.worker_job_id}"
                                 )
+                            result_started = time.perf_counter()
                             result = await runtime.result(record.job.worker_job_id)
+                            terminal_result_samples.append(time.perf_counter() - result_started)
                             if result is None:
                                 errors.append(
                                     f"terminal worker job has no result: {record.job.worker_job_id}"
@@ -414,7 +430,10 @@ class DistributedWorkerWorkspaceScaleHarness:
             registration_latency=LatencyDistribution.from_seconds(registration_samples),
             heartbeat_latency=LatencyDistribution.from_seconds(heartbeat_samples),
             dispatch_latency=LatencyDistribution.from_seconds(dispatch_samples),
-            terminal_latency=LatencyDistribution.from_seconds(terminal_samples),
+            reconciliation_batch_latency=LatencyDistribution.from_seconds(
+                reconciliation_batch_samples
+            ),
+            terminal_result_latency=LatencyDistribution.from_seconds(terminal_result_samples),
             placement_counts=dict(sorted(placement_counts.items())),
             payload_operation_counts=dict(
                 sorted(payload_operation_counts.items(), key=lambda x: int(x[0]))

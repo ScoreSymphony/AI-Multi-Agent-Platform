@@ -21,19 +21,24 @@ scheduler or file-copy path:
 
 The measured interval excludes creation of canonical payload fixtures. It includes authenticated
 Worker registration, authenticated heartbeat, Workspace-aware dispatch, Worker execution,
-terminal reconciliation, result collection and remote cleanup.
+full-round reconciliation, terminal result collection and remote cleanup.
 
 The report records:
 
 - Worker registration p50/p95/p99 latency;
 - heartbeat p50/p95/p99 latency;
 - Workspace-aware dispatch p50/p95/p99 latency;
-- terminal reconciliation/result p50/p95/p99 latency;
+- full-round reconciliation batch p50/p95/p99 latency, with one sample per Worker round;
+- individual terminal result-collection p50/p95/p99 latency, with one sample per Worker Job;
 - Worker Job throughput;
 - deterministic placement counts per Worker;
 - operation counts per Workspace payload size;
 - process CPU, traced memory, peak RSS, descriptor and data-root storage evidence;
 - canonical Node, Worker, Worker Job and Run identities for auditability.
+
+Reconciliation is deliberately reported as a **batch** distribution rather than dividing one
+full-round interval into fabricated per-Worker samples. The canonical runtime reconciles the round as
+one operation; terminal result retrieval is timed separately per Worker Job.
 
 ## Correctness gates
 
@@ -50,8 +55,8 @@ number that can be treated as valid evidence.
 
 Payload sizes are supplied as a strictly increasing comma-separated list. The same canonical
 Workspace snapshot is exercised once per round and Worker. The report records the production remote
-Workspace transfer chunk size of 64 KiB as fixed v1 metadata; the benchmark does not expose a
-benchmark-only chunk override.
+Workspace transfer chunk size from `DEFAULT_WORKSPACE_CHUNK_BYTES` as fixed v1 metadata. The current
+production value is 128 KiB; the benchmark does not expose a benchmark-only chunk override.
 
 Example:
 
@@ -63,8 +68,11 @@ platform-distributed-scale \
   --output artifacts/benchmarks/distributed-scale.json
 ```
 
-Explicit safety limits bound total Worker Job operations and maximum payload size. They prevent an
-accidental PR/local invocation from becoming an unbounded load generator.
+Explicit safety limits bound total Worker Job operations, the largest individual payload and the sum
+of canonical payload fixture bytes created before the timed interval. The aggregate fixture bound is
+important because a large number of individually valid payloads can otherwise allocate far more
+control-plane storage than the per-payload limit suggests. These bounds prevent an accidental
+PR/local invocation from becoming an unbounded load generator.
 
 ## Evidence tiers
 

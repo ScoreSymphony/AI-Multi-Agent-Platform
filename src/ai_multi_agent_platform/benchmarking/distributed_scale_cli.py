@@ -29,6 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     parser.add_argument("--safety-max-operations", type=int, default=2048)
     parser.add_argument("--safety-max-payload-bytes", type=int, default=16 * 1024 * 1024)
+    parser.add_argument("--safety-max-fixture-bytes", type=int, default=64 * 1024 * 1024)
     parser.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
     parser.add_argument("--output", required=True)
     return parser
@@ -54,6 +55,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             timeout_seconds=args.timeout_seconds,
             safety_max_operations=args.safety_max_operations,
             safety_max_payload_bytes=args.safety_max_payload_bytes,
+            safety_max_fixture_bytes=args.safety_max_fixture_bytes,
         )
     except (ValueError, argparse.ArgumentTypeError) as exc:
         print(f"invalid distributed scale benchmark: {exc}")

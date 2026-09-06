@@ -12,6 +12,7 @@ from ai_multi_agent_platform.benchmarking.distributed_scale import (
     DistributedScaleSpec,
     DistributedWorkerWorkspaceScaleHarness,
 )
+from ai_multi_agent_platform.distributed.workspace_transport import DEFAULT_WORKSPACE_CHUNK_BYTES
 
 
 def test_distributed_scale_runs_authenticated_two_worker_workspace_round(tmp_path: Path) -> None:
@@ -31,6 +32,8 @@ def test_distributed_scale_runs_authenticated_two_worker_workspace_round(tmp_pat
 
     assert report.schema_version == DISTRIBUTED_SCALE_REPORT_SCHEMA_VERSION
     assert report.platform_commit == "test-sha"
+    assert report.benchmark.chunk_bytes == DEFAULT_WORKSPACE_CHUNK_BYTES
+    assert report.benchmark.fixture_bytes == 1024
     assert report.correctness.passed is True
     assert report.correctness.expected_workers == 2
     assert report.correctness.registered_workers == 2
@@ -45,7 +48,8 @@ def test_distributed_scale_runs_authenticated_two_worker_workspace_round(tmp_pat
     assert report.registration_latency.count == 2
     assert report.heartbeat_latency.count == 2
     assert report.dispatch_latency.count == 2
-    assert report.terminal_latency.count == 2
+    assert report.reconciliation_batch_latency.count == 1
+    assert report.terminal_result_latency.count == 2
     assert set(report.placement_counts) == set(report.worker_ids)
     assert set(report.placement_counts.values()) == {1}
     assert report.payload_operation_counts == {"1024": 2}
@@ -72,8 +76,9 @@ def test_distributed_scale_runs_authenticated_two_worker_workspace_round(tmp_pat
         ({"payload_sizes_bytes": (1024, 1024)}, "unique"),
         ({"payload_sizes_bytes": (2048, 1024)}, "strictly increasing"),
         ({"payload_sizes_bytes": (0,)}, "positive"),
-        ({"chunk_bytes": 1024}, "fixed 64 KiB"),
+        ({"chunk_bytes": 1024}, "fixed production Workspace chunk size"),
         ({"timeout_seconds": 0.0}, "timeout_seconds"),
+        ({"safety_max_fixture_bytes": 0}, "safety_max_fixture_bytes"),
     ],
 )
 def test_distributed_scale_spec_rejects_invalid_bounds(
@@ -90,7 +95,7 @@ def test_distributed_scale_spec_rejects_invalid_bounds(
         DistributedScaleSpec(**values)  # type: ignore[arg-type]
 
 
-def test_distributed_scale_spec_rejects_operation_and_payload_safety_limits() -> None:
+def test_distributed_scale_spec_rejects_operation_payload_and_fixture_safety_limits() -> None:
     with pytest.raises(ValueError, match="operation safety bound"):
         DistributedScaleSpec(
             worker_count=2,
@@ -104,6 +109,13 @@ def test_distributed_scale_spec_rejects_operation_and_payload_safety_limits() ->
             rounds=1,
             payload_sizes_bytes=(2048,),
             safety_max_payload_bytes=1024,
+        )
+    with pytest.raises(ValueError, match="fixture safety bound"):
+        DistributedScaleSpec(
+            worker_count=1,
+            rounds=1,
+            payload_sizes_bytes=(1024, 2048),
+            safety_max_fixture_bytes=3000,
         )
 
 

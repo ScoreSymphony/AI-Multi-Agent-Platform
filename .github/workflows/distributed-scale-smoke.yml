@@ -41,6 +41,7 @@ jobs:
             --timeout-seconds 20 \
             --safety-max-operations 4 \
             --safety-max-payload-bytes 4096 \
+            --safety-max-fixture-bytes 4096 \
             --platform-commit "$GITHUB_SHA" \
             --output artifacts/benchmarks/pr-distributed-scale/report.json
       - name: Validate distributed scale report
@@ -63,7 +64,8 @@ jobs:
           assert report["benchmark"]["worker_count"] == 2
           assert report["benchmark"]["rounds"] == 1
           assert report["benchmark"]["payload_sizes_bytes"] == [1024]
-          assert report["benchmark"]["chunk_bytes"] == 65536
+          assert report["benchmark"]["chunk_bytes"] == 131072
+          assert report["benchmark"]["fixture_bytes"] == 1024
           assert report["benchmark"]["operation_count"] == 2
           assert correctness["passed"] is True
           assert correctness["registered_workers"] == 2
@@ -77,7 +79,8 @@ jobs:
           assert report["registration_latency"]["count"] == 2
           assert report["heartbeat_latency"]["count"] == 2
           assert report["dispatch_latency"]["count"] == 2
-          assert report["terminal_latency"]["count"] == 2
+          assert report["reconciliation_batch_latency"]["count"] == 1
+          assert report["terminal_result_latency"]["count"] == 2
           assert report["payload_operation_counts"] == {"1024": 2}
           PY
       - name: Upload distributed scale evidence
