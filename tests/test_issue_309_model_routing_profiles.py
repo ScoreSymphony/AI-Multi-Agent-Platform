@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 
@@ -90,45 +91,48 @@ def _registry() -> ModelRegistry:
     return registry
 
 
-@pytest.mark.asyncio
-async def test_create_version_and_restart_preserve_exact_revisions(tmp_path) -> None:
+def test_create_version_and_restart_preserve_exact_revisions(tmp_path) -> None:
     path = tmp_path / "routing-profiles.json"
     project_id = new_id("project")
     repository = JsonModelRoutingProfileRepository(path)
     service = ModelRoutingProfileService(repository)
 
-    first = await service.create_profile(
-        name="Research",
-        description="Prefer the local large-context model.",
-        policy=ModelRoutingProfilePolicy(
-            requirements=RoutingRequirements(
-                min_context_window=8_000,
-                tool_calling=True,
+    first = asyncio.run(
+        service.create_profile(
+            name="Research",
+            description="Prefer the local large-context model.",
+            policy=ModelRoutingProfilePolicy(
+                requirements=RoutingRequirements(
+                    min_context_window=8_000,
+                    tool_calling=True,
+                ),
+                preferred_model_ids=("model-local-large",),
             ),
-            preferred_model_ids=("model-local-large",),
-        ),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_context(project_id=project_id),
-        project_id=project_id,
-        provenance=Provenance(source="issue-309-test", actor_ref=OWNER.id),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_context(project_id=project_id),
+            project_id=project_id,
+            provenance=Provenance(source="issue-309-test", actor_ref=OWNER.id),
+        )
     )
-    second = await service.version_profile(
-        first.profile_id,
-        name="Research",
-        description="Require structured output as well.",
-        policy=ModelRoutingProfilePolicy(
-            requirements=RoutingRequirements(
-                min_context_window=8_000,
-                tool_calling=True,
-                structured_output=True,
+    second = asyncio.run(
+        service.version_profile(
+            first.profile_id,
+            name="Research",
+            description="Require structured output as well.",
+            policy=ModelRoutingProfilePolicy(
+                requirements=RoutingRequirements(
+                    min_context_window=8_000,
+                    tool_calling=True,
+                    structured_output=True,
+                ),
+                preferred_model_ids=("model-local-large",),
             ),
-            preferred_model_ids=("model-local-large",),
-        ),
-        expected_revision=1,
-        principal_ref=OWNER.id,
-        context=_context(project_id=project_id),
-        provenance=Provenance(source="issue-309-test", actor_ref=OWNER.id),
+            expected_revision=1,
+            principal_ref=OWNER.id,
+            context=_context(project_id=project_id),
+            provenance=Provenance(source="issue-309-test", actor_ref=OWNER.id),
+        )
     )
 
     assert first.ref.canonical_ref.endswith("@r1")
@@ -140,36 +144,39 @@ async def test_create_version_and_restart_preserve_exact_revisions(tmp_path) -> 
     assert restarted.get_revision(second.ref).policy.requirements.structured_output is True
 
 
-@pytest.mark.asyncio
-async def test_exact_profile_revision_drives_deterministic_preference_and_fallback(
+def test_exact_profile_revision_drives_deterministic_preference_and_fallback(
     tmp_path,
 ) -> None:
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
     service = ModelRoutingProfileService(repository)
     router = DeterministicModelRouter(_registry())
 
-    first = await service.create_profile(
-        name="Fallback",
-        policy=ModelRoutingProfilePolicy(
-            requirements=RoutingRequirements(min_context_window=8_000),
-            preferred_model_ids=("model-local-small",),
-            fallback=RoutingProfileFallbackPolicy.ROUTE,
-        ),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_context(),
+    first = asyncio.run(
+        service.create_profile(
+            name="Fallback",
+            policy=ModelRoutingProfilePolicy(
+                requirements=RoutingRequirements(min_context_window=8_000),
+                preferred_model_ids=("model-local-small",),
+                fallback=RoutingProfileFallbackPolicy.ROUTE,
+            ),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_context(),
+        )
     )
-    second = await service.version_profile(
-        first.profile_id,
-        name="Strict",
-        policy=ModelRoutingProfilePolicy(
-            requirements=RoutingRequirements(min_context_window=8_000),
-            preferred_model_ids=("model-local-small",),
-            fallback=RoutingProfileFallbackPolicy.FAIL,
-        ),
-        expected_revision=1,
-        principal_ref=OWNER.id,
-        context=_context(),
+    second = asyncio.run(
+        service.version_profile(
+            first.profile_id,
+            name="Strict",
+            policy=ModelRoutingProfilePolicy(
+                requirements=RoutingRequirements(min_context_window=8_000),
+                preferred_model_ids=("model-local-small",),
+                fallback=RoutingProfileFallbackPolicy.FAIL,
+            ),
+            expected_revision=1,
+            principal_ref=OWNER.id,
+            context=_context(),
+        )
     )
 
     route = router.route_profile(repository.get_revision(first.ref))
@@ -182,23 +189,24 @@ async def test_exact_profile_revision_drives_deterministic_preference_and_fallba
     assert exc_info.value.details["routing_profile_ref"] == second.ref.canonical_ref
 
 
-@pytest.mark.asyncio
-async def test_local_policy_and_ordered_preferences_are_profile_owned(tmp_path) -> None:
+def test_local_policy_and_ordered_preferences_are_profile_owned(tmp_path) -> None:
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
     service = ModelRoutingProfileService(repository)
-    profile = await service.create_profile(
-        name="Local structured",
-        policy=ModelRoutingProfilePolicy(
-            requirements=RoutingRequirements(
-                local_only=True,
-                structured_output=True,
+    profile = asyncio.run(
+        service.create_profile(
+            name="Local structured",
+            policy=ModelRoutingProfilePolicy(
+                requirements=RoutingRequirements(
+                    local_only=True,
+                    structured_output=True,
+                ),
+                preferred_model_ids=("model-remote-large", "model-local-large"),
+                fallback=RoutingProfileFallbackPolicy.FAIL,
             ),
-            preferred_model_ids=("model-remote-large", "model-local-large"),
-            fallback=RoutingProfileFallbackPolicy.FAIL,
-        ),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_context(),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_context(),
+        )
     )
 
     route = DeterministicModelRouter(_registry()).route_profile(profile)
@@ -206,20 +214,21 @@ async def test_local_policy_and_ordered_preferences_are_profile_owned(tmp_path) 
     assert "ordered canonical preference" in route.reason
 
 
-@pytest.mark.asyncio
-async def test_provider_replacement_does_not_rewrite_profile_identity(tmp_path) -> None:
+def test_provider_replacement_does_not_rewrite_profile_identity(tmp_path) -> None:
     registry = _registry()
     router = DeterministicModelRouter(registry)
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
     service = ModelRoutingProfileService(repository)
-    profile = await service.create_profile(
-        name="Pinned canonical model",
-        policy=ModelRoutingProfilePolicy(
-            requirements=RoutingRequirements(explicit_model_id="model-local-large")
-        ),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_context(),
+    profile = asyncio.run(
+        service.create_profile(
+            name="Pinned canonical model",
+            policy=ModelRoutingProfilePolicy(
+                requirements=RoutingRequirements(explicit_model_id="model-local-large")
+            ),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_context(),
+        )
     )
 
     before = router.route_profile(profile)
@@ -230,8 +239,7 @@ async def test_provider_replacement_does_not_rewrite_profile_identity(tmp_path) 
     assert repository.get_revision(profile.ref).ref == profile.ref
 
 
-@pytest.mark.asyncio
-async def test_authorization_and_project_scope_are_enforced(tmp_path) -> None:
+def test_authorization_and_project_scope_are_enforced(tmp_path) -> None:
     project_a = new_id("project")
     project_b = new_id("project")
     denied = FakeAuthorizationProvider(allowed=False)
@@ -241,13 +249,15 @@ async def test_authorization_and_project_scope_are_enforced(tmp_path) -> None:
     )
 
     with pytest.raises(ContractError) as exc_info:
-        await denied_service.create_profile(
-            name="Denied",
-            policy=ModelRoutingProfilePolicy(),
-            owner_ref=OWNER,
-            principal_ref=OWNER.id,
-            context=_context(project_id=project_a),
-            project_id=project_a,
+        asyncio.run(
+            denied_service.create_profile(
+                name="Denied",
+                policy=ModelRoutingProfilePolicy(),
+                owner_ref=OWNER,
+                principal_ref=OWNER.id,
+                context=_context(project_id=project_a),
+                project_id=project_a,
+            )
         )
     assert exc_info.value.code is ErrorCode.FORBIDDEN
     assert denied.calls[-1].action == "model-routing-profile:create"
@@ -255,48 +265,57 @@ async def test_authorization_and_project_scope_are_enforced(tmp_path) -> None:
     allowed = FakeAuthorizationProvider(allowed=True)
     repository = JsonModelRoutingProfileRepository(tmp_path / "allowed.json")
     service = ModelRoutingProfileService(repository, authorization=allowed)
-    profile = await service.create_profile(
-        name="Scoped",
-        policy=ModelRoutingProfilePolicy(),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_context(project_id=project_a),
-        project_id=project_a,
+    profile = asyncio.run(
+        service.create_profile(
+            name="Scoped",
+            policy=ModelRoutingProfilePolicy(),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_context(project_id=project_a),
+            project_id=project_a,
+        )
     )
 
     with pytest.raises(ContractError) as scope_error:
-        await service.get_revision(
-            profile.ref,
-            principal_ref=OWNER.id,
-            context=_context(project_id=project_b),
+        asyncio.run(
+            service.get_revision(
+                profile.ref,
+                principal_ref=OWNER.id,
+                context=_context(project_id=project_b),
+            )
         )
     assert scope_error.value.code is ErrorCode.FORBIDDEN
 
 
-@pytest.mark.asyncio
-async def test_disable_blocks_execution_resolution_when_requested(tmp_path) -> None:
+def test_disable_blocks_execution_resolution_when_requested(tmp_path) -> None:
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
     service = ModelRoutingProfileService(repository)
-    profile = await service.create_profile(
-        name="Disable me",
-        policy=ModelRoutingProfilePolicy(),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_context(),
+    profile = asyncio.run(
+        service.create_profile(
+            name="Disable me",
+            policy=ModelRoutingProfilePolicy(),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_context(),
+        )
     )
-    await service.set_enabled(
-        profile.profile_id,
-        False,
-        principal_ref=OWNER.id,
-        context=_context(),
+    asyncio.run(
+        service.set_enabled(
+            profile.profile_id,
+            False,
+            principal_ref=OWNER.id,
+            context=_context(),
+        )
     )
 
     with pytest.raises(ContractError) as exc_info:
-        await service.get_revision(
-            profile.ref,
-            principal_ref=OWNER.id,
-            context=_context(),
-            require_enabled=True,
+        asyncio.run(
+            service.get_revision(
+                profile.ref,
+                principal_ref=OWNER.id,
+                context=_context(),
+                require_enabled=True,
+            )
         )
     assert exc_info.value.code is ErrorCode.UNAVAILABLE
 

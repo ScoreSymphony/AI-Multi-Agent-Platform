@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from ai_multi_agent_platform.agents import (
@@ -69,8 +71,7 @@ def _agent_profile(routing_profile_ref: str) -> AgentProfile:
     )
 
 
-@pytest.mark.asyncio
-async def test_agent_runtime_consumes_exact_persisted_profile_revision(tmp_path) -> None:
+def test_agent_runtime_consumes_exact_persisted_profile_revision(tmp_path) -> None:
     project_id = new_id("project")
     profiles = JsonModelRoutingProfileRepository(tmp_path / "routing-profiles.json")
     profile_service = ModelRoutingProfileService(profiles)
@@ -80,27 +81,31 @@ async def test_agent_runtime_consumes_exact_persisted_profile_revision(tmp_path)
         owner_id=OWNER.id,
         project_id=project_id,
     )
-    first = await profile_service.create_profile(
-        name="Pinned routing",
-        policy=ModelRoutingProfilePolicy(
-            preferred_model_ids=("model-preferred-r1",),
-            fallback=RoutingProfileFallbackPolicy.FAIL,
-        ),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=context,
-        project_id=project_id,
+    first = asyncio.run(
+        profile_service.create_profile(
+            name="Pinned routing",
+            policy=ModelRoutingProfilePolicy(
+                preferred_model_ids=("model-preferred-r1",),
+                fallback=RoutingProfileFallbackPolicy.FAIL,
+            ),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=context,
+            project_id=project_id,
+        )
     )
-    await profile_service.version_profile(
-        first.profile_id,
-        name="Current routing",
-        policy=ModelRoutingProfilePolicy(
-            preferred_model_ids=("model-preferred-r2",),
-            fallback=RoutingProfileFallbackPolicy.FAIL,
-        ),
-        expected_revision=1,
-        principal_ref=OWNER.id,
-        context=context,
+    asyncio.run(
+        profile_service.version_profile(
+            first.profile_id,
+            name="Current routing",
+            policy=ModelRoutingProfilePolicy(
+                preferred_model_ids=("model-preferred-r2",),
+                fallback=RoutingProfileFallbackPolicy.FAIL,
+            ),
+            expected_revision=1,
+            principal_ref=OWNER.id,
+            context=context,
+        )
     )
 
     agents = AgentService(InMemoryAgentRepository())
@@ -125,22 +130,23 @@ async def test_agent_runtime_consumes_exact_persisted_profile_revision(tmp_path)
     assert profiles.get_definition(first.profile_id).current_revision == 2
 
 
-@pytest.mark.asyncio
-async def test_disabled_profile_fails_before_agent_execution(tmp_path) -> None:
+def test_disabled_profile_fails_before_agent_execution(tmp_path) -> None:
     profiles = JsonModelRoutingProfileRepository(tmp_path / "routing-profiles.json")
     profile_service = ModelRoutingProfileService(profiles)
-    profile = await profile_service.create_profile(
-        name="Disabled",
-        policy=ModelRoutingProfilePolicy(
-            preferred_model_ids=("model-preferred-r1",),
-        ),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=OperationContext(
-            correlation_id="corr-disabled-profile",
-            owner_type=OWNER.type,
-            owner_id=OWNER.id,
-        ),
+    profile = asyncio.run(
+        profile_service.create_profile(
+            name="Disabled",
+            policy=ModelRoutingProfilePolicy(
+                preferred_model_ids=("model-preferred-r1",),
+            ),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=OperationContext(
+                correlation_id="corr-disabled-profile",
+                owner_type=OWNER.type,
+                owner_id=OWNER.id,
+            ),
+        )
     )
     profiles.set_enabled(profile.profile_id, False)
 
@@ -164,28 +170,29 @@ async def test_disabled_profile_fails_before_agent_execution(tmp_path) -> None:
     assert caught.value.code is ErrorCode.UNAVAILABLE
 
 
-@pytest.mark.asyncio
-async def test_self_hosted_profile_constraint_excludes_remote_but_allows_local(tmp_path) -> None:
+def test_self_hosted_profile_constraint_excludes_remote_but_allows_local(tmp_path) -> None:
     profiles = JsonModelRoutingProfileRepository(tmp_path / "routing-profiles.json")
     profile_service = ModelRoutingProfileService(profiles)
-    profile = await profile_service.create_profile(
-        name="Self-hosted only",
-        policy=ModelRoutingProfilePolicy(
-            requirements=RoutingRequirements(self_hosted_only=True, tool_calling=True),
-            preferred_model_ids=(
-                "model-remote",
-                "model-preferred-r1",
-                "model-self-hosted",
+    profile = asyncio.run(
+        profile_service.create_profile(
+            name="Self-hosted only",
+            policy=ModelRoutingProfilePolicy(
+                requirements=RoutingRequirements(self_hosted_only=True, tool_calling=True),
+                preferred_model_ids=(
+                    "model-remote",
+                    "model-preferred-r1",
+                    "model-self-hosted",
+                ),
+                fallback=RoutingProfileFallbackPolicy.FAIL,
             ),
-            fallback=RoutingProfileFallbackPolicy.FAIL,
-        ),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=OperationContext(
-            correlation_id="corr-self-hosted-profile",
-            owner_type=OWNER.type,
-            owner_id=OWNER.id,
-        ),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=OperationContext(
+                correlation_id="corr-self-hosted-profile",
+                owner_type=OWNER.type,
+                owner_id=OWNER.id,
+            ),
+        )
     )
 
     route = DeterministicModelRouter(_model_registry()).route_profile(profile)

@@ -114,7 +114,11 @@ def test_routing_profile_portability_round_trip_excludes_runtime_private_state(t
     assert resource.resource_id == profile_id
     assert resource.resource_version == "2"
     dependency_ids = {item.identifier for item in resource.dependencies}
-    assert dependency_ids == {project_id, preferred_model_id, fallback_model_id}
+    assert dependency_ids == {
+        f"project:{project_id}",
+        preferred_model_id,
+        fallback_model_id,
+    }
     payload = json.dumps(resource.payload, sort_keys=True)
     for forbidden in (
         "provider_id",

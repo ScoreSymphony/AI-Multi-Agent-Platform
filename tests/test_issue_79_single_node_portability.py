@@ -16,6 +16,7 @@ def test_single_node_composes_canonical_portability(tmp_path: Path) -> None:
         "agent",
         "agent_team",
         "evaluation_suite",
+        "model_routing_profile",
         "project",
         "template",
     )

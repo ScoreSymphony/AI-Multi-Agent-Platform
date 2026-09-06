@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from ai_multi_agent_platform.agents import (
@@ -61,25 +63,28 @@ def _agent_profile(routing_profile_ref: str) -> AgentProfile:
     )
 
 
-@pytest.mark.asyncio
-async def test_assignment_gate_uses_distinct_assign_authorization_action(tmp_path) -> None:
+def test_assignment_gate_uses_distinct_assign_authorization_action(tmp_path) -> None:
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
-    profile = await ModelRoutingProfileService(repository).create_profile(
-        name="Assignable",
-        policy=ModelRoutingProfilePolicy(),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_operation(),
+    profile = asyncio.run(
+        ModelRoutingProfileService(repository).create_profile(
+            name="Assignable",
+            policy=ModelRoutingProfilePolicy(),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_operation(),
+        )
     )
     authorization = FakeAuthorizationProvider(allowed=False)
     gate = ModelRoutingProfileAssignmentGate(repository, authorization=authorization)
 
     with pytest.raises(ContractError) as caught:
-        await gate.authorize(
-            profile.ref,
-            principal_ref=OWNER.id,
-            context=_operation(),
-            actor_type="human",
+        asyncio.run(
+            gate.authorize(
+                profile.ref,
+                principal_ref=OWNER.id,
+                context=_operation(),
+                actor_type="human",
+            )
         )
 
     assert caught.value.code is ErrorCode.FORBIDDEN
@@ -88,42 +93,46 @@ async def test_assignment_gate_uses_distinct_assign_authorization_action(tmp_pat
     assert authorization.calls[-1].actor_type == "human"
 
 
-@pytest.mark.asyncio
-async def test_assignment_without_authorization_provider_requires_exact_owner_context(
+def test_assignment_without_authorization_provider_requires_exact_owner_context(
     tmp_path,
 ) -> None:
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
-    profile = await ModelRoutingProfileService(repository).create_profile(
-        name="Owner scoped",
-        policy=ModelRoutingProfilePolicy(),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_operation(),
+    profile = asyncio.run(
+        ModelRoutingProfileService(repository).create_profile(
+            name="Owner scoped",
+            policy=ModelRoutingProfilePolicy(),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_operation(),
+        )
     )
     gate = ModelRoutingProfileAssignmentGate(repository)
 
     with pytest.raises(ContractError) as caught:
-        await gate.authorize(
-            profile.ref,
-            principal_ref=OWNER.id,
-            context=OperationContext(correlation_id="corr-missing-owner"),
-            actor_type="human",
+        asyncio.run(
+            gate.authorize(
+                profile.ref,
+                principal_ref=OWNER.id,
+                context=OperationContext(correlation_id="corr-missing-owner"),
+                actor_type="human",
+            )
         )
 
     assert caught.value.code is ErrorCode.FORBIDDEN
 
 
-@pytest.mark.asyncio
-async def test_agent_create_fails_closed_when_profile_assignment_is_denied(tmp_path) -> None:
+def test_agent_create_fails_closed_when_profile_assignment_is_denied(tmp_path) -> None:
     project_id = new_id("project")
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
-    profile = await ModelRoutingProfileService(repository).create_profile(
-        name="Project routing",
-        policy=ModelRoutingProfilePolicy(),
-        owner_ref=OWNER,
-        principal_ref=OWNER.id,
-        context=_operation(project_id),
-        project_id=project_id,
+    profile = asyncio.run(
+        ModelRoutingProfileService(repository).create_profile(
+            name="Project routing",
+            policy=ModelRoutingProfilePolicy(),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_operation(project_id),
+            project_id=project_id,
+        )
     )
     authorization = FakeAuthorizationProvider(allowed=False)
     agents_repository = InMemoryAgentRepository()
@@ -133,13 +142,15 @@ async def test_agent_create_fails_closed_when_profile_assignment_is_denied(tmp_p
     )
 
     with pytest.raises(ContractError) as caught:
-        await handlers.create_agent(
-            _request(),
-            "agents",
-            {
-                "profile": json_object(_agent_profile(profile.ref.canonical_ref)),
-                "project_id": project_id,
-            },
+        asyncio.run(
+            handlers.create_agent(
+                _request(),
+                "agents",
+                {
+                    "profile": json_object(_agent_profile(profile.ref.canonical_ref)),
+                    "project_id": project_id,
+                },
+            )
         )
 
     assert caught.value.code is ErrorCode.FORBIDDEN
