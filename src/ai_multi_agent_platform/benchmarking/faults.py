@@ -426,7 +426,9 @@ class SingleNodeFaultUnderLoadHarness(SingleNodeWorkloadHarness):
         headers: dict[str, str],
         path: str,
     ) -> tuple[bool, str]:
-        response = await deployment.http.handle(HTTPRequest(method="GET", path=path, headers=headers))
+        response = await deployment.http.handle(
+            HTTPRequest(method="GET", path=path, headers=headers)
+        )
         if response.status != 200:
             return False, f"http-{response.status}"
         body = _require_mapping(response, 200, f"fault status probe {path}")
