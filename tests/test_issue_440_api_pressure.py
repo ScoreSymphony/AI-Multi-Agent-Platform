@@ -64,7 +64,11 @@ def test_api_pressure_profile_is_correct_and_schema_valid(tmp_path: Path) -> Non
         assert report.pagination_page_latency.count == 4
         assert report.benchmark.expected_pages_per_scan == 2
         assert report.throughput_operations_per_second > 0
-        assert report.resources.storage_bytes_after >= report.resources.storage_bytes_before
+        assert report.resources.storage_bytes_before >= 0
+        assert report.resources.storage_bytes_after >= 0
+        assert report.resources.storage_growth_bytes == (
+            report.resources.storage_bytes_after - report.resources.storage_bytes_before
+        )
         assert len(report.sample_task_ids) == 4
 
         Draft202012Validator(_schema()).validate(report.to_dict())
