@@ -89,6 +89,7 @@ def build_distributed_control_plane_deployment(
         transport=transport,
         workspaces=deployment.workspaces,
         files=deployment.files,
+        kernel=deployment.kernel,
     )
     # ``SingleNodeDeployment`` intentionally types its Stage-1 app as ControlPlaneASGI. The
     # advanced adapter wraps that same ASGI app without changing the Stage-1 contract.
