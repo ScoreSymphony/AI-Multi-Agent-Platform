@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import re
+
 from .models import (
     CompatibilityStatus,
     GateStatus,
+    ReleaseEvidenceKind,
     ReleaseManifest,
     ReleaseReadinessReport,
 )
@@ -22,6 +25,26 @@ REQUIRED_RELEASE_GATES = frozenset(
         "backup_restore_fresh",
     }
 )
+COMMIT_BOUND_RELEASE_GATES = frozenset(
+    {
+        "ci",
+        "adapter_contract_tests",
+        "eval_regression",
+        "security",
+        "compatibility_review",
+        "migration_compatibility",
+        "provenance_complete",
+    }
+)
+
+_GIT_COMMIT = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+_DIGEST = re.compile(r"^(?:sha256:[0-9a-f]{64}|sha512:[0-9a-f]{128})$")
+_REFERENCE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:.+$")
+_DIGEST_EVIDENCE_KINDS = {
+    ReleaseEvidenceKind.ARTIFACT,
+    ReleaseEvidenceKind.REPORT,
+    ReleaseEvidenceKind.ATTESTATION,
+}
 
 
 def evaluate_release(manifest: ReleaseManifest) -> ReleaseReadinessReport:
@@ -33,6 +56,24 @@ def evaluate_release(manifest: ReleaseManifest) -> ReleaseReadinessReport:
             "release_version must match versions.platform_release "
             f"({manifest.release_version!r} != {manifest.versions.platform_release!r})"
         )
+    if _GIT_COMMIT.fullmatch(manifest.source_commit) is None:
+        blockers.append("source_commit must be a full 40- or 64-character Git commit SHA")
+
+    dependency_names = [item.name for item in manifest.dependency_sets]
+    if not dependency_names:
+        blockers.append("at least one dependency lock/resolved set is required")
+    duplicate_dependency_names = sorted(
+        name for name in set(dependency_names) if dependency_names.count(name) > 1
+    )
+    if duplicate_dependency_names:
+        blockers.append(
+            "duplicate dependency-set names: " + ", ".join(duplicate_dependency_names)
+        )
+    for item in manifest.dependency_sets:
+        if _REFERENCE.fullmatch(item.source_ref) is None:
+            blockers.append(f"dependency set {item.name!r} has an invalid source_ref")
+        if _DIGEST.fullmatch(item.digest) is None:
+            blockers.append(f"dependency set {item.name!r} has an invalid digest")
 
     gate_by_name = {gate.name: gate for gate in manifest.gates}
     duplicate_gate_names = sorted(
@@ -51,18 +92,50 @@ def evaluate_release(manifest: ReleaseManifest) -> ReleaseReadinessReport:
         elif not gate.required and gate.status is GateStatus.FAILED:
             warnings.append(f"optional gate {gate.name!r} failed")
 
+        evidence = gate.evidence
+        if _REFERENCE.fullmatch(evidence.ref) is None:
+            blockers.append(f"gate {gate.name!r} has an invalid evidence reference")
+        if evidence.source_commit is not None and _GIT_COMMIT.fullmatch(evidence.source_commit) is None:
+            blockers.append(f"gate {gate.name!r} has an invalid evidence source_commit")
+        if evidence.digest is not None and _DIGEST.fullmatch(evidence.digest) is None:
+            blockers.append(f"gate {gate.name!r} has an invalid evidence digest")
+        if evidence.kind in _DIGEST_EVIDENCE_KINDS and evidence.digest is None:
+            blockers.append(
+                f"gate {gate.name!r} evidence kind {evidence.kind.value!r} requires a digest"
+            )
+        if gate.name in COMMIT_BOUND_RELEASE_GATES and evidence.source_commit != manifest.source_commit:
+            blockers.append(
+                f"gate {gate.name!r} evidence is not bound to release source_commit"
+            )
+
     if not manifest.artifact_hashes:
         blockers.append("release artifact hashes are missing")
+    for artifact, digest in manifest.artifact_hashes.items():
+        if _DIGEST.fullmatch(digest) is None:
+            blockers.append(f"release artifact {artifact!r} has an invalid digest")
 
-    upstream_names = {upstream.component for upstream in manifest.upstreams}
+    upstream_by_name = {upstream.component: upstream for upstream in manifest.upstreams}
     for upstream in manifest.upstreams:
         if not upstream.provenance_ref:
             blockers.append(f"upstream {upstream.component!r} is missing provenance_ref")
+        elif _REFERENCE.fullmatch(upstream.provenance_ref) is None:
+            blockers.append(f"upstream {upstream.component!r} has an invalid provenance_ref")
+        for artifact, digest in upstream.artifact_hashes.items():
+            if _DIGEST.fullmatch(digest) is None:
+                blockers.append(
+                    f"upstream {upstream.component!r} artifact {artifact!r} has an invalid digest"
+                )
 
     for record in manifest.compatibility:
-        if record.component not in upstream_names:
+        upstream = upstream_by_name.get(record.component)
+        if upstream is None:
             blockers.append(
                 f"compatibility record {record.component!r} has no matching upstream provenance"
+            )
+        elif record.upstream_revision != upstream.revision:
+            blockers.append(
+                f"compatibility record {record.component!r} revision does not match "
+                "the release upstream provenance"
             )
         if record.status is CompatibilityStatus.BLOCKED:
             blockers.append(
@@ -90,6 +163,7 @@ def release_metadata(manifest: ReleaseManifest) -> dict[str, object]:
         "created_at": manifest.created_at,
         "release_notes_ref": manifest.release_notes_ref,
         "versions": manifest.versions.to_dict(),
+        "dependency_sets": [item.to_dict() for item in manifest.dependency_sets],
         "upstreams": [
             {
                 "component": item.component,
@@ -102,6 +176,7 @@ def release_metadata(manifest: ReleaseManifest) -> dict[str, object]:
             for item in manifest.upstreams
         ],
         "compatibility": [item.to_dict() for item in manifest.compatibility],
+        "gates": [item.to_dict() for item in manifest.gates],
         "sbom_ref": manifest.sbom_ref,
         "provenance_ref": manifest.provenance_ref,
         "artifact_hashes": dict(manifest.artifact_hashes),
