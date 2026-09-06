@@ -178,6 +178,6 @@ def test_workflow_export_authorizes_source_read_before_creating_templates() -> N
                 author=PRINCIPAL,
             )
         assert captured.value.code is ErrorCode.FORBIDDEN
-        assert templates.repository.list_definitions() == ()
+        assert templates.repository.list_templates() == ()
 
     asyncio.run(scenario())
