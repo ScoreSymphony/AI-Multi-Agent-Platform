@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from uuid import NAMESPACE_URL, uuid5
-
 from ai_multi_agent_platform.capabilities import (
     ECHO_CAPABILITY_ID,
     CapabilityRegistration,
@@ -30,6 +28,7 @@ from .models import JobRequirements, JobResultStatus, WorkerJobRequest
 from .registry import RegistryError
 from .runtime import DistributedRuntime
 from .scheduler import NoEligibleWorkerError
+from .tool_lineage import bind_worker_job_to_tool_invocation
 
 DISTRIBUTED_ECHO_TOOL_REF = "distributed.executor.echo"
 
@@ -38,9 +37,11 @@ class DistributedExecutorEchoProvider(CapabilityToolProvider):
     """Execute ``tool.echo`` as a Worker Job behind the generic Executor seam.
 
     The parent Task/Run/Agent identity arrives through the provider-neutral ToolInvocation.
-    ``worker_job_id`` is the subordinate execution identity; the provider never creates a
-    second canonical Run. Exact Workspace/Snapshot input is recovered from the immutable
-    Run binding before dispatch.
+    The direct canonical ``tool_invocation_*`` cause arrives through
+    ``OperationContext.causation_id`` after CapabilityInvoker binding. ``worker_job_id`` is the
+    subordinate execution identity derived from that canonical ToolInvocation; the provider never
+    creates a second canonical Run or re-derives Tool identity from provider-private handles.
+    Exact Workspace/Snapshot input is recovered from the immutable Run binding before dispatch.
     """
 
     def __init__(
@@ -136,6 +137,13 @@ class DistributedExecutorEchoProvider(CapabilityToolProvider):
                 "distributed capability invocation requires canonical Task/Run/Agent trace IDs",
                 provider_id=self.provider_id,
             )
+        tool_invocation_id = invocation.context.causation_id
+        if tool_invocation_id is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "distributed capability invocation requires canonical ToolInvocation causation",
+                provider_id=self.provider_id,
+            )
 
         binding = await self.workspace_bindings.get(invocation.run_id)
         if binding is None:
@@ -159,29 +167,38 @@ class DistributedExecutorEchoProvider(CapabilityToolProvider):
                 "distributed echo message must be a string",
                 provider_id=self.provider_id,
             )
-        worker_job_id = _worker_job_id(self.worker_id, invocation.invocation_id)
-        job = WorkerJobRequest(
-            worker_job_id=worker_job_id,
-            execution=ExecutionRequest(
-                run_id=invocation.run_id,
-                subject_type="task",
-                subject_id=invocation.task_id,
-                context=invocation.context,
-                input=executor_worker_input(
-                    action="echo",
-                    arguments={"text": message},
+        try:
+            job = bind_worker_job_to_tool_invocation(
+                WorkerJobRequest(
+                    execution=ExecutionRequest(
+                        run_id=invocation.run_id,
+                        subject_type="task",
+                        subject_id=invocation.task_id,
+                        context=invocation.context,
+                        input=executor_worker_input(
+                            action="echo",
+                            arguments={"text": message},
+                        ),
+                    ),
+                    requirements=JobRequirements(
+                        executor_type=self.executor_type,
+                        capability_refs=(ECHO_CAPABILITY_ID,),
+                        preferred_worker_ids=(self.worker_id,),
+                    ),
+                    workspace_ref=binding.workspace_id,
+                    snapshot_ref=binding.workspace_snapshot_id,
+                    timeout_seconds=invocation.context.control.timeout_seconds,
+                    idempotency_key=f"capability:{tool_invocation_id}",
                 ),
-            ),
-            requirements=JobRequirements(
-                executor_type=self.executor_type,
-                capability_refs=(ECHO_CAPABILITY_ID,),
-                preferred_worker_ids=(self.worker_id,),
-            ),
-            workspace_ref=binding.workspace_id,
-            snapshot_ref=binding.workspace_snapshot_id,
-            timeout_seconds=invocation.context.control.timeout_seconds,
-            idempotency_key=f"capability:{invocation.invocation_id}",
-        )
+                tool_invocation_id,
+            )
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "distributed capability causation is not a canonical ToolInvocation identity",
+                provider_id=self.provider_id,
+            ) from exc
+        worker_job_id = job.worker_job_id
         try:
             record = await self.runtime.dispatch_to_worker(job, self.worker_id)
             result = await self.runtime.result(worker_job_id)
@@ -228,6 +245,7 @@ class DistributedExecutorEchoProvider(CapabilityToolProvider):
                 AdapterMetadata(
                     namespace="distributed-capability",
                     values={
+                        "tool_invocation_id": tool_invocation_id,
                         "worker_job_id": worker_job_id,
                         "worker_id": record.worker_id,
                         "node_id": worker.node_id,
@@ -240,14 +258,6 @@ class DistributedExecutorEchoProvider(CapabilityToolProvider):
                 ),
             ),
         )
-
-
-def _worker_job_id(worker_id: str, invocation_id: str) -> str:
-    value = uuid5(
-        NAMESPACE_URL,
-        f"ai-multi-agent-platform:capability-worker-job:{worker_id}:{invocation_id}",
-    )
-    return f"worker_job_{value}"
 
 
 __all__ = ["DISTRIBUTED_ECHO_TOOL_REF", "DistributedExecutorEchoProvider"]
