@@ -30,7 +30,7 @@ This distinction is deliberate: the runner must never make an operational-v1 cla
 
 ### `fast`
 
-The deterministic PR tier currently maintains the first executable cross-product slice:
+The deterministic PR tier maintains the critical local/reference cross-product slice:
 
 | Scenario | Evidence | Owner |
 | --- | --- | --- |
@@ -48,7 +48,7 @@ The fast tier is intentionally local/reference-only and deterministic. It requir
 
 ### `integration`
 
-The integration tier currently includes the complete fast tier and explicitly records optional capability profiles for:
+The integration tier includes the complete fast tier and explicitly records optional capability profiles for:
 
 - B — Hermes orchestration;
 - C — Forge execution;
@@ -56,24 +56,31 @@ The integration tier currently includes the complete fast tier and explicitly re
 - S — optional Registry;
 - X — optional Control Plane HA.
 
-Until a concrete #46 integration path is selected/enabled, those entries are emitted as `disabled` rather than silently omitted or counted as a baseline failure. Future adapter-specific jobs should replace the disabled record with a real executable scenario and record the tested component version.
+Until a concrete #46 integration path is selected/enabled, those entries are emitted as `disabled` rather than silently omitted or counted as a baseline failure. Adapter-specific jobs can replace the disabled record with a real executable scenario and record the tested component version without making that adapter mandatory for the reference baseline.
 
 ### `release`
 
-The release tier extends integration with the remaining end-product scenarios. Required scenarios without a maintained executable #46 path are deliberately `not_implemented`, so the release profile is expected to remain **incomplete** while #46 is under construction.
+The release tier extends integration with representative operational product paths. The following required scenarios now reuse maintained evidence from their owning domains:
 
-Currently explicit required pending paths include:
+| Scenario | Maintained acceptance evidence | Owner |
+| --- | --- | --- |
+| I — Automation | one-time schedule creates a canonical Task with provenance | #18 |
+| K — Task-centric Chat | message-to-Task Control Plane handoff is canonical and bidirectionally linked | #72 |
+| L — Terminal | project/workspace-scoped Control Plane session create/list/get/terminate with idempotency | #73 |
+| M — Browser | canonical download File/Artifact path plus policy-gated form upload through File permissions | #74 |
+| O — Usage/resources | Task/Run/Executor accounting is canonically attributed, idempotent and aggregated | #76 |
+| P — Standard Agents/Teams | starter catalog lifecycle uses the real Control Plane bootstrap/clone path | #77 |
+| W — Task management | priority/deadline/not-before, assignment and dependency semantics stay canonical metadata | #88 |
 
-- G — controlled failure/retry;
-- I — Automation -> canonical Task;
-- K — Task-centric Chat;
-- L — Terminal/session path;
-- M — Browser capability;
-- O — Usage/resources attribution;
-- P — Standard Agents/Teams configurability;
-- W — practical Task management.
+The only required scenario still lacking one maintained #46 end-to-end command is:
 
-Optional or conditional domains such as Notifications, Templates, portable Import/Export, Registry, Repository/Git, Organization collaboration and HA remain non-blocking when their profile is disabled. Scenario Y for #384 durable Plan/Step coordination is recorded as unsupported until the corresponding coordination path is available.
+- G — controlled failure/retry with canonical retry semantics and telemetry.
+
+The repository already has focused retry telemetry and retryable-failure tests, but #46 does not combine separate proofs into a stronger end-to-end compatibility claim. G remains `not_implemented` until one representative path demonstrates the complete criterion coherently.
+
+Optional or conditional domains such as Notifications, Templates, portable Import/Export, Registry, Repository/Git, Organization collaboration and HA remain non-blocking when their profile is disabled. Scenario Y for #384 durable Plan/Step coordination is recorded as `unsupported` until the corresponding coordination path is available.
+
+Consequently the release profile remains intentionally **incomplete** while G is unresolved; executable I/K/L/M/O/P/W failures are real incompatibilities rather than missing-evidence states.
 
 ## Compatibility semantics
 
@@ -107,7 +114,7 @@ Every report records:
 - command output tail and failure category when applicable;
 - canonical resource IDs and evidence references when a scenario exposes them.
 
-The current first slice leaves canonical resource ID/evidence collections empty for subsystem tests that do not yet export them. They are explicit empty collections rather than fabricated identifiers. As scenarios become true cross-layer fixtures, #46 should populate those fields with Task/Run/Result/Artifact/Verification IDs and retained trace/log/artifact references.
+The current aggregator leaves canonical resource ID/evidence collections empty for subsystem tests that do not yet export them. They are explicit empty collections rather than fabricated identifiers. As scenarios become true cross-layer fixtures, #46 should populate those fields with Task/Run/Result/Artifact/Verification IDs and retained trace/log/artifact references.
 
 ## Architecture invariants
 
@@ -120,13 +127,13 @@ Additional #46 invariants should be added here as they can be checked reliably w
 
 ## CI tiers
 
-The repository should treat conformance as three different cost/coverage tiers rather than one giant permutation matrix:
+The repository treats conformance as three different cost/coverage tiers rather than one giant permutation matrix:
 
 1. **Fast PR** — deterministic local/reference components, architecture invariants and critical lifecycle/security/verification checks.
 2. **Integration** — real optional adapters/services where configured, distributed fixtures and richer cross-domain paths.
 3. **Release acceptance** — representative operational, recovery, portability, security and product-path evidence required for the compatibility claims made by that release.
 
-The first implementation wires only the fast tier into normal PR/main CI. Integration and release remain explicit CLI profiles while their scenario matrix is being completed.
+The fast tier is wired into normal PR/main CI. Integration and release remain explicit CLI profiles while their matrix and environment-specific compatibility claims are being completed. A release profile is not promoted to a blocking release gate until every required scenario has a maintained executable path.
 
 ## Relationship to #252
 
