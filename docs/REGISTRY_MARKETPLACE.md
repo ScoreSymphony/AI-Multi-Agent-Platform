@@ -62,6 +62,12 @@ The distribution layer does not replace repository/package provenance, plugin sa
 
 ## Control Plane / CLI / UI integration seam
 
-Northbound clients should consume registry discovery and preview through Control Plane resources/commands, never call a concrete provider directly. The domain API introduced here is intentionally provider-neutral so Control Plane, CLI and UI adapters can expose the same operations without coupling the platform to a hosted marketplace.
+Northbound clients consume registry operations through the provider-neutral `DistributionService`; concrete providers are not exposed to CLI/UI consumers.
 
-Until those northbound adapters are enabled by a deployment, the registry can remain absent with no degraded core-platform state.
+`register_distribution_control_plane()` is optional by construction. When no provider is configured it registers no collection or command, so registry availability is not part of core startup. With a provider it registers the read-only `registry-items` collection. `registry.preview` is registered only when the deployment supplies a `RegistryValidationContextResolver`, which resolves platform version, installed dependencies, capabilities, models, connectors and grantable permissions from authoritative server-side state rather than trusting client-supplied compatibility inputs.
+
+The generic Control Plane performs the existing #15 authorization check before registered resource reads or commands execute. The distribution adapter does not implement a parallel authorization system.
+
+There is intentionally no `registry.activate` Control Plane command in this slice. Activation remains behind `DistributionRouter` and must be composed with the canonical owner-domain mutation paths from #20 and #79/#78. This prevents a marketplace adapter from becoming an alternate plugin installer or configuration writer merely because discovery is enabled.
+
+CLI and UI integrations can therefore discover exact versioned resources (`<item-id>@<version>`) and request the same canonical preview result through the Control Plane without coupling themselves to a hosted marketplace. Deployments that do not expose these adapters remain fully functional offline.
