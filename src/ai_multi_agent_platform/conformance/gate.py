@@ -319,6 +319,18 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             (sys.executable, "scripts/ci/issue19_evaluation_gate.py"),
         ),
         ConformanceScenario(
+            "REL-VERTICAL",
+            "#46 authenticated reference vertical slice",
+            (
+                "authenticated Control Plane work preserves one canonical Task/Run through "
+                "Agent/Model, Workspace, Result/Artifact, Verification and timeline evidence"
+            ),
+            _pytest(
+                "tests/test_issue_46_reference_vertical_slice.py::"
+                "test_authenticated_reference_vertical_preserves_canonical_evidence_end_to_end"
+            ),
+        ),
+        ConformanceScenario(
             "G",
             "#46 failure/retry",
             "controlled failures preserve canonical retries and telemetry",
