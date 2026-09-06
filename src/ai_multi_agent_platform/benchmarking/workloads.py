@@ -311,7 +311,9 @@ class SingleNodeWorkloadHarness:
                 f"observed {observed_tasks} tasks, expected at least {expected_tasks}"
             )
         if observed_runs < expected_runs:
-            samples.errors.append(f"observed {observed_runs} runs, expected at least {expected_runs}")
+            samples.errors.append(
+                f"observed {observed_runs} runs, expected at least {expected_runs}"
+            )
 
         throughput = samples.completed / duration if duration > 0 else 0.0
         all_task_ids = seed.task_ids + tuple(samples.write_task_ids)
