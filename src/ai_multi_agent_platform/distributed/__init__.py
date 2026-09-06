@@ -1,5 +1,9 @@
 """Canonical distributed node, worker and scheduling primitives."""
 
+from .artifact_integration import (
+    CanonicalWorkerArtifactIntegrator,
+    worker_change_artifact_id,
+)
 from .capability_provider import (
     DISTRIBUTED_ECHO_TOOL_REF,
     DistributedExecutorEchoProvider,
@@ -91,6 +95,7 @@ from .worker_protocol import (
 from .workspace import (
     MaterializingWorkerDispatcher,
     WorkerWorkspaceResolver,
+    WorkerWorkspaceResultIntegrator,
     WorkspaceDispatchEvidence,
     WorkspaceJobMaterializationResolver,
 )
@@ -110,6 +115,7 @@ __all__ = [
     "WORKER_TRANSPORT_SCHEMA_VERSION",
     "AcceleratorResource",
     "CandidateEvaluation",
+    "CanonicalWorkerArtifactIntegrator",
     "DeterministicScheduler",
     "DispatchRecord",
     "DispatchState",
@@ -169,6 +175,7 @@ __all__ = [
     "WorkerTransportCodec",
     "WorkerTransportEndpoint",
     "WorkerWorkspaceResolver",
+    "WorkerWorkspaceResultIntegrator",
     "WorkspaceDispatchEvidence",
     "WorkspaceJobMaterializationResolver",
     "bind_worker_job_to_tool_invocation",
@@ -176,6 +183,7 @@ __all__ = [
     "prepare_registry_disaster_recovery",
     "register_distributed_control_plane",
     "tool_lineage",
+    "worker_change_artifact_id",
     "worker_command_topic",
     "worker_job_id_for_tool_invocation",
 ]
