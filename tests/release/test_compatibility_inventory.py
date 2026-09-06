@@ -1,5 +1,6 @@
 import json
 import re
+from importlib.resources import files
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,6 +29,28 @@ def test_compatibility_matrix_matches_governed_upstream_pins() -> None:
         pinned_revision = _quoted_field(upstream_path, "pinned_revision")
         assert source in by_source
         assert by_source[source]["revision"] == pinned_revision
+
+
+def test_packaged_compatibility_inventory_matches_repository_snapshot() -> None:
+    repository = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
+    packaged = json.loads(
+        files("ai_multi_agent_platform.release")
+        .joinpath("compatibility.json")
+        .read_text(encoding="utf-8")
+    )
+    assert packaged == repository
+
+
+def test_compatibility_matrix_contains_operator_query_fields() -> None:
+    document = json.loads(COMPATIBILITY_PATH.read_text(encoding="utf-8"))
+    for component in document["components"]:
+        assert component["license"]
+        assert component["integration_mode"]
+        assert component["last_checked_at"]
+        assert component["latest_known_revision"]
+        assert component["update_risk"] in {"low", "medium", "high"}
+        assert isinstance(component["local_modifications"], bool)
+        assert isinstance(component["patches"], list)
 
 
 def test_release_compatibility_metadata_has_no_floating_latest_pin() -> None:
