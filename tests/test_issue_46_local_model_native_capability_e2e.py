@@ -178,9 +178,9 @@ def _agent_profile() -> AgentProfile:
     )
 
 
-def test_authenticated_local_model_executes_distributed_capability_end_to_end(
-    tmp_path: Path,
-) -> None:
+def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_path: Path) -> None:
+    """Keep the historical D-vertical entrypoint while exercising the stronger Worker path."""
+
     server = ThreadingHTTPServer(("127.0.0.1", 0), _LocalToolCallingModelHandler)
     _LocalToolCallingModelHandler.chat_payloads.clear()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
