@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts import OperationContext
+from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
-from ai_multi_agent_platform.distributed import WorkerJobRequest
+from ai_multi_agent_platform.distributed import RegistryError, WorkerJobRequest
 from ai_multi_agent_platform.distributed.workspace import WorkspaceJobMaterializationResolver
 from ai_multi_agent_platform.distributed.workspace_transport import (
     TransportRemoteWorkspaceMaterializer,
@@ -102,9 +102,7 @@ async def _canonical_workspace(
     return workspaces, files, context, workspace, snapshot, request
 
 
-def _execution_request(project_id: str):
-    from ai_multi_agent_platform.contracts import ExecutionRequest
-
+def _execution_request(project_id: str) -> ExecutionRequest:
     task_id = new_id("task")
     return ExecutionRequest(
         run_id=new_id("run"),
@@ -206,7 +204,7 @@ def test_read_only_remote_workspace_detects_worker_side_modification(tmp_path: P
             target = worker_root / workspace.id / snapshot.id / "src" / "input.txt"
             target.chmod(0o600)
             target.write_bytes(b"unauthorized change")
-            with pytest.raises(Exception, match="read-only remote Workspace was modified"):
+            with pytest.raises(RegistryError, match="read-only remote Workspace was modified"):
                 await materializer.collect_result(receipt)
         finally:
             endpoint_task.cancel()
