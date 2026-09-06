@@ -36,6 +36,8 @@ class CoordinatorRepository(Protocol):
         step: Step,
         record: StepCoordinationRecord,
         expected_revision: int,
+        claim: CoordinatorClaim | None = None,
+        now: datetime | None = None,
     ) -> StepCoordinationRecord: ...
 
     def acquire_claim(
@@ -124,10 +126,23 @@ class InMemoryCoordinatorRepository:
         step: Step,
         record: StepCoordinationRecord,
         expected_revision: int,
+        claim: CoordinatorClaim | None = None,
+        now: datetime | None = None,
     ) -> StepCoordinationRecord:
         if step.id != record.step_id or step.plan_id != record.plan_id:
             raise ValueError("canonical Step and coordination record identity do not match")
+        commit_time = now or datetime.now(UTC)
+        if commit_time.tzinfo is None:
+            raise ValueError("coordinator commit time must be timezone-aware")
         with self._lock:
+            if claim is not None:
+                current_claim = self._claims.get(step.id)
+                if current_claim != claim or current_claim.expires_at <= commit_time:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "stale or expired coordinator claim",
+                        details={"step_id": step.id, "fence": claim.fence},
+                    )
             current = self._records.get(step.id)
             if current is None:
                 raise ContractError(ErrorCode.NOT_FOUND, f"coordination Step {step.id} not found")
@@ -143,8 +158,7 @@ class InMemoryCoordinatorRepository:
                 )
             plan_state = self._plans[step.plan_id]
             steps = tuple(step if item.id == step.id else item for item in plan_state.steps)
-            now = datetime.now(UTC)
-            saved = replace(record, revision=current.revision + 1, updated_at=now)
+            saved = replace(record, revision=current.revision + 1, updated_at=commit_time)
             self._records[step.id] = saved
             self._plans[step.plan_id] = replace(
                 plan_state,
