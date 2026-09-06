@@ -98,7 +98,9 @@ class EnduranceBenchmarkSpec:
             raise ValueError("read/write weights must not be negative")
         if self.scenario == "idle":
             if self.max_operations != 0 or self.seed_tasks != 0 or self.warmup_operations != 0:
-                raise ValueError("idle benchmark cannot seed, warm up or execute workload operations")
+                raise ValueError(
+                    "idle benchmark cannot seed, warm up or execute workload operations"
+                )
             if self.read_weight != 0 or self.write_weight != 0:
                 raise ValueError("idle benchmark must use zero read/write weights")
         else:
@@ -698,9 +700,7 @@ class SingleNodeEnduranceHarness:
                 failed_operations=samples.failed,
                 read_operations=samples.read_operations,
                 write_operations=samples.write_operations,
-                window_operation_latency=LatencyDistribution.from_seconds(
-                    samples.window_operation
-                ),
+                window_operation_latency=LatencyDistribution.from_seconds(samples.window_operation),
             )
         )
         samples.window_operation.clear()
