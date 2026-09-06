@@ -23,17 +23,20 @@ jobs:
             src/ai_multi_agent_platform/benchmarking \
             tests/test_issue_440_benchmarking.py \
             tests/test_issue_440_sweep.py \
-            tests/test_issue_440_workloads.py
+            tests/test_issue_440_workloads.py \
+            tests/test_issue_440_endurance.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking \
             tests/test_issue_440_benchmarking.py \
             tests/test_issue_440_sweep.py \
-            tests/test_issue_440_workloads.py
+            tests/test_issue_440_workloads.py \
+            tests/test_issue_440_endurance.py
           mypy src/ai_multi_agent_platform/benchmarking
           pytest \
             tests/test_issue_440_benchmarking.py \
             tests/test_issue_440_sweep.py \
-            tests/test_issue_440_workloads.py
+            tests/test_issue_440_workloads.py \
+            tests/test_issue_440_endurance.py
       - name: Run deterministic single-node performance smoke
         run: |
           mkdir -p artifacts/benchmarks
@@ -66,6 +69,25 @@ jobs:
               --platform-commit "$GITHUB_SHA" \
               --output "artifacts/benchmarks/pr-workloads/${scenario}.json"
           done
+      - name: Run tiny idle and soak profiles
+        run: |
+          mkdir -p artifacts/benchmarks/pr-endurance
+          platform-benchmark single-node-endurance \
+            --scenario idle \
+            --duration-seconds 0.05 \
+            --sample-interval-seconds 0.02 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-endurance/idle.json
+          platform-benchmark single-node-endurance \
+            --scenario soak \
+            --duration-seconds 5 \
+            --sample-interval-seconds 0.01 \
+            --max-operations 4 \
+            --concurrency 2 \
+            --seed-tasks 2 \
+            --warmup-operations 0 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-endurance/soak.json
       - name: Validate benchmark report schemas and correctness
         run: |
           python - <<'PY'
@@ -107,6 +129,18 @@ jobs:
               Draft202012Validator(workload_schema).validate(workload)
               assert workload["benchmark"]["scenario"] == scenario
               assert workload["correctness"]["passed"] is True
+
+          endurance_schema = json.loads(
+              Path("docs/schemas/benchmark-endurance.v1.schema.json").read_text()
+          )
+          for scenario in ("idle", "soak"):
+              endurance = json.loads(
+                  Path(f"artifacts/benchmarks/pr-endurance/{scenario}.json").read_text()
+              )
+              Draft202012Validator(endurance_schema).validate(endurance)
+              assert endurance["benchmark"]["scenario"] == scenario
+              assert endurance["correctness"]["passed"] is True
+              assert len(endurance["snapshots"]) >= 2
           PY
       - name: Upload benchmark evidence
         if: always()
