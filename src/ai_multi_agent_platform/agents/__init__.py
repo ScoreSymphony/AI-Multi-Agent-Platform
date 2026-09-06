@@ -35,6 +35,7 @@ from .models import (
 from .persistence import AGENT_REPOSITORY_SCHEMA_VERSION, JsonAgentRepository
 from .repository import AgentRepository, InMemoryAgentRepository
 from .runtime import AgentOrchestratorMapper, AgentRuntime, ReferenceOrchestratorMapper
+from .routing_profile_runtime import DurableRoutingProfileAgentRuntime
 from .service import AgentService
 
 # AgentService must be initialized before control_plane imports. Real Forge/Hermes
@@ -169,6 +170,7 @@ __all__ = [
     "AgentWorkspaceDefaults",
     "CapabilityConstraint",
     "CapabilityInventory",
+    "DurableRoutingProfileAgentRuntime",
     "InMemoryAgentRepository",
     "InstructionSource",
     "JsonAgentRepository",

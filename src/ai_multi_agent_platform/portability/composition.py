@@ -14,6 +14,9 @@ from ai_multi_agent_platform.control_plane.service import ScopeStore
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.evaluation.service import EvaluationService
 from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.models.routing_profile_repository import (
+    ModelRoutingProfileRepository,
+)
 from ai_multi_agent_platform.security.policy_profiles import (
     AuthorizationPolicyProfileCallContext,
     AuthorizationPolicyProfileRepository,
@@ -37,6 +40,12 @@ from .evaluation_codecs import (
 )
 from .evaluation_import import EvaluationSuiteImportMutationHandler
 from .executor import ImportExecutor, ImportMutationRegistry
+from .model_routing_profile_codecs import (
+    MODEL_ROUTING_PROFILE_RESOURCE_TYPE,
+    register_model_routing_profile_portability_codec,
+    snapshot_model_routing_profile,
+)
+from .model_routing_profile_import import ModelRoutingProfileImportMutationHandler
 from .models import DependencyKind, DependencyRequirement, IdPolicy, PortableResource
 from .planner import ImportPreviewService, ImportSecurityFinding
 from .policy_profile_codecs import (
@@ -49,6 +58,10 @@ from .policy_profile_import import AuthorizationPolicyProfileImportMutationHandl
 from .project_codecs import PROJECT_RESOURCE_TYPE, register_project_portability_codec
 from .project_import import ProjectDependencyAudit, ProjectImportMutationHandler
 from .registry import ResourceSerializerRegistry
+from .routing_profile_reference_codecs import (
+    register_routing_profile_aware_agent_portability_codecs,
+    register_routing_profile_aware_template_portability_codec,
+)
 from .template_codecs import (
     TEMPLATE_RESOURCE_TYPE,
     register_template_portability_codec,
@@ -66,6 +79,7 @@ def build_agent_portability_workflow(
     platform_version: str,
     capabilities: CapabilityRegistry | None = None,
     templates: TemplateRepository | None = None,
+    routing_profiles: ModelRoutingProfileRepository | None = None,
     evaluation: EvaluationService | None = None,
     evaluation_fixture_exists: Callable[[str], bool] | None = None,
     policy_profiles: AuthorizationPolicyProfileRepository | None = None,
@@ -79,20 +93,17 @@ def build_agent_portability_workflow(
 ) -> PortabilityWorkflowService:
     """Compose production-safe portability against supplied canonical stores.
 
-    Agent, Agent Team and Project are always available. Template and EvaluationSuite
-    portability are enabled only when their owning-domain repositories/services are
-    supplied. Authorization-policy portability is enabled only when the canonical #310
-    repository, canonical lifecycle service, explicit import context and explicit
-    destination owner are supplied together. Imported policy profiles are therefore
-    materialized through the normal security domain and never gain assignments or effective
-    authority as an import side effect.
+    Agent, Agent Team and Project are always available. Template, model-routing-profile
+    and EvaluationSuite portability are enabled only when their owning-domain repositories
+    or services are supplied. Authorization-policy portability is enabled only when the
+    canonical #310 repository, lifecycle service, explicit import context and destination
+    owner are supplied together.
 
     Project rollback deliberately fails closed unless the caller supplies a cross-domain
     dependency audit that can prove removal is safe. Resource domains not owned directly by
-    this composition, such as Organization, Team or Node, can expose a synchronous
-    canonical existence view through ``additional_resource_exists``. Without that view,
-    those dependencies remain unavailable and import preview fails closed rather than
-    making optimistic assumptions about target state.
+    this composition can expose a synchronous canonical existence view through
+    ``additional_resource_exists``. Without that view, dependencies remain unavailable and
+    import preview fails closed rather than making optimistic assumptions about target state.
     """
 
     policy_parts = (
@@ -110,14 +121,29 @@ def build_agent_portability_workflow(
         )
 
     serializers = ResourceSerializerRegistry()
-    register_agent_portability_codecs(
-        serializers,
-        agent_id_policy=id_policy,
-        team_id_policy=id_policy,
-    )
+    if routing_profiles is None:
+        register_agent_portability_codecs(
+            serializers,
+            agent_id_policy=id_policy,
+            team_id_policy=id_policy,
+        )
+    else:
+        register_routing_profile_aware_agent_portability_codecs(
+            serializers,
+            agent_id_policy=id_policy,
+            team_id_policy=id_policy,
+        )
     register_project_portability_codec(serializers, id_policy=id_policy)
     if templates is not None:
-        register_template_portability_codec(serializers, id_policy=id_policy)
+        if routing_profiles is None:
+            register_template_portability_codec(serializers, id_policy=id_policy)
+        else:
+            register_routing_profile_aware_template_portability_codec(
+                serializers,
+                id_policy=id_policy,
+            )
+    if routing_profiles is not None:
+        register_model_routing_profile_portability_codec(serializers, id_policy=id_policy)
     if evaluation is not None:
         register_evaluation_suite_portability_codec(serializers)
     if policy_profiles is not None:
@@ -146,6 +172,12 @@ def build_agent_portability_workflow(
             return snapshot_template(templates, resource_id)
 
         export_sources.register(TEMPLATE_RESOURCE_TYPE, load_template)
+    if routing_profiles is not None:
+
+        async def load_routing_profile(resource_id: str) -> object:
+            return snapshot_model_routing_profile(routing_profiles, resource_id)
+
+        export_sources.register(MODEL_ROUTING_PROFILE_RESOURCE_TYPE, load_routing_profile)
     if evaluation is not None:
 
         async def load_evaluation_suite(resource_id: str) -> object:
@@ -173,6 +205,8 @@ def build_agent_portability_workflow(
     )
     if templates is not None:
         mutations.register(TemplateImportMutationHandler(templates))
+    if routing_profiles is not None:
+        mutations.register(ModelRoutingProfileImportMutationHandler(routing_profiles))
     if evaluation is not None:
         mutations.register(EvaluationSuiteImportMutationHandler(evaluation))
     if (
@@ -197,6 +231,8 @@ def build_agent_portability_workflow(
             return _canonical_exists(lambda: agents.get_team(resource_id))
         if resource_type == TEMPLATE_RESOURCE_TYPE and templates is not None:
             return _canonical_exists(lambda: templates.get_template(resource_id))
+        if resource_type == MODEL_ROUTING_PROFILE_RESOURCE_TYPE and routing_profiles is not None:
+            return _canonical_exists(lambda: routing_profiles.get_definition(resource_id))
         if (
             resource_type == AUTHORIZATION_POLICY_PROFILE_RESOURCE_TYPE
             and policy_profiles is not None
