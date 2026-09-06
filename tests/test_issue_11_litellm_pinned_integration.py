@@ -51,7 +51,7 @@ def test_pinned_litellm_library_executes_through_platform_adapter() -> None:
     response = asyncio.run(provider.generate(request))
 
     assert response.model_ref == "model-ci"
-    assert response.content == "pinned-litellm-integration-ok"
+    assert response.text == "pinned-litellm-integration-ok"
     assert any(
         item.namespace == "litellm" and item.values.get("litellm_version") == PINNED_LITELLM_VERSION
         for item in response.adapter_metadata
