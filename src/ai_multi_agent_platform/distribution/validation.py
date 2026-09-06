@@ -76,18 +76,23 @@ def validate_item(
         findings.append(
             _error(
                 "permission_escalation",
-                "requested permissions are not grantable: " + ", ".join(sorted(missing_permissions)),
+                "requested permissions are not grantable: "
+                + ", ".join(sorted(missing_permissions)),
             )
         )
     _require_set(item.required_capabilities, context.available_capabilities, "capability", findings)
     _require_set(frozenset(item.required_plugins), context.installed_plugins, "plugin", findings)
-    _require_set(frozenset(item.required_connectors), context.installed_connectors, "connector", findings)
+    _require_set(
+        frozenset(item.required_connectors), context.installed_connectors, "connector", findings
+    )
     _require_set(frozenset(item.required_models), context.available_models, "model", findings)
 
     current = installed.get(item.item_id)
     if current is not None:
         if current.license is not None and current.license != item.license:
-            findings.append(_warning("license_changed", "license metadata changed since installation"))
+            findings.append(
+                _warning("license_changed", "license metadata changed since installation")
+            )
         if current.provenance is not None and current.provenance != item.provenance:
             findings.append(_warning("provenance_changed", "provenance metadata changed"))
         if current.pinned_version is not None and current.pinned_version != item.version:
@@ -109,7 +114,9 @@ def _require_set(
 ) -> None:
     missing = required - available
     if missing:
-        findings.append(_error(f"missing_{label}", f"missing {label}: " + ", ".join(sorted(missing))))
+        findings.append(
+            _error(f"missing_{label}", f"missing {label}: " + ", ".join(sorted(missing)))
+        )
 
 
 def _error(code: str, message: str) -> ValidationFinding:

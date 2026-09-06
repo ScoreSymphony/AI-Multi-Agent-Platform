@@ -80,7 +80,9 @@ def test_activation_requires_explicit_authorization() -> None:
 def test_plugin_and_template_use_separate_owner_routes() -> None:
     plugin = _item(RegistryItemType.PLUGIN)
     plugin_service, plugin_router = _service(plugin)
-    plugin_preview = plugin_service.preview(plugin.item_id, plugin.version, ValidationContext("0.0.1"))
+    plugin_preview = plugin_service.preview(
+        plugin.item_id, plugin.version, ValidationContext("0.0.1")
+    )
     plugin_service.activate(plugin_preview, ValidationContext("0.0.1"), authorized=True)
     assert plugin_router.calls == [("plugin", plugin.item_id)]
 
