@@ -319,9 +319,17 @@ class CoordinationContentionHarness:
             for projection in projections
             for item in projection.steps
         )
-        task_states = tuple(await kernel.get_task(workflow.plan.task_id) for workflow in workflows)
+        task_states: tuple[TaskState, ...] = tuple(
+            await asyncio.gather(
+                *(kernel.get_task(workflow.plan.task_id) for workflow in workflows)
+            )
+        )
         succeeded_tasks = sum(state.status is TaskStatus.SUCCEEDED for state in task_states)
-        histories = tuple(await kernel.history(workflow.plan.task_id) for workflow in workflows)
+        histories: tuple[tuple[Event, ...], ...] = tuple(
+            await asyncio.gather(
+                *(kernel.history(workflow.plan.task_id) for workflow in workflows)
+            )
+        )
         run_ids = tuple(run_id for history in histories for run_id in _history_run_ids(history))
         run_created_events = len(run_ids)
         expected_contention = spec.total_steps if spec.scenario == "claim-contention" else 0
