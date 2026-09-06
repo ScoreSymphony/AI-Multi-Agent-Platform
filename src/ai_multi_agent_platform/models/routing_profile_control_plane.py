@@ -87,11 +87,9 @@ class ModelRoutingProfileResourceService:
             ),
             actor_type=context.actor.actor_type,
         )
-        return _profile_resource(
-            definition,
-            revision,
-            exact=resource_id != definition.profile_id,
-        )
+        if resource_id != definition.profile_id:
+            return _exact_revision_resource(revision)
+        return _profile_resource(definition, revision)
 
 
 class ModelRoutingProfileCommandHandlers:
@@ -317,11 +315,9 @@ def _policy(value: JsonValue | None) -> ModelRoutingProfilePolicy:
 def _profile_resource(
     definition: ModelRoutingProfileDefinition,
     revision: ModelRoutingProfileRevision,
-    *,
-    exact: bool = False,
 ) -> dict[str, JsonValue]:
     return {
-        "id": revision.ref.canonical_ref if exact else definition.profile_id,
+        "id": definition.profile_id,
         "profile_id": definition.profile_id,
         "exact_ref": revision.ref.canonical_ref,
         "current_revision": definition.current_revision,
@@ -331,18 +327,36 @@ def _profile_resource(
         "created_at": definition.created_at.isoformat(),
         "updated_at": definition.updated_at.isoformat(),
         "schema_version": definition.schema_version,
-        "revision": {
-            "revision": revision.revision,
-            "name": revision.name,
-            "description": revision.description,
-            "created_at": revision.created_at.isoformat(),
-            "schema_version": revision.schema_version,
-            "provenance": _provenance_json(revision.provenance),
-            "policy": {
-                "requirements": _requirements_json(revision.policy.requirements),
-                "preferred_model_ids": list(revision.policy.preferred_model_ids),
-                "fallback": revision.policy.fallback.value,
-            },
+        "revision": _revision_payload(revision),
+    }
+
+
+def _exact_revision_resource(revision: ModelRoutingProfileRevision) -> dict[str, JsonValue]:
+    """Serialize an exact ref only from immutable revision-owned state."""
+
+    return {
+        "id": revision.ref.canonical_ref,
+        "profile_id": revision.profile_id,
+        "exact_ref": revision.ref.canonical_ref,
+        "owner_ref": {"type": revision.owner_ref.type, "id": revision.owner_ref.id},
+        "project_id": revision.project_id,
+        "schema_version": revision.schema_version,
+        "revision": _revision_payload(revision),
+    }
+
+
+def _revision_payload(revision: ModelRoutingProfileRevision) -> dict[str, JsonValue]:
+    return {
+        "revision": revision.revision,
+        "name": revision.name,
+        "description": revision.description,
+        "created_at": revision.created_at.isoformat(),
+        "schema_version": revision.schema_version,
+        "provenance": _provenance_json(revision.provenance),
+        "policy": {
+            "requirements": _requirements_json(revision.policy.requirements),
+            "preferred_model_ids": list(revision.policy.preferred_model_ids),
+            "fallback": revision.policy.fallback.value,
         },
     }
 
