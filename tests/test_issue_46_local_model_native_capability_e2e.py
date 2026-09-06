@@ -23,16 +23,27 @@ from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     encode_agent_execution_binding,
 )
-from ai_multi_agent_platform.capabilities import ECHO_CAPABILITY_ID, NativeEchoProvider
+from ai_multi_agent_platform.capabilities import ECHO_CAPABILITY_ID
 from ai_multi_agent_platform.contracts import JsonValue
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
-from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus, validate_id
+from ai_multi_agent_platform.distributed import (
+    DistributedExecutorEchoProvider,
+    DistributedRegistry,
+    DistributedRuntime,
+    ExecutorWorker,
+    NodeRecord,
+    RegistrationRequest,
+    WorkerRecord,
+    tool_lineage,
+)
+from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus, new_id, validate_id
+from ai_multi_agent_platform.execution import ReferenceExecutor
 from ai_multi_agent_platform.models import RoutingRequirements
 from ai_multi_agent_platform.onboarding import FIRST_RUN_RESOURCE_ID
 
 _PASSWORD = "correct horse battery staple"
-_ECHO_MESSAGE = "local model -> native capability"
+_ECHO_MESSAGE = "local model -> distributed capability -> executor -> worker"
 
 
 class _LocalToolCallingModelHandler(BaseHTTPRequestHandler):
@@ -167,7 +178,9 @@ def _agent_profile() -> AgentProfile:
     )
 
 
-def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_path: Path) -> None:
+def test_authenticated_local_model_executes_distributed_capability_end_to_end(
+    tmp_path: Path,
+) -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 0), _LocalToolCallingModelHandler)
     _LocalToolCallingModelHandler.chat_payloads.clear()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -175,16 +188,49 @@ def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_pat
 
     async def scenario() -> None:
         host, port = server.server_address
+        distributed = DistributedRuntime(DistributedRegistry())
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False),
             onboarding_model_adapters=(OpenAICompatibleOnboardingAdapter(),),
+            distributed_runtime=distributed,
         )
-        await deployment.capabilities.register_provider(NativeEchoProvider())
+
+        node_id = new_id("node")
+        worker_id = new_id("worker")
+        distributed.register(
+            RegistrationRequest(
+                node=NodeRecord(node_id=node_id, display_name="issue-46-local-worker-node"),
+                workers=(
+                    WorkerRecord(
+                        worker_id=worker_id,
+                        node_id=node_id,
+                        supported_executors=("reference",),
+                        capability_refs=(ECHO_CAPABILITY_ID,),
+                    ),
+                ),
+            )
+        )
+        executor_root = tmp_path / "executor"
+        (executor_root / "reference").mkdir(parents=True)
+        distributed.attach_worker(
+            ExecutorWorker(
+                worker_id,
+                ReferenceExecutor(executor_root),
+                workspace="reference",
+            )
+        )
+        await deployment.capabilities.register_provider(
+            DistributedExecutorEchoProvider(
+                distributed,
+                worker_id=worker_id,
+                workspace_bindings=deployment.run_workspace_bindings,
+            )
+        )
 
         admin = deployment.bootstrap_admin("admin", _PASSWORD)
         credential = deployment.authentication.create_personal_access_token(
             admin.user_id,
-            purpose="issue-46-local-model-native-capability",
+            purpose="issue-46-local-model-distributed-capability",
         )
         token = credential.secret
 
@@ -203,7 +249,7 @@ def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_pat
                 method="POST",
                 path="/api/v1/projects",
                 headers=_headers(token, key="issue-46:d:project"),
-                body={"name": "Local model capability project"},
+                body={"name": "Local model distributed capability project"},
             )
         )
         assert project_response.status == 201, project_response.body
@@ -239,8 +285,8 @@ def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_pat
                 path="/api/v1/tasks",
                 headers=_headers(token, key="issue-46:d:task"),
                 body={
-                    "title": "Local model native capability Task",
-                    "objective": "Echo one message through the native capability.",
+                    "title": "Local model distributed capability Task",
+                    "objective": "Echo one message through Capability, Executor and Worker.",
                     "project_id": project_id,
                 },
             )
@@ -326,9 +372,32 @@ def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_pat
         assert capability_result["model_tool_call_id"] == "call-local-echo"
         assert capability_result["capability_id"] == ECHO_CAPABILITY_ID
         assert capability_result["capability_version"] == "1.0"
-        assert capability_result["provider_id"] == "native.reference"
+        assert capability_result["provider_id"] == "distributed.executor.reference"
         assert capability_result["status"] == "succeeded"
         assert capability_result["output"] == {"message": _ECHO_MESSAGE}
+        evidence_refs = capability_result["evidence_refs"]
+        assert isinstance(evidence_refs, tuple | list)
+        assert len(evidence_refs) == 1
+        worker_job_id = evidence_refs[0]
+        assert isinstance(worker_job_id, str)
+        validate_id(worker_job_id, "worker_job")
+
+        worker_record = distributed.get_record(worker_job_id)
+        lineage = tool_lineage(worker_record.job)
+        assert lineage.worker_job_id == worker_job_id
+        assert lineage.root_run_id == run_id
+        assert lineage.tool_invocation_id == tool_invocation_id
+        assert lineage.correlation_id == task_id
+        assert lineage.task_id == task_id
+        assert worker_record.worker_id == worker_id
+        assert worker_record.job.workspace_ref == workspace_id
+        assert worker_record.job.snapshot_ref == workspace_snapshot_id
+        assert worker_record.job.execution.run_id == run_id
+        assert worker_record.job.execution.subject_id == task_id
+        assert worker_record.handle is not None
+        assert worker_record.handle.run_id == run_id
+        registered_worker = distributed.registry.get_worker(worker_id)
+        assert registered_worker.node_id == node_id
 
         agent_run = deployment.agents.repository.get_agent_run(agent_run_id)
         assert agent_run.status is AgentRunStatus.SUCCEEDED
