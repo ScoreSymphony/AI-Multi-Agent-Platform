@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.control_plane.extensions import CommandHandler
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .models import PlanCoordinationProjection, StepCoordinationProjection
@@ -48,7 +49,7 @@ class CoordinatorCommandHandlers:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
-        del payload
+        del context, payload
         return _projection_resource(await self._coordinator.reconcile_plan(resource_ref))
 
     async def cancel(
@@ -74,7 +75,9 @@ def coordination_resource_services(
     return {"plan-coordination": CoordinatorPlanResourceService(coordinator)}
 
 
-def coordination_command_handlers(coordinator: DurablePlanStepCoordinator) -> dict[str, object]:
+def coordination_command_handlers(
+    coordinator: DurablePlanStepCoordinator,
+) -> dict[str, CommandHandler]:
     handlers = CoordinatorCommandHandlers(coordinator)
     return {
         "coordination.reconcile": handlers.reconcile,
