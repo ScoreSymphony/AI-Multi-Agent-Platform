@@ -36,6 +36,7 @@ from ai_multi_agent_platform.portability import (
     PortableResource,
     ResourceSerializerRegistry,
     build_package,
+    seal_resource,
 )
 from ai_multi_agent_platform.portability.agent_codecs import snapshot_agent
 from ai_multi_agent_platform.portability.agent_import import AgentImportMutationHandler
@@ -136,7 +137,7 @@ def test_portable_agent_import_rejects_malformed_canonical_reference_before_muta
 def test_portable_agent_import_rejects_undeclared_canonical_dependency_before_mutation() -> None:
     routing_ref = ModelRoutingProfileRef(new_model_routing_profile_id(), 1).canonical_ref
     _, serializers, resource = _serialized_agent(routing_ref)
-    resource = replace(resource, dependencies=())
+    resource = seal_resource(replace(resource, dependencies=(), checksum=""))
     snapshot = serializers.deserialize(resource, ImportContext())
     target = InMemoryAgentRepository()
 
@@ -170,13 +171,16 @@ def test_portable_agent_import_checks_canonical_dependencies_across_immutable_hi
         "agent",
         snapshot_agent(source_agents.repository, first.agent_id),
     )
-    resource = replace(
-        resource,
-        dependencies=tuple(
-            dependency
-            for dependency in resource.dependencies
-            if second_profile_id not in dependency.identifier
-        ),
+    resource = seal_resource(
+        replace(
+            resource,
+            dependencies=tuple(
+                dependency
+                for dependency in resource.dependencies
+                if second_profile_id not in dependency.identifier
+            ),
+            checksum="",
+        )
     )
     snapshot = serializers.deserialize(resource, ImportContext())
     target = InMemoryAgentRepository()
@@ -242,7 +246,6 @@ def test_portable_agent_assignment_uses_imported_target_project_scope(tmp_path) 
     assert call.context.owner_id == OWNER.id
 
 
-@pytest.mark.skip(reason="diagnostic isolation for package rollback regression")
 def test_assignment_denial_rolls_back_earlier_in_package_routing_profile_import(
     tmp_path,
 ) -> None:
