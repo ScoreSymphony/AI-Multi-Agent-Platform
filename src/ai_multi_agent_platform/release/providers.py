@@ -97,7 +97,11 @@ def discover_git_heads(
         except UpdateDiscoveryError as exc:
             errors[entry.component] = str(exc)
             continue
-        revision = entry.revision if _revision_contains(entry.revision, remote_revision) else remote_revision
+        revision = (
+            entry.revision
+            if _revision_contains(entry.revision, remote_revision)
+            else remote_revision
+        )
         classifications = () if revision == entry.revision else (UpdateClassification.UNKNOWN,)
         observations.append(
             ObservedUpstream(
