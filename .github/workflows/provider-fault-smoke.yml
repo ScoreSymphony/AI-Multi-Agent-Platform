@@ -74,6 +74,14 @@ jobs:
               "tool-timeout": {"timeout": 2},
               "tool-cancelled": {"cancelled": 2},
           }
+          expected_retryable_errors = {
+              "model-latency": {},
+              "model-unavailable": {"unavailable": 2},
+              "model-cancelled": {},
+              "tool-unavailable": {"unavailable": 2},
+              "tool-timeout": {"timeout": 2},
+              "tool-cancelled": {"cancelled": 2},
+          }
           for scenario, errors in expected_errors.items():
               report = json.loads(
                   Path(f"artifacts/benchmarks/pr-provider-faults/{scenario}.json").read_text()
@@ -84,7 +92,7 @@ jobs:
               assert report["correctness"]["recovered"] is True
               assert report["correctness"]["automatic_retry_attempts"] == 0
               assert report["error_counts"] == errors
-              assert report["retryable_error_counts"] == errors
+              assert report["retryable_error_counts"] == expected_retryable_errors[scenario]
               for phase in ("baseline", "fault", "recovery"):
                   assert report["phase_latency"][phase]["count"] == 2
                   assert report["provider_service_latency"][phase]["count"] == 2
