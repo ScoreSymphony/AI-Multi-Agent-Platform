@@ -153,7 +153,7 @@ export class RegistryClient {
     );
   }
 
-  preview(
+  async preview(
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
@@ -166,7 +166,7 @@ export class RegistryClient {
     );
   }
 
-  activate(
+  async activate(
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
@@ -179,7 +179,7 @@ export class RegistryClient {
     );
   }
 
-  pin(
+  async pin(
     itemId: string,
     version: string,
     idempotencyKey: string = crypto.randomUUID(),
@@ -192,7 +192,7 @@ export class RegistryClient {
     );
   }
 
-  unpin(
+  async unpin(
     itemId: string,
     idempotencyKey: string = crypto.randomUUID(),
   ): Promise<RegistryInstallation> {
