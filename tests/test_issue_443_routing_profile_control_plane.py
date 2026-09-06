@@ -6,7 +6,11 @@ from pathlib import Path
 from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
-from ai_multi_agent_platform.models import ModelRoutingProfileAssignmentGate
+from ai_multi_agent_platform.domain import OwnerRef
+from ai_multi_agent_platform.models import (
+    ModelRoutingProfileAssignmentGate,
+    ModelRoutingProfilePolicy,
+)
 
 _PASSWORD = "correct horse battery staple"
 
@@ -174,34 +178,60 @@ def test_real_local_authorization_accepts_management_and_assignment_vocabulary(
             SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
         )
         admin = deployment.bootstrap_admin("admin", _PASSWORD)
+        owner = OwnerRef(type="user", id=admin.user_id)
         operation = OperationContext(
             correlation_id="issue-443-direct-authorization",
-            owner_type="user",
-            owner_id=admin.user_id,
+            owner_type=owner.type,
+            owner_id=owner.id,
         )
         profile = await deployment.routing_profiles.create_profile(
             name="Direct authorization vocabulary",
-            policy=deployment.routing_profile_repository.list_definitions()
-            and deployment.routing_profile_repository.list_revisions("unused")[0].policy,
-            owner_ref=deployment.scopes.create_project(
-                key="issue-443-owner-source",
-                name="Owner source",
-                owner_type="user",
-                owner_id=admin.user_id,
-            ).owner_ref,
+            policy=ModelRoutingProfilePolicy(),
+            owner_ref=owner,
             principal_ref=admin.user_id,
             context=operation,
         )
+        versioned = await deployment.routing_profiles.version_profile(
+            profile.profile_id,
+            name="Direct authorization vocabulary v2",
+            policy=ModelRoutingProfilePolicy(),
+            principal_ref=admin.user_id,
+            context=operation,
+            expected_revision=1,
+        )
+        await deployment.routing_profiles.get_revision(
+            versioned.ref,
+            principal_ref=admin.user_id,
+            context=operation,
+        )
+        await deployment.routing_profiles.set_enabled(
+            profile.profile_id,
+            False,
+            principal_ref=admin.user_id,
+            context=operation,
+        )
+        await deployment.routing_profiles.set_enabled(
+            profile.profile_id,
+            True,
+            principal_ref=admin.user_id,
+            context=operation,
+        )
+        visible = await deployment.routing_profiles.list_profiles(
+            principal_ref=admin.user_id,
+            context=operation,
+        )
+        assert any(item.profile_id == profile.profile_id for item in visible)
+
         gate = ModelRoutingProfileAssignmentGate(
             deployment.routing_profile_repository,
             authorization=deployment.authorization,
         )
         assigned = await gate.authorize(
-            profile.ref,
+            versioned.ref,
             principal_ref=admin.user_id,
             context=operation,
             actor_type="human",
         )
-        assert assigned.ref == profile.ref
+        assert assigned.ref == versioned.ref
 
     asyncio.run(scenario())
