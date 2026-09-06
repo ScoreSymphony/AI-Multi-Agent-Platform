@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ai_multi_agent_platform.agents import AgentRevisionRef, AgentService, AgentTeamRevisionRef
+from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, new_id
@@ -205,7 +205,10 @@ class WorkflowTemplateExporter:
             cleanup_failures: list[JsonValue] = [dict(failure) for failure in failures]
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
-                "Workflow Template export failed and partial Templates could not be fully compensated",
+                (
+                    "Workflow Template export failed and partial Templates could not be "
+                    "fully compensated"
+                ),
                 details={
                     "export_error_type": type(export_error).__name__,
                     "export_error": str(export_error),
@@ -285,7 +288,10 @@ def _requirements(source: WorkflowRevision) -> TemplateRequirements:
             ):
                 raise ContractError(
                     ErrorCode.UNSUPPORTED_CAPABILITY,
-                    "Workflow Template export cannot losslessly collapse differing capability requirements",
+                    (
+                        "Workflow Template export cannot losslessly collapse differing "
+                        "capability requirements"
+                    ),
                     details={"capability_id": requirement.capability_id},
                 )
             capabilities[requirement.capability_id] = requirement
