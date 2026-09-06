@@ -15,6 +15,7 @@
     "upstreams",
     "compatibility",
     "gates",
+    "artifact_hashes",
     "sbom_ref",
     "provenance_ref"
   ],
@@ -63,6 +64,7 @@
       "type": "array",
       "items": {"$ref": "#/$defs/gate"}
     },
+    "artifact_hashes": {"$ref": "#/$defs/artifactHashMap"},
     "sbom_ref": {"type": "string", "minLength": 1},
     "provenance_ref": {"type": "string", "minLength": 1}
   },
@@ -70,6 +72,11 @@
     "stringMap": {
       "type": "object",
       "additionalProperties": {"type": "string"}
+    },
+    "artifactHashMap": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"type": "string", "minLength": 1}
     },
     "upstream": {
       "type": "object",
