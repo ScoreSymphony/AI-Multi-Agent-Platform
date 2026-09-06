@@ -30,6 +30,7 @@ class ValidationContext:
     installed_connectors: frozenset[str] = frozenset()
     available_models: frozenset[str] = frozenset()
     grantable_permissions: frozenset[str] = frozenset()
+    signature_valid: bool | None = None
 
 
 def validate_item(
@@ -49,12 +50,15 @@ def validate_item(
         if actual != item.integrity.sha256:
             findings.append(_error("checksum_mismatch", "artifact checksum validation failed"))
     if item.integrity.signature is not None:
-        findings.append(
-            _warning(
-                "signature_unverified",
-                "signature metadata is present but requires a configured signature verifier",
+        if context.signature_valid is False:
+            findings.append(_error("signature_failure", "artifact signature validation failed"))
+        elif context.signature_valid is None:
+            findings.append(
+                _warning(
+                    "signature_unverified",
+                    "signature metadata is present but no verification result was supplied",
+                )
             )
-        )
 
     installed = {record.item_id: record for record in context.installed_items}
     for dependency in item.dependencies:
