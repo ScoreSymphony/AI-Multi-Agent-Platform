@@ -1,7 +1,13 @@
 """Canonical capability registry and invocation pipeline."""
 
+from .canonical_binding import (
+    bind_canonical_capability_invocation,
+    canonical_tool_id,
+    canonical_tool_invocation_id,
+)
 from .invocation import (
     ApprovalHook,
+    CanonicalInvocationBindingHook,
     CapabilityInvoker,
     GovernanceBindingHook,
     InvocationObserver,
@@ -30,6 +36,7 @@ from .types import (
 
 __all__ = [
     "ApprovalHook",
+    "CanonicalInvocationBindingHook",
     "CapabilityCompatibilityRequest",
     "CapabilityDiscoveryPolicyHook",
     "CapabilityDiscoveryRequest",
@@ -54,4 +61,7 @@ __all__ = [
     "PolicyHook",
     "SafetyClassification",
     "SideEffectClassification",
+    "bind_canonical_capability_invocation",
+    "canonical_tool_id",
+    "canonical_tool_invocation_id",
 ]
