@@ -65,7 +65,17 @@ def test_controlled_failure_retry_preserves_canonical_history_and_retry_telemetr
         )
         assert retry.run_id != first.run_id
         assert retry.attempt == 2
-        assert retry.status is RunStatus.RUNNING
+        assert retry.status is RunStatus.QUEUED
+        assert (await kernel.get_task(task_id)).status is TaskStatus.READY
+
+        started_retry = await kernel.start_run(
+            idempotency_key="issue-46-failure-retry-start",
+            task_id=task_id,
+            run_id=retry.run_id,
+            actor_ref="user:issue-46",
+        )
+        assert started_retry.status is RunStatus.RUNNING
+        assert started_retry.attempt == 2
         assert (await kernel.get_task(task_id)).status is TaskStatus.RUNNING
 
         history = await kernel.history(task_id)
