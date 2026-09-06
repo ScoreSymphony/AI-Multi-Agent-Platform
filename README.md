@@ -25,7 +25,7 @@ The dependency-driven implementation order, current parallel work lanes and conv
 
 Material implementation choices and architecture refinements are recorded through [`docs/adr/`](docs/adr/README.md). Implementations must not silently contradict the normative product or architecture documents.
 
-The platform-owned kernel under `src/ai_multi_agent_platform/kernel/` is the authoritative source for externally visible Task/Run lifecycle state. Orchestrators and executors integrate through contracts and must not become implicit lifecycle owners. Durable task-bound Plan/Step progression is likewise being kept platform-owned rather than delegated to an external workflow engine.
+The platform-owned kernel under `src/ai_multi_agent_platform/kernel/` is the authoritative source for externally visible Task/Run lifecycle state. Orchestrators and executors integrate through contracts and must not become implicit lifecycle owners. A platform-owned durable Plan/Step coordinator core is now implemented for restart-safe task-bound workflow progression; #384 remains open for its remaining distributed, operational and acceptance hardening rather than because lifecycle ownership is undecided.
 
 ## Development
 
@@ -33,7 +33,7 @@ A fresh-clone setup and the validation commands are documented in [`docs/DEVELOP
 
 Repository-level integration boundaries are reserved under `adapters/`, `workers/` and `frontend/`. Concrete integrations must implement platform-owned contracts rather than redefine canonical domain types.
 
-The repository already contains dedicated validation for the canonical single-node path, optional adapter compatibility, frontend/browser behavior, deterministic evaluation, security scanning and a reusable prototype-acceptance gate. See [`docs/PROTOTYPE_ACCEPTANCE.md`](docs/PROTOTYPE_ACCEPTANCE.md) for the single-node acceptance profiles.
+The repository contains dedicated validation for the canonical single-node path, optional adapter compatibility, frontend/browser behavior, deterministic evaluation, security scanning, performance/load evidence and reusable prototype/platform conformance gates. See [`docs/PROTOTYPE_ACCEPTANCE.md`](docs/PROTOTYPE_ACCEPTANCE.md) for the single-node prototype profiles and [`docs/PLATFORM_CONFORMANCE.md`](docs/PLATFORM_CONFORMANCE.md) for the wider conformance framework.
 
 ## Licensing and upstream components
 
@@ -45,13 +45,13 @@ The policy is exercised against multiple integration models in [`docs/UPSTREAM_P
 
 ## Status
 
-> Status snapshot: 2026-09-06, after PR #493
+> Status snapshot: 2026-09-06, after PR #494
 
 The project is now in late integration, hardening and acceptance work rather than foundational platform construction. The usable single-node prototype acceptance gate (#252) is complete, and `main` contains the canonical kernel and Control Plane, reference execution, model routing, capabilities/tools, Agents and Agent Teams, authentication and authorization/approvals, Workspaces/files, Memory and Knowledge, Search, Automations, Notifications, Organizations/Teams/Memberships, Chat, Browser and Terminal entry points, reusable workflow definitions, Verification/Review, accounting, durable Connector state, portable import/export, Repository/Git integration, optional HA/failover support, extensive Web/CLI coverage and concrete distributed Workspace/Worker paths.
 
 The latest hardening wave also completed the routing-profile follow-ups #443–#447, Node/Worker timestamp semantics (#414), durable Connector persistence (#416) and the remaining accounting integration work (#171). Significant implementation has landed for durable task-bound Plan/Step coordination (#384), distributed deployment (#240), Templates (#78), the optional Registry (#81), performance/load evidence (#440), release/update mechanics (#42) and platform conformance (#46), but those issues remain open until their remaining acceptance or operationalization work is finished.
 
-There are currently **9 open issues out of 98 repository issues** (89 closed; about 90.8% closed by issue count), and **no open pull requests**:
+At this snapshot there are **9 open issues out of 98 repository issues** (89 closed; about 90.8% closed by issue count):
 
 `#42, #46, #78, #81, #240, #384, #421, #439, #440`
 
