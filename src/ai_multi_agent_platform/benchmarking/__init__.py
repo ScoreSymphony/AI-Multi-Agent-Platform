@@ -1,5 +1,12 @@
 """Performance, load and scalability benchmark contracts and harnesses."""
 
+from .api_pressure import (
+    API_PRESSURE_REPORT_SCHEMA_VERSION,
+    APIPressureBenchmarkReport,
+    APIPressureBenchmarkSpec,
+    APIPressureCorrectnessSummary,
+    SingleNodeAPIPressureHarness,
+)
 from .coordination_contention import (
     COORDINATION_CONTENTION_REPORT_SCHEMA_VERSION,
     CoordinationContentionCorrectnessSummary,
@@ -95,6 +102,7 @@ from .workloads import (
 )
 
 __all__ = [
+    "API_PRESSURE_REPORT_SCHEMA_VERSION",
     "BENCHMARK_REPORT_SCHEMA_VERSION",
     "COORDINATION_CONTENTION_REPORT_SCHEMA_VERSION",
     "COORDINATION_PRESSURE_REPORT_SCHEMA_VERSION",
@@ -107,6 +115,9 @@ __all__ = [
     "SWEEP_REPORT_SCHEMA_VERSION",
     "TRANSPORT_FAULT_REPORT_SCHEMA_VERSION",
     "WORKLOAD_REPORT_SCHEMA_VERSION",
+    "APIPressureBenchmarkReport",
+    "APIPressureBenchmarkSpec",
+    "APIPressureCorrectnessSummary",
     "BaselineComparison",
     "BenchmarkReport",
     "BenchmarkSpec",
@@ -141,6 +152,7 @@ __all__ = [
     "RegressionThresholds",
     "ResourceMetrics",
     "ResourceSnapshot",
+    "SingleNodeAPIPressureHarness",
     "SingleNodeBenchmarkHarness",
     "SingleNodeEnduranceHarness",
     "SingleNodeFaultUnderLoadHarness",

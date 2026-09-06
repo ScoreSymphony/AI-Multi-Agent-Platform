@@ -30,6 +30,7 @@ platform-provider-fault = "ai_multi_agent_platform.benchmarking.provider_fault_c
 platform-plan-step = "ai_multi_agent_platform.benchmarking.plan_step_cli:main"
 platform-coordination-pressure = "ai_multi_agent_platform.benchmarking.coordination_pressure_cli:main"
 platform-coordination-contention = "ai_multi_agent_platform.benchmarking.coordination_contention_cli:main"
+platform-api-pressure = "ai_multi_agent_platform.benchmarking.api_pressure_cli:main"
 platform-release = "ai_multi_agent_platform.release.cli:main"
 
 [project.optional-dependencies]
