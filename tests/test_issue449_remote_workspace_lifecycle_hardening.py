@@ -164,8 +164,7 @@ def test_materializing_dispatcher_uses_concrete_remote_materializer_for_full_lif
             assert change.kind is WorkspaceChangeKind.MODIFIED
             assert change.file_id is not None
             assert (
-                await _read_file(files, change.file_id, context)
-                == b"changed by remote execution"
+                await _read_file(files, change.file_id, context) == b"changed by remote execution"
             )
             assert evidence.cleanup is not None
             assert evidence.cleanup.succeeded is True
