@@ -184,12 +184,12 @@ def _validate_upstreams_and_compatibility(
                 )
 
     for record in manifest.compatibility:
-        upstream = upstream_by_name.get(record.component)
-        if upstream is None:
+        matched_upstream = upstream_by_name.get(record.component)
+        if matched_upstream is None:
             blockers.append(
                 f"compatibility record {record.component!r} has no matching upstream provenance"
             )
-        elif record.upstream_revision != upstream.revision:
+        elif record.upstream_revision != matched_upstream.revision:
             blockers.append(
                 f"compatibility record {record.component!r} revision does not match "
                 "the release upstream provenance"
