@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from ai_multi_agent_platform.agents import AgentRevision, AgentRunStatus, AgentRuntime
+from ai_multi_agent_platform.agents import (
+    AgentCapabilityTurn,
+    AgentRevision,
+    AgentRunStatus,
+    AgentRuntime,
+)
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     decode_agent_execution_binding,
@@ -78,12 +83,16 @@ def preflight_first_run_agent(
 
 
 class FirstRunAgentLifecycleBackend(LifecycleBackend):
-    """Route first-run and explicitly bound Agent Tasks through AgentRuntime + ModelRuntime.
+    """Route first-run and explicitly bound Agent Tasks through canonical runtime seams.
 
     The first-run onboarding profile keeps its stricter local/self-hosted requirements.
     The generic Agent execution binding is platform-owned and lets features such as
     Evaluation select an exact Agent/model/capability configuration without introducing a
     second lifecycle implementation. Unmarked Runs are delegated unchanged.
+
+    When an AgentRun pins capabilities, the optional ``AgentCapabilityTurn`` composes the
+    existing rich Model protocol with the canonical CapabilityInvoker. Runs without capability
+    bindings retain the established direct ModelRuntime path.
     """
 
     def __init__(
@@ -93,11 +102,13 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         tasks: TaskRepository,
         agents: AgentRuntime,
         models: ModelRuntime,
+        capability_turn: AgentCapabilityTurn | None = None,
     ) -> None:
         self._delegate = delegate
         self._tasks = tasks
         self._agents = agents
         self._models = models
+        self._capability_turn = capability_turn
         self._snapshots: dict[str, ExecutionSnapshot] = {}
         self._backend_refs: dict[str, str] = {}
 
@@ -207,20 +218,53 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                     ErrorCode.NO_COMPATIBLE_ROUTE,
                     "Agent execution did not resolve a canonical model route",
                 )
-            requirements: dict[str, JsonValue] = {
-                "model_config_id": agent_run.selected_model_config_id,
-                "modalities": ["text"],
-            }
-            if self_hosted_only:
-                requirements["self_hosted_only"] = True
-            response = await self._models.generate(
-                ModelRequest(
-                    request_id=f"{request.run_id}:model",
-                    messages=(instruction, task.task.description),
+
+            if agent_run.capability_ids:
+                if self._capability_turn is None:
+                    raise ContractError(
+                        ErrorCode.INVALID_CONFIGURATION,
+                        "Agent execution selected capabilities but no capability turn is composed",
+                    )
+                turn = await self._capability_turn.execute(
+                    task_id=task.task_id,
+                    run_id=request.run_id,
+                    agent_id=agent_run.agent.agent_id,
+                    model_config_id=agent_run.selected_model_config_id,
+                    instruction=instruction,
+                    objective=task.task.description,
+                    capability_ids=agent_run.capability_ids,
+                    capability_versions=dict(agent_run.capability_versions),
                     context=request.context,
-                    requirements=requirements,
                 )
-            )
+                text = turn.text
+                model_ref = turn.model_ref
+                model_call_refs = turn.model_call_refs
+                tool_invocation_refs = turn.tool_invocation_refs
+                artifact_refs = turn.artifact_refs
+                capability_results = turn.capability_results
+                model_usage = turn.model_usage
+            else:
+                requirements: dict[str, JsonValue] = {
+                    "model_config_id": agent_run.selected_model_config_id,
+                    "modalities": ["text"],
+                }
+                if self_hosted_only:
+                    requirements["self_hosted_only"] = True
+                response = await self._models.generate(
+                    ModelRequest(
+                        request_id=f"{request.run_id}:model",
+                        messages=(instruction, task.task.description),
+                        context=request.context,
+                        requirements=requirements,
+                    )
+                )
+                text = response.text
+                model_ref = response.model_ref
+                model_call_refs = (response.request_id,)
+                tool_invocation_refs = ()
+                artifact_refs = ()
+                capability_results = ()
+                model_usage = dict(response.usage)
         except ContractError as exc:
             self._agents.finish_agent_run(
                 agent_run.agent_run_id,
@@ -242,19 +286,30 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
         self._agents.finish_agent_run(
             agent_run.agent_run_id,
             status=AgentRunStatus.SUCCEEDED,
+            artifact_ids=artifact_refs,
             result_ids=(result_id,),
-            model_call_refs=(response.request_id,),
-            telemetry={"model_usage": dict(response.usage)},
+            model_call_refs=model_call_refs,
+            tool_invocation_refs=tool_invocation_refs,
+            telemetry={
+                "model_usage": model_usage,
+                "capability_invocation_count": len(tool_invocation_refs),
+            },
         )
+        output: dict[str, JsonValue] = {
+            "text": text,
+            "model_ref": model_ref,
+            "agent_run_id": agent_run.agent_run_id,
+            "result_id": result_id,
+        }
+        if capability_results:
+            output["capability_results"] = list(capability_results)
+            output["tool_invocation_refs"] = list(tool_invocation_refs)
+        if artifact_refs:
+            output["artifact_refs"] = list(artifact_refs)
         self._snapshots[request.run_id] = ExecutionSnapshot(
             run_id=request.run_id,
             status=ExecutionStatus.SUCCEEDED,
-            output={
-                "text": response.text,
-                "model_ref": response.model_ref,
-                "agent_run_id": agent_run.agent_run_id,
-                "result_id": result_id,
-            },
+            output=output,
             adapter_metadata=self._metadata(agent_run.agent_run_id),
         )
         return self._handle(request.run_id)
