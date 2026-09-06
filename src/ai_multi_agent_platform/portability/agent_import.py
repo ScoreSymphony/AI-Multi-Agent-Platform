@@ -13,6 +13,10 @@ from ai_multi_agent_platform.agents.models import (
 )
 from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.models import ModelRoutingProfileRef
+from ai_multi_agent_platform.models.routing_profile_assignment_context import (
+    require_routing_profile_assignment_access,
+)
 
 from .agent_codecs import (
     AGENT_RESOURCE_TYPE,
@@ -20,7 +24,9 @@ from .agent_codecs import (
     AgentPortableSnapshot,
     AgentTeamPortableSnapshot,
 )
-from .models import PortableResource
+from .dependencies import parse_resource_dependency
+from .model_routing_profile_codecs import MODEL_ROUTING_PROFILE_RESOURCE_TYPE
+from .models import DependencyKind, PortableResource
 from .registry import ImportContext
 
 
@@ -36,9 +42,15 @@ class AgentImportMutationHandler:
         value: object,
         context: ImportContext,
     ) -> None:
-        del resource, context
         snapshot = _require_agent_snapshot(value)
         _require_missing_agent(self._repository, snapshot.definition.agent_id)
+        assignments = _routing_profile_assignments(resource, snapshot, context)
+        if assignments:
+            # Preflight every authorization prerequisite before package mutation, but do
+            # not resolve the profile through the gate yet. A referenced profile may be
+            # another resource in this same package and is therefore not guaranteed to
+            # exist until its dependency is applied earlier in the import order.
+            require_routing_profile_assignment_access()
 
     async def apply(
         self,
@@ -46,8 +58,8 @@ class AgentImportMutationHandler:
         value: object,
         context: ImportContext,
     ) -> object:
-        del resource, context
         snapshot = _require_agent_snapshot(value)
+        await _authorize_routing_profile_assignments(resource, snapshot, context)
         created = False
         try:
             first = snapshot.revisions[0]
@@ -146,6 +158,83 @@ class AgentTeamImportMutationHandler:
                 "portable Agent Team rollback token must be the imported Team ID",
             )
         self._repository.delete_team(token)
+
+
+async def _authorize_routing_profile_assignments(
+    resource: PortableResource,
+    snapshot: AgentPortableSnapshot,
+    context: ImportContext,
+) -> None:
+    assignments = _routing_profile_assignments(resource, snapshot, context)
+    if not assignments:
+        return
+    access = require_routing_profile_assignment_access()
+    for reference, revision in assignments:
+        await access.authorize(
+            reference,
+            owner_ref=revision.owner_ref,
+            project_id=revision.project_id,
+        )
+
+
+def _routing_profile_assignments(
+    resource: PortableResource,
+    snapshot: AgentPortableSnapshot,
+    context: ImportContext,
+) -> tuple[tuple[ModelRoutingProfileRef, AgentRevision], ...]:
+    declared = _declared_routing_profile_dependencies(resource, context)
+    assignments: dict[
+        tuple[str, str, str, str | None],
+        tuple[ModelRoutingProfileRef, AgentRevision],
+    ] = {}
+    for revision in snapshot.revisions:
+        raw_ref = revision.profile.model.routing_profile_ref
+        if raw_ref is None:
+            continue
+        try:
+            reference = ModelRoutingProfileRef.parse(raw_ref)
+        except ValueError as exc:
+            if raw_ref.startswith("model_routing_profile_"):
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "portable Agent routing-profile reference must pin an exact canonical revision",
+                    details={"routing_profile_ref": raw_ref},
+                ) from exc
+            # Preserve pre-#309 compatibility routing keys unchanged.
+            continue
+        if (reference.profile_id, reference.revision) not in declared:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "portable Agent routing-profile assignment is missing its canonical dependency",
+                details={"routing_profile_ref": reference.canonical_ref},
+            )
+        owner = revision.owner_ref
+        key = (reference.canonical_ref, owner.type, owner.id, revision.project_id)
+        assignments[key] = (reference, revision)
+    return tuple(assignments.values())
+
+
+def _declared_routing_profile_dependencies(
+    resource: PortableResource,
+    context: ImportContext,
+) -> set[tuple[str, int]]:
+    declared: set[tuple[str, int]] = set()
+    for dependency in resource.dependencies:
+        if dependency.kind is not DependencyKind.RESOURCE:
+            continue
+        parsed = parse_resource_dependency(dependency)
+        if parsed.resource_type != MODEL_ROUTING_PROFILE_RESOURCE_TYPE:
+            continue
+        constraint = dependency.version_constraint
+        if constraint is None or not constraint.startswith("==") or not constraint[2:].isdigit():
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "portable Agent routing-profile dependency must pin an exact revision",
+                details={"profile_id": parsed.resource_id},
+            )
+        target_id = context.remap(MODEL_ROUTING_PROFILE_RESOURCE_TYPE, parsed.resource_id)
+        declared.add((target_id, int(constraint[2:])))
+    return declared
 
 
 def _require_agent_snapshot(value: object) -> AgentPortableSnapshot:
