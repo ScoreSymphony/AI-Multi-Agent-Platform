@@ -169,10 +169,7 @@ class ControlPlane(_CurrentControlPlane):
             raise ValueError(
                 f"extension collection conflicts with canonical organization route: {collection}"
             )
-        if (
-            self._accounting_service is not None
-            and collection in _CANONICAL_ACCOUNTING_COLLECTIONS
-        ):
+        if self._accounting_service is not None and collection in _CANONICAL_ACCOUNTING_COLLECTIONS:
             raise ValueError(
                 f"extension collection conflicts with canonical accounting route: {collection}"
             )
