@@ -146,7 +146,16 @@ class InstalledRegistryItem:
         )
 
     def accepts_update(self, candidate: RegistryItem) -> bool:
-        """Return whether the candidate may be applied under the current version pin."""
+        """Backward-compatible discovery predicate for a newer candidate.
+
+        Pins are application policy, not discovery policy. Activation validation remains the
+        authoritative place that blocks a candidate while the installed version is pinned.
+        """
+
+        return self.has_update(candidate)
+
+    def can_apply_update(self, candidate: RegistryItem) -> bool:
+        """Return whether a newer candidate is not blocked by the current version pin."""
 
         if not self.has_update(candidate):
             return False
