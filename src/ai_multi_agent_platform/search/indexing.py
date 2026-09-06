@@ -91,6 +91,9 @@ def document_from_resource(
     organization_id = _optional_string(resource, "organization_id")
     if organization_id is not None:
         provenance["organization_id"] = organization_id
+    canonical_provenance_refs = _string_sequence(resource, "provenance_refs")
+    if canonical_provenance_refs:
+        provenance["canonical_refs"] = list(canonical_provenance_refs)
     return SearchDocument(
         resource_type=resource_type,
         resource_id=resource_id,
@@ -347,6 +350,11 @@ def _resource_keywords(resource: Mapping[str, JsonValue]) -> tuple[str, ...]:
     for field in (
         "provider_id",
         "provider_type",
+        "connection_id",
+        "native_namespace",
+        "native_id",
+        "external_version",
+        "external_revision",
         "organization_id",
         "team_id",
         "actor_id",

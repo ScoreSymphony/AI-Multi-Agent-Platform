@@ -115,6 +115,11 @@ export interface TemplatePreview {
   dependency_order: TemplateRevisionRef[];
   missing_required_capability_ids: string[];
   missing_optional_capability_ids: string[];
+  incompatible_capability_versions: string[];
+  incompatible_optional_capability_versions: string[];
+  incompatible_platform_versions: string[];
+  missing_contract_versions: string[];
+  incompatible_contract_versions: string[];
   missing_plugin_ids: string[];
   missing_connector_ids: string[];
   missing_model_policy_refs: string[];
@@ -302,6 +307,22 @@ export class TemplateClient {
       "template.publish",
       requireRef(templateId, "Template"),
       { expected_revision: requirePositiveRevision(expectedRevision) },
+      idempotencyKey,
+    );
+  }
+
+  activateUntrusted(
+    templateId: string,
+    expectedRevision: number,
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<CanonicalTemplate> {
+    return this.command(
+      "template.publish",
+      requireRef(templateId, "Template"),
+      {
+        expected_revision: requirePositiveRevision(expectedRevision),
+        activate_untrusted: true,
+      },
       idempotencyKey,
     );
   }

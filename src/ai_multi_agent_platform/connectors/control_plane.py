@@ -18,6 +18,11 @@ from ai_multi_agent_platform.security import (
     redact_sensitive,
 )
 
+from .external_resources import (
+    EXTERNAL_RESOURCE_DETACH_COMMAND,
+    external_resource_projection,
+    register_external_resource_control_plane,
+)
 from .models import Connection, ConnectorDefinition, SyncMode
 from .service import ConnectorService
 
@@ -35,6 +40,7 @@ CONNECTOR_COMMANDS = (
     "connection.remove",
     "connection.health",
     "connector.sync",
+    EXTERNAL_RESOURCE_DETACH_COMMAND,
 )
 
 
@@ -157,6 +163,9 @@ def register_connector_control_plane(
             ),
         ),
     )
+    register_external_resource_control_plane(
+        control_plane, connectors, actor_resolver=actor_resolver
+    )
 
     async def create_connection(
         context: RequestContext,
@@ -267,7 +276,9 @@ def register_connector_control_plane(
                 if result.checkpoint.last_successful_sync is not None
                 else None
             ),
-            "resource_refs": [resource.to_dict() for resource in result.resources],
+            "resource_refs": [
+                external_resource_projection(resource, existing) for resource in result.resources
+            ],
             "events": [
                 {
                     "id": event.id,

@@ -485,8 +485,43 @@ class ConnectorService:
             self._validate_resource_binding(resource, connection, provider)
         for event in result.events:
             self._validate_event_binding(event, connection, provider)
+
+        if mode is SyncMode.REBUILD:
+            persisted_resources = await self.repository.replace_external_resources(
+                connection.id, result.resources
+            )
+            persisted_by_identity = {
+                _external_resource_identity(resource): resource for resource in persisted_resources
+            }
+            canonical_resources = tuple(
+                persisted_by_identity[_external_resource_identity(resource)]
+                for resource in result.resources
+            )
+        else:
+            canonical_items: list[ExternalResourceReference] = []
+            for resource in result.resources:
+                canonical_items.append(await self.repository.save_external_resource(resource))
+            canonical_resources = tuple(canonical_items)
+
+        canonical_id_by_proposed_id = {
+            proposed.id: canonical.id
+            for proposed, canonical in zip(result.resources, canonical_resources, strict=True)
+        }
+        canonical_events = tuple(
+            replace(
+                event,
+                resource_id=canonical_id_by_proposed_id.get(event.resource_id, event.resource_id),
+            )
+            if event.resource_id is not None
+            else event
+            for event in result.events
+        )
         await self.repository.save_checkpoint(result.checkpoint)
-        return result
+        return replace(
+            result,
+            resources=canonical_resources,
+            events=canonical_events,
+        )
 
     async def _usable_connection(
         self,
@@ -714,6 +749,15 @@ class ConnectorService:
                 "connector event project context does not match the Connection",
                 provider_id=provider.descriptor.provider_id,
             )
+
+
+def _external_resource_identity(resource: ExternalResourceReference) -> tuple[str, str, str, str]:
+    return (
+        resource.connection_id,
+        resource.resource_type,
+        resource.native_reference.namespace,
+        resource.native_reference.native_id,
+    )
 
 
 def _connection_security_payload(connection: Connection) -> dict[str, JsonValue]:

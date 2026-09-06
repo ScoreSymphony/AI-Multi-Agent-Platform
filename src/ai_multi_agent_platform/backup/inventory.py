@@ -45,6 +45,13 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
         "onboarding-commands", "db/onboarding-commands.json", "json", False, "onboarding"
     ),
     DurableStoreSpec("templates", "db/templates.json", "json", False, "templates"),
+    DurableStoreSpec(
+        "capability-assignments",
+        "db/capability-assignments.json",
+        "json",
+        False,
+        "capability-assignments",
+    ),
     # #41 state is lazy on the 0.0.1 transition because existing deployments adopt the baseline
     # explicitly. Once present, these files are canonical recovery evidence and must move with the
     # rest of the durable data root. `upgrade-maintenance.json` is intentionally excluded: backups

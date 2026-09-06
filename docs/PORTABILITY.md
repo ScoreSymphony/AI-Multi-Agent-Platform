@@ -238,6 +238,18 @@ Import preserves `IdentityContext` and rejects implicit identity transfer by def
 
 The detailed Automation contract is documented in `PORTABILITY_AUTOMATION.md`.
 
+## Evaluation Suite semantics
+
+Portable `evaluation_suite` resources carry one exact canonical `EvaluationSuite` version. The portability resource ID is the existing northbound exact suite reference `<suite_id>@<version>`; the portable codec schema version is tracked separately so multiple suite versions remain independently addressable.
+
+Imported/mutable suite ownership remains inside Evaluation. `EvaluationSuiteAssetRepository` defines the canonical create/read/delete seam and `SqliteEvaluationSuiteAssetRepository` persists imported versions in the same `evaluation.sqlite3` database used by Evaluation history. Configured/built-in suites remain immutable deployment inputs. Portability never writes that database directly: `EvaluationSuiteImportMutationHandler` applies and compensates only through `EvaluationService.create_suite(...)` and `EvaluationService.delete_suite(...)`.
+
+Exact suite versions are create-only. Existing `<suite_id>@<version>` identities are reported as preview conflicts before mutation. Compensation is checksum-bound and refuses to delete a suite version once durable EvaluationRun history references it.
+
+The codec declares dependencies from suite content rather than silently weakening it. Canonical Agent targets are resource dependencies and are remapped through the accepted `ImportContext`; model and capability targets remain explicit model/capability requirements. Fixture references are declared as `evaluation_fixture` resource dependencies. The current single-node composition intentionally has no portable EvaluationFixture resource/registry, so cross-deployment import of a fixture-bearing suite fails closed unless that dependency is supplied by a future owning-domain integration. Fixture bytes/paths are never smuggled into the suite payload as portability-private state.
+
+Single-node production composition registers `evaluation_suite` on the normal #79 workflow. Evaluation execution itself still has no dependency on portability: deployments may execute configured or persisted suites without enabling export/import.
+
 ## Dry-run and conflict boundary
 
 `ImportPreviewService` is mutation-free. Before a package may enter the executor it reports or computes:
@@ -314,6 +326,9 @@ The #79 portability stack verifies at least:
 - Automation Project/Workspace/ID remapping;
 - webhook SecretReference dependency declaration without credential transfer;
 - Automation identity-transfer rejection before mutation;
-- guarded Automation rollback for in-memory and SQLite repositories.
+- guarded Automation rollback for in-memory and SQLite repositories;
+- EvaluationSuite codec round trip through the existing package/preview/import pipeline;
+- deterministic Agent-target remapping inside imported EvaluationSuite cases;
+- durable imported-suite restart recovery, exact-version conflict detection and checksum/history-guarded compensation.
 
-#79 is complete and closed. Agent/Team, Template and Project round trips, canonical dependency/reference remapping, guarded compensation, replay-safe import reports and the Control Plane/CLI workflow form the completed portability surface. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. #309 and #310 remain independent follow-up domain work for durable model-routing and authorization-policy resources; they are not blockers to the completed #79 Definition of Done. #19 is currently reopened for its own outstanding Evaluation-framework acceptance work. Configured EvaluationSuite assets currently remain deployment/configuration inputs rather than a mutable canonical repository, so any future cross-deployment Evaluation-suite import must consume a stable owning-domain mutation seam instead of introducing portability-specific shadow persistence.
+#79 is complete and closed. Agent/Team, Template, Project and now EvaluationSuite round trips use the same package, integrity, preview, remapping and rollback-safe import contracts. #308 is complete and Project portability consumes its canonical ScopeStore persistence seam. #19 now supplies the previously missing owning-domain EvaluationSuite persistence/mutation seam and registers `evaluation_suite` through the existing #79 workflow without making Evaluation execution depend on portability. Fixture-bearing suite imports remain fail-closed until an owning-domain portable EvaluationFixture integration exists. #309 and #310 remain independent follow-up domain work for durable model-routing and authorization-policy resources; they are not blockers to the completed #79 Definition of Done.
