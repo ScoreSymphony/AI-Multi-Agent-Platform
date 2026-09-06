@@ -186,7 +186,9 @@ def test_claim_conflicts_are_emitted_from_the_shared_claim_boundary() -> None:
 
         assert unchanged.steps[0].latest_run_id == run_id
         conflicts = [
-            entry for entry in exporter.timeline if entry.event_name == "coordination.claim.conflict"
+            entry
+            for entry in exporter.timeline
+            if entry.event_name == "coordination.claim.conflict"
         ]
         assert len(conflicts) == 1
         assert conflicts[0].context.step_id == steps[0].id
