@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, replace
 from typing import Protocol
 
@@ -82,7 +83,7 @@ class DistributionService:
             return ()
         installed = installation.as_installed()
         candidates = self.search(RegistryQuery(update_for_item_id=item_id))
-        return tuple(candidate for candidate in candidates if installed.accepts_update(candidate))
+        return tuple(candidate for candidate in candidates if installed.has_update(candidate))
 
     def pin(self, item_id: str, version: str) -> RegistryInstallation:
         return self._require_installations().pin(item_id, version)
@@ -138,7 +139,11 @@ class DistributionService:
         else:
             raise RuntimeError("manual registry assets cannot be activated automatically")
         if self._installations is not None:
-            self._installations.record(current, provider_id=provider.provider_id)
+            self._installations.record(
+                current,
+                provider_id=provider.provider_id,
+                artifact_sha256=hashlib.sha256(artifact).hexdigest(),
+            )
         return result
 
     def _resolved_context(
