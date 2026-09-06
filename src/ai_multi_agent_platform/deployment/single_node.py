@@ -379,9 +379,7 @@ def build_single_node_deployment(
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
     observed_authorization = ObservedAuthorizationProvider(authorization, telemetry)
     approval_service = SqliteApprovalService(database_dir / "approvals.sqlite3")
-    authorization_audit = SqliteAuthorizationAuditSink(
-        database_dir / "authorization-audit.sqlite3"
-    )
+    authorization_audit = SqliteAuthorizationAuditSink(database_dir / "authorization-audit.sqlite3")
     approval_gate = AuthorizationGate(
         observed_authorization,
         approvals=approval_service,
