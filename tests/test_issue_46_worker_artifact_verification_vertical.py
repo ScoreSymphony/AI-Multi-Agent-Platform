@@ -397,15 +397,14 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             policy_version=policy.version,
         )
 
-        assert (
-            await deployment.http.handle(
-                HTTPRequest(
-                    method="POST",
-                    path=f"/api/v1/tasks/{task_id}:queue",
-                    headers=_headers(token, key="issue-46:full:queue"),
-                )
+        queued = await deployment.http.handle(
+            HTTPRequest(
+                method="POST",
+                path=f"/api/v1/tasks/{task_id}:queue",
+                headers=_headers(token, key="issue-46:full:queue"),
             )
-        ).status == 200
+        )
+        assert queued.status == 200, queued.body
         started = await deployment.http.handle(
             HTTPRequest(
                 method="POST",
@@ -458,7 +457,9 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             assert capability_result["capability_id"] == WORKSPACE_ARTIFACT_CAPABILITY_ID
             assert capability_result["canonical_tool_invocation_id"] == tool_invocation_id
             assert capability_result["model_tool_call_id"] == "call-worker-artifact"
-            assert tuple(capability_result["artifact_refs"]) == (artifact_id,)
+            capability_artifacts = capability_result["artifact_refs"]
+            assert isinstance(capability_artifacts, tuple | list)
+            assert tuple(capability_artifacts) == (artifact_id,)
             evidence_refs = capability_result["evidence_refs"]
             assert isinstance(evidence_refs, tuple | list)
             worker_job_id = evidence_refs[0]
@@ -574,9 +575,12 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             assert final_run.run_id == run_id
             assert artifact_id in final_run.artifact_ids
             assert result_id in final_run.result_ids
-            assert len(
-                [record for record in distributed.records() if record.job.execution.run_id == run_id]
-            ) == 1
+            same_run_records = [
+                record
+                for record in distributed.records()
+                if record.job.execution.run_id == run_id
+            ]
+            assert len(same_run_records) == 1
             assert len(_ArtifactToolCallingModelHandler.chat_payloads) == 1
         finally:
             endpoint_task.cancel()
