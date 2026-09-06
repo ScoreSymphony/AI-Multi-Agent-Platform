@@ -4,7 +4,10 @@ import asyncio
 from dataclasses import replace
 from typing import cast
 
-from ai_multi_agent_platform.coordination import DurablePlanStepCoordinator, InMemoryCoordinatorRepository
+from ai_multi_agent_platform.coordination import (
+    DurablePlanStepCoordinator,
+    InMemoryCoordinatorRepository,
+)
 from ai_multi_agent_platform.domain import (
     OwnerRef,
     Plan,
