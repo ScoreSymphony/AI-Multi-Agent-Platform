@@ -90,6 +90,7 @@ from ai_multi_agent_platform.repositories import (
 from ai_multi_agent_platform.repositories.control_plane import register_repository_control_plane
 from ai_multi_agent_platform.security import (
     ActorType,
+    AuthorizationAction,
     AuthorizationGate,
     AuthorizedLifecycleBackend,
     AuthorizedSecretProvider,
@@ -97,6 +98,7 @@ from ai_multi_agent_platform.security import (
     LocalAuthenticationService,
     LocalPrincipalPolicy,
     LocalUserAccount,
+    ResourceType,
     SqliteApprovalService,
     SqliteAuthorizationAuditSink,
 )
@@ -150,6 +152,8 @@ _SMOKE_START_KEY = "deployment-smoke-start-v1"
 _SMOKE_REFRESH_KEY = "deployment-smoke-refresh-v1"
 _EVALUATION_PROJECT_KEY = "evaluation-system-project-v1"
 _EVALUATION_OWNER_ID = "evaluation-single-node"
+_EVALUATION_PRINCIPAL = f"service:{_EVALUATION_OWNER_ID}"
+_PLATFORM_SERVICE_PRINCIPAL = "service:platform"
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,6 +381,35 @@ def build_single_node_deployment(
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
+    if not authorization.has_policy(_EVALUATION_PRINCIPAL):
+        authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=_EVALUATION_PRINCIPAL,
+                actor_types=frozenset({ActorType.SERVICE}),
+                allowed_actions=frozenset(
+                    {
+                        AuthorizationAction.EXECUTE,
+                        AuthorizationAction.READ,
+                        AuthorizationAction.MODIFY,
+                    }
+                ),
+                resource_types=frozenset({ResourceType.RUN}),
+            )
+        )
+    if not authorization.has_policy(_PLATFORM_SERVICE_PRINCIPAL):
+        authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=_PLATFORM_SERVICE_PRINCIPAL,
+                actor_types=frozenset({ActorType.SERVICE}),
+                allowed_actions=frozenset(
+                    {
+                        AuthorizationAction.READ,
+                        AuthorizationAction.MANAGE_CREDENTIALS,
+                    }
+                ),
+                resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
+            )
+        )
     observed_authorization = ObservedAuthorizationProvider(authorization, telemetry)
     approval_service = SqliteApprovalService(database_dir / "approvals.sqlite3")
     authorization_audit = SqliteAuthorizationAuditSink(database_dir / "authorization-audit.sqlite3")
@@ -435,6 +468,7 @@ def build_single_node_deployment(
             models=model_runtime,
         ),
         approval_gate,
+        allow_internal_service_reads=True,
     )
     verification_path = database_dir / "verification.sqlite3"
     verification = SqliteVerificationService(
