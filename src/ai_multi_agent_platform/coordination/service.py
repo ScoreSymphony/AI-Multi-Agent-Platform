@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Literal, Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import (
     OwnerRef,
     Plan,
@@ -50,7 +51,7 @@ class CanonicalRunKernel(Protocol):
         *,
         idempotency_key: str,
         task_id: str,
-        subject_type: str = "task",
+        subject_type: Literal["task", "step"] = "task",
         subject_id: str | None = None,
         actor_ref: str | None = None,
         source: str = "platform-kernel",
@@ -146,7 +147,7 @@ class DurablePlanStepCoordinator:
         retry_policies: dict[str, StepRetryPolicy] | None = None,
         predecessor_failure_policy: PredecessorFailurePolicy = PredecessorFailurePolicy.FAIL_FAST,
     ) -> PlanCoordinationProjection:
-        """Register the exact active canonical Plan after it has entered the kernel task stream."""
+        """Register the exact active canonical Plan already present in kernel truth."""
 
         self._validate_graph(plan, steps)
         task = await self.kernel.get_task(plan.task_id)
@@ -207,18 +208,16 @@ class DurablePlanStepCoordinator:
                 step = by_id[record.step_id]
                 if record.phase is CoordinationPhase.RETRY_SCHEDULED:
                     if record.retry_due_at is not None and record.retry_due_at <= current_time:
-                        if await self._activate_retry(step, record, current_time):
-                            made_progress = True
+                        made_progress = await self._activate_retry(step, record, current_time) or made_progress
                     continue
                 if record.phase is CoordinationPhase.BLOCKED:
-                    if await self._refresh_dependencies(step, record, by_id, current_time):
-                        made_progress = True
+                    made_progress = (
+                        await self._refresh_dependencies(step, record, by_id, current_time)
+                        or made_progress
+                    )
                     continue
                 if record.phase is CoordinationPhase.READY:
-                    if await self._start_attempt(step, record, current_time):
-                        made_progress = True
-            if made_progress:
-                continue
+                    made_progress = await self._start_attempt(step, record, current_time) or made_progress
         await self._aggregate_task(plan_id)
         return self.projection(plan_id)
 
@@ -256,9 +255,12 @@ class DurablePlanStepCoordinator:
             current = self.repository.get_step_record(record.step_id)
             if key in current.processed_keys:
                 return self.projection(record.plan_id)
-            processed = (*current.processed_keys, key)
-            next_record = replace(current, processed_keys=processed, latest_run_id=run_id)
             next_step = step
+            next_record = replace(
+                current,
+                processed_keys=(*current.processed_keys, key),
+                latest_run_id=run_id,
+            )
 
             if run.status is RunStatus.SUCCEEDED:
                 if step.status is StepStatus.RUNNING:
@@ -279,12 +281,13 @@ class DurablePlanStepCoordinator:
                     next_step = step.transition_to(StepStatus.FAILED)
                 next_attempt = max(current.current_attempt, run.attempt) + 1
                 if current.retry_policy.permits(category=category, next_attempt=next_attempt):
-                    due = current_time + current.retry_policy.delay_for_attempt(next_attempt)
                     next_record = replace(
                         next_record,
                         phase=CoordinationPhase.RETRY_SCHEDULED,
                         current_attempt=max(current.current_attempt, run.attempt),
-                        retry_due_at=due,
+                        retry_due_at=(
+                            current_time + current.retry_policy.delay_for_attempt(next_attempt)
+                        ),
                         wait=None,
                     )
                     self._emit(
@@ -348,7 +351,7 @@ class DurablePlanStepCoordinator:
         *,
         now: datetime | None = None,
     ) -> PlanCoordinationProjection:
-        """Persist a safe backend-neutral wait without provider payloads or secrets."""
+        """Persist a backend-neutral wait without raw provider payloads or secrets."""
 
         current_time = self._now(now)
         state = self.repository.get_plan(wait.plan_id)
@@ -399,6 +402,8 @@ class DurablePlanStepCoordinator:
         now: datetime | None = None,
     ) -> PlanCoordinationProjection:
         record = self.repository.get_step_record(step_id)
+        if resolution_key in record.processed_keys:
+            return self.projection(record.plan_id)
         wait = record.wait
         if wait is None or wait.wait_type is not WaitType.APPROVAL:
             raise ContractError(ErrorCode.CONFLICT, "Step is not waiting for an Approval")
@@ -429,11 +434,14 @@ class DurablePlanStepCoordinator:
         project_id: str | None,
         now: datetime | None = None,
     ) -> PlanCoordinationProjection:
-        """Resolve an Event wait from canonical identity/correlation only, never raw payload."""
+        """Resolve an Event wait from canonical identity/correlation only."""
 
         if not event_id.strip():
             raise ValueError("event_id must not be blank")
+        resolution_key = f"event:{event_id}"
         record = self.repository.get_step_record(step_id)
+        if resolution_key in record.processed_keys:
+            return self.projection(record.plan_id)
         wait = record.wait
         if wait is None or wait.wait_type is not WaitType.EVENT:
             raise ContractError(ErrorCode.CONFLICT, "Step is not waiting for a canonical Event")
@@ -443,9 +451,33 @@ class DurablePlanStepCoordinator:
         return await self._resolve_wait(
             step_id,
             WaitResolution.SATISFIED,
-            f"event:{event_id}",
+            resolution_key,
             self._now(now),
         )
+
+    async def resolve_external_job(
+        self,
+        *,
+        step_id: str,
+        external_job_ref: str,
+        resolution: WaitResolution,
+        resolution_key: str,
+        owner_ref: OwnerRef,
+        project_id: str | None,
+        now: datetime | None = None,
+    ) -> PlanCoordinationProjection:
+        """Resolve an adapter-neutral external-job wait by canonical reference only."""
+
+        record = self.repository.get_step_record(step_id)
+        if resolution_key in record.processed_keys:
+            return self.projection(record.plan_id)
+        wait = record.wait
+        if wait is None or wait.wait_type is not WaitType.EXTERNAL_JOB:
+            raise ContractError(ErrorCode.CONFLICT, "Step is not waiting for an external job")
+        self._require_scope(wait, owner_ref, project_id)
+        if wait.external_job_ref != external_job_ref:
+            raise ContractError(ErrorCode.CONFLICT, "external job reference does not match wait")
+        return await self._resolve_wait(step_id, resolution, resolution_key, self._now(now))
 
     async def process_due(
         self,
@@ -489,7 +521,7 @@ class DurablePlanStepCoordinator:
         idempotency_key: str,
         now: datetime | None = None,
     ) -> PlanCoordinationProjection:
-        """Suppress future wakeups/retries and propagate cancellation to active canonical Runs."""
+        """Suppress future wakeups/retries and propagate cancellation to canonical truth."""
 
         if not idempotency_key.strip():
             raise ValueError("idempotency_key must not be blank")
@@ -545,7 +577,7 @@ class DurablePlanStepCoordinator:
         *,
         now: datetime | None = None,
     ) -> PlanCoordinationProjection:
-        """Reconcile canonical Run/Worker truth before any attempt to resume dispatch."""
+        """Reconcile canonical Run/Worker truth before resuming dispatch."""
 
         current_time = self._now(now)
         state = self.repository.get_plan(plan_id)
@@ -604,9 +636,10 @@ class DurablePlanStepCoordinator:
         *,
         now: datetime | None = None,
     ) -> tuple[PlanCoordinationProjection, ...]:
-        return tuple(
-            [await self.reconcile_plan(state.plan.id, now=now) for state in self.repository.list_active_plans()]
-        )
+        projections: list[PlanCoordinationProjection] = []
+        for state in self.repository.list_active_plans():
+            projections.append(await self.reconcile_plan(state.plan.id, now=now))
+        return tuple(projections)
 
     def projection(self, plan_id: str) -> PlanCoordinationProjection:
         state = self.repository.get_plan(plan_id)
@@ -693,6 +726,7 @@ class DurablePlanStepCoordinator:
                 return True
             finally:
                 self.repository.release_claim(claim)
+
         if set(satisfied) != set(record.satisfied_dependency_ids):
             claim = self._claim(step.id, now)
             if claim is None:
@@ -731,6 +765,7 @@ class DurablePlanStepCoordinator:
                 return True
             finally:
                 self.repository.release_claim(claim)
+
         if not record.dependency_ids:
             claim = self._claim(step.id, now)
             if claim is None:
@@ -750,7 +785,10 @@ class DurablePlanStepCoordinator:
                     now=now,
                 )
                 self._emit(
-                    "coordination.step.ready", current.task_id, current.plan_id, current.step_id
+                    "coordination.step.ready",
+                    current.task_id,
+                    current.plan_id,
+                    current.step_id,
                 )
                 return True
             finally:
@@ -772,9 +810,8 @@ class DurablePlanStepCoordinator:
             if current.phase is not CoordinationPhase.READY or current_step.status is not StepStatus.READY:
                 return False
             attempt = current.current_attempt + 1
-            key = self._attempt_key(current, attempt)
             run = await self.kernel.create_run(
-                idempotency_key=key,
+                idempotency_key=self._attempt_key(current, attempt),
                 task_id=current.task_id,
                 subject_type="step",
                 subject_id=current.step_id,
@@ -883,26 +920,20 @@ class DurablePlanStepCoordinator:
                 return self.projection(current.plan_id)
             state = self.repository.get_plan(current.plan_id)
             step = state.step(step_id)
-            resolved_wait = replace(
-                wait,
-                resolved_at=now,
-                resolution=resolution,
-                resolution_key=resolution_key,
-            )
             processed = (*current.processed_keys, resolution_key)
             if resolution is WaitResolution.SATISFIED:
-                resumed = step.transition_to(StepStatus.RUNNING)
+                next_step = step.transition_to(StepStatus.RUNNING)
                 phase = CoordinationPhase.ATTEMPT_ACTIVE
                 if current.latest_run_id is not None:
                     run = await self.kernel.get_run(current.task_id, current.latest_run_id)
                     if run.status is RunStatus.SUCCEEDED:
-                        resumed = resumed.transition_to(StepStatus.SUCCEEDED)
+                        next_step = next_step.transition_to(StepStatus.SUCCEEDED)
                         phase = CoordinationPhase.TERMINAL
                     elif run.status in {RunStatus.FAILED, RunStatus.TIMED_OUT}:
-                        resumed = resumed.transition_to(StepStatus.FAILED)
+                        next_step = next_step.transition_to(StepStatus.FAILED)
                         phase = CoordinationPhase.TERMINAL
                     elif run.status is RunStatus.CANCELLED:
-                        resumed = resumed.transition_to(StepStatus.CANCELLED)
+                        next_step = next_step.transition_to(StepStatus.CANCELLED)
                         phase = CoordinationPhase.TERMINAL
                 updated = replace(
                     current,
@@ -910,7 +941,6 @@ class DurablePlanStepCoordinator:
                     wait=None,
                     processed_keys=processed,
                 )
-                next_step = resumed
             elif resolution is WaitResolution.CANCELLED:
                 await self._cancel_active_run(current, f"wait:{resolution_key}:cancel")
                 next_step = step.transition_to(StepStatus.CANCELLED)
@@ -952,7 +982,7 @@ class DurablePlanStepCoordinator:
                     else TelemetryOutcome.FAILED
                 ),
                 attributes={
-                    "wait_type": resolved_wait.wait_type.value,
+                    "wait_type": wait.wait_type.value,
                     "resolution": resolution.value,
                 },
             )
@@ -1072,7 +1102,8 @@ class DurablePlanStepCoordinator:
                 raise ContractError(ErrorCode.INVALID_REQUEST, "Step belongs to a different Plan")
             if step.status is not StepStatus.PENDING:
                 raise ContractError(
-                    ErrorCode.INVALID_REQUEST, "newly registered Steps must be pending"
+                    ErrorCode.INVALID_REQUEST,
+                    "newly registered Steps must be pending",
                 )
             missing = set(step.depends_on) - ids
             if missing:
@@ -1083,7 +1114,8 @@ class DurablePlanStepCoordinator:
                 )
             if step.parent_step_id is not None and step.parent_step_id not in ids:
                 raise ContractError(
-                    ErrorCode.INVALID_REQUEST, "parent Step must belong to the same Plan"
+                    ErrorCode.INVALID_REQUEST,
+                    "parent Step must belong to the same Plan",
                 )
         graph = {step.id: step.depends_on for step in steps}
         visiting: set[str] = set()
@@ -1113,7 +1145,7 @@ class DurablePlanStepCoordinator:
         if wait.task_id != plan.task_id or wait.plan_id != plan.id or wait.step_id != step.id:
             raise ContractError(ErrorCode.CONFLICT, "wait canonical identity does not match Step")
         if wait.owner_ref != step.owner_ref or wait.project_id != step.project_id:
-            raise ContractError(ErrorCode.PERMISSION_DENIED, "wait scope does not match canonical Step")
+            raise ContractError(ErrorCode.FORBIDDEN, "wait scope does not match canonical Step")
         if wait.plan_id != record.plan_id or wait.task_id != record.task_id:
             raise ContractError(ErrorCode.CONFLICT, "wait coordination identity mismatch")
 
@@ -1121,7 +1153,7 @@ class DurablePlanStepCoordinator:
     def _require_scope(wait: StepWait, owner_ref: OwnerRef, project_id: str | None) -> None:
         if wait.owner_ref != owner_ref or wait.project_id != project_id:
             raise ContractError(
-                ErrorCode.PERMISSION_DENIED,
+                ErrorCode.FORBIDDEN,
                 "foreign-scope signal cannot resolve a durable Step wait",
             )
 
@@ -1158,9 +1190,9 @@ class DurablePlanStepCoordinator:
         *,
         run_id: str | None = None,
         outcome: TelemetryOutcome = TelemetryOutcome.UNKNOWN,
-        attributes: dict[str, str | int | list[str]] | None = None,
+        attributes: dict[str, JsonValue] | None = None,
     ) -> None:
-        safe_attributes: dict[str, object] = {"plan_id": plan_id}
+        safe_attributes: dict[str, JsonValue] = {"plan_id": plan_id}
         if attributes:
             safe_attributes.update(attributes)
         self.telemetry.timeline(
@@ -1173,5 +1205,5 @@ class DurablePlanStepCoordinator:
                 correlation_id=task_id,
             ),
             outcome=outcome,
-            attributes=safe_attributes,  # type: ignore[arg-type]
+            attributes=safe_attributes,
         )
