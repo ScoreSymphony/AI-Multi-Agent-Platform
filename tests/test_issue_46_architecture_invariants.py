@@ -10,8 +10,14 @@ _CORE_ROOTS = (
     Path("src/ai_multi_agent_platform/kernel"),
 )
 _OPTIONAL_BACKEND_IMPORTS = (
-    re.compile(r"^\s*(?:from|import)\s+ai_multi_agent_platform\.adapters(?:\.|\s|$)", re.MULTILINE),
-    re.compile(r"^\s*(?:from|import)\s+(?:hermes|forge|litellm|mcp)(?:\.|\s|$)", re.MULTILINE),
+    re.compile(
+        r"^\s*(?:from|import)\s+ai_multi_agent_platform\.adapters(?:\.|\s|$)",
+        re.MULTILINE,
+    ),
+    re.compile(
+        r"^\s*(?:from|import)\s+(?:hermes|forge|litellm|mcp)(?:\.|\s|$)",
+        re.MULTILINE,
+    ),
 )
 _MANDATORY_DEPENDENCY_DENYLIST = {
     "anthropic",
