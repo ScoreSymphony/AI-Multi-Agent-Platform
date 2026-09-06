@@ -95,13 +95,12 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install pinned optional LiteLLM extra
+      - name: Install pinned optional LiteLLM extra and test tools
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[litellm]"
-      - name: Verify pinned LiteLLM async entrypoint
-        run: |
-          python -c "import litellm; assert callable(litellm.acompletion)"
+          python -m pip install -e ".[litellm]" pytest
+      - name: Run real pinned LiteLLM adapter integration test
+        run: pytest -q tests/test_issue_11_litellm_pinned_integration.py
 
   hermes-pinned-compat:
     needs: test
