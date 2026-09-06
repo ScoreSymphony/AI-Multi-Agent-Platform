@@ -1,8 +1,22 @@
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "platform_release": "0.0.1",
-  "generated_from": "upstream/*.yaml",
-  "last_reviewed_at": "2026-09-03T00:00:00Z",
+  "versions": {
+    "platform_release": "0.0.1",
+    "domain_schema": "1.0",
+    "api": "v1",
+    "migration_revision": "baseline",
+    "plugin_manifest": "1",
+    "portable_format": "1.0",
+    "template_schema": "1",
+    "backup_format": "1",
+    "worker_protocol": "1.0",
+    "message_protocol": "1.0",
+    "adapter_versions": {},
+    "plugin_interface_versions": {}
+  },
+  "generated_from": "upstream/*.yaml + canonical VersionSnapshot",
+  "last_reviewed_at": "2026-09-06T15:55:00Z",
   "components": [
     {
       "component": "Hermes Agent",
