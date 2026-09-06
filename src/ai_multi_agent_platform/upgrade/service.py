@@ -226,7 +226,8 @@ class UpgradeService:
                 )
             if installed != maintenance_state.source:
                 raise UpgradeError(
-                    "installed version state matches neither source nor target of the active upgrade"
+                    "installed version state matches neither source nor target "
+                    "of the active upgrade"
                 )
             if (
                 request.current != maintenance_state.source
@@ -238,7 +239,8 @@ class UpgradeService:
             effective_request = self._resume_request(effective_request, maintenance_state)
         elif installed != request.current:
             raise UpgradeError(
-                "installed version state changed since the upgrade request was prepared; rerun preflight"
+                "installed version state changed since the upgrade request was prepared; "
+                "rerun preflight"
             )
 
         report = self.preflight.run(effective_request)
