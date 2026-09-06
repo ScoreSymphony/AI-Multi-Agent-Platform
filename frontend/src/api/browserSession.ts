@@ -26,6 +26,21 @@ export interface BrowserSessionSummary {
   active: boolean;
 }
 
+export interface ReleaseVersionSnapshot {
+  platform_release: string;
+  domain_schema: string;
+  api: string;
+  migration_revision: string;
+  plugin_manifest: string;
+  portable_format: string;
+  template_schema: string;
+  backup_format: string;
+  worker_protocol: string;
+  message_protocol: string;
+  adapter_versions: Record<string, string>;
+  plugin_interface_versions: Record<string, string>;
+}
+
 export interface ReleaseCompatibilityEntry {
   component: string;
   source_url: string;
@@ -40,6 +55,65 @@ export interface ReleaseCompatibilityEntry {
   local_modifications: boolean;
   patches: string[];
   notes: string[];
+}
+
+export interface ReleaseDependencySet {
+  name: string;
+  ecosystem: string;
+  kind: string;
+  source_ref: string;
+  digest: string;
+}
+
+export interface ReleaseEvidence {
+  kind: string;
+  ref: string;
+  source_commit: string | null;
+  digest: string | null;
+}
+
+export interface ReleaseGate {
+  name: string;
+  status: string;
+  evidence: ReleaseEvidence;
+  required: boolean;
+}
+
+export interface ReleaseManifestUpstream {
+  component: string;
+  revision: string;
+  source_url: string;
+  license: string;
+  modified: boolean;
+  last_verified_at: string;
+}
+
+export interface ReleaseManifestCompatibility {
+  component: string;
+  upstream_revision: string;
+  status: string;
+  tested_at: string;
+  platform_constraint: string;
+  notes: string[];
+}
+
+export interface ReleaseManifestStatus {
+  release_version: string;
+  release_kind: string;
+  source_commit: string;
+  created_at: string;
+  release_notes_ref: string;
+  versions: ReleaseVersionSnapshot;
+  dependency_sets: ReleaseDependencySet[];
+  upstreams: ReleaseManifestUpstream[];
+  compatibility: ReleaseManifestCompatibility[];
+  gates: ReleaseGate[];
+  sbom_ref: string;
+  provenance_ref: string;
+  artifact_hashes: Record<string, string>;
+  release_ready: boolean;
+  release_blockers: string[];
+  release_warnings: string[];
 }
 
 export interface ReleaseUpdateCandidate {
@@ -58,11 +132,12 @@ export interface ReleaseUpdateCandidate {
 
 export interface ReleaseOperatorStatus {
   platform_release: string;
-  versions: Record<string, JsonValue>;
-  release_manifest: Record<string, JsonValue> | null;
+  versions: ReleaseVersionSnapshot;
+  release_manifest: ReleaseManifestStatus | null;
   compatibility_inventory: {
     schema_version: string;
     platform_release: string;
+    versions: ReleaseVersionSnapshot;
     generated_from: string;
     last_reviewed_at: string;
     components: ReleaseCompatibilityEntry[];
@@ -73,6 +148,7 @@ export interface ReleaseOperatorStatus {
     update_available: boolean;
     candidates: ReleaseUpdateCandidate[];
   };
+  update_discovery_reviewed_at: string | null;
   release_ready: boolean | null;
   operator_warnings: string[];
   automatic_production_updates: boolean;
