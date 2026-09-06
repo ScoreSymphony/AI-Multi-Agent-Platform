@@ -31,6 +31,7 @@ from .models import (
 )
 from .plugin_adapter import PluginRegistryArtifactInstaller
 from .provider import RegistryItemNotFoundError, RegistryProvider, RegistryUnavailableError
+from .reconciliation import RegistryPluginReconciliationError, reconcile_registry_plugins
 from .schema import (
     REGISTRY_ITEM_SCHEMA_VERSION,
     registry_item_from_document,
@@ -87,6 +88,7 @@ __all__ = [
     "RegistryItem",
     "RegistryItemNotFoundError",
     "RegistryItemType",
+    "RegistryPluginReconciliationError",
     "RegistryProvider",
     "RegistryQuery",
     "RegistryResourceService",
@@ -100,6 +102,7 @@ __all__ = [
     "VersionRange",
     "has_errors",
     "load_hmac_signature_keys",
+    "reconcile_registry_plugins",
     "register_distribution_control_plane",
     "registry_item_from_document",
     "validate_item",
