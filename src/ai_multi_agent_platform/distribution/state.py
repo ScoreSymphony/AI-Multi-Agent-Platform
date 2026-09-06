@@ -116,7 +116,9 @@ class JsonRegistryInstallationStore:
         record = self._require(item_id)
         if record.current.version != version:
             raise ValueError("registry item can only be pinned to its currently installed version")
-        updated = RegistryInstallation(record.current, pinned_version=version, history=record.history)
+        updated = RegistryInstallation(
+            record.current, pinned_version=version, history=record.history
+        )
         self._records[item_id] = updated
         self._save()
         return updated
