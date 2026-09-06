@@ -136,6 +136,7 @@ from ai_multi_agent_platform.templates import (
     register_automation_template_handler,
     register_capability_assignment_template_handler,
     register_project_template_handler,
+    register_workflow_template_handler,
     register_workspace_structure_template_handler,
 )
 from ai_multi_agent_platform.templates.agent_team_control_plane import (
@@ -157,6 +158,11 @@ from ai_multi_agent_platform.verification import (
 )
 from ai_multi_agent_platform.verification.control_plane import register_verification_control_plane
 from ai_multi_agent_platform.verification.observability import VerificationTimelineReader
+from ai_multi_agent_platform.workflows import (
+    AuthorizedWorkflowService,
+    JsonWorkflowRepository,
+    WorkflowService,
+)
 from ai_multi_agent_platform.workspaces import SqliteRunWorkspaceBindingRepository
 from ai_multi_agent_platform.workspaces.compensation import CompensatingSqliteWorkspaceProvider
 
@@ -215,6 +221,7 @@ class SingleNodeDeployment:
     first_task: FirstRunTaskService
     secrets: SecretProvider | None
     templates: TemplateApplicationService
+    workflows: AuthorizedWorkflowService
     coordination_repository: SQLiteCoordinatorRepository
     coordination: DurablePlanStepCoordinator
     evaluation_repository: SqliteEvaluationRepository
@@ -458,11 +465,14 @@ def build_single_node_deployment(
         if secret_provider is not None
         else None
     )
+    workflow_service = WorkflowService(JsonWorkflowRepository(database_dir / "workflows.json"))
+    workflows = AuthorizedWorkflowService(workflow_service, approval_gate)
 
     template_handlers = ContextualTemplateHandlerRegistry()
     register_agent_template_handlers(template_handlers, agents)
     register_project_template_handler(template_handlers, scopes)
     register_workspace_structure_template_handler(template_handlers, workspaces, scopes)
+    register_workflow_template_handler(template_handlers, workflows, agents=agents)
     register_template_compensators(
         template_handlers,
         agents=agents,
@@ -632,6 +642,7 @@ def build_single_node_deployment(
         conversation_response_provider=conversation_response_provider,
         portability_workflow=portability_workflow,
         approval_gate=approval_gate,
+        accounting_service=accounting_service,
     )
     resolvers = control_plane.workspace_source_resolvers
     if resolvers is None:
@@ -767,6 +778,7 @@ def build_single_node_deployment(
         first_task=first_task,
         secrets=protected_secret_provider,
         templates=templates,
+        workflows=workflows,
         coordination_repository=coordination_repository,
         coordination=coordination,
         evaluation_repository=evaluation_composition.repository,
