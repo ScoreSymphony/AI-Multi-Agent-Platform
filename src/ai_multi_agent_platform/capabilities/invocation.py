@@ -27,6 +27,10 @@ from .types import (
 )
 
 type PolicyHook = Callable[[CapabilityInvocation, CapabilitySpec], Awaitable[PolicyDecision]]
+type CanonicalInvocationBindingHook = Callable[
+    [CapabilityInvocation, CapabilityRegistration, ToolInvocation],
+    Awaitable[DomainToolInvocation],
+]
 type GovernanceBindingHook = Callable[
     [CapabilityInvocation, CapabilityRegistration, ToolInvocation],
     Awaitable[DomainToolInvocation],
@@ -59,19 +63,29 @@ class NullInvocationObserver:
 
 
 class CapabilityInvoker:
-    """Resolve, validate, authorize, govern, invoke and normalize one request."""
+    """Resolve, validate, authorize, govern, invoke and normalize one request.
+
+    ``canonical_binding_hook`` is the ordinary platform identity seam. When configured, it is
+    applied to every resolved invocation before policy/approval and provider execution so a
+    successful, denied or failed call can retain the same canonical ``tool_invocation_*`` subject.
+
+    ``governance_binding_hook`` is retained as the backwards-compatible approval-only fallback
+    for callers that have not yet adopted ordinary canonical binding.
+    """
 
     def __init__(
         self,
         registry: CapabilityRegistry,
         *,
         policy_hook: PolicyHook | None = None,
+        canonical_binding_hook: CanonicalInvocationBindingHook | None = None,
         governance_binding_hook: GovernanceBindingHook | None = None,
         approval_hook: ApprovalHook | None = None,
         observer: InvocationObserver | None = None,
     ) -> None:
         self._registry = registry
         self._policy_hook = policy_hook
+        self._canonical_binding_hook = canonical_binding_hook
         self._governance_binding_hook = governance_binding_hook
         self._approval_hook = approval_hook
         self._observer = observer or NullInvocationObserver()
@@ -103,12 +117,26 @@ class CapabilityInvoker:
             context=request.context,
         )
 
+        canonical_invocation: DomainToolInvocation | None = None
+        if self._canonical_binding_hook is not None:
+            canonical_invocation = await self._bind_invocation(
+                request,
+                registration,
+                provider_invocation,
+                self._canonical_binding_hook,
+                binding_name="canonical",
+            )
+
         policy_decision = PolicyDecision.ALLOW
         if self._policy_hook is not None:
             policy_decision = await self._policy_hook(request, capability)
         if policy_decision is PolicyDecision.DENY:
             await self._record(
-                request, registration, InvocationStatus.DENIED, ErrorCode.FORBIDDEN.value
+                request,
+                registration,
+                InvocationStatus.DENIED,
+                ErrorCode.FORBIDDEN.value,
+                canonical_invocation=canonical_invocation,
             )
             raise ContractError(
                 ErrorCode.FORBIDDEN,
@@ -116,50 +144,36 @@ class CapabilityInvoker:
                 provider_id=registration.provider_id,
             )
 
-        canonical_invocation: DomainToolInvocation | None = None
         approval_decision: str | None = None
         approval_required = policy_decision is PolicyDecision.REQUIRE_APPROVAL or bool(
             capability.required_approvals
         )
         if approval_required:
-            if self._governance_binding_hook is None:
-                await self._record(
+            if canonical_invocation is None:
+                if self._governance_binding_hook is None:
+                    await self._record(
+                        request,
+                        registration,
+                        InvocationStatus.FAILED,
+                        ErrorCode.CONTRACT_VIOLATION.value,
+                        approval_decision="required",
+                    )
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        (
+                            f"capability {capability.capability_id!r} requires approval but no "
+                            "canonical governance binding hook is configured"
+                        ),
+                        provider_id=registration.provider_id,
+                    )
+                canonical_invocation = await self._bind_invocation(
                     request,
                     registration,
-                    InvocationStatus.FAILED,
-                    ErrorCode.CONTRACT_VIOLATION.value,
+                    provider_invocation,
+                    self._governance_binding_hook,
+                    binding_name="governance",
                     approval_decision="required",
                 )
-                raise ContractError(
-                    ErrorCode.CONTRACT_VIOLATION,
-                    (
-                        f"capability {capability.capability_id!r} requires approval but no "
-                        "canonical governance binding hook is configured"
-                    ),
-                    provider_id=registration.provider_id,
-                )
-
-            canonical_invocation = await self._governance_binding_hook(
-                request,
-                registration,
-                provider_invocation,
-            )
-            try:
-                validate_tool_invocation_binding(provider_invocation, canonical_invocation)
-            except ValueError as exc:
-                await self._record(
-                    request,
-                    registration,
-                    InvocationStatus.FAILED,
-                    ErrorCode.CONTRACT_VIOLATION.value,
-                    canonical_invocation=canonical_invocation,
-                    approval_decision="required",
-                )
-                raise ContractError(
-                    ErrorCode.CONTRACT_VIOLATION,
-                    "governance binding does not match the resolved provider invocation",
-                    provider_id=registration.provider_id,
-                ) from exc
 
             approved = False
             if self._approval_hook is not None:
@@ -350,6 +364,43 @@ class CapabilityInvoker:
             adapter_metadata=tool_result.adapter_metadata,
         )
         return result
+
+    async def _bind_invocation(
+        self,
+        request: CapabilityInvocation,
+        registration: CapabilityRegistration,
+        provider_invocation: ToolInvocation,
+        hook: CanonicalInvocationBindingHook | GovernanceBindingHook,
+        *,
+        binding_name: str,
+        approval_decision: str | None = None,
+    ) -> DomainToolInvocation:
+        try:
+            canonical_invocation = await hook(request, registration, provider_invocation)
+            validate_tool_invocation_binding(provider_invocation, canonical_invocation)
+        except ContractError as exc:
+            await self._record(
+                request,
+                registration,
+                InvocationStatus.FAILED,
+                exc.code.value,
+                approval_decision=approval_decision,
+            )
+            raise
+        except (TypeError, ValueError) as exc:
+            await self._record(
+                request,
+                registration,
+                InvocationStatus.FAILED,
+                ErrorCode.CONTRACT_VIOLATION.value,
+                approval_decision=approval_decision,
+            )
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                f"{binding_name} binding does not match the resolved provider invocation",
+                provider_id=registration.provider_id,
+            ) from exc
+        return canonical_invocation
 
     @staticmethod
     def _provider_failure_metadata(

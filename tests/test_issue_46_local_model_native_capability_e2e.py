@@ -27,7 +27,7 @@ from ai_multi_agent_platform.capabilities import ECHO_CAPABILITY_ID, NativeEchoP
 from ai_multi_agent_platform.contracts import JsonValue
 from ai_multi_agent_platform.control_plane import HTTPRequest
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
-from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus
+from ai_multi_agent_platform.domain import OwnerRef, RunStatus, TaskStatus, validate_id
 from ai_multi_agent_platform.models import RoutingRequirements
 from ai_multi_agent_platform.onboarding import FIRST_RUN_RESOURCE_ID
 
@@ -307,7 +307,13 @@ def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_pat
         assert isinstance(agent_run_id, str)
         assert isinstance(result_id, str)
         assert run.output.get("model_ref") == "model-local-tool-capable"
-        assert run.output.get("tool_invocation_refs") == (f"{run_id}:call-local-echo",)
+        tool_invocation_refs = run.output.get("tool_invocation_refs")
+        assert isinstance(tool_invocation_refs, tuple)
+        assert len(tool_invocation_refs) == 1
+        tool_invocation_id = tool_invocation_refs[0]
+        assert isinstance(tool_invocation_id, str)
+        validate_id(tool_invocation_id, "tool_invocation")
+        assert tool_invocation_id != f"{run_id}:call-local-echo"
         assert _ECHO_MESSAGE in str(run.output.get("text"))
 
         capability_results = run.output.get("capability_results")
@@ -315,6 +321,9 @@ def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_pat
         assert len(capability_results) == 1
         capability_result = capability_results[0]
         assert isinstance(capability_result, Mapping)
+        assert capability_result["invocation_id"] == f"{run_id}:capability:1"
+        assert capability_result["canonical_tool_invocation_id"] == tool_invocation_id
+        assert capability_result["model_tool_call_id"] == "call-local-echo"
         assert capability_result["capability_id"] == ECHO_CAPABILITY_ID
         assert capability_result["capability_version"] == "1.0"
         assert capability_result["provider_id"] == "native.reference"
@@ -330,7 +339,7 @@ def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_pat
         assert agent_run.capability_ids == (ECHO_CAPABILITY_ID,)
         assert dict(agent_run.capability_versions) == {ECHO_CAPABILITY_ID: "1.0"}
         assert agent_run.model_call_refs == (f"{run_id}:model",)
-        assert agent_run.tool_invocation_refs == (f"{run_id}:call-local-echo",)
+        assert agent_run.tool_invocation_refs == (tool_invocation_id,)
         assert agent_run.result_ids == (result_id,)
         assert agent_run.telemetry["capability_invocation_count"] == 1
         assert agent_run.telemetry["model_usage"] == {
