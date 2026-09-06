@@ -29,9 +29,9 @@ The deterministic benchmark providers implement the same `ModelProvider` and `Ca
 
 The benchmark deliberately relies on existing runtime semantics rather than duplicating them:
 
-- model cancellation is normalized by `ModelRuntime` to canonical `cancelled`;
-- tool timeout is enforced by `CapabilityInvoker` and normalized to canonical `timeout`;
-- tool cancellation is normalized by `CapabilityInvoker` to canonical `cancelled`;
+- model cancellation is normalized by `ModelRuntime` to canonical non-retryable `cancelled`;
+- tool timeout is enforced by `CapabilityInvoker` and normalized to canonical retryable `timeout`;
+- tool cancellation is normalized by `CapabilityInvoker` to canonical retryable `cancelled`;
 - provider unavailability crosses the provider boundary as canonical, retryable `unavailable`;
 - no automatic retry loop is added by the benchmark harness.
 
@@ -44,7 +44,7 @@ The benchmark deliberately relies on existing runtime semantics rather than dupl
 : The selected deterministic model provider returns canonical retryable `unavailable` during the fault phase, then returns to healthy service.
 
 `model-cancelled`
-: Concurrent model requests are cancelled while the provider is in-flight. `ModelRuntime` must expose canonical retryable `cancelled`, and provider coroutine cancellation must be observable.
+: Concurrent model requests are cancelled while the provider is in-flight. `ModelRuntime` must expose canonical non-retryable `cancelled`, and provider coroutine cancellation must be observable.
 
 `tool-unavailable`
 : The resolved deterministic tool provider returns canonical retryable `unavailable`, followed by a healthy recovery phase.
@@ -82,7 +82,9 @@ This is intended for comparative platform evidence. It does not claim nanosecond
 
 ## Retry semantics
 
-Canonical failures retain their `retryable` classification in the report through `retryable_error_counts`. The benchmark does **not** invent a retry policy where the exercised runtime does not currently own one; `automatic_retry_attempts` is therefore expected to remain `0` for this profile.
+Canonical failures retain their actual `retryable` classification in the report through `retryable_error_counts`. The model and tool runtime paths are intentionally not flattened into one synthetic policy: current `ModelRuntime` cancellation is non-retryable, while `CapabilityInvoker` timeout and cancellation are retryable. Provider unavailability is retryable on both exercised paths.
+
+The benchmark does **not** invent a retry policy where the exercised runtime does not currently own one; `automatic_retry_attempts` is therefore expected to remain `0` for this profile.
 
 A future retry-owning runtime can add an explicit benchmark profile when its semantics are stable. Until then, this profile proves failure classification, timeout/cancellation behavior and recovery without creating an uncontrolled retry/spin loop.
 
