@@ -36,6 +36,7 @@ def test_coordination_repair_commands_are_authorized_before_handler_execution() 
 
         control_plane.register_command("coordination.reconcile", handler)
         control_plane.register_command("coordination.cancel", handler)
+        control_plane.register_command("coordination.repair", handler)
         context = RequestContext(
             request_id="issue-384-authorization-request",
             correlation_id="issue-384-authorization-correlation",
@@ -43,7 +44,11 @@ def test_coordination_repair_commands_are_authorized_before_handler_execution() 
             idempotency_key="issue-384-command-key",
         )
 
-        for command in ("coordination.reconcile", "coordination.cancel"):
+        for command in (
+            "coordination.reconcile",
+            "coordination.cancel",
+            "coordination.repair",
+        ):
             with pytest.raises(ContractError) as caught:
                 await control_plane.execute_command(
                     context,
@@ -56,6 +61,7 @@ def test_coordination_repair_commands_are_authorized_before_handler_execution() 
         assert [call.action for call in authorization.calls] == [
             "coordination.reconcile",
             "coordination.cancel",
+            "coordination.repair",
         ]
 
     asyncio.run(scenario())
