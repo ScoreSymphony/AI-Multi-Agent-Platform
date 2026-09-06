@@ -54,6 +54,8 @@ def inspect_coordinator_store(path: str | Path) -> CoordinatorStoreMetadata | No
         with sqlite3.connect(uri, uri=True) as connection:
             if not _table_exists(connection, "coordinator_meta"):
                 return None
+            _validate_required_tables(connection)
+            _quick_check(connection)
             schema_row = connection.execute(
                 "SELECT value FROM coordinator_meta WHERE key = 'schema_version'"
             ).fetchone()
@@ -136,8 +138,6 @@ def migrate_coordinator_store(path: str | Path) -> tuple[str, ...]:
             )
             _quick_check(connection)
     except (OSError, sqlite3.DatabaseError, ValueError) as exc:
-        if isinstance(exc, CoordinatorMigrationError):
-            raise
         raise CoordinatorMigrationError(f"coordinator migration failed: {exc}") from exc
 
     metadata = inspect_coordinator_store(store)
