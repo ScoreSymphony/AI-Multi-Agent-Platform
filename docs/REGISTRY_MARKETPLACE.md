@@ -80,6 +80,8 @@ When an operator configures a local catalog, the default composition connects:
 
 and supplies durable installation state plus `PlatformRegistryValidationContextResolver`. The resolver derives platform version, installed Registry dependencies, capabilities, plugins, models and grantable permissions from server-side platform state rather than accepting those claims from a client. Optional signature keys add the reference HMAC verifier at the same composition boundary.
 
+The configured single-node composition attaches exactly one canonical #20 `PluginRegistry` to the Control Plane and gives that same instance to the Registry plugin artifact installer. Marketplace-installed plugins therefore appear through the normal `plugins` resource and lifecycle instead of creating a Registry-private parallel plugin state.
+
 ## Control Plane, CLI and graphical Marketplace
 
 `register_distribution_control_plane()` exposes provider-neutral Registry operations only when the required server-side pieces exist. With a provider it registers the read-only `registry-items` collection. `registry.preview` requires the authoritative validation resolver. `registry.activate` additionally requires the owner-domain router. `registry.pin` and `registry.unpin` additionally require durable installation state.
