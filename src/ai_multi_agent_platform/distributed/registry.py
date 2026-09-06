@@ -26,6 +26,24 @@ class RegistryError(RuntimeError):
     """Raised when registration, liveness or reservation invariants are violated."""
 
 
+def _state_timestamp(previous: datetime, event_time: datetime) -> datetime:
+    """Advance canonical state time monotonically without changing heartbeat evidence."""
+
+    return max(previous, event_time)
+
+
+def _worker_state_changed(previous: WorkerRecord, current: WorkerRecord) -> bool:
+    """Compare Worker state while excluding liveness and modification timestamps."""
+
+    normalized = replace(
+        previous,
+        registered_at=current.registered_at,
+        last_heartbeat_at=current.last_heartbeat_at,
+        updated_at=current.updated_at,
+    )
+    return normalized != current
+
+
 @dataclass(frozen=True, slots=True)
 class RegistrySnapshot:
     """Restart-safe registry state without backend- or process-specific identity."""
@@ -67,7 +85,12 @@ class DistributedRegistry:
             reservations=self.active_reservations(),
         )
 
-    def restore_snapshot(self, snapshot: RegistrySnapshot) -> None:
+    def restore_snapshot(
+        self,
+        snapshot: RegistrySnapshot,
+        *,
+        now: datetime | None = None,
+    ) -> None:
         """Restore a clean registry conservatively after control-side restart."""
 
         if self._nodes or self._workers or self._reservations or self._heartbeat_sequence:
@@ -110,13 +133,30 @@ class DistributedRegistry:
                 raise RegistryError("worker job has multiple active reservations in snapshot")
             job_reservations[reservation.worker_job_id] = reservation.reservation_id
 
+        timestamp = now or utc_now()
+
+        def restored_node(node: NodeRecord) -> NodeRecord:
+            if node.status is NodeStatus.OFFLINE:
+                return node
+            return replace(
+                node,
+                status=NodeStatus.OFFLINE,
+                updated_at=_state_timestamp(node.updated_at, timestamp),
+            )
+
+        def restored_worker(worker: WorkerRecord) -> WorkerRecord:
+            if worker.status is WorkerStatus.OFFLINE:
+                return worker
+            return replace(
+                worker,
+                status=WorkerStatus.OFFLINE,
+                updated_at=_state_timestamp(worker.updated_at, timestamp),
+            )
+
         # Persisted health is not fresh liveness evidence after a process restart.
-        self._nodes = {
-            node_id: replace(node, status=NodeStatus.OFFLINE) for node_id, node in nodes.items()
-        }
+        self._nodes = {node_id: restored_node(node) for node_id, node in nodes.items()}
         self._workers = {
-            worker_id: replace(worker, status=WorkerStatus.OFFLINE)
-            for worker_id, worker in workers.items()
+            worker_id: restored_worker(worker) for worker_id, worker in workers.items()
         }
         self._heartbeat_sequence = {node_id: sequence_map.get(node_id, 0) for node_id in nodes}
         self._reservations = reservations
@@ -141,6 +181,7 @@ class DistributedRegistry:
             request.node,
             registered_at=timestamp,
             last_heartbeat_at=timestamp,
+            updated_at=timestamp,
             status=NodeStatus.MAINTENANCE if request.node.maintenance else NodeStatus.ONLINE,
             worker_refs=tuple(sorted(worker.worker_id for worker in request.workers)),
         )
@@ -155,16 +196,20 @@ class DistributedRegistry:
         incoming = {worker.worker_id for worker in request.workers}
         for stale_worker_id in known_for_node - incoming:
             stale = self._workers[stale_worker_id]
+            if stale.status is WorkerStatus.OFFLINE and stale.draining:
+                continue
             self._workers[stale_worker_id] = replace(
                 stale,
                 status=WorkerStatus.OFFLINE,
                 draining=True,
+                updated_at=_state_timestamp(stale.updated_at, timestamp),
             )
         for worker in request.workers:
             self._workers[worker.worker_id] = replace(
                 worker,
                 registered_at=timestamp,
                 last_heartbeat_at=timestamp,
+                updated_at=timestamp,
             )
         return node
 
@@ -188,10 +233,17 @@ class DistributedRegistry:
         status = heartbeat.node_status or NodeStatus.ONLINE
         if node.maintenance:
             status = NodeStatus.MAINTENANCE
+        resources = heartbeat.resources or node.resources
+        node_state_changed = status != node.status or resources != node.resources
         updated = replace(
             node,
             last_heartbeat_at=heartbeat.observed_at,
-            resources=heartbeat.resources or node.resources,
+            updated_at=(
+                _state_timestamp(node.updated_at, heartbeat.observed_at)
+                if node_state_changed
+                else node.updated_at
+            ),
+            resources=resources,
             status=status,
         )
         self._nodes[node.node_id] = updated
@@ -200,10 +252,25 @@ class DistributedRegistry:
             existing = self._workers.get(worker.worker_id)
             if existing is not None and existing.node_id != node.node_id:
                 raise RegistryError("worker cannot move between nodes during heartbeat")
-            refreshed = replace(
-                worker,
-                last_heartbeat_at=heartbeat.observed_at,
-            )
+            if existing is None:
+                refreshed = replace(
+                    worker,
+                    registered_at=heartbeat.observed_at,
+                    last_heartbeat_at=heartbeat.observed_at,
+                    updated_at=heartbeat.observed_at,
+                )
+            else:
+                refreshed = replace(
+                    worker,
+                    registered_at=existing.registered_at,
+                    last_heartbeat_at=heartbeat.observed_at,
+                    updated_at=existing.updated_at,
+                )
+                if _worker_state_changed(existing, refreshed):
+                    refreshed = replace(
+                        refreshed,
+                        updated_at=_state_timestamp(existing.updated_at, heartbeat.observed_at),
+                    )
             self._workers[worker.worker_id] = refreshed
             self._renew_active_reservations_for_worker(
                 worker.worker_id,
@@ -229,45 +296,87 @@ class DistributedRegistry:
         except KeyError as exc:
             raise RegistryError(f"unknown worker: {worker_id}") from exc
 
-    def set_node_draining(self, node_id: str, *, draining: bool) -> NodeRecord:
+    def set_node_draining(
+        self,
+        node_id: str,
+        *,
+        draining: bool,
+        now: datetime | None = None,
+    ) -> NodeRecord:
         node = self.get_node(node_id)
-        updated = replace(node, draining=draining)
-        self._nodes[node_id] = updated
-        return updated
-
-    def set_node_maintenance(self, node_id: str, *, maintenance: bool) -> NodeRecord:
-        node = self.get_node(node_id)
+        if node.draining is draining:
+            return node
+        timestamp = now or utc_now()
         updated = replace(
             node,
-            maintenance=maintenance,
-            status=NodeStatus.MAINTENANCE if maintenance else NodeStatus.ONLINE,
+            draining=draining,
+            updated_at=_state_timestamp(node.updated_at, timestamp),
         )
         self._nodes[node_id] = updated
         return updated
 
-    def set_worker_draining(self, worker_id: str, *, draining: bool) -> WorkerRecord:
+    def set_node_maintenance(
+        self,
+        node_id: str,
+        *,
+        maintenance: bool,
+        now: datetime | None = None,
+    ) -> NodeRecord:
+        node = self.get_node(node_id)
+        target_status = NodeStatus.MAINTENANCE if maintenance else NodeStatus.ONLINE
+        if node.maintenance is maintenance and node.status is target_status:
+            return node
+        timestamp = now or utc_now()
+        updated = replace(
+            node,
+            maintenance=maintenance,
+            status=target_status,
+            updated_at=_state_timestamp(node.updated_at, timestamp),
+        )
+        self._nodes[node_id] = updated
+        return updated
+
+    def set_worker_draining(
+        self,
+        worker_id: str,
+        *,
+        draining: bool,
+        now: datetime | None = None,
+    ) -> WorkerRecord:
         worker = self.get_worker(worker_id)
-        updated = replace(worker, draining=draining)
+        if worker.draining is draining:
+            return worker
+        timestamp = now or utc_now()
+        updated = replace(
+            worker,
+            draining=draining,
+            updated_at=_state_timestamp(worker.updated_at, timestamp),
+        )
         self._workers[worker_id] = updated
         return updated
 
-    def deregister_worker(self, worker_id: str) -> None:
+    def deregister_worker(self, worker_id: str, *, now: datetime | None = None) -> None:
+        timestamp = now or utc_now()
         worker = self.get_worker(worker_id)
         for reservation in tuple(self.active_reservations(worker_id=worker_id)):
             self.release_reservation(reservation.reservation_id)
         self._workers.pop(worker_id)
         node = self._nodes.get(worker.node_id)
         if node is not None:
-            self._nodes[worker.node_id] = replace(
-                node,
-                worker_refs=tuple(ref for ref in node.worker_refs if ref != worker_id),
-            )
+            worker_refs = tuple(ref for ref in node.worker_refs if ref != worker_id)
+            if worker_refs != node.worker_refs:
+                self._nodes[worker.node_id] = replace(
+                    node,
+                    worker_refs=worker_refs,
+                    updated_at=_state_timestamp(node.updated_at, timestamp),
+                )
 
-    def deregister_node(self, node_id: str) -> None:
+    def deregister_node(self, node_id: str, *, now: datetime | None = None) -> None:
+        timestamp = now or utc_now()
         self.get_node(node_id)
         for worker in tuple(self.list_workers()):
             if worker.node_id == node_id:
-                self.deregister_worker(worker.worker_id)
+                self.deregister_worker(worker.worker_id, now=timestamp)
         self._nodes.pop(node_id)
         self._heartbeat_sequence.pop(node_id, None)
 
@@ -280,7 +389,11 @@ class DistributedRegistry:
             if timestamp - node.last_heartbeat_at <= self.heartbeat_timeout:
                 continue
             if node.status is not NodeStatus.OFFLINE:
-                self._nodes[node_id] = replace(node, status=NodeStatus.OFFLINE)
+                self._nodes[node_id] = replace(
+                    node,
+                    status=NodeStatus.OFFLINE,
+                    updated_at=_state_timestamp(node.updated_at, timestamp),
+                )
                 expired_nodes.append(node_id)
 
         for worker_id, worker in tuple(self._workers.items()):
@@ -289,7 +402,11 @@ class DistributedRegistry:
             node_offline = worker_node is None or worker_node.status is NodeStatus.OFFLINE
             if worker_stale or node_offline:
                 if worker.status is not WorkerStatus.OFFLINE:
-                    self._workers[worker_id] = replace(worker, status=WorkerStatus.OFFLINE)
+                    self._workers[worker_id] = replace(
+                        worker,
+                        status=WorkerStatus.OFFLINE,
+                        updated_at=_state_timestamp(worker.updated_at, timestamp),
+                    )
 
         return tuple(sorted(expired_nodes))
 
