@@ -163,7 +163,7 @@ class StepCoordinationRecord:
     plan_revision: int
     step_id: str
     phase: CoordinationPhase
-    dependency_ids: tuple[str, ...]
+    dependency_ids: tuple[str, ...] = ()
     satisfied_dependency_ids: tuple[str, ...] = ()
     latest_run_id: str | None = None
     current_attempt: int = 0

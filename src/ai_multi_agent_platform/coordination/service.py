@@ -1061,6 +1061,11 @@ class DurablePlanStepCoordinator:
 
     async def _aggregate_task(self, plan_id: str) -> None:
         state = self.repository.get_plan(plan_id)
+        records = self.repository.list_step_records(plan_id)
+        if len(records) != len(state.steps) or any(
+            record.phase is not CoordinationPhase.TERMINAL for record in records
+        ):
+            return
         if not state.steps or any(step.status not in _TERMINAL_STEPS for step in state.steps):
             return
         task = await self.kernel.get_task(state.plan.task_id)
