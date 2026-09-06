@@ -60,7 +60,7 @@ export class BrowserSessionClient {
 
   constructor(options: BrowserSessionClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? "").replace(/\/$/, "");
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.storage = options.storage === undefined ? browserCsrfStorage() : options.storage;
     this.csrfToken = this.storage?.getItem(CSRF_STORAGE_KEY) ?? null;
   }
