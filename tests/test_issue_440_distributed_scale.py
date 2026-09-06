@@ -24,7 +24,6 @@ def test_distributed_scale_runs_authenticated_two_worker_workspace_round(tmp_pat
                 worker_count=2,
                 rounds=1,
                 payload_sizes_bytes=(1024,),
-                chunk_bytes=1024,
                 timeout_seconds=20.0,
             )
         )
@@ -73,7 +72,7 @@ def test_distributed_scale_runs_authenticated_two_worker_workspace_round(tmp_pat
         ({"payload_sizes_bytes": (1024, 1024)}, "unique"),
         ({"payload_sizes_bytes": (2048, 1024)}, "strictly increasing"),
         ({"payload_sizes_bytes": (0,)}, "positive"),
-        ({"chunk_bytes": 512}, "chunk_bytes"),
+        ({"chunk_bytes": 1024}, "fixed 64 KiB"),
         ({"timeout_seconds": 0.0}, "timeout_seconds"),
     ],
 )

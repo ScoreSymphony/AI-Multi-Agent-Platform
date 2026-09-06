@@ -26,7 +26,6 @@ def build_parser() -> argparse.ArgumentParser:
         default="1024,65536",
         help="Strictly increasing comma-separated remote Workspace payload sizes.",
     )
-    parser.add_argument("--chunk-bytes", type=int, default=64 * 1024)
     parser.add_argument("--timeout-seconds", type=float, default=30.0)
     parser.add_argument("--safety-max-operations", type=int, default=2048)
     parser.add_argument("--safety-max-payload-bytes", type=int, default=16 * 1024 * 1024)
@@ -52,7 +51,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             worker_count=args.worker_count,
             rounds=args.rounds,
             payload_sizes_bytes=_payload_sizes(args.payload_sizes_bytes),
-            chunk_bytes=args.chunk_bytes,
             timeout_seconds=args.timeout_seconds,
             safety_max_operations=args.safety_max_operations,
             safety_max_payload_bytes=args.safety_max_payload_bytes,

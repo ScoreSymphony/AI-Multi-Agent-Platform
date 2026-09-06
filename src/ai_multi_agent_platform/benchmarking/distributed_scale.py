@@ -15,7 +15,7 @@ from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.adapters.single_node_app import build_default_single_node_deployment
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext
-from ai_multi_agent_platform.deployment import SingleNodeConfig
+from ai_multi_agent_platform.deployment import SingleNodeConfig, SingleNodeDeployment
 from ai_multi_agent_platform.deployment.distributed_control_plane import (
     DeploymentWorkerProtocolService,
     platform_workspace_context,
@@ -25,9 +25,10 @@ from ai_multi_agent_platform.deployment.distributed_worker import (
     DistributedWorkerProcessConfig,
 )
 from ai_multi_agent_platform.distributed import (
+    DispatchRecord,
+    DispatchState,
     DistributedRegistry,
     DistributedRuntime,
-    DispatchState,
     Heartbeat,
     NodeRecord,
     RegistrationRequest,
@@ -93,8 +94,8 @@ class DistributedScaleSpec:
             raise ValueError("payload sizes must be unique")
         if tuple(sorted(self.payload_sizes_bytes)) != self.payload_sizes_bytes:
             raise ValueError("payload sizes must be strictly increasing")
-        if self.chunk_bytes < 1024:
-            raise ValueError("chunk_bytes must be at least 1024")
+        if self.chunk_bytes != 64 * 1024:
+            raise ValueError("distributed scale v1 uses the fixed 64 KiB production chunk size")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if self.safety_max_operations < 1:
@@ -430,7 +431,7 @@ class DistributedWorkerWorkspaceScaleHarness:
     def _build_workers(
         self,
         spec: DistributedScaleSpec,
-        deployment: Any,
+        deployment: SingleNodeDeployment,
         transport: InProcessMessageTransport,
     ) -> tuple[_WorkerFixture, ...]:
         actions = frozenset(
@@ -506,7 +507,7 @@ class DistributedWorkerWorkspaceScaleHarness:
     async def _build_workspaces(
         self,
         spec: DistributedScaleSpec,
-        deployment: Any,
+        deployment: SingleNodeDeployment,
     ) -> tuple[_WorkspaceFixture, ...]:
         fixtures: list[_WorkspaceFixture] = []
         for payload_size in spec.payload_sizes_bytes:
@@ -553,7 +554,7 @@ class DistributedWorkerWorkspaceScaleHarness:
     async def _dispatch_timed(
         runtime: DistributedRuntime,
         job: WorkerJobRequest,
-    ) -> tuple[Any, float]:
+    ) -> tuple[DispatchRecord, float]:
         started = time.perf_counter()
         record = await runtime.dispatch(job)
         return record, time.perf_counter() - started

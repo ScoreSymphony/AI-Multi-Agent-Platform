@@ -49,8 +49,9 @@ number that can be treated as valid evidence.
 ## Payload sweeps
 
 Payload sizes are supplied as a strictly increasing comma-separated list. The same canonical
-Workspace snapshot is exercised once per round and Worker. The default chunk size is 64 KiB and can
-be changed independently of payload size.
+Workspace snapshot is exercised once per round and Worker. The report records the production remote
+Workspace transfer chunk size of 64 KiB as fixed v1 metadata; the benchmark does not expose a
+benchmark-only chunk override.
 
 Example:
 
@@ -59,7 +60,6 @@ platform-distributed-scale \
   --worker-count 4 \
   --rounds 3 \
   --payload-sizes-bytes 1024,65536,1048576 \
-  --chunk-bytes 65536 \
   --output artifacts/benchmarks/distributed-scale.json
 ```
 

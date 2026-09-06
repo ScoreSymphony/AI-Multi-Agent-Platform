@@ -38,7 +38,6 @@ jobs:
             --worker-count 2 \
             --rounds 1 \
             --payload-sizes-bytes 1024 \
-            --chunk-bytes 1024 \
             --timeout-seconds 20 \
             --safety-max-operations 4 \
             --safety-max-payload-bytes 4096 \
@@ -64,6 +63,7 @@ jobs:
           assert report["benchmark"]["worker_count"] == 2
           assert report["benchmark"]["rounds"] == 1
           assert report["benchmark"]["payload_sizes_bytes"] == [1024]
+          assert report["benchmark"]["chunk_bytes"] == 65536
           assert report["benchmark"]["operation_count"] == 2
           assert correctness["passed"] is True
           assert correctness["registered_workers"] == 2
