@@ -9,6 +9,7 @@ from ai_multi_agent_platform.capabilities import (
     CapabilityInvoker,
     CapabilityRegistry,
     InvocationTrace,
+    bind_canonical_capability_invocation,
 )
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.distributed.capability_provider import (
@@ -27,6 +28,7 @@ from ai_multi_agent_platform.distributed.models import (
 )
 from ai_multi_agent_platform.distributed.registry import DistributedRegistry
 from ai_multi_agent_platform.distributed.runtime import DistributedRuntime
+from ai_multi_agent_platform.distributed.tool_lineage import tool_lineage
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.execution import ReferenceExecutor
 from ai_multi_agent_platform.workspaces import (
@@ -139,7 +141,10 @@ def test_capability_invocation_crosses_executor_and_exact_worker_with_root_trace
         )
         capabilities = CapabilityRegistry()
         await capabilities.register_provider(provider)
-        result = await CapabilityInvoker(capabilities).invoke(
+        result = await CapabilityInvoker(
+            capabilities,
+            canonical_binding_hook=bind_canonical_capability_invocation,
+        ).invoke(
             CapabilityInvocation(
                 invocation_id=f"{run_id}:tool-call-1",
                 capability_id=ECHO_CAPABILITY_ID,
@@ -147,6 +152,8 @@ def test_capability_invocation_crosses_executor_and_exact_worker_with_root_trace
                 arguments={"message": "through worker"},
                 context=OperationContext(
                     correlation_id=task_id,
+                    owner_type="service",
+                    owner_id="issue-46-conformance",
                     project_id=project_id,
                 ),
                 trace=InvocationTrace(
@@ -160,9 +167,15 @@ def test_capability_invocation_crosses_executor_and_exact_worker_with_root_trace
         )
 
         assert result.output == {"message": "through worker"}
+        assert result.canonical_tool_invocation_id is not None
         assert len(result.evidence_refs) == 1
         worker_job_id = result.evidence_refs[0]
         record = runtime.get_record(worker_job_id)
+        lineage = tool_lineage(record.job)
+        assert lineage.root_run_id == run_id
+        assert lineage.tool_invocation_id == result.canonical_tool_invocation_id
+        assert lineage.correlation_id == task_id
+        assert lineage.task_id == task_id
         assert record.job.execution.run_id == run_id
         assert record.job.execution.subject_id == task_id
         assert record.job.requirements == JobRequirements(
@@ -176,6 +189,7 @@ def test_capability_invocation_crosses_executor_and_exact_worker_with_root_trace
         assert record.handle is not None
         metadata = result.adapter_metadata[0]
         assert metadata.namespace == "distributed-capability"
+        assert metadata.values["tool_invocation_id"] == result.canonical_tool_invocation_id
         assert metadata.values["worker_job_id"] == worker_job_id
         assert metadata.values["worker_id"] == worker_id
         assert metadata.values["node_id"] == node_id
