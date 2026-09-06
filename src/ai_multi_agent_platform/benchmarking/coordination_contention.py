@@ -326,9 +326,7 @@ class CoordinationContentionHarness:
         )
         succeeded_tasks = sum(state.status is TaskStatus.SUCCEEDED for state in task_states)
         histories: tuple[tuple[Event, ...], ...] = tuple(
-            await asyncio.gather(
-                *(kernel.history(workflow.plan.task_id) for workflow in workflows)
-            )
+            await asyncio.gather(*(kernel.history(workflow.plan.task_id) for workflow in workflows))
         )
         run_ids = tuple(run_id for history in histories for run_id in _history_run_ids(history))
         run_created_events = len(run_ids)
