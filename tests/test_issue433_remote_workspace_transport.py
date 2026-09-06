@@ -20,6 +20,7 @@ from ai_multi_agent_platform.distributed.workspace_transport import (
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.messaging import (
     InProcessMessageTransport,
+    MessageDelivery,
     PublishReceipt,
     TcpMessageBroker,
     TcpMessageTransport,
@@ -73,6 +74,33 @@ class _DropFirstCommitReplyTransport(TcpMessageTransport):
             self.dropped_commit_reply = True
             raise ConnectionError("simulated transient TCP commit reply failure")
         return await super().publish(topic, envelope, control=control)
+
+
+class _DisconnectAfterFirstChunkAckTransport(TcpMessageTransport):
+    def __init__(self, host: str, port: int, *, authentication_key: str) -> None:
+        super().__init__(
+            host,
+            port,
+            authentication_key=authentication_key,
+            provider_id="issue-433-disconnect-after-chunk",
+        )
+        self.disconnected_after_chunk = False
+
+    async def ack(self, delivery: MessageDelivery) -> None:
+        await super().ack(delivery)
+        if (
+            delivery.envelope.message_type != "workspace.put_chunk"
+            or self.disconnected_after_chunk
+        ):
+            return
+        self.disconnected_after_chunk = True
+        for subscription in tuple(self._subscriptions):
+            writer = subscription._writer
+            if writer is None:
+                continue
+            writer.close()
+            with suppress(ConnectionError, OSError):
+                await writer.wait_closed()
 
 
 def _context(project_id: str) -> DataAccessContext:
@@ -279,6 +307,58 @@ def test_workspace_bound_local_worker_uses_exact_materialized_execution_token(
             with suppress(asyncio.CancelledError):
                 await endpoint_task
             await transport.close(graceful=False)
+
+    asyncio.run(scenario())
+
+
+def test_tcp_worker_subscription_reconnects_mid_workspace_transfer(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        workspaces, files, context, workspace, snapshot, request = await _canonical_workspace(
+            tmp_path,
+            content=b"r" * 300_000,
+        )
+        worker_id = new_id("worker")
+        worker_root = tmp_path / "tcp-reconnect-worker-root"
+        broker = TcpMessageBroker(authentication_key=TEST_TRANSPORT_KEY)
+        await broker.start()
+        control_transport = TcpMessageTransport(
+            broker.host,
+            broker.port,
+            authentication_key=TEST_TRANSPORT_KEY,
+            provider_id="issue-433-reconnect-control",
+        )
+        worker_transport = _DisconnectAfterFirstChunkAckTransport(
+            broker.host,
+            broker.port,
+            authentication_key=TEST_TRANSPORT_KEY,
+        )
+        store = WorkerWorkspaceMaterializationStore(worker_id, worker_root)
+        endpoint_task = asyncio.create_task(
+            WorkerWorkspaceTransportEndpoint(store, worker_transport).serve()
+        )
+        materializer = TransportRemoteWorkspaceMaterializer(
+            worker_id,
+            control_transport,
+            workspaces,
+            files,
+            lambda _workspace: context,
+            chunk_bytes=64 * 1024,
+            response_timeout_seconds=5.0,
+        )
+        try:
+            receipt = await materializer.materialize(request)
+            assert worker_transport.disconnected_after_chunk is True
+            assert receipt.worker_ref == worker_id
+            assert (
+                worker_root / workspace.id / snapshot.id / "src" / "input.txt"
+            ).read_bytes() == b"r" * 300_000
+        finally:
+            endpoint_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await endpoint_task
+            await worker_transport.close(graceful=False)
+            await control_transport.close(graceful=False)
+            await broker.close(graceful=False)
 
     asyncio.run(scenario())
 
