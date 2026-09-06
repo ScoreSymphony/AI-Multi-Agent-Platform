@@ -686,7 +686,8 @@ class ProviderFaultBenchmarkHarness:
                 else:
                     evidence.unexpected_failures += 1
                     evidence.errors.append(
-                        f"{phase} operation {index} succeeded while {expected_code.value} was expected"
+                        f"{phase} operation {index} succeeded while "
+                        f"{expected_code.value} was expected"
                     )
 
         await asyncio.gather(*(run_one(index) for index in range(spec.operations_per_phase)))
