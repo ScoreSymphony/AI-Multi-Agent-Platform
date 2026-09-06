@@ -50,9 +50,7 @@ def test_provider_fault_profiles_are_correct_and_schema_valid(
             safety_max_operations_per_phase=4,
             safety_max_concurrency=4,
         )
-        report = await ProviderFaultBenchmarkHarness(
-            platform_commit="provider-test-sha"
-        ).run(spec)
+        report = await ProviderFaultBenchmarkHarness(platform_commit="provider-test-sha").run(spec)
 
         assert report.platform_commit == "provider-test-sha"
         assert report.expected_fault_error_code == expected_code
