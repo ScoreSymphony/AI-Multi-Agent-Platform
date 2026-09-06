@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
+from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext, OperationControl
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.distributed import RegistryError, WorkerJobRequest
 from ai_multi_agent_platform.distributed.workspace import WorkspaceJobMaterializationResolver
@@ -50,6 +50,29 @@ class _RecordingTransport(InProcessMessageTransport):
     ) -> PublishReceipt:
         self.published.append((topic, envelope))
         return await super()._publish_once(topic, envelope)
+
+
+class _DropFirstCommitReplyTransport(TcpMessageTransport):
+    def __init__(self, host: str, port: int, *, authentication_key: str) -> None:
+        super().__init__(
+            host,
+            port,
+            authentication_key=authentication_key,
+            provider_id="issue-433-drop-commit-reply",
+        )
+        self.dropped_commit_reply = False
+
+    async def publish(
+        self,
+        topic: str,
+        envelope: TransportEnvelope,
+        *,
+        control: OperationControl | None = None,
+    ) -> PublishReceipt:
+        if envelope.message_type == "workspace.commit.accepted" and not self.dropped_commit_reply:
+            self.dropped_commit_reply = True
+            raise ConnectionError("simulated transient TCP commit reply failure")
+        return await super().publish(topic, envelope, control=control)
 
 
 def _context(project_id: str) -> DataAccessContext:
@@ -256,6 +279,60 @@ def test_workspace_bound_local_worker_uses_exact_materialized_execution_token(
             with suppress(asyncio.CancelledError):
                 await endpoint_task
             await transport.close(graceful=False)
+
+    asyncio.run(scenario())
+
+
+def test_tcp_commit_reply_failure_redelivers_without_duplicate_materialization(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        workspaces, files, context, workspace, snapshot, request = await _canonical_workspace(
+            tmp_path,
+            content=b"tcp-redelivery-workspace",
+        )
+        worker_id = new_id("worker")
+        worker_root = tmp_path / "tcp-redelivery-worker-root"
+        broker = TcpMessageBroker(authentication_key=TEST_TRANSPORT_KEY)
+        await broker.start()
+        control_transport = TcpMessageTransport(
+            broker.host,
+            broker.port,
+            authentication_key=TEST_TRANSPORT_KEY,
+            provider_id="issue-433-redelivery-control",
+        )
+        worker_transport = _DropFirstCommitReplyTransport(
+            broker.host,
+            broker.port,
+            authentication_key=TEST_TRANSPORT_KEY,
+        )
+        store = WorkerWorkspaceMaterializationStore(worker_id, worker_root)
+        endpoint_task = asyncio.create_task(
+            WorkerWorkspaceTransportEndpoint(store, worker_transport).serve()
+        )
+        materializer = TransportRemoteWorkspaceMaterializer(
+            worker_id,
+            control_transport,
+            workspaces,
+            files,
+            lambda _workspace: context,
+            response_timeout_seconds=5.0,
+        )
+        try:
+            receipt = await materializer.materialize(request)
+            assert worker_transport.dropped_commit_reply is True
+            assert receipt.worker_ref == worker_id
+            assert receipt.cache_hit is True
+            assert (
+                worker_root / workspace.id / snapshot.id / "src" / "input.txt"
+            ).read_bytes() == b"tcp-redelivery-workspace"
+        finally:
+            endpoint_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await endpoint_task
+            await worker_transport.close(graceful=False)
+            await control_transport.close(graceful=False)
+            await broker.close(graceful=False)
 
     asyncio.run(scenario())
 
