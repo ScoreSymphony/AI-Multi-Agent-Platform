@@ -193,7 +193,7 @@ def test_agent_model_tool_call_executes_pinned_capability_through_invoker() -> N
     asyncio.run(scenario())
 
 
-def test_bound_agent_run_records_model_and_capability_evidence_in_lifecycle() -> None:
+def test_bound_agent_run_lazily_composes_and_records_capability_execution() -> None:
     async def scenario() -> None:
         capabilities = CapabilityRegistry()
         await capabilities.register_provider(NativeEchoProvider())
@@ -230,17 +230,11 @@ def test_bound_agent_run_records_model_and_capability_evidence_in_lifecycle() ->
                 )
             ),
         )
-        turn = AgentCapabilityTurn(
-            model_runtime,
-            capabilities,
-            CapabilityInvoker(capabilities),
-        )
         lifecycle = FirstRunAgentLifecycleBackend(
             delegate=FakeLifecycleBackend(),
             tasks=_Tasks(TaskState(task=task, revision=1)),
             agents=runtime,
             models=model_runtime,
-            capability_turn=turn,
         )
         context = OperationContext(
             correlation_id=task_id,
