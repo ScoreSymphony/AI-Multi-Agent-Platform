@@ -1,5 +1,9 @@
 """Cross-cutting platform security, authentication and authorization surface."""
 
+# Import order is intentionally not fully alphabetical: redaction/types must be bound
+# before enforced_providers imports configuration, whose package root imports them back.
+# ruff: noqa: I001
+
 from .approvals import ApprovalRecord, ApprovalService
 from .authentication import (
     AuthenticatedActor,
