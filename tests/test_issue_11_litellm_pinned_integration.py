@@ -3,15 +3,21 @@ from __future__ import annotations
 import asyncio
 from importlib import metadata
 
-import litellm
+import pytest
 
-from ai_multi_agent_platform.adapters.litellm import (
+litellm = pytest.importorskip("litellm", reason="requires the optional [litellm] extra")
+
+from ai_multi_agent_platform.adapters.litellm import (  # noqa: E402
     LiteLLMMode,
     LiteLLMModelProvider,
     LiteLLMProviderConfig,
 )
-from ai_multi_agent_platform.contracts import OperationContext
-from ai_multi_agent_platform.models import CanonicalModelRequest, ModelMessage, ModelRole
+from ai_multi_agent_platform.contracts import OperationContext  # noqa: E402
+from ai_multi_agent_platform.models import (  # noqa: E402
+    CanonicalModelRequest,
+    ModelMessage,
+    ModelRole,
+)
 
 PINNED_LITELLM_VERSION = "1.99.0"
 
