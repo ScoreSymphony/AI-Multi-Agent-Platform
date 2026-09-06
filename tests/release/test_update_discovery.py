@@ -2,6 +2,10 @@ from pathlib import Path
 
 import pytest
 
+from ai_multi_agent_platform.release.adoption import (
+    UpdateGateEvidence,
+    UpdateValidationEvidenceSet,
+)
 from ai_multi_agent_platform.release.discovery import (
     CompatibilityInventory,
     ObservedUpstream,
@@ -14,7 +18,7 @@ from ai_multi_agent_platform.release.discovery import (
     load_observations,
     record_reviewed_candidate,
 )
-from ai_multi_agent_platform.release.models import GateStatus
+from ai_multi_agent_platform.release.models import GateStatus, ReleaseEvidenceKind
 from ai_multi_agent_platform.upgrade.models import VersionSnapshot
 
 
@@ -64,6 +68,21 @@ def _passed_validation() -> dict[str, GateStatus]:
         "security": GateStatus.PASSED,
         "compatibility_review": GateStatus.PASSED,
     }
+
+
+def _passed_evidence(*, revision: str = "v1.1.0") -> UpdateValidationEvidenceSet:
+    return UpdateValidationEvidenceSet(
+        component="runtime",
+        candidate_revision=revision,
+        gates={
+            name: UpdateGateEvidence(
+                status=GateStatus.PASSED,
+                kind=ReleaseEvidenceKind.WORKFLOW_RUN,
+                ref=f"workflow:run/{name}",
+            )
+            for name in _passed_validation()
+        },
+    )
 
 
 def _observed(
@@ -171,6 +190,7 @@ def test_reviewed_candidate_can_produce_new_matrix_without_mutating_old_one() ->
         candidate,
         compatibility_status="tested",
         reviewed_at="2026-09-06T00:00:00Z",
+        validation_evidence=_passed_evidence(),
     )
     assert inventory.entries[0].revision == "v1.0.0"
     assert updated.entries[0].revision == "v1.1.0"
@@ -192,6 +212,7 @@ def test_candidate_cannot_be_adopted_with_missing_validation_gate() -> None:
             candidate,
             compatibility_status="tested",
             reviewed_at="2026-09-06T00:00:00Z",
+            validation_evidence=_passed_evidence(),
         )
 
 
@@ -208,6 +229,22 @@ def test_candidate_cannot_be_adopted_with_not_run_validation_gate() -> None:
             candidate,
             compatibility_status="tested",
             reviewed_at="2026-09-06T00:00:00Z",
+            validation_evidence=_passed_evidence(),
+        )
+
+
+def test_candidate_cannot_be_adopted_with_evidence_for_different_revision() -> None:
+    candidate = evaluate_update_candidates(
+        _inventory(),
+        (_observed(validation=_passed_validation()),),
+    ).candidates[0]
+    with pytest.raises(UpdateDiscoveryError, match="different candidate revision"):
+        record_reviewed_candidate(
+            _inventory(),
+            candidate,
+            compatibility_status="tested",
+            reviewed_at="2026-09-06T00:00:00Z",
+            validation_evidence=_passed_evidence(revision="v1.2.0"),
         )
 
 
@@ -227,6 +264,7 @@ def test_manual_review_candidate_cannot_be_recorded_without_approval() -> None:
             candidate,
             compatibility_status="tested",
             reviewed_at="2026-09-06T00:00:00Z",
+            validation_evidence=_passed_evidence(),
         )
 
 
