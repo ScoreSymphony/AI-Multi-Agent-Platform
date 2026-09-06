@@ -213,6 +213,36 @@ class ModelRoutingProfileService:
             visible.append(definition)
         return tuple(visible)
 
+    def compensate_created(
+        self,
+        profile_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+        expected_instance_id: str,
+    ) -> None:
+        """Remove only an untouched profile created by the exact failed Template apply."""
+
+        definition = self.repository.get_definition(profile_id)
+        revision = self.repository.get_revision(ModelRoutingProfileRef(profile_id, 1))
+        provenance = revision.provenance
+        if (
+            definition.current_revision != 1
+            or not definition.enabled
+            or definition.updated_at != definition.created_at
+            or definition.owner_ref != expected_owner_ref
+            or revision.owner_ref != expected_owner_ref
+            or provenance is None
+            or provenance.source != expected_source
+            or provenance.details.get("template_instance_id") != expected_instance_id
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "routing profile is not eligible for Template compensation",
+                details={"profile_id": profile_id},
+            )
+        self.repository.delete_profile(profile_id)
+
     @staticmethod
     def _require_project_scope(project_id: str | None, context: OperationContext) -> None:
         if project_id is not None and context.project_id != project_id:
