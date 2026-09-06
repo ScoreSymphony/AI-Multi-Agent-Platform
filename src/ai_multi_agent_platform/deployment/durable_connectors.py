@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, fields
 from typing import Any
 
+from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.accounting import AccountingService
 from ai_multi_agent_platform.configuration import SecretProvider
 from ai_multi_agent_platform.connectors import (
@@ -15,11 +16,18 @@ from ai_multi_agent_platform.connectors import (
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
 from ai_multi_agent_platform.distributed import DistributedRuntime
+from ai_multi_agent_platform.models import ModelRoutingProfileRef
 from ai_multi_agent_platform.observability import InMemoryExporter
 from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
 from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
 from ai_multi_agent_platform.repositories.connector_bootstrap import (
     connector_repository_discovery_resolver,
+)
+from ai_multi_agent_platform.templates import (
+    AgentTemplateExporter,
+    AutomationTemplateExporter,
+    PlatformTemplateEnvironmentResolver,
+    register_template_control_plane,
 )
 
 from .config import SingleNodeConfig
@@ -88,6 +96,46 @@ def build_single_node_deployment(
         authorization_gate=base.approval_gate,
     )
     register_connector_control_plane(base.control_plane, connectors)
+
+    # The public deployment now has an authoritative canonical Connector inventory. Rebind the
+    # Template surface to a resolver that includes exactly those ConnectorDefinition IDs instead
+    # of leaving connector requirements permanently fail-closed. The callback closes over the
+    # live registry so later provider registration/removal is reflected immediately in preview.
+    template_environment = PlatformTemplateEnvironmentResolver(
+        workspaces=base.workspaces,
+        capabilities=lambda: (
+            capability.capability_id
+            for capability in base.capabilities.inventory_capabilities(include_unavailable=False)
+        ),
+        capability_versions=lambda: (
+            (capability.capability_id, capability.version)
+            for capability in base.capabilities.inventory_capabilities(include_unavailable=False)
+        ),
+        connectors=lambda: (definition.id for definition in connector_registry.definitions()),
+        model_policies=lambda: (
+            ModelRoutingProfileRef(definition.profile_id, definition.current_revision).canonical_ref
+            for definition in base.routing_profile_repository.list_definitions()
+            if definition.enabled
+        ),
+        grantable_permissions=lambda context: (
+            action.value
+            for action in base.authorization.globally_grantable_actions(
+                context.actor.principal_ref,
+                actor_type=context.actor.actor_type,
+            )
+        ),
+        platform_version=__version__,
+    )
+    register_template_control_plane(
+        base.control_plane,
+        base.templates,
+        environment_resolver=template_environment,
+        agent_exporter=AgentTemplateExporter(base.agents, base.templates.templates),
+        automation_exporter=AutomationTemplateExporter(
+            base.control_plane.automation_service,
+            base.templates.templates,
+        ),
+    )
 
     base_values: dict[str, Any] = {
         field.name: getattr(base, field.name) for field in fields(BaseSingleNodeDeployment)
