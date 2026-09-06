@@ -134,7 +134,10 @@ def test_verified_repository_event_enters_normal_single_node_automation_runtime(
         )
         assert len(deliveries) == 1
         delivery = deliveries[0]
-        assert delivery.status is DeliveryStatus.SUCCEEDED
+        assert delivery.status is DeliveryStatus.SUCCEEDED, (
+            delivery.error_code,
+            delivery.error_message,
+        )
         assert delivery.generated_task_id is not None
         generated = await deployment.kernel.get_task(delivery.generated_task_id)
         assert generated.task.project_id == project.id
