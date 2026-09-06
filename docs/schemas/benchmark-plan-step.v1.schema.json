@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/benchmark-plan-step.v1.schema.json",
+  "title": "AI Multi-Agent Platform Durable Plan/Step Benchmark Report v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "benchmark",
+    "platform_version",
+    "platform_commit",
+    "started_at",
+    "duration_seconds",
+    "environment",
+    "throughput_steps_per_second",
+    "registration_latency",
+    "outcome_persistence_latency",
+    "coordination_observation_latency",
+    "resources",
+    "correctness",
+    "task_id",
+    "plan_id",
+    "step_ids",
+    "run_ids",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "scenario",
+        "size",
+        "timeout_seconds",
+        "safety_max_size",
+        "benchmark_id",
+        "benchmark_version",
+        "deployment_profile",
+        "persistence_profile",
+        "expected_step_count",
+        "expected_peak_active_width",
+        "expected_invariants",
+        "captured_metrics"
+      ],
+      "properties": {
+        "scenario": {"enum": ["linear", "fan-out", "fan-in"]},
+        "size": {"type": "integer", "minimum": 1},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "safety_max_size": {"type": "integer", "minimum": 1},
+        "benchmark_id": {"const": "single-node.plan-step-scale"},
+        "benchmark_version": {"const": "1.0"},
+        "deployment_profile": {"const": "single-node-reference"},
+        "persistence_profile": {"const": "sqlite-kernel+coordinator"},
+        "expected_step_count": {"type": "integer", "minimum": 1},
+        "expected_peak_active_width": {"type": "integer", "minimum": 1},
+        "expected_invariants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "captured_metrics": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        }
+      },
+      "additionalProperties": false
+    },
+    "platform_version": {"type": "string"},
+    "platform_commit": {"type": "string"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "environment": {"type": "object"},
+    "throughput_steps_per_second": {"type": "number", "minimum": 0},
+    "registration_latency": {"$ref": "#/$defs/latency"},
+    "outcome_persistence_latency": {"$ref": "#/$defs/latency"},
+    "coordination_observation_latency": {"$ref": "#/$defs/latency"},
+    "resources": {"$ref": "#/$defs/resources"},
+    "correctness": {
+      "type": "object",
+      "required": [
+        "expected_steps",
+        "succeeded_steps",
+        "run_created_events",
+        "unique_run_ids",
+        "dependency_order_valid",
+        "task_succeeded",
+        "active_width_peak",
+        "expected_active_width_peak",
+        "passed"
+      ],
+      "properties": {
+        "expected_steps": {"type": "integer", "minimum": 1},
+        "succeeded_steps": {"type": "integer", "minimum": 0},
+        "run_created_events": {"type": "integer", "minimum": 0},
+        "unique_run_ids": {"type": "integer", "minimum": 0},
+        "dependency_order_valid": {"type": "boolean"},
+        "task_succeeded": {"type": "boolean"},
+        "active_width_peak": {"type": "integer", "minimum": 0},
+        "expected_active_width_peak": {"type": "integer", "minimum": 1},
+        "passed": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "task_id": {"type": "string", "minLength": 1},
+    "plan_id": {"type": "string", "minLength": 1},
+    "step_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "run_ids": {"type": "array", "items": {"type": "string"}},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "latency": {
+      "type": "object",
+      "required": ["count", "min_ms", "mean_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "min_ms": {"type": "number", "minimum": 0},
+        "mean_ms": {"type": "number", "minimum": 0},
+        "p50_ms": {"type": "number", "minimum": 0},
+        "p95_ms": {"type": "number", "minimum": 0},
+        "p99_ms": {"type": "number", "minimum": 0},
+        "max_ms": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object",
+      "required": [
+        "process_cpu_seconds",
+        "traced_memory_current_bytes",
+        "traced_memory_peak_bytes",
+        "peak_rss_bytes",
+        "storage_bytes_before",
+        "storage_bytes_after",
+        "storage_growth_bytes",
+        "open_file_descriptors"
+      ],
+      "properties": {
+        "process_cpu_seconds": {"type": "number", "minimum": 0},
+        "traced_memory_current_bytes": {"type": "integer", "minimum": 0},
+        "traced_memory_peak_bytes": {"type": "integer", "minimum": 0},
+        "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "storage_bytes_before": {"type": "integer", "minimum": 0},
+        "storage_bytes_after": {"type": "integer", "minimum": 0},
+        "storage_growth_bytes": {"type": "integer"},
+        "open_file_descriptors": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
