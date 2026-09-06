@@ -44,6 +44,16 @@ describe("Template manifest gating", () => {
     }
   });
 
+  it("keeps the post-owner-domain create-from-existing exporters in the product contract", () => {
+    for (const command of [
+      "template.create-from-workflow",
+      "template.create-from-capability-assignment",
+      "template.create-from-model-routing-profile",
+    ]) {
+      expect(TEMPLATE_REQUIRED_COMMANDS).toContain(command);
+    }
+  });
+
   it("mounts only when the complete Template product contract is advertised", () => {
     expect(templateManifestState("ready", manifest())).toBe("available");
   });
