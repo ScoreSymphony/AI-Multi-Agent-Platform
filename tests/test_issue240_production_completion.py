@@ -10,6 +10,7 @@ from ai_multi_agent_platform.adapters.distributed_control_plane_app import (
     build_distributed_control_plane_deployment,
 )
 from ai_multi_agent_platform.cli.compute import add_compute_parsers
+from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.deployment.advanced_profiles import load_advanced_deployment_profile
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
@@ -32,7 +33,6 @@ from ai_multi_agent_platform.distributed.worker_protocol import (
     WorkerHeartbeatRequest,
     WorkerRequestCredentials,
 )
-from ai_multi_agent_platform.control_plane.models import RequestContext
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 from ai_multi_agent_platform.security import (
     ActorType,
@@ -185,7 +185,8 @@ def test_profile_bound_admin_provisions_and_rotates_reporter_credential(tmp_path
             assert exc.failure is AuthenticationFailure.CREDENTIAL_REVOKED
         else:
             raise AssertionError("rotated Worker credential remained valid")
-        assert authentication.authenticate_bearer(replacement_secret).identity.actor_id == reporter_id
+        replacement_actor = authentication.authenticate_bearer(replacement_secret)
+        assert replacement_actor.identity.actor_id == reporter_id
 
     asyncio.run(scenario())
 
