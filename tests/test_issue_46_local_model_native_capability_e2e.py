@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -306,14 +307,14 @@ def test_authenticated_local_model_executes_native_capability_end_to_end(tmp_pat
         assert isinstance(agent_run_id, str)
         assert isinstance(result_id, str)
         assert run.output.get("model_ref") == "model-local-tool-capable"
-        assert run.output.get("tool_invocation_refs") == [f"{run_id}:call-local-echo"]
+        assert run.output.get("tool_invocation_refs") == (f"{run_id}:call-local-echo",)
         assert _ECHO_MESSAGE in str(run.output.get("text"))
 
         capability_results = run.output.get("capability_results")
-        assert isinstance(capability_results, list)
+        assert isinstance(capability_results, tuple)
         assert len(capability_results) == 1
         capability_result = capability_results[0]
-        assert isinstance(capability_result, dict)
+        assert isinstance(capability_result, Mapping)
         assert capability_result["capability_id"] == ECHO_CAPABILITY_ID
         assert capability_result["capability_version"] == "1.0"
         assert capability_result["provider_id"] == "native.reference"
