@@ -263,7 +263,7 @@ def test_schema_v1_state_without_worker_result_remains_restorable(tmp_path: Path
     asyncio.run(create_current_state())
 
     document = json.loads(state_path.read_text(encoding="utf-8"))
-    assert document["schema_version"] == DISTRIBUTED_STATE_SCHEMA_VERSION == "2"
+    assert document["schema_version"] == DISTRIBUTED_STATE_SCHEMA_VERSION == "3"
     document["schema_version"] = "1"
     for record in document["dispatch_records"]:
         record.pop("result", None)
