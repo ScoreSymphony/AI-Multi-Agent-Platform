@@ -36,8 +36,7 @@ Every release has:
    impact and known limitations;
 5. a release manifest conforming to `release-manifest.schema.json`;
 6. an SBOM reference and release provenance reference;
-7. immutable artifact hashes for distributed artifacts and upstream runtime artifacts used by the
-   release.
+7. immutable hashes for every platform/release artifact that is actually published or distributed.
 
 The package version and `VersionSnapshot.platform_release` must match the release manifest's
 `release_version`.
@@ -53,9 +52,14 @@ For every relevant upstream or redistributed artifact record:
 - whether local modifications exist;
 - patch identifiers, if any;
 - build and test status;
-- cryptographic artifact hashes;
+- cryptographic artifact hashes when that upstream input is itself built, mirrored, packaged or
+  distributed as an artifact by the platform release;
 - release-specific SBOM/provenance references where applicable;
 - last verified timestamp.
+
+A source-only upstream integration does not need a fictional artifact hash: its reproducibility is
+anchored by the immutable source revision plus provenance. If that upstream is later built or
+redistributed as part of a release, the resulting artifact must be hashed and recorded.
 
 `upstream/*.yaml` remains the source-of-truth governance inventory. A release manifest is an
 immutable release snapshot of the inputs actually shipped or tested. Updating one does not silently
