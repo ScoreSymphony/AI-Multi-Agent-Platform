@@ -60,8 +60,8 @@ __all__ = [
     "WaitResolution",
     "WaitType",
     "coordination_command_handlers",
-    "coordination_migration_plan",
     "coordination_resource_services",
+    "coordinator_migration_plan",
     "inspect_coordinator_store",
     "migrate_coordinator_store",
 ]
