@@ -1,6 +1,12 @@
 """Optional registry and distribution contracts for issue #81."""
 
+from .canonical_router import (
+    CanonicalDistributionRouter,
+    PluginArtifactInstaller,
+    PortabilityImportOwner,
+)
 from .control_plane import (
+    REGISTRY_ACTIVATE_COMMAND,
     REGISTRY_COLLECTION,
     REGISTRY_PREVIEW_COMMAND,
     RegistryCommandHandlers,
@@ -32,6 +38,7 @@ from .validation import (
 
 __all__ = [
     "ArtifactIntegrity",
+    "CanonicalDistributionRouter",
     "DistributionPreview",
     "DistributionRoute",
     "DistributionRouter",
@@ -39,6 +46,9 @@ __all__ = [
     "FindingSeverity",
     "InstalledRegistryItem",
     "LocalRegistryProvider",
+    "PluginArtifactInstaller",
+    "PortabilityImportOwner",
+    "REGISTRY_ACTIVATE_COMMAND",
     "REGISTRY_COLLECTION",
     "REGISTRY_ITEM_SCHEMA_VERSION",
     "REGISTRY_PREVIEW_COMMAND",

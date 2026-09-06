@@ -17,8 +17,14 @@ class LocalRegistryProvider:
         *,
         provider_id: str = "local",
     ) -> None:
+        if not provider_id.strip():
+            raise ValueError("registry provider_id must be non-blank")
+        resolved_items = tuple(items)
+        identities = [(item.item_id, item.version) for item in resolved_items]
+        if len(identities) != len(set(identities)):
+            raise ValueError("local registry contains duplicate item/version identities")
         self._provider_id = provider_id
-        self._items = tuple(items)
+        self._items = resolved_items
         self._artifacts = dict(artifacts or {})
 
     @property
@@ -27,7 +33,12 @@ class LocalRegistryProvider:
 
     def search(self, query: RegistryQuery) -> tuple[RegistryItem, ...]:
         matches = [item for item in self._items if self._matches(item, query)]
-        matches.sort(key=lambda item: (item.item_id, version_key(item.version)), reverse=True)
+        matches.sort(
+            key=lambda item: (
+                item.item_id,
+                tuple(-part for part in version_key(item.version)),
+            )
+        )
         return tuple(matches)
 
     def get(self, item_id: str, version: str | None = None) -> RegistryItem:
