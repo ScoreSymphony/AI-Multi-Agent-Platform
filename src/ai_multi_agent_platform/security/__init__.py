@@ -57,6 +57,14 @@ from .data_enforcement_lifecycle import (
     AuthorizedDataKnowledgeProvider,
     AuthorizedDataMemoryProvider,
 )
+from .enforced_providers import (
+    AuthorizedFileProvider,
+    AuthorizedKnowledgeProvider,
+    AuthorizedLifecycleBackend,
+    AuthorizedMemoryProvider,
+    AuthorizedSecretProvider,
+    AuthorizedToolProvider,
+)
 from .enforcement import AuthorizationAuditSink, AuthorizationGate
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
@@ -83,6 +91,7 @@ from .policy_profiles import (
     compile_local_principal_policy,
 )
 from .redaction import REDACTED, redact_exception, redact_sensitive, redact_text
+from .sqlite_approvals import SqliteApprovalService, SqliteAuthorizationAuditSink
 from .types import (
     ExternalSideEffect,
     SecretReference,
@@ -126,6 +135,12 @@ __all__ = [
     "AuthorizedDataFileProvider",
     "AuthorizedDataKnowledgeProvider",
     "AuthorizedDataMemoryProvider",
+    "AuthorizedFileProvider",
+    "AuthorizedKnowledgeProvider",
+    "AuthorizedLifecycleBackend",
+    "AuthorizedMemoryProvider",
+    "AuthorizedSecretProvider",
+    "AuthorizedToolProvider",
     "BrowserSession",
     "ControlPlaneAuthorizationBridge",
     "CredentialKind",
@@ -157,6 +172,8 @@ __all__ = [
     "SecurityContext",
     "SecurityDecision",
     "SessionGrant",
+    "SqliteApprovalService",
+    "SqliteAuthorizationAuditSink",
     "StoredCredential",
     "UntrustedInputError",
     "VerifiedExternalIdentity",
