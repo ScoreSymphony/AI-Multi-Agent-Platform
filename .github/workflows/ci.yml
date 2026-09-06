@@ -86,6 +86,12 @@ jobs:
         run: npm test
       - name: Build frontend
         run: npm run build
+      - name: Install Chromium regression runner
+        run: npm install --no-save --package-lock=false playwright@1.55.0
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run real browser session regression
+        run: node tests/browserSession.browser.mjs
 
   litellm-compat:
     runs-on: ubuntu-latest
