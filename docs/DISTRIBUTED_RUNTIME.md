@@ -28,7 +28,7 @@ The persisted domain `Node` and `Worker` objects remain the canonical ownership/
 
 `NodeRecord` describes a participating device using stable canonical `node_*` identity plus backend-neutral runtime facts:
 
-- health/status and heartbeat timestamps;
+- health/status, heartbeat evidence and canonical state-change timestamps;
 - CPU, RAM and storage capacity;
 - generic accelerator inventory and available memory;
 - operating-system/platform/architecture metadata;
@@ -45,7 +45,7 @@ The persisted domain `Node` and `Worker` objects remain the canonical ownership/
 - concurrency limit and active-job count;
 - health/status;
 - protocol and implementation version;
-- heartbeat/drain/locality state.
+- heartbeat, canonical state-change, drain and locality state.
 
 Raw host paths, GPU vendor IDs, broker IDs and process/container IDs are not canonical identities.
 
@@ -86,6 +86,21 @@ Authenticated registration is treated as an authoritative Worker snapshot for th
 Remote reports never control administrative trust state. For a new remotely enrolled Node, the reference service assigns `trust_level="untrusted"` unless the deployment chooses another explicit initial policy. Re-registration and heartbeat preserve Control-Plane-owned Node trust, maintenance and drain state as well as existing Worker drain state.
 
 #36 replay protection and optional TLS peer binding are applied before the registry is mutated. The raw Worker credential is never persisted in distributed runtime state.
+
+### State-change timestamp semantics
+
+`last_heartbeat_at` is liveness evidence only. `updated_at` is the latest canonical caller-visible Node/Worker state change and is never assigned by Search or another derived consumer.
+
+- registration/re-registration establishes both liveness and state-change time;
+- a pure heartbeat refresh advances `last_heartbeat_at` but preserves `updated_at`;
+- a heartbeat that changes canonical status/resources/Worker metadata advances `updated_at` as well;
+- drain/maintenance changes advance `updated_at` without changing `last_heartbeat_at`;
+- liveness expiry/offline transitions advance `updated_at` without rewriting the last accepted heartbeat;
+- no-op administrative mutations preserve the previous state-change timestamp;
+- state-change time is monotonic within the registry and all runtime timestamps are timezone-aware;
+- restart health normalization to offline is a canonical state change when the persisted record was not already offline, but it is not a heartbeat.
+
+Derived Search projections use canonical `updated_at`, so modification-time filters and ordering do not depend on heartbeat frequency.
 
 ## Placement policy
 
@@ -228,7 +243,7 @@ Tests cover network partition without fencing, retry-forbidden work, invalid fen
 - dispatch ownership records and portable Worker Job data;
 - retrieved terminal `WorkerJobResult` state including canonical artifact/evidence references.
 
-Distributed JSON state schema v2 adds the optional terminal result field while the reference store remains able to restore schema v1 snapshots. A v1 record therefore restores with no cached result and can recover the result from the same Worker after reachability is re-established.
+Distributed JSON state schema v3 adds explicit Node/Worker `updated_at` state-change timestamps. The reference store remains able to restore schema v1/v2 snapshots; missing state-change timestamps are derived conservatively from the later of registration and heartbeat time before restart health normalization. Schema v2 added the optional terminal result field, so a v1 dispatch record still restores with no cached result and can recover the result from the same Worker after reachability is re-established.
 
 The runtime persists dispatch ownership before the external Worker acknowledgement can be lost. After Control-Plane restart, persisted health is deliberately restored as offline rather than trusted as fresh liveness evidence. Re-registration/heartbeat then re-establishes reachability and reconciliation continues without duplicating execution.
 
