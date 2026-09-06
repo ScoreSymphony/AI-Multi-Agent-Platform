@@ -22,7 +22,7 @@ Optional compatibility claims are opt-in and claim-blocking:
 platform-conformance \
   --profile release \
   --deployment-profile reference-single-node-extended \
-  --enable-optional E,N,R,S,T,V,X,Y \
+  --enable-optional E,N,Q,R,S,T,V,X,Y \
   --json-report conformance-extended-reference.json
 ```
 
@@ -122,6 +122,7 @@ The following optional scenarios have maintained executable #46 evidence and can
 | C — Forge | real execution-only Forge Rust sidecar integration test |
 | E — Distributed Worker | authorization context + canonical terminal result identity + correlated safe distributed telemetry |
 | N — Notifications | recipient scope, authenticated anti-spoofing, idempotent inbox commands and replay-safe event projection |
+| Q — Templates | exact-source reapply authorization, dependency denial before side effects, compatibility/version blockers, secret rejection before instantiation, guarded composite compensation and final Single-Node owner-domain composition |
 | R — Import/export | package integrity, secret/runtime-state exclusion, successful import and rollback on failed import |
 | S — Registry | Registry-disabled single-node startup, configured local/offline composition sharing canonical plugin lifecycle, server-resolved preview validation and authoritative signature verification |
 | T — Repository/Git | exact repository revision -> canonical Workspace/Run -> change Artifact/commit provenance and retry identity |
@@ -129,11 +130,9 @@ The following optional scenarios have maintained executable #46 evidence and can
 | X — HA | stale-leader fencing, promotion reconciliation preserving Worker identity and duplicate-command replay without duplicate Task/Run |
 | Y — durable Plan/Step coordination | crash/restart-safe Run creation, waits/retries/fan-in, stale-fence rejection, lost-Worker reconciliation, restore/history consistency and explicit coordination observability |
 
-The following remains deliberately unavailable as a compatibility claim:
+Q, S and Y were previously unavailable while their owning implementation issues were still open. Their owning work is now complete and each has retained executable evidence. They remain optional deployment claims rather than becoming implicit requirements of the reference release profile.
 
-- Q — Templates: #78 remains open with unresolved authorization/compatibility/rollback and follow-up integration gaps.
-
-Explicitly enabling Q therefore blocks compatibility with `not_implemented`; it does not convert unfinished subsystem work into a conformance claim. S and Y now have maintained executable evidence and are claim-blocking when explicitly enabled.
+B and C still require prepared external Hermes/Forge environments. Explicit activation remains fail-closed when those external preconditions are absent.
 
 ## Compatibility semantics
 
@@ -193,7 +192,7 @@ The repository treats conformance as three different cost/coverage tiers rather 
 
 - `conformance-fast`;
 - `conformance-release` for the reference single-node release claim;
-- `conformance-extended-reference`, which additionally enables E/N/R/S/T/V/X/Y and therefore treats all eight as required.
+- `conformance-extended-reference`, which additionally enables E/N/Q/R/S/T/V/X/Y and therefore treats all nine as required.
 
 Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE`, `REL-EVAL` and `REL-VERTICAL` automatically because those checks are required members of the release profile rather than separately enabled options.
 
