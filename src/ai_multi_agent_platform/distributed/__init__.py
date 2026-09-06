@@ -1,5 +1,6 @@
 """Canonical distributed node, worker and scheduling primitives."""
 
+from .capability_provider import DISTRIBUTED_ECHO_TOOL_REF, DistributedExecutorEchoProvider
 from .control_plane import (
     DISTRIBUTED_ADMIN_COMMANDS,
     NODE_COLLECTION,
@@ -12,6 +13,13 @@ from .control_plane import (
     register_distributed_control_plane,
 )
 from .disaster_recovery import prepare_registry_disaster_recovery
+from .executor_worker import (
+    EXECUTOR_WORKER_INPUT_KEY,
+    EXECUTOR_WORKER_INPUT_SCHEMA,
+    ExecutorWorker,
+    ExecutorWorkspaceResolver,
+    executor_worker_input,
+)
 from .failover import (
     FailoverError,
     FailoverFenceReceipt,
@@ -80,7 +88,10 @@ from .workspace import (
 
 __all__ = [
     "DISTRIBUTED_ADMIN_COMMANDS",
+    "DISTRIBUTED_ECHO_TOOL_REF",
     "DISTRIBUTED_STATE_SCHEMA_VERSION",
+    "EXECUTOR_WORKER_INPUT_KEY",
+    "EXECUTOR_WORKER_INPUT_SCHEMA",
     "NODE_COLLECTION",
     "WORKER_COLLECTION",
     "WORKER_JOB_COLLECTION",
@@ -94,6 +105,7 @@ __all__ = [
     "DispatchRecord",
     "DispatchState",
     "DistributedAdminCommandHandlers",
+    "DistributedExecutorEchoProvider",
     "DistributedLifecycleBackend",
     "DistributedNodeProvider",
     "DistributedRegistry",
@@ -101,6 +113,8 @@ __all__ = [
     "DistributedStateStore",
     "DistributedTelemetry",
     "DistributedWorkerProvider",
+    "ExecutorWorker",
+    "ExecutorWorkspaceResolver",
     "FailoverError",
     "FailoverFenceReceipt",
     "FailoverRejectionCode",
@@ -147,6 +161,7 @@ __all__ = [
     "WorkerWorkspaceResolver",
     "WorkspaceDispatchEvidence",
     "WorkspaceJobMaterializationResolver",
+    "executor_worker_input",
     "prepare_registry_disaster_recovery",
     "register_distributed_control_plane",
     "worker_command_topic",
