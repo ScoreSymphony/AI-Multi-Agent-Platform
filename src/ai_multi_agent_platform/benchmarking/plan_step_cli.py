@@ -8,6 +8,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import cast
 
 from .plan_step import PlanStepBenchmarkHarness, PlanStepBenchmarkSpec, PlanStepScenario
 
@@ -42,7 +43,7 @@ async def _run(args: argparse.Namespace) -> int:
             platform_commit=args.platform_commit,
         ).run(
             PlanStepBenchmarkSpec(
-                scenario=PlanStepScenario(args.scenario),
+                scenario=cast(PlanStepScenario, args.scenario),
                 size=args.size,
                 timeout_seconds=args.timeout_seconds,
                 safety_max_size=args.safety_max_size,
