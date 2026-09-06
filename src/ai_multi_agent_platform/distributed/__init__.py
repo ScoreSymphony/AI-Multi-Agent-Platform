@@ -18,6 +18,7 @@ from .failover import (
     FailoverRejectionCode,
     WorkerOwnershipFencer,
 )
+from .lifecycle import DistributedLifecycleBackend
 from .models import (
     WORKER_PROTOCOL_VERSION,
     AcceleratorResource,
@@ -93,6 +94,7 @@ __all__ = [
     "DispatchRecord",
     "DispatchState",
     "DistributedAdminCommandHandlers",
+    "DistributedLifecycleBackend",
     "DistributedNodeProvider",
     "DistributedRegistry",
     "DistributedRuntime",

@@ -232,6 +232,35 @@ export class TemplateClient {
     );
   }
 
+  createFromWorkflow(
+    workflowId: string,
+    options: { revision?: number; name?: string } = {},
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<CanonicalTemplate> {
+    return this.command(
+      "template.create-from-workflow",
+      TEMPLATES,
+      compact({ workflow_id: requireRef(workflowId, "Workflow"), ...options }),
+      idempotencyKey,
+    );
+  }
+
+  createFromCapabilityAssignment(
+    assignmentId: string,
+    options: { revision?: number; name?: string } = {},
+    idempotencyKey: string = crypto.randomUUID(),
+  ): Promise<CanonicalTemplate> {
+    return this.command(
+      "template.create-from-capability-assignment",
+      TEMPLATES,
+      compact({
+        assignment_id: requireRef(assignmentId, "Capability Assignment"),
+        ...options,
+      }),
+      idempotencyKey,
+    );
+  }
+
   createFromAutomation(
     automationId: string,
     options: { name?: string } = {},

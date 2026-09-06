@@ -31,7 +31,14 @@ import {
 const TEMPLATE_QUERY_KEY = "templates:updated";
 const INSTANCE_LIMIT = 200;
 
-type ExportKind = "agent" | "agent_team" | "automation" | "project" | "workspaces";
+type ExportKind =
+  | "agent"
+  | "agent_team"
+  | "workflow"
+  | "capability_assignment"
+  | "automation"
+  | "project"
+  | "workspaces";
 
 export function TemplatesPage({ client }: { client: TemplateClient }) {
   const { navigate } = useRouter();
@@ -71,6 +78,10 @@ export function TemplatesPage({ client }: { client: TemplateClient }) {
         created = await client.createFromAgent(sourceRef, { name });
       } else if (exportKind === "agent_team") {
         created = await client.createFromAgentTeam(sourceRef, { name });
+      } else if (exportKind === "workflow") {
+        created = await client.createFromWorkflow(sourceRef, { name });
+      } else if (exportKind === "capability_assignment") {
+        created = await client.createFromCapabilityAssignment(sourceRef, { name });
       } else if (exportKind === "automation") {
         created = await client.createFromAutomation(sourceRef, { name });
       } else if (exportKind === "project") {
@@ -148,6 +159,8 @@ export function TemplatesPage({ client }: { client: TemplateClient }) {
             >
               <option value="agent">Agent</option>
               <option value="agent_team">Agent Team</option>
+              <option value="workflow">Workflow</option>
+              <option value="capability_assignment">Capability Assignment</option>
               <option value="automation">Automation</option>
               <option value="project">Project</option>
               <option value="workspaces">Workspace structure</option>

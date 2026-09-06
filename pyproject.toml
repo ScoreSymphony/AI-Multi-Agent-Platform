@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-platform = "ai_multi_agent_platform.cli.issue_82:main"
+platform = "ai_multi_agent_platform.cli.issue_81:main"
 platform-completion = "ai_multi_agent_platform.cli.completion:main"
 platform-server = "ai_multi_agent_platform.adapters.single_node_app:main"
 platform-distributed-server = "ai_multi_agent_platform.adapters.distributed_control_plane_app:main"

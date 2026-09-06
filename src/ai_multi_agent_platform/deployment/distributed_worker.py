@@ -219,14 +219,19 @@ def build_worker_process_from_deployment_node(
 
     Exactly the declared reporter performs registration/heartbeat.  Additional Worker processes
     for the same Node can run execution endpoints with ``reporting=False`` while the reporter owns
-    the complete Node heartbeat snapshot.
+    the complete Node heartbeat snapshot. Local and remote reporters use the same authenticated
+    Worker-protocol contract; ``connection_mode`` only describes deployment locality.
     """
 
     worker_ids = {worker.worker_id for worker in node.workers}
     if worker_id not in worker_ids:
         raise ValueError(f"Worker {worker_id!r} is not declared on deployment Node")
     reporting = node.reporter_worker_id == worker_id
-    registration = node.registration_request()
+    registration = RegistrationRequest(
+        node=node.node,
+        workers=node.workers,
+        service_identity_ref=node.reporter_worker_id,
+    )
     return DistributedWorkerProcess(
         DistributedWorkerProcessConfig(
             registration=registration,

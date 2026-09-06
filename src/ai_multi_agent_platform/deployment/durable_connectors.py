@@ -51,6 +51,7 @@ def build_single_node_deployment(
     accounting_service: AccountingService | None = None,
     observability_exporter: InMemoryExporter | None = None,
     distributed_runtime: DistributedRuntime | None = None,
+    enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
 ) -> SingleNodeDeployment:
     """Build the normal single-node profile with durable Connector source state.
@@ -78,6 +79,7 @@ def build_single_node_deployment(
         accounting_service=accounting_service,
         observability_exporter=observability_exporter,
         distributed_runtime=distributed_runtime,
+        enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=effective_repository_resolver,
     )
     connectors = ConnectorService(

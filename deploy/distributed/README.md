@@ -11,8 +11,9 @@ compositions over the canonical #14 distributed runtime, not a new Worker archit
 - `profiles/heterogeneous-three-node.json` — three differently capable Nodes selected through
   resources, capabilities and locality.
 
-All examples are credential-free. Remote entries contain only `SecretReference` locator/scope
-metadata. Raw Worker tokens, passwords, API keys and private keys are invalid profile content.
+All examples are credential-free. Reporter entries contain only `SecretReference` locator/scope
+metadata, including local same-host reporters. Raw Worker tokens, passwords, API keys and private
+keys are invalid profile content.
 
 ## Validate a profile
 
@@ -34,6 +35,8 @@ PY
 
 `registration_requests` are canonical #14 objects. `host_ref`, `transport_endpoint_ref` and
 `workspace_root` remain deployment-only metadata and are not copied into Node/Worker identity.
+The shipped Worker process binds the declared `reporter_worker_id` as the authenticated
+`service_identity_ref` for both local and remote reporters.
 
 ## Runnable composition
 
@@ -47,25 +50,45 @@ Issue #240 ships three explicit operator entrypoints in addition to the unchange
 - `platform-worker` — one independently running Worker endpoint with registration/heartbeat,
   TCP command transport and Worker-local Workspace materialization.
 
-For a remote Worker:
+The distributed server must be bound to one checked/validated topology:
 
-1. provision its scoped #36 Worker credential outside source control;
+```bash
+platform-distributed-server \
+  --profile deploy/distributed/profiles/remote-worker.json \
+  serve
+```
+
+`PLATFORM_DISTRIBUTED_PROFILE` may be used instead of `--profile`. Startup rejects a profile that
+contains a Node without a declared reporter or Worker credential reference; this prevents a
+configuration example from being accepted as runnable when the shipped Worker process cannot
+actually register it.
+
+For a Worker topology:
+
+1. provision each Node reporter's scoped #36 Worker credential outside source control;
 2. provision the #35 transport HMAC key and/or mTLS material outside source control;
-3. start `platform-message-broker` on the selected private endpoint;
+3. start `platform-message-broker` on the selected loopback/private endpoint;
 4. configure `PLATFORM_MESSAGE_BROKER_HOST` and `PLATFORM_MESSAGE_BROKER_PORT` for
-   `platform-distributed-server` and start the Control Plane;
+   `platform-distributed-server` and start it with the same `--profile` used by the Workers;
 5. expose the Control Plane Worker-protocol route through HTTPS for a non-loopback Worker;
-6. export the actual Worker credential only in the Worker process environment and run
+6. export the actual Worker credential only in the reporter Worker process environment and run
    `platform-worker --profile ... --host-ref ... --worker-id ... --control-plane-url ...
    --broker-host ... --broker-port ...`;
-7. let authenticated registration attach `TransportWorkerDispatcher`,
-   `TransportRemoteWorkspaceMaterializer` and `MaterializingWorkerDispatcher` to the canonical
-   distributed runtime automatically.
+7. start sibling Worker processes for the same Node with their own `--worker-id`; only the
+   declared reporter performs Node registration/heartbeat;
+8. let authenticated registration attach `TransportWorkerDispatcher`,
+   `TransportRemoteWorkspaceMaterializer` and `MaterializingWorkerDispatcher` to the same
+   canonical distributed runtime used by ordinary Task/Run execution.
 
 The Worker process starts both `WorkerTransportEndpoint` and
 `WorkerWorkspaceTransportEndpoint`. Canonical Workspace/snapshot/artifact references cross the
 transport; the destination machine reconstructs content beneath its own configured
 `workspace_root`.
+
+A normal Control Plane Task does not need distributed-specific Task logic. With the advanced
+composition enabled, the existing kernel `LifecycleBackend` seam routes the canonical Run into
+`DistributedRuntime`; the canonical scheduler chooses an eligible Worker and the terminal Worker
+snapshot is reconciled back into the same Run/Task lifecycle.
 
 `TcpMessageTransport` is the checked-in network-capable #35 adapter. Loopback operation may run
 without TLS; non-loopback TCP connections/listeners fail closed unless TLS is configured. The
@@ -78,6 +101,11 @@ complete authenticated registration/heartbeat snapshot. Additional Worker proces
 Node run their own execution/Workspace endpoints without inventing a second Node reporter. This
 keeps Node-wide capacity and liveness authority canonical while allowing separate OS processes.
 
+Local Workers use the same #36 Worker identity and #14 registration semantics as remote Workers.
+`connection_mode = "local"` changes deployment locality/TLS expectations only; it does not create
+an unauthenticated local Worker model. The reference local profiles therefore use loopback TCP,
+a reporter and a credential reference rather than an unused in-process transport declaration.
+
 ## Workspace rule
 
 Each Worker host declares one absolute machine-local `workspace_root`. Worker jobs carry only
@@ -86,10 +114,17 @@ filesystem path. #37 materialization transfers the exact canonical snapshot to a
 `<workspace_root>/<workspace_id>/<snapshot_id>` execution tree and collects changed files back as
 canonical file/artifact records.
 
+When a normal Run already has a canonical `RunWorkspaceBinding`, the distributed lifecycle adapter
+copies only its canonical Workspace ID and exact snapshot ID into the Worker Job. No local path is
+added to Task/Run state.
+
 ## Security defaults
 
 - Remote Worker bindings require TLS.
-- Remote registration uses #36 Worker authentication and #15 authorization.
+- Local same-host reporters still require #36 Worker authentication; loopback transport may omit
+  TLS when the deployment remains loopback-only.
+- Registration uses #36 Worker authentication and #15 authorization for both local and remote
+  reporters.
 - TCP transport supports scoped deployment HMAC authentication and TLS/mTLS.
 - Credential values are read only from operator-selected runtime environment variables or TLS
   files; committed profiles contain references only.

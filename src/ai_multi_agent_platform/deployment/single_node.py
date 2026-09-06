@@ -24,6 +24,7 @@ from ai_multi_agent_platform.capability_assignments import (
     JsonCapabilityAssignmentRepository,
 )
 from ai_multi_agent_platform.configuration import SecretProvider
+from ai_multi_agent_platform.contracts import LifecycleBackend
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlaneASGI,
@@ -38,7 +39,12 @@ from ai_multi_agent_platform.conversations import (
     JsonConversationRepository,
 )
 from ai_multi_agent_platform.data import LocalFileProvider
-from ai_multi_agent_platform.distributed import DistributedRuntime
+from ai_multi_agent_platform.distributed import (
+    DistributedLifecycleBackend,
+    DistributedRegistry,
+    DistributedRuntime,
+    JobRequirements,
+)
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.evaluation import (
     AccountingEvaluationEvidenceProvider,
@@ -129,6 +135,7 @@ from ai_multi_agent_platform.templates import (
     register_automation_template_handler,
     register_capability_assignment_template_handler,
     register_project_template_handler,
+    register_template_control_plane,
     register_workflow_template_handler,
     register_workspace_structure_template_handler,
 )
@@ -136,7 +143,6 @@ from ai_multi_agent_platform.templates.agent_team_control_plane import (
     register_agent_team_template_control_plane,
 )
 from ai_multi_agent_platform.templates.compensation import register_template_compensators
-from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
 from ai_multi_agent_platform.templates.project_control_plane import (
     register_project_template_control_plane,
 )
@@ -325,9 +331,15 @@ def build_single_node_deployment(
     accounting_service: AccountingService | None = None,
     observability_exporter: InMemoryExporter | None = None,
     distributed_runtime: DistributedRuntime | None = None,
+    enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
 ) -> SingleNodeDeployment:
-    """Build the durable Stage-1 profile without optional external services."""
+    """Build the durable Stage-1 profile without optional external services.
+
+    ``enable_distributed_execution`` is opt-in. The ordinary #39 profile therefore keeps its local
+    reference LifecycleBackend unchanged, while advanced deployment may bind the same canonical
+    Task/Run kernel seam to #14 scheduling and Worker dispatch.
+    """
 
     config.prepare_directories()
     database_dir = config.database_dir
@@ -405,6 +417,12 @@ def build_single_node_deployment(
     authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
     authentication = LocalAuthenticationService(store=authentication_store)
     authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
+    effective_distributed_runtime = distributed_runtime
+    if enable_distributed_execution and effective_distributed_runtime is None:
+        effective_distributed_runtime = DistributedRuntime(
+            DistributedRegistry(),
+            authorization=authorization,
+        )
     routing_profiles = ModelRoutingProfileService(
         routing_profile_repository,
         authorization=authorization,
@@ -495,9 +513,18 @@ def build_single_node_deployment(
         workspace_resolver=repository_workspace_execution.resolve_execution_workspace,
         terminal_result_observer=repository_workspace_execution.observe_terminal_result,
     )
+    execution_lifecycle: LifecycleBackend = reference_lifecycle
+    if enable_distributed_execution:
+        if effective_distributed_runtime is None:
+            raise AssertionError("distributed execution enabled without a distributed runtime")
+        execution_lifecycle = DistributedLifecycleBackend(
+            effective_distributed_runtime,
+            requirements=JobRequirements(executor_type="reference"),
+            workspace_bindings=run_workspace_bindings,
+        )
     lifecycle = AuthorizedLifecycleBackend(
         FirstRunAgentLifecycleBackend(
-            delegate=reference_lifecycle,
+            delegate=execution_lifecycle,
             tasks=EventSourcedTaskRepository(kernel_repository),
             agents=agent_runtime,
             models=model_runtime,
@@ -585,7 +612,7 @@ def build_single_node_deployment(
         run_workspace_bindings=run_workspace_bindings,
         evidence_providers=tuple(evaluation_evidence_providers),
         approval_reader=approval_gate.approvals,
-        distributed_runtime=distributed_runtime,
+        distributed_runtime=effective_distributed_runtime,
     )
 
     portability_workflow = build_agent_portability_workflow(
@@ -763,7 +790,7 @@ def build_single_node_deployment(
         observability_exporter=effective_observability_exporter,
         telemetry=telemetry,
         health_provider=health_provider,
-        distributed_runtime=distributed_runtime,
+        distributed_runtime=effective_distributed_runtime,
         authentication=authentication,
         authorization=authorization,
         authorization_audit=authorization_audit,
