@@ -25,21 +25,24 @@ jobs:
             tests/test_issue_440_sweep.py \
             tests/test_issue_440_workloads.py \
             tests/test_issue_440_endurance.py \
-            tests/test_issue_440_stress_fault.py
+            tests/test_issue_440_stress_fault.py \
+            tests/test_issue_440_transport_faults.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking \
             tests/test_issue_440_benchmarking.py \
             tests/test_issue_440_sweep.py \
             tests/test_issue_440_workloads.py \
             tests/test_issue_440_endurance.py \
-            tests/test_issue_440_stress_fault.py
+            tests/test_issue_440_stress_fault.py \
+            tests/test_issue_440_transport_faults.py
           mypy src/ai_multi_agent_platform/benchmarking
           pytest \
             tests/test_issue_440_benchmarking.py \
             tests/test_issue_440_sweep.py \
             tests/test_issue_440_workloads.py \
             tests/test_issue_440_endurance.py \
-            tests/test_issue_440_stress_fault.py
+            tests/test_issue_440_stress_fault.py \
+            tests/test_issue_440_transport_faults.py
       - name: Run deterministic single-node performance smoke
         run: |
           mkdir -p artifacts/benchmarks
@@ -113,6 +116,28 @@ jobs:
             --write-weight 1 \
             --platform-commit "$GITHUB_SHA" \
             --output artifacts/benchmarks/pr-fault.json
+      - name: Run tiny transport fault profiles
+        run: |
+          mkdir -p artifacts/benchmarks/pr-transport-faults
+          platform-benchmark transport-fault \
+            --scenario backpressure \
+            --batch-size 2 \
+            --concurrency 2 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-transport-faults/backpressure.json
+          platform-benchmark transport-fault \
+            --scenario outage \
+            --batch-size 2 \
+            --concurrency 2 \
+            --fault-operations 2 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-transport-faults/outage.json
+          platform-benchmark transport-fault \
+            --scenario duplicate-delivery \
+            --batch-size 3 \
+            --concurrency 2 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-transport-faults/duplicate-delivery.json
       - name: Validate benchmark report schemas and correctness
         run: |
           python - <<'PY'
@@ -191,6 +216,32 @@ jobs:
           assert fault["correctness"]["pre_fault_completed_operations"] > 0
           assert fault["correctness"]["post_fault_completed_operations"] > 0
           assert fault["correctness"]["unauthorized_access_blocked"] is True
+
+          transport_schema = json.loads(
+              Path("docs/schemas/benchmark-transport-fault.v1.schema.json").read_text()
+          )
+          expected_errors = {
+              "backpressure": {"resource_exhausted": 1},
+              "outage": {"unavailable": 2},
+              "duplicate-delivery": {},
+          }
+          for scenario in ("backpressure", "outage", "duplicate-delivery"):
+              transport = json.loads(
+                  Path(f"artifacts/benchmarks/pr-transport-faults/{scenario}.json").read_text()
+              )
+              Draft202012Validator(transport_schema).validate(transport)
+              assert transport["benchmark"]["scenario"] == scenario
+              assert transport["correctness"]["passed"] is True
+              assert transport["correctness"]["message_loss_count"] == 0
+              assert transport["error_counts"] == expected_errors[scenario]
+          assert (
+              json.loads(
+                  Path(
+                      "artifacts/benchmarks/pr-transport-faults/duplicate-delivery.json"
+                  ).read_text()
+              )["correctness"]["suppressed_duplicate_handlers"]
+              == 1
+          )
           PY
       - name: Upload benchmark evidence
         if: always()

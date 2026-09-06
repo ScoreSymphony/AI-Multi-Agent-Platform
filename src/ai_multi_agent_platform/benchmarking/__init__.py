@@ -42,6 +42,14 @@ from .sweep import (
     SingleNodeSweepReport,
     SweepPoint,
 )
+from .transport_faults import (
+    TRANSPORT_FAULT_REPORT_SCHEMA_VERSION,
+    TransportFaultBenchmarkHarness,
+    TransportFaultBenchmarkReport,
+    TransportFaultBenchmarkSpec,
+    TransportFaultCorrectnessSummary,
+    TransportFaultResourceMetrics,
+)
 from .workloads import (
     WORKLOAD_REPORT_SCHEMA_VERSION,
     SingleNodeWorkloadHarness,
@@ -56,6 +64,7 @@ __all__ = [
     "FAULT_REPORT_SCHEMA_VERSION",
     "STRESS_REPORT_SCHEMA_VERSION",
     "SWEEP_REPORT_SCHEMA_VERSION",
+    "TRANSPORT_FAULT_REPORT_SCHEMA_VERSION",
     "WORKLOAD_REPORT_SCHEMA_VERSION",
     "BaselineComparison",
     "BenchmarkReport",
@@ -84,6 +93,11 @@ __all__ = [
     "StressBenchmarkSpec",
     "StressPoint",
     "SweepPoint",
+    "TransportFaultBenchmarkHarness",
+    "TransportFaultBenchmarkReport",
+    "TransportFaultBenchmarkSpec",
+    "TransportFaultCorrectnessSummary",
+    "TransportFaultResourceMetrics",
     "WorkloadBenchmarkReport",
     "WorkloadBenchmarkSpec",
     "WorkloadCorrectnessSummary",
