@@ -117,7 +117,10 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             AcceptanceCheck(
                 "cli-canonical-state",
                 "#17/#252 CLI client",
-                "CLI reads the shared canonical Task fixture through the versioned Control Plane path",
+                (
+                    "CLI reads the shared canonical Task fixture through the versioned "
+                    "Control Plane path"
+                ),
                 _pytest(
                     "tests/test_issue_252_acceptance_gate.py::"
                     "test_cli_and_web_share_canonical_task_fixture_and_route"
@@ -126,7 +129,10 @@ def profile_checks(profile: AcceptanceProfile) -> tuple[AcceptanceCheck, ...]:
             AcceptanceCheck(
                 "web-canonical-state",
                 "#17/#395 Web client",
-                "Web reads the same canonical Task fixture through the same versioned resource path",
+                (
+                    "Web reads the same canonical Task fixture through the same versioned "
+                    "resource path"
+                ),
                 (
                     "npm",
                     "--prefix",
