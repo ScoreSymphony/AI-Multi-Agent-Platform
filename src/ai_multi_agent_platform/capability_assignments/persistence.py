@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.domain import OwnerRef
 
 from .codec import policy_from_json, policy_to_json, revision_from_json, revision_to_json
 from .models import CapabilityAssignmentPolicy, CapabilityAssignmentRevision
@@ -38,6 +39,20 @@ class JsonCapabilityAssignmentRepository(InMemoryCapabilityAssignmentRepository)
         revision: CapabilityAssignmentRevision,
     ) -> None:
         super().append_revision(policy, revision)
+        self._save()
+
+    def compensate_created(
+        self,
+        assignment_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+    ) -> None:
+        super().compensate_created(
+            assignment_id,
+            expected_owner_ref=expected_owner_ref,
+            expected_source=expected_source,
+        )
         self._save()
 
     def _save(self) -> None:

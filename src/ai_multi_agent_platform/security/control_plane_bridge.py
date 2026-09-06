@@ -175,6 +175,19 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
     if action.startswith("task-management."):
         return AuthorizationAction.MODIFY, ResourceType.TASK
 
+    if action.startswith("model-routing-profile."):
+        routing_profile_verb = action.removeprefix("model-routing-profile.")
+        routing_profile_actions = {
+            "create": AuthorizationAction.CREATE,
+            "version": AuthorizationAction.MODIFY,
+            "enable": AuthorizationAction.ADMINISTER,
+            "disable": AuthorizationAction.ADMINISTER,
+        }
+        return routing_profile_actions.get(
+            routing_profile_verb,
+            AuthorizationAction.MODIFY,
+        ), ResourceType.MODEL_ROUTING_PROFILE
+
     if action.startswith("automation."):
         automation_verb = action.removeprefix("automation.")
         automation_actions = {
@@ -264,6 +277,8 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "create": AuthorizationAction.CREATE,
         "update": AuthorizationAction.MODIFY,
         "modify": AuthorizationAction.MODIFY,
+        "version": AuthorizationAction.MODIFY,
+        "assign": AuthorizationAction.MODIFY,
         "queue": AuthorizationAction.EXECUTE,
         "start": AuthorizationAction.EXECUTE,
         "retry": AuthorizationAction.EXECUTE,
@@ -290,6 +305,7 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "knowledge-source": ResourceType.KNOWLEDGE_SOURCE,
         "model-provider": ResourceType.PROVIDER_CONFIGURATION,
         "model": ResourceType.MODEL_CONFIGURATION,
+        "model-routing-profile": ResourceType.MODEL_ROUTING_PROFILE,
         "agent": ResourceType.AGENT,
         "agent-team": ResourceType.AGENT_TEAM,
         "worker": ResourceType.WORKER,

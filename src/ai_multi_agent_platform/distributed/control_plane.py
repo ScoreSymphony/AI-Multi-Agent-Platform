@@ -243,6 +243,7 @@ def _node_resource(node: NodeRecord) -> dict[str, JsonValue]:
         "status": node.status.value,
         "registered_at": _timestamp(node.registered_at),
         "last_heartbeat_at": _timestamp(node.last_heartbeat_at),
+        "updated_at": _timestamp(node.updated_at),
         "labels": list(node.labels),
         "os_name": node.os_name,
         "platform": node.platform,
@@ -276,6 +277,7 @@ def _worker_resource(worker: WorkerRecord) -> dict[str, JsonValue]:
         "worker_version": worker.worker_version,
         "registered_at": _timestamp(worker.registered_at),
         "last_heartbeat_at": _timestamp(worker.last_heartbeat_at),
+        "updated_at": _timestamp(worker.updated_at),
         "draining": worker.draining,
         "locality_refs": list(worker.locality_refs),
     }
@@ -302,7 +304,7 @@ def _node_search_resource(node: NodeRecord) -> dict[str, JsonValue]:
         "display_name": node.display_name,
         "status": node.status.value,
         "labels": list(node.labels),
-        "updated_at": _timestamp(node.last_heartbeat_at),
+        "updated_at": _timestamp(node.updated_at),
         "aliases": list(aliases),
         "capabilities": list(node.capability_refs),
     }
@@ -325,7 +327,7 @@ def _worker_search_resource(worker: WorkerRecord) -> dict[str, JsonValue]:
         "type": WORKER_TYPE,
         "id": worker.worker_id,
         "status": worker.status.value,
-        "updated_at": _timestamp(worker.last_heartbeat_at),
+        "updated_at": _timestamp(worker.updated_at),
         "aliases": list(aliases),
         "capabilities": list(worker.capability_refs),
     }

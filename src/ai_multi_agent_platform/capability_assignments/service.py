@@ -273,6 +273,21 @@ class CapabilityAssignmentService:
                 visible.append(policy)
         return tuple(visible)
 
+    def compensate_created(
+        self,
+        assignment_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+    ) -> None:
+        """Rollback an untouched assignment created by a failed operation."""
+
+        self.repository.compensate_created(
+            assignment_id,
+            expected_owner_ref=expected_owner_ref,
+            expected_source=expected_source,
+        )
+
     def _validate(
         self,
         content: CapabilityAssignmentContent,

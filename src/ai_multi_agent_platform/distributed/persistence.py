@@ -39,8 +39,8 @@ from .models import (
 from .registry import DistributedRegistry, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
 
-DISTRIBUTED_STATE_SCHEMA_VERSION = "2"
-_SUPPORTED_DISTRIBUTED_STATE_SCHEMA_VERSIONS = frozenset({"1", "2"})
+DISTRIBUTED_STATE_SCHEMA_VERSION = "3"
+_SUPPORTED_DISTRIBUTED_STATE_SCHEMA_VERSIONS = frozenset({"1", "2", "3"})
 
 
 class DistributedStateStore(Protocol):
@@ -153,16 +153,25 @@ def _encode_value(value: object) -> JsonValue:
 
 def _node_record(value: JsonValue) -> NodeRecord:
     data = _object(value, "NodeRecord")
+    registered_at = _datetime(_required(data, "registered_at"), "registered_at")
+    last_heartbeat_at = _datetime(
+        _required(data, "last_heartbeat_at"),
+        "last_heartbeat_at",
+    )
+    updated_raw = data.get("updated_at")
+    updated_at = (
+        max(registered_at, last_heartbeat_at)
+        if updated_raw is None
+        else _datetime(updated_raw, "updated_at")
+    )
     return NodeRecord(
         node_id=_required_string(data, "node_id"),
         display_name=_required_string(data, "display_name"),
         resources=_resource_snapshot(_required(data, "resources")),
         status=NodeStatus(_required_string(data, "status")),
-        registered_at=_datetime(_required(data, "registered_at"), "registered_at"),
-        last_heartbeat_at=_datetime(
-            _required(data, "last_heartbeat_at"),
-            "last_heartbeat_at",
-        ),
+        registered_at=registered_at,
+        last_heartbeat_at=last_heartbeat_at,
+        updated_at=updated_at,
         labels=_string_tuple(_required(data, "labels"), "labels"),
         os_name=_optional_string(data.get("os_name"), "os_name"),
         platform=_optional_string(data.get("platform"), "platform"),
@@ -194,6 +203,17 @@ def _node_record(value: JsonValue) -> NodeRecord:
 
 def _worker_record(value: JsonValue) -> WorkerRecord:
     data = _object(value, "WorkerRecord")
+    registered_at = _datetime(_required(data, "registered_at"), "registered_at")
+    last_heartbeat_at = _datetime(
+        _required(data, "last_heartbeat_at"),
+        "last_heartbeat_at",
+    )
+    updated_raw = data.get("updated_at")
+    updated_at = (
+        max(registered_at, last_heartbeat_at)
+        if updated_raw is None
+        else _datetime(updated_raw, "updated_at")
+    )
     return WorkerRecord(
         worker_id=_required_string(data, "worker_id"),
         node_id=_required_string(data, "node_id"),
@@ -219,11 +239,9 @@ def _worker_record(value: JsonValue) -> WorkerRecord:
         status=WorkerStatus(_required_string(data, "status")),
         protocol_version=_required_string(data, "protocol_version"),
         worker_version=_required_string(data, "worker_version"),
-        registered_at=_datetime(_required(data, "registered_at"), "registered_at"),
-        last_heartbeat_at=_datetime(
-            _required(data, "last_heartbeat_at"),
-            "last_heartbeat_at",
-        ),
+        registered_at=registered_at,
+        last_heartbeat_at=last_heartbeat_at,
+        updated_at=updated_at,
         draining=_boolean(_required(data, "draining"), "draining"),
         locality_refs=_string_tuple(_required(data, "locality_refs"), "locality_refs"),
         adapter_metadata=_adapter_metadata_tuple(
