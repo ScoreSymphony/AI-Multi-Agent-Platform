@@ -361,7 +361,7 @@ class TransportFaultBenchmarkHarness:
         first_stream = transport.subscribe(
             Subscription(_TRANSPORT_TOPIC, "consumer-before-restart", _TRANSPORT_GROUP)
         )
-        first = await self._next_delivery(first_stream, spec, evidence)
+        await self._next_delivery(first_stream, spec, evidence)
         await first_stream.aclose()
 
         stream = transport.subscribe(
