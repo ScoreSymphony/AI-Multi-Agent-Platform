@@ -315,7 +315,10 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         _optional(
             "R",
             "#79 Import/export",
-            "portable round-trip preserves references/checksums while excluding secrets/runtime state",
+            (
+                "portable round-trip preserves references/checksums while excluding "
+                "secrets/runtime state"
+            ),
             "portable import/export conformance profile is optional and not enabled",
         ),
         _optional(
