@@ -62,14 +62,14 @@ export function MarketplacePage({ client }: { client: RegistryClient }) {
       const next = await client.list(listQuery);
       setPage(next);
       setError(null);
-      if (selected) {
-        const refreshed = next.items.find((item) => item.id === selected.id);
-        if (refreshed) setSelected(refreshed);
-      }
+      setSelected((current) => {
+        if (!current) return current;
+        return next.items.find((item) => item.id === current.id) ?? current;
+      });
     } catch (nextError) {
       setError(nextError);
     }
-  }, [client, listQuery, selected]);
+  }, [client, listQuery]);
 
   useEffect(() => void load(), [load]);
 
