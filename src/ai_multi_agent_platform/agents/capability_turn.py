@@ -19,6 +19,7 @@ from ai_multi_agent_platform.capabilities import (
     CapabilityInvocation,
     CapabilityInvoker,
     CapabilityRegistry,
+    CapabilitySpec,
     CredentialRequirement,
     InvocationTrace,
     SafetyClassification,
@@ -196,23 +197,18 @@ class AgentCapabilityTurn:
         return tuple(definitions), names
 
 
-def _ensure_reference_safe(capability: object) -> None:
-    safety = getattr(capability, "safety", None)
-    side_effects = getattr(capability, "side_effects", None)
-    credential_requirement = getattr(capability, "credential_requirement", None)
-    required_approvals = getattr(capability, "required_approvals", ())
+def _ensure_reference_safe(capability: CapabilitySpec) -> None:
     if (
-        safety is not SafetyClassification.STANDARD
-        or side_effects is not SideEffectClassification.NONE
-        or credential_requirement is not CredentialRequirement.NONE
-        or bool(required_approvals)
+        capability.safety is not SafetyClassification.STANDARD
+        or capability.side_effects is not SideEffectClassification.NONE
+        or capability.credential_requirement is not CredentialRequirement.NONE
+        or bool(capability.required_approvals)
     ):
-        capability_id = getattr(capability, "capability_id", "unknown")
         raise ContractError(
             ErrorCode.FORBIDDEN,
             (
                 f"reference Agent capability execution is limited to standard, side-effect-free "
-                f"capabilities without credentials/approvals: {capability_id!r}"
+                f"capabilities without credentials/approvals: {capability.capability_id!r}"
             ),
             details={"governed_capability_requires_composed_approval_path": True},
         )
