@@ -1,0 +1,62 @@
+{
+  "schema_version": "1",
+  "platform_release": "0.0.1",
+  "generated_from": "upstream/*.yaml",
+  "last_reviewed_at": "2026-09-03T00:00:00Z",
+  "components": [
+    {
+      "component": "Hermes Agent",
+      "source_url": "https://github.com/NousResearch/hermes-agent",
+      "revision": "63279301bcbdc185c1b07b98a9312eb0c862f26d",
+      "status": "tested",
+      "integration_mode": "optional external service plus platform-owned adapter",
+      "boundary": "Orchestrator / AgentOrchestratorMapper adapter",
+      "license": "MIT",
+      "last_checked_at": "2026-09-03T00:00:00Z",
+      "latest_known_revision": "63279301bcbdc185c1b07b98a9312eb0c862f26d",
+      "update_risk": "high",
+      "local_modifications": false,
+      "patches": [],
+      "notes": [
+        "Optional external service; canonical lifecycle and authorization remain platform-owned.",
+        "Update requires pinned API compatibility, security and regression review."
+      ]
+    },
+    {
+      "component": "Forge executor sidecar",
+      "source_url": "https://github.com/ScoreSymphony/AI-Agent-VPS",
+      "revision": "00b821bc94767865457814bf282982ca242a2e10",
+      "status": "tested",
+      "integration_mode": "optional external execution sidecar plus platform-owned adapter",
+      "boundary": "Executor adapter using forge-executor-sidecar/v1",
+      "license": "MIT",
+      "last_checked_at": "2026-09-03T00:00:00Z",
+      "latest_known_revision": "00b821bc94767865457814bf282982ca242a2e10",
+      "update_risk": "high",
+      "local_modifications": false,
+      "patches": [],
+      "notes": [
+        "Optional execution-only runtime; canonical Task/Run/Event state remains platform-owned.",
+        "Update requires the real pinned sidecar integration test."
+      ]
+    },
+    {
+      "component": "LiteLLM",
+      "source_url": "https://github.com/BerriAI/litellm",
+      "revision": "v1.99.0 / fa647f742d7baefe8eb1181899d9c81b41559772",
+      "status": "tested",
+      "integration_mode": "optional ModelProvider library or separately deployed proxy",
+      "boundary": "Optional ModelProvider adapter/library or OpenAI-compatible proxy",
+      "license": "MIT outside enterprise/; enterprise/ is excluded from the integration scope",
+      "last_checked_at": "2026-09-03T00:00:00Z",
+      "latest_known_revision": "v1.99.0 / fa647f742d7baefe8eb1181899d9c81b41559772",
+      "update_risk": "medium",
+      "local_modifications": false,
+      "patches": [],
+      "notes": [
+        "Enterprise-licensed upstream paths are outside the approved integration scope.",
+        "Core operation must remain possible without the LiteLLM optional dependency."
+      ]
+    }
+  ]
+}

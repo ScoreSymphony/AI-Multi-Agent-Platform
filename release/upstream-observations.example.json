@@ -1,0 +1,21 @@
+{
+  "schema_version": "1",
+  "observed_at": "2026-09-06T00:00:00Z",
+  "components": [
+    {
+      "component": "Hermes Agent",
+      "source_url": "https://github.com/NousResearch/hermes-agent",
+      "revision": "example-candidate-immutable-revision",
+      "license": "MIT",
+      "classifications": ["feature"],
+      "release_ref": "example-release-or-advisory-ref",
+      "published_at": "2026-09-06T00:00:00Z",
+      "patch_conflicts": [],
+      "validation": {
+        "adapter_contract_tests": "not_run",
+        "eval_regression": "not_run",
+        "security": "not_run"
+      }
+    }
+  ]
+}

@@ -26,6 +26,59 @@ export interface BrowserSessionSummary {
   active: boolean;
 }
 
+export interface ReleaseCompatibilityEntry {
+  component: string;
+  source_url: string;
+  revision: string;
+  status: string;
+  integration_mode: string;
+  boundary: string;
+  license: string;
+  last_checked_at: string;
+  latest_known_revision: string;
+  update_risk: string;
+  local_modifications: boolean;
+  patches: string[];
+  notes: string[];
+}
+
+export interface ReleaseUpdateCandidate {
+  component: string;
+  source_url: string;
+  current_revision: string;
+  candidate_revision: string | null;
+  disposition: string;
+  classifications: string[];
+  manual_review_required: boolean;
+  reasons: string[];
+  release_ref: string | null;
+  published_at: string | null;
+  validation: Record<string, string> | null;
+}
+
+export interface ReleaseOperatorStatus {
+  platform_release: string;
+  versions: Record<string, JsonValue>;
+  release_manifest: Record<string, JsonValue> | null;
+  compatibility_inventory: {
+    schema_version: string;
+    platform_release: string;
+    generated_from: string;
+    last_reviewed_at: string;
+    components: ReleaseCompatibilityEntry[];
+  };
+  update_discovery: {
+    mode: string;
+    observed_at: string | null;
+    update_available: boolean;
+    candidates: ReleaseUpdateCandidate[];
+  };
+  release_ready: boolean | null;
+  operator_warnings: string[];
+  automatic_production_updates: boolean;
+  production_pin_mutation: string;
+}
+
 export interface LoginResult {
   actor: AuthenticatedActor;
   csrf_token: string;
@@ -98,6 +151,10 @@ export class BrowserSessionClient {
     return this.request<{ items: BrowserSessionSummary[] }>("/auth/sessions").then(
       (result) => result.items,
     );
+  }
+
+  releaseStatus(): Promise<ReleaseOperatorStatus> {
+    return this.request<ReleaseOperatorStatus>("/release/status");
   }
 
   revokeSession(sessionId: string): Promise<{ id: string; revoked: boolean }> {

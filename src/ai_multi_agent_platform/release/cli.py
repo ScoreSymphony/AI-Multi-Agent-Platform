@@ -1,0 +1,149 @@
+"""Operator CLI for release manifests, release gates and upstream discovery."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from collections.abc import Sequence
+
+from .codec import ReleaseManifestError, load_release_manifest
+from .discovery import (
+    ObservedUpstream,
+    UpdateDiscoveryError,
+    UpdateDisposition,
+    evaluate_update_candidates,
+    load_compatibility_inventory,
+    load_observations,
+)
+from .service import evaluate_release, release_metadata
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="platform-release",
+        description="Validate release provenance and evaluate safe release/update state.",
+    )
+    subcommands = parser.add_subparsers(dest="command", required=True)
+
+    validate = subcommands.add_parser("validate", help="Validate a release manifest and gates")
+    validate.add_argument("--manifest", required=True)
+    validate.add_argument("--json", action="store_true")
+
+    status = subcommands.add_parser("status", help="Print release/operator metadata")
+    status.add_argument("--manifest", required=True)
+    status.add_argument("--json", action="store_true")
+
+    upstream = subcommands.add_parser(
+        "upstream-check",
+        help="Compare pinned upstream inventory with advisory observations",
+    )
+    upstream.add_argument(
+        "--inventory",
+        help="Compatibility inventory JSON; packaged inventory is used when omitted",
+    )
+    upstream.add_argument(
+        "--observations",
+        help="Observed upstream candidate JSON produced manually or by CI/provider tooling",
+    )
+    upstream.add_argument("--disabled", action="store_true")
+    upstream.add_argument("--offline", action="store_true")
+    upstream.add_argument("--json", action="store_true")
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(list(argv) if argv is not None else None)
+
+    if args.command == "upstream-check":
+        return _upstream_check(args)
+
+    try:
+        manifest = load_release_manifest(str(args.manifest))
+    except ReleaseManifestError as exc:
+        print(f"release manifest invalid: {exc}", file=sys.stderr)
+        return 2
+
+    if args.command == "validate":
+        report = evaluate_release(manifest)
+        if bool(args.json):
+            print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+        else:
+            state = "ready" if report.ready else "blocked"
+            print(f"release {report.release_version}: {state}")
+            for blocker in report.blockers:
+                print(f"BLOCKER: {blocker}")
+            for warning in report.warnings:
+                print(f"WARNING: {warning}")
+        return 0 if report.ready else 3
+
+    if args.command == "status":
+        payload = release_metadata(manifest)
+        report = evaluate_release(manifest)
+        if bool(args.json):
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            print(f"platform release: {manifest.release_version}")
+            print(f"release ready: {str(payload['release_ready']).lower()}")
+            for upstream in manifest.upstreams:
+                print(
+                    f"upstream: {upstream.component} revision={upstream.revision} "
+                    f"verified={upstream.last_verified_at}"
+                )
+            for blocker in report.blockers:
+                print(f"blocker: {blocker}")
+        return 0
+
+    raise AssertionError(f"unhandled release command: {args.command}")
+
+
+def _upstream_check(args: argparse.Namespace) -> int:
+    if bool(args.disabled) and bool(args.offline):
+        print("--disabled and --offline are mutually exclusive", file=sys.stderr)
+        return 2
+    try:
+        inventory = load_compatibility_inventory(args.inventory)
+        observed_at: str | None = None
+        observations: tuple[ObservedUpstream, ...] = ()
+        if not bool(args.disabled) and not bool(args.offline):
+            if not args.observations:
+                print(
+                    "--observations is required unless --disabled or --offline is used",
+                    file=sys.stderr,
+                )
+                return 2
+            observed_at, observations = load_observations(str(args.observations))
+        report = evaluate_update_candidates(
+            inventory,
+            observations,
+            observed_at=observed_at,
+            enabled=not bool(args.disabled),
+            offline=bool(args.offline),
+        )
+    except UpdateDiscoveryError as exc:
+        print(f"upstream discovery input invalid: {exc}", file=sys.stderr)
+        return 2
+
+    if bool(args.json):
+        print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    else:
+        print(f"upstream discovery mode: {report.mode.value}")
+        for candidate in report.candidates:
+            revision = candidate.candidate_revision or "—"
+            classifications = ",".join(item.value for item in candidate.classifications) or "none"
+            print(
+                f"{candidate.component}: {candidate.disposition.value} "
+                f"current={candidate.current_revision} candidate={revision} "
+                f"classification={classifications}"
+            )
+            for reason in candidate.reasons:
+                print(f"  - {reason}")
+
+    blocked = any(
+        candidate.disposition is UpdateDisposition.BLOCKED for candidate in report.candidates
+    )
+    return 4 if blocked else 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

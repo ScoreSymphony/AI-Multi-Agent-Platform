@@ -10,6 +10,8 @@
 
 Optional ecosystem and advanced-deployment capabilities do not redefine the ordinary local/self-hosted baseline unless a release explicitly claims support for the corresponding profile.
 
+The detailed release-manifest, provenance/SBOM, compatibility-state, upstream-update and fail-closed gate rules are defined in [`RELEASE_AND_UPSTREAM_POLICY.md`](RELEASE_AND_UPSTREAM_POLICY.md). Security-sensitive releases additionally follow [`SECURITY_HOTFIX_RELEASE_RUNBOOK.md`](SECURITY_HOTFIX_RELEASE_RUNBOOK.md). These documents extend this publication process; they do not create a separate versioning authority.
+
 ## Current status
 
 > Status snapshot: 2026-09-06
@@ -33,6 +35,7 @@ The `1.0.0` operational target remains gated by #46 full platform conformance. C
 - [ ] `CHANGELOG.md` contains user-visible changes, known limitations and security notes.
 - [ ] Package, container and other published artifacts use the same version and source revision.
 - [ ] The compatibility/acceptance report names the exact enabled optional profiles rather than implying untested support.
+- [ ] A release manifest with concrete evidence passes `platform-release validate`.
 
 ## Publication
 
@@ -40,10 +43,11 @@ The `1.0.0` operational target remains gated by #46 full platform conformance. C
 2. Run the required acceptance/conformance profile and release checks against that commit.
 3. Create a release candidate without modifying the already-tested source tree.
 4. Verify generated artifacts and checksums.
-5. Tag the accepted commit with the semantic version.
-6. Publish a GitHub release using the matching changelog section.
-7. Record artifact checksums, canonical source revision and tested compatibility profiles.
-8. Verify a clean installation using the published artifacts.
+5. Populate the immutable release manifest, including SBOM/provenance and gate evidence, and run `platform-release validate`.
+6. Tag the accepted commit with the semantic version.
+7. Publish a GitHub release using the matching changelog section.
+8. Record artifact checksums, canonical source revision and tested compatibility profiles.
+9. Verify a clean installation using the published artifacts.
 
 ## Rollback
 
