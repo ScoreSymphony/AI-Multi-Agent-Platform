@@ -94,7 +94,7 @@ class CoordinationPressureSpec:
             "expected_invariants": [
                 "every configured Step reaches succeeded",
                 "canonical Run identities are never duplicated during wakeup or reconciliation",
-                "retry wakeup creates exactly one new attempt per Step only after the persisted due time",
+                "retry wakeup creates one new attempt per Step only after the persisted due time",
                 "deadline wakeup resumes the existing active attempt without creating another Run",
                 "restart reconciliation preserves every active canonical Run identity",
             ],
