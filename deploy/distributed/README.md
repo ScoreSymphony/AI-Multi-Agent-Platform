@@ -35,41 +35,69 @@ PY
 `registration_requests` are canonical #14 objects. `host_ref`, `transport_endpoint_ref` and
 `workspace_root` remain deployment-only metadata and are not copied into Node/Worker identity.
 
-## Composition rules
+## Runnable composition
 
-For a local Worker, bind the declared Worker ID to a `LocalWorker` or another conforming
-`WorkerDispatcher` and attach it to the existing `DistributedRuntime`.
+Issue #240 ships three explicit operator entrypoints in addition to the unchanged #39
+`platform-server` fallback:
+
+- `platform-message-broker` — self-hosted network implementation of the existing #35
+  `MessageTransport` contract;
+- `platform-distributed-server` — normal Control Plane plus `DistributedRuntime`, authenticated
+  Worker-protocol HTTP surface, scheduler attachment and remote Workspace materialization;
+- `platform-worker` — one independently running Worker endpoint with registration/heartbeat,
+  TCP command transport and Worker-local Workspace materialization.
 
 For a remote Worker:
 
-1. provision the credential referenced by `credential_reference` outside source control;
-2. establish an authenticated TLS-capable deployment transport;
-3. register/heartbeat through `WorkerProtocolService`;
-4. expose execution through `WorkerTransportEndpoint` on a conforming #35 `MessageTransport`;
-5. attach the Control-Plane side through `TransportWorkerDispatcher`;
-6. let the canonical scheduler perform placement.
+1. provision its scoped #36 Worker credential outside source control;
+2. provision the #35 transport HMAC key and/or mTLS material outside source control;
+3. start `platform-message-broker` on the selected private endpoint;
+4. configure `PLATFORM_MESSAGE_BROKER_HOST` and `PLATFORM_MESSAGE_BROKER_PORT` for
+   `platform-distributed-server` and start the Control Plane;
+5. expose the Control Plane Worker-protocol route through HTTPS for a non-loopback Worker;
+6. export the actual Worker credential only in the Worker process environment and run
+   `platform-worker --profile ... --host-ref ... --worker-id ... --control-plane-url ...
+   --broker-host ... --broker-port ...`;
+7. let authenticated registration attach `TransportWorkerDispatcher`,
+   `TransportRemoteWorkspaceMaterializer` and `MaterializingWorkerDispatcher` to the canonical
+   distributed runtime automatically.
 
-The repository currently provides `InProcessMessageTransport` as the dependency-free reference
-transport for same-process operation and tests. It is **not** a cross-machine network transport.
-A real remote deployment must supply a conforming network-capable #35 adapter; the profile's
-`transport_endpoint_ref` selects deployment configuration for that adapter without making the
-adapter canonical.
+The Worker process starts both `WorkerTransportEndpoint` and
+`WorkerWorkspaceTransportEndpoint`. Canonical Workspace/snapshot/artifact references cross the
+transport; the destination machine reconstructs content beneath its own configured
+`workspace_root`.
+
+`TcpMessageTransport` is the checked-in network-capable #35 adapter. Loopback operation may run
+without TLS; non-loopback TCP connections/listeners fail closed unless TLS is configured. The
+Worker-protocol HTTP client likewise requires HTTPS for non-loopback Control Plane URLs.
+
+## Multiple Worker processes on one Node
+
+One profile Node may declare several Workers. Exactly the declared `reporter_worker_id` owns the
+complete authenticated registration/heartbeat snapshot. Additional Worker processes for that
+Node run their own execution/Workspace endpoints without inventing a second Node reporter. This
+keeps Node-wide capacity and liveness authority canonical while allowing separate OS processes.
 
 ## Workspace rule
 
-Each Worker host declares one absolute machine-local `workspace_root`. A canonical
-`workspace_*` ID maps deterministically beneath that root. Worker jobs carry only workspace,
-snapshot and artifact references; they never carry the Control Plane's local filesystem path.
-Content materialization remains governed by #37.
+Each Worker host declares one absolute machine-local `workspace_root`. Worker jobs carry only
+workspace, snapshot and artifact references; they never carry the Control Plane's local
+filesystem path. #37 materialization transfers the exact canonical snapshot to a Worker-local
+`<workspace_root>/<workspace_id>/<snapshot_id>` execution tree and collects changed files back as
+canonical file/artifact records.
 
 ## Security defaults
 
 - Remote Worker bindings require TLS.
 - Remote registration uses #36 Worker authentication and #15 authorization.
+- TCP transport supports scoped deployment HMAC authentication and TLS/mTLS.
+- Credential values are read only from operator-selected runtime environment variables or TLS
+  files; committed profiles contain references only.
 - Optional model/browser/tool/connector services are private by default.
 - SQLite and local filesystem stores expose no network listener.
-- Do not put credential values in JSON, environment examples, service definitions or compose
-  files committed to the repository.
+- Do not put credential values in JSON, service definitions, compose files or command arguments
+  committed to the repository.
 
 See `docs/ADVANCED_DEPLOYMENT.md` for the network matrix, placement examples, failure behavior,
-credential rotation, drain/restart/replacement operations and the #39 fallback path.
+credential rotation, drain/restart/replacement operations, reproducible two-machine flow and the
+#39 fallback path.
