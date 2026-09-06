@@ -749,7 +749,7 @@ def _projection_step(projection: PlanCoordinationProjection, step_id: str) -> An
 
 def _running_run_ids(projection: PlanCoordinationProjection) -> dict[str, str]:
     return {
-        item.step_id: cast(str, item.latest_run_id)
+        item.step_id: item.latest_run_id
         for item in projection.steps
         if item.status is StepStatus.RUNNING and item.latest_run_id is not None
     }
