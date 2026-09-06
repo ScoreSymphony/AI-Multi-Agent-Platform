@@ -181,7 +181,7 @@ def test_routing_profile_import_restores_history_and_rolls_back(tmp_path) -> Non
     decoded = registry.deserialize(resource)
 
     target = JsonModelRoutingProfileRepository(tmp_path / "target.json")
-    handler = ModelRoutingProfileImportMutationHandler(target)
+    handler = ModelRoutingProfileImportMutationHandler(target, dependency_audit=lambda _: ())
     asyncio.run(handler.preflight(resource, decoded, ImportContext()))
     token = asyncio.run(handler.apply(resource, decoded, ImportContext()))
 
@@ -211,10 +211,57 @@ def test_routing_profile_import_compensates_partial_history(tmp_path) -> None:
             raise ContractError(ErrorCode.BACKEND_ERROR, "forced failure")
 
     target = FailingRepository(tmp_path / "target.json")
-    handler = ModelRoutingProfileImportMutationHandler(target)
+    handler = ModelRoutingProfileImportMutationHandler(target, dependency_audit=lambda _: ())
     with pytest.raises(ContractError) as caught:
         asyncio.run(handler.apply(resource, decoded, ImportContext()))
     assert caught.value.code is ErrorCode.BACKEND_ERROR
     with pytest.raises(ContractError) as missing:
         target.get_definition(profile_id)
     assert missing.value.code is ErrorCode.NOT_FOUND
+
+
+def test_routing_profile_import_rollback_fails_closed_without_reference_audit(tmp_path) -> None:
+    source = JsonModelRoutingProfileRepository(tmp_path / "source.json")
+    profile_id, _, _, _ = _seed_profile(source)
+    registry = ResourceSerializerRegistry()
+    register_model_routing_profile_portability_codec(registry)
+    resource = registry.serialize(
+        MODEL_ROUTING_PROFILE_RESOURCE_TYPE,
+        snapshot_model_routing_profile(source, profile_id),
+    )
+    decoded = registry.deserialize(resource)
+
+    target = JsonModelRoutingProfileRepository(tmp_path / "target.json")
+    handler = ModelRoutingProfileImportMutationHandler(target)
+    token = asyncio.run(handler.apply(resource, decoded, ImportContext()))
+
+    with pytest.raises(ContractError) as caught:
+        asyncio.run(handler.rollback(resource, decoded, token, ImportContext()))
+    assert caught.value.code is ErrorCode.CONFLICT
+    assert "reference audit" in str(caught.value)
+    assert target.get_definition(profile_id).current_revision == 2
+
+
+def test_routing_profile_import_rollback_refuses_referenced_profile(tmp_path) -> None:
+    source = JsonModelRoutingProfileRepository(tmp_path / "source.json")
+    profile_id, _, _, _ = _seed_profile(source)
+    registry = ResourceSerializerRegistry()
+    register_model_routing_profile_portability_codec(registry)
+    resource = registry.serialize(
+        MODEL_ROUTING_PROFILE_RESOURCE_TYPE,
+        snapshot_model_routing_profile(source, profile_id),
+    )
+    decoded = registry.deserialize(resource)
+
+    target = JsonModelRoutingProfileRepository(tmp_path / "target.json")
+    handler = ModelRoutingProfileImportMutationHandler(
+        target,
+        dependency_audit=lambda _: ("agent:agent_example@r1",),
+    )
+    token = asyncio.run(handler.apply(resource, decoded, ImportContext()))
+
+    with pytest.raises(ContractError) as caught:
+        asyncio.run(handler.rollback(resource, decoded, token, ImportContext()))
+    assert caught.value.code is ErrorCode.CONFLICT
+    assert caught.value.details["dependencies"] == ["agent:agent_example@r1"]
+    assert target.get_definition(profile_id).current_revision == 2
