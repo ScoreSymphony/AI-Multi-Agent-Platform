@@ -284,15 +284,44 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         _pending(
             "G", "#46 failure/retry", "controlled failures preserve canonical retries and telemetry"
         ),
-        _pending("I", "#18 automation", "automation creates a normal canonical Task lifecycle"),
-        _pending(
-            "K", "#72 Chat", "Chat creates durable canonical work without becoming lifecycle truth"
+        ConformanceScenario(
+            "I",
+            "#18 automation",
+            "automation creates a normal canonical Task lifecycle",
+            _pytest(
+                "tests/test_automation.py::"
+                "test_one_time_schedule_creates_canonical_task_with_provenance"
+            ),
         ),
-        _pending(
-            "L", "#73 Terminal", "terminal/session access remains authorized and Workspace-bounded"
+        ConformanceScenario(
+            "K",
+            "#72 Chat",
+            "Chat creates durable canonical work without becoming lifecycle truth",
+            _pytest(
+                "tests/test_issue_72_control_plane.py::"
+                "test_message_to_task_handoff_is_canonical_and_bidirectionally_linked"
+            ),
         ),
-        _pending(
-            "M", "#74 Browser", "browser work uses replaceable Capability/File/security boundaries"
+        ConformanceScenario(
+            "L",
+            "#73 Terminal",
+            "terminal/session access remains authorized and Workspace-bounded",
+            _pytest(
+                "tests/test_issue73_control_plane_e2e.py::"
+                "test_terminal_http_resource_and_command_use_standard_composition_and_"
+                "idempotent_create"
+            ),
+        ),
+        ConformanceScenario(
+            "M",
+            "#74 Browser",
+            "browser work uses replaceable Capability/File/security boundaries",
+            _pytest(
+                "tests/test_browser_capability.py::"
+                "test_download_enters_canonical_file_and_artifact_path_with_redacted_provenance",
+                "tests/test_browser_capability.py::"
+                "test_form_side_effect_is_policy_gated_and_upload_reads_authorized_canonical_file",
+            ),
         ),
         _optional(
             "N",
@@ -300,11 +329,23 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "notifications remain scoped, deduplicated and source-linked",
             "notification integration profile is optional and not enabled",
         ),
-        _pending("O", "#76 Usage/resources", "usage remains attributable through canonical IDs"),
-        _pending(
+        ConformanceScenario(
+            "O",
+            "#76 Usage/resources",
+            "usage remains attributable through canonical IDs",
+            _pytest(
+                "tests/test_issue76_accounting.py::"
+                "test_task_run_executor_accounting_is_idempotent_and_aggregated"
+            ),
+        ),
+        ConformanceScenario(
             "P",
             "#77 Standard Agents/Teams",
             "bundled Agent/Team definitions remain editable configuration rather than architecture",
+            _pytest(
+                "tests/test_issue_77_completion_hardening.py::"
+                "test_standard_catalog_lifecycle_uses_real_control_plane_http_command_path"
+            ),
         ),
         _optional(
             "Q",
@@ -333,10 +374,18 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "organization isolation and membership revocation preserve historical provenance",
             "organization collaboration conformance profile is optional and not enabled",
         ),
-        _pending(
+        ConformanceScenario(
             "W",
             "#88 Task management",
             "priority/deadline/assignment/dependencies remain metadata over canonical lifecycle",
+            _pytest(
+                "tests/test_task_management.py::"
+                "test_priority_deadline_not_before_and_query_projection",
+                "tests/test_task_management.py::"
+                "test_responsibility_reassignment_and_agent_assignment_are_permission_neutral",
+                "tests/test_task_management.py::"
+                "test_dependency_satisfaction_cycle_cross_project_and_blocked_reason",
+            ),
         ),
         _optional(
             "Y",
