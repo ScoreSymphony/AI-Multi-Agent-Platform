@@ -32,6 +32,16 @@ describe("Template manifest gating", () => {
     }
   });
 
+  it("keeps instantiated owner-domain detail collections in the product contract", () => {
+    for (const resource of [
+      "workflows",
+      "capability-assignments",
+      "model-routing-profiles",
+    ]) {
+      expect(TEMPLATE_REQUIRED_RESOURCES).toContain(resource);
+    }
+  });
+
   it("fails closed when commands are absent or any Template command is missing", () => {
     expect(templateManifestState("ready", manifest({ commands: undefined }))).toBe(
       "unavailable",
@@ -41,6 +51,16 @@ describe("Template manifest gating", () => {
       expect(templateManifestState("ready", manifest({ commands: [...commands] }))).toBe(
         "unavailable",
       );
+    }
+  });
+
+  it("keeps the post-owner-domain create-from-existing exporters in the product contract", () => {
+    for (const command of [
+      "template.create-from-workflow",
+      "template.create-from-capability-assignment",
+      "template.create-from-model-routing-profile",
+    ]) {
+      expect(TEMPLATE_REQUIRED_COMMANDS).toContain(command);
     }
   });
 
