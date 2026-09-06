@@ -12,9 +12,7 @@ from ai_multi_agent_platform.benchmarking.persistence import SingleNodePersisten
 
 def _schema() -> dict[str, object]:
     payload = json.loads(
-        Path("docs/schemas/benchmark-persistence-sweep.v1.schema.json").read_text(
-            encoding="utf-8"
-        )
+        Path("docs/schemas/benchmark-persistence-sweep.v1.schema.json").read_text(encoding="utf-8")
     )
     assert isinstance(payload, dict)
     return payload
