@@ -35,18 +35,22 @@ def build_routing_profile_dependency_audit(
     def audit(profile_id: str) -> tuple[str, ...] | None:
         dependencies: set[str] = set()
         try:
-            for definition in agents.list_agents():
-                for revision in agents.list_agent_revisions(definition.agent_id):
-                    reference = revision.profile.model.routing_profile_ref
+            for agent_definition in agents.list_agents():
+                for agent_revision in agents.list_agent_revisions(agent_definition.agent_id):
+                    reference = agent_revision.profile.model.routing_profile_ref
                     if reference is not None and _references_profile(reference, profile_id):
-                        dependencies.add(f"agent:{revision.agent_id}@r{revision.revision}")
+                        dependencies.add(
+                            f"agent:{agent_revision.agent_id}@r{agent_revision.revision}"
+                        )
 
             if templates is not None:
-                for definition in templates.list_templates():
-                    for revision in templates.list_revisions(definition.template_id):
-                        if _template_references_profile(revision.content, profile_id):
+                for template_definition in templates.list_templates():
+                    for template_revision in templates.list_revisions(
+                        template_definition.template_id
+                    ):
+                        if _template_references_profile(template_revision.content, profile_id):
                             dependencies.add(
-                                f"template:{revision.template_id}@r{revision.revision}"
+                                f"template:{template_revision.template_id}@r{template_revision.revision}"
                             )
         except (ContractError, ValueError, TypeError):
             return None
