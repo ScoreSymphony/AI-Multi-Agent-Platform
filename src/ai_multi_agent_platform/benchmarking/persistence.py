@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
-import asyncio
-import json
-import os
-import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -232,17 +227,6 @@ def _validate_seed_task_levels(levels: Sequence[int]) -> tuple[int, ...]:
     return normalized
 
 
-def _parse_seed_task_levels(value: str) -> tuple[int, ...]:
-    fields = tuple(field.strip() for field in value.split(",") if field.strip())
-    if not fields:
-        raise ValueError("at least one seed-task level is required")
-    try:
-        levels = tuple(int(field) for field in fields)
-    except ValueError as exc:
-        raise ValueError("seed-task levels must be comma-separated integers") from exc
-    return _validate_seed_task_levels(levels)
-
-
 def _require_fresh_root(root: Path) -> None:
     if not root.exists():
         return
@@ -252,68 +236,3 @@ def _require_fresh_root(root: Path) -> None:
         raise ValueError(f"persistence sweep data root cannot be inspected: {root}") from exc
     if has_entries:
         raise ValueError("persistence sweep requires a fresh empty data root")
-
-
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="python -m ai_multi_agent_platform.benchmarking.persistence",
-        description=(
-            "Measure canonical query, storage and restart behavior across increasing "
-            "single-node durable-state sizes."
-        ),
-    )
-    parser.add_argument("--data-root", type=Path)
-    parser.add_argument("--seed-task-levels", default="10,100,1000")
-    parser.add_argument("--operations-per-level", type=int, default=100)
-    parser.add_argument("--concurrency", type=int, default=10)
-    parser.add_argument("--warmup-operations", type=int, default=5)
-    parser.add_argument("--repetitions", type=int, default=1)
-    parser.add_argument("--timeout-seconds", type=float, default=30.0)
-    parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
-    return parser
-
-
-async def _run_cli(args: argparse.Namespace) -> int:
-    temporary: tempfile.TemporaryDirectory[str] | None = None
-    if args.data_root is None:
-        temporary = tempfile.TemporaryDirectory(prefix="ai-map-persistence-sweep-")
-        data_root = Path(temporary.name) / "data"
-    else:
-        data_root = args.data_root
-
-    try:
-        execution = await SingleNodePersistenceScaleHarness(
-            data_root,
-            platform_commit=args.platform_commit,
-        ).run(
-            seed_task_levels=_parse_seed_task_levels(args.seed_task_levels),
-            operation_count=args.operations_per_level,
-            concurrency=args.concurrency,
-            warmup_operations=args.warmup_operations,
-            timeout_seconds=args.timeout_seconds,
-            repetitions=args.repetitions,
-        )
-        args.output_dir.mkdir(parents=True, exist_ok=True)
-        for point, report in execution.point_reports:
-            (args.output_dir / point.report_file).write_text(
-                json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-        (args.output_dir / "summary.json").write_text(
-            json.dumps(execution.summary.to_dict(), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        return 0 if execution.summary.correctness_passed else 2
-    finally:
-        if temporary is not None:
-            temporary.cleanup()
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    return asyncio.run(_run_cli(args))
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
