@@ -40,12 +40,12 @@ def test_optional_claims_remain_disabled_by_default() -> None:
 
 
 def test_maintained_optional_evidence_registry_is_explicit() -> None:
-    assert optional_evidence_ids() == ("B", "C", "E", "N", "R", "T", "V", "X")
+    assert optional_evidence_ids() == ("B", "C", "E", "N", "R", "S", "T", "V", "X", "Y")
 
 
 def test_enabling_supported_optional_claim_makes_it_required_and_executable() -> None:
-    scenarios = _by_id(ConformanceProfile.RELEASE, ("N", "R", "T", "V", "X"))
-    for scenario_id in ("N", "R", "T", "V", "X"):
+    scenarios = _by_id(ConformanceProfile.RELEASE, ("N", "R", "S", "T", "V", "X", "Y"))
+    for scenario_id in ("N", "R", "S", "T", "V", "X", "Y"):
         assert scenarios[scenario_id].required is True
         assert scenarios[scenario_id].command is not None
         assert scenarios[scenario_id].unavailable_reason is None
@@ -56,6 +56,13 @@ def test_enabling_supported_optional_claim_makes_it_required_and_executable() ->
     assert "test_executor_rolls_back_real_team_and_agent_in_reverse_order" in " ".join(
         scenarios["R"].command or ()
     )
+    assert (
+        "test_default_single_node_keeps_registry_and_plugin_runtime_absent_when_unconfigured"
+        in " ".join(scenarios["S"].command or ())
+    )
+    assert "test_signed_artifact_requires_and_accepts_authoritative_verification" in " ".join(
+        scenarios["S"].command or ()
+    )
     assert "test_control_plane_records_repository_input_before_start_and_on_retry" in " ".join(
         scenarios["T"].command or ()
     )
@@ -65,6 +72,13 @@ def test_enabling_supported_optional_claim_makes_it_required_and_executable() ->
     assert (
         "test_restart_promotion_reconciles_running_work_and_preserves_worker_identity"
         in " ".join(scenarios["X"].command or ())
+    )
+    assert "test_sqlite_partial_fan_in_survives_restart" in " ".join(
+        scenarios["Y"].command or ()
+    )
+    assert (
+        "test_lost_worker_acknowledgement_delegates_to_kernel_without_blind_redispatch"
+        in " ".join(scenarios["Y"].command or ())
     )
 
 
