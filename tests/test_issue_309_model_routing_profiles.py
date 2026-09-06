@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from ai_multi_agent_platform import models as model_api
+import ai_multi_agent_platform.models as model_api
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
