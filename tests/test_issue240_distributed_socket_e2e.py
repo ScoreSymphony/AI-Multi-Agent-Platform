@@ -41,6 +41,7 @@ from ai_multi_agent_platform.workspaces import WorkspaceAccessMode, WorkspaceFil
 from ai_multi_agent_platform.workspaces.reference import LocalWorkspaceProvider
 
 _TRANSPORT_KEY = "issue-240-composed-e2e-key"
+_OUTPUT_BYTES = b"remote worker artifact"
 
 
 def _context(project_id: str) -> DataAccessContext:
@@ -180,6 +181,18 @@ def test_composed_remote_worker_tcp_workspace_execution_result_and_cleanup(tmp_p
         )
 
         worker_root = (tmp_path / "worker-root").resolve()
+
+        def lifecycle_factory(token: str) -> ExecutorLifecycleBackend:
+            execution_root = worker_root / token
+            if not execution_root.is_dir():
+                raise AssertionError("remote Workspace must be materialized before execution")
+            (execution_root / "artifact.txt").write_bytes(_OUTPUT_BYTES)
+            return ExecutorLifecycleBackend(
+                ReferenceExecutor(worker_root),
+                workspace=token,
+                action="echo",
+            )
+
         process = DistributedWorkerProcess(
             DistributedWorkerProcessConfig(
                 registration=registration,
@@ -189,11 +202,7 @@ def test_composed_remote_worker_tcp_workspace_execution_result_and_cleanup(tmp_p
             ),
             protocol=None,
             transport=worker_transport,
-            lifecycle_factory=lambda token: ExecutorLifecycleBackend(
-                ReferenceExecutor(worker_root),
-                workspace=token,
-                action="write_artifact",
-            ),
+            lifecycle_factory=lifecycle_factory,
         )
         process_task = asyncio.create_task(process.run())
         try:
@@ -253,7 +262,7 @@ def test_composed_remote_worker_tcp_workspace_execution_result_and_cleanup(tmp_p
                 and item.metadata.get("workspace_id") == workspace.id
             ]
             assert len(outputs) == 1
-            assert await _read_file(files, outputs[0].file_id, context) == b""
+            assert await _read_file(files, outputs[0].file_id, context) == _OUTPUT_BYTES
         finally:
             process.stop()
             await process_task
