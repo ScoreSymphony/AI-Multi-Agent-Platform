@@ -105,8 +105,7 @@ def test_release_profile_has_no_required_placeholders() -> None:
 
 def test_operational_release_paths_are_bound_to_owning_acceptance_evidence() -> None:
     scenarios = {
-        scenario.scenario_id: scenario
-        for scenario in profile_scenarios(ConformanceProfile.RELEASE)
+        scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.RELEASE)
     }
     expected_evidence = {
         "G": "test_controlled_failure_retry_preserves_canonical_history_and_retry_telemetry",
