@@ -114,9 +114,7 @@ class CapabilityAssignmentTemplateHandler:
         """Rollback only untouched canonical assignments created by this exact apply source."""
 
         del context
-        expected_source = (
-            f"template:{provenance.source.template_id}@{provenance.source.revision}"
-        )
+        expected_source = f"template:{provenance.source.template_id}@{provenance.source.revision}"
         for resource in reversed(resources):
             if resource.resource_type != "capability_assignment":
                 raise ContractError(
