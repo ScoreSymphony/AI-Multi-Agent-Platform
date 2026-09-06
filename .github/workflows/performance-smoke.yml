@@ -21,12 +21,14 @@ jobs:
         run: |
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking \
-            tests/test_issue_440_benchmarking.py
+            tests/test_issue_440_benchmarking.py \
+            tests/test_issue_440_sweep.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking \
-            tests/test_issue_440_benchmarking.py
+            tests/test_issue_440_benchmarking.py \
+            tests/test_issue_440_sweep.py
           mypy src/ai_multi_agent_platform/benchmarking
-          pytest tests/test_issue_440_benchmarking.py
+          pytest tests/test_issue_440_benchmarking.py tests/test_issue_440_sweep.py
       - name: Run deterministic single-node performance smoke
         run: |
           mkdir -p artifacts/benchmarks
@@ -36,7 +38,16 @@ jobs:
             --warmup-operations 1 \
             --platform-commit "$GITHUB_SHA" \
             --output artifacts/benchmarks/pr-single-node.json
-      - name: Validate benchmark report schema and correctness
+      - name: Run tiny single-node concurrency sweep
+        run: |
+          platform-benchmark single-node-sweep \
+            --concurrency-levels 1,2 \
+            --operations-per-level 2 \
+            --warmup-operations 0 \
+            --repetitions 1 \
+            --platform-commit "$GITHUB_SHA" \
+            --output-dir artifacts/benchmarks/pr-sweep
+      - name: Validate benchmark report schemas and correctness
         run: |
           python - <<'PY'
           import json
@@ -44,15 +55,33 @@ jobs:
           from jsonschema import Draft202012Validator
 
           report = json.loads(Path("artifacts/benchmarks/pr-single-node.json").read_text())
-          schema = json.loads(Path("docs/schemas/benchmark-report.v1.schema.json").read_text())
-          Draft202012Validator(schema).validate(report)
+          report_schema = json.loads(
+              Path("docs/schemas/benchmark-report.v1.schema.json").read_text()
+          )
+          Draft202012Validator(report_schema).validate(report)
           assert report["correctness"]["passed"] is True
           assert report["benchmark"]["deployment_profile"] == "single-node-reference"
+
+          sweep = json.loads(Path("artifacts/benchmarks/pr-sweep/summary.json").read_text())
+          sweep_schema = json.loads(
+              Path("docs/schemas/benchmark-sweep.v1.schema.json").read_text()
+          )
+          Draft202012Validator(sweep_schema).validate(sweep)
+          assert sweep["correctness_passed"] is True
+          assert sweep["concurrency_levels"] == [1, 2]
+          assert len(sweep["points"]) == 2
+
+          for point in sweep["points"]:
+              point_report = json.loads(
+                  (Path("artifacts/benchmarks/pr-sweep") / point["report_file"]).read_text()
+              )
+              Draft202012Validator(report_schema).validate(point_report)
+              assert point_report["correctness"]["passed"] is True
           PY
       - name: Upload benchmark evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pr-single-node-benchmark
-          path: artifacts/benchmarks/pr-single-node.json
+          path: artifacts/benchmarks
           if-no-files-found: ignore

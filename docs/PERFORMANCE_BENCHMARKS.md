@@ -49,7 +49,7 @@ The v1 report records:
 
 Setup and warmup happen before CPU, traced-memory and storage-growth measurement starts. Unavailable host-specific metrics are reported as `null`; the harness does not fabricate values.
 
-The machine-readable schema is `docs/schemas/benchmark-report.v1.schema.json`.
+The machine-readable point schema is `docs/schemas/benchmark-report.v1.schema.json`.
 
 ## Local use
 
@@ -65,19 +65,35 @@ platform-benchmark single-node \
 
 If `--data-dir` is omitted, the command uses an isolated temporary data root and removes it after the report is written. A supplied `--data-dir` must be a fresh, empty directory dedicated to one benchmark run. This protects unrelated platform state, prevents benchmark credentials from being reused, and gives every reference run the same clean persistence starting point.
 
-For a concurrency sweep, run separate reports so each point preserves its own environment and workload metadata:
+## Concurrency sweeps
+
+`single-node.reference.lifecycle.sweep@1.0` characterizes how the same deterministic lifecycle workload changes as concurrency rises. The default CLI sweep covers the issue-required `1/10/50/100` levels and can be extended beyond 100 explicitly:
 
 ```bash
-platform-benchmark single-node --operations 100 --concurrency 1 --output bench-c1.json
-platform-benchmark single-node --operations 100 --concurrency 10 --output bench-c10.json
-platform-benchmark single-node --operations 100 --concurrency 50 --output bench-c50.json
+platform-benchmark single-node-sweep \
+  --concurrency-levels 1,10,50,100 \
+  --operations-per-level 100 \
+  --warmup-operations 5 \
+  --repetitions 3 \
+  --output-dir artifacts/benchmarks/sweep
 ```
 
-Absolute numbers from different machines must not be compared as if the hardware were identical.
+Every concurrency/repetition point uses a separate fresh single-node data root. This is intentional: state accumulated by the 1-concurrency point must not silently make the 100-concurrency point a different persistence-history workload.
+
+The output directory contains:
+
+- `summary.json` using `docs/schemas/benchmark-sweep.v1.schema.json`;
+- one complete v1 point report such as `c-10-r-2.json` for every concurrency/repetition pair.
+
+The summary records the deployment profile, reference persistence profile, deterministic workload distribution, environment fingerprint, operation count, warmup count, timeout, repetition count, requested concurrency levels, throughput, p95 latency, storage growth and correctness for every point. Full point reports preserve all other distributions and resource evidence.
+
+A sweep is invalid when any point fails canonical correctness or when the environment fingerprint changes during one sweep. Repetitions are evidence samples, not permission to average away a failed correctness run.
+
+Absolute numbers from different hardware must not be compared as if the machines were identical. The intended result is an environment-specific operating curve, not a universal capacity claim.
 
 ## Baseline comparison
 
-A prior report can be supplied as a comparison baseline:
+A prior single-point report can be supplied as a comparison baseline:
 
 ```bash
 platform-benchmark single-node \
@@ -112,20 +128,24 @@ The intended tiers are:
 - **integration/nightly:** larger concurrency sweeps, read/write mixes, persistence growth and comparative baselines.
 - **release qualification:** stress, soak/endurance, restart/recovery under load and the supported distributed profiles.
 
+The `single-node-sweep` command is suitable for integration/nightly or explicit performance work. The ordinary PR workflow keeps the smaller single-point smoke so that 100-concurrency measurements do not turn every unrelated pull request into a load test.
+
 Full soak and saturation runs do not belong in every ordinary PR.
 
 ## Progressive #440 profiles
 
-The current foundation intentionally does not claim completion of the whole issue. Add the following as their dependencies stabilize:
+The current suite does not claim completion of the whole issue. Add the following as their dependencies stabilize:
 
-- durable Plan/Step long-linear, fan-out/fan-in, retry and reconciliation workloads (#384);
-- local/remote Worker dispatch, heartbeat and Workspace materialization workloads (#240/#433);
 - read-heavy and mixed read/write API profiles;
 - large persisted Task/Run/Event history profiles;
+- restart with accumulated durable state;
+- idle-footprint evidence;
 - bounded admission/persistence saturation stress profiles;
 - longer-running memory/descriptor/queue soak profiles;
 - deterministic fault-under-load profiles;
+- durable Plan/Step long-linear, fan-out/fan-in, retry and reconciliation workloads after #384;
+- local/remote Worker dispatch, heartbeat and Workspace materialization workloads after #240/#433;
 - optional HA promotion profile (#89);
 - optional Memory/Knowledge/Search/Connector profiles.
 
-Each new profile must reuse the versioned report envelope and correctness rules rather than creating an unrelated benchmark format.
+Each new profile must preserve the versioned evidence model and correctness rules rather than creating an unrelated benchmark methodology.
