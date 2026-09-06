@@ -162,5 +162,6 @@ def test_activation_command_exists_only_with_owner_router_and_revalidates_server
         "type": "registry-activation",
         "status": "applied",
         "route": "portable_import",
+        "installation": None,
     }
     assert router.calls == [("portable", item.item_id)]
