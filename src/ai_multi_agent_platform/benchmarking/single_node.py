@@ -6,6 +6,7 @@ import asyncio
 import importlib
 import os
 import platform
+import secrets
 import sys
 import time
 import tracemalloc
@@ -30,7 +31,6 @@ from .models import (
 )
 
 _BENCHMARK_ADMIN = "benchmark-admin"
-_BENCHMARK_PASSWORD = "local benchmark credential only"
 _BENCHMARK_PROJECT_KEY = "performance-benchmark-project-v1"
 
 
@@ -56,10 +56,10 @@ class SingleNodeBenchmarkHarness:
     async def run(self, spec: BenchmarkSpec) -> BenchmarkReport:
         if spec.deployment_profile != "single-node-reference":
             raise ValueError("SingleNodeBenchmarkHarness requires single-node-reference profile")
+        _require_fresh_data_root(self._config.data_dir)
 
-        storage_before = _directory_size(self._config.data_dir)
         deployment = build_single_node_deployment(self._config)
-        admin = deployment.bootstrap_admin(_BENCHMARK_ADMIN, _BENCHMARK_PASSWORD)
+        admin = deployment.bootstrap_admin(_BENCHMARK_ADMIN, secrets.token_urlsafe(32))
         credential = deployment.authentication.create_personal_access_token(
             admin.user_id,
             purpose="performance-benchmark",
@@ -90,6 +90,7 @@ class SingleNodeBenchmarkHarness:
             )
 
         samples = _Samples()
+        storage_before = _directory_size(self._config.data_dir)
         tracing_was_active = tracemalloc.is_tracing()
         if not tracing_was_active:
             tracemalloc.start()
@@ -249,6 +250,10 @@ class SingleNodeBenchmarkHarness:
         timeline_ok = isinstance(timeline_items, list) and len(timeline_items) > 0
         inspection_elapsed = time.perf_counter() - inspection_started
 
+        if not timeline_ok:
+            if samples is not None:
+                samples.timeline_failures += 1
+            raise RuntimeError(f"task {task_id} has no canonical timeline events")
         if samples is not None:
             samples.operation.append(time.perf_counter() - operation_started)
             samples.admission.append(admission_elapsed)
@@ -256,10 +261,6 @@ class SingleNodeBenchmarkHarness:
             samples.inspection.append(inspection_elapsed)
             samples.task_ids.append(task_id)
             samples.run_ids.append(run_id)
-            if not timeline_ok:
-                samples.timeline_failures += 1
-        if not timeline_ok:
-            raise RuntimeError(f"task {task_id} has no canonical timeline events")
 
 
 def attach_baseline_comparison(report: BenchmarkReport, comparison: Any) -> BenchmarkReport:
@@ -288,6 +289,20 @@ def _require_id(response: HTTPResponse, *, expected_status: int, label: str) -> 
     return identifier
 
 
+def _require_fresh_data_root(root: Path) -> None:
+    if not root.exists():
+        return
+    try:
+        has_entries = next(root.iterdir(), None) is not None
+    except OSError as exc:
+        raise ValueError(f"benchmark data root cannot be inspected: {root}") from exc
+    if has_entries:
+        raise ValueError(
+            "single-node reference benchmark requires a fresh empty data root; "
+            "use a dedicated directory"
+        )
+
+
 def _directory_size(root: Path) -> int:
     if not root.exists():
         return 0
@@ -308,10 +323,44 @@ def _environment_metadata() -> dict[str, Any]:
         "machine": platform.machine(),
         "processor": platform.processor(),
         "cpu_count": os.cpu_count(),
+        "cpu_model": _cpu_model(),
+        "memory_total_bytes": _memory_total_bytes(),
         "python_implementation": platform.python_implementation(),
         "python_version": platform.python_version(),
         "python_major_minor": f"{sys.version_info.major}.{sys.version_info.minor}",
     }
+
+
+def _cpu_model() -> str | None:
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.is_file():
+        try:
+            for line in cpuinfo.read_text(encoding="utf-8", errors="replace").splitlines():
+                key, separator, value = line.partition(":")
+                if separator and key.strip().casefold() in {"model name", "hardware"}:
+                    normalized = value.strip()
+                    if normalized:
+                        return normalized
+        except OSError:
+            pass
+    processor = platform.processor().strip()
+    return processor or None
+
+
+def _memory_total_bytes() -> int | None:
+    meminfo = Path("/proc/meminfo")
+    if not meminfo.is_file():
+        return None
+    try:
+        for line in meminfo.read_text(encoding="utf-8", errors="replace").splitlines():
+            if not line.startswith("MemTotal:"):
+                continue
+            fields = line.split()
+            if len(fields) >= 2:
+                return int(fields[1]) * 1024
+    except (OSError, ValueError):
+        return None
+    return None
 
 
 def _open_file_descriptor_count() -> int | None:
