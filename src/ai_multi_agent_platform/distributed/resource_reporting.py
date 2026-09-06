@@ -10,6 +10,7 @@ so replacing a Node provider or transport does not change canonical resource ide
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue
 
@@ -77,8 +78,8 @@ def resource_reporting_metadata(
         unavailable_fields=frozenset(unavailable_fields),
     )
     values: dict[str, JsonValue] = {
-        "reported_fields": sorted(state.reported_fields),
-        "unavailable_fields": sorted(state.unavailable_fields),
+        "reported_fields": cast(list[JsonValue], sorted(state.reported_fields)),
+        "unavailable_fields": cast(list[JsonValue], sorted(state.unavailable_fields)),
     }
     return AdapterMetadata(namespace=RESOURCE_REPORTING_NAMESPACE, values=values)
 
