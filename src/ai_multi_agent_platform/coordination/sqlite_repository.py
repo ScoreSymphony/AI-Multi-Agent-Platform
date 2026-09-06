@@ -50,7 +50,10 @@ def _owner_to_dict(owner: OwnerRef) -> dict[str, str]:
 
 
 def _owner_from_dict(value: dict[str, Any]) -> OwnerRef:
-    return OwnerRef(type=cast(Any, str(value["type"])), id=str(value["id"]))
+    owner_type = str(value["type"])
+    if owner_type not in {"user", "organization", "team", "service"}:
+        raise ValueError("invalid persisted owner type")
+    return OwnerRef(type=cast(Any, owner_type), id=str(value["id"]))
 
 
 def _provenance_to_dict(value: Provenance | None) -> dict[str, Any] | None:
@@ -427,10 +430,34 @@ class SQLiteCoordinatorRepository:
         step: Step,
         record: StepCoordinationRecord,
         expected_revision: int,
+        claim: CoordinatorClaim | None = None,
+        now: datetime | None = None,
     ) -> StepCoordinationRecord:
         if step.id != record.step_id or step.plan_id != record.plan_id:
             raise ValueError("canonical Step and coordination record identity do not match")
+        commit_time = now or datetime.now(UTC)
+        if commit_time.tzinfo is None:
+            raise ValueError("coordinator commit time must be timezone-aware")
         with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            if claim is not None:
+                claim_row = connection.execute(
+                    "SELECT claim_id, owner_id, fence, expires_at FROM coordinator_claims "
+                    "WHERE step_id = ?",
+                    (step.id,),
+                ).fetchone()
+                if (
+                    claim_row is None
+                    or str(claim_row[0]) != claim.claim_id
+                    or str(claim_row[1]) != claim.owner_id
+                    or int(claim_row[2]) != claim.fence
+                    or datetime.fromisoformat(str(claim_row[3])) <= commit_time
+                ):
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "stale or expired coordinator claim",
+                        details={"step_id": step.id, "fence": claim.fence},
+                    )
             row = connection.execute(
                 "SELECT revision FROM coordinator_steps WHERE step_id = ?", (step.id,)
             ).fetchone()
@@ -447,11 +474,7 @@ class SQLiteCoordinatorRepository:
                         "current_revision": current_revision,
                     },
                 )
-            saved = replace(
-                record,
-                revision=current_revision + 1,
-                updated_at=datetime.now(UTC),
-            )
+            saved = replace(record, revision=current_revision + 1, updated_at=commit_time)
             updated = connection.execute(
                 "UPDATE coordinator_steps SET step_json = ?, record_json = ?, revision = ? "
                 "WHERE step_id = ? AND revision = ?",
@@ -481,7 +504,15 @@ class SQLiteCoordinatorRepository:
     ) -> CoordinatorClaim | None:
         if ttl.total_seconds() <= 0:
             raise ValueError("claim ttl must be positive")
+        if now.tzinfo is None:
+            raise ValueError("claim time must be timezone-aware")
         with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            exists = connection.execute(
+                "SELECT 1 FROM coordinator_steps WHERE step_id = ?", (step_id,)
+            ).fetchone()
+            if exists is None:
+                raise ContractError(ErrorCode.NOT_FOUND, f"coordination Step {step_id} not found")
             current = connection.execute(
                 "SELECT claim_id, owner_id, fence, expires_at FROM coordinator_claims "
                 "WHERE step_id = ?",
@@ -532,6 +563,7 @@ class SQLiteCoordinatorRepository:
         if ttl.total_seconds() <= 0:
             raise ValueError("claim ttl must be positive")
         with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT claim_id, owner_id, fence, expires_at FROM coordinator_claims "
                 "WHERE step_id = ?",
