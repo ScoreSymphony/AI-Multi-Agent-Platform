@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { TemplatePreview } from "../api/templates";
-import { PreviewReport } from "./TemplatesPage";
+import type { TemplatePreview, TemplateResourceRef } from "../api/templates";
+import { canonicalResourceHref, PreviewReport } from "./TemplatesPage";
 
 function preview(overrides: Partial<TemplatePreview> = {}): TemplatePreview {
   return {
@@ -29,6 +29,10 @@ function preview(overrides: Partial<TemplatePreview> = {}): TemplatePreview {
     applicable: false,
     ...overrides,
   };
+}
+
+function resource(resourceType: string, resourceId: string): TemplateResourceRef {
+  return { resource_type: resourceType, resource_id: resourceId };
 }
 
 describe("Template PreviewReport", () => {
@@ -65,5 +69,23 @@ describe("Template PreviewReport", () => {
 
     expect(markup).toContain("Optional capability versions incompatible:");
     expect(markup).toContain("capability.optional requires &gt;=4; available 3");
+  });
+});
+
+describe("Template instantiated resource links", () => {
+  it("routes newly integrated owner-domain resources to canonical read-only detail surfaces", () => {
+    expect(canonicalResourceHref(resource("workflow", "workflow_123"))).toBe(
+      "/workflows/workflow_123",
+    );
+    expect(
+      canonicalResourceHref(resource("capability_assignment", "cap_assignment_123")),
+    ).toBe("/capability-assignments/cap_assignment_123");
+    expect(
+      canonicalResourceHref(resource("model_routing_profile", "routing_profile_123")),
+    ).toBe("/model-routing-profiles/routing_profile_123");
+  });
+
+  it("keeps unknown resource types unlinked rather than fabricating routes", () => {
+    expect(canonicalResourceHref(resource("future_resource", "future_123"))).toBeNull();
   });
 });
