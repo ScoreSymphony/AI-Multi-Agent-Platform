@@ -58,9 +58,7 @@ def test_distributed_scale_runs_authenticated_two_worker_workspace_round(tmp_pat
 
     document = report.to_dict()
     schema = json.loads(
-        Path("docs/schemas/benchmark-distributed-scale.v1.schema.json").read_text(
-            encoding="utf-8"
-        )
+        Path("docs/schemas/benchmark-distributed-scale.v1.schema.json").read_text(encoding="utf-8")
     )
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(document)
