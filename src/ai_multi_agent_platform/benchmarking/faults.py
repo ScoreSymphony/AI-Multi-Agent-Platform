@@ -14,7 +14,7 @@ from typing import Any
 
 from ai_multi_agent_platform import __version__
 from ai_multi_agent_platform.control_plane import HTTPRequest
-from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
+from ai_multi_agent_platform.deployment import build_single_node_deployment
 
 from .models import LatencyDistribution, ResourceMetrics
 from .single_node import (
