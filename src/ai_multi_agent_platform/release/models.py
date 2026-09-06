@@ -120,7 +120,11 @@ class ReleaseManifest:
     gates: tuple[ReleaseGate, ...]
     sbom_ref: str
     provenance_ref: str
+    artifact_hashes: Mapping[str, str] = field(default_factory=dict)
     schema_version: str = RELEASE_MANIFEST_SCHEMA_VERSION
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "artifact_hashes", MappingProxyType(dict(self.artifact_hashes)))
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -136,6 +140,7 @@ class ReleaseManifest:
             "gates": [gate.to_dict() for gate in self.gates],
             "sbom_ref": self.sbom_ref,
             "provenance_ref": self.provenance_ref,
+            "artifact_hashes": dict(self.artifact_hashes),
         }
 
 
