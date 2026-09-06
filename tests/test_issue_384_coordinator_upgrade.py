@@ -189,9 +189,9 @@ def test_explicit_v1_to_v2_migration_preserves_runtime_state_and_invalidates_cla
     assert records[barrier.id].satisfied_dependency_ids == (predecessor.id,)
     assert records[retry.id].phase is CoordinationPhase.RETRY_SCHEDULED
     assert records[retry.id].current_attempt == 1
-    assert records[retry.id].retry_due_at == datetime(
-        2026, 9, 6, 10, 0, tzinfo=UTC
-    ) + timedelta(seconds=30)
+    assert records[retry.id].retry_due_at == datetime(2026, 9, 6, 10, 0, tzinfo=UTC) + timedelta(
+        seconds=30
+    )
 
     with sqlite3.connect(path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM coordinator_claims").fetchone() == (0,)
@@ -238,9 +238,7 @@ def test_41_preflight_and_upgrade_service_migrate_coordinator_store_explicitly(
     assert blocked.ok is False
     assert blocked.backup_required is True
     assert blocked.maintenance_required is True
-    assert any(
-        check.code == "coordination.migration.backup_required" for check in blocked.checks
-    )
+    assert any(check.code == "coordination.migration.backup_required" for check in blocked.checks)
 
     request = PreflightRequest(
         data_dir=data_dir,
@@ -270,6 +268,7 @@ def test_41_preflight_and_upgrade_service_migrate_coordinator_store_explicitly(
     assert maintenance.active() is False
     metadata = inspect_coordinator_store(data_dir / "db" / "coordination.sqlite3")
     assert metadata is not None and metadata.current
-    assert SQLiteCoordinatorRepository(data_dir / "db" / "coordination.sqlite3").get_plan(
-        plan.id
-    ).plan == plan
+    assert (
+        SQLiteCoordinatorRepository(data_dir / "db" / "coordination.sqlite3").get_plan(plan.id).plan
+        == plan
+    )
