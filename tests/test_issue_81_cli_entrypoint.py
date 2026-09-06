@@ -70,14 +70,17 @@ def test_registry_preview_is_reachable_through_platform_entrypoint(tmp_path: Pat
     )
 
     assert code == 0
-    assert transport.calls == [
-        (
-            "POST",
-            "/commands/registry.preview",
-            {"content-type": "application/json", "x-principal-ref": "user:test"},
-            {"resource_ref": "example.asset", "version": "1.2.3"},
-        )
-    ]
+    assert len(transport.calls) == 1
+    method, path, headers, body = transport.calls[0]
+    assert method == "POST"
+    assert path == "/api/v1/commands/registry.preview"
+    assert headers["content-type"] == "application/json"
+    assert headers["accept"] == "application/json"
+    assert headers["x-principal-ref"] == "user:test"
+    assert headers["x-request-id"].startswith("request_")
+    assert headers["x-correlation-id"].startswith("corr_")
+    assert headers["idempotency-key"].startswith("cli_")
+    assert body == {"resource_ref": "example.asset", "version": "1.2.3"}
 
 
 def test_registry_activation_requires_global_yes_before_transport(tmp_path: Path) -> None:
@@ -118,7 +121,7 @@ def test_registry_activation_with_yes_dispatches_exact_version(tmp_path: Path) -
     assert len(transport.calls) == 1
     method, path, _, body = transport.calls[0]
     assert method == "POST"
-    assert path == "/commands/registry.activate"
+    assert path == "/api/v1/commands/registry.activate"
     assert body == {"resource_ref": "example.asset", "version": "1.2.3"}
 
 
