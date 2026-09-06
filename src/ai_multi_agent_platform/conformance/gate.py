@@ -282,6 +282,43 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
 
     return integration + (
         ConformanceScenario(
+            "REL-BACKUP",
+            "#40 backup/restore",
+            (
+                "replacement-machine restore preserves canonical identity/history and reaches "
+                "service readiness"
+            ),
+            _pytest(
+                "tests/test_issue40_replacement_machine.py::"
+                "test_clean_replacement_machine_restore_preserves_canonical_history"
+            ),
+        ),
+        ConformanceScenario(
+            "REL-UPGRADE",
+            "#41 upgrade lifecycle",
+            (
+                "supported schema upgrade uses preflight, recorded migrations, backup semantics "
+                "and explicit recovery"
+            ),
+            _pytest(
+                "tests/test_issue41_upgrade_lifecycle.py::"
+                "test_upgrade_from_previous_schema_fixture_records_history",
+                "tests/test_issue41_upgrade_lifecycle.py::"
+                "test_forward_only_migration_requires_matching_verified_backup",
+                "tests/test_issue41_upgrade_lifecycle.py::"
+                "test_failed_upgrade_stays_in_maintenance_until_explicit_resume",
+            ),
+        ),
+        ConformanceScenario(
+            "REL-EVAL",
+            "#19 evaluation/regression",
+            (
+                "checked-in deterministic evaluation baseline rejects regressions "
+                "without paid services"
+            ),
+            (sys.executable, "scripts/ci/issue19_evaluation_gate.py"),
+        ),
+        ConformanceScenario(
             "G",
             "#46 failure/retry",
             "controlled failures preserve canonical retries and telemetry",
