@@ -26,7 +26,11 @@ from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 from ai_multi_agent_platform.testing import FakeOrchestrator
 from ai_multi_agent_platform.testing.fakes import FakeLifecycleBackend
-from ai_multi_agent_platform.workspaces import WorkspaceAccessMode, WorkspaceChangeKind, WorkspaceType
+from ai_multi_agent_platform.workspaces import (
+    WorkspaceAccessMode,
+    WorkspaceChangeKind,
+    WorkspaceType,
+)
 from ai_multi_agent_platform.workspaces.reference import LocalWorkspaceProvider
 
 
