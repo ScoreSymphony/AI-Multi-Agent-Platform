@@ -21,6 +21,7 @@ class DurableStoreSpec:
 
 SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
     DurableStoreSpec("kernel", "db/kernel.sqlite3", "sqlite", True, "kernel"),
+    DurableStoreSpec("coordination", "db/coordination.sqlite3", "sqlite", True, "coordination"),
     DurableStoreSpec("scopes", "db/scopes.sqlite3", "sqlite", True, "control-plane"),
     DurableStoreSpec("files", "db/files.sqlite3", "sqlite", True, "data"),
     DurableStoreSpec("workspaces", "db/workspaces.sqlite3", "sqlite", True, "workspaces"),
