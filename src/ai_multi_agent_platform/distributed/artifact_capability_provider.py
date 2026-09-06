@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from ai_multi_agent_platform.capabilities import (
+    ISOLATED_WORKSPACE_WRITE_FEATURE,
     CapabilityRegistration,
     CapabilitySpec,
     CapabilityToolProvider,
@@ -108,6 +109,7 @@ class DistributedExecutorArtifactProvider(CapabilityToolProvider):
             },
             tags=("distributed", "executor", "workspace", "artifact", "reference"),
             side_effects=SideEffectClassification.LOCAL_WRITE,
+            features=(ISOLATED_WORKSPACE_WRITE_FEATURE,),
             health=HealthStatus.HEALTHY,
             available=True,
         )
