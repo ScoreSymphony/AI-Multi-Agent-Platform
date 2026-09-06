@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from collections.abc import Iterable
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -113,6 +114,10 @@ def _split_resource_id(resource_id: str) -> tuple[str, str | None]:
     return item_id, version
 
 
+def _json_strings(values: Iterable[str]) -> list[JsonValue]:
+    return [cast(JsonValue, value) for value in values]
+
+
 def _item_resource(item: RegistryItem) -> dict[str, JsonValue]:
     dependencies: list[JsonValue] = [
         {
@@ -142,13 +147,13 @@ def _item_resource(item: RegistryItem) -> dict[str, JsonValue]:
         "minimum_platform_version": item.supported_platform.minimum,
         "maximum_platform_version": item.supported_platform.maximum,
         "dependencies": dependencies,
-        "requested_permissions": sorted(item.requested_permissions),
-        "required_capabilities": sorted(item.required_capabilities),
-        "required_plugins": list(item.required_plugins),
-        "required_connectors": list(item.required_connectors),
-        "required_models": list(item.required_models),
-        "tags": sorted(item.tags),
-        "categories": sorted(item.categories),
+        "requested_permissions": _json_strings(sorted(item.requested_permissions)),
+        "required_capabilities": _json_strings(sorted(item.required_capabilities)),
+        "required_plugins": _json_strings(item.required_plugins),
+        "required_connectors": _json_strings(item.required_connectors),
+        "required_models": _json_strings(item.required_models),
+        "tags": _json_strings(sorted(item.tags)),
+        "categories": _json_strings(sorted(item.categories)),
         "trust_status": item.trust_status.value,
         "review_reference": item.review_reference,
         "released_at": item.released_at,
