@@ -1,10 +1,10 @@
 # Dependency-Driven Implementation Roadmap
 
-> Status baseline: 2026-09-06, after PR #493
+> Status baseline: 2026-09-06, after PR #494
 
 This roadmap describes the remaining work from the current `main` branch toward the ideal end-state platform. The repository is no longer in its foundation-building stage: most canonical domains and the usable single-node product path are implemented. The remaining work is concentrated in late cross-domain integration, distributed deployment hardening, durable workflow productization, autonomous planning, performance evidence, release operationalization and final platform conformance.
 
-GitHub issue state and the current wording of each issue remain the point-in-time source of truth. The normative product and architecture baseline remains:
+GitHub issue state and the current wording/comments of each issue remain the point-in-time source of truth. The normative product and architecture baseline remains:
 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md)
 - [`ARCHITECTURE_PRINCIPLES.md`](ARCHITECTURE_PRINCIPLES.md)
@@ -40,11 +40,9 @@ The latest completed hardening wave also closed #171, #414, #416 and the routing
 
 ### Current open set
 
-There are currently **9 open issues out of 98 repository issues**:
+At this snapshot there are **9 open issues out of 98 repository issues**:
 
 `#42, #46, #78, #81, #240, #384, #421, #439, #440`
-
-There are currently **no open pull requests**.
 
 The raw issue-closure ratio is therefore about **90.8%**, but the remaining issues are disproportionately large. The repository should be treated as a late-stage platform with several substantial end-state capabilities and acceptance gates still open, not as a product that is literally 90.8% complete by engineering effort.
 
@@ -86,9 +84,18 @@ The provider-neutral Registry foundation, canonical owner handoff and CLI/fronte
 
 #### #384 durable Plan/Step coordinator
 
-PR #472 merged the platform-owned coordinator covering durable coordination records, dependency progression, fan-out/fan-in, waits, Step retries, cancellation, restart reconciliation, optimistic revisions/claims, Control Plane projections and telemetry.
+PR #472 merged the platform-owned coordinator covering durable coordination records, dependency progression, fan-out/fan-in, waits, Step retries, cancellation, restart reconciliation, optimistic revisions/claims, Control Plane projections, telemetry, backup inventory participation and broad regression coverage.
 
-Because #384 remains open, perform a final requirement-by-requirement audit around the difficult crash/reconciliation, backup/restore, fencing and acceptance cases. Do not treat the merged core as permission to weaken the platform-owned lifecycle boundary.
+The issue remains open because its post-merge Definition of Done still requires explicit proof/hardening in several high-risk areas:
+
+- a production-grade shared claim/fencing backend for genuine multi-Control-Plane coordination;
+- end-to-end distributed Task -> Step -> Run -> Worker cancellation/reconciliation, including late results and lost acknowledgements;
+- restore/fencing crash-boundary regressions that prevent stale tokens or duplicate canonical Runs/Events after takeover/restore;
+- release-to-release migration/upgrade evidence for the coordinator persistence schema/store;
+- a final authorized operator repair workflow for inconsistent coordinator state;
+- broader evaluation, performance, security and conformance evidence, including representative large fan-out limits.
+
+Do not treat the merged core as permission to weaken the platform-owned lifecycle boundary or to move canonical coordination ownership into an orchestrator/workflow engine.
 
 ### Lane B — Workflow product layer unlocked by #384: #421 and #439
 
@@ -135,9 +142,14 @@ The architecture prerequisites are no longer missing:
 #240 distributed deployment integration (major path merged)
 ```
 
-PR #487 routes ordinary canonical Task/Run execution through the distributed runtime when the advanced deployment is enabled, shares the scheduler/runtime composition, propagates exact Workspace bindings and proves an authenticated HTTP Task reaching a registered distributed Worker.
+PR #487 routes ordinary canonical Task/Run execution through the distributed runtime when advanced deployment is enabled, shares the scheduler/runtime composition, propagates exact Workspace bindings and proves an authenticated HTTP Task reaching a registered distributed Worker.
 
-The issue remains open for focused final hardening, including the residual acceptance items explicitly recorded by the merged work such as zero-byte Workspace transfer coverage, positive TLS/mTLS evidence, documentation synchronization and final deployment-profile acceptance.
+The issue remains open for focused final hardening, including the residual acceptance items explicitly recorded by the merged work:
+
+- zero-byte Workspace/File transfer regression coverage;
+- positive TLS/mTLS broker/client acceptance rather than rejection-only tests;
+- final `ADVANCED_DEPLOYMENT.md` and operator-example synchronization with profile-aware startup;
+- a full current-`main` CI/conformance/security/regression pass and final acceptance review.
 
 Do not expand #240 into HA, cloud provisioning or a second scheduler. Those boundaries are already owned elsewhere.
 
@@ -173,7 +185,7 @@ The current issue body identifies the remaining operationalization work:
 - explicit frontend typing for the richer release schema v2 structures;
 - optional provider-neutral scheduled discovery adapters where useful, while preserving manual adoption and the no-recurring-paid-service constraint.
 
-This lane is largely independent from #421/#439/#240 and can progress continuously in parallel.
+This lane is largely independent from #421/#439/#240 and can progress continuously in parallel. #41 remains authoritative for persisted upgrade/version state; update discovery stays advisory and must not silently approve, mutate pins, merge or deploy changes.
 
 ### Lane F — Final platform convergence: #46
 
@@ -200,7 +212,7 @@ A practical high-throughput split from current `main` is:
 
 | Track | Work | Dependency status |
 |---|---|---|
-| A | #384 final DoD / crash-recovery-backup audit | Core implementation merged |
+| A | #384 final DoD / crash-recovery-backup/distributed audit | Core implementation merged |
 | B | #240 distributed deployment hardening | Major integration path merged |
 | C | #42 release/update operationalization | Independent |
 | D | #440 remaining workflow/distributed/fault profiles | Partially unlocked now |
@@ -282,9 +294,9 @@ The project is therefore best described as **late-stage architecture/product int
 
 ## Release interpretation
 
-The planned `0.1.0` prerequisite (#252) has passed, but no GitHub release is published yet. A formal prototype release still requires the publication checklist in [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md), current changelog/provenance and an exact passing release commit.
+The planned `0.1.0` prerequisite (#252) has passed, but no GitHub release is published yet. A formal prototype release still requires the publication checklist in [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md), current changelog/provenance, a validated release manifest and an exact passing release commit.
 
-The planned `1.0.0` operational baseline remains tied to #46 full conformance. Optional Registry operation must not become a hidden prerequisite for the local/self-hosted baseline, even if #81 is completed before 1.0.
+The planned `1.0.0` operational baseline remains tied to #46 full conformance for the profiles the release explicitly claims. Optional Registry and advanced distributed capabilities must not become hidden prerequisites for the ordinary local/self-hosted baseline unless a release explicitly claims them.
 
 ## Consistency rules for every remaining issue
 
@@ -300,4 +312,4 @@ Each implementation must continue to preserve:
 - tests proportional to the failure mode being closed;
 - no acceptance-only bypass that hides a production integration gap.
 
-When this roadmap and a GitHub issue diverge, the current issue wording and merged code are authoritative until the roadmap is refreshed again.
+When this roadmap and a GitHub issue diverge, the current issue wording, issue comments and merged code are authoritative until the roadmap is refreshed again.
