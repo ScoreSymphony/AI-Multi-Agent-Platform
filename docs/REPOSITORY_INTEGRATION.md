@@ -55,6 +55,8 @@ Side effects are classified independently of provider identity:
 
 `RepositoryService` is the policy-enforced facade. Callers do not invoke Git/provider binaries or APIs directly through this repository surface.
 
+The shipped Single-Node Control Plane is composed through `ControlPlaneAuthorizationBridge(approval_gate)`. Stable northbound operations such as `task:create` are therefore translated into canonical #15 `AuthorizationAction`/`ResourceType` values before the local policy provider evaluates them. Repository-triggered Automations create canonical Tasks through the same authorization boundary as other Control Plane callers rather than bypassing or misrouting local policy.
+
 The service maps operations onto #15 authorization/approval semantics:
 
 - read/status/diff: standard read;
