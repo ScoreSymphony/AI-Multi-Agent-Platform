@@ -52,6 +52,10 @@ class DistributionService:
     def activation_enabled(self) -> bool:
         return self._provider is not None and self._router is not None
 
+    @property
+    def installation_state_enabled(self) -> bool:
+        return self._installations is not None
+
     def search(self, query: RegistryQuery | None = None) -> tuple[RegistryItem, ...]:
         """Discover registry metadata without exposing a concrete provider northbound."""
 
