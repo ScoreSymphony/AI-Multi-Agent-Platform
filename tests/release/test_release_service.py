@@ -65,6 +65,7 @@ def _manifest(*, gate_status: GateStatus = GateStatus.PASSED) -> ReleaseManifest
         gates=gates,
         sbom_ref="sbom:1.2.3",
         provenance_ref="attestation:1.2.3",
+        artifact_hashes={"ai_multi_agent_platform-1.2.3.whl": "sha256:platform"},
     )
 
 
@@ -101,6 +102,7 @@ def test_blocked_compatibility_blocks_release() -> None:
         gates=manifest.gates,
         sbom_ref=manifest.sbom_ref,
         provenance_ref=manifest.provenance_ref,
+        artifact_hashes=manifest.artifact_hashes,
     )
     report = evaluate_release(changed)
     assert report.ready is False
