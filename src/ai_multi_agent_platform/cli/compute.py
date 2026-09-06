@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from pathlib import Path
 from urllib.parse import quote
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -47,6 +48,11 @@ def add_compute_parsers(
     )
     provision.add_argument("worker_id")
     provision.add_argument("--purpose")
+    provision.add_argument(
+        "--secret-file",
+        required=True,
+        help="write the one-time Worker bearer secret to this local file with mode 0600",
+    )
     provision.add_argument("--idempotency-key")
 
     rotate = worker_commands.add_parser(
@@ -56,6 +62,11 @@ def add_compute_parsers(
     rotate.add_argument("worker_id")
     rotate.add_argument("--credential-id", required=True)
     rotate.add_argument("--purpose")
+    rotate.add_argument(
+        "--secret-file",
+        required=True,
+        help="write the replacement Worker bearer secret to this local file with mode 0600",
+    )
     rotate.add_argument("--idempotency-key")
 
     worker_job = areas.add_parser("worker-job", help="inspect canonical WorkerJob dispatch state")
@@ -207,11 +218,12 @@ def _execute_worker(
         body: dict[str, JsonValue] = {"resource_ref": worker_id}
         if args.purpose:
             body["purpose"] = str(args.purpose)
-        return client.post(
+        response = client.post(
             "/commands/worker.provision",
             body=body,
             idempotency_key=args.idempotency_key,
         )
+        return _persist_worker_secret(response, Path(str(args.secret_file)).expanduser())
     if args.command == "rotate-credential":
         worker_id = str(args.worker_id)
         confirm(args, "rotate Worker credential", worker_id)
@@ -221,12 +233,58 @@ def _execute_worker(
         }
         if args.purpose:
             body["purpose"] = str(args.purpose)
-        return client.post(
+        response = client.post(
             "/commands/worker.rotate-credential",
             body=body,
             idempotency_key=args.idempotency_key,
         )
+        return _persist_worker_secret(response, Path(str(args.secret_file)).expanduser())
     raise ProfileError(f"unsupported worker command: {args.command}")
+
+
+def _persist_worker_secret(response: ClientResponse, path: Path) -> ClientResponse:
+    body = response.body
+    if not isinstance(body, dict):
+        raise ProfileError("Worker credential response must be an object")
+    safe_body: dict[str, JsonValue] = dict(body)
+    secret = safe_body.pop("secret", None)
+    if secret is None:
+        safe_body["secret_file_written"] = False
+        return ClientResponse(
+            status=response.status,
+            body=safe_body,
+            request_id=response.request_id,
+            correlation_id=response.correlation_id,
+            api_version=response.api_version,
+        )
+    if not isinstance(secret, str) or not secret:
+        raise ProfileError("Worker credential response contained an invalid one-time secret")
+
+    target = path.resolve()
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.tmp")
+        temporary.write_text(secret + "\n", encoding="utf-8")
+        try:
+            temporary.chmod(0o600)
+        except OSError:
+            pass
+        temporary.replace(target)
+        try:
+            target.chmod(0o600)
+        except OSError:
+            pass
+    except OSError as exc:
+        raise ProfileError(f"cannot write Worker credential secret file: {exc}") from exc
+
+    safe_body["secret_file_written"] = True
+    return ClientResponse(
+        status=response.status,
+        body=safe_body,
+        request_id=response.request_id,
+        correlation_id=response.correlation_id,
+        api_version=response.api_version,
+    )
 
 
 def _execute_worker_job(args: argparse.Namespace, client: ControlPlaneClient) -> ClientResponse:
