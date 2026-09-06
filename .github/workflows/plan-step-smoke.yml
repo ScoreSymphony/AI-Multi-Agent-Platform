@@ -1,0 +1,85 @@
+name: Plan step scale smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  plan-step-scale-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install benchmark environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Validate Plan Step benchmark implementation
+        run: |
+          ruff format --check \
+            src/ai_multi_agent_platform/benchmarking/plan_step.py \
+            src/ai_multi_agent_platform/benchmarking/plan_step_cli.py \
+            tests/test_issue_440_plan_step.py
+          ruff check \
+            src/ai_multi_agent_platform/benchmarking/plan_step.py \
+            src/ai_multi_agent_platform/benchmarking/plan_step_cli.py \
+            tests/test_issue_440_plan_step.py
+          mypy \
+            src/ai_multi_agent_platform/benchmarking/plan_step.py \
+            src/ai_multi_agent_platform/benchmarking/plan_step_cli.py
+          pytest tests/test_issue_440_plan_step.py
+      - name: Run tiny durable Plan Step profiles
+        run: |
+          mkdir -p artifacts/benchmarks/pr-plan-step
+          for scenario in linear fan-out fan-in; do
+            platform-plan-step \
+              --scenario "$scenario" \
+              --size 3 \
+              --timeout-seconds 5 \
+              --safety-max-size 8 \
+              --platform-commit "$GITHUB_SHA" \
+              --output "artifacts/benchmarks/pr-plan-step/${scenario}.json"
+          done
+      - name: Validate Plan Step reports
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from jsonschema import Draft202012Validator
+
+          schema = json.loads(
+              Path("docs/schemas/benchmark-plan-step.v1.schema.json").read_text()
+          )
+          expected_steps = {"linear": 3, "fan-out": 4, "fan-in": 5}
+          expected_width = {"linear": 1, "fan-out": 3, "fan-in": 3}
+          for scenario in ("linear", "fan-out", "fan-in"):
+              report = json.loads(
+                  Path(f"artifacts/benchmarks/pr-plan-step/{scenario}.json").read_text()
+              )
+              Draft202012Validator(schema).validate(report)
+              assert report["benchmark"]["scenario"] == scenario
+              assert report["correctness"]["passed"] is True
+              assert report["correctness"]["expected_steps"] == expected_steps[scenario]
+              assert report["correctness"]["run_created_events"] == expected_steps[scenario]
+              assert report["correctness"]["unique_run_ids"] == expected_steps[scenario]
+              assert report["correctness"]["dependency_order_valid"] is True
+              assert report["correctness"]["task_succeeded"] is True
+              assert report["correctness"]["active_width_peak"] == expected_width[scenario]
+              assert report["registration_latency"]["count"] == 1
+              assert report["outcome_persistence_latency"]["count"] == expected_steps[scenario]
+              assert (
+                  report["coordination_observation_latency"]["count"]
+                  == expected_steps[scenario]
+              )
+          PY
+      - name: Upload Plan Step evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-plan-step-benchmarks
+          path: artifacts/benchmarks/pr-plan-step
+          if-no-files-found: ignore
