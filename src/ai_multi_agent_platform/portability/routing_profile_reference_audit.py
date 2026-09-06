@@ -8,6 +8,7 @@ from ai_multi_agent_platform.agents.repository import AgentRepository
 from ai_multi_agent_platform.contracts.errors import ContractError
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
+from ai_multi_agent_platform.templates.models import TemplateContent
 from ai_multi_agent_platform.templates.repository import TemplateRepository
 
 from .model_routing_profile_import import RoutingProfileDependencyAudit
@@ -61,14 +62,12 @@ def build_routing_profile_dependency_audit(
     return audit
 
 
-def _template_references_profile(content: object, profile_id: str) -> bool:
-    requirements = getattr(content, "requirements")
-    for reference in requirements.model_policy_refs:
+def _template_references_profile(content: TemplateContent, profile_id: str) -> bool:
+    for reference in content.requirements.model_policy_refs:
         if _references_profile(reference, profile_id):
             return True
 
-    configuration = getattr(content, "configuration")
-    payload = configuration.payload
+    payload = content.configuration.payload
     if payload is None:
         return False
     return _payload_references_profile(payload, profile_id)
