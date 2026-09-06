@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -32,7 +33,6 @@ from ai_multi_agent_platform.upgrade import (
     JsonUpgradeHistoryStore,
     JsonVersionStateStore,
     MaintenanceStateStore,
-    MigrationContext,
     MigrationRegistry,
     PreflightRequest,
     UpgradeService,
@@ -144,7 +144,7 @@ def _legacy_coordination_fixture(root: Path) -> tuple[Plan, tuple[Step, ...], in
     return plan, (waiting, predecessor, barrier, retry), claim.fence
 
 
-def _backup_verifier(version: str):
+def _backup_verifier(version: str) -> Callable[[Path], BackupVerification]:
     def verify(path: Path) -> BackupVerification:
         return BackupVerification(
             backup_dir=path,
