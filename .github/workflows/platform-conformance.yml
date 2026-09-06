@@ -94,7 +94,7 @@ jobs:
           platform-conformance
           --profile release
           --deployment-profile reference-single-node-extended
-          --enable-optional E,N,R,S,T,V,X,Y
+          --enable-optional E,N,Q,R,S,T,V,X,Y
           --json-report conformance-extended-reference.json
       - name: Upload extended reference evidence
         if: always()
