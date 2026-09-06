@@ -390,6 +390,7 @@ class ProviderFaultBenchmarkHarness:
             errors.extend(evidence.errors)
 
         expected_code = _expected_fault_error_code(spec.scenario)
+        expected_retryable = _expected_fault_retryable(spec.scenario)
         baseline = phases["baseline"]
         fault = phases["fault"]
         recovery = phases["recovery"]
@@ -405,8 +406,13 @@ class ProviderFaultBenchmarkHarness:
             and not errors
         )
         if expected_code is not None:
+            expected_retryable_counts = (
+                Counter({expected_code.value: expected_faults})
+                if expected_retryable
+                else Counter()
+            )
             passed = passed and error_counts == Counter({expected_code.value: expected_faults})
-            passed = passed and retryable_counts == Counter({expected_code.value: expected_faults})
+            passed = passed and retryable_counts == expected_retryable_counts
         else:
             passed = passed and not error_counts and not retryable_counts
         if spec.scenario in {"model-cancelled", "tool-cancelled", "tool-timeout"}:
@@ -642,6 +648,7 @@ class ProviderFaultBenchmarkHarness:
         evidence = _PhaseEvidence()
         semaphore = asyncio.Semaphore(spec.concurrency)
         phase_started = time.perf_counter()
+        expected_retryable = _expected_fault_retryable(spec.scenario)
 
         async def run_one(index: int) -> None:
             async with semaphore:
@@ -658,7 +665,11 @@ class ProviderFaultBenchmarkHarness:
                     evidence.error_counts[exc.code.value] += 1
                     if exc.retryable:
                         evidence.retryable_error_counts[exc.code.value] += 1
-                    if expected_code is not None and exc.code is expected_code and exc.retryable:
+                    if (
+                        expected_code is not None
+                        and exc.code is expected_code
+                        and exc.retryable is expected_retryable
+                    ):
                         evidence.expected_failures += 1
                     else:
                         evidence.unexpected_failures += 1
@@ -709,6 +720,21 @@ def _expected_fault_error_code(scenario: str) -> ErrorCode | None:
         return ErrorCode.TIMEOUT
     if scenario in {"model-cancelled", "tool-cancelled"}:
         return ErrorCode.CANCELLED
+    raise ValueError(f"unsupported provider fault scenario: {scenario}")
+
+
+def _expected_fault_retryable(scenario: str) -> bool | None:
+    if scenario == "model-latency":
+        return None
+    if scenario == "model-cancelled":
+        return False
+    if scenario in {
+        "model-unavailable",
+        "tool-unavailable",
+        "tool-timeout",
+        "tool-cancelled",
+    }:
+        return True
     raise ValueError(f"unsupported provider fault scenario: {scenario}")
 
 
