@@ -10,6 +10,7 @@ export const navigation: NavigationItem[] = [
   { label: "First-run onboarding", path: "/onboarding", group: "Work", apiResource: "onboarding" },
   { label: "Chat", path: "/chat", group: "Work" },
   { label: "Projects & Workspaces", path: "/projects", group: "Work", apiResource: "projects" },
+  { label: "Repositories", path: "/repositories", group: "Work", apiResource: "repositories" },
   { label: "Tasks", path: "/tasks", group: "Work", apiResource: "tasks" },
   { label: "Runs", path: "/runs", group: "Work", apiResource: "runs" },
   { label: "Templates", path: "/templates", group: "Work", apiResource: "templates" },

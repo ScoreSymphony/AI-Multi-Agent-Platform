@@ -1,5 +1,9 @@
 """Cross-cutting platform security, authentication and authorization surface."""
 
+# Import order is intentionally not fully alphabetical: redaction/types must be bound
+# before enforced_providers imports configuration, whose package root imports them back.
+# ruff: noqa: I001
+
 from .approvals import ApprovalRecord, ApprovalService
 from .authentication import (
     AuthenticatedActor,
@@ -83,12 +87,21 @@ from .policy_profiles import (
     compile_local_principal_policy,
 )
 from .redaction import REDACTED, redact_exception, redact_sensitive, redact_text
+from .sqlite_approvals import SqliteApprovalService, SqliteAuthorizationAuditSink
 from .types import (
     ExternalSideEffect,
     SecretReference,
     SecurityAuditEvent,
     SecurityContext,
     SecurityDecision,
+)
+from .enforced_providers import (
+    AuthorizedFileProvider,
+    AuthorizedKnowledgeProvider,
+    AuthorizedLifecycleBackend,
+    AuthorizedMemoryProvider,
+    AuthorizedSecretProvider,
+    AuthorizedToolProvider,
 )
 from .validation import UntrustedInputError, validate_untrusted_json
 
@@ -126,6 +139,12 @@ __all__ = [
     "AuthorizedDataFileProvider",
     "AuthorizedDataKnowledgeProvider",
     "AuthorizedDataMemoryProvider",
+    "AuthorizedFileProvider",
+    "AuthorizedKnowledgeProvider",
+    "AuthorizedLifecycleBackend",
+    "AuthorizedMemoryProvider",
+    "AuthorizedSecretProvider",
+    "AuthorizedToolProvider",
     "BrowserSession",
     "ControlPlaneAuthorizationBridge",
     "CredentialKind",
@@ -157,6 +176,8 @@ __all__ = [
     "SecurityContext",
     "SecurityDecision",
     "SessionGrant",
+    "SqliteApprovalService",
+    "SqliteAuthorizationAuditSink",
     "StoredCredential",
     "UntrustedInputError",
     "VerifiedExternalIdentity",

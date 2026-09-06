@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { BrowserSessionClient } from "./browserSession";
 import { ControlPlaneClient } from "./client";
 
@@ -25,7 +25,24 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe("BrowserSessionClient", () => {
+  it("binds the native global fetch receiver for real browser calls", async () => {
+    const nativeFetch = vi.fn(function (this: typeof globalThis) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(jsonResponse({ ok: true }));
+    }) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", nativeFetch);
+    const session = new BrowserSessionClient({ storage: null });
+
+    await session.fetch("/api/v1/health");
+
+    expect(nativeFetch).toHaveBeenCalledOnce();
+  });
+
   it("stores the login CSRF token and injects it into later cookie mutations", async () => {
     const requests: RequestInit[] = [];
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {

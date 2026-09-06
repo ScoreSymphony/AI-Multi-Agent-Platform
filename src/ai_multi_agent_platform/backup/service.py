@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .dependencies import DependencyInventoryError, discover_single_node_external_dependencies
-from .inventory import required_single_node_store_paths
+from .inventory import optional_single_node_store_paths, required_single_node_store_paths
 from .manifest import ManifestSchemaError, validate_backup_manifest_v1
 from .recovery import write_restore_recovery_marker
 
@@ -356,10 +356,18 @@ def verify_restored_single_node_data_root(
         actual_versions[relative] = _sqlite_user_version(item)
 
     expected = dict(expected_sqlite_user_versions)
-    if set(actual_versions) != set(expected):
+    actual_paths = set(actual_versions)
+    expected_paths = set(expected)
+    allowed_runtime_additions = {
+        path for path in optional_single_node_store_paths() if _is_sqlite_path(path)
+    }
+    missing_expected = expected_paths - actual_paths
+    unexpected_actual = actual_paths - expected_paths - allowed_runtime_additions
+    if missing_expected or unexpected_actual:
         raise BackupError(
             "restored SQLite file set differs from backup manifest: "
-            f"expected={sorted(expected)!r} actual={sorted(actual_versions)!r}"
+            f"missing_expected={sorted(missing_expected)!r} "
+            f"unexpected_actual={sorted(unexpected_actual)!r}"
         )
     for path, version in expected.items():
         actual = actual_versions[path]

@@ -13,6 +13,7 @@ import { NotificationClient } from "../api/notifications";
 import { OnboardingClient } from "../api/onboarding";
 import { OrganizationClient } from "../api/organizations";
 import { PluginsClient } from "../api/plugins";
+import { RepositoryCollectionClient } from "../api/repositories";
 import { TemplateClient } from "../api/templates";
 import { VerificationClient } from "../api/verification";
 import type { ReferenceCollection } from "../api/references";
@@ -74,6 +75,7 @@ import {
 } from "../pages/PluginsPage";
 import { ProjectDetailPage, WorkspaceDetailPage } from "../pages/ProjectPages";
 import { ProjectsPage } from "../pages/ProjectListPage";
+import { RepositoriesPage, RepositoryDetailPage } from "../pages/RepositoriesPage";
 import { ReferencesPage } from "../pages/ReferencePages";
 import { RunsPage } from "../pages/RunListPage";
 import { SearchPage } from "../pages/SearchPage";
@@ -115,6 +117,10 @@ export function Shell() {
   );
   const approvalClient = useMemo(
     () => new ApprovalClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const repositoryClient = useMemo(
+    () => new RepositoryCollectionClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const conversationClient = useMemo(
@@ -181,6 +187,7 @@ export function Shell() {
 
   const projectMatch = matchPath("/projects/:projectId", path);
   const workspaceMatch = matchPath("/workspaces/:workspaceId", path);
+  const repositoryMatch = matchPath("/repositories/:repositoryId", path);
   const taskManagementMatch = matchPath("/tasks/:taskId/manage", path);
   const taskMatch = matchPath("/tasks/:taskId", path);
   const runMatch = matchPath("/runs/:runId", path);
@@ -246,6 +253,31 @@ export function Shell() {
     content = <ProjectDetailPage client={client} projectId={projectMatch.projectId} />;
   } else if (workspaceMatch) {
     content = <WorkspaceDetailPage client={client} workspaceId={workspaceMatch.workspaceId} />;
+  } else if (path === "/repositories") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Repositories"
+        resource="repositories"
+      >
+        <RepositoriesPage client={repositoryClient} />
+      </ManifestResourcePage>
+    );
+  } else if (repositoryMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Repositories"
+        resource="repositories"
+      >
+        <RepositoryDetailPage
+          client={repositoryClient}
+          repositoryId={repositoryMatch.repositoryId}
+        />
+      </ManifestResourcePage>
+    );
   } else if (path === "/tasks") content = <ManagedTasksPage client={client} />;
   else if (taskManagementMatch) {
     content = <TaskManagementDetailPage client={client} taskId={taskManagementMatch.taskId} />;

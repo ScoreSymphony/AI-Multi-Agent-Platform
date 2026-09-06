@@ -41,6 +41,7 @@ from ai_multi_agent_platform.security.types import SecretReference
 
 from .authorization import (
     ActorIdentity,
+    ActorType,
     AuthorizationAction,
     AuthorizationContext,
     ProposedAction,
@@ -115,11 +116,24 @@ class AuthorizedToolProvider(ToolProvider):
 
 
 class AuthorizedLifecycleBackend(LifecycleBackend):
-    """Protect Run start/read/cancel at the lifecycle provider boundary."""
+    """Protect Run start/read/cancel at the lifecycle provider boundary.
 
-    def __init__(self, inner: LifecycleBackend, gate: AuthorizationGate) -> None:
+    A composed platform kernel may need to reconcile backend state for legacy or restored
+    service-owned Runs whose historical owner was never an authorization principal.  The
+    optional internal-service read exemption is deliberately limited to READ: execution and
+    cancellation always remain authorization-gated.
+    """
+
+    def __init__(
+        self,
+        inner: LifecycleBackend,
+        gate: AuthorizationGate,
+        *,
+        allow_internal_service_reads: bool = False,
+    ) -> None:
         self._inner = inner
         self._gate = gate
+        self._allow_internal_service_reads = allow_internal_service_reads
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -139,14 +153,17 @@ class AuthorizedLifecycleBackend(LifecycleBackend):
         return await self._inner.start(request)
 
     async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
-        await self._gate.enforce(
-            _operation_action(
-                context,
-                action=AuthorizationAction.READ,
-                resource_type=ResourceType.RUN,
-                resource_id=run_id,
-            )
+        action = _operation_action(
+            context,
+            action=AuthorizationAction.READ,
+            resource_type=ResourceType.RUN,
+            resource_id=run_id,
         )
+        if not (
+            self._allow_internal_service_reads
+            and action.context.actor.actor_type is ActorType.SERVICE
+        ):
+            await self._gate.enforce(action)
         return await self._inner.get(run_id, context)
 
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
