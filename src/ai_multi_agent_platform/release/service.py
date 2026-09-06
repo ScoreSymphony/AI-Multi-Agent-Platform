@@ -97,9 +97,7 @@ def _validate_dependency_sets(manifest: ReleaseManifest, blockers: list[str]) ->
         name for name in set(dependency_names) if dependency_names.count(name) > 1
     )
     if duplicate_dependency_names:
-        blockers.append(
-            "duplicate dependency-set names: " + ", ".join(duplicate_dependency_names)
-        )
+        blockers.append("duplicate dependency-set names: " + ", ".join(duplicate_dependency_names))
     for item in manifest.dependency_sets:
         if _REFERENCE.fullmatch(item.source_ref) is None:
             blockers.append(f"dependency set {item.name!r} has an invalid source_ref")
@@ -147,9 +145,7 @@ def _validate_release_gates(
             gate.name in COMMIT_BOUND_RELEASE_GATES
             and evidence.source_commit != manifest.source_commit
         ):
-            blockers.append(
-                f"gate {gate.name!r} evidence is not bound to release source_commit"
-            )
+            blockers.append(f"gate {gate.name!r} evidence is not bound to release source_commit")
 
 
 def _validate_artifacts(manifest: ReleaseManifest, blockers: list[str]) -> None:
@@ -169,10 +165,7 @@ def _validate_upstreams_and_compatibility(
     for upstream in manifest.upstreams:
         if _FLOATING_REVISION.search(upstream.revision) is not None or "*" in upstream.revision:
             blockers.append(f"upstream {upstream.component!r} uses a floating revision")
-        if (
-            upstream.revision_kind == "commit"
-            and _GIT_COMMIT.fullmatch(upstream.revision) is None
-        ):
+        if upstream.revision_kind == "commit" and _GIT_COMMIT.fullmatch(upstream.revision) is None:
             blockers.append(
                 f"upstream {upstream.component!r} commit revision must be a full Git SHA"
             )
