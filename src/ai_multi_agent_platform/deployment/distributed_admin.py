@@ -136,9 +136,7 @@ class DistributedWorkerAdmin:
             if node.reporter_worker_id == worker_id:
                 return node
         declared_worker = any(
-            worker.worker_id == worker_id
-            for node in self._profile.nodes
-            for worker in node.workers
+            worker.worker_id == worker_id for node in self._profile.nodes for worker in node.workers
         )
         if declared_worker:
             raise ContractError(
