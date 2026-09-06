@@ -28,8 +28,7 @@ class CoordinationEvaluationEvidenceProvider:
 
         state = matches[0]
         records = {
-            record.step_id: record
-            for record in self._repository.list_step_records(state.plan.id)
+            record.step_id: record for record in self._repository.list_step_records(state.plan.id)
         }
         step_data: list[JsonValue] = []
         for step in state.steps:
@@ -46,9 +45,7 @@ class CoordinationEvaluationEvidenceProvider:
                     "current_attempt": record.current_attempt,
                     "retry_policy_version": record.retry_policy.version,
                     "retry_due_at": (
-                        record.retry_due_at.isoformat()
-                        if record.retry_due_at is not None
-                        else None
+                        record.retry_due_at.isoformat() if record.retry_due_at is not None else None
                     ),
                     "wait_type": wait.wait_type.value if wait is not None else None,
                     "wait_deadline_at": (
@@ -60,16 +57,12 @@ class CoordinationEvaluationEvidenceProvider:
                 }
             )
 
-        waiting = sum(
-            record.phase is CoordinationPhase.WAITING for record in records.values()
-        )
+        waiting = sum(record.phase is CoordinationPhase.WAITING for record in records.values())
         retry_scheduled = sum(
-            record.phase is CoordinationPhase.RETRY_SCHEDULED
-            for record in records.values()
+            record.phase is CoordinationPhase.RETRY_SCHEDULED for record in records.values()
         )
         inconsistent = sum(
-            record.phase is CoordinationPhase.INCONSISTENT
-            for record in records.values()
+            record.phase is CoordinationPhase.INCONSISTENT for record in records.values()
         )
         partial_barriers = sum(
             bool(record.satisfied_dependency_ids)

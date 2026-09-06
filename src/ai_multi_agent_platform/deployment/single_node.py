@@ -24,6 +24,12 @@ from ai_multi_agent_platform.capability_assignments import (
     JsonCapabilityAssignmentRepository,
 )
 from ai_multi_agent_platform.configuration import SecretProvider
+from ai_multi_agent_platform.coordination import (
+    DurablePlanStepCoordinator,
+    SQLiteCoordinatorRepository,
+    coordination_command_handlers,
+    coordination_resource_services,
+)
 from ai_multi_agent_platform.control_plane import (
     AuthenticatedControlPlaneHTTP,
     ControlPlaneASGI,
@@ -42,6 +48,7 @@ from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.domain import RunStatus, TaskStatus
 from ai_multi_agent_platform.evaluation import (
     AccountingEvaluationEvidenceProvider,
+    CoordinationEvaluationEvidenceProvider,
     EvaluationEvidenceProvider,
     EvaluationService,
     InMemoryObservabilityEvaluationEvidenceProvider,
@@ -208,6 +215,8 @@ class SingleNodeDeployment:
     first_task: FirstRunTaskService
     secrets: SecretProvider | None
     templates: TemplateApplicationService
+    coordination_repository: SQLiteCoordinatorRepository
+    coordination: DurablePlanStepCoordinator
     evaluation_repository: SqliteEvaluationRepository
     evaluation: EvaluationService
     accounting_service: AccountingService | None
@@ -510,6 +519,13 @@ def build_single_node_deployment(
         event_sink=observability_events,
         completion_authority=verification_completion,
     )
+    coordination_repository = SQLiteCoordinatorRepository(database_dir / "coordination.sqlite3")
+    coordination = DurablePlanStepCoordinator(
+        repository=coordination_repository,
+        kernel=kernel,
+        coordinator_id="single-node",
+        telemetry=telemetry,
+    )
     verification_evidence = KernelFileVerificationEvidenceResolver(
         kernel, kernel_repository, files, agents.repository
     )
@@ -551,7 +567,9 @@ def build_single_node_deployment(
     )
     register_capability_assignment_template_handler(template_handlers, capability_assignments)
 
-    evaluation_evidence_providers: list[EvaluationEvidenceProvider] = []
+    evaluation_evidence_providers: list[EvaluationEvidenceProvider] = [
+        CoordinationEvaluationEvidenceProvider(coordination_repository)
+    ]
     if accounting_service is not None:
         evaluation_evidence_providers.append(
             AccountingEvaluationEvidenceProvider(accounting_service)
@@ -630,6 +648,10 @@ def build_single_node_deployment(
     for collection, service in evaluation_resource_services(evaluation_composition.service).items():
         control_plane.register_resource_service(collection, service)
     for command, handler in evaluation_command_handlers(evaluation_composition.service).items():
+        control_plane.register_command(command, handler)
+    for collection, service in coordination_resource_services(coordination).items():
+        control_plane.register_resource_service(collection, service)
+    for command, handler in coordination_command_handlers(coordination).items():
         control_plane.register_command(command, handler)
     register_routing_profile_aware_agent_control_plane(
         control_plane,
@@ -745,6 +767,8 @@ def build_single_node_deployment(
         first_task=first_task,
         secrets=protected_secret_provider,
         templates=templates,
+        coordination_repository=coordination_repository,
+        coordination=coordination,
         evaluation_repository=evaluation_composition.repository,
         evaluation=evaluation_composition.service,
         accounting_service=accounting_service,
