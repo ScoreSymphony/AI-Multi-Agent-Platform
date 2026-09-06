@@ -88,10 +88,7 @@ class _DisconnectAfterFirstChunkAckTransport(TcpMessageTransport):
 
     async def ack(self, delivery: MessageDelivery) -> None:
         await super().ack(delivery)
-        if (
-            delivery.envelope.message_type != "workspace.put_chunk"
-            or self.disconnected_after_chunk
-        ):
+        if delivery.envelope.message_type != "workspace.put_chunk" or self.disconnected_after_chunk:
             return
         self.disconnected_after_chunk = True
         for subscription in tuple(self._subscriptions):
