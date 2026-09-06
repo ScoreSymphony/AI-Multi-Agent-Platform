@@ -155,14 +155,14 @@ class JsonModelRoutingProfileRepository:
         definition = self.get_definition(profile_id)
         revisions = self.list_revisions(profile_id)
         del self._definitions[profile_id]
-        for revision in range(1, definition.current_revision + 1):
-            self._revisions.pop((profile_id, revision), None)
+        for revision_number in range(1, definition.current_revision + 1):
+            self._revisions.pop((profile_id, revision_number), None)
         try:
             self._persist()
         except Exception:
             self._definitions[profile_id] = definition
-            for revision in revisions:
-                self._revisions[(profile_id, revision.revision)] = revision
+            for stored_revision in revisions:
+                self._revisions[(profile_id, stored_revision.revision)] = stored_revision
             raise
 
     def _validate_pair(
