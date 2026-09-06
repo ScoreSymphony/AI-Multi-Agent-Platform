@@ -7,6 +7,7 @@ import json
 import sys
 from collections.abc import Sequence
 
+from .adoption import UpdateValidationEvidenceError, load_update_validation_evidence
 from .codec import ReleaseManifestError, load_release_manifest
 from .discovery import (
     ObservedUpstream,
@@ -15,6 +16,7 @@ from .discovery import (
     evaluate_update_candidates,
     load_compatibility_inventory,
     load_observations,
+    record_reviewed_candidate,
 )
 from .generator import (
     ReleaseGenerationError,
@@ -71,6 +73,19 @@ def build_parser() -> argparse.ArgumentParser:
     upstream.add_argument("--data-dir")
     upstream.add_argument("--reviewed-at")
     upstream.add_argument("--json", action="store_true")
+
+    adoption = subcommands.add_parser(
+        "upstream-adoption-check",
+        help="Validate revision-bound evidence before recording a reviewed upstream candidate",
+    )
+    adoption.add_argument("--inventory")
+    adoption.add_argument("--observations", required=True)
+    adoption.add_argument("--component", required=True)
+    adoption.add_argument("--evidence", required=True)
+    adoption.add_argument("--compatibility-status", required=True)
+    adoption.add_argument("--reviewed-at", required=True)
+    adoption.add_argument("--manual-review-approved", action="store_true")
+    adoption.add_argument("--json", action="store_true")
     return parser
 
 
@@ -83,6 +98,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _upstream_discover_git(args)
     if args.command == "upstream-check":
         return _upstream_check(args)
+    if args.command == "upstream-adoption-check":
+        return _upstream_adoption_check(args)
 
     try:
         manifest = load_release_manifest(str(args.manifest))
@@ -214,6 +231,55 @@ def _upstream_check(args: argparse.Namespace) -> int:
         candidate.disposition is UpdateDisposition.BLOCKED for candidate in report.candidates
     )
     return 4 if blocked else 0
+
+
+def _upstream_adoption_check(args: argparse.Namespace) -> int:
+    try:
+        inventory = load_compatibility_inventory(args.inventory)
+        observed_at, observations = load_observations(str(args.observations))
+        report = evaluate_update_candidates(
+            inventory,
+            observations,
+            observed_at=observed_at,
+        )
+        matches = [
+            candidate for candidate in report.candidates if candidate.component == args.component
+        ]
+        if len(matches) != 1:
+            raise UpdateDiscoveryError(
+                f"expected exactly one candidate for component {args.component!r}"
+            )
+        candidate = matches[0]
+        evidence = load_update_validation_evidence(str(args.evidence))
+        updated = record_reviewed_candidate(
+            inventory,
+            candidate,
+            compatibility_status=str(args.compatibility_status),
+            reviewed_at=str(args.reviewed_at),
+            validation_evidence=evidence,
+            manual_review_approved=bool(args.manual_review_approved),
+        )
+    except (UpdateDiscoveryError, UpdateValidationEvidenceError) as exc:
+        print(f"upstream adoption validation failed: {exc}", file=sys.stderr)
+        return 2
+
+    if bool(args.json):
+        print(
+            json.dumps(
+                {
+                    "candidate": candidate.to_dict(),
+                    "validation_evidence": evidence.to_dict(),
+                    "resulting_compatibility_inventory": updated.to_dict(),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    else:
+        print(f"upstream candidate validated: {candidate.component}")
+        print(f"candidate revision: {candidate.candidate_revision}")
+        print("production pin mutation: none")
+    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover

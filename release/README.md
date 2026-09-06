@@ -9,6 +9,8 @@ This directory contains operator-facing, machine-readable release metadata for i
   version maps where those are claimed.
 - `upstream-observations.example.json` documents the provider/CI-neutral input format for advisory
   update discovery.
+- `upstream-validation-evidence.example.json` documents the revision-bound validation evidence
+  required before a reviewed upstream candidate can be recorded into a new compatibility snapshot.
 - `release-generation-input.example.json` documents the reviewed inputs consumed by deterministic
   release-manifest generation. It is a template: placeholder evidence must be replaced before a
   release candidate can pass validation.
@@ -32,6 +34,20 @@ upstream is current. Supplying `--data-dir <AI_MAP_DATA_DIR> --reviewed-at <RFC3
 persists the evaluated advisory report under the deployment data root. The operator service reloads
 the latest persisted report after restart; malformed advisory state becomes an operator warning and
 does not change production pins or #41 upgrade/version state.
+
+A candidate that is ready for review still cannot be recorded from bare `passed` strings alone.
+Create a validation-evidence document bound to the exact candidate revision and run
+`platform-release upstream-adoption-check --observations <path> --component <name> --evidence <path>
+--compatibility-status <state> --reviewed-at <RFC3339>`. The check requires passed
+`adapter_contract_tests`, `eval_regression`, `security` and `compatibility_review` status plus typed
+revision-bound evidence for every gate. Report/artifact/attestation evidence requires a SHA-256 or
+SHA-512 digest. The command is read-only: it prints the resulting compatibility snapshot but never
+rewrites production pins, commits changes or deploys an update.
+
+The repository CI also treats `upstream/*.yaml` as the governance authority for important upstream
+pins. Tests fail if the reviewed compatibility snapshot, packaged snapshot, Hermes runtime pin,
+Hermes/Forge CI checkout revisions, LiteLLM optional dependency pin or the pinned LiteLLM integration
+test drift away from the governed revisions.
 
 `platform-release upstream-discover-git` is an optional provider-neutral Git-remote discovery
 adapter. It uses immutable remote HEADs only as advisory observations. A changed revision is
