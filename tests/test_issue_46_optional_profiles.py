@@ -17,7 +17,6 @@ from ai_multi_agent_platform.conformance import (
     profile_scenarios,
     run_conformance,
 )
-from ai_multi_agent_platform.conformance.external_profile import main as external_profile_main
 
 
 def _by_id(profile: ConformanceProfile, enabled: tuple[str, ...] = ()):
@@ -121,7 +120,9 @@ def test_cli_optional_and_component_version_parsing_is_deterministic() -> None:
         _parse_component_versions(["same=1", "same=2"], "--adapter-version")
 
 
-def test_external_adapter_profiles_fail_closed_without_real_environment(monkeypatch) -> None:
+def test_external_adapter_profiles_fail_closed_without_real_environment(
+    tmp_path: Path, monkeypatch
+) -> None:
     for variable in (
         "HERMES_UPSTREAM_DIR",
         "HERMES_UPSTREAM_REVISION",
@@ -129,5 +130,14 @@ def test_external_adapter_profiles_fail_closed_without_real_environment(monkeypa
         "FORGE_SIDECAR_WORKSPACE_ROOT",
     ):
         monkeypatch.delenv(variable, raising=False)
-    assert external_profile_main(["B"]) == 2
-    assert external_profile_main(["C"]) == 2
+
+    scenarios = _by_id(ConformanceProfile.RELEASE, ("B", "C"))
+    for scenario_id in ("B", "C"):
+        report = run_conformance(
+            ConformanceProfile.RELEASE,
+            repository_root=Path.cwd(),
+            scenarios=(scenarios[scenario_id],),
+        )
+        assert report.passed is False
+        assert report.compatibility_result == CompatibilityResult.INCOMPATIBLE.value
+        assert report.scenarios[0].status == ConformanceStatus.FAIL.value
