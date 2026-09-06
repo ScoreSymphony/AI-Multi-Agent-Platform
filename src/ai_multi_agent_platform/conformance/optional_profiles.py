@@ -50,6 +50,20 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "tests/test_issue75_control_plane.py::"
         "test_event_provider_projects_task_event_and_replay_aggregates_safely",
     ),
+    "Q": _pytest(
+        "tests/test_issue_78_reopened_p0_authorization.py::"
+        "test_reapply_authorizes_instance_and_exact_source_revision",
+        "tests/test_issue_78_reopened_p0_authorization.py::"
+        "test_unauthorized_dependency_blocks_preview_and_apply_before_resource_creation",
+        "tests/test_issue_78_reopened_compatibility.py::"
+        "test_version_incompatibilities_appear_in_preview_and_block_apply",
+        "tests/test_issue_78_reopened_materialized_secret_guard.py::"
+        "test_configuration_reference_plaintext_secret_is_rejected_before_handler",
+        "tests/test_issue_78_capability_assignment_compensation.py::"
+        "test_composite_failure_compensates_earlier_capability_assignment",
+        "tests/test_issue_78_final_composition.py::"
+        "test_standard_single_node_exposes_final_template_integrations",
+    ),
     "R": _pytest(
         "tests/test_portability.py::test_portable_package_round_trip_preserves_manifest_and_integrity",
         "tests/test_portability.py::test_plaintext_secret_bearing_field_is_rejected",
@@ -58,6 +72,16 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_executor_imports_agent_then_team_with_full_revision_history",
         "tests/test_issue_79_import_executor.py::"
         "test_executor_rolls_back_real_team_and_agent_in_reverse_order",
+    ),
+    "S": _pytest(
+        "tests/test_issue_81_production_composition.py::"
+        "test_default_single_node_keeps_registry_and_plugin_runtime_absent_when_unconfigured",
+        "tests/test_issue_81_production_composition.py::"
+        "test_configured_single_node_shares_registry_plugins_with_canonical_plugin_lifecycle",
+        "tests/test_issue_81_registry_control_plane.py::"
+        "test_preview_uses_server_resolved_validation_context_without_activation_router",
+        "tests/test_issue_81_marketplace_completion.py::"
+        "test_signed_artifact_requires_and_accepts_authoritative_verification",
     ),
     "T": _pytest(
         "tests/test_issue_82_repository_control_plane_provenance.py::"
@@ -80,6 +104,26 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_restart_promotion_reconciles_running_work_and_preserves_worker_identity",
         "tests/test_issue_89_final_failover_acceptance.py::"
         "test_duplicate_command_replay_after_promotion_does_not_duplicate_task_or_run",
+    ),
+    "Y": _pytest(
+        "tests/test_issue_384_coordination_durability.py::"
+        "test_crash_after_run_creation_before_coordinator_commit_is_exactly_once",
+        "tests/test_issue_384_coordination_durability.py::"
+        "test_sqlite_deadline_wait_survives_restart_and_resumes_once",
+        "tests/test_issue_384_coordination_durability.py::"
+        "test_sqlite_retry_deadline_survives_restart_and_fires_once",
+        "tests/test_issue_384_coordination_durability.py::"
+        "test_sqlite_partial_fan_in_survives_restart",
+        "tests/test_issue_384_coordination_durability.py::"
+        "test_sqlite_stale_fence_cannot_commit_after_takeover",
+        "tests/test_issue_384_lost_worker_acknowledgement.py::"
+        "test_lost_worker_acknowledgement_delegates_to_kernel_without_blind_redispatch",
+        "tests/test_issue_384_restore_history_consistency.py::"
+        "test_restore_preserves_kernel_history_and_resumes_wait_and_retry_once",
+        "tests/test_issue_384_observability_completeness.py::"
+        "test_attempt_barrier_and_cancellation_evidence_is_explicit",
+        "tests/test_issue_384_observability_completeness.py::"
+        "test_claim_conflicts_are_emitted_from_the_shared_claim_boundary",
     ),
 }
 
