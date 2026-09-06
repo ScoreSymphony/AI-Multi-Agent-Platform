@@ -39,3 +39,10 @@ jobs:
           assert report["correctness"]["passed"] is True
           assert report["benchmark"]["deployment_profile"] == "single-node-reference"
           PY
+      - name: Upload benchmark evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-single-node-benchmark
+          path: artifacts/benchmarks/pr-single-node.json
+          if-no-files-found: ignore
