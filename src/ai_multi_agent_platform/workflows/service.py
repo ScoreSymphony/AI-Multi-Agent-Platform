@@ -119,6 +119,23 @@ class WorkflowService:
     def list_revisions(self, workflow_id: str) -> tuple[WorkflowRevision, ...]:
         return self.repository.list_revisions(workflow_id)
 
+    def compensate_created(
+        self,
+        workflow_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+        expected_instance_id: str,
+    ) -> None:
+        """Rollback an untouched workflow created by one failed Template apply."""
+
+        self.repository.compensate_created(
+            workflow_id,
+            expected_owner_ref=expected_owner_ref,
+            expected_source=expected_source,
+            expected_instance_id=expected_instance_id,
+        )
+
     def admit(
         self,
         reference: WorkflowRevisionRef,
