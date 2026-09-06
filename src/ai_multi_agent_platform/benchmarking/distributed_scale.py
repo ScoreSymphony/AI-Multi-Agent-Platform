@@ -337,9 +337,7 @@ class DistributedWorkerWorkspaceScaleHarness:
                         )
                         for record in current_records:
                             if record.state is not DispatchState.TERMINAL:
-                                errors.append(
-                                    f"worker job did not become terminal: {record.job.worker_job_id}"
-                                )
+                                errors.append(f"non-terminal worker job: {record.job.worker_job_id}")
                             result_started = time.perf_counter()
                             result = await runtime.result(record.job.worker_job_id)
                             terminal_result_samples.append(time.perf_counter() - result_started)
