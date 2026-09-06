@@ -110,9 +110,7 @@ def _validate_runnable_profile(profile: AdvancedDeploymentProfile) -> None:
 
     for node in profile.nodes:
         if node.reporter_worker_id is None:
-            raise ValueError(
-                f"deployment node {node.binding.host_ref!r} has no reporter_worker_id"
-            )
+            raise ValueError(f"deployment node {node.binding.host_ref!r} has no reporter_worker_id")
         if node.binding.credential_reference is None:
             raise ValueError(
                 f"deployment node {node.binding.host_ref!r} has no Worker credential reference"
