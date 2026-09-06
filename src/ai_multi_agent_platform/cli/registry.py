@@ -57,8 +57,8 @@ def execute_registry(
 
     item_id = str(args.item_id)
     if args.command == "show":
-        version = str(args.version)
-        resource_id = quote(f"{item_id}@{version}", safe="")
+        show_version = str(args.version)
+        resource_id = quote(f"{item_id}@{show_version}", safe="")
         return client.get(f"/registry-items/{resource_id}")
 
     version: str | None
