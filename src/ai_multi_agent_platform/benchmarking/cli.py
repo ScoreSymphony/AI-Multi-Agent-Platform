@@ -18,6 +18,7 @@ from .models import BenchmarkSpec, RegressionThresholds, compare_with_baseline
 from .single_node import SingleNodeBenchmarkHarness, attach_baseline_comparison
 from .stress import SingleNodeStressHarness, StressBenchmarkSpec
 from .sweep import SingleNodeSweepHarness
+from .transport_faults import TransportFaultBenchmarkHarness, TransportFaultBenchmarkSpec
 from .workloads import SingleNodeWorkloadHarness, WorkloadBenchmarkSpec
 
 
@@ -127,6 +128,26 @@ def _parser() -> argparse.ArgumentParser:
     fault.add_argument("--write-weight", type=int, default=1)
     fault.add_argument("--output", type=Path, required=True)
     fault.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
+
+    transport_fault = subparsers.add_parser(
+        "transport-fault",
+        help="run bounded in-process transport backpressure, outage or duplicate-delivery evidence",
+    )
+    transport_fault.add_argument(
+        "--scenario",
+        choices=("backpressure", "outage", "duplicate-delivery"),
+        required=True,
+    )
+    transport_fault.add_argument("--batch-size", type=int, default=10)
+    transport_fault.add_argument("--concurrency", type=int, default=4)
+    transport_fault.add_argument("--max-queue-size", type=int)
+    transport_fault.add_argument("--fault-operations", type=int)
+    transport_fault.add_argument("--timeout-seconds", type=float, default=30.0)
+    transport_fault.add_argument("--output", type=Path, required=True)
+    transport_fault.add_argument(
+        "--platform-commit",
+        default=os.environ.get("GITHUB_SHA", "unknown"),
+    )
     return parser
 
 
@@ -144,6 +165,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_run_single_node_stress(args))
     if args.command == "single-node-fault-under-load":
         return asyncio.run(_run_single_node_fault_under_load(args))
+    if args.command == "transport-fault":
+        return asyncio.run(_run_transport_fault(args))
     raise AssertionError(f"unsupported benchmark command: {args.command}")
 
 
@@ -422,6 +445,37 @@ async def _run_single_node_fault_under_load(args: argparse.Namespace) -> int:
     finally:
         if temporary is not None:
             temporary.cleanup()
+
+
+async def _run_transport_fault(args: argparse.Namespace) -> int:
+    if args.scenario == "backpressure":
+        max_queue_size = args.batch_size if args.max_queue_size is None else args.max_queue_size
+        fault_operations = 1 if args.fault_operations is None else args.fault_operations
+    elif args.scenario == "outage":
+        max_queue_size = args.batch_size * 2 if args.max_queue_size is None else args.max_queue_size
+        fault_operations = args.batch_size if args.fault_operations is None else args.fault_operations
+    else:
+        max_queue_size = args.batch_size + 1 if args.max_queue_size is None else args.max_queue_size
+        fault_operations = 0 if args.fault_operations is None else args.fault_operations
+
+    spec = TransportFaultBenchmarkSpec(
+        benchmark_id=f"transport.reference.{args.scenario}",
+        benchmark_version="1.0",
+        scenario=args.scenario,
+        transport_profile="in-process-reference",
+        batch_size=args.batch_size,
+        concurrency=args.concurrency,
+        max_queue_size=max_queue_size,
+        fault_operations=fault_operations,
+        timeout_seconds=args.timeout_seconds,
+    )
+    report = await TransportFaultBenchmarkHarness(platform_commit=args.platform_commit).run(spec)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return 0 if report.correctness.passed else 2
 
 
 def _workload_identity(scenario: str) -> tuple[str, str]:
