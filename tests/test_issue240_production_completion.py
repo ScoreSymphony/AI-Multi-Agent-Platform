@@ -292,11 +292,20 @@ def test_platform_worker_cli_exposes_provision_and_rotation_commands() -> None:
     worker_id = "worker_00000000-0000-4000-8000-000000000902"
 
     provision = parser.parse_args(
-        ["worker", "provision", worker_id, "--idempotency-key", "provision-1"]
+        [
+            "worker",
+            "provision",
+            worker_id,
+            "--secret-file",
+            "worker.token",
+            "--idempotency-key",
+            "provision-1",
+        ]
     )
     assert provision.area == "worker"
     assert provision.command == "provision"
     assert provision.worker_id == worker_id
+    assert provision.secret_file == "worker.token"
 
     rotate = parser.parse_args(
         [
@@ -305,9 +314,12 @@ def test_platform_worker_cli_exposes_provision_and_rotation_commands() -> None:
             worker_id,
             "--credential-id",
             "credential_00000000-0000-4000-8000-000000000904",
+            "--secret-file",
+            "worker.token",
             "--idempotency-key",
             "rotate-1",
         ]
     )
     assert rotate.command == "rotate-credential"
     assert rotate.worker_id == worker_id
+    assert rotate.secret_file == "worker.token"
