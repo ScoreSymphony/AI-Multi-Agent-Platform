@@ -48,8 +48,8 @@ class DurableRoutingProfileConversationResponseProvider(ModelRuntimeConversation
         request: ConversationResponseRequest,
     ) -> tuple[str | None, dict[str, JsonValue]]:
         if agent_policy is None or agent_policy.routing_profile_ref is None:
-            model_id, requirements = super()._effective_routing(agent_policy, request)
-            return model_id, requirements
+            model_id, requirements_json = super()._effective_routing(agent_policy, request)
+            return model_id, requirements_json
 
         profile = self._routing_profile_resolver.resolve(
             agent_policy.routing_profile_ref,

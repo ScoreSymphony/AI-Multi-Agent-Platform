@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.interfaces import ModelRouter
@@ -11,6 +12,7 @@ from ai_multi_agent_platform.contracts.types import (
     Capability,
     CapabilityKind,
     HealthStatus,
+    JsonValue,
     ModelRequest,
     ModelSelection,
     ProviderDescriptor,
@@ -114,8 +116,8 @@ class DeterministicModelRouter(ModelRouter):
                 "no configured routing-profile model preference is currently compatible",
                 details={
                     "routing_profile_ref": profile.ref.canonical_ref,
-                    "preferred_model_ids": preferred_ids,
-                    "failed_preference_ids": failures,
+                    "preferred_model_ids": cast(JsonValue, preferred_ids),
+                    "failed_preference_ids": cast(JsonValue, failures),
                     "fallback": profile.policy.fallback.value,
                 },
             )
