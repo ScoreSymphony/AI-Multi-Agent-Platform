@@ -4,6 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from ai_multi_agent_platform.benchmarking import (
@@ -55,6 +56,8 @@ def test_single_node_benchmark_report_is_correct_and_schema_valid(tmp_path: Path
         assert report.inspection_latency.count == 3
         assert report.resources.storage_growth_bytes > 0
         assert report.platform_commit == "test-sha"
+        assert "cpu_model" in report.environment
+        assert "memory_total_bytes" in report.environment
 
         schema = json.loads(
             Path("docs/schemas/benchmark-report.v1.schema.json").read_text(encoding="utf-8")
@@ -62,6 +65,30 @@ def test_single_node_benchmark_report_is_correct_and_schema_valid(tmp_path: Path
         Draft202012Validator(schema).validate(report.to_dict())
 
     asyncio.run(scenario())
+
+
+def test_single_node_reference_benchmark_requires_fresh_data_root(tmp_path: Path) -> None:
+    data_root = tmp_path / "platform"
+    data_root.mkdir()
+    (data_root / "unrelated-state.txt").write_text("do not touch", encoding="utf-8")
+
+    async def scenario() -> None:
+        harness = SingleNodeBenchmarkHarness(
+            SingleNodeConfig(data_dir=data_root, secure_cookie=False)
+        )
+        with pytest.raises(ValueError, match="fresh empty data root"):
+            await harness.run(
+                BenchmarkSpec(
+                    benchmark_id="single-node.reference.lifecycle",
+                    benchmark_version="1.0",
+                    deployment_profile="single-node-reference",
+                    operation_count=1,
+                    concurrency=1,
+                )
+            )
+
+    asyncio.run(scenario())
+    assert (data_root / "unrelated-state.txt").read_text(encoding="utf-8") == "do not touch"
 
 
 def test_baseline_comparison_requires_compatible_environment_and_explicit_budget(
@@ -109,5 +136,16 @@ def test_baseline_comparison_requires_compatible_environment_and_explicit_budget
         )
         assert incompatible.comparable is False
         assert incompatible.classification == "incomparable"
+
+        different_workload_size = compare_with_baseline(
+            report,
+            {
+                **baseline,
+                "benchmark": {**baseline["benchmark"], "operation_count": 999},
+            },
+            RegressionThresholds(max_p95_latency_regression_ratio=0.10),
+        )
+        assert different_workload_size.comparable is False
+        assert different_workload_size.classification == "incomparable"
 
     asyncio.run(scenario())
