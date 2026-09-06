@@ -19,6 +19,13 @@ from ai_multi_agent_platform.backup import (
 from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel import RecoveryReport
+from ai_multi_agent_platform.upgrade.service import MaintenanceStateStore, UpgradeError
+from ai_multi_agent_platform.upgrade.versioning import (
+    BASELINE_ADOPTION_PLATFORM_RELEASE,
+    JsonVersionStateStore,
+    VersionStateError,
+    current_release_versions,
+)
 
 from .config import SingleNodeConfig, load_single_node_config
 from .restore_integrity import single_node_restore_integrity_validators
@@ -77,6 +84,72 @@ def main(
 ) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else None)
     config = load_single_node_config()
+    maintenance = MaintenanceStateStore.for_data_dir(config.data_dir)
+    try:
+        maintenance_state = maintenance.read()
+    except UpgradeError as exc:
+        print(f"upgrade maintenance state is invalid: {exc}", file=sys.stderr)
+        return 3
+    if maintenance_state is not None:
+        print(
+            "platform upgrade maintenance is active; finish or recover the upgrade with "
+            "platform-upgrade before running platform-server "
+            f"(source={maintenance_state.source.platform_release} "
+            f"target={maintenance_state.target.platform_release})",
+            file=sys.stderr,
+        )
+        return 3
+
+    version_state = JsonVersionStateStore.for_data_dir(config.data_dir)
+    if version_state.exists():
+        try:
+            installed = version_state.read()
+        except VersionStateError as exc:
+            print(f"platform upgrade version state is invalid: {exc}", file=sys.stderr)
+            return 3
+        runtime = current_release_versions(
+            migration_revision=installed.migration_revision,
+            adapter_versions=installed.adapter_versions,
+            plugin_interface_versions=installed.plugin_interface_versions,
+        )
+        if installed != runtime:
+            mismatches = [
+                name
+                for name in (
+                    "platform_release",
+                    "domain_schema",
+                    "api",
+                    "plugin_manifest",
+                    "portable_format",
+                    "template_schema",
+                    "backup_format",
+                    "worker_protocol",
+                    "message_protocol",
+                )
+                if getattr(installed, name) != getattr(runtime, name)
+            ]
+            print(
+                "running platform release is incompatible with the persisted upgrade state; "
+                "run the supported platform-upgrade path before platform-server "
+                f"(mismatched={','.join(mismatches)})",
+                file=sys.stderr,
+            )
+            return 3
+    else:
+        runtime = current_release_versions()
+        if runtime.platform_release != BASELINE_ADOPTION_PLATFORM_RELEASE:
+            print(
+                "platform upgrade version state is missing and this release cannot adopt an "
+                "untracked data root; restore/run the baseline release and establish a supported "
+                "upgrade path first",
+                file=sys.stderr,
+            )
+            return 3
+
+    # Do not construct the deployment while upgrade maintenance is active or while executable
+    # and durable version vectors disagree: store constructors may initialize or inspect durable
+    # schemas, which must remain exclusively owned by the offline upgrade process until activation
+    # succeeds.
     deployment = deployment_builder(config)
 
     if args.command == "bootstrap-admin":

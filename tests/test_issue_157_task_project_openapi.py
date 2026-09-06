@@ -45,6 +45,7 @@ def test_project_move_commands_have_explicit_openapi_contracts() -> None:
         "historical_scope": "retained",
         "future_execution_scope": "destination_project_id",
         "bulk_atomic": False,
+        "bulk_idempotency": "durable_batch_digest_reservation",
         "connected_bulk_moves": "rejected_without_multi_stream_atomic_commit",
     }
 
