@@ -50,6 +50,20 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "tests/test_issue75_control_plane.py::"
         "test_event_provider_projects_task_event_and_replay_aggregates_safely",
     ),
+    "Q": _pytest(
+        "tests/test_issue_78_reopened_p0_authorization.py::"
+        "test_reapply_authorizes_instance_and_exact_source_revision",
+        "tests/test_issue_78_reopened_p0_authorization.py::"
+        "test_unauthorized_dependency_blocks_preview_and_apply_before_resource_creation",
+        "tests/test_issue_78_reopened_compatibility.py::"
+        "test_version_incompatibilities_appear_in_preview_and_block_apply",
+        "tests/test_issue_78_reopened_materialized_secret_guard.py::"
+        "test_configuration_reference_plaintext_secret_is_rejected_before_handler",
+        "tests/test_issue_78_capability_assignment_compensation.py::"
+        "test_composite_failure_compensates_earlier_capability_assignment",
+        "tests/test_issue_78_final_composition.py::"
+        "test_standard_single_node_exposes_final_template_integrations",
+    ),
     "R": _pytest(
         "tests/test_portability.py::test_portable_package_round_trip_preserves_manifest_and_integrity",
         "tests/test_portability.py::test_plaintext_secret_bearing_field_is_rejected",
