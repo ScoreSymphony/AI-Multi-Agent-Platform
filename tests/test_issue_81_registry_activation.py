@@ -112,6 +112,25 @@ def test_pinned_version_blocks_other_update() -> None:
     assert any(finding.code == "version_pinned" for finding in findings)
 
 
+def test_available_update_is_previewed_but_never_auto_applied() -> None:
+    item = _item(RegistryItemType.PLUGIN, "2.0.0")
+    installed = InstalledRegistryItem(
+        item_id=item.item_id,
+        version="1.0.0",
+        source_registry="local",
+    )
+    service, router = _service(item)
+
+    assert installed.accepts_update(item) is True
+    preview = service.preview(
+        item.item_id,
+        item.version,
+        ValidationContext("0.0.1", installed_items=(installed,)),
+    )
+    assert preview.activation_allowed is True
+    assert router.calls == []
+
+
 def test_license_change_is_visible_before_update() -> None:
     item = _item(RegistryItemType.PLUGIN, "2.0.0")
     installed = InstalledRegistryItem(
