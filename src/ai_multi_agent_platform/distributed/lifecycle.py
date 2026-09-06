@@ -22,6 +22,7 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
     ProviderDescriptor,
 )
+from ai_multi_agent_platform.workspaces import RunWorkspaceBindingRepository
 
 from .models import JobRequirements, WorkerJobRequest
 from .registry import RegistryError
@@ -39,9 +40,11 @@ class DistributedLifecycleBackend(LifecycleBackend):
         runtime: DistributedRuntime,
         *,
         requirements: JobRequirements | None = None,
+        workspace_bindings: RunWorkspaceBindingRepository | None = None,
     ) -> None:
         self.runtime = runtime
         self.requirements = requirements or JobRequirements()
+        self.workspace_bindings = workspace_bindings
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -55,11 +58,17 @@ class DistributedLifecycleBackend(LifecycleBackend):
         )
 
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
+        binding = (
+            None
+            if self.workspace_bindings is None
+            else await self.workspace_bindings.get(request.run_id)
+        )
         job = WorkerJobRequest(
             worker_job_id=_worker_job_id(request.run_id),
             execution=request,
             requirements=self.requirements,
-            actor_ref=request.context.owner_id,
+            workspace_ref=None if binding is None else binding.workspace_id,
+            snapshot_ref=None if binding is None else binding.workspace_snapshot_id,
             timeout_seconds=request.context.control.timeout_seconds,
             idempotency_key=request.context.control.idempotency_key,
         )
