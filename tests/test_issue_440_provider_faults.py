@@ -77,9 +77,7 @@ def test_provider_fault_profiles_are_correct_and_schema_valid(
             assert report.retryable_error_counts == {}
         else:
             expected_retryable_failures = 2 if expected_retryable else 0
-            expected_retryable_errors = (
-                {expected_code: 2} if expected_retryable else {}
-            )
+            expected_retryable_errors = {expected_code: 2} if expected_retryable else {}
             assert report.correctness.fault_successes == 0
             assert report.correctness.expected_failures == 2
             assert report.correctness.retryable_failures == expected_retryable_failures
