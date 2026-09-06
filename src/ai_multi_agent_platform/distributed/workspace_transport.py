@@ -732,7 +732,7 @@ class TransportRemoteWorkspaceMaterializer(RemoteWorkspaceMaterializer):
                     },
                     idempotency_suffix=f"result-chunk:{relative_path}:{index}",
                 )
-                data.extend(_decode_base64(_required_string(chunk_reply, "data_base64")))
+                data.extend(_required_base64(chunk_reply, "data_base64"))
             raw_data = bytes(data)
             if len(raw_data) != size_bytes or hashlib.sha256(raw_data).hexdigest() != sha256:
                 raise ContractError(
@@ -987,7 +987,7 @@ class WorkerWorkspaceTransportEndpoint:
                 _required_string(data, "relative_path"),
                 chunk_index=_required_integer(data, "chunk_index", minimum=0),
                 total_chunks=_required_integer(data, "total_chunks", minimum=1),
-                data=_decode_base64(_required_string(data, "data_base64")),
+                data=_required_base64(data, "data_base64"),
             )
             return {"worker_id": self.store.worker_id, "stored": True}
         if operation == "commit":
@@ -1354,6 +1354,13 @@ def _decode_base64(value: str) -> bytes:
         return base64.b64decode(value, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise RegistryError("remote Workspace payload contains invalid base64") from exc
+
+
+def _required_base64(data: Mapping[str, object], name: str) -> bytes:
+    value = _required(data, name)
+    if not isinstance(value, str):
+        raise RegistryError(f"remote Workspace field {name} must be a base64 string")
+    return _decode_base64(value)
 
 
 def _validate_sha256(value: str) -> None:
