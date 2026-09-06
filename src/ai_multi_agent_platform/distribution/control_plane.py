@@ -153,7 +153,9 @@ class RegistryCommandHandlers:
     ) -> dict[str, JsonValue]:
         del context
         if payload:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "registry.unpin accepts no payload fields")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "registry.unpin accepts no payload fields"
+            )
         try:
             installation = self.distribution.unpin(resource_ref)
         except LookupError as exc:
@@ -195,7 +197,9 @@ def register_distribution_control_plane(
 
 def _registry_query(query: PageQuery) -> tuple[RegistryQuery, bool | None]:
     filters = dict(query.filters or {})
-    item_types = frozenset(RegistryItemType(value) for value in _values(filters.pop("item_type", None)))
+    item_types = frozenset(
+        RegistryItemType(value) for value in _values(filters.pop("item_type", None))
+    )
     tags = frozenset(_values(filters.pop("tag", None)))
     categories = frozenset(_values(filters.pop("category", None)))
     licenses = frozenset(_values(filters.pop("license", None)))
