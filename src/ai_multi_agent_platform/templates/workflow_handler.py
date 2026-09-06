@@ -249,7 +249,9 @@ def _portable_stage(value: object) -> _PortableStage:
     agent_template_id = _optional_string(data, "agent_template_id")
     team_template_id = _optional_string(data, "team_template_id")
     if agent_template_id is not None and team_template_id is not None:
-        raise ValueError("workflow stage may reference an Agent Template or Team Template, not both")
+        raise ValueError(
+            "workflow stage may reference an Agent Template or Team Template, not both"
+        )
     agent_template_revision = _optional_positive_int(data, "agent_template_revision")
     team_template_revision = _optional_positive_int(data, "team_template_revision")
     if agent_template_revision is not None and agent_template_id is None:
@@ -318,9 +320,7 @@ def _validate_declared_requirements(
         item.capability_id for item in revision.content.requirements.capabilities
     }
     used_capabilities = {
-        requirement.capability_id
-        for stage in config.stages
-        for requirement in stage.capabilities
+        requirement.capability_id for stage in config.stages for requirement in stage.capabilities
     }
     undeclared_capabilities = sorted(used_capabilities - declared_capabilities)
     if undeclared_capabilities:
@@ -335,9 +335,7 @@ def _validate_declared_requirements(
         for stage in config.stages
         if stage.model_routing_policy_ref is not None
     }
-    undeclared_models = sorted(
-        used_models - set(revision.content.requirements.model_policy_refs)
-    )
+    undeclared_models = sorted(used_models - set(revision.content.requirements.model_policy_refs))
     if undeclared_models:
         raise ContractError(
             ErrorCode.INVALID_CONFIGURATION,
@@ -345,9 +343,7 @@ def _validate_declared_requirements(
             details={"model_policy_refs": cast(JsonValue, undeclared_models)},
         )
 
-    used_permissions = {
-        action for stage in config.stages for action in stage.permission_actions
-    }
+    used_permissions = {action for stage in config.stages for action in stage.permission_actions}
     undeclared_permissions = sorted(
         used_permissions - set(revision.content.requirements.permission_actions)
     )
