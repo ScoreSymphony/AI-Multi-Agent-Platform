@@ -68,6 +68,7 @@ def test_incremental_sync_resumes_after_repository_and_provider_recreation(tmp_p
         )
         assert len(initial.resources) == 2
         assert initial.checkpoint.cursor == "2"
+        assert b"fixture-value-416" not in database_path.read_bytes()
         original_ids = {
             resource.native_reference.native_id: resource.id for resource in initial.resources
         }
