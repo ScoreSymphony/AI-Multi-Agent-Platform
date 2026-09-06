@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from ai_multi_agent_platform.contracts import (
@@ -25,9 +26,19 @@ from ai_multi_agent_platform.contracts import (
 
 from .contracts import ExecutionRequest, ExecutionResult, ExecutionStatus, Executor
 
+WorkspaceResolver = Callable[[KernelExecutionRequest], Awaitable[str]]
+TerminalResultObserver = Callable[[KernelExecutionRequest, ExecutionResult], Awaitable[None]]
+
 
 class ExecutorLifecycleBackend(LifecycleBackend):
-    """Lifecycle adapter proving the kernel can execute through a generic Executor."""
+    """Lifecycle adapter proving the kernel can execute through a generic Executor.
+
+    The optional workspace resolver keeps canonical Run/Workspace selection outside the
+    Executor contract while allowing one lifecycle instance to route each Run to an opaque
+    execution-workspace token. The optional terminal observer runs before a terminal snapshot
+    becomes visible to the kernel and is retried when it fails, which lets platform-owned
+    integrations persist artifacts/provenance without making the Executor lifecycle authority.
+    """
 
     def __init__(
         self,
@@ -35,11 +46,17 @@ class ExecutorLifecycleBackend(LifecycleBackend):
         *,
         workspace: str,
         action: str = "echo",
+        workspace_resolver: WorkspaceResolver | None = None,
+        terminal_result_observer: TerminalResultObserver | None = None,
     ) -> None:
         self._executor = executor
         self._workspace = workspace
         self._action = action
+        self._workspace_resolver = workspace_resolver
+        self._terminal_result_observer = terminal_result_observer
         self._results: dict[str, ExecutionResult] = {}
+        self._requests: dict[str, KernelExecutionRequest] = {}
+        self._observed_terminal_runs: set[str] = set()
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -55,21 +72,35 @@ class ExecutorLifecycleBackend(LifecycleBackend):
     ) -> KernelExecutionHandle:
         existing = self._results.get(request.run_id)
         if existing is None:
+            workspace = self._workspace
+            if self._workspace_resolver is not None:
+                workspace = await self._workspace_resolver(request)
+                if not workspace.strip():
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "execution workspace resolver returned a blank token",
+                    )
             result = await self._executor.execute(
                 ExecutionRequest(
-                    task_id=request.context.correlation_id,
+                    task_id=(
+                        request.subject_id
+                        if request.subject_type == "task"
+                        else request.context.correlation_id
+                    ),
                     run_id=request.run_id,
                     step_id=request.subject_id if request.subject_type == "step" else None,
                     correlation_id=request.context.correlation_id,
                     action=self._action,
-                    workspace=self._workspace,
+                    workspace=workspace,
                     arguments={"text": str(request.input.get("plan_ref", ""))},
                     timeout_seconds=request.context.control.timeout_seconds,
                 )
             )
             self._results[request.run_id] = result
+            self._requests[request.run_id] = request
         else:
             result = existing
+            self._requests.setdefault(request.run_id, request)
         return KernelExecutionHandle(
             run_id=request.run_id,
             backend_ref=f"{self._executor.descriptor.executor_id}:{request.run_id}",
@@ -88,6 +119,7 @@ class ExecutorLifecycleBackend(LifecycleBackend):
                 ErrorCode.NOT_FOUND,
                 f"execution not found: {run_id}",
             )
+        await self._observe_terminal_result(run_id, result)
         return ExecutionSnapshot(
             run_id=run_id,
             status=self._map_status(result.status),
@@ -126,6 +158,31 @@ class ExecutorLifecycleBackend(LifecycleBackend):
             run_id,
             OperationContext(correlation_id=run_id),
         )
+
+    async def _observe_terminal_result(
+        self,
+        run_id: str,
+        result: ExecutionResult,
+    ) -> None:
+        observer = self._terminal_result_observer
+        if observer is None or run_id in self._observed_terminal_runs:
+            return
+        if result.status not in {
+            ExecutionStatus.SUCCEEDED,
+            ExecutionStatus.FAILED,
+            ExecutionStatus.CANCELLED,
+            ExecutionStatus.TIMED_OUT,
+        }:
+            return
+        request = self._requests.get(run_id)
+        if request is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "terminal execution result has no originating lifecycle request",
+                details={"run_id": run_id},
+            )
+        await observer(request, result)
+        self._observed_terminal_runs.add(run_id)
 
     @staticmethod
     def ensure_workspace(root: str | Path, workspace: str) -> Path:

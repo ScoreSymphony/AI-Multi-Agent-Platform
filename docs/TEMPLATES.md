@@ -53,15 +53,21 @@ The current platform has concrete canonical handlers for:
 - Project -> `ScopeStore`;
 - Workspace structure -> the canonical `WorkspaceProvider`, optionally depending on a
   Project Template so generated Workspaces bind to the newly generated Project ID;
+- Capability assignment -> the #366 `CapabilityAssignmentService`, with either a direct
+  canonical Agent/Agent Team/Project target or a target produced by an earlier Template
+  dependency;
 - Composite -> dependency coordination only; it creates no private composite runtime
   object of its own.
 
-`workflow_plan`, `model_routing_policy` and `capability_assignment` remain valid Template
-types, but they are not given synthetic persistence or shadow runtime objects. Until the
-platform exposes matching ordinary canonical resource services for those concepts,
-preview reports their missing handler type and application is blocked. This preserves the
-architectural rule that Templates configure canonical resources rather than becoming a
-second resource system.
+`workflow_plan` and `model_routing_policy` remain valid Template types, but they are not
+given synthetic persistence or shadow runtime objects. Until the platform exposes matching
+ordinary canonical resource services for those concepts, preview reports their missing
+handler type and application is blocked. This preserves the architectural rule that
+Templates configure canonical resources rather than becoming a second resource system.
+
+Capability assignments follow that rule explicitly: the Template handler calls the #366
+owning service and returns the resulting `cap_assignment_*` resource ID. Template storage
+never becomes an assignment store.
 
 ## Versioning
 
@@ -206,6 +212,10 @@ resource handler runs.
 A Template cannot grant permissions the applying actor is not allowed to grant. Privileged
 capabilities remain visible in preview instead of being silently accepted.
 
+For `capability_assignment`, required/allowed privileged or approval-gated rules remain
+explicit in the Template payload, and the #366 service re-enters the ordinary #15
+`AuthorizationGate` before canonical assignment persistence.
+
 ## Trust and portable imports
 
 Trust is revision-local and behavioral, not descriptive metadata only.
@@ -249,7 +259,9 @@ For example, an Agent Team Template points to Agent Template dependencies rather
 persisting source Agent IDs; the Team handler resolves those dependencies to the new Agent
 IDs created in the same Template instance.
 
-The same rule is used by Workspace structures that depend on a Project Template.
+The same rule is used by Workspace structures that depend on a Project Template and by
+capability-assignment Templates whose target is produced by an Agent, Agent Team or Project
+Template dependency.
 
 ## Failure safety
 
@@ -273,6 +285,10 @@ restart.
 
 Persistence contains canonical Template configuration and provenance only. It does not
 serialize provider sessions, worker jobs, active runs, credentials or plaintext secrets.
+
+Capability-assignment state is not copied into this repository. It lives in the #366
+`JsonCapabilityAssignmentRepository` and participates independently in normal deployment
+backup/restore.
 
 ## Control Plane API
 
@@ -355,7 +371,8 @@ Issue #78 tests cover the required lifecycle and safety cases, including:
 - plaintext-secret and backend-runtime-state exclusion before storage and after materialization;
 - ordinary placeholder, SecretReference and external-reference materialization;
 - graph-wide pre-side-effect materialization;
-- canonical Agent, Agent Team, Automation, Project and Workspace instantiation;
+- canonical Agent, Agent Team, Automation, Project, Workspace and capability-assignment
+  instantiation;
 - portable Team member/leader/delegation ID remapping;
 - provenance linkage to exact Template revision;
 - trust downgrade on import, explicit activation and promotion-bypass prevention;

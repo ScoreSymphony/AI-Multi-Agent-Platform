@@ -10,12 +10,9 @@ from ai_multi_agent_platform.accounting import AccountingService
 from ai_multi_agent_platform.agents import (
     AgentRuntime,
     AgentService,
-    DurableRoutingProfileAgentRuntime,
     JsonAgentRepository,
+    register_agent_control_plane,
     register_standard_agent_control_plane,
-)
-from ai_multi_agent_platform.agents.routing_profile_control_plane import (
-    register_routing_profile_aware_agent_control_plane,
 )
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.capability_assignments import (
@@ -34,8 +31,8 @@ from ai_multi_agent_platform.control_plane.approval_portability_composition impo
 from ai_multi_agent_platform.control_plane.sqlite_scope import SqliteScopeStore
 from ai_multi_agent_platform.conversations import (
     ConversationService,
-    DurableRoutingProfileConversationResponseProvider,
     JsonConversationRepository,
+    ModelRuntimeConversationResponseProvider,
 )
 from ai_multi_agent_platform.data import LocalFileProvider
 from ai_multi_agent_platform.distributed import DistributedRuntime
@@ -54,16 +51,18 @@ from ai_multi_agent_platform.kernel import (
     PlatformKernel,
     SqliteKernelRepository,
 )
-from ai_multi_agent_platform.models import (
-    JsonModelRegistryStore,
-    JsonModelRoutingProfileRepository,
-    ModelRegistry,
-    ModelRoutingProfileAssignmentGate,
-    ModelRoutingProfileRef,
-    ModelRoutingProfileService,
-    ModelRuntime,
+from ai_multi_agent_platform.models import JsonModelRegistryStore, ModelRegistry, ModelRuntime
+from ai_multi_agent_platform.observability import (
+    AggregatedHealthProvider,
+    InMemoryExporter,
+    ObservabilityEventProvider,
+    ObservedAuthorizationProvider,
+    ObservedExecutor,
+    ObservedOrchestrator,
+    ProviderHealthDependency,
+    Telemetry,
 )
-from ai_multi_agent_platform.observability import InMemoryExporter
+from ai_multi_agent_platform.observability.composite import CompositeTimelineReader
 from ai_multi_agent_platform.onboarding import (
     FirstRunAgentLifecycleBackend,
     FirstRunTaskService,
@@ -75,12 +74,33 @@ from ai_multi_agent_platform.onboarding import (
 )
 from ai_multi_agent_platform.orchestration import ReferenceOrchestrator
 from ai_multi_agent_platform.portability.composition import build_agent_portability_workflow
+from ai_multi_agent_platform.repositories import (
+    RepositoryDiscoveryResolver,
+    RepositoryEventRuntimeIngress,
+    RepositoryManagementService,
+    RepositoryRegistry,
+    RepositoryRunIntegration,
+    RepositoryService,
+    RepositoryWorkspaceExecutionCoordinator,
+    RepositoryWorkspaceSourceResolver,
+    SqliteRepositoryBindingCatalog,
+    SqliteRepositoryProvenanceStore,
+    restore_managed_local_repositories,
+)
+from ai_multi_agent_platform.repositories.control_plane import register_repository_control_plane
 from ai_multi_agent_platform.security import (
     ActorType,
+    AuthorizationAction,
     AuthorizationGate,
+    AuthorizedLifecycleBackend,
+    AuthorizedSecretProvider,
+    ControlPlaneAuthorizationBridge,
     LocalAuthenticationService,
     LocalPrincipalPolicy,
     LocalUserAccount,
+    ResourceType,
+    SqliteApprovalService,
+    SqliteAuthorizationAuditSink,
 )
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
@@ -132,6 +152,8 @@ _SMOKE_START_KEY = "deployment-smoke-start-v1"
 _SMOKE_REFRESH_KEY = "deployment-smoke-refresh-v1"
 _EVALUATION_PROJECT_KEY = "evaluation-system-project-v1"
 _EVALUATION_OWNER_ID = "evaluation-single-node"
+_EVALUATION_PRINCIPAL = f"service:{_EVALUATION_OWNER_ID}"
+_PLATFORM_SERVICE_PRINCIPAL = "service:platform"
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,14 +176,20 @@ class SingleNodeDeployment:
     files: LocalFileProvider
     workspaces: CompensatingSqliteWorkspaceProvider
     run_workspace_bindings: SqliteRunWorkspaceBindingRepository
+    repository_registry: RepositoryRegistry
+    repository_catalog: SqliteRepositoryBindingCatalog
+    repository_provenance: SqliteRepositoryProvenanceStore
+    repositories: RepositoryService
+    repository_management: RepositoryManagementService
+    repository_run_integration: RepositoryRunIntegration
+    repository_workspace_execution: RepositoryWorkspaceExecutionCoordinator
+    repository_event_ingress: RepositoryEventRuntimeIngress
     agents: AgentService
     conversations: ConversationService
     agent_runtime: AgentRuntime
     capabilities: CapabilityRegistry
     capability_assignments: CapabilityAssignmentService
     models: ModelRegistry
-    routing_profile_repository: JsonModelRoutingProfileRepository
-    routing_profiles: ModelRoutingProfileService
     model_runtime: ModelRuntime
     onboarding: OnboardingService
     first_task: FirstRunTaskService
@@ -170,10 +198,13 @@ class SingleNodeDeployment:
     evaluation_repository: SqliteEvaluationRepository
     evaluation: EvaluationService
     accounting_service: AccountingService | None
-    observability_exporter: InMemoryExporter | None
+    observability_exporter: InMemoryExporter
+    telemetry: Telemetry
+    health_provider: AggregatedHealthProvider
     distributed_runtime: DistributedRuntime | None
     authentication: LocalAuthenticationService
     authorization: SqliteLocalAuthorizationProvider
+    authorization_audit: SqliteAuthorizationAuditSink
     approval_gate: AuthorizationGate
     verification: SqliteVerificationService
     verification_runtime: CanonicalVerificationRuntime
@@ -274,6 +305,7 @@ def build_single_node_deployment(
     accounting_service: AccountingService | None = None,
     observability_exporter: InMemoryExporter | None = None,
     distributed_runtime: DistributedRuntime | None = None,
+    repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
 ) -> SingleNodeDeployment:
     """Build the durable Stage-1 profile without optional external services."""
 
@@ -291,6 +323,24 @@ def build_single_node_deployment(
     run_workspace_bindings = SqliteRunWorkspaceBindingRepository(
         database_dir / "run-workspace-bindings.sqlite3"
     )
+    repository_catalog = SqliteRepositoryBindingCatalog(
+        database_dir / "repository-bindings.sqlite3"
+    )
+    repository_registry = RepositoryRegistry()
+    restore_managed_local_repositories(repository_catalog, repository_registry)
+    repository_provenance = SqliteRepositoryProvenanceStore(
+        database_dir / "repository-provenance.sqlite3"
+    )
+    repository_workspace_execution = RepositoryWorkspaceExecutionCoordinator(
+        run_workspace_bindings,
+        workspaces,
+        repository_provenance,
+        fallback_workspace=_REFERENCE_EXECUTION_WORKSPACE,
+    )
+    repository_event_ingress = RepositoryEventRuntimeIngress(
+        repository_registry,
+        kernel_repository,
+    )
     evaluation_project = scopes.create_project(
         key=_EVALUATION_PROJECT_KEY,
         name="Platform Evaluation",
@@ -303,12 +353,8 @@ def build_single_node_deployment(
     )
     capabilities = CapabilityRegistry()
     models = ModelRegistry()
-    routing_profile_repository = JsonModelRoutingProfileRepository(
-        database_dir / "model-routing-profiles.json"
-    )
-    agent_runtime = DurableRoutingProfileAgentRuntime(
+    agent_runtime = AgentRuntime(
         agents,
-        routing_profile_repository=routing_profile_repository,
         model_registry=models,
         capability_registry=capabilities,
     )
@@ -324,10 +370,59 @@ def build_single_node_deployment(
     )
     onboarding.restore()
     model_runtime = ModelRuntime(models)
-    conversation_response_provider = DurableRoutingProfileConversationResponseProvider(
+    conversation_response_provider = ModelRuntimeConversationResponseProvider(
         model_runtime,
         agents,
-        routing_profile_repository=routing_profile_repository,
+        routing_profiles=agent_runtime.routing_profiles,
+    )
+
+    effective_observability_exporter = observability_exporter or InMemoryExporter()
+    telemetry = Telemetry(effective_observability_exporter)
+    authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
+    authentication = LocalAuthenticationService(store=authentication_store)
+    authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
+    if not authorization.has_policy(_EVALUATION_PRINCIPAL):
+        authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=_EVALUATION_PRINCIPAL,
+                actor_types=frozenset({ActorType.SERVICE}),
+                allowed_actions=frozenset(
+                    {
+                        AuthorizationAction.EXECUTE,
+                        AuthorizationAction.READ,
+                        AuthorizationAction.MODIFY,
+                    }
+                ),
+                resource_types=frozenset({ResourceType.RUN}),
+            )
+        )
+    if not authorization.has_policy(_PLATFORM_SERVICE_PRINCIPAL):
+        authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=_PLATFORM_SERVICE_PRINCIPAL,
+                actor_types=frozenset({ActorType.SERVICE}),
+                allowed_actions=frozenset(
+                    {
+                        AuthorizationAction.READ,
+                        AuthorizationAction.MANAGE_CREDENTIALS,
+                    }
+                ),
+                resource_types=frozenset({ResourceType.SECRET_REFERENCE}),
+            )
+        )
+    observed_authorization = ObservedAuthorizationProvider(authorization, telemetry)
+    approval_service = SqliteApprovalService(database_dir / "approvals.sqlite3")
+    authorization_audit = SqliteAuthorizationAuditSink(database_dir / "authorization-audit.sqlite3")
+    approval_gate = AuthorizationGate(
+        observed_authorization,
+        approvals=approval_service,
+        audit_sink=authorization_audit,
+    )
+    control_plane_authorization = ControlPlaneAuthorizationBridge(approval_gate)
+    protected_secret_provider: SecretProvider | None = (
+        AuthorizedSecretProvider(secret_provider, approval_gate)
+        if secret_provider is not None
+        else None
     )
 
     template_handlers = ContextualTemplateHandlerRegistry()
@@ -352,20 +447,28 @@ def build_single_node_deployment(
         templates.templates,
     )
 
-    execution_workspace = config.executor_dir / _REFERENCE_EXECUTION_WORKSPACE
+    execution_workspace = workspaces.materialization_root / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
-    orchestrator = ReferenceOrchestrator()
-    reference_executor = ReferenceExecutor(config.executor_dir)
+    reference_orchestrator = ReferenceOrchestrator()
+    reference_executor = ReferenceExecutor(workspaces.materialization_root)
+    orchestrator = ObservedOrchestrator(reference_orchestrator, telemetry)
+    observed_executor = ObservedExecutor(reference_executor, telemetry)
     reference_lifecycle = ExecutorLifecycleBackend(
-        reference_executor,
+        observed_executor,
         workspace=_REFERENCE_EXECUTION_WORKSPACE,
         action="echo",
+        workspace_resolver=repository_workspace_execution.resolve_execution_workspace,
+        terminal_result_observer=repository_workspace_execution.observe_terminal_result,
     )
-    lifecycle = FirstRunAgentLifecycleBackend(
-        delegate=reference_lifecycle,
-        tasks=EventSourcedTaskRepository(kernel_repository),
-        agents=agent_runtime,
-        models=model_runtime,
+    lifecycle = AuthorizedLifecycleBackend(
+        FirstRunAgentLifecycleBackend(
+            delegate=reference_lifecycle,
+            tasks=EventSourcedTaskRepository(kernel_repository),
+            agents=agent_runtime,
+            models=model_runtime,
+        ),
+        approval_gate,
+        allow_internal_service_reads=True,
     )
     verification_path = database_dir / "verification.sqlite3"
     verification = SqliteVerificationService(
@@ -374,10 +477,12 @@ def build_single_node_deployment(
         require_canonical_results=True,
     )
     verification_completion = SqliteVerificationCompletionAuthority(verification, verification_path)
+    observability_events = ObservabilityEventProvider(telemetry)
     kernel = PlatformKernel(
         orchestrator=orchestrator,
         lifecycle=lifecycle,
         repository=kernel_repository,
+        event_sink=observability_events,
         completion_authority=verification_completion,
     )
     verification_evidence = KernelFileVerificationEvidenceResolver(
@@ -393,18 +498,22 @@ def build_single_node_deployment(
         agents=agents,
     )
 
-    authentication_store = SqliteAuthenticationStore(database_dir / "authentication.sqlite3")
-    authentication = LocalAuthenticationService(store=authentication_store)
-    authorization = SqliteLocalAuthorizationProvider(database_dir / "authorization.sqlite3")
-    routing_profiles = ModelRoutingProfileService(
-        routing_profile_repository,
-        authorization=authorization,
+    repositories = RepositoryService(repository_registry, approval_gate)
+    repository_management = RepositoryManagementService(
+        repository_registry,
+        repository_catalog,
+        approval_gate,
+        managed_local_root=config.repositories_dir,
+        discovery_resolver=repository_discovery_resolver,
     )
-    routing_profile_assignment_gate = ModelRoutingProfileAssignmentGate(
-        routing_profile_repository,
-        authorization=authorization,
+    repository_run_integration = RepositoryRunIntegration(
+        repository_registry,
+        repository_provenance,
+        workspaces,
+        files,
+        kernel,
     )
-    approval_gate = AuthorizationGate(authorization)
+    repository_workspace_execution.configure_run_integration(repository_run_integration)
     capability_assignments = CapabilityAssignmentService(
         repository=JsonCapabilityAssignmentRepository(database_dir / "capability-assignments.json"),
         capabilities=capabilities,
@@ -422,10 +531,9 @@ def build_single_node_deployment(
         evaluation_evidence_providers.append(
             AccountingEvaluationEvidenceProvider(accounting_service)
         )
-    if observability_exporter is not None:
-        evaluation_evidence_providers.append(
-            InMemoryObservabilityEvaluationEvidenceProvider(observability_exporter)
-        )
+    evaluation_evidence_providers.append(
+        InMemoryObservabilityEvaluationEvidenceProvider(effective_observability_exporter)
+    )
     evaluation_composition = build_single_node_evaluation(
         database_path=database_dir / "evaluation.sqlite3",
         asset_dir=config.evaluation_dir,
@@ -434,7 +542,7 @@ def build_single_node_deployment(
         agent_runtime=agent_runtime,
         models=models,
         model_runtime=model_runtime,
-        orchestrator=orchestrator,
+        orchestrator=reference_orchestrator,
         executor=reference_executor,
         files=files,
         workspaces=workspaces,
@@ -452,18 +560,25 @@ def build_single_node_deployment(
         platform_version=__version__,
         capabilities=capabilities,
         templates=templates.repository,
-        routing_profiles=routing_profile_repository,
         evaluation=evaluation_composition.service,
         evaluation_fixture_exists=evaluation_composition.fixture_exists,
     )
 
+    health_provider = AggregatedHealthProvider(
+        (
+            ProviderHealthDependency(orchestrator, required=True, name="orchestrator"),
+            ProviderHealthDependency(lifecycle, required=True, name="lifecycle"),
+            ProviderHealthDependency(files, required=True, name="files"),
+        )
+    )
     control_plane = ControlPlane(
         kernel=kernel,
         events=kernel_repository,
         scopes=scopes,
-        authorization=authorization,
+        authorization=control_plane_authorization,
         workspace_provider=workspaces,
-        health_providers=(orchestrator, lifecycle, files),
+        run_workspace_bindings=run_workspace_bindings,
+        health_providers=(health_provider,),
         model_registry=models,
         automation_state_path=database_dir / "automation.sqlite3",
         notification_state_path=database_dir / "notifications.sqlite3",
@@ -474,16 +589,23 @@ def build_single_node_deployment(
         portability_workflow=portability_workflow,
         approval_gate=approval_gate,
     )
+    resolvers = control_plane.workspace_source_resolvers
+    if resolvers is None:
+        raise RuntimeError(
+            "single-node Control Plane did not initialize Workspace source resolvers"
+        )
+    resolvers.register(RepositoryWorkspaceSourceResolver(repository_registry, files))
+    control_plane.configure_repository_run_integration(repository_run_integration)
+    register_repository_control_plane(
+        control_plane,
+        repositories,
+        management=repository_management,
+    )
     for collection, service in evaluation_resource_services(evaluation_composition.service).items():
         control_plane.register_resource_service(collection, service)
     for command, handler in evaluation_command_handlers(evaluation_composition.service).items():
         control_plane.register_command(command, handler)
-    register_routing_profile_aware_agent_control_plane(
-        control_plane,
-        agents,
-        routing_profile_assignment_gate,
-        runtime=agent_runtime,
-    )
+    register_agent_control_plane(control_plane, agents, runtime=agent_runtime)
     register_standard_agent_control_plane(control_plane, agents)
     register_onboarding_control_plane(control_plane, onboarding, first_task=first_task)
     register_automation_template_handler(template_handlers, control_plane.automation_service)
@@ -504,11 +626,6 @@ def build_single_node_deployment(
         capability_versions=lambda: (
             (capability.capability_id, capability.version)
             for capability in capabilities.inventory_capabilities(include_unavailable=False)
-        ),
-        model_policies=lambda: (
-            ModelRoutingProfileRef(definition.profile_id, definition.current_revision).canonical_ref
-            for definition in routing_profile_repository.list_definitions()
-            if definition.enabled
         ),
         grantable_permissions=lambda context: (
             action.value
@@ -548,7 +665,14 @@ def build_single_node_deployment(
         verification_evidence,
         verification_runtime,
     )
-    control_plane.bind_observability_timeline(VerificationTimelineReader(verification))
+    control_plane.bind_observability_timeline(
+        CompositeTimelineReader(
+            (
+                effective_observability_exporter,
+                VerificationTimelineReader(verification),
+            )
+        )
+    )
 
     http = AuthenticatedControlPlaneHTTP(
         control_plane,
@@ -564,26 +688,35 @@ def build_single_node_deployment(
         files=files,
         workspaces=workspaces,
         run_workspace_bindings=run_workspace_bindings,
+        repository_registry=repository_registry,
+        repository_catalog=repository_catalog,
+        repository_provenance=repository_provenance,
+        repositories=repositories,
+        repository_management=repository_management,
+        repository_run_integration=repository_run_integration,
+        repository_workspace_execution=repository_workspace_execution,
+        repository_event_ingress=repository_event_ingress,
         agents=agents,
         conversations=conversations,
         agent_runtime=agent_runtime,
         capabilities=capabilities,
         capability_assignments=capability_assignments,
         models=models,
-        routing_profile_repository=routing_profile_repository,
-        routing_profiles=routing_profiles,
         model_runtime=model_runtime,
         onboarding=onboarding,
         first_task=first_task,
-        secrets=secret_provider,
+        secrets=protected_secret_provider,
         templates=templates,
         evaluation_repository=evaluation_composition.repository,
         evaluation=evaluation_composition.service,
         accounting_service=accounting_service,
-        observability_exporter=observability_exporter,
+        observability_exporter=effective_observability_exporter,
+        telemetry=telemetry,
+        health_provider=health_provider,
         distributed_runtime=distributed_runtime,
         authentication=authentication,
         authorization=authorization,
+        authorization_audit=authorization_audit,
         approval_gate=approval_gate,
         verification=verification,
         verification_runtime=verification_runtime,

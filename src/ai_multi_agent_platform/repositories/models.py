@@ -1,4 +1,4 @@
-"""Provider-neutral repository identities, revisions, status and provenance models."""
+"""Provider-neutral repository identities, revisions, collaboration and provenance models."""
 
 from __future__ import annotations
 
@@ -50,6 +50,20 @@ class RepositoryVisibility(StrEnum):
     PRIVATE = "private"
     INTERNAL = "internal"
     LOCAL = "local"
+    UNKNOWN = "unknown"
+
+
+class RepositoryIssueState(StrEnum):
+    OPEN = "open"
+    CLOSED = "closed"
+    UNKNOWN = "unknown"
+
+
+class RepositoryChangeRequestState(StrEnum):
+    OPEN = "open"
+    DRAFT = "draft"
+    CLOSED = "closed"
+    MERGED = "merged"
     UNKNOWN = "unknown"
 
 
@@ -139,6 +153,84 @@ class RepositoryReference:
 
 
 @dataclass(frozen=True, slots=True)
+class RepositoryIssue:
+    """Canonical provider-neutral view of one repository issue."""
+
+    repository_id: str
+    external_resource: ExternalResourceReference
+    title: str
+    state: RepositoryIssueState = RepositoryIssueState.UNKNOWN
+    body: str | None = None
+    metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        validate_id(self.repository_id, "external_resource")
+        if self.external_resource.resource_type != "repository_issue":
+            raise ValueError("repository issue must wrap resource_type='repository_issue'")
+        _nonblank(self.title, "repository issue title")
+        object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
+
+    @property
+    def id(self) -> str:
+        return self.external_resource.id
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return {
+            "id": self.id,
+            "repository_id": self.repository_id,
+            "external_resource": self.external_resource.to_dict(),
+            "title": self.title,
+            "state": self.state.value,
+            "body": self.body,
+            "metadata": dict(self.metadata),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryChangeRequest:
+    """Canonical provider-neutral view of a pull/merge/change request."""
+
+    repository_id: str
+    external_resource: ExternalResourceReference
+    title: str
+    state: RepositoryChangeRequestState = RepositoryChangeRequestState.UNKNOWN
+    head_ref: str | None = None
+    base_ref: str | None = None
+    body: str | None = None
+    metadata: Mapping[str, JsonValue] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        validate_id(self.repository_id, "external_resource")
+        if self.external_resource.resource_type != "repository_change_request":
+            raise ValueError(
+                "repository change request must wrap resource_type='repository_change_request'"
+            )
+        _nonblank(self.title, "repository change request title")
+        for name in ("head_ref", "base_ref"):
+            value = getattr(self, name)
+            if value is not None:
+                _nonblank(value, name)
+        object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
+
+    @property
+    def id(self) -> str:
+        return self.external_resource.id
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return {
+            "id": self.id,
+            "repository_id": self.repository_id,
+            "external_resource": self.external_resource.to_dict(),
+            "title": self.title,
+            "state": self.state.value,
+            "head_ref": self.head_ref,
+            "base_ref": self.base_ref,
+            "body": self.body,
+            "metadata": dict(self.metadata),
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class RepositoryRevision:
     repository_id: str
     requested_ref: str
@@ -207,6 +299,25 @@ class RepositoryCommit:
         validate_id(self.repository_id, "external_resource")
         object.__setattr__(self, "revision", validate_git_revision(self.revision))
         _nonblank(self.message, "commit message")
+        object.__setattr__(
+            self,
+            "parent_revisions",
+            tuple(validate_git_revision(value) for value in self.parent_revisions),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryCommitInfo:
+    """Provider-neutral read model for an existing commit in repository history."""
+
+    repository_id: str
+    revision: str
+    message: str
+    parent_revisions: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        validate_id(self.repository_id, "external_resource")
+        object.__setattr__(self, "revision", validate_git_revision(self.revision))
         object.__setattr__(
             self,
             "parent_revisions",

@@ -24,6 +24,98 @@ def repository_platform_event_id(event: ConnectorEvent) -> str:
     return f"event_{uuid5(NAMESPACE_URL, identity)}"
 
 
+def repository_platform_event(
+    event: ConnectorEvent,
+    binding: RepositoryBinding,
+    *,
+    correlation_id: str,
+    require_verified: bool = True,
+) -> PlatformEvent:
+    """Validate and normalize one repository ConnectorEvent without choosing a transport.
+
+    This pure boundary is shared by direct EventProvider publication and the durable automation
+    runtime ingress. It keeps provider verification, Connection binding and project scoping in one
+    place so alternate transports cannot weaken the repository event contract.
+    """
+
+    connection = binding.connection.connection
+    repository = binding.reference
+    if event.connection_id != connection.id:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "repository connector event belongs to another connection",
+            provider_id=binding.provider.provider_id,
+        )
+    if event.connector_type_id != connection.connector_type_id:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "repository connector event type does not match the bound connection",
+            provider_id=binding.provider.provider_id,
+        )
+    if require_verified and not event.verified:
+        raise ContractError(
+            ErrorCode.UNAUTHORIZED,
+            "unverified repository connector event cannot enter the canonical event stream",
+            provider_id=binding.provider.provider_id,
+        )
+    project_id = event.project_id or connection.project_id
+    if project_id is None:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "repository connector event needs project scope for a canonical event subject",
+            provider_id=binding.provider.provider_id,
+        )
+    if connection.project_id is not None and project_id != connection.project_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "repository connector event project scope does not match the connection",
+            provider_id=binding.provider.provider_id,
+        )
+    if not correlation_id.strip():
+        raise ValueError("repository event correlation_id must not be blank")
+
+    native_event_value = f"{event.native_reference.namespace}:{event.native_reference.native_id}"
+    external_refs = (
+        ExternalRef(
+            system=event.connector_type_id,
+            kind="repository_event",
+            value=native_event_value,
+        ),
+    )
+    return PlatformEvent(
+        id=repository_platform_event_id(event),
+        event_type=f"repository.external.{event.event_type}",
+        subject_type="project",
+        subject_id=project_id,
+        correlation_id=correlation_id,
+        project_id=project_id,
+        occurred_at=event.received_at,
+        payload={
+            "repository_id": repository.id,
+            "connection_id": connection.id,
+            "connector_type_id": event.connector_type_id,
+            "connector_event_id": event.id,
+            "dedupe_key": event.dedupe_key,
+            "resource_id": event.resource_id,
+            "verified": event.verified,
+            "schema_version": event.schema_version,
+            "payload": dict(event.payload),
+            "provenance": dict(event.provenance),
+        },
+        provenance=Provenance(
+            source=f"connector:{event.connector_type_id}",
+            details={
+                "connection_id": connection.id,
+                "repository_id": repository.id,
+                "connector_event_id": event.id,
+                "dedupe_key": event.dedupe_key,
+                "verified": event.verified,
+            },
+        ),
+        external_refs=external_refs,
+    )
+
+
 class RepositoryEventBridge:
     """Publish verified repository events once through the platform-owned EventProvider.
 
@@ -43,83 +135,11 @@ class RepositoryEventBridge:
         *,
         correlation_id: str,
     ) -> PlatformEvent:
-        connection = binding.connection.connection
-        repository = binding.reference
-        if event.connection_id != connection.id:
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "repository connector event belongs to another connection",
-                provider_id=binding.provider.provider_id,
-            )
-        if event.connector_type_id != connection.connector_type_id:
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "repository connector event type does not match the bound connection",
-                provider_id=binding.provider.provider_id,
-            )
-        if self._require_verified and not event.verified:
-            raise ContractError(
-                ErrorCode.UNAUTHORIZED,
-                "unverified repository connector event cannot enter the canonical event stream",
-                provider_id=binding.provider.provider_id,
-            )
-        project_id = event.project_id or connection.project_id
-        if project_id is None:
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "repository connector event needs project scope for a canonical event subject",
-                provider_id=binding.provider.provider_id,
-            )
-        if connection.project_id is not None and project_id != connection.project_id:
-            raise ContractError(
-                ErrorCode.FORBIDDEN,
-                "repository connector event project scope does not match the connection",
-                provider_id=binding.provider.provider_id,
-            )
-        if not correlation_id.strip():
-            raise ValueError("repository event correlation_id must not be blank")
-
-        native_event_value = (
-            f"{event.native_reference.namespace}:{event.native_reference.native_id}"
-        )
-        external_refs = (
-            ExternalRef(
-                system=event.connector_type_id,
-                kind="repository_event",
-                value=native_event_value,
-            ),
-        )
-        canonical = PlatformEvent(
-            id=repository_platform_event_id(event),
-            event_type=f"repository.external.{event.event_type}",
-            subject_type="project",
-            subject_id=project_id,
+        canonical = repository_platform_event(
+            event,
+            binding,
             correlation_id=correlation_id,
-            project_id=project_id,
-            occurred_at=event.received_at,
-            payload={
-                "repository_id": repository.id,
-                "connection_id": connection.id,
-                "connector_type_id": event.connector_type_id,
-                "connector_event_id": event.id,
-                "dedupe_key": event.dedupe_key,
-                "resource_id": event.resource_id,
-                "verified": event.verified,
-                "schema_version": event.schema_version,
-                "payload": dict(event.payload),
-                "provenance": dict(event.provenance),
-            },
-            provenance=Provenance(
-                source=f"connector:{event.connector_type_id}",
-                details={
-                    "connection_id": connection.id,
-                    "repository_id": repository.id,
-                    "connector_event_id": event.id,
-                    "dedupe_key": event.dedupe_key,
-                    "verified": event.verified,
-                },
-            ),
-            external_refs=external_refs,
+            require_verified=self._require_verified,
         )
         await self._events.publish(canonical)
         return canonical

@@ -24,7 +24,7 @@ from .external_resources import (
     register_external_resource_control_plane,
 )
 from .models import Connection, ConnectorDefinition, SyncMode
-from .service import ConnectorService
+from .service import ConnectionRemovalHook, ConnectorService
 
 type ConnectorControlPlaneActorResolver = Callable[[RequestContext], ActorIdentity]
 type ConnectorHealthEventSink = Callable[[Connection, Connection], Awaitable[None]]
@@ -219,11 +219,15 @@ def register_connector_control_plane(
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         existing = await connectors.repository.get_connection(resource_ref)
+        removal_hook = getattr(control_plane, "connector_connection_removal_hook", None)
         await connectors.remove_connection(
             resource_ref,
             actor=actor_resolver(context),
             context=_operation_context(context, existing.project_id),
             approval_id=_optional_string(payload.get("approval_id"), "approval_id"),
+            before_remove=(
+                cast(ConnectionRemovalHook, removal_hook) if callable(removal_hook) else None
+            ),
         )
         return {"id": resource_ref, "removed": True}
 

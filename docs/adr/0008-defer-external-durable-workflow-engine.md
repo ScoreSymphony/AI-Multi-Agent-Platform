@@ -4,6 +4,7 @@
 - **Date:** 2026-09-05
 - **Affected issue:** #21
 - **Implementation follow-up:** #384
+- **Operational evidence addendum:** [`0008-durable-workflow-operational-evidence.md`](0008-durable-workflow-operational-evidence.md)
 - **Hard dependencies reviewed:** #1, #4, #5, #6, #9, #14, #18
 - **Related decisions:** ADR 0005 (message transport is not canonical event history)
 - **Decision outcome:** **Outcome 2 — Add minimal internal durability features; do not adopt Temporal or another external workflow engine now.**
