@@ -101,6 +101,9 @@ class CapabilityInvoker:
             tool_ref=registration.provider_tool_ref,
             arguments=request.arguments,
             context=request.context,
+            task_id=request.trace.task_id,
+            run_id=request.trace.run_id,
+            agent_id=request.trace.agent_id,
         )
 
         policy_decision = PolicyDecision.ALLOW
