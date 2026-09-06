@@ -29,7 +29,6 @@ from ai_multi_agent_platform.models import (
 )
 from ai_multi_agent_platform.testing import FakeAuthorizationProvider, FakeModelProvider
 
-
 OWNER = OwnerRef(type="user", id="user-routing-owner")
 
 
