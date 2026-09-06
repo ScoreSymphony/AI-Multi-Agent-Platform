@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { BrowserSessionClient } from "../api/browserSession";
+import { useCallback, useEffect, useState } from "react";
 import { ControlPlaneClient } from "../api/client";
 import {
   describeLiveStreamError,
   TaskEventStream,
   type LiveConnectionState,
 } from "../api/live";
-import { TaskProjectReassignmentClient } from "../api/taskProjectReassignment";
 import type {
   CanonicalProject,
   CanonicalRun,
@@ -57,18 +55,6 @@ export function TaskDetailPage({
   const [liveError, setLiveError] = useState<string | null>(null);
   const permission = usePermissionHint("task:command", taskId);
   const movePermission = usePermissionHint("task:move-project", taskId);
-  const moveSession = useMemo(
-    () => new BrowserSessionClient({ baseUrl: client.baseUrl }),
-    [client.baseUrl],
-  );
-  const reassignmentClient = useMemo(
-    () =>
-      new TaskProjectReassignmentClient({
-        baseUrl: client.baseUrl,
-        fetchImpl: moveSession.fetch,
-      }),
-    [client.baseUrl, moveSession],
-  );
 
   const load = useCallback(async () => {
     if (!isCanonicalId(taskId)) {
@@ -149,7 +135,7 @@ export function TaskDetailPage({
     if (destination === task.project_id) return;
     setBusy(true);
     try {
-      await reassignmentClient.move(taskId, destination);
+      await client.moveTaskProject(taskId, destination);
       await load();
     } catch (nextError) {
       setError(nextError);
