@@ -140,13 +140,41 @@ class ControlPlane(_CurrentControlPlane):
                 )
             requests.append(_move_request(task_id, raw_move))
 
-        # All authorization and relationship checks happen before the first append.
+        key = _require_key(context)
+        reserved = await self._task_project_reassignment.batch_reserved(
+            requests,
+            idempotency_key=key,
+        )
+
+        # Authorization is re-evaluated for every attempt. On the first attempt the
+        # whole relationship set is also preflighted before the reservation append.
         for request in requests:
             await self._authorize_project_move(context, request)
-        prepared = await self._task_project_reassignment.prepare_batch(requests)
+        if not reserved:
+            await self._task_project_reassignment.prepare_batch(requests)
+            await self._task_project_reassignment.reserve_batch(
+                requests,
+                idempotency_key=key,
+                actor_ref=context.actor.principal_ref,
+                source="control-plane.task-project-reassignment",
+            )
 
-        key = _require_key(context)
-        items: list[JsonValue] = []
+        completed: dict[str, Any] = {}
+        pending: list[TaskProjectMoveRequest] = []
+        for request in requests:
+            item_key = f"{key}:task-project-move:{request.task_id}"
+            replayed = await self._task_project_reassignment.replayed_move(
+                request,
+                idempotency_key=item_key,
+            )
+            if replayed is None:
+                pending.append(request)
+            else:
+                completed[request.task_id] = replayed
+
+        prepared = (
+            await self._task_project_reassignment.prepare_batch(pending) if pending else ()
+        )
         for item in prepared:
             moved = await self._task_project_reassignment.commit(
                 item,
@@ -154,6 +182,11 @@ class ControlPlane(_CurrentControlPlane):
                 actor_ref=context.actor.principal_ref,
                 source="control-plane.task-project-reassignment",
             )
+            completed[item.task.task_id] = moved
+
+        items: list[JsonValue] = []
+        for request in requests:
+            moved = completed[request.task_id]
             items.append(
                 {
                     "task_id": moved.task_id,
@@ -345,6 +378,7 @@ def _augment_openapi(specification: dict[str, Any]) -> None:
         "historical_scope": "retained",
         "future_execution_scope": "destination_project_id",
         "bulk_atomic": False,
+        "bulk_idempotency": "durable_batch_digest_reservation",
         "connected_bulk_moves": "rejected_without_multi_stream_atomic_commit",
     }
 
