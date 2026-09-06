@@ -61,6 +61,10 @@ def build_single_node_deployment(
     checkpoints live in ``db/connectors.sqlite3``.
     """
 
+    # Preserve the base deployment's canonical configuration error boundary before the Connector
+    # repository touches a path under the data root. This keeps invalid persistence roots from
+    # leaking backend-specific OSError subclasses through the public single-node builder.
+    config.prepare_directories()
     connector_repository = SqliteConnectorRepository(config.database_dir / "connectors.sqlite3")
     connector_registry = ConnectorRegistry()
     effective_repository_resolver = repository_discovery_resolver or (
