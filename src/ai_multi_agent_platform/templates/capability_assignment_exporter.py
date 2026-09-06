@@ -12,7 +12,7 @@ from ai_multi_agent_platform.capability_assignments import (
     CapabilityAssignmentService,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import FrozenJsonValue
+from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
 from ai_multi_agent_platform.domain import OwnerRef
 
 from .models import (
@@ -151,7 +151,7 @@ def _version_constraint(rule: CapabilityAssignmentRule) -> str | None:
 
 
 def _require_lossless_template_requirements(source: CapabilityAssignmentRevision) -> None:
-    unsupported = [
+    unsupported: list[JsonValue] = [
         rule.capability_id
         for rule in source.content.all_rules
         if _required_features(rule.compatibility)
