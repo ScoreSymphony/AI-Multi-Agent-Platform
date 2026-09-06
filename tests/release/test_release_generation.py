@@ -89,6 +89,8 @@ def test_generation_is_deterministic_and_binds_canonical_release_state(tmp_path)
     assert [item.revision for item in first.upstreams] == [
         item.revision for item in inventory.entries
     ]
+    litellm = next(item for item in first.upstreams if item.component == "LiteLLM")
+    assert litellm.revision_kind == "tag"
     expected = "sha256:" + hashlib.sha256(b"deterministic-artifact").hexdigest()
     assert first.artifact_hashes["platform-wheel"] == expected
 
