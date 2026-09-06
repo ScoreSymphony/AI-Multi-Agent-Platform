@@ -79,6 +79,16 @@ describe("TemplateClient", () => {
 
     await client.createFromAgent("agent-1", { revision: 2, name: "Agent template" }, "agent-key");
     await client.createFromAgentTeam("team-1", {}, "team-key");
+    await client.createFromWorkflow(
+      "workflow-1",
+      { revision: 2, name: "Workflow template" },
+      "workflow-key",
+    );
+    await client.createFromCapabilityAssignment(
+      "cap_assignment-1",
+      { revision: 3, name: "Capability policy" },
+      "capability-assignment-key",
+    );
     await client.createFromAutomation("automation-1", {}, "automation-key");
     await client.createFromProject("project-1", {}, "project-key");
     await client.createFromWorkspaces(
@@ -94,11 +104,25 @@ describe("TemplateClient", () => {
     expect(calls.map((item) => item.url)).toEqual([
       "/api/v1/commands/template.create-from-agent",
       "/api/v1/commands/template.create-from-agent-team",
+      "/api/v1/commands/template.create-from-workflow",
+      "/api/v1/commands/template.create-from-capability-assignment",
       "/api/v1/commands/template.create-from-automation",
       "/api/v1/commands/template.create-from-project",
       "/api/v1/commands/template.create-from-workspaces",
     ]);
-    expect(calls[4]?.body).toEqual({
+    expect(calls[2]?.body).toEqual({
+      resource_ref: "templates",
+      workflow_id: "workflow-1",
+      revision: 2,
+      name: "Workflow template",
+    });
+    expect(calls[3]?.body).toEqual({
+      resource_ref: "templates",
+      assignment_id: "cap_assignment-1",
+      revision: 3,
+      name: "Capability policy",
+    });
+    expect(calls[6]?.body).toEqual({
       resource_ref: "templates",
       workspace_ids: ["workspace-1", "workspace-2"],
       name: "Workspace setup",

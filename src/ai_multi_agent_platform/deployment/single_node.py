@@ -129,6 +129,7 @@ from ai_multi_agent_platform.templates import (
     register_automation_template_handler,
     register_capability_assignment_template_handler,
     register_project_template_handler,
+    register_template_control_plane,
     register_workflow_template_handler,
     register_workspace_structure_template_handler,
 )
@@ -136,7 +137,6 @@ from ai_multi_agent_platform.templates.agent_team_control_plane import (
     register_agent_team_template_control_plane,
 )
 from ai_multi_agent_platform.templates.compensation import register_template_compensators
-from ai_multi_agent_platform.templates.control_plane import register_template_control_plane
 from ai_multi_agent_platform.templates.project_control_plane import (
     register_project_template_control_plane,
 )

@@ -14,9 +14,9 @@ from .validation import ValidationContext, ValidationFinding, has_errors, valida
 class DistributionRouter(Protocol):
     """Hands validated content to the existing owner domains (#20/#78/#79)."""
 
-    def install_plugin(self, item: RegistryItem, artifact: bytes) -> object: ...
+    async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object: ...
 
-    def import_portable(self, item: RegistryItem, artifact: bytes) -> object: ...
+    async def import_portable(self, item: RegistryItem, artifact: bytes) -> object: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +40,10 @@ class DistributionService:
     @property
     def enabled(self) -> bool:
         return self._provider is not None
+
+    @property
+    def activation_enabled(self) -> bool:
+        return self._provider is not None and self._router is not None
 
     def search(self, query: RegistryQuery | None = None) -> tuple[RegistryItem, ...]:
         """Discover registry metadata without exposing a concrete provider northbound."""
@@ -69,7 +73,7 @@ class DistributionService:
             activation_allowed=not has_errors(findings),
         )
 
-    def activate(
+    async def activate(
         self,
         preview: DistributionPreview,
         context: ValidationContext,
@@ -91,9 +95,9 @@ class DistributionService:
         if self._router is None:
             raise RuntimeError("distribution activation router is not configured")
         if current.route is DistributionRoute.PLUGIN:
-            return self._router.install_plugin(current, artifact)
+            return await self._router.install_plugin(current, artifact)
         if current.route is DistributionRoute.PORTABLE_IMPORT:
-            return self._router.import_portable(current, artifact)
+            return await self._router.import_portable(current, artifact)
         raise RuntimeError("manual registry assets cannot be activated automatically")
 
     def _require_provider(self) -> RegistryProvider:

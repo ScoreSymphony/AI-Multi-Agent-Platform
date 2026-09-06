@@ -50,7 +50,12 @@ class ModelRoutingProfileRepository(Protocol):
 
     def set_enabled(self, profile_id: str, enabled: bool) -> ModelRoutingProfileDefinition: ...
 
-    def delete_profile(self, profile_id: str) -> None: ...
+    def compensate_profile_creation(
+        self,
+        profile_id: str,
+        *,
+        expected_current_revision: int,
+    ) -> None: ...
 
 
 class JsonModelRoutingProfileRepository:
@@ -184,8 +189,24 @@ class JsonModelRoutingProfileRepository:
             raise
         return updated
 
-    def delete_profile(self, profile_id: str) -> None:
+    def compensate_profile_creation(
+        self,
+        profile_id: str,
+        *,
+        expected_current_revision: int,
+    ) -> None:
+        """Remove only the exact history created by a failed/rolled-back import."""
         definition = self.get_definition(profile_id)
+        if definition.current_revision != expected_current_revision:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "routing profile compensation refused because history advanced",
+                details={
+                    "profile_id": profile_id,
+                    "expected_current_revision": expected_current_revision,
+                    "current_revision": definition.current_revision,
+                },
+            )
         revisions = self.list_revisions(profile_id)
         del self._definitions[profile_id]
         for revision_number in range(1, definition.current_revision + 1):
@@ -209,6 +230,16 @@ class JsonModelRoutingProfileRepository:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "routing profile definition/revision identity mismatch",
+            )
+        if definition.schema_version != revision.schema_version:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "routing profile definition/revision schema versions must match",
+                details={
+                    "profile_id": definition.profile_id,
+                    "definition_schema_version": definition.schema_version,
+                    "revision_schema_version": revision.schema_version,
+                },
             )
         if (
             definition.current_revision != expected_revision
@@ -301,6 +332,11 @@ class JsonModelRoutingProfileRepository:
                 raise ContractError(
                     ErrorCode.INVALID_CONFIGURATION,
                     "persisted routing profile revision has inconsistent identity/scope",
+                )
+            if revision.schema_version != definition.schema_version:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "persisted routing profile revision has inconsistent schema version",
                 )
             if previous is not None and revision.created_at < previous.created_at:
                 raise ContractError(

@@ -49,6 +49,9 @@ from ai_multi_agent_platform.portability.model_routing_profile_import import (
     ModelRoutingProfileImportMutationHandler,
 )
 from ai_multi_agent_platform.portability.registry import ImportContext
+from ai_multi_agent_platform.portability.routing_profile_reference_audit import (
+    build_routing_profile_dependency_audit,
+)
 from ai_multi_agent_platform.portability.routing_profile_reference_codecs import (
     RoutingProfileAwareAgentPortableCodec,
 )
@@ -270,7 +273,12 @@ def test_assignment_denial_rolls_back_earlier_in_package_routing_profile_import(
     target_profiles = JsonModelRoutingProfileRepository(tmp_path / "target-profiles.json")
     target_agents = InMemoryAgentRepository()
     mutations = ImportMutationRegistry()
-    mutations.register(ModelRoutingProfileImportMutationHandler(target_profiles))
+    mutations.register(
+        ModelRoutingProfileImportMutationHandler(
+            target_profiles,
+            dependency_audit=build_routing_profile_dependency_audit(agents=target_agents),
+        )
+    )
     mutations.register(AgentImportMutationHandler(target_agents))
     authorization = FakeAuthorizationProvider(allowed=False)
     access = RoutingProfileAssignmentAccess(

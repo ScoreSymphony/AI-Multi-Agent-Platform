@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 
 import pytest
@@ -24,11 +25,11 @@ class RecordingRouter:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
 
-    def install_plugin(self, item: RegistryItem, artifact: bytes) -> object:
+    async def install_plugin(self, item: RegistryItem, artifact: bytes) -> object:
         self.calls.append(("plugin", item.item_id))
         return artifact
 
-    def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
+    async def import_portable(self, item: RegistryItem, artifact: bytes) -> object:
         self.calls.append(("portable", item.item_id))
         return artifact
 
@@ -73,7 +74,7 @@ def test_activation_requires_explicit_authorization() -> None:
     context = ValidationContext("0.0.1")
     preview = service.preview(item.item_id, item.version, context)
     with pytest.raises(PermissionError, match="explicit authorization"):
-        service.activate(preview, context, authorized=False)
+        asyncio.run(service.activate(preview, context, authorized=False))
     assert router.calls == []
 
 
@@ -83,7 +84,13 @@ def test_plugin_and_template_use_separate_owner_routes() -> None:
     plugin_preview = plugin_service.preview(
         plugin.item_id, plugin.version, ValidationContext("0.0.1")
     )
-    plugin_service.activate(plugin_preview, ValidationContext("0.0.1"), authorized=True)
+    asyncio.run(
+        plugin_service.activate(
+            plugin_preview,
+            ValidationContext("0.0.1"),
+            authorized=True,
+        )
+    )
     assert plugin_router.calls == [("plugin", plugin.item_id)]
 
     template = _item(RegistryItemType.TEMPLATE)
@@ -91,7 +98,13 @@ def test_plugin_and_template_use_separate_owner_routes() -> None:
     template_preview = template_service.preview(
         template.item_id, template.version, ValidationContext("0.0.1")
     )
-    template_service.activate(template_preview, ValidationContext("0.0.1"), authorized=True)
+    asyncio.run(
+        template_service.activate(
+            template_preview,
+            ValidationContext("0.0.1"),
+            authorized=True,
+        )
+    )
     assert template_router.calls == [("portable", template.item_id)]
 
 

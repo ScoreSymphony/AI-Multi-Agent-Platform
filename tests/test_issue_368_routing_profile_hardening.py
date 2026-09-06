@@ -169,7 +169,7 @@ def test_enable_state_rolls_back_when_persist_fails(tmp_path, monkeypatch) -> No
     assert repository.get_definition(profile.profile_id).enabled is True
 
 
-def test_delete_rolls_back_complete_history_when_persist_fails(tmp_path, monkeypatch) -> None:
+def test_compensation_rolls_back_complete_history_when_persist_fails(tmp_path, monkeypatch) -> None:
     repository = JsonModelRoutingProfileRepository(tmp_path / "profiles.json")
     service = ModelRoutingProfileService(repository)
     first = asyncio.run(
@@ -194,7 +194,10 @@ def test_delete_rolls_back_complete_history_when_persist_fails(tmp_path, monkeyp
     monkeypatch.setattr(repository, "_persist", _raise_persist_failure)
 
     with pytest.raises(OSError, match="simulated durable write failure"):
-        repository.delete_profile(first.profile_id)
+        repository.compensate_profile_creation(
+            first.profile_id,
+            expected_current_revision=2,
+        )
 
     assert repository.get_definition(first.profile_id).current_revision == 2
     assert repository.list_revisions(first.profile_id) == (first, second)
