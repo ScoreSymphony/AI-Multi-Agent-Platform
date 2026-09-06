@@ -9,7 +9,7 @@ from types import MappingProxyType
 
 from ai_multi_agent_platform.upgrade.models import VersionSnapshot
 
-RELEASE_MANIFEST_SCHEMA_VERSION = "1"
+RELEASE_MANIFEST_SCHEMA_VERSION = "2"
 
 
 class ReleaseKind(StrEnum):
@@ -32,6 +32,54 @@ class GateStatus(StrEnum):
     PASSED = "passed"
     FAILED = "failed"
     NOT_RUN = "not_run"
+
+
+class DependencySetKind(StrEnum):
+    LOCKFILE = "lockfile"
+    RESOLVED_SET = "resolved_set"
+
+
+class ReleaseEvidenceKind(StrEnum):
+    WORKFLOW_RUN = "workflow_run"
+    REPORT = "report"
+    ARTIFACT = "artifact"
+    REVIEW = "review"
+    DRILL = "drill"
+    ATTESTATION = "attestation"
+
+
+@dataclass(frozen=True, slots=True)
+class DependencySetProvenance:
+    name: str
+    ecosystem: str
+    kind: DependencySetKind
+    source_ref: str
+    digest: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "name": self.name,
+            "ecosystem": self.ecosystem,
+            "kind": self.kind.value,
+            "source_ref": self.source_ref,
+            "digest": self.digest,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ReleaseEvidence:
+    kind: ReleaseEvidenceKind
+    ref: str
+    source_commit: str | None = None
+    digest: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "kind": self.kind.value,
+            "ref": self.ref,
+            "source_commit": self.source_commit,
+            "digest": self.digest,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,14 +143,14 @@ class CompatibilityRecord:
 class ReleaseGate:
     name: str
     status: GateStatus
-    evidence: str
+    evidence: ReleaseEvidence
     required: bool = True
 
     def to_dict(self) -> dict[str, object]:
         return {
             "name": self.name,
             "status": self.status.value,
-            "evidence": self.evidence,
+            "evidence": self.evidence.to_dict(),
             "required": self.required,
         }
 
@@ -115,6 +163,7 @@ class ReleaseManifest:
     created_at: str
     release_notes_ref: str
     versions: VersionSnapshot
+    dependency_sets: tuple[DependencySetProvenance, ...]
     upstreams: tuple[UpstreamProvenance, ...]
     compatibility: tuple[CompatibilityRecord, ...]
     gates: tuple[ReleaseGate, ...]
@@ -135,6 +184,7 @@ class ReleaseManifest:
             "created_at": self.created_at,
             "release_notes_ref": self.release_notes_ref,
             "versions": self.versions.to_dict(),
+            "dependency_sets": [item.to_dict() for item in self.dependency_sets],
             "upstreams": [upstream.to_dict() for upstream in self.upstreams],
             "compatibility": [record.to_dict() for record in self.compatibility],
             "gates": [gate.to_dict() for gate in self.gates],

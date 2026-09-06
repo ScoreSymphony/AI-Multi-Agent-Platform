@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from ai_multi_agent_platform.release import (
     ReleaseOperatorService,
     UpdateClassification,
@@ -15,10 +17,24 @@ def test_packaged_operator_status_is_read_only_and_queryable() -> None:
     assert status["production_pin_mutation"] == "not_permitted_by_discovery"
     inventory = status["compatibility_inventory"]
     assert isinstance(inventory, dict)
+    assert inventory["schema_version"] == "2"
+    assert inventory["versions"] == status["versions"]
     assert inventory["components"]
     discovery = status["update_discovery"]
     assert isinstance(discovery, dict)
     assert discovery["mode"] == "disabled"
+
+
+def test_operator_warns_when_any_reviewed_version_dimension_differs() -> None:
+    service = ReleaseOperatorService.packaged_defaults()
+    service.inventory = replace(
+        service.inventory,
+        versions=replace(service.inventory.versions, worker_protocol="999"),
+    )
+    status = service.status()
+    warnings = status["operator_warnings"]
+    assert isinstance(warnings, list)
+    assert any("worker_protocol" in warning for warning in warnings)
 
 
 def test_operator_status_surfaces_advisory_candidate_without_changing_inventory() -> None:

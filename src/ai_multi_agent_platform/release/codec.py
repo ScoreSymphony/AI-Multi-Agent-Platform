@@ -17,7 +17,11 @@ from ai_multi_agent_platform.upgrade.versioning import version_snapshot_from_dic
 from .models import (
     CompatibilityRecord,
     CompatibilityStatus,
+    DependencySetKind,
+    DependencySetProvenance,
     GateStatus,
+    ReleaseEvidence,
+    ReleaseEvidenceKind,
     ReleaseGate,
     ReleaseKind,
     ReleaseManifest,
@@ -27,6 +31,10 @@ from .models import (
 _RFC3339_TIMESTAMP = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
 )
+_GIT_COMMIT = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+_DIGEST = re.compile(r"^(?:sha256:[0-9a-f]{64}|sha512:[0-9a-f]{128})$")
+_REFERENCE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:.+$")
+_FLOATING_REVISION = re.compile(r"(^|[:/@])latest$", re.IGNORECASE)
 
 
 class ReleaseManifestError(ValueError):
@@ -65,6 +73,9 @@ def load_release_manifest(path: str | Path) -> ReleaseManifest:
 
 def release_manifest_from_dict(value: Mapping[str, object]) -> ReleaseManifest:
     versions = _mapping(value, "versions")
+    dependency_sets = tuple(
+        _decode_dependency_set(item) for item in _object_list(value, "dependency_sets")
+    )
     upstreams = tuple(_decode_upstream(item) for item in _object_list(value, "upstreams"))
     compatibility = tuple(
         _decode_compatibility(item) for item in _object_list(value, "compatibility")
@@ -74,39 +85,46 @@ def release_manifest_from_dict(value: Mapping[str, object]) -> ReleaseManifest:
         schema_version=_string(value, "schema_version"),
         release_version=_string(value, "release_version"),
         release_kind=ReleaseKind(_string(value, "release_kind")),
-        source_commit=_string(value, "source_commit"),
+        source_commit=_commit(value, "source_commit"),
         created_at=_timestamp(value, "created_at"),
-        release_notes_ref=_string(value, "release_notes_ref"),
+        release_notes_ref=_reference(value, "release_notes_ref"),
         versions=version_snapshot_from_dict(cast(Mapping[object, object], versions)),
+        dependency_sets=dependency_sets,
         upstreams=upstreams,
         compatibility=compatibility,
         gates=gates,
-        sbom_ref=_string(value, "sbom_ref"),
-        provenance_ref=_string(value, "provenance_ref"),
-        artifact_hashes=_string_map(value, "artifact_hashes"),
+        sbom_ref=_reference(value, "sbom_ref"),
+        provenance_ref=_reference(value, "provenance_ref"),
+        artifact_hashes=_digest_map(value, "artifact_hashes"),
+    )
+
+
+def _decode_dependency_set(value: Mapping[str, object]) -> DependencySetProvenance:
+    return DependencySetProvenance(
+        name=_string(value, "name"),
+        ecosystem=_string(value, "ecosystem"),
+        kind=DependencySetKind(_string(value, "kind")),
+        source_ref=_reference(value, "source_ref"),
+        digest=_digest(value, "digest"),
     )
 
 
 def _decode_upstream(value: Mapping[str, object]) -> UpstreamProvenance:
-    hashes_raw = _mapping(value, "artifact_hashes")
-    hashes: dict[str, str] = {}
-    for key, item in hashes_raw.items():
-        if not isinstance(key, str) or not isinstance(item, str) or not item:
-            raise ReleaseManifestError("artifact_hashes must map non-empty strings to strings")
-        hashes[key] = item
+    revision_kind = _string(value, "revision_kind")
+    revision = _immutable_revision(value, "revision", revision_kind=revision_kind)
     return UpstreamProvenance(
         component=_string(value, "component"),
         source_url=_string(value, "source_url"),
-        revision=_string(value, "revision"),
-        revision_kind=_string(value, "revision_kind"),
+        revision=revision,
+        revision_kind=revision_kind,
         license=_string(value, "license"),
         modified=_bool(value, "modified"),
         patches=tuple(_string_list(value, "patches")),
         build_status=_string(value, "build_status"),
         test_status=_string(value, "test_status"),
-        artifact_hashes=hashes,
-        sbom_ref=_optional_string(value, "sbom_ref"),
-        provenance_ref=_optional_string(value, "provenance_ref"),
+        artifact_hashes=_digest_map(value, "artifact_hashes"),
+        sbom_ref=_optional_reference(value, "sbom_ref"),
+        provenance_ref=_optional_reference(value, "provenance_ref"),
         last_verified_at=_timestamp(value, "last_verified_at"),
     )
 
@@ -123,20 +141,32 @@ def _decode_compatibility(value: Mapping[str, object]) -> CompatibilityRecord:
 
 
 def _decode_gate(value: Mapping[str, object]) -> ReleaseGate:
+    evidence_raw = _mapping(value, "evidence")
     return ReleaseGate(
         name=_string(value, "name"),
         status=GateStatus(_string(value, "status")),
-        evidence=_string(value, "evidence"),
+        evidence=_decode_evidence(evidence_raw),
         required=_bool(value, "required"),
     )
 
 
-def _string_map(value: Mapping[str, object], name: str) -> dict[str, str]:
+def _decode_evidence(value: Mapping[str, object]) -> ReleaseEvidence:
+    return ReleaseEvidence(
+        kind=ReleaseEvidenceKind(_string(value, "kind")),
+        ref=_reference(value, "ref"),
+        source_commit=_optional_commit(value, "source_commit"),
+        digest=_optional_digest(value, "digest"),
+    )
+
+
+def _digest_map(value: Mapping[str, object], name: str) -> dict[str, str]:
     raw = _mapping(value, name)
     result: dict[str, str] = {}
     for key, item in raw.items():
-        if not isinstance(key, str) or not key or not isinstance(item, str) or not item:
-            raise ReleaseManifestError(f"{name} must map non-empty strings to non-empty strings")
+        if not isinstance(key, str) or not key or not isinstance(item, str):
+            raise ReleaseManifestError(f"{name} must map non-empty strings to digests")
+        if _DIGEST.fullmatch(item) is None:
+            raise ReleaseManifestError(f"{name}.{key} must be a sha256 or sha512 digest")
         result[key] = item
     return result
 
@@ -167,6 +197,70 @@ def _string(value: Mapping[str, object], name: str) -> str:
     return raw
 
 
+def _commit(value: Mapping[str, object], name: str) -> str:
+    raw = _string(value, name)
+    if _GIT_COMMIT.fullmatch(raw) is None:
+        raise ReleaseManifestError(f"{name} must be a full 40- or 64-character Git commit SHA")
+    return raw
+
+
+def _optional_commit(value: Mapping[str, object], name: str) -> str | None:
+    raw = value.get(name)
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or _GIT_COMMIT.fullmatch(raw) is None:
+        raise ReleaseManifestError(f"{name} must be null or a full Git commit SHA")
+    return raw
+
+
+def _digest(value: Mapping[str, object], name: str) -> str:
+    raw = _string(value, name)
+    if _DIGEST.fullmatch(raw) is None:
+        raise ReleaseManifestError(f"{name} must be a sha256 or sha512 digest")
+    return raw
+
+
+def _optional_digest(value: Mapping[str, object], name: str) -> str | None:
+    raw = value.get(name)
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or _DIGEST.fullmatch(raw) is None:
+        raise ReleaseManifestError(f"{name} must be null or a sha256/sha512 digest")
+    return raw
+
+
+def _reference(value: Mapping[str, object], name: str) -> str:
+    raw = _string(value, name)
+    if _REFERENCE.fullmatch(raw) is None:
+        raise ReleaseManifestError(f"{name} must be a scheme-qualified immutable reference")
+    return raw
+
+
+def _optional_reference(value: Mapping[str, object], name: str) -> str | None:
+    raw = value.get(name)
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or _REFERENCE.fullmatch(raw) is None:
+        raise ReleaseManifestError(f"{name} must be null or a scheme-qualified reference")
+    return raw
+
+
+def _immutable_revision(
+    value: Mapping[str, object],
+    name: str,
+    *,
+    revision_kind: str,
+) -> str:
+    raw = _string(value, name)
+    if _FLOATING_REVISION.search(raw) is not None or "*" in raw:
+        raise ReleaseManifestError(f"{name} must not use a floating revision")
+    if revision_kind == "commit" and _GIT_COMMIT.fullmatch(raw) is None:
+        raise ReleaseManifestError(f"{name} must be a full Git commit SHA for commit revisions")
+    if revision_kind == "digest" and _DIGEST.fullmatch(raw) is None:
+        raise ReleaseManifestError(f"{name} must be a digest for digest revisions")
+    return raw
+
+
 def _timestamp(value: Mapping[str, object], name: str) -> str:
     raw = _string(value, name)
     if _RFC3339_TIMESTAMP.fullmatch(raw) is None:
@@ -177,15 +271,6 @@ def _timestamp(value: Mapping[str, object], name: str) -> str:
         raise ReleaseManifestError(f"{name} must be an RFC3339 timestamp") from exc
     if parsed.utcoffset() is None:
         raise ReleaseManifestError(f"{name} must include a timezone offset")
-    return raw
-
-
-def _optional_string(value: Mapping[str, object], name: str) -> str | None:
-    raw = value.get(name)
-    if raw is None:
-        return None
-    if not isinstance(raw, str) or not raw.strip():
-        raise ReleaseManifestError(f"{name} must be null or a non-empty string")
     return raw
 
 

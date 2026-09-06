@@ -15,11 +15,29 @@ from ai_multi_agent_platform.release.discovery import (
     record_reviewed_candidate,
 )
 from ai_multi_agent_platform.release.models import GateStatus
+from ai_multi_agent_platform.upgrade.models import VersionSnapshot
+
+
+def _versions() -> VersionSnapshot:
+    return VersionSnapshot(
+        platform_release="1.2.3",
+        domain_schema="1.0",
+        api="v1",
+        migration_revision="r3",
+        plugin_manifest="1",
+        portable_format="1.0",
+        template_schema="1",
+        backup_format="1",
+        worker_protocol="1.0",
+        message_protocol="1.0",
+        adapter_versions={"runtime-adapter": "1"},
+        plugin_interface_versions={"tool": "1"},
+    )
 
 
 def _inventory() -> CompatibilityInventory:
     return CompatibilityInventory(
-        platform_release="1.2.3",
+        versions=_versions(),
         last_reviewed_at="2026-09-01T00:00:00Z",
         entries=(
             UpstreamInventoryEntry(
@@ -157,6 +175,8 @@ def test_reviewed_candidate_can_produce_new_matrix_without_mutating_old_one() ->
     assert inventory.entries[0].revision == "v1.0.0"
     assert updated.entries[0].revision == "v1.1.0"
     assert updated.last_reviewed_at == "2026-09-06T00:00:00Z"
+    assert updated.versions == inventory.versions
+    assert updated.to_dict()["versions"] == _versions().to_dict()
 
 
 def test_candidate_cannot_be_adopted_with_missing_validation_gate() -> None:
@@ -234,5 +254,8 @@ def test_observation_loader_rejects_floating_latest(tmp_path: Path) -> None:
 
 def test_packaged_compatibility_inventory_is_loadable() -> None:
     inventory = load_compatibility_inventory()
+    assert inventory.schema_version == "2"
     assert inventory.entries
+    assert inventory.versions.worker_protocol
+    assert inventory.versions.message_protocol
     assert all(entry.revision.lower() != "latest" for entry in inventory.entries)

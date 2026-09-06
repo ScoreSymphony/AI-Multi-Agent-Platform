@@ -21,7 +21,11 @@ from .models import (
     RELEASE_MANIFEST_SCHEMA_VERSION,
     CompatibilityRecord,
     CompatibilityStatus,
+    DependencySetKind,
+    DependencySetProvenance,
     GateStatus,
+    ReleaseEvidence,
+    ReleaseEvidenceKind,
     ReleaseGate,
     ReleaseKind,
     ReleaseManifest,
@@ -29,9 +33,15 @@ from .models import (
     UpstreamProvenance,
 )
 from .operator import ReleaseOperatorService
-from .service import REQUIRED_RELEASE_GATES, evaluate_release, release_metadata
+from .service import (
+    COMMIT_BOUND_RELEASE_GATES,
+    REQUIRED_RELEASE_GATES,
+    evaluate_release,
+    release_metadata,
+)
 
 __all__ = [
+    "COMMIT_BOUND_RELEASE_GATES",
     "COMPATIBILITY_INVENTORY_SCHEMA_VERSION",
     "RELEASE_MANIFEST_SCHEMA_VERSION",
     "REQUIRED_RELEASE_GATES",
@@ -39,8 +49,12 @@ __all__ = [
     "CompatibilityInventory",
     "CompatibilityRecord",
     "CompatibilityStatus",
+    "DependencySetKind",
+    "DependencySetProvenance",
     "GateStatus",
     "ObservedUpstream",
+    "ReleaseEvidence",
+    "ReleaseEvidenceKind",
     "ReleaseGate",
     "ReleaseKind",
     "ReleaseManifest",

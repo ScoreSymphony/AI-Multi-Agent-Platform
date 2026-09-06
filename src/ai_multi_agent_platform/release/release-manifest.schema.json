@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/release-manifest-v1.json",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/release-manifest-v2.json",
   "title": "AI Multi-Agent Platform release manifest",
   "type": "object",
   "additionalProperties": false,
@@ -12,6 +12,7 @@
     "created_at",
     "release_notes_ref",
     "versions",
+    "dependency_sets",
     "upstreams",
     "compatibility",
     "gates",
@@ -20,15 +21,63 @@
     "provenance_ref"
   ],
   "properties": {
-    "schema_version": {"const": "1"},
+    "schema_version": {"const": "2"},
     "release_version": {"type": "string", "minLength": 1},
     "release_kind": {
       "enum": ["patch", "minor", "major", "security_hotfix", "prerelease"]
     },
-    "source_commit": {"type": "string", "minLength": 1},
+    "source_commit": {"$ref": "#/$defs/gitCommit"},
     "created_at": {"type": "string", "format": "date-time"},
-    "release_notes_ref": {"type": "string", "minLength": 1},
-    "versions": {
+    "release_notes_ref": {"$ref": "#/$defs/reference"},
+    "versions": {"$ref": "#/$defs/versionSnapshot"},
+    "dependency_sets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/dependencySet"}
+    },
+    "upstreams": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/upstream"}
+    },
+    "compatibility": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/compatibility"}
+    },
+    "gates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/gate"}
+    },
+    "artifact_hashes": {"$ref": "#/$defs/artifactHashMap"},
+    "sbom_ref": {"$ref": "#/$defs/reference"},
+    "provenance_ref": {"$ref": "#/$defs/reference"}
+  },
+  "$defs": {
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "gitCommit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^(?:sha256:[0-9a-f]{64}|sha512:[0-9a-f]{128})$"
+    },
+    "reference": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:.+$"
+    },
+    "digestMap": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/digest"}
+    },
+    "artifactHashMap": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/digest"}
+    },
+    "versionSnapshot": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -52,31 +101,17 @@
         "plugin_interface_versions": {"$ref": "#/$defs/stringMap"}
       }
     },
-    "upstreams": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/upstream"}
-    },
-    "compatibility": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/compatibility"}
-    },
-    "gates": {
-      "type": "array",
-      "items": {"$ref": "#/$defs/gate"}
-    },
-    "artifact_hashes": {"$ref": "#/$defs/artifactHashMap"},
-    "sbom_ref": {"type": "string", "minLength": 1},
-    "provenance_ref": {"type": "string", "minLength": 1}
-  },
-  "$defs": {
-    "stringMap": {
+    "dependencySet": {
       "type": "object",
-      "additionalProperties": {"type": "string"}
-    },
-    "artifactHashMap": {
-      "type": "object",
-      "minProperties": 1,
-      "additionalProperties": {"type": "string", "minLength": 1}
+      "additionalProperties": false,
+      "required": ["name", "ecosystem", "kind", "source_ref", "digest"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "ecosystem": {"type": "string", "minLength": 1},
+        "kind": {"enum": ["lockfile", "resolved_set"]},
+        "source_ref": {"$ref": "#/$defs/reference"},
+        "digest": {"$ref": "#/$defs/digest"}
+      }
     },
     "upstream": {
       "type": "object",
@@ -88,19 +123,29 @@
       ],
       "properties": {
         "component": {"type": "string", "minLength": 1},
-        "source_url": {"type": "string", "minLength": 1},
+        "source_url": {"type": "string", "format": "uri"},
         "revision": {"type": "string", "minLength": 1},
-        "revision_kind": {"type": "string", "minLength": 1},
+        "revision_kind": {"enum": ["commit", "tag", "version", "digest"]},
         "license": {"type": "string", "minLength": 1},
         "modified": {"type": "boolean"},
         "patches": {"type": "array", "items": {"type": "string", "minLength": 1}},
         "build_status": {"type": "string", "minLength": 1},
         "test_status": {"type": "string", "minLength": 1},
-        "artifact_hashes": {"$ref": "#/$defs/stringMap"},
-        "sbom_ref": {"type": ["string", "null"]},
-        "provenance_ref": {"type": ["string", "null"]},
+        "artifact_hashes": {"$ref": "#/$defs/digestMap"},
+        "sbom_ref": {"anyOf": [{"$ref": "#/$defs/reference"}, {"type": "null"}]},
+        "provenance_ref": {"anyOf": [{"$ref": "#/$defs/reference"}, {"type": "null"}]},
         "last_verified_at": {"type": "string", "format": "date-time"}
-      }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"revision_kind": {"const": "commit"}}},
+          "then": {"properties": {"revision": {"$ref": "#/$defs/gitCommit"}}}
+        },
+        {
+          "if": {"properties": {"revision_kind": {"const": "digest"}}},
+          "then": {"properties": {"revision": {"$ref": "#/$defs/digest"}}}
+        }
+      ]
     },
     "compatibility": {
       "type": "object",
@@ -120,6 +165,19 @@
         "notes": {"type": "array", "items": {"type": "string", "minLength": 1}}
       }
     },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref", "source_commit", "digest"],
+      "properties": {
+        "kind": {
+          "enum": ["workflow_run", "report", "artifact", "review", "drill", "attestation"]
+        },
+        "ref": {"$ref": "#/$defs/reference"},
+        "source_commit": {"anyOf": [{"$ref": "#/$defs/gitCommit"}, {"type": "null"}]},
+        "digest": {"anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]}
+      }
+    },
     "gate": {
       "type": "object",
       "additionalProperties": false,
@@ -127,7 +185,7 @@
       "properties": {
         "name": {"type": "string", "minLength": 1},
         "status": {"enum": ["passed", "failed", "not_run"]},
-        "evidence": {"type": "string", "minLength": 1},
+        "evidence": {"$ref": "#/$defs/evidence"},
         "required": {"type": "boolean"}
       }
     }

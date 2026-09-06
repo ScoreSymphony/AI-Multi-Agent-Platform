@@ -10,9 +10,11 @@ from importlib.resources import files
 from pathlib import Path
 from typing import cast
 
+from ai_multi_agent_platform.upgrade.models import VersionSnapshot
+
 from .models import GateStatus
 
-COMPATIBILITY_INVENTORY_SCHEMA_VERSION = "1"
+COMPATIBILITY_INVENTORY_SCHEMA_VERSION = "2"
 UPDATE_OBSERVATION_SCHEMA_VERSION = "1"
 REQUIRED_ADOPTION_GATES = frozenset(
     {
@@ -80,16 +82,21 @@ class UpstreamInventoryEntry:
 
 @dataclass(frozen=True, slots=True)
 class CompatibilityInventory:
-    platform_release: str
+    versions: VersionSnapshot
     last_reviewed_at: str
     entries: tuple[UpstreamInventoryEntry, ...]
     generated_from: str = "upstream/*.yaml"
     schema_version: str = COMPATIBILITY_INVENTORY_SCHEMA_VERSION
 
+    @property
+    def platform_release(self) -> str:
+        return self.versions.platform_release
+
     def to_dict(self) -> dict[str, object]:
         return {
             "schema_version": self.schema_version,
             "platform_release": self.platform_release,
+            "versions": self.versions.to_dict(),
             "generated_from": self.generated_from,
             "last_reviewed_at": self.last_reviewed_at,
             "components": [entry.to_dict() for entry in self.entries],
@@ -187,9 +194,15 @@ def load_compatibility_inventory(path: str | Path | None = None) -> Compatibilit
     raw = _json_object(text, "compatibility inventory")
     if _string(raw, "schema_version") != COMPATIBILITY_INVENTORY_SCHEMA_VERSION:
         raise UpdateDiscoveryError("unsupported compatibility inventory schema_version")
+    versions = _decode_version_snapshot(_mapping(raw, "versions"))
+    platform_release = _string(raw, "platform_release")
+    if versions.platform_release != platform_release:
+        raise UpdateDiscoveryError(
+            "compatibility inventory platform_release must match versions.platform_release"
+        )
     return CompatibilityInventory(
         schema_version=COMPATIBILITY_INVENTORY_SCHEMA_VERSION,
-        platform_release=_string(raw, "platform_release"),
+        versions=versions,
         generated_from=_string(raw, "generated_from"),
         last_reviewed_at=_string(raw, "last_reviewed_at"),
         entries=tuple(_decode_inventory_entry(item) for item in _object_list(raw, "components")),
@@ -425,6 +438,23 @@ def _not_checked(
     )
 
 
+def _decode_version_snapshot(value: Mapping[str, object]) -> VersionSnapshot:
+    return VersionSnapshot(
+        platform_release=_string(value, "platform_release"),
+        domain_schema=_string(value, "domain_schema"),
+        api=_string(value, "api"),
+        migration_revision=_string(value, "migration_revision"),
+        plugin_manifest=_string(value, "plugin_manifest"),
+        portable_format=_string(value, "portable_format"),
+        template_schema=_string(value, "template_schema"),
+        backup_format=_string(value, "backup_format"),
+        worker_protocol=_string(value, "worker_protocol"),
+        message_protocol=_string(value, "message_protocol"),
+        adapter_versions=_string_map(value, "adapter_versions"),
+        plugin_interface_versions=_string_map(value, "plugin_interface_versions"),
+    )
+
+
 def _decode_inventory_entry(value: Mapping[str, object]) -> UpstreamInventoryEntry:
     return UpstreamInventoryEntry(
         component=_string(value, "component"),
@@ -479,8 +509,8 @@ def _decode_observation(value: Mapping[str, object]) -> ObservedUpstream:
 
 def _immutable_revision(value: Mapping[str, object]) -> str:
     revision = _string(value, "revision")
-    if revision.lower() == "latest" or revision.lower().endswith(":latest"):
-        raise UpdateDiscoveryError("floating latest revision is not allowed")
+    if revision.lower() == "latest" or revision.lower().endswith(":latest") or "*" in revision:
+        raise UpdateDiscoveryError("floating revision is not allowed")
     return revision
 
 
@@ -494,6 +524,13 @@ def _json_object(text: str, label: str) -> dict[str, object]:
     return cast(dict[str, object], raw)
 
 
+def _mapping(value: Mapping[str, object], name: str) -> Mapping[str, object]:
+    raw = value.get(name)
+    if not isinstance(raw, dict):
+        raise UpdateDiscoveryError(f"{name} must be an object")
+    return cast(dict[str, object], raw)
+
+
 def _object_list(value: Mapping[str, object], name: str) -> list[Mapping[str, object]]:
     raw = value.get(name)
     if not isinstance(raw, list):
@@ -503,6 +540,16 @@ def _object_list(value: Mapping[str, object], name: str) -> list[Mapping[str, ob
         if not isinstance(item, dict):
             raise UpdateDiscoveryError(f"{name} entries must be objects")
         result.append(cast(dict[str, object], item))
+    return result
+
+
+def _string_map(value: Mapping[str, object], name: str) -> dict[str, str]:
+    raw = _mapping(value, name)
+    result: dict[str, str] = {}
+    for key, item in raw.items():
+        if not isinstance(key, str) or not isinstance(item, str) or not item:
+            raise UpdateDiscoveryError(f"{name} must map strings to non-empty strings")
+        result[key] = item
     return result
 
 
