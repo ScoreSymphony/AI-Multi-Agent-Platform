@@ -8,7 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import cast
 
-from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema import Draft202012Validator, FormatChecker  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.upgrade.versioning import version_snapshot_from_dict
 
@@ -71,7 +71,7 @@ def release_manifest_from_dict(value: Mapping[str, object]) -> ReleaseManifest:
         source_commit=_string(value, "source_commit"),
         created_at=_string(value, "created_at"),
         release_notes_ref=_string(value, "release_notes_ref"),
-        versions=version_snapshot_from_dict(versions),
+        versions=version_snapshot_from_dict(cast(Mapping[object, object], versions)),
         upstreams=upstreams,
         compatibility=compatibility,
         gates=gates,
