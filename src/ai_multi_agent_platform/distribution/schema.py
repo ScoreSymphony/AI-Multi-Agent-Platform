@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
 REGISTRY_ITEM_SCHEMA_VERSION = "1"
 REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
