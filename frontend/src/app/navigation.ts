@@ -27,6 +27,7 @@ export const navigation: NavigationItem[] = [
   { label: "Integrations", path: "/integrations", group: "Intelligence", apiResource: "connector-definitions" },
   { label: "Models", path: "/models", group: "Intelligence", apiResource: "models" },
   { label: "Evaluations", path: "/evaluations", group: "Intelligence", apiResource: "evaluation-suites" },
+  { label: "Marketplace", path: "/marketplace", group: "Intelligence", apiResource: "registry-items" },
   { label: "Compute", path: "/compute", group: "Platform", apiResource: "nodes" },
   { label: "Terminal", path: "/terminal", group: "Platform", apiResource: "terminal-sessions" },
   { label: "Automations", path: "/automations", group: "Platform", apiResource: "automations" },
