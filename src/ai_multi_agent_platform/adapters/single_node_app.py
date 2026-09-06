@@ -13,12 +13,9 @@ from collections.abc import Sequence
 from ai_multi_agent_platform.configuration import LocalSecretProvider
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationContext
+from ai_multi_agent_platform.deployment import SingleNodeDeployment, build_single_node_deployment
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
 from ai_multi_agent_platform.deployment.server import main as run_server
-from ai_multi_agent_platform.deployment.single_node import (
-    SingleNodeDeployment,
-    build_single_node_deployment,
-)
 from ai_multi_agent_platform.repositories import RepositoryCapabilityProvider
 
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
