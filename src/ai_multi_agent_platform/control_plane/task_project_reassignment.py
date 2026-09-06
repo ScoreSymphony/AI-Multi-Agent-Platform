@@ -172,9 +172,7 @@ class ControlPlane(_CurrentControlPlane):
             else:
                 completed[request.task_id] = replayed
 
-        prepared = (
-            await self._task_project_reassignment.prepare_batch(pending) if pending else ()
-        )
+        prepared = await self._task_project_reassignment.prepare_batch(pending) if pending else ()
         for item in prepared:
             moved = await self._task_project_reassignment.commit(
                 item,
