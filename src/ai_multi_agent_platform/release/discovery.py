@@ -14,6 +14,14 @@ from .models import GateStatus
 
 COMPATIBILITY_INVENTORY_SCHEMA_VERSION = "1"
 UPDATE_OBSERVATION_SCHEMA_VERSION = "1"
+REQUIRED_ADOPTION_GATES = frozenset(
+    {
+        "adapter_contract_tests",
+        "eval_regression",
+        "security",
+        "compatibility_review",
+    }
+)
 
 
 class UpdateClassification(StrEnum):
@@ -272,6 +280,16 @@ def record_reviewed_candidate(
         )
     if candidate.candidate_revision is None:
         raise UpdateDiscoveryError("candidate revision is missing")
+
+    validation = candidate.validation or {}
+    adoption_blockers = sorted(
+        name for name in REQUIRED_ADOPTION_GATES if validation.get(name) is not GateStatus.PASSED
+    )
+    if adoption_blockers:
+        raise UpdateDiscoveryError(
+            "candidate adoption requires passed validation gates: " + ", ".join(adoption_blockers)
+        )
+
     if candidate.manual_review_required and not manual_review_approved:
         raise UpdateDiscoveryError("manual review approval is required before recording candidate")
     if compatibility_status not in {
