@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping
+from typing import Any
 
 BENCHMARK_REPORT_SCHEMA_VERSION = "1.0"
 
@@ -169,7 +170,9 @@ def compare_with_baseline(
 
     baseline_latency = _mapping(baseline.get("operation_latency"))
     baseline_p95 = _positive_float(baseline_latency.get("p95_ms"))
-    baseline_throughput = _positive_float(baseline.get("throughput_operations_per_second"))
+    baseline_throughput = _positive_float(
+        baseline.get("throughput_operations_per_second")
+    )
     if baseline_p95 is None or baseline_throughput is None:
         return BaselineComparison(
             False,
@@ -216,9 +219,10 @@ def _percentile(sorted_values: list[float], percentile: float) -> float:
     lower_index = int(position)
     upper_index = min(lower_index + 1, len(sorted_values) - 1)
     fraction = position - lower_index
-    return sorted_values[lower_index] + (
-        sorted_values[upper_index] - sorted_values[lower_index]
-    ) * fraction
+    return (
+        sorted_values[lower_index]
+        + (sorted_values[upper_index] - sorted_values[lower_index]) * fraction
+    )
 
 
 def _round_ms(value: float) -> float:
