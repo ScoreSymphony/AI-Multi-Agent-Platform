@@ -467,7 +467,12 @@ def test_authenticated_reference_vertical_preserves_canonical_evidence_end_to_en
             for item in timeline_items
             if isinstance(item, dict) and item.get("type") == "telemetry"
         }
-        assert {"run.succeeded", "result.attached", "artifact.attached", "task.succeeded"} <= event_types
+        assert {
+            "run.succeeded",
+            "result.attached",
+            "artifact.attached",
+            "task.succeeded",
+        } <= event_types
         assert {"verification.requested", "verification.result_recorded"} <= telemetry_names
 
         model_calls = [call for call in transport.calls if call[1].endswith("/chat/completions")]
