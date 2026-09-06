@@ -33,6 +33,12 @@ RELEASE_GENERATION_INPUT_SCHEMA_VERSION = "1"
 _SOURCE_COMMIT_TOKEN = "${SOURCE_COMMIT}"
 _GIT_COMMIT = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _DIGEST = re.compile(r"^(?:sha256:[0-9a-f]{64}|sha512:[0-9a-f]{128})$")
+_TAG_COMMIT = re.compile(
+    r"^(?P<tag>[^/\s][^/]*)\s*/\s*(?P<commit>(?:[0-9a-f]{40}|[0-9a-f]{64}))$",
+    re.IGNORECASE,
+)
+_TAG = re.compile(r"^v\d+(?:\.\d+)+(?:[-+][0-9a-z.-]+)?$", re.IGNORECASE)
+_VERSION = re.compile(r"^\d+(?:\.\d+)+(?:[-+][0-9a-z.-]+)?$", re.IGNORECASE)
 
 
 class ReleaseGenerationError(ValueError):
@@ -299,12 +305,19 @@ def _sha256_file(path: Path) -> str:
 
 
 def _revision_kind(revision: str) -> str:
-    lowered = revision.lower()
+    normalized = revision.strip()
+    lowered = normalized.lower()
     if _GIT_COMMIT.fullmatch(lowered) is not None:
         return "commit"
     if _DIGEST.fullmatch(lowered) is not None:
         return "digest"
-    return "pinned"
+    if _TAG_COMMIT.fullmatch(normalized) is not None:
+        return "tag"
+    if _TAG.fullmatch(normalized) is not None:
+        return "tag"
+    if _VERSION.fullmatch(normalized) is not None:
+        return "version"
+    raise ReleaseGenerationError(f"unsupported immutable upstream revision format: {revision!r}")
 
 
 def _resolve_path(base_dir: Path, value: str) -> Path:
