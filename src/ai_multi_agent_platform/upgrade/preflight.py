@@ -466,7 +466,8 @@ def _backup_checks(
                 code="backup.required.missing" if required else "backup.not_supplied",
                 severity=CheckSeverity.ERROR if required else CheckSeverity.WARNING,
                 message=(
-                    "a verified source-release backup is required for this forward-only/risky upgrade"
+                    "a verified source-release backup is required for this "
+                    "forward-only/risky upgrade"
                     if required
                     else "no backup supplied; recommended before upgrade"
                 ),
