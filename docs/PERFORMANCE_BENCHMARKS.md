@@ -153,7 +153,7 @@ By default, canonical correctness failure stops further escalation and records t
 
 ## Fault under load
 
-`platform-benchmark single-node-fault-under-load` currently provides one deterministic fault profile: `control-plane-restart`. It runs bounded authenticated read/write load, reconstructs the real `SingleNodeDeployment` on the same durable state at a configured operation boundary, then continues the measured load.
+`platform-benchmark single-node-fault-under-load` currently provides one deterministic deployment fault profile: `control-plane-restart`. It runs bounded authenticated read/write load, reconstructs the real `SingleNodeDeployment` on the same durable state at a configured operation boundary, then continues the measured load.
 
 ```bash
 platform-benchmark single-node-fault-under-load \
@@ -180,7 +180,44 @@ The fault boundary is required to split the workload: there must be measured ope
 
 The operation and concurrency safety limits are explicit harness boundaries, not advertised platform capacity. The schema is `docs/schemas/benchmark-fault-under-load.v1.schema.json`.
 
-This first fault profile deliberately uses a real supported recovery seam rather than a private repository failure hook. Transport outage/backpressure, transient persistence failure, Worker disconnect/reconnect, provider unavailability and HA promotion require their own stable integration seams and remain progressive profiles.
+This deployment fault profile deliberately uses a real supported recovery seam rather than a private repository failure hook. Transient persistence failure, Worker disconnect/reconnect, provider unavailability and HA promotion require their own stable integration seams and remain progressive profiles.
+
+## Transport backpressure, outage and duplicate delivery
+
+`platform-benchmark transport-fault` exercises the existing bounded in-process reference transport through its public contract and explicit reference-test recovery seam. It adds three deterministic scenarios:
+
+- `backpressure` fills the retained queue to its configured bound, requires the next publish to fail with retryable `resource_exhausted`, drains one accepted message, then requires a recovery publish and complete delivery of every accepted message;
+- `outage` publishes one bounded load phase, marks the reference transport unavailable, requires every configured fault-window publish to fail with retryable `unavailable`, restores availability, publishes a second load phase and verifies that every accepted message is delivered;
+- `duplicate-delivery` intentionally leaves the first delivery unacked across a consumer restart and also publishes one duplicate envelope identity. The transport must expose the at-least-once redelivery while `IdempotentConsumer` executes the handler exactly once for each unique message identity and suppresses the duplicate handler invocation.
+
+Examples:
+
+```bash
+platform-benchmark transport-fault \
+  --scenario backpressure \
+  --batch-size 100 \
+  --concurrency 10 \
+  --output artifacts/benchmarks/transport-backpressure.json
+
+platform-benchmark transport-fault \
+  --scenario outage \
+  --batch-size 100 \
+  --concurrency 10 \
+  --fault-operations 25 \
+  --output artifacts/benchmarks/transport-outage.json
+
+platform-benchmark transport-fault \
+  --scenario duplicate-delivery \
+  --batch-size 100 \
+  --concurrency 10 \
+  --output artifacts/benchmarks/transport-duplicate-delivery.json
+```
+
+Scenario defaults keep queue bounds coherent with the requested workload. Backpressure defaults `max_queue_size` to `batch_size` and exactly one overflow attempt. Outage defaults the queue to two accepted batches and defaults fault-window attempts to one batch. Duplicate delivery defaults the queue to one batch plus the intentional duplicate entry. Explicit incompatible bounds fail before execution.
+
+Expected fault errors are evidence, not benchmark failures. Correctness requires their exact canonical error code and retryable semantics, zero unexpected failures, zero loss among accepted message identities, the expected number of duplicate delivery attempts and successful recovery. Duplicate delivery additionally requires exactly one intentional redelivery and one idempotently suppressed handler invocation. The schema is `docs/schemas/benchmark-transport-fault.v1.schema.json`.
+
+The in-process reference transport is the deterministic contract fixture. Completing these profiles is evidence for transport semantics, not a throughput or capacity claim for every future network transport implementation.
 
 ## Baseline comparison
 
@@ -200,9 +237,9 @@ A baseline is rejected as incomparable when its benchmark ID/version/profile, op
 
 ## CI tiers
 
-- **PR smoke:** small deterministic lifecycle, tiny 1/2 sweep, tiny workload fixtures, contract-sized idle/soak, 1/2 bounded stress and a six-operation restart-under-load fixture; correctness and schemas mandatory, artifacts retained; no noisy universal latency budget.
-- **integration/nightly/manual performance work:** full 1/10/50/100+ sweeps, realistic read/mixed/history/restart sizes, longer resource-sampling windows, larger controlled stress sweeps, restart-under-load runs and comparative baselines.
-- **release qualification:** meaningful soak/endurance durations, controlled saturation to an explicitly chosen host boundary, fault-under-load and supported distributed profiles.
+- **PR smoke:** small deterministic lifecycle, tiny 1/2 sweep, tiny workload fixtures, contract-sized idle/soak, 1/2 bounded stress, a six-operation restart-under-load fixture and tiny transport backpressure/outage/duplicate-delivery fixtures; correctness and schemas mandatory, artifacts retained; no noisy universal latency budget.
+- **integration/nightly/manual performance work:** full 1/10/50/100+ sweeps, realistic read/mixed/history/restart sizes, longer resource-sampling windows, larger controlled stress sweeps, restart-under-load runs, larger transport fault batches and comparative baselines.
+- **release qualification:** meaningful soak/endurance durations, controlled saturation to an explicitly chosen host boundary, fault-under-load, transport degradation/recovery and supported distributed profiles.
 
 Tiny endurance/stress/fault runs in PRs prove semantics only. They are not evidence of long-term memory stability or a production operating envelope. Full scale, soak and saturation runs do not belong in every ordinary PR.
 
@@ -211,7 +248,6 @@ Tiny endurance/stress/fault runs in PRs prove semantics only. They are not evide
 The suite still does not claim completion of #440. Remaining progressive work includes:
 
 - transient persistence failure under moderate load where a stable provider-level fixture is available;
-- transport outage/backpressure and duplicate delivery under load;
 - model/tool/provider unavailability fixture under load;
 - durable Plan/Step long-linear, fan-out/fan-in, retry and reconciliation workloads after #384;
 - local/remote Worker dispatch, heartbeat, Worker loss/rejoin and Workspace materialization workloads after #240/#433;
