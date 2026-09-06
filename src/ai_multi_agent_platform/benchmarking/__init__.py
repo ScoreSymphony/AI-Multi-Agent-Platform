@@ -33,6 +33,13 @@ from .persistence import (
     PersistenceScaleReport,
     SingleNodePersistenceScaleHarness,
 )
+from .plan_step import (
+    PLAN_STEP_REPORT_SCHEMA_VERSION,
+    PlanStepBenchmarkHarness,
+    PlanStepBenchmarkReport,
+    PlanStepBenchmarkSpec,
+    PlanStepCorrectnessSummary,
+)
 from .provider_faults import (
     PROVIDER_FAULT_REPORT_SCHEMA_VERSION,
     ProviderFaultBenchmarkHarness,
@@ -78,6 +85,7 @@ __all__ = [
     "ENDURANCE_REPORT_SCHEMA_VERSION",
     "FAULT_REPORT_SCHEMA_VERSION",
     "PERSISTENCE_SWEEP_REPORT_SCHEMA_VERSION",
+    "PLAN_STEP_REPORT_SCHEMA_VERSION",
     "PROVIDER_FAULT_REPORT_SCHEMA_VERSION",
     "STRESS_REPORT_SCHEMA_VERSION",
     "SWEEP_REPORT_SCHEMA_VERSION",
@@ -97,6 +105,10 @@ __all__ = [
     "PersistenceScaleExecution",
     "PersistenceScalePoint",
     "PersistenceScaleReport",
+    "PlanStepBenchmarkHarness",
+    "PlanStepBenchmarkReport",
+    "PlanStepBenchmarkSpec",
+    "PlanStepCorrectnessSummary",
     "ProviderFaultBenchmarkHarness",
     "ProviderFaultBenchmarkReport",
     "ProviderFaultBenchmarkSpec",
