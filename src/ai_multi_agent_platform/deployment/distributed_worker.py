@@ -13,7 +13,7 @@ import os
 import signal
 import ssl
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,6 +34,7 @@ from ai_multi_agent_platform.distributed.workspace_transport import (
     WorkerWorkspaceMaterializationStore,
     WorkerWorkspaceTransportEndpoint,
     WorkspaceBoundLocalWorker,
+    WorkspaceLifecycleFactory,
 )
 from ai_multi_agent_platform.execution import ExecutorLifecycleBackend, ReferenceExecutor
 from ai_multi_agent_platform.messaging import MessageTransport, TcpMessageTransport
@@ -84,7 +85,7 @@ class DistributedWorkerProcess:
         *,
         protocol: WorkerProtocolHTTPClient | None,
         transport: MessageTransport,
-        lifecycle_factory: Callable[[str], ExecutorLifecycleBackend] | None = None,
+        lifecycle_factory: WorkspaceLifecycleFactory | None = None,
     ) -> None:
         if config.reporting and protocol is None:
             raise ValueError("a reporting Worker process requires a Worker protocol client")
@@ -98,7 +99,7 @@ class DistributedWorkerProcess:
         self.store = WorkerWorkspaceMaterializationStore(config.worker_id, config.workspace_root)
         executor = ReferenceExecutor(config.workspace_root)
         ExecutorLifecycleBackend.ensure_workspace(config.workspace_root, _REFERENCE_WORKSPACE)
-        self._lifecycle_factory = lifecycle_factory or (
+        self._lifecycle_factory: WorkspaceLifecycleFactory = lifecycle_factory or (
             lambda execution_workspace: ExecutorLifecycleBackend(
                 executor,
                 workspace=execution_workspace,
