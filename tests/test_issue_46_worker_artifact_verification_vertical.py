@@ -576,9 +576,7 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             assert artifact_id in final_run.artifact_ids
             assert result_id in final_run.result_ids
             same_run_records = [
-                record
-                for record in distributed.records()
-                if record.job.execution.run_id == run_id
+                record for record in distributed.records() if record.job.execution.run_id == run_id
             ]
             assert len(same_run_records) == 1
             assert len(_ArtifactToolCallingModelHandler.chat_payloads) == 1
