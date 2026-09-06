@@ -16,13 +16,36 @@ platform-conformance --profile integration --json-report conformance-integration
 platform-conformance --profile release --json-report conformance-release.json
 ```
 
+Optional compatibility claims are opt-in and claim-blocking:
+
+```text
+platform-conformance \
+  --profile release \
+  --deployment-profile reference-single-node-extended \
+  --enable-optional E,N,R,T,V,X \
+  --json-report conformance-extended-reference.json
+```
+
+External adapter profiles are enabled only in a prepared real environment. Tested component revisions can be retained in the same report:
+
+```text
+platform-conformance \
+  --profile integration \
+  --deployment-profile hermes-pinned \
+  --enable-optional B \
+  --adapter-version hermes-agent=<tested-revision> \
+  --json-report conformance-hermes.json
+```
+
+`--adapter-version`, `--provider-version` and `--plugin-version` accept repeatable `NAME=VERSION` values. `--enable-optional` may be repeated or contain comma-separated scenario IDs.
+
 The report schema is versioned as:
 
 ```text
 ai-multi-agent-platform/platform-conformance/v1
 ```
 
-A required scenario must pass for the selected profile to claim compatibility. An optional capability may be reported as `disabled` or `unsupported` without failing the reference single-node baseline. A required scenario without an executable path is `not_implemented` and blocks a compatibility claim.
+A required scenario must pass for the selected profile to claim compatibility. An optional capability may be reported as `disabled` or `unsupported` without failing the reference single-node baseline. Once an optional scenario is explicitly enabled it becomes required for that exact deployment claim. If executable #46 evidence is not registered, the enabled scenario becomes `not_implemented` and the report is `incomplete` rather than silently compatible.
 
 ## Profiles
 
@@ -54,11 +77,11 @@ The integration tier includes the complete fast tier and explicitly records opti
 - S — optional Registry;
 - X — optional Control Plane HA.
 
-Until a concrete #46 integration path is selected/enabled, those entries are emitted as `disabled` rather than silently omitted or counted as a baseline failure. Adapter-specific jobs must replace the disabled record with real executable evidence before compatibility for that adapter/profile is claimed.
+These entries remain `disabled` unless explicitly enabled. Enabling B or C uses a fail-closed external-profile runner: missing Hermes source/revision configuration or a missing Forge sidecar environment is a failed compatibility run, not a skipped passing test.
 
 ### `release`
 
-The reference release tier extends integration with representative operational product paths. Every required reference-release scenario now has maintained executable evidence:
+The reference release tier extends integration with representative operational product paths. Every required reference-release scenario has maintained executable evidence:
 
 | Scenario | Maintained acceptance evidence | Owner |
 | --- | --- | --- |
@@ -73,9 +96,28 @@ The reference release tier extends integration with representative operational p
 
 G is intentionally one coherent test rather than two unrelated assertions: a real canonical Run fails through the lifecycle backend, the Task becomes failed, `retry_task()` creates a distinct second Run with `attempt == 2`, canonical history contains the failed and retry events, and the Observability event provider emits exactly one `platform.run.retries` metric for that retry.
 
-Optional or conditional domains such as Notifications, Templates, portable Import/Export, Registry, Repository/Git, Organization collaboration, distributed Workers and HA remain non-blocking when their profile is disabled or unsupported. That does **not** constitute compatibility evidence for those profiles. #46 remains open until the additional integration/environment matrix required by the issue is represented and exercised.
+## Optional compatibility evidence
 
-Scenario Y for #384 durable Plan/Step coordination remains `unsupported` until that coordination path is available; its absence does not invalidate the current reference single-node release profile unless a release claims that optional capability.
+The following optional scenarios now have maintained executable #46 evidence and can be promoted from `disabled` to claim-blocking with `--enable-optional`:
+
+| Scenario | Representative evidence |
+| --- | --- |
+| B — Hermes | real pinned Hermes `/v1/runs` API compatibility test through the platform adapter |
+| C — Forge | real execution-only Forge Rust sidecar integration test |
+| E — Distributed Worker | authorization context + canonical terminal result identity + correlated safe distributed telemetry |
+| N — Notifications | recipient scope, authenticated anti-spoofing, idempotent inbox commands and replay-safe event projection |
+| R — Import/export | package integrity, secret/runtime-state exclusion, successful import and rollback on failed import |
+| T — Repository/Git | exact repository revision -> canonical Workspace/Run -> change Artifact/commit provenance, retry identity and provider-ID namespacing |
+| V — Organizations | membership suspension/removal plus resource sharing/revocation and cross-organization isolation |
+| X — HA | stale-leader fencing, promotion reconciliation preserving Worker identity and duplicate-command replay without duplicate Task/Run |
+
+The following remain deliberately unavailable as compatibility claims:
+
+- Q — Templates: #78 is reopened and still has unresolved authorization/compatibility/rollback integration gaps;
+- S — Registry: #81 is reopened and still has unresolved deployment-grade registry/install/trust/update gaps;
+- Y — durable Plan/Step coordination: remains unsupported until the #384 coordination path is available.
+
+Explicitly enabling Q, S or Y therefore blocks compatibility with `not_implemented`; it does not convert unfinished subsystem work into a conformance claim.
 
 ## Compatibility semantics
 
@@ -94,7 +136,7 @@ Report compatibility values:
 - `incomplete` — no enabled scenario failed, but at least one required scenario has no passing acceptance result;
 - `not_claimed` — used at scenario level for disabled/unsupported/not-yet-implemented paths.
 
-A `compatible` reference release report is a compatibility claim only for the explicitly recorded reference deployment profile. It is not evidence that Hermes, Forge, distributed Worker, Registry or HA profiles have passed.
+A `compatible` report applies only to its explicit deployment profile and enabled scenario set. A compatible reference release does not imply Hermes, Forge, distributed Worker, Registry or HA compatibility. Conversely, enabling an optional profile changes that scenario to `required=true` in the report, so a failed or missing path cannot be hidden behind optionality.
 
 ## Evidence model
 
@@ -106,6 +148,7 @@ Every report records:
 - installed platform package/release version when available;
 - adapter/provider/plugin version collections;
 - stable scenario ID and owning issue/subsystem;
+- whether the scenario was required for the concrete claim;
 - pass/fail/availability result;
 - duration;
 - command output tail and failure category when applicable;
@@ -127,12 +170,16 @@ Additional #46 invariants should be added as they can be checked reliably withou
 The repository treats conformance as three different cost/coverage tiers rather than one giant permutation matrix:
 
 1. **Fast PR** — deterministic local/reference components, architecture invariants and critical lifecycle/security/verification checks.
-2. **Integration** — real optional adapters/services where configured, distributed fixtures and richer cross-domain paths.
+2. **Integration** — explicitly enabled optional adapters/services, distributed fixtures and richer cross-domain paths.
 3. **Release acceptance** — representative operational, recovery, portability, security and product-path evidence required for the compatibility claims made by that release.
 
-`.github/workflows/platform-conformance.yml` runs both `conformance-fast` and the real `conformance-release` reference profile on pull requests and `main`, retaining separate machine-readable JSON reports. The release command itself must exit successfully; there is no allow-incomplete bypass.
+`.github/workflows/platform-conformance.yml` retains separate machine-readable reports for:
 
-Additional adapter/distributed/HA lanes remain separate because a green reference profile must not silently imply compatibility with an optional environment that was not exercised.
+- `conformance-fast`;
+- `conformance-release` for the reference single-node release claim;
+- `conformance-extended-reference`, which additionally enables E/N/R/T/V/X and therefore treats all six as required.
+
+Hermes and Forge retain their real upstream/sidecar setup in adapter-specific integration jobs; their conformance activation is valid only after those external preconditions are satisfied. The default reference jobs never install or require either runtime.
 
 ## Relationship to #252
 
@@ -147,5 +194,6 @@ When another issue completes an end-product path needed by #46:
 1. keep focused unit/contract/integration tests in the owning issue;
 2. add one representative public/canonical end-to-end path to the appropriate #46 profile;
 3. record the owning issue, deployment profile and tested adapter/provider/plugin versions;
-4. preserve optionality by reporting disabled/unsupported optional profiles explicitly;
-5. never declare compatibility when the required scenario did not actually pass.
+4. preserve optionality by leaving the scenario disabled until the caller explicitly claims that profile;
+5. make an explicitly enabled scenario required for that exact claim;
+6. never declare compatibility when the required scenario did not actually pass.
