@@ -116,7 +116,8 @@ def activate_optional_scenarios(
             continue
         if scenario.required:
             raise ValueError(
-                f"scenario {scenario.scenario_id} is already required by the {profile.value} profile"
+                f"scenario {scenario.scenario_id} is already required by the "
+                f"{profile.value} profile"
             )
 
         command = _OPTIONAL_EVIDENCE.get(scenario.scenario_id)
