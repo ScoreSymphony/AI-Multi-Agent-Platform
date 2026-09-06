@@ -791,15 +791,6 @@ class AuthorizationPolicyProfileService:
         expected_revision: int,
     ) -> AuthorizationPolicyProfileDefinition:
         current = self._repository.get_profile(policy_profile_id)
-        if current.current_revision != expected_revision:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "policy profile revision conflict",
-                details={
-                    "expected_revision": expected_revision,
-                    "current_revision": current.current_revision,
-                },
-            )
         next_revision = expected_revision + 1
         fingerprint = _approval_fingerprint(content)
         await self._enforce_definition(
@@ -810,6 +801,15 @@ class AuthorizationPolicyProfileService:
             side_effect="policy_profile_revise",
             risk=RiskClassification.HIGH,
         )
+        if current.current_revision != expected_revision:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "policy profile revision conflict",
+                details={
+                    "expected_revision": expected_revision,
+                    "current_revision": current.current_revision,
+                },
+            )
         now = utc_now()
         updated = replace(
             current,
@@ -886,12 +886,6 @@ class AuthorizationPolicyProfileService:
         context: AuthorizationPolicyProfileCallContext,
     ) -> AuthorizationPolicyAssignment:
         definition = self._repository.get_profile(profile_ref.policy_profile_id)
-        revision = self._repository.get_revision(
-            profile_ref.policy_profile_id,
-            profile_ref.revision,
-        )
-        if not definition.enabled:
-            raise ContractError(ErrorCode.CONFLICT, "disabled policy profile cannot be assigned")
         _non_blank(principal_ref, "principal_ref")
         normalized_actor_types = tuple(actor_types)
         if not normalized_actor_types:
@@ -911,6 +905,12 @@ class AuthorizationPolicyProfileService:
             side_effect="policy_profile_assign",
             risk=RiskClassification.CRITICAL,
         )
+        revision = self._repository.get_revision(
+            profile_ref.policy_profile_id,
+            profile_ref.revision,
+        )
+        if not definition.enabled:
+            raise ContractError(ErrorCode.CONFLICT, "disabled policy profile cannot be assigned")
         assignment = AuthorizationPolicyAssignment(
             profile_ref=profile_ref,
             principal_ref=principal_ref,
