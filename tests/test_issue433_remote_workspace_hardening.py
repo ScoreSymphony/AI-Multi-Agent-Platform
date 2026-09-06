@@ -10,8 +10,8 @@ from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.distributed import RegistryError
 from ai_multi_agent_platform.distributed.workspace_transport import (
     WorkerWorkspaceMaterializationStore,
-    _ManifestEntry,
     _canonical_snapshot_checksum,
+    _ManifestEntry,
 )
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.workspaces import (
