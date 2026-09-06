@@ -22,9 +22,7 @@ The report schema is versioned as:
 ai-multi-agent-platform/platform-conformance/v1
 ```
 
-A required scenario must pass for the selected profile to claim compatibility. An optional capability may be reported as `disabled` or `unsupported` without failing the reference single-node baseline. A required scenario that has not yet been wired into #46 is reported as `not_implemented` and blocks a release compatibility claim.
-
-This distinction is deliberate: the runner must never make an operational-v1 claim merely because an acceptance path is absent.
+A required scenario must pass for the selected profile to claim compatibility. An optional capability may be reported as `disabled` or `unsupported` without failing the reference single-node baseline. A required scenario without an executable path is `not_implemented` and blocks a compatibility claim.
 
 ## Profiles
 
@@ -56,14 +54,15 @@ The integration tier includes the complete fast tier and explicitly records opti
 - S — optional Registry;
 - X — optional Control Plane HA.
 
-Until a concrete #46 integration path is selected/enabled, those entries are emitted as `disabled` rather than silently omitted or counted as a baseline failure. Adapter-specific jobs can replace the disabled record with a real executable scenario and record the tested component version without making that adapter mandatory for the reference baseline.
+Until a concrete #46 integration path is selected/enabled, those entries are emitted as `disabled` rather than silently omitted or counted as a baseline failure. Adapter-specific jobs must replace the disabled record with real executable evidence before compatibility for that adapter/profile is claimed.
 
 ### `release`
 
-The release tier extends integration with representative operational product paths. The following required scenarios now reuse maintained evidence from their owning domains:
+The reference release tier extends integration with representative operational product paths. Every required reference-release scenario now has maintained executable evidence:
 
 | Scenario | Maintained acceptance evidence | Owner |
 | --- | --- | --- |
+| G — Failure/retry | controlled failed Run -> canonical failed Task -> retry Run attempt 2 -> retry/failure telemetry | #46 / #16 |
 | I — Automation | one-time schedule creates a canonical Task with provenance | #18 |
 | K — Task-centric Chat | message-to-Task Control Plane handoff is canonical and bidirectionally linked | #72 |
 | L — Terminal | project/workspace-scoped Control Plane session create/list/get/terminate with idempotency | #73 |
@@ -72,15 +71,11 @@ The release tier extends integration with representative operational product pat
 | P — Standard Agents/Teams | starter catalog lifecycle uses the real Control Plane bootstrap/clone path | #77 |
 | W — Task management | priority/deadline/not-before, assignment and dependency semantics stay canonical metadata | #88 |
 
-The only required scenario still lacking one maintained #46 end-to-end command is:
+G is intentionally one coherent test rather than two unrelated assertions: a real canonical Run fails through the lifecycle backend, the Task becomes failed, `retry_task()` creates a distinct second Run with `attempt == 2`, canonical history contains the failed and retry events, and the Observability event provider emits exactly one `platform.run.retries` metric for that retry.
 
-- G — controlled failure/retry with canonical retry semantics and telemetry.
+Optional or conditional domains such as Notifications, Templates, portable Import/Export, Registry, Repository/Git, Organization collaboration, distributed Workers and HA remain non-blocking when their profile is disabled or unsupported. That does **not** constitute compatibility evidence for those profiles. #46 remains open until the additional integration/environment matrix required by the issue is represented and exercised.
 
-The repository already has focused retry telemetry and retryable-failure tests, but #46 does not combine separate proofs into a stronger end-to-end compatibility claim. G remains `not_implemented` until one representative path demonstrates the complete criterion coherently.
-
-Optional or conditional domains such as Notifications, Templates, portable Import/Export, Registry, Repository/Git, Organization collaboration and HA remain non-blocking when their profile is disabled. Scenario Y for #384 durable Plan/Step coordination is recorded as `unsupported` until the corresponding coordination path is available.
-
-Consequently the release profile remains intentionally **incomplete** while G is unresolved; executable I/K/L/M/O/P/W failures are real incompatibilities rather than missing-evidence states.
+Scenario Y for #384 durable Plan/Step coordination remains `unsupported` until that coordination path is available; its absence does not invalidate the current reference single-node release profile unless a release claims that optional capability.
 
 ## Compatibility semantics
 
@@ -90,7 +85,7 @@ Scenario status values:
 - `fail` — an enabled acceptance command failed or could not execute;
 - `disabled` — an optional capability/profile is intentionally not enabled;
 - `unsupported` — an optional/conditional profile is not yet available in this environment;
-- `not_implemented` — a required #46 acceptance path has not yet been registered.
+- `not_implemented` — a required acceptance path has not yet been registered.
 
 Report compatibility values:
 
@@ -98,6 +93,8 @@ Report compatibility values:
 - `incompatible` — at least one enabled scenario failed;
 - `incomplete` — no enabled scenario failed, but at least one required scenario has no passing acceptance result;
 - `not_claimed` — used at scenario level for disabled/unsupported/not-yet-implemented paths.
+
+A `compatible` reference release report is a compatibility claim only for the explicitly recorded reference deployment profile. It is not evidence that Hermes, Forge, distributed Worker, Registry or HA profiles have passed.
 
 ## Evidence model
 
@@ -114,7 +111,7 @@ Every report records:
 - command output tail and failure category when applicable;
 - canonical resource IDs and evidence references when a scenario exposes them.
 
-The current aggregator leaves canonical resource ID/evidence collections empty for subsystem tests that do not yet export them. They are explicit empty collections rather than fabricated identifiers. As scenarios become true cross-layer fixtures, #46 should populate those fields with Task/Run/Result/Artifact/Verification IDs and retained trace/log/artifact references.
+The current aggregator leaves canonical resource ID/evidence collections empty for subsystem tests that do not yet export them. They are explicit empty collections rather than fabricated identifiers. As scenarios become richer cross-layer fixtures, #46 should populate those fields with Task/Run/Result/Artifact/Verification IDs and retained trace/log/artifact references.
 
 ## Architecture invariants
 
@@ -123,7 +120,7 @@ The current aggregator leaves canonical resource ID/evidence collections empty f
 1. canonical `contracts`, `domain` and `kernel` source must not import platform adapter implementations or Hermes/Forge/LiteLLM/MCP runtime packages;
 2. optional backend packages such as LiteLLM/MCP/provider SDKs must not become mandatory platform runtime dependencies.
 
-Additional #46 invariants should be added here as they can be checked reliably without encoding brittle implementation details.
+Additional #46 invariants should be added as they can be checked reliably without encoding brittle implementation details.
 
 ## CI tiers
 
@@ -133,7 +130,9 @@ The repository treats conformance as three different cost/coverage tiers rather 
 2. **Integration** — real optional adapters/services where configured, distributed fixtures and richer cross-domain paths.
 3. **Release acceptance** — representative operational, recovery, portability, security and product-path evidence required for the compatibility claims made by that release.
 
-The fast tier is wired into normal PR/main CI. Integration and release remain explicit CLI profiles while their matrix and environment-specific compatibility claims are being completed. A release profile is not promoted to a blocking release gate until every required scenario has a maintained executable path.
+`.github/workflows/platform-conformance.yml` runs both `conformance-fast` and the real `conformance-release` reference profile on pull requests and `main`, retaining separate machine-readable JSON reports. The release command itself must exit successfully; there is no allow-incomplete bypass.
+
+Additional adapter/distributed/HA lanes remain separate because a green reference profile must not silently imply compatibility with an optional environment that was not exercised.
 
 ## Relationship to #252
 
