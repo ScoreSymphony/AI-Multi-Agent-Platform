@@ -56,10 +56,10 @@ def test_enabling_supported_optional_claim_makes_it_required_and_executable() ->
     assert "test_event_provider_projects_task_event_and_replay_aggregates_safely" in " ".join(
         scenarios["N"].command or ()
     )
-    assert "test_failure_rolls_back_applied_resources_and_tracks_recovery" in " ".join(
+    assert "test_executor_rolls_back_real_team_and_agent_in_reverse_order" in " ".join(
         scenarios["R"].command or ()
     )
-    assert "test_task_run_materializes_repository_revision_and_returns_change_artifact" in " ".join(
+    assert "test_control_plane_records_repository_input_before_start_and_on_retry" in " ".join(
         scenarios["T"].command or ()
     )
     assert "test_resource_ownership_sharing_revoke_and_cross_org_isolation" in " ".join(
@@ -74,8 +74,12 @@ def test_distributed_profile_covers_security_result_identity_and_trace_safe_tele
     scenario = _by_id(ConformanceProfile.RELEASE, ("E",))["E"]
     command = " ".join(scenario.command or ())
     assert scenario.required is True
-    assert "test_dispatch_authorization_receives_canonical_worker_context_and_grant" in command
-    assert "test_terminal_result_recovery_and_timeout_diagnostics_are_canonical" in command
+    assert (
+        "test_dispatch_authorization_denial_releases_reservation_before_worker_execution" in command
+    )
+    assert (
+        "test_terminal_result_is_recovered_after_restart_and_then_survives_without_worker" in command
+    )
     assert "test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry" in command
 
 
