@@ -251,8 +251,12 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         }
         return worker_actions.get(worker_verb, AuthorizationAction.MODIFY), ResourceType.WORKER
 
+    routing_profile_verb: str | None = None
     if action.startswith("model-routing-profile:"):
         routing_profile_verb = action.removeprefix("model-routing-profile:")
+    elif action.startswith("model-routing-profile."):
+        routing_profile_verb = action.removeprefix("model-routing-profile.")
+    if routing_profile_verb is not None:
         routing_profile_actions = {
             "list": AuthorizationAction.MODEL_ROUTING_PROFILE_LIST,
             "read": AuthorizationAction.MODEL_ROUTING_PROFILE_READ,
