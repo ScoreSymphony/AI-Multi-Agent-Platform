@@ -53,9 +53,9 @@ def test_single_node_stress_escalates_with_explicit_safety_bounds(tmp_path: Path
             assert point.error_rate == 0.0
             assert report.correctness.passed is True
 
-        Draft202012Validator(
-            _schema("docs/schemas/benchmark-stress.v1.schema.json")
-        ).validate(execution.summary.to_dict())
+        Draft202012Validator(_schema("docs/schemas/benchmark-stress.v1.schema.json")).validate(
+            execution.summary.to_dict()
+        )
 
     asyncio.run(run())
 
