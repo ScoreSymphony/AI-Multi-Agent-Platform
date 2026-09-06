@@ -8,7 +8,12 @@ from dataclasses import replace
 from typing import Protocol
 from uuid import NAMESPACE_URL, uuid5
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    ExecutionHandle,
+    ExecutionSnapshot,
+)
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.workspaces import RemoteMaterializationResult, Workspace, WorkspaceProvider
@@ -110,17 +115,17 @@ class ArtifactPublishingWorkerDispatcher:
     def worker_id(self) -> str:
         return self._dispatcher.worker_id
 
-    async def dispatch(self, job: WorkerJobRequest):
+    async def dispatch(self, job: WorkerJobRequest) -> ExecutionHandle:
         existing = self._jobs.get(job.worker_job_id)
         if existing is not None and existing != job:
             raise RegistryError("duplicate worker_job_id carries a different artifact request")
         self._jobs[job.worker_job_id] = job
         return await self._dispatcher.dispatch(job)
 
-    async def get(self, worker_job_id: str):
+    async def get(self, worker_job_id: str) -> ExecutionSnapshot:
         return await self._dispatcher.get(worker_job_id)
 
-    async def cancel(self, worker_job_id: str):
+    async def cancel(self, worker_job_id: str) -> ExecutionSnapshot:
         return await self._dispatcher.cancel(worker_job_id)
 
     async def result(self, worker_job_id: str) -> WorkerJobResult | None:
