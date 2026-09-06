@@ -14,7 +14,8 @@ from datetime import datetime
 from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
 from ai_multi_agent_platform.distributed import (
-    CanonicalWorkerArtifactIntegrator,
+    ArtifactPublishingWorkerDispatcher,
+    CanonicalWorkspaceArtifactPublisher,
     DistributedRuntime,
     WorkerStatus,
 )
@@ -165,17 +166,22 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             self._files,
             self._context_resolver,
         )
-        result_integrator = (
-            None
-            if self._kernel is None
-            else CanonicalWorkerArtifactIntegrator(self._files, self._kernel)
-        )
-        dispatcher = MaterializingWorkerDispatcher(
+        materializing = MaterializingWorkerDispatcher(
             transport_dispatcher,
             materializer,
             WorkspaceJobMaterializationResolver(self._workspaces),
-            result_integrator=result_integrator,
         )
+        dispatcher = materializing
+        if self._kernel is not None:
+            dispatcher = ArtifactPublishingWorkerDispatcher(
+                materializing,
+                CanonicalWorkspaceArtifactPublisher(
+                    self._workspaces,
+                    self._files,
+                    self._kernel,
+                    self._context_resolver,
+                ),
+            )
         self.runtime.attach_worker(dispatcher)
         self._attached.add(worker_id)
 
