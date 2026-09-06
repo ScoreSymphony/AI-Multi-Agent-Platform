@@ -16,11 +16,11 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.control_plane.plugin_api import _manifest_document
 from ai_multi_agent_platform.deployment import SingleNodeConfig
 from ai_multi_agent_platform.distribution import (
+    REGISTRY_PREVIEW_COMMAND,
     ArtifactIntegrity,
     DistributionService,
     JsonRegistryInstallationStore,
     LocalRegistryProvider,
-    REGISTRY_PREVIEW_COMMAND,
     RegistryItem,
     RegistryItemType,
     RegistryPluginReconciliationError,
