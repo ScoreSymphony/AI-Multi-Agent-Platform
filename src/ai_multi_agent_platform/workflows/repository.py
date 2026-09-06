@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.domain import OwnerRef
 
 from .models import WorkflowDefinition, WorkflowRevision
 
@@ -29,6 +30,15 @@ class WorkflowRepository(Protocol):
     def get_revision(self, workflow_id: str, revision: int) -> WorkflowRevision: ...
 
     def list_revisions(self, workflow_id: str) -> tuple[WorkflowRevision, ...]: ...
+
+    def compensate_created(
+        self,
+        workflow_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+        expected_instance_id: str,
+    ) -> None: ...
 
 
 class InMemoryWorkflowRepository:
@@ -101,6 +111,50 @@ class InMemoryWorkflowRepository:
             item for (current_id, _), item in self._revisions.items() if current_id == workflow_id
         ]
         return tuple(sorted(revisions, key=lambda item: item.revision))
+
+    def compensate_created(
+        self,
+        workflow_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+        expected_instance_id: str,
+    ) -> None:
+        """Remove only an untouched workflow proven to originate from one failed apply."""
+
+        definition = self.get_workflow(workflow_id)
+        if definition.owner_ref != expected_owner_ref:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "workflow compensation owner does not match",
+                details={"workflow_id": workflow_id},
+            )
+        if definition.current_revision != 1:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "workflow changed after creation and cannot be compensated",
+                details={
+                    "workflow_id": workflow_id,
+                    "current_revision": definition.current_revision,
+                },
+            )
+        revision = self.get_revision(workflow_id, 1)
+        if revision.content.provenance.source != expected_source:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "workflow provenance does not match failed Template apply",
+                details={"workflow_id": workflow_id},
+            )
+        if revision.content.provenance.metadata.get("template_instance_id") != expected_instance_id:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "workflow Template instance provenance does not match failed apply",
+                details={"workflow_id": workflow_id},
+            )
+        del self._workflows[workflow_id]
+        for key in tuple(self._revisions):
+            if key[0] == workflow_id:
+                del self._revisions[key]
 
     @staticmethod
     def _validate_pair(
