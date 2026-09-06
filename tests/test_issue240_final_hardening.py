@@ -8,8 +8,6 @@ import subprocess
 from contextlib import suppress
 from pathlib import Path
 
-import pytest
-
 from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.distributed import WorkerJobRequest
@@ -166,7 +164,7 @@ def _run_openssl(openssl: str, *args: str) -> None:
 def _generate_mtls_material(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:
     openssl = shutil.which("openssl")
     if openssl is None:
-        pytest.skip("OpenSSL CLI is required for the positive mTLS transport acceptance test")
+        raise AssertionError("OpenSSL CLI is required for the positive mTLS acceptance test")
 
     ca_key = tmp_path / "ca.key"
     ca_cert = tmp_path / "ca.crt"
