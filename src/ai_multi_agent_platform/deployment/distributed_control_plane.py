@@ -7,7 +7,6 @@ scheduler/ownership authority.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import datetime
 
 from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext
@@ -32,11 +31,12 @@ from ai_multi_agent_platform.distributed.workspace import (
 )
 from ai_multi_agent_platform.distributed.workspace_transport import (
     TransportRemoteWorkspaceMaterializer,
+    WorkspaceDataContextResolver,
 )
 from ai_multi_agent_platform.messaging import MessageTransport
 from ai_multi_agent_platform.workspaces import Workspace, WorkspaceProvider
 
-WorkspaceContextResolver = Callable[[Workspace], DataAccessContext]
+WorkspaceContextResolver = WorkspaceDataContextResolver
 
 
 class DeploymentWorkerProtocolService(WorkerProtocolService):
