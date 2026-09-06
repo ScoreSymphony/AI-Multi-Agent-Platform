@@ -54,6 +54,11 @@ The package exposes four independent deployment modes/commands:
 | `platform-worker` | independently running Worker process from one #240 profile binding |
 
 The distributed commands are deployment adapters. They do not replace any canonical interface.
+`platform-distributed-server` always requires an explicit runnable profile through `--profile` or
+`PLATFORM_DISTRIBUTED_PROFILE`; a description-only or reporter-less profile is rejected at startup.
+After the distributed-only `--profile` option is consumed, the command uses the ordinary #39 server
+subcommands, so a Control Plane is started with `serve`. Listener configuration remains owned by
+the normal single-node configuration rather than by distributed-only `--host`/`--port` flags.
 
 ## Reference profiles
 
@@ -83,13 +88,11 @@ Roles emerge from Node/Worker facts rather than host names. Examples:
 
 Equal candidates retain #14's deterministic Worker-ID tie-break.
 
-## Registration and discovery
-
-### Reporter ownership
+## Registration, reporters and discovery
 
 A profile Node may declare several Worker processes. Exactly one `reporter_worker_id` owns the
-complete remote Node registration and heartbeat snapshot. Sibling Worker processes expose their
-own execution/Workspace endpoints but do not create competing Node reporters.
+complete authenticated Node registration and heartbeat snapshot. Sibling Worker processes expose
+their own execution/Workspace endpoints but do not create competing Node reporters.
 
 The reporter:
 
@@ -104,8 +107,6 @@ The reporter:
 Remote registration cannot self-grant Control-Plane-owned trust, drain or maintenance state.
 Registration/liveness/state-change timestamps remain Control-Plane-owned and are not accepted as
 Worker-authored wire state.
-
-### Control-Plane attachment
 
 A successful authenticated registration is composed into the existing runtime as:
 
@@ -129,7 +130,7 @@ Worker ID can be attached again on a later re-registration.
 
 ## Network transport
 
-The repository now ships a real network-capable #35 adapter:
+The repository ships a real network-capable #35 adapter:
 
 - `TcpMessageBroker` — self-hosted broker/server;
 - `TcpMessageTransport` — Control Plane and Worker client adapter.
@@ -144,6 +145,9 @@ Security defaults fail closed:
 - non-loopback `TcpMessageTransport` clients require TLS;
 - the private Worker-protocol HTTP client requires HTTPS for non-loopback Control Plane URLs;
 - bearer credentials and transport HMAC keys are supplied at runtime, not committed in profiles.
+
+Positive TLS/mTLS acceptance is covered by the #240 hardening suite using a runtime-generated test
+CA, server certificate and client certificate. No private key is committed to the repository.
 
 The profile field `transport_endpoint_ref` remains deployment metadata; it does not become a
 canonical Worker/Node/transport identity.
@@ -191,7 +195,9 @@ cleanup / retain according to outcome
 
 Changed output files are reconstructed as canonical `FileRecord` state. Canonical artifact
 references already attached to the Worker job/result remain references and survive the remote
-transport/result path; this layer does not invent a second artifact-registration model.
+transport/result path; this layer does not invent a second artifact-registration model. Zero-byte
+files use the same prepare/chunk/commit and result-manifest/result-chunk contracts as non-empty
+files; the final #240 regression suite explicitly covers empty input and empty result files.
 
 ## Network and exposure matrix
 
@@ -201,7 +207,7 @@ provider-specific fixed ports.
 | Flow | Default scope | Required protection | Notes |
 | --- | --- | --- | --- |
 | browser/client -> Control Plane | public only when explicitly enabled | normal Control Plane auth; TLS for public exposure | canonical northbound API |
-| Control Plane -> local Worker | loopback/private | local or authenticated #35 transport | no public Worker listener |
+| Control Plane -> local Worker | loopback/private | authenticated #35 transport; loopback TLS optional | no public Worker listener |
 | Control Plane <-> remote Worker messages | private | TLS plus HMAC or mTLS | `TcpMessageTransport` |
 | remote Worker -> registration/heartbeat | private | HTTPS, scoped #36 Worker credential, nonce/replay protection | Worker-protocol ASGI route |
 | Workspace/artifact transfer | same private #35 transport | transport identity + canonical access context | no Control-Plane paths |
@@ -209,33 +215,86 @@ provider-specific fixed ports.
 | browser/tool/connector service | private by default | scoped service identity | optional |
 | SQLite/local filesystem stores | no listener | filesystem permissions | never direct network services |
 
-## Minimal local multi-process flow
+## Runnable same-host multi-process profile
 
-For development on one machine, loopback is sufficient. Example shape:
+The checked-in `multi-local-workers.json` profile contains one Node with two independent Worker
+processes. The reporter is
+`worker_00000000-0000-4000-8000-000000000241`; sibling
+`worker_00000000-0000-4000-8000-000000000242` runs the same execution/Workspace endpoints but does
+not emit a competing Node heartbeat.
 
 ```bash
-# terminal 1
+# terminal 1: broker
 platform-message-broker --host 127.0.0.1 --port 8765
 
-# terminal 2
+# terminal 2: profile-aware distributed Control Plane
 export PLATFORM_MESSAGE_BROKER_HOST=127.0.0.1
 export PLATFORM_MESSAGE_BROKER_PORT=8765
-platform-distributed-server --host 127.0.0.1 --port 8000
+platform-distributed-server \
+  --profile deploy/distributed/profiles/multi-local-workers.json \
+  serve
 
-# terminal 3 (reporter Worker; credential must already be provisioned)
+# terminal 3: reporter Worker
 export PLATFORM_WORKER_TOKEN='<runtime-only-worker-credential>'
 platform-worker \
-  --profile deploy/distributed/profiles/remote-worker.json \
-  --host-ref device-worker \
-  --worker-id worker_00000000-0000-4000-8000-000000000251 \
+  --profile deploy/distributed/profiles/multi-local-workers.json \
+  --host-ref device-a \
+  --worker-id worker_00000000-0000-4000-8000-000000000241 \
+  --control-plane-url http://127.0.0.1:8000 \
+  --broker-host 127.0.0.1 \
+  --broker-port 8765
+
+# terminal 4: sibling Worker; no Node reporter ownership
+platform-worker \
+  --profile deploy/distributed/profiles/multi-local-workers.json \
+  --host-ref device-a \
+  --worker-id worker_00000000-0000-4000-8000-000000000242 \
   --control-plane-url http://127.0.0.1:8000 \
   --broker-host 127.0.0.1 \
   --broker-port 8765
 ```
 
-Treat IDs above as examples only; use the actual values declared by the selected profile. A
-profile containing multiple Workers may start additional `platform-worker` processes for sibling
-Worker IDs; only `reporter_worker_id` performs Node reporting.
+The token shown is intentionally a placeholder. The actual scoped reporter credential must be
+provisioned through #36 and injected at runtime. The sibling process still uses the same canonical
+Worker protocol/runtime composition; `connection_mode="local"` is locality metadata, not a second
+unauthenticated Worker model.
+
+## CPU + accelerator and heterogeneous profile startup
+
+Every Node in the runnable reference profiles has exactly one reporter. Start the distributed
+server once with the selected profile, then start one `platform-worker` process per declared
+Worker, using that Worker's `host_ref` and `worker_id`.
+
+For `cpu-control-gpu-worker.json`:
+
+| Host binding | Reporter Worker | Placement meaning |
+| --- | --- | --- |
+| `device-cpu` | `worker_00000000-0000-4000-8000-000000000262` | general CPU execution |
+| `device-accelerated` | `worker_00000000-0000-4000-8000-000000000263` | generic accelerator-capable execution |
+
+For `heterogeneous-three-node.json`:
+
+| Host binding | Reporter Worker | Declared facts |
+| --- | --- | --- |
+| `device-a` | `worker_00000000-0000-4000-8000-000000000273` | Linux/x86_64 general execution, primary Workspace locality |
+| `device-b` | `worker_00000000-0000-4000-8000-000000000274` | Windows/x86_64 accelerator/model-serving capability |
+| `device-c` | `worker_00000000-0000-4000-8000-000000000275` | Linux/aarch64 data-local execution |
+
+Those host labels are deployment bindings only. Scheduling still uses the canonical capability,
+resource, runtime, model, OS and locality metadata carried by #14 contracts.
+
+A profile-aware Control Plane launch follows the same shape for either profile:
+
+```bash
+export PLATFORM_MESSAGE_BROKER_HOST=127.0.0.1
+export PLATFORM_MESSAGE_BROKER_PORT=8765
+platform-distributed-server \
+  --profile deploy/distributed/profiles/heterogeneous-three-node.json \
+  serve
+```
+
+For non-loopback Workers, replace the loopback endpoints with private reachable endpoints and
+configure the TLS/HTTPS settings described below.
 
 ## Reproducible two-machine flow
 
@@ -251,7 +310,8 @@ A physical two-host deployment uses the same composition with network security e
    (and `--client-ca-file` when using mTLS);
 5. configure `PLATFORM_MESSAGE_BROKER_HOST`, `PLATFORM_MESSAGE_BROKER_PORT`, CA/client TLS values
    and optionally `PLATFORM_TRANSPORT_AUTH_KEY` for `platform-distributed-server`;
-6. expose the Control Plane through an HTTPS reverse proxy/private TLS edge; the standard HTTP
+6. start `platform-distributed-server --profile <selected-profile> serve`;
+7. expose the Control Plane through an HTTPS reverse proxy/private TLS edge; the standard HTTP
    application remains deployment-neutral and does not own certificate termination.
 
 ### Machine B — Worker
@@ -327,7 +387,7 @@ the Control Plane is unreachable, heartbeat expiry provides the canonical fallba
 1. choose/provision canonical Node and Worker IDs;
 2. declare resources/capabilities/runtimes/locality in the profile;
 3. provision the scoped Worker credential and transport identity outside source control;
-4. start the broker/Control Plane transport if not already running;
+4. start the broker and profile-aware Control Plane if not already running;
 5. start the Worker process;
 6. verify registration, heartbeat and scheduler eligibility.
 
@@ -337,11 +397,12 @@ Set canonical Worker drain state before maintenance. New jobs are rejected while
 ownership remains visible for reconciliation. Stop only after reaching the intended in-flight
 state.
 
-### Remove a Worker
+### Remove or replace a Worker
 
 Use explicit deregistration for permanent removal. A hardware/process replacement may retain the
 same canonical Worker identity only when it represents the same logical Worker and security
-policy permits it.
+policy permits it. Replacement hardware may change deployment metadata without changing Task/Run
+logic.
 
 ### Rotate credentials
 
@@ -368,7 +429,7 @@ Canonical Task/Run/Workspace identity does not require migration into a second s
 
 Profiles may declare optional model, browser, connector or other services. Disabled services have
 no endpoint. Enabled services remain replaceable/private and their degradation affects only
-dependent capabilities.
+independent capabilities.
 
 The checked-in no-paid-service path uses local/reference execution and requires no paid external
 service. Advanced distributed deployment itself does not introduce a paid API dependency.
@@ -378,7 +439,7 @@ service. Advanced distributed deployment itself does not introduce a paid API de
 - scoped/replay-protected Worker credentials;
 - TLS for every non-loopback Worker/message connection;
 - HMAC or mTLS identity on non-loopback message broker listeners;
-- no raw credentials in profiles/source control;
+- no raw credentials or private keys in profiles/source control;
 - remote registration cannot alter administrative trust/drain/maintenance ownership;
 - Worker Workspace roots contain only materialized execution data, not application credentials;
 - private-by-default optional services;
@@ -394,6 +455,14 @@ attachment, two independent Worker OS processes, graceful re-registration, TCP l
 expiry and same-ID restart, and #39 regression. The #388/#433 suites additionally exercise real
 TCP reconnect/redelivery, exact remote Workspace transfer, process isolation, checksums, result
 collection and cleanup.
+
+The final #240 hardening coverage adds:
+
+- zero-byte canonical Workspace input materialization;
+- zero-byte changed/result file reconstruction through the canonical `FileProvider`;
+- a successful verified mTLS broker/client publish/subscribe/ack path with runtime-generated test
+  certificates;
+- profile-aware operator examples for same-host, CPU+accelerator and heterogeneous deployments.
 
 The composed #240 socket acceptance path exercises scheduler -> network Worker dispatch -> exact
 Workspace materialization -> execution -> canonical result/file collection -> cleanup, while the
