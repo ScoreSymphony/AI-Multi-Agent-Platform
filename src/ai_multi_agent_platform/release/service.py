@@ -51,12 +51,13 @@ def evaluate_release(manifest: ReleaseManifest) -> ReleaseReadinessReport:
         elif not gate.required and gate.status is GateStatus.FAILED:
             warnings.append(f"optional gate {gate.name!r} failed")
 
+    if not manifest.artifact_hashes:
+        blockers.append("release artifact hashes are missing")
+
     upstream_names = {upstream.component for upstream in manifest.upstreams}
     for upstream in manifest.upstreams:
         if not upstream.provenance_ref:
             blockers.append(f"upstream {upstream.component!r} is missing provenance_ref")
-        if not upstream.artifact_hashes:
-            blockers.append(f"upstream {upstream.component!r} is missing artifact hashes")
 
     for record in manifest.compatibility:
         if record.component not in upstream_names:
@@ -103,6 +104,7 @@ def release_metadata(manifest: ReleaseManifest) -> dict[str, object]:
         "compatibility": [item.to_dict() for item in manifest.compatibility],
         "sbom_ref": manifest.sbom_ref,
         "provenance_ref": manifest.provenance_ref,
+        "artifact_hashes": dict(manifest.artifact_hashes),
         "release_ready": report.ready,
         "release_blockers": list(report.blockers),
         "release_warnings": list(report.warnings),
