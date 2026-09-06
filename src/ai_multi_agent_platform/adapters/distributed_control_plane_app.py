@@ -1,18 +1,23 @@
 """Advanced distributed Control-Plane entrypoint for issue #240.
 
 The normal #39 single-node composition remains the fallback. This adapter opts the same canonical
-Task/Run kernel into #14 distributed execution, then exposes the authenticated Worker protocol and
-#35 network transport at the outer deployment boundary.
+Task/Run kernel into #14 distributed execution, validates one executable #240 deployment profile,
+then exposes the authenticated Worker protocol and #35 network transport at the outer boundary.
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import ssl
 import sys
 from collections.abc import Sequence
 from typing import Any, cast
 
+from ai_multi_agent_platform.deployment.advanced_profiles import (
+    AdvancedDeploymentProfile,
+    load_advanced_deployment_profile,
+)
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
 from ai_multi_agent_platform.deployment.distributed_control_plane import build_worker_protocol_app
 from ai_multi_agent_platform.deployment.server import main as run_server
@@ -21,9 +26,20 @@ from ai_multi_agent_platform.messaging import TcpMessageTransport
 
 from .single_node_app import build_default_single_node_deployment
 
+_PROFILE_ENV = "PLATFORM_DISTRIBUTED_PROFILE"
 
-def build_distributed_control_plane_deployment(config: SingleNodeConfig) -> SingleNodeDeployment:
+
+def build_distributed_control_plane_deployment(
+    config: SingleNodeConfig,
+    *,
+    profile_path: str | None = None,
+) -> SingleNodeDeployment:
     """Build one Control Plane whose canonical Runs and Worker protocol share one runtime."""
+
+    resolved_profile = profile_path or os.environ.get(_PROFILE_ENV)
+    if resolved_profile is not None:
+        profile = load_advanced_deployment_profile(resolved_profile)
+        _validate_runnable_profile(profile)
 
     host = os.environ.get("PLATFORM_MESSAGE_BROKER_HOST", "127.0.0.1")
     port_raw = os.environ.get("PLATFORM_MESSAGE_BROKER_PORT", "")
@@ -66,11 +82,41 @@ def build_distributed_control_plane_deployment(config: SingleNodeConfig) -> Sing
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    raw_args = list(argv) if argv is not None else sys.argv[1:]
+    profile_parser = argparse.ArgumentParser(add_help=False)
+    profile_parser.add_argument("--profile", default=None)
+    profile_args, server_args = profile_parser.parse_known_args(raw_args)
+    profile_path = str(profile_args.profile) if profile_args.profile is not None else None
+    profile_path = profile_path or os.environ.get(_PROFILE_ENV)
+    if not profile_path:
+        print(
+            "distributed Control Plane requires --profile or PLATFORM_DISTRIBUTED_PROFILE",
+            file=sys.stderr,
+        )
+        return 2
+
+    def builder(config: SingleNodeConfig) -> SingleNodeDeployment:
+        return build_distributed_control_plane_deployment(config, profile_path=profile_path)
+
     try:
-        return run_server(argv, deployment_builder=build_distributed_control_plane_deployment)
+        return run_server(server_args, deployment_builder=builder)
     except ValueError as exc:
         print(f"cannot compose distributed Control Plane: {exc}", file=sys.stderr)
         return 2
+
+
+def _validate_runnable_profile(profile: AdvancedDeploymentProfile) -> None:
+    """Reject description-only profiles that the shipped Worker process cannot actually start."""
+
+    for node in profile.nodes:
+        if node.reporter_worker_id is None:
+            raise ValueError(
+                f"deployment node {node.binding.host_ref!r} has no reporter_worker_id"
+            )
+        if node.binding.credential_reference is None:
+            raise ValueError(
+                f"deployment node {node.binding.host_ref!r} has no Worker credential reference"
+            )
 
 
 def _client_ssl_context() -> ssl.SSLContext | None:
