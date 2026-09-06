@@ -61,6 +61,7 @@ def execute_registry(
         resource_id = quote(f"{item_id}@{version}", safe="")
         return client.get(f"/registry-items/{resource_id}")
 
+    version: str | None
     if args.command == "activate":
         version = str(args.version)
         confirm(args, "activate registry item", f"{item_id}@{version}")
