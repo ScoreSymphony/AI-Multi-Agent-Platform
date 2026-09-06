@@ -40,3 +40,32 @@ jobs:
           name: platform-conformance-fast
           path: conformance-fast.json
           if-no-files-found: warn
+
+  release-evidence:
+    name: conformance-release-evidence
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+      - name: Install conformance environment
+        run: python -m pip install -e '.[dev]'
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install --no-audit --no-fund
+      - name: Run registered release evidence
+        run: >-
+          python scripts/ci/issue46_release_evidence_gate.py
+          --json-report conformance-release-evidence.json
+      - name: Upload release evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: platform-conformance-release-evidence
+          path: conformance-release-evidence.json
+          if-no-files-found: warn
