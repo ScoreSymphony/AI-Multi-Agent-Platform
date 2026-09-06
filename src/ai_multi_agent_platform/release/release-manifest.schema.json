@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/release-manifest-v1.json",
+  "title": "AI Multi-Agent Platform release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "release_version",
+    "release_kind",
+    "source_commit",
+    "created_at",
+    "release_notes_ref",
+    "versions",
+    "upstreams",
+    "compatibility",
+    "gates",
+    "sbom_ref",
+    "provenance_ref"
+  ],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "release_version": {"type": "string", "minLength": 1},
+    "release_kind": {
+      "enum": ["patch", "minor", "major", "security_hotfix", "prerelease"]
+    },
+    "source_commit": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "release_notes_ref": {"type": "string", "minLength": 1},
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform_release", "domain_schema", "api", "migration_revision",
+        "plugin_manifest", "portable_format", "template_schema", "backup_format",
+        "worker_protocol", "message_protocol", "adapter_versions",
+        "plugin_interface_versions"
+      ],
+      "properties": {
+        "platform_release": {"type": "string", "minLength": 1},
+        "domain_schema": {"type": "string", "minLength": 1},
+        "api": {"type": "string", "minLength": 1},
+        "migration_revision": {"type": "string", "minLength": 1},
+        "plugin_manifest": {"type": "string", "minLength": 1},
+        "portable_format": {"type": "string", "minLength": 1},
+        "template_schema": {"type": "string", "minLength": 1},
+        "backup_format": {"type": "string", "minLength": 1},
+        "worker_protocol": {"type": "string", "minLength": 1},
+        "message_protocol": {"type": "string", "minLength": 1},
+        "adapter_versions": {"$ref": "#/$defs/stringMap"},
+        "plugin_interface_versions": {"$ref": "#/$defs/stringMap"}
+      }
+    },
+    "upstreams": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/upstream"}
+    },
+    "compatibility": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/compatibility"}
+    },
+    "gates": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/gate"}
+    },
+    "sbom_ref": {"type": "string", "minLength": 1},
+    "provenance_ref": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component", "source_url", "revision", "revision_kind", "license", "modified",
+        "patches", "build_status", "test_status", "artifact_hashes", "sbom_ref",
+        "provenance_ref", "last_verified_at"
+      ],
+      "properties": {
+        "component": {"type": "string", "minLength": 1},
+        "source_url": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "revision_kind": {"type": "string", "minLength": 1},
+        "license": {"type": "string", "minLength": 1},
+        "modified": {"type": "boolean"},
+        "patches": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "build_status": {"type": "string", "minLength": 1},
+        "test_status": {"type": "string", "minLength": 1},
+        "artifact_hashes": {"$ref": "#/$defs/stringMap"},
+        "sbom_ref": {"type": ["string", "null"]},
+        "provenance_ref": {"type": ["string", "null"]},
+        "last_verified_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component", "upstream_revision", "status", "tested_at",
+        "platform_constraint", "notes"
+      ],
+      "properties": {
+        "component": {"type": "string", "minLength": 1},
+        "upstream_revision": {"type": "string", "minLength": 1},
+        "status": {
+          "enum": ["supported", "tested", "experimental", "deprecated", "blocked"]
+        },
+        "tested_at": {"type": "string", "format": "date-time"},
+        "platform_constraint": {"type": "string", "minLength": 1},
+        "notes": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "evidence", "required"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "status": {"enum": ["passed", "failed", "not_run"]},
+        "evidence": {"type": "string", "minLength": 1},
+        "required": {"type": "boolean"}
+      }
+    }
+  }
+}
