@@ -75,7 +75,12 @@ class JsonModelRoutingProfileRepository:
         self._validate_pair(definition, revision, expected_revision=1)
         self._definitions[definition.profile_id] = definition
         self._revisions[(revision.profile_id, revision.revision)] = revision
-        self._persist()
+        try:
+            self._persist()
+        except Exception:
+            self._definitions.pop(definition.profile_id, None)
+            self._revisions.pop((revision.profile_id, revision.revision), None)
+            raise
 
     def update_profile(
         self,
@@ -98,7 +103,12 @@ class JsonModelRoutingProfileRepository:
             )
         self._definitions[definition.profile_id] = definition
         self._revisions[(revision.profile_id, revision.revision)] = revision
-        self._persist()
+        try:
+            self._persist()
+        except Exception:
+            self._definitions[definition.profile_id] = current
+            self._revisions.pop((revision.profile_id, revision.revision), None)
+            raise
 
     def get_definition(self, profile_id: str) -> ModelRoutingProfileDefinition:
         try:
@@ -134,15 +144,26 @@ class JsonModelRoutingProfileRepository:
             return current
         updated = replace(current, enabled=enabled, updated_at=datetime.now(UTC))
         self._definitions[profile_id] = updated
-        self._persist()
+        try:
+            self._persist()
+        except Exception:
+            self._definitions[profile_id] = current
+            raise
         return updated
 
     def delete_profile(self, profile_id: str) -> None:
         definition = self.get_definition(profile_id)
+        revisions = self.list_revisions(profile_id)
         del self._definitions[profile_id]
         for revision in range(1, definition.current_revision + 1):
             self._revisions.pop((profile_id, revision), None)
-        self._persist()
+        try:
+            self._persist()
+        except Exception:
+            self._definitions[profile_id] = definition
+            for revision in revisions:
+                self._revisions[(profile_id, revision.revision)] = revision
+            raise
 
     def _validate_pair(
         self,
