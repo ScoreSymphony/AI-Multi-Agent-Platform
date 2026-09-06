@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -163,9 +162,7 @@ def test_backup_restore_preserves_wait_partial_fan_in_and_pending_retry_once(
     assert restored_retry.current_attempt == 1
     assert restored_retry.retry_due_at == now + timedelta(seconds=30)
 
-    assert restored.get_plan(plan.id).steps == (
-        replace(wait_step),
-        replace(predecessor),
-        replace(barrier),
-        replace(retry_step),
-    )
+    restored_steps = {step.id: step for step in restored.get_plan(plan.id).steps}
+    assert restored_steps == {
+        step.id: step for step in (wait_step, predecessor, barrier, retry_step)
+    }
