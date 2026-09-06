@@ -281,11 +281,19 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         return integration
 
     return integration + (
-        _pending("G", "#46 failure/retry", "controlled failures preserve canonical retries and telemetry"),
+        _pending(
+            "G", "#46 failure/retry", "controlled failures preserve canonical retries and telemetry"
+        ),
         _pending("I", "#18 automation", "automation creates a normal canonical Task lifecycle"),
-        _pending("K", "#72 Chat", "Chat creates durable canonical work without becoming lifecycle truth"),
-        _pending("L", "#73 Terminal", "terminal/session access remains authorized and Workspace-bounded"),
-        _pending("M", "#74 Browser", "browser work uses replaceable Capability/File/security boundaries"),
+        _pending(
+            "K", "#72 Chat", "Chat creates durable canonical work without becoming lifecycle truth"
+        ),
+        _pending(
+            "L", "#73 Terminal", "terminal/session access remains authorized and Workspace-bounded"
+        ),
+        _pending(
+            "M", "#74 Browser", "browser work uses replaceable Capability/File/security boundaries"
+        ),
         _optional(
             "N",
             "#75 Notifications",
@@ -444,9 +452,7 @@ def _report_compatibility(
 ) -> CompatibilityResult:
     if any(result.status == ConformanceStatus.FAIL.value for result in results):
         return CompatibilityResult.INCOMPATIBLE
-    if any(
-        result.required and result.status != ConformanceStatus.PASS.value for result in results
-    ):
+    if any(result.required and result.status != ConformanceStatus.PASS.value for result in results):
         return CompatibilityResult.INCOMPLETE
     return CompatibilityResult.COMPATIBLE
 
