@@ -17,6 +17,10 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
 from ai_multi_agent_platform.control_plane.models import json_value
 from ai_multi_agent_platform.domain import OwnerRef, Provenance
+from ai_multi_agent_platform.models import ModelRoutingProfileRef
+from ai_multi_agent_platform.models.routing_profile_assignment_context import (
+    require_routing_profile_assignment_access,
+)
 
 from .application import (
     ContextualTemplateHandlerRegistry,
@@ -47,7 +51,8 @@ class AgentTemplateHandler:
 
     def preview(self, revision: TemplateRevision) -> tuple[TemplateResourceChange, ...]:
         payload = _payload(revision)
-        _agent_profile(payload)
+        profile = _agent_profile(payload)
+        _canonical_routing_profile_ref(revision, profile)
         _optional_canonical_string(payload, "project_id")
         _optional_canonical_string(payload, "workspace_id")
         return (
@@ -65,10 +70,20 @@ class AgentTemplateHandler:
         context: TemplateInstantiationContext,
     ) -> tuple[TemplateResourceRef, ...]:
         payload = _payload(revision)
+        profile = _agent_profile(payload)
+        project_id = _optional_canonical_string(payload, "project_id")
+        routing_profile_ref = _canonical_routing_profile_ref(revision, profile)
+        if routing_profile_ref is not None:
+            access = require_routing_profile_assignment_access()
+            await access.authorize(
+                routing_profile_ref,
+                owner_ref=provenance.applied_by,
+                project_id=project_id,
+            )
         created = self.service.create_agent(
-            _agent_profile(payload),
+            profile,
             owner_ref=provenance.applied_by,
-            project_id=_optional_canonical_string(payload, "project_id"),
+            project_id=project_id,
             workspace_id=_optional_canonical_string(payload, "workspace_id"),
             provenance=_resource_provenance(provenance, context),
         )
@@ -232,6 +247,36 @@ def _agent_profile(payload: Mapping[str, object]) -> AgentProfile:
             ErrorCode.INVALID_CONFIGURATION,
             f"invalid Agent template profile: {exc}",
         ) from exc
+
+
+def _canonical_routing_profile_ref(
+    revision: TemplateRevision,
+    profile: AgentProfile,
+) -> ModelRoutingProfileRef | None:
+    raw_ref = profile.model.routing_profile_ref
+    if raw_ref is None:
+        return None
+    try:
+        reference = ModelRoutingProfileRef.parse(raw_ref)
+    except ValueError as exc:
+        if raw_ref.startswith("model_routing_profile_"):
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "Agent Template routing-profile reference must pin an exact canonical revision",
+                details={"routing_profile_ref": raw_ref},
+            ) from exc
+        # Pre-#309 compatibility keys are not canonical durable routing-profile assignments.
+        return None
+    if reference.canonical_ref not in revision.content.requirements.model_policy_refs:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            (
+                "Agent Template routing-profile assignment must be declared "
+                "as a model-policy requirement"
+            ),
+            details={"routing_profile_ref": reference.canonical_ref},
+        )
+    return reference
 
 
 def _materialize_team_profile(

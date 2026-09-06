@@ -4,8 +4,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from ai_multi_agent_platform.agents import agent_profile_from_json
 from ai_multi_agent_platform.agents.models import AgentProfile
+from ai_multi_agent_platform.contracts.types import FrozenJsonValue, JsonValue
+from ai_multi_agent_platform.control_plane.models import json_value
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
+from ai_multi_agent_platform.templates.models import TemplateContent, TemplateType
 
 from .agent_codecs import (
     AgentPortableCodec,
@@ -77,16 +81,7 @@ class RoutingProfileAwareTemplatePortableCodec(TemplatePortableCodec):
         revisions = tuple(
             replace(
                 revision,
-                content=replace(
-                    revision.content,
-                    requirements=replace(
-                        revision.content.requirements,
-                        model_policy_refs=tuple(
-                            _remap_exact_ref(item, context)
-                            for item in revision.content.requirements.model_policy_refs
-                        ),
-                    ),
-                ),
+                content=_remap_template_content(revision.content, context),
             )
             for revision in value.revisions
         )
@@ -122,6 +117,49 @@ def _remap_agent_profile(profile: AgentProfile, context: ImportContext) -> Agent
         profile,
         model=replace(profile.model, routing_profile_ref=remapped),
     )
+
+
+def _remap_template_content(content: TemplateContent, context: ImportContext) -> TemplateContent:
+    requirements = replace(
+        content.requirements,
+        model_policy_refs=tuple(
+            _remap_exact_ref(item, context) for item in content.requirements.model_policy_refs
+        ),
+    )
+    configuration = content.configuration
+    if content.template_type is not TemplateType.AGENT or configuration.payload is None:
+        return replace(content, requirements=requirements)
+
+    raw_profile = configuration.payload.get("profile")
+    if raw_profile is None:
+        return replace(content, requirements=requirements)
+    try:
+        profile = agent_profile_from_json(raw_profile)
+    except (TypeError, ValueError):
+        # Preserve malformed payloads for the canonical Template validator to reject with
+        # its existing domain-specific error instead of changing portability error semantics.
+        return replace(content, requirements=requirements)
+    remapped_profile = _remap_agent_profile(profile, context)
+    if remapped_profile == profile:
+        return replace(content, requirements=requirements)
+    serialized_profile = json_value(remapped_profile)
+    if not isinstance(serialized_profile, dict):
+        return replace(content, requirements=requirements)
+    payload = dict(configuration.payload)
+    payload["profile"] = _freeze_json(serialized_profile)
+    return replace(
+        content,
+        requirements=requirements,
+        configuration=replace(configuration, payload=payload),
+    )
+
+
+def _freeze_json(value: JsonValue) -> FrozenJsonValue:
+    if isinstance(value, dict):
+        return {key: _freeze_json(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return tuple(_freeze_json(item) for item in value)
+    return value
 
 
 def _remap_exact_ref(value: str, context: ImportContext) -> str:
