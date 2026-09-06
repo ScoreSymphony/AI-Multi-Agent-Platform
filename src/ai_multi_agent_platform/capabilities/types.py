@@ -16,6 +16,8 @@ from ai_multi_agent_platform.contracts.types import (
 )
 from ai_multi_agent_platform.domain import validate_id
 
+ISOLATED_WORKSPACE_WRITE_FEATURE = "isolated_workspace_write"
+
 
 def _utc_now() -> datetime:
     """Return an aware UTC timestamp without expanding the public domain API."""
@@ -219,13 +221,22 @@ class CapabilityDiscoveryRequest:
 
 @dataclass(frozen=True, slots=True)
 class CapabilityInvocation:
-    """Canonical capability request before provider-specific tool resolution."""
+    """Provider-neutral request routed through the canonical capability registry."""
 
     invocation_id: str
     capability_id: str
-    arguments: Mapping[str, JsonValue]
-    context: OperationContext
-    trace: InvocationTrace
+    arguments: Mapping[str, JsonValue] = field(default_factory=dict)
+    context: OperationContext = field(
+        default_factory=lambda: OperationContext(correlation_id="capability")
+    )
+    trace: InvocationTrace = field(
+        default_factory=lambda: InvocationTrace(
+            correlation_id="capability",
+            task_id="task_00000000-0000-4000-8000-000000000001",
+            run_id="run_00000000-0000-4000-8000-000000000001",
+            agent_id="agent_00000000-0000-4000-8000-000000000001",
+        )
+    )
     version: str | None = None
     compatibility: CapabilityCompatibilityRequest | None = None
     granted_permissions: frozenset[str] = frozenset()
@@ -240,19 +251,11 @@ class CapabilityInvocation:
             raise ValueError("version must not be blank")
         if self.version is not None and self.compatibility is not None:
             raise ValueError("version and compatibility are mutually exclusive")
-        if self.trace.correlation_id != self.context.correlation_id:
-            raise ValueError("trace/context correlation_id must match")
-        if self.trace.causation_id != self.context.causation_id:
-            raise ValueError("trace/context causation_id must match")
-        if self.trace.project_id != self.context.project_id:
-            raise ValueError("trace/context project_id must match")
         object.__setattr__(self, "arguments", _freeze_mapping(self.arguments))
 
 
 @dataclass(frozen=True, slots=True)
 class CapabilityInvocationResult:
-    """Normalized invocation result independent from the selected backend."""
-
     invocation_id: str
     capability_id: str
     capability_version: str
@@ -265,6 +268,26 @@ class CapabilityInvocationResult:
     evidence_refs: tuple[str, ...] = ()
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
 
+
+@dataclass(frozen=True, slots=True)
+class InvocationRecord:
+    """Normalized observability record emitted for every invocation state change."""
+
+    invocation_id: str
+    capability_id: str
+    capability_version: str
+    provider_id: str
+    provider_tool_ref: str
+    status: InvocationStatus
+    trace: InvocationTrace
+    canonical_tool_invocation_id: str | None = None
+    node_id: str | None = None
+    worker_id: str | None = None
+    approval_decision: str | None = None
+    error_code: str | None = None
+    adapter_metadata: tuple[AdapterMetadata, ...] = ()
+    occurred_at: datetime = field(default_factory=_utc_now)
+
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
             raise ValueError("invocation_id must not be blank")
@@ -274,43 +297,18 @@ class CapabilityInvocationResult:
             raise ValueError("capability_version must not be blank")
         if not self.provider_id.strip():
             raise ValueError("provider_id must not be blank")
-        if self.canonical_tool_invocation_id is not None:
-            validate_id(self.canonical_tool_invocation_id, "tool_invocation")
-
-
-@dataclass(frozen=True, slots=True)
-class InvocationRecord:
-    """Audit/observability record emitted for every canonical tool invocation."""
-
-    invocation_id: str
-    capability_id: str
-    capability_version: str
-    provider_id: str
-    provider_tool_ref: str
-    status: InvocationStatus
-    trace: InvocationTrace
-    recorded_at: datetime = field(default_factory=_utc_now)
-    canonical_tool_invocation_id: str | None = None
-    node_id: str | None = None
-    worker_id: str | None = None
-    approval_decision: str | None = None
-    error_code: str | None = None
-    adapter_metadata: tuple[AdapterMetadata, ...] = ()
-
-    def __post_init__(self) -> None:
+        if not self.provider_tool_ref.strip():
+            raise ValueError("provider_tool_ref must not be blank")
         if self.canonical_tool_invocation_id is not None:
             validate_id(self.canonical_tool_invocation_id, "tool_invocation")
         if self.node_id is not None:
             validate_id(self.node_id, "node")
         if self.worker_id is not None:
             validate_id(self.worker_id, "worker")
-        if self.approval_decision is not None and not self.approval_decision.strip():
-            raise ValueError("approval_decision must not be blank")
+        if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() is None:
+            raise ValueError("occurred_at must be timezone-aware")
 
 
-def _numeric_version_key(version: str) -> tuple[int, int, int]:
-    """Normalize a validated one-to-three-part dotted numeric version."""
-
-    values = [int(part) for part in version.split(".")]
-    values.extend([0] * (3 - len(values)))
-    return values[0], values[1], values[2]
+def _numeric_version_key(value: str) -> tuple[int, int, int]:
+    parts = [int(part) for part in value.split(".")]
+    return tuple(parts + [0] * (3 - len(parts)))  # type: ignore[return-value]
