@@ -21,6 +21,7 @@ platform-server = "ai_multi_agent_platform.adapters.single_node_app:main"
 platform-backup = "ai_multi_agent_platform.backup.cli:main"
 platform-acceptance = "ai_multi_agent_platform.cli.acceptance:main"
 platform-upgrade = "ai_multi_agent_platform.upgrade.cli:main"
+platform-release = "ai_multi_agent_platform.release.cli:main"
 
 [project.optional-dependencies]
 server = [
@@ -45,6 +46,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "ai_multi_agent_platform.backup" = ["*.json"]
+"ai_multi_agent_platform.release" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
