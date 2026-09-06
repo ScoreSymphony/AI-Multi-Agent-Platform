@@ -60,6 +60,7 @@ def _document() -> dict[str, object]:
             {"name": name, "status": "passed", "evidence": f"ci:{name}", "required": True}
             for name in sorted(REQUIRED_RELEASE_GATES)
         ],
+        "artifact_hashes": {"ai_multi_agent_platform-1.2.3.whl": "sha256:platform"},
         "sbom_ref": "sbom:1.2.3",
         "provenance_ref": "attestation:1.2.3",
     }
@@ -80,6 +81,15 @@ def test_load_release_manifest_rejects_floating_missing_revision(tmp_path: Path)
     upstream = upstreams[0]
     assert isinstance(upstream, dict)
     upstream["revision"] = ""
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ReleaseManifestError):
+        load_release_manifest(path)
+
+
+def test_load_release_manifest_rejects_invalid_timestamp(tmp_path: Path) -> None:
+    document = _document()
+    document["created_at"] = "not-a-timestamp"
     path = tmp_path / "manifest.json"
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(ReleaseManifestError):
