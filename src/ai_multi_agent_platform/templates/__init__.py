@@ -19,12 +19,17 @@ from .automation_handler import (
     AutomationTemplateHandler,
     register_automation_template_handler,
 )
+from .capability_assignment_exporter import CapabilityAssignmentTemplateExporter
 from .capability_assignment_handler import (
     CapabilityAssignmentTemplateHandler,
     register_capability_assignment_template_handler,
 )
 from .control_plane import register_template_control_plane
 from .environment import PlatformTemplateEnvironmentResolver
+from .model_routing_handler import (
+    ModelRoutingPolicyTemplateHandler,
+    register_model_routing_policy_template_handler,
+)
 from .models import (
     CapabilityRequirement,
     TemplateCompatibility,
@@ -60,6 +65,7 @@ from .service import (
     validate_template_configuration,
 )
 from .trust import activate_untrusted_revision
+from .workflow_exporter import WorkflowTemplateExporter
 from .workflow_handler import WorkflowTemplateHandler, register_workflow_template_handler
 from .workspace_structure_handler import (
     WorkspaceStructureTemplateExporter,
@@ -74,6 +80,7 @@ __all__ = [
     "AgentTemplateHandler",
     "AutomationTemplateExporter",
     "AutomationTemplateHandler",
+    "CapabilityAssignmentTemplateExporter",
     "CapabilityAssignmentTemplateHandler",
     "CapabilityRequirement",
     "CompositeTemplateHandler",
@@ -81,6 +88,7 @@ __all__ = [
     "ContextualTemplateResourceHandler",
     "InMemoryTemplateRepository",
     "JsonTemplateRepository",
+    "ModelRoutingPolicyTemplateHandler",
     "PlatformTemplateEnvironmentResolver",
     "ProjectTemplateExporter",
     "ProjectTemplateHandler",
@@ -109,6 +117,7 @@ __all__ = [
     "TemplateService",
     "TemplateTrust",
     "TemplateType",
+    "WorkflowTemplateExporter",
     "WorkflowTemplateHandler",
     "WorkspaceStructureTemplateExporter",
     "WorkspaceStructureTemplateHandler",
@@ -116,6 +125,7 @@ __all__ = [
     "register_agent_template_handlers",
     "register_automation_template_handler",
     "register_capability_assignment_template_handler",
+    "register_model_routing_policy_template_handler",
     "register_project_template_handler",
     "register_template_control_plane",
     "register_workflow_template_handler",
