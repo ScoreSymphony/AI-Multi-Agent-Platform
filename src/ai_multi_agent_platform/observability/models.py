@@ -44,6 +44,7 @@ class FailureComponent(StrEnum):
     VERIFICATION = "verification"
     SCHEDULER_WORKER_NODE = "scheduler_worker_node"
     AUTOMATION = "automation"
+    CONTROL_PLANE_HA = "control_plane_ha"
     CONNECTOR_BROWSER = "connector_browser"
     PLUGIN_ADAPTER = "plugin_adapter"
     INFRASTRUCTURE_UNKNOWN = "infrastructure_unknown"
