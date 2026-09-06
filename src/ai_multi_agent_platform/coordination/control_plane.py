@@ -145,10 +145,7 @@ def _record_map(
     coordinator: DurablePlanStepCoordinator,
     plan_id: str,
 ) -> dict[str, StepCoordinationRecord]:
-    return {
-        record.step_id: record
-        for record in coordinator.repository.list_step_records(plan_id)
-    }
+    return {record.step_id: record for record in coordinator.repository.list_step_records(plan_id)}
 
 
 def _projection_resource(
