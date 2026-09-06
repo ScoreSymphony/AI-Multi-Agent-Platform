@@ -288,9 +288,7 @@ class DistributedWorkerWorkspaceScaleHarness:
                     )
                     heartbeat_samples.append(time.perf_counter() - sample_started)
                     if receipt.worker_ids != (fixture.worker.worker_id,):
-                        errors.append(
-                            f"heartbeat receipt mismatch for {fixture.worker.worker_id}"
-                        )
+                        errors.append(f"heartbeat receipt mismatch for {fixture.worker.worker_id}")
 
                 for workspace in workspace_fixtures:
                     for round_index in range(spec.rounds):
@@ -352,9 +350,7 @@ class DistributedWorkerWorkspaceScaleHarness:
             1
             for worker in worker_fixtures
             for workspace in workspace_fixtures
-            if not (
-                worker.workspace_root / workspace.workspace_id / workspace.snapshot_id
-            ).exists()
+            if not (worker.workspace_root / workspace.workspace_id / workspace.snapshot_id).exists()
         )
         expected_cleaned = len(worker_fixtures) * len(workspace_fixtures)
         terminal_jobs = sum(
@@ -419,7 +415,9 @@ class DistributedWorkerWorkspaceScaleHarness:
             dispatch_latency=LatencyDistribution.from_seconds(dispatch_samples),
             terminal_latency=LatencyDistribution.from_seconds(terminal_samples),
             placement_counts=dict(sorted(placement_counts.items())),
-            payload_operation_counts=dict(sorted(payload_operation_counts.items(), key=lambda x: int(x[0]))),
+            payload_operation_counts=dict(
+                sorted(payload_operation_counts.items(), key=lambda x: int(x[0]))
+            ),
             resources=resources,
             correctness=correctness,
             node_ids=tuple(item.node.node_id for item in worker_fixtures),
