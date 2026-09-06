@@ -22,10 +22,10 @@ The profile is intentionally provider-neutral at the platform boundary. `sqlite-
 
 ## Running the sweep
 
-The module has a standalone CLI so this progressive benchmark can be exercised without changing normal runtime startup paths:
+The profile is available through the same `platform-benchmark` entrypoint as the other #440 benchmark families:
 
 ```bash
-python -m ai_multi_agent_platform.benchmarking.persistence \
+platform-benchmark single-node-persistence-sweep \
   --seed-task-levels 10,100,1000 \
   --operations-per-level 100 \
   --concurrency 10 \
