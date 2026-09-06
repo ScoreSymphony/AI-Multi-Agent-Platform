@@ -307,12 +307,21 @@ class ToolInvocation:
     tool_ref: str
     arguments: Mapping[str, JsonValue]
     context: OperationContext
+    task_id: str | None = None
+    run_id: str | None = None
+    agent_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
             raise ValueError("tool invocation_id must not be blank")
         if not self.tool_ref.strip():
             raise ValueError("tool_ref must not be blank")
+        if self.task_id is not None:
+            validate_id(self.task_id, "task")
+        if self.run_id is not None:
+            validate_id(self.run_id, "run")
+        if self.agent_id is not None:
+            validate_id(self.agent_id, "agent")
         frozen = MappingProxyType(
             {key: _freeze_json(value) for key, value in dict(self.arguments).items()}
         )
