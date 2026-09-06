@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -168,7 +168,7 @@ class DurablePlanStepCoordinator:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "retry policy references unknown Steps",
-                details={"step_ids": sorted(unknown)},
+                details={"step_ids": cast(JsonValue, sorted(unknown))},
             )
         records = tuple(
             StepCoordinationRecord(
@@ -667,9 +667,15 @@ class DurablePlanStepCoordinator:
                     latest_run_id=records[step.id].latest_run_id,
                     current_attempt=records[step.id].current_attempt,
                     retry_due_at=records[step.id].retry_due_at,
-                    wait_type=(records[step.id].wait.wait_type if records[step.id].wait else None),
+                    wait_type=(
+                        cast(StepWait, records[step.id].wait).wait_type
+                        if records[step.id].wait is not None
+                        else None
+                    ),
                     wait_deadline_at=(
-                        records[step.id].wait.deadline_at if records[step.id].wait else None
+                        cast(StepWait, records[step.id].wait).deadline_at
+                        if records[step.id].wait is not None
+                        else None
                     ),
                     reconciliation=records[step.id].reconciliation,
                 )
@@ -1070,7 +1076,12 @@ class DurablePlanStepCoordinator:
                 )
             return
         if any(step.status is StepStatus.CANCELLED for step in state.steps):
-            if task.status is not TaskStatus.CANCELLED:
+            if task.status in {
+                TaskStatus.DRAFT,
+                TaskStatus.READY,
+                TaskStatus.RUNNING,
+                TaskStatus.WAITING,
+            }:
                 await self.kernel.cancel_task(
                     idempotency_key=f"coord:{plan_id}:aggregate:cancelled",
                     task_id=state.plan.task_id,
@@ -1122,7 +1133,10 @@ class DurablePlanStepCoordinator:
                 raise ContractError(
                     ErrorCode.INVALID_REQUEST,
                     "Step dependency references an unknown Step",
-                    details={"step_id": step.id, "dependencies": sorted(missing)},
+                    details={
+                        "step_id": step.id,
+                        "dependencies": cast(JsonValue, sorted(missing)),
+                    },
                 )
             if step.parent_step_id is not None and step.parent_step_id not in ids:
                 raise ContractError(
