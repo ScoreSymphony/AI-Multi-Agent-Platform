@@ -123,3 +123,21 @@ def test_release_metadata_exposes_operator_status() -> None:
             "last_verified_at": "2026-09-06T08:00:00Z",
         }
     ]
+
+
+def test_release_provenance_generation_is_traceable_and_complete() -> None:
+    payload = _manifest().to_dict()
+
+    assert payload["source_commit"] == "deadbeef"
+    assert payload["versions"] == _versions().to_dict()
+    assert payload["provenance_ref"] == "attestation:1.2.3"
+    assert payload["sbom_ref"] == "sbom:1.2.3"
+    assert payload["artifact_hashes"] == {
+        "ai_multi_agent_platform-1.2.3.whl": "sha256:platform"
+    }
+
+    upstreams = payload["upstreams"]
+    assert isinstance(upstreams, list)
+    assert upstreams[0]["revision"] == "abc123"
+    assert upstreams[0]["artifact_hashes"] == {"runtime.tar.zst": "sha256:123"}
+    assert upstreams[0]["provenance_ref"] == "attestation:runtime"
