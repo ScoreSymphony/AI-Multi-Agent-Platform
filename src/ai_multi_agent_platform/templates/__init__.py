@@ -60,6 +60,7 @@ from .service import (
     validate_template_configuration,
 )
 from .trust import activate_untrusted_revision
+from .workflow_handler import WorkflowTemplateHandler, register_workflow_template_handler
 from .workspace_structure_handler import (
     WorkspaceStructureTemplateExporter,
     WorkspaceStructureTemplateHandler,
@@ -108,6 +109,7 @@ __all__ = [
     "TemplateService",
     "TemplateTrust",
     "TemplateType",
+    "WorkflowTemplateHandler",
     "WorkspaceStructureTemplateExporter",
     "WorkspaceStructureTemplateHandler",
     "activate_untrusted_revision",
@@ -116,6 +118,7 @@ __all__ = [
     "register_capability_assignment_template_handler",
     "register_project_template_handler",
     "register_template_control_plane",
+    "register_workflow_template_handler",
     "register_workspace_structure_template_handler",
     "validate_template_configuration",
 ]

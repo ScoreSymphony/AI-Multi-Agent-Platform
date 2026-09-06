@@ -49,6 +49,8 @@ The current platform has concrete canonical handlers for:
 
 - Agent -> `AgentService`;
 - Agent Team -> `AgentService` with portable member/delegation remapping;
+- Workflow/Plan -> the #364 `AuthorizedWorkflowService`, with portable Agent/Agent-Team
+  Template dependencies remapped to the canonical resources created in the same apply;
 - Automation -> the canonical Automation service;
 - Project -> `ScopeStore`;
 - Workspace structure -> the canonical `WorkspaceProvider`, optionally depending on a
@@ -59,15 +61,21 @@ The current platform has concrete canonical handlers for:
 - Composite -> dependency coordination only; it creates no private composite runtime
   object of its own.
 
-`workflow_plan` and `model_routing_policy` remain valid Template types, but they are not
-given synthetic persistence or shadow runtime objects. Until the platform exposes matching
-ordinary canonical resource services for those concepts, preview reports their missing
-handler type and application is blocked. This preserves the architectural rule that
-Templates configure canonical resources rather than becoming a second resource system.
+`model_routing_policy` remains a valid Template type but is not given Template-private
+persistence or a shadow runtime object. Until a concrete Template handler is composed for
+the canonical routing-policy owner domain, preview reports the missing handler type and
+application is blocked. This preserves the architectural rule that Templates configure
+canonical resources rather than becoming a second resource system.
 
-Capability assignments follow that rule explicitly: the Template handler calls the #366
-owning service and returns the resulting `cap_assignment_*` resource ID. Template storage
-never becomes an assignment store.
+Workflow Templates follow that rule explicitly: the handler calls the #364 owning service
+and returns the resulting `workflow_*` resource ID. Workflow stages are materialized into
+canonical `WorkflowStage` objects, Template compatibility is preserved as canonical
+`WorkflowCompatibility`, and the exact Template revision plus Template instance ID are
+stored in canonical Workflow provenance. Template storage never becomes a Workflow store.
+
+Capability assignments follow the same rule: the Template handler calls the #366 owning
+service and returns the resulting `cap_assignment_*` resource ID. Template storage never
+becomes an assignment store.
 
 ## Versioning
 
@@ -107,6 +115,11 @@ authorized separately before resource handlers run. Targets introduced through o
 placeholder bindings or external configuration references receive the same authorization
 as literal target IDs. Workspace targets fail closed when no canonical
 `WorkspaceProvider` is composed.
+
+Workflow Templates do not accept a second caller-controlled target-scope field in their
+configuration payload. Their canonical Project/Organization target comes from the stored
+Template revision scope and creation re-enters the #364 authorization facade before the
+Workflow is persisted.
 
 ## Preview before apply
 
@@ -171,8 +184,7 @@ actions are not over-reported as globally grantable.
 
 Plugin, connector, model-policy and named contract inventories are connected only when a
 canonical provider with matching semantics exists in the deployment. They are not
-fabricated from adjacent concepts. For example, model configuration IDs are deliberately
-not treated as model-routing-policy references.
+fabricated from adjacent concepts.
 
 ## Materialization
 
@@ -198,6 +210,11 @@ The whole graph is materialized before any handler is allowed to create a resour
 missing or invalid binding in a later dependency therefore cannot leave earlier resources
 partially created.
 
+Workflow stage bindings to Agents or Agent Teams use Template dependencies rather than
+source-deployment resource IDs. During apply, the Workflow handler resolves the dependency
+resource produced in the current `TemplateInstantiationContext` and persists the new
+canonical Agent/Team revision reference in the Workflow stage.
+
 ## Security rules
 
 Payloads are validated before they enter the Template repository. Known plaintext-secret
@@ -215,6 +232,10 @@ capabilities remain visible in preview instead of being silently accepted.
 For `capability_assignment`, required/allowed privileged or approval-gated rules remain
 explicit in the Template payload, and the #366 service re-enters the ordinary #15
 `AuthorizationGate` before canonical assignment persistence.
+
+For `workflow_plan`, target Project/Organization scope is stored on the Template revision
+and creation re-enters `AuthorizedWorkflowService`; a manually authored Workflow payload
+cannot substitute a different target scope after Template authorization.
 
 ## Trust and portable imports
 
@@ -248,7 +269,7 @@ Template revision
     -> trust + server-owned binding materialization
     -> target-scope authorization
     -> TemplateResourceHandler
-    -> ordinary canonical Agent / Team / Automation / Project / Workspace / ... service
+    -> ordinary canonical Agent / Team / Workflow / Automation / Project / Workspace / ... service
     -> canonical resource IDs
 ```
 
@@ -259,9 +280,10 @@ For example, an Agent Team Template points to Agent Template dependencies rather
 persisting source Agent IDs; the Team handler resolves those dependencies to the new Agent
 IDs created in the same Template instance.
 
-The same rule is used by Workspace structures that depend on a Project Template and by
+The same rule is used by Workspace structures that depend on a Project Template,
 capability-assignment Templates whose target is produced by an Agent, Agent Team or Project
-Template dependency.
+Template dependency, and Workflow Templates whose stages depend on Agent or Agent Team
+Templates.
 
 ## Failure safety
 
@@ -269,6 +291,13 @@ Integrated apply tracks resources created by contextual handlers and invokes ava
 compensators in reverse order if a later handler fails. If compensation is incomplete,
 the resulting error includes both the original apply failure and explicit uncompensated or
 compensation-failure evidence.
+
+Capability-assignment and Workflow handlers implement guarded canonical compensation.
+Rollback may remove only an untouched revision-1 resource whose owner and exact Template
+provenance match the failed apply. Workflow compensation additionally checks the exact
+`template_instance_id`, preventing one Template application from compensating a Workflow
+created by another application of the same Template revision. JSON repositories persist a
+successful compensation immediately.
 
 Agent Team export follows the same fail-closed principle while constructing reusable
 Template graphs. Child and parent Template IDs are registered for cleanup before
@@ -289,6 +318,11 @@ serialize provider sessions, worker jobs, active runs, credentials or plaintext 
 Capability-assignment state is not copied into this repository. It lives in the #366
 `JsonCapabilityAssignmentRepository` and participates independently in normal deployment
 backup/restore.
+
+Workflow state is likewise independent. Single-node composition owns `db/workflows.json`
+through #364 `JsonWorkflowRepository`; the store is part of the authoritative durable-store
+inventory and retains complete immutable canonical Workflow histories rather than copies in
+Template persistence.
 
 ## Control Plane API
 
@@ -313,13 +347,16 @@ revision, the explicit payload `activate_untrusted=true` selects the trust-activ
 operation instead.
 
 Creation from existing canonical resources is supported for the resource sets currently
-owned by concrete handlers:
+owned by concrete exporters:
 
 - `template.create-from-agent`
 - `template.create-from-agent-team`
 - `template.create-from-automation`
 - `template.create-from-project`
 - `template.create-from-workspaces`
+
+Workflow Template application is composed, but create-from-existing Workflow export is a
+separate #78 completion path and is not implied by the handler integration.
 
 All commands run through the normal Control Plane authorization and idempotency path.
 Template list/detail and Template-instance list/detail are ordinary Control Plane
@@ -371,13 +408,17 @@ Issue #78 tests cover the required lifecycle and safety cases, including:
 - plaintext-secret and backend-runtime-state exclusion before storage and after materialization;
 - ordinary placeholder, SecretReference and external-reference materialization;
 - graph-wide pre-side-effect materialization;
-- canonical Agent, Agent Team, Automation, Project, Workspace and capability-assignment
-  instantiation;
+- canonical Agent, Agent Team, Workflow, Automation, Project, Workspace and
+  capability-assignment instantiation;
 - portable Team member/leader/delegation ID remapping;
-- provenance linkage to exact Template revision;
+- portable Workflow Agent dependency remapping;
+- exact Template revision and Template-instance Workflow provenance;
+- target-scope authorization before Workflow persistence;
+- persistent Workflow and capability-assignment compensation on failed Composite apply;
 - trust downgrade on import, explicit activation and promotion-bypass prevention;
 - Agent Team export compensation;
 - durable repository restart restoration;
+- standard Single-Node Workflow Template composition and Workflow backup inventory;
 - server-resolved environment behavior and owner-scoped Workspace inventory;
 - provider/orchestrator replacement compatibility;
 - frontend command contracts, compatibility diagnostics, activation path, tests and production build.
