@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 
 import pytest
 
-from ai_multi_agent_platform.contracts import OperationContext
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.models import (
     JsonModelRoutingProfileRepository,
@@ -77,6 +78,68 @@ def test_version_rolls_back_definition_and_new_revision_when_persist_fails(
 
     assert repository.get_definition(first.profile_id).current_revision == 1
     assert repository.list_revisions(first.profile_id) == (first,)
+
+
+def test_repository_rejects_owner_scope_rewrite_and_remains_restartable(tmp_path) -> None:
+    path = tmp_path / "profiles.json"
+    repository = JsonModelRoutingProfileRepository(path)
+    service = ModelRoutingProfileService(repository)
+    first = asyncio.run(
+        service.create_profile(
+            name="Stable owner",
+            policy=ModelRoutingProfilePolicy(),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_context(),
+        )
+    )
+    current = repository.get_definition(first.profile_id)
+    other_owner = OwnerRef(type="user", id="user-routing-other")
+
+    moved_definition = replace(current, current_revision=2, owner_ref=other_owner)
+    moved_revision = replace(first, revision=2, owner_ref=other_owner)
+
+    with pytest.raises(ContractError) as caught:
+        repository.update_profile(moved_definition, moved_revision)
+
+    assert caught.value.code is ErrorCode.CONTRACT_VIOLATION
+    assert repository.get_definition(first.profile_id) == current
+    assert repository.list_revisions(first.profile_id) == (first,)
+
+    restarted = JsonModelRoutingProfileRepository(path)
+    assert restarted.get_definition(first.profile_id) == current
+    assert restarted.list_revisions(first.profile_id) == (first,)
+
+
+def test_repository_rejects_project_scope_rewrite_and_remains_restartable(tmp_path) -> None:
+    path = tmp_path / "profiles.json"
+    repository = JsonModelRoutingProfileRepository(path)
+    service = ModelRoutingProfileService(repository)
+    first = asyncio.run(
+        service.create_profile(
+            name="Stable project scope",
+            policy=ModelRoutingProfilePolicy(),
+            owner_ref=OWNER,
+            principal_ref=OWNER.id,
+            context=_context(),
+        )
+    )
+    current = repository.get_definition(first.profile_id)
+    project_id = new_id("project")
+
+    moved_definition = replace(current, current_revision=2, project_id=project_id)
+    moved_revision = replace(first, revision=2, project_id=project_id)
+
+    with pytest.raises(ContractError) as caught:
+        repository.update_profile(moved_definition, moved_revision)
+
+    assert caught.value.code is ErrorCode.CONTRACT_VIOLATION
+    assert repository.get_definition(first.profile_id) == current
+    assert repository.list_revisions(first.profile_id) == (first,)
+
+    restarted = JsonModelRoutingProfileRepository(path)
+    assert restarted.get_definition(first.profile_id) == current
+    assert restarted.list_revisions(first.profile_id) == (first,)
 
 
 def test_enable_state_rolls_back_when_persist_fails(tmp_path, monkeypatch) -> None:
