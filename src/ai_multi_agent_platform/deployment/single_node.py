@@ -416,13 +416,12 @@ def build_single_node_deployment(
 
     execution_workspace = workspaces.materialization_root / _REFERENCE_EXECUTION_WORKSPACE
     execution_workspace.mkdir(parents=True, exist_ok=True)
-    orchestrator = ObservedOrchestrator(ReferenceOrchestrator(), telemetry)
-    reference_executor = ObservedExecutor(
-        ReferenceExecutor(workspaces.materialization_root),
-        telemetry,
-    )
+    reference_orchestrator = ReferenceOrchestrator()
+    reference_executor = ReferenceExecutor(workspaces.materialization_root)
+    orchestrator = ObservedOrchestrator(reference_orchestrator, telemetry)
+    observed_executor = ObservedExecutor(reference_executor, telemetry)
     reference_lifecycle = ExecutorLifecycleBackend(
-        reference_executor,
+        observed_executor,
         workspace=_REFERENCE_EXECUTION_WORKSPACE,
         action="echo",
         workspace_resolver=repository_workspace_execution.resolve_execution_workspace,
@@ -509,7 +508,7 @@ def build_single_node_deployment(
         agent_runtime=agent_runtime,
         models=models,
         model_runtime=model_runtime,
-        orchestrator=orchestrator,
+        orchestrator=reference_orchestrator,
         executor=reference_executor,
         files=files,
         workspaces=workspaces,
