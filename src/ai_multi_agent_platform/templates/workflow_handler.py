@@ -409,7 +409,7 @@ def _call_context(
             owner_id=owner.id,
             project_id=revision.project_id,
         ),
-        actor_ref=f"{owner.type}:{owner.id}",
+        actor_ref=owner.id,
     )
 
 
