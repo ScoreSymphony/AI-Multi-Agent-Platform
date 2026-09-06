@@ -167,7 +167,9 @@ def test_duplicate_prepare_chunk_and_commit_are_idempotent_and_conflicts_are_rej
             total_chunks=1,
             data=data,
         )
-        with pytest.raises(RegistryError, match="duplicate workspace chunk carries different bytes"):
+        with pytest.raises(
+            RegistryError, match="duplicate workspace chunk carries different bytes"
+        ):
             await store.put_chunk(
                 first,
                 manifest[0].relative_path,
