@@ -19,6 +19,11 @@ from .automation_handler import (
     AutomationTemplateHandler,
     register_automation_template_handler,
 )
+from .capability_assignment_control_plane import (
+    CAPABILITY_ASSIGNMENT_TEMPLATE_EXPORT_COMMAND,
+    register_capability_assignment_template_export_control_plane,
+)
+from .capability_assignment_exporter import CapabilityAssignmentTemplateExporter
 from .capability_assignment_handler import (
     CapabilityAssignmentTemplateHandler,
     register_capability_assignment_template_handler,
@@ -60,6 +65,11 @@ from .service import (
     validate_template_configuration,
 )
 from .trust import activate_untrusted_revision
+from .workflow_control_plane import (
+    WORKFLOW_TEMPLATE_EXPORT_COMMAND,
+    register_workflow_template_export_control_plane,
+)
+from .workflow_exporter import WorkflowTemplateExporter
 from .workflow_handler import WorkflowTemplateHandler, register_workflow_template_handler
 from .workspace_structure_handler import (
     WorkspaceStructureTemplateExporter,
@@ -74,6 +84,8 @@ __all__ = [
     "AgentTemplateHandler",
     "AutomationTemplateExporter",
     "AutomationTemplateHandler",
+    "CAPABILITY_ASSIGNMENT_TEMPLATE_EXPORT_COMMAND",
+    "CapabilityAssignmentTemplateExporter",
     "CapabilityAssignmentTemplateHandler",
     "CapabilityRequirement",
     "CompositeTemplateHandler",
@@ -109,15 +121,19 @@ __all__ = [
     "TemplateService",
     "TemplateTrust",
     "TemplateType",
+    "WORKFLOW_TEMPLATE_EXPORT_COMMAND",
+    "WorkflowTemplateExporter",
     "WorkflowTemplateHandler",
     "WorkspaceStructureTemplateExporter",
     "WorkspaceStructureTemplateHandler",
     "activate_untrusted_revision",
     "register_agent_template_handlers",
     "register_automation_template_handler",
+    "register_capability_assignment_template_export_control_plane",
     "register_capability_assignment_template_handler",
     "register_project_template_handler",
     "register_template_control_plane",
+    "register_workflow_template_export_control_plane",
     "register_workflow_template_handler",
     "register_workspace_structure_template_handler",
     "validate_template_configuration",
