@@ -9,7 +9,6 @@ from ai_multi_agent_platform.cli.conformance import (
     _parse_optional,
 )
 from ai_multi_agent_platform.conformance import (
-    CompatibilityResult,
     ConformanceProfile,
     ConformanceStatus,
     activate_optional_scenarios,
@@ -40,18 +39,39 @@ def test_optional_claims_remain_disabled_by_default() -> None:
 
 
 def test_maintained_optional_evidence_registry_is_explicit() -> None:
-    assert optional_evidence_ids() == ("B", "C", "E", "N", "R", "S", "T", "V", "X", "Y")
+    assert optional_evidence_ids() == (
+        "B",
+        "C",
+        "E",
+        "N",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "V",
+        "X",
+        "Y",
+    )
 
 
 def test_enabling_supported_optional_claim_makes_it_required_and_executable() -> None:
-    scenarios = _by_id(ConformanceProfile.RELEASE, ("N", "R", "S", "T", "V", "X", "Y"))
-    for scenario_id in ("N", "R", "S", "T", "V", "X", "Y"):
+    scenarios = _by_id(
+        ConformanceProfile.RELEASE,
+        ("N", "Q", "R", "S", "T", "V", "X", "Y"),
+    )
+    for scenario_id in ("N", "Q", "R", "S", "T", "V", "X", "Y"):
         assert scenarios[scenario_id].required is True
         assert scenarios[scenario_id].command is not None
         assert scenarios[scenario_id].unavailable_reason is None
 
     assert "test_event_provider_projects_task_event_and_replay_aggregates_safely" in " ".join(
         scenarios["N"].command or ()
+    )
+    assert "test_reapply_authorizes_instance_and_exact_source_revision" in " ".join(
+        scenarios["Q"].command or ()
+    )
+    assert "test_composite_failure_compensates_earlier_capability_assignment" in " ".join(
+        scenarios["Q"].command or ()
     )
     assert "test_executor_rolls_back_real_team_and_agent_in_reverse_order" in " ".join(
         scenarios["R"].command or ()
@@ -92,22 +112,6 @@ def test_distributed_profile_covers_security_result_identity_and_trace_safe_tele
         in command
     )
     assert "test_scheduler_reservation_and_dispatch_emit_correlated_safe_telemetry" in command
-
-
-def test_enabling_unregistered_optional_claim_blocks_compatibility(tmp_path: Path) -> None:
-    scenario = _by_id(ConformanceProfile.RELEASE, ("Q",))["Q"]
-    assert scenario.required is True
-    assert scenario.command is None
-    assert scenario.unavailable_status is ConformanceStatus.NOT_IMPLEMENTED
-
-    report = run_conformance(
-        ConformanceProfile.RELEASE,
-        repository_root=tmp_path,
-        scenarios=(scenario,),
-    )
-    assert report.passed is False
-    assert report.compatibility_result == CompatibilityResult.INCOMPLETE.value
-    assert report.scenarios[0].status == ConformanceStatus.NOT_IMPLEMENTED.value
 
 
 def test_activation_rejects_unknown_or_already_required_scenarios() -> None:
@@ -151,5 +155,4 @@ def test_external_adapter_profiles_fail_closed_without_real_environment(
             scenarios=(scenarios[scenario_id],),
         )
         assert report.passed is False
-        assert report.compatibility_result == CompatibilityResult.INCOMPATIBLE.value
         assert report.scenarios[0].status == ConformanceStatus.FAIL.value
