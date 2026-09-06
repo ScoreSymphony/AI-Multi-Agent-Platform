@@ -1,18 +1,17 @@
 [build-system]
-requires = ["hatchling>=1.24"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-multi-agent-platform"
-version = "0.1.0"
-description = "Canonical substrate for an AI multi-agent platform"
+version = "0.0.1"
+description = "General-purpose, self-hostable AI multi-agent platform"
 readme = "README.md"
-requires-python = ">=3.11"
-license = {text = "MIT"}
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "ScoreSymphony" }]
 dependencies = [
-  "mcp>=1.0.0,<2",
-  "httpx>=0.27,<1",
-  "dulwich>=0.22,<1",
+  "jsonschema==4.26.0",
 ]
 
 [project.scripts]
@@ -20,38 +19,48 @@ platform = "ai_multi_agent_platform.cli.issue_82:main"
 platform-completion = "ai_multi_agent_platform.cli.completion:main"
 platform-server = "ai_multi_agent_platform.adapters.single_node_app:main"
 platform-backup = "ai_multi_agent_platform.backup.cli:main"
-platform-restore = "ai_multi_agent_platform.backup.restore_cli:main"
+platform-acceptance = "ai_multi_agent_platform.cli.acceptance:main"
 platform-upgrade = "ai_multi_agent_platform.upgrade.cli:main"
 
 [project.optional-dependencies]
-forgex = ["httpx>=0.27,<1"]
-litellm = ["litellm>=1.40,<2"]
-hermes = ["hermes-agent @ git+https://github.com/NousResearch/hermes-agent.git@41a7bdee44746ccfeffe25dc5bd42a49bedb0e5e"]
+server = [
+  "uvicorn>=0.35,<1",
+]
+mcp = [
+  "mcp==2.1.1",
+]
+litellm = [
+  "litellm==1.99.0",
+]
 dev = [
-  "build>=1.2",
-  "mypy>=1.10",
-  "pytest>=8.2",
-  "ruff>=0.5",
+  "build>=1.2,<2",
+  "pytest>=8.3,<10",
+  "ruff>=0.12,<1",
+  "mypy>=1.17,<3",
+  "mcp==2.1.1",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/ai_multi_agent_platform"]
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"ai_multi_agent_platform.backup" = ["*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q"
 
 [tool.ruff]
+target-version = "py312"
 line-length = 100
-target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
-[tool.mypy]
-python_version = "3.11"
-strict = true
-mypy_path = ["src"]
+[tool.ruff.lint.per-file-ignores]
+"src/ai_multi_agent_platform/control_plane/organization_api.py" = ["UP047"]
 
-[[tool.mypy.overrides]]
-module = ["mcp.*", "dulwich.*"]
-ignore_missing_imports = true
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["ai_multi_agent_platform"]
