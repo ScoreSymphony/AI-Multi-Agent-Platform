@@ -437,7 +437,7 @@ def usage_from_metric(metric: MetricRecord) -> UsageRecord | None:
     return UsageRecord(
         id=f"usage_{uuid5(NAMESPACE_URL, identity)}",
         metric_type=metric_type,
-        quantity=metric.value,
+        quantity=None if quality is MeasurementQuality.UNAVAILABLE else metric.value,
         unit=unit,
         quality=quality,
         aggregation_mode=aggregation_mode,
@@ -486,6 +486,58 @@ def _metric_mapping(
             metric.unit,
             MeasurementQuality.REPORTED,
         )
+
+    if metric.name == "platform.node.resource_unavailable":
+        resource_metric = metric.attributes.get("resource_metric")
+        resource_unit = metric.attributes.get("resource_unit")
+        if not isinstance(resource_metric, str) or not isinstance(resource_unit, str):
+            return None
+        unavailable: dict[str, tuple[str, str, MeasurementQuality]] = {
+            "platform.node.cpu_cores_total": (
+                "node.cpu.cores.capacity",
+                "cores",
+                MeasurementQuality.UNAVAILABLE,
+            ),
+            "platform.node.cpu_cores_available": (
+                "node.cpu.cores.available",
+                "cores",
+                MeasurementQuality.UNAVAILABLE,
+            ),
+            "platform.node.ram_total_bytes": (
+                "node.memory.bytes.capacity",
+                "bytes",
+                MeasurementQuality.UNAVAILABLE,
+            ),
+            "platform.node.ram_available_bytes": (
+                "node.memory.bytes.available",
+                "bytes",
+                MeasurementQuality.UNAVAILABLE,
+            ),
+            "platform.node.storage_total_bytes": (
+                "node.storage.bytes.capacity",
+                "bytes",
+                MeasurementQuality.UNAVAILABLE,
+            ),
+            "platform.node.storage_available_bytes": (
+                "node.storage.bytes.available",
+                "bytes",
+                MeasurementQuality.UNAVAILABLE,
+            ),
+            "platform.node.accelerator_memory_total_bytes": (
+                "node.accelerator.memory.bytes.capacity",
+                "bytes",
+                MeasurementQuality.UNAVAILABLE,
+            ),
+            "platform.node.accelerator_memory_available_total_bytes": (
+                "node.accelerator.memory.bytes.available",
+                "bytes",
+                MeasurementQuality.UNAVAILABLE,
+            ),
+        }
+        mapped = unavailable.get(resource_metric)
+        if mapped is None or mapped[1] != resource_unit:
+            return None
+        return mapped
 
     if metric.name == "platform.model.usage":
         usage_key = _normalized_metric_label(metric.attributes.get("usage_key"))
@@ -634,6 +686,7 @@ def _aggregation_mode(metric: MetricRecord) -> AggregationMode:
         in {
             "platform.node.reported_resource",
             "platform.worker.reported_resource",
+            "platform.node.resource_unavailable",
         }
         | _RUNTIME_GAUGE_METRICS
     ):
