@@ -21,6 +21,7 @@ from ai_multi_agent_platform.distributed import (
 )
 from ai_multi_agent_platform.distributed.models import RegistrationRequest, WorkerRecord
 from ai_multi_agent_platform.distributed.transport import TransportWorkerDispatcher
+from ai_multi_agent_platform.distributed.worker import WorkerDispatcher
 from ai_multi_agent_platform.distributed.worker_protocol import (
     WorkerHeartbeatRequest,
     WorkerProtocolReceipt,
@@ -171,7 +172,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             materializer,
             WorkspaceJobMaterializationResolver(self._workspaces),
         )
-        dispatcher = materializing
+        dispatcher: WorkerDispatcher = materializing
         if self._kernel is not None:
             dispatcher = ArtifactPublishingWorkerDispatcher(
                 materializing,
