@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, replace
+from pathlib import Path
 
 import pytest
 
@@ -251,7 +252,7 @@ def test_compensation_refuses_independently_revised_assignment() -> None:
     assert repository.get(assignment_id).current_revision == 2
 
 
-def test_json_repository_persists_successful_compensation(tmp_path: pytest.TempPathFactory) -> None:
+def test_json_repository_persists_successful_compensation(tmp_path: Path) -> None:
     path = tmp_path / "capability-assignments.json"
     repository = JsonCapabilityAssignmentRepository(path)
     assignment_id = new_id("cap_assignment")
