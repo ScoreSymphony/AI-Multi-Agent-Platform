@@ -1,11 +1,11 @@
-"""Guarded registry preview and explicit activation workflow."""
+"""Guarded registry discovery, preview and explicit activation workflow."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
 
-from .items import RegistryItem
+from .items import RegistryItem, RegistryQuery
 from .models import DistributionRoute
 from .provider import RegistryProvider
 from .validation import ValidationContext, ValidationFinding, has_errors, validate_item
@@ -40,6 +40,16 @@ class DistributionService:
     @property
     def enabled(self) -> bool:
         return self._provider is not None
+
+    def search(self, query: RegistryQuery | None = None) -> tuple[RegistryItem, ...]:
+        """Discover registry metadata without exposing a concrete provider northbound."""
+
+        return self._require_provider().search(query or RegistryQuery())
+
+    def get(self, item_id: str, version: str | None = None) -> RegistryItem:
+        """Read exact registry metadata through the provider-neutral domain boundary."""
+
+        return self._require_provider().get(item_id, version)
 
     def preview(
         self,
