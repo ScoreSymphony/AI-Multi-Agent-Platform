@@ -369,3 +369,49 @@ def test_search_updated_at_tracks_canonical_state_changes_not_heartbeats() -> No
         assert node.node_id not in {item["resource_id"] for item in _items(excluded)}
 
     asyncio.run(scenario())
+
+
+def test_search_updated_at_sorting_and_worker_filters_use_canonical_state_time() -> None:
+    async def scenario() -> None:
+        _, http, runtime, node, worker = _stack()
+        node_mutation_at = NOW + timedelta(minutes=5)
+        worker_mutation_at = NOW + timedelta(minutes=10)
+        runtime.registry.set_node_draining(
+            node.node_id,
+            draining=True,
+            now=node_mutation_at,
+        )
+        runtime.registry.set_worker_draining(
+            worker.worker_id,
+            draining=True,
+            now=worker_mutation_at,
+        )
+
+        worker_exact = await _search(http, {"id": worker.worker_id, "type": "worker"})
+        assert _items(worker_exact)[0]["updated_at"] == worker_mutation_at.isoformat()
+
+        worker_after = await _search(
+            http,
+            {"type": "worker", "updated_after": worker_mutation_at.isoformat()},
+        )
+        assert {item["resource_id"] for item in _items(worker_after)} == {worker.worker_id}
+
+        ascending = await _search(
+            http,
+            {"type": "node,worker", "sort": "updated_at", "direction": "asc"},
+        )
+        assert [item["resource_id"] for item in _items(ascending)] == [
+            node.node_id,
+            worker.worker_id,
+        ]
+
+        descending = await _search(
+            http,
+            {"type": "node,worker", "sort": "updated_at", "direction": "desc"},
+        )
+        assert [item["resource_id"] for item in _items(descending)] == [
+            worker.worker_id,
+            node.node_id,
+        ]
+
+    asyncio.run(scenario())
