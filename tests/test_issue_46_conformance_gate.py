@@ -29,7 +29,10 @@ def test_conformance_profiles_are_explicit_and_scenario_ids_are_unique() -> None
 
 
 def test_fast_profile_owns_the_reference_security_verification_and_client_slice() -> None:
-    scenarios = {scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.FAST)}
+    scenarios = {
+        scenario.scenario_id: scenario
+        for scenario in profile_scenarios(ConformanceProfile.FAST)
+    }
     assert {
         "A",
         "D-model",
