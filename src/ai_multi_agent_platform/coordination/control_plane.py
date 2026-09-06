@@ -8,6 +8,7 @@ from ai_multi_agent_platform.control_plane.extensions import CommandHandler
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .models import PlanCoordinationProjection, StepCoordinationProjection
+from .repair import CoordinatorRepairAction, CoordinatorRepairService
 from .service import DurablePlanStepCoordinator
 
 
@@ -42,6 +43,7 @@ class CoordinatorCommandHandlers:
 
     def __init__(self, coordinator: DurablePlanStepCoordinator) -> None:
         self._coordinator = coordinator
+        self._repair = CoordinatorRepairService(coordinator)
 
     async def reconcile(
         self,
@@ -68,6 +70,43 @@ class CoordinatorCommandHandlers:
             )
         )
 
+    async def repair(
+        self,
+        context: RequestContext,
+        resource_ref: str,
+        payload: dict[str, JsonValue],
+    ) -> dict[str, JsonValue]:
+        if context.idempotency_key is None:
+            raise ContractError(ErrorCode.INVALID_REQUEST, "idempotency key is required")
+        step_id = payload.get("step_id")
+        action_raw = payload.get("action")
+        expected_revision = payload.get("expected_revision")
+        if not isinstance(step_id, str) or not step_id.strip():
+            raise ContractError(ErrorCode.INVALID_REQUEST, "repair step_id is required")
+        if not isinstance(action_raw, str):
+            raise ContractError(ErrorCode.INVALID_REQUEST, "repair action is required")
+        if isinstance(expected_revision, bool) or not isinstance(expected_revision, int):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "repair expected_revision must be an integer",
+            )
+        try:
+            action = CoordinatorRepairAction(action_raw)
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                f"unsupported coordinator repair action: {action_raw}",
+            ) from exc
+        return _projection_resource(
+            await self._repair.repair_step(
+                plan_id=resource_ref,
+                step_id=step_id,
+                action=action,
+                expected_revision=expected_revision,
+                idempotency_key=context.idempotency_key,
+            )
+        )
+
 
 def coordination_resource_services(
     coordinator: DurablePlanStepCoordinator,
@@ -82,6 +121,7 @@ def coordination_command_handlers(
     return {
         "coordination.reconcile": handlers.reconcile,
         "coordination.cancel": handlers.cancel,
+        "coordination.repair": handlers.repair,
     }
 
 
