@@ -317,9 +317,7 @@ class TransportFaultBenchmarkHarness:
         pre = [self._envelope(index) for index in range(spec.batch_size)]
         await self._publish_batch(transport, pre, spec, evidence)
         await transport.set_available(False)
-        outage = [
-            self._envelope(spec.batch_size + index) for index in range(spec.fault_operations)
-        ]
+        outage = [self._envelope(spec.batch_size + index) for index in range(spec.fault_operations)]
         await asyncio.gather(
             *(
                 self._expect_publish_error(
