@@ -96,8 +96,7 @@ def load_release_generation_inputs(
         for item in _object_list(document, "artifacts")
     )
     gates = tuple(
-        _decode_gate(item, source_commit=source_commit)
-        for item in _object_list(document, "gates")
+        _decode_gate(item, source_commit=source_commit) for item in _object_list(document, "gates")
     )
     return ReleaseGenerationInputs(
         release_kind=release_kind,
