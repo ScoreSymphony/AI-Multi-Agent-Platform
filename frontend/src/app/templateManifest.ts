@@ -11,6 +11,9 @@ export const TEMPLATE_REQUIRED_RESOURCES = [
   "automations",
   "projects",
   "workspaces",
+  "workflows",
+  "capability-assignments",
+  "model-routing-profiles",
 ] as const;
 
 export const TEMPLATE_REQUIRED_COMMANDS = [
