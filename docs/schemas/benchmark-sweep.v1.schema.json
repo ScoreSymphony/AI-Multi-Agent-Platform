@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/benchmark-sweep.v1.schema.json",
+  "title": "AI Multi-Agent Platform Single-Node Benchmark Sweep v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "benchmark_id",
+    "benchmark_version",
+    "platform_version",
+    "platform_commit",
+    "started_at",
+    "deployment_profile",
+    "persistence_profile",
+    "workload_distribution",
+    "operation_count_per_point",
+    "warmup_operations",
+    "timeout_seconds",
+    "repetitions",
+    "concurrency_levels",
+    "environment",
+    "points",
+    "correctness_passed",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark_id": {"const": "single-node.reference.lifecycle.sweep"},
+    "benchmark_version": {"const": "1.0"},
+    "platform_version": {"type": "string"},
+    "platform_commit": {"type": "string"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "deployment_profile": {"const": "single-node-reference"},
+    "persistence_profile": {"type": "string", "minLength": 1},
+    "workload_distribution": {"type": "string", "minLength": 1},
+    "operation_count_per_point": {"type": "integer", "minimum": 1},
+    "warmup_operations": {"type": "integer", "minimum": 0},
+    "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+    "repetitions": {"type": "integer", "minimum": 1},
+    "concurrency_levels": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "integer", "minimum": 1}
+    },
+    "environment": {"type": "object"},
+    "points": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "concurrency",
+          "repetition",
+          "report_file",
+          "throughput_operations_per_second",
+          "p95_latency_ms",
+          "duration_seconds",
+          "completed_operations",
+          "storage_growth_bytes",
+          "correctness_passed"
+        ],
+        "properties": {
+          "concurrency": {"type": "integer", "minimum": 1},
+          "repetition": {"type": "integer", "minimum": 1},
+          "report_file": {"type": "string", "minLength": 1},
+          "throughput_operations_per_second": {"type": "number", "minimum": 0},
+          "p95_latency_ms": {"type": "number", "minimum": 0},
+          "duration_seconds": {"type": "number", "minimum": 0},
+          "completed_operations": {"type": "integer", "minimum": 0},
+          "storage_growth_bytes": {"type": "integer"},
+          "correctness_passed": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "correctness_passed": {"type": "boolean"},
+    "errors": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": false
+}

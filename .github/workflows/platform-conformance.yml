@@ -1,0 +1,42 @@
+name: Platform conformance
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fast:
+    name: conformance-fast
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Pin supported npm
+        run: npm install --global npm@11.6.0
+      - name: Install conformance environment
+        run: python -m pip install -e '.[dev]'
+      - name: Install frontend dependencies
+        run: npm --prefix frontend install --no-audit --no-fund
+      - name: Run fast conformance profile
+        run: >-
+          platform-conformance
+          --profile fast
+          --deployment-profile reference-single-node
+          --json-report conformance-fast.json
+      - name: Upload conformance evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: platform-conformance-fast
+          path: conformance-fast.json
+          if-no-files-found: warn

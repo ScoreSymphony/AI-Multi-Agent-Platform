@@ -105,6 +105,32 @@ class CapabilityAssignmentTemplateHandler:
             ),
         )
 
+    async def compensate(
+        self,
+        resources: tuple[TemplateResourceRef, ...],
+        provenance: TemplateInstantiationProvenance,
+        context: TemplateInstantiationContext,
+    ) -> None:
+        """Rollback only untouched canonical assignments created by this exact apply source."""
+
+        del context
+        expected_source = f"template:{provenance.source.template_id}@{provenance.source.revision}"
+        for resource in reversed(resources):
+            if resource.resource_type != "capability_assignment":
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "capability-assignment Template compensation received an unexpected resource",
+                    details={
+                        "resource_type": resource.resource_type,
+                        "resource_id": resource.resource_id,
+                    },
+                )
+            self.service.compensate_created(
+                resource.resource_id,
+                expected_owner_ref=provenance.applied_by,
+                expected_source=expected_source,
+            )
+
 
 def register_capability_assignment_template_handler(
     registry: ContextualTemplateHandlerRegistry,

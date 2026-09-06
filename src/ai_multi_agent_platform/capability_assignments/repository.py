@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.domain import OwnerRef
 
 from .models import CapabilityAssignmentPolicy, CapabilityAssignmentRevision
 
@@ -36,6 +37,14 @@ class CapabilityAssignmentRepository(Protocol):
         self,
         assignment_id: str,
     ) -> tuple[CapabilityAssignmentRevision, ...]: ...
+
+    def compensate_created(
+        self,
+        assignment_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+    ) -> None: ...
 
 
 class InMemoryCapabilityAssignmentRepository:
@@ -139,6 +148,43 @@ class InMemoryCapabilityAssignmentRepository:
             item for (current_id, _), item in self._revisions.items() if current_id == assignment_id
         ]
         return tuple(sorted(revisions, key=lambda item: item.revision))
+
+    def compensate_created(
+        self,
+        assignment_id: str,
+        *,
+        expected_owner_ref: OwnerRef,
+        expected_source: str,
+    ) -> None:
+        """Remove only an untouched resource proven to originate from one failed apply."""
+
+        policy = self.get(assignment_id)
+        if policy.owner_ref != expected_owner_ref:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "capability assignment compensation owner does not match",
+                details={"assignment_id": assignment_id},
+            )
+        if policy.current_revision != 1:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "capability assignment changed after creation and cannot be compensated",
+                details={
+                    "assignment_id": assignment_id,
+                    "current_revision": policy.current_revision,
+                },
+            )
+        revision = self.get_revision(assignment_id, 1)
+        if revision.content.provenance.source != expected_source:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "capability assignment provenance does not match failed Template apply",
+                details={"assignment_id": assignment_id},
+            )
+        del self._policies[assignment_id]
+        for key in tuple(self._revisions):
+            if key[0] == assignment_id:
+                del self._revisions[key]
 
     @staticmethod
     def _validate_pair(

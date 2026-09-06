@@ -47,6 +47,7 @@ class ModelRoutingProfileService:
         owner_ref: OwnerRef,
         principal_ref: str,
         context: OperationContext,
+        actor_type: str | None = None,
         description: str = "",
         project_id: str | None = None,
         provenance: Provenance | None = None,
@@ -57,6 +58,7 @@ class ModelRoutingProfileService:
         await self._authorize(
             principal_ref=principal_ref,
             context=context,
+            actor_type=actor_type,
             action="model-routing-profile:create",
             resource_ref=canonical_id,
             owner_ref=owner_ref,
@@ -93,6 +95,7 @@ class ModelRoutingProfileService:
         policy: ModelRoutingProfilePolicy,
         principal_ref: str,
         context: OperationContext,
+        actor_type: str | None = None,
         description: str = "",
         expected_revision: int | None = None,
         provenance: Provenance | None = None,
@@ -102,6 +105,7 @@ class ModelRoutingProfileService:
         await self._authorize(
             principal_ref=principal_ref,
             context=context,
+            actor_type=actor_type,
             action="model-routing-profile:version",
             resource_ref=profile_id,
             owner_ref=current.owner_ref,
@@ -138,6 +142,7 @@ class ModelRoutingProfileService:
         *,
         principal_ref: str,
         context: OperationContext,
+        actor_type: str | None = None,
         require_enabled: bool = False,
     ) -> ModelRoutingProfileRevision:
         definition = self.repository.get_definition(ref.profile_id)
@@ -145,6 +150,7 @@ class ModelRoutingProfileService:
         await self._authorize(
             principal_ref=principal_ref,
             context=context,
+            actor_type=actor_type,
             action="model-routing-profile:read",
             resource_ref=ref.canonical_ref,
             owner_ref=definition.owner_ref,
@@ -163,12 +169,14 @@ class ModelRoutingProfileService:
         *,
         principal_ref: str,
         context: OperationContext,
+        actor_type: str | None = None,
     ) -> ModelRoutingProfileDefinition:
         current = self.repository.get_definition(profile_id)
         self._require_project_scope(current.project_id, context)
         await self._authorize(
             principal_ref=principal_ref,
             context=context,
+            actor_type=actor_type,
             action="model-routing-profile:enable" if enabled else "model-routing-profile:disable",
             resource_ref=profile_id,
             owner_ref=current.owner_ref,
@@ -180,6 +188,7 @@ class ModelRoutingProfileService:
         *,
         principal_ref: str,
         context: OperationContext,
+        actor_type: str | None = None,
     ) -> tuple[ModelRoutingProfileDefinition, ...]:
         definitions = tuple(
             item
@@ -192,6 +201,7 @@ class ModelRoutingProfileService:
                 await self._authorize(
                     principal_ref=principal_ref,
                     context=context,
+                    actor_type=actor_type,
                     action="model-routing-profile:read",
                     resource_ref=definition.profile_id,
                     owner_ref=definition.owner_ref,
@@ -212,11 +222,22 @@ class ModelRoutingProfileService:
                 details={"project_id": project_id},
             )
 
+    @staticmethod
+    def _authorization_actor_type(context: OperationContext, actor_type: str | None) -> str:
+        if actor_type is not None:
+            if not actor_type.strip():
+                raise ContractError(ErrorCode.INVALID_REQUEST, "actor_type must not be blank")
+            return actor_type
+        if context.owner_type in {"user", "organization", "team"}:
+            return "human"
+        return "service"
+
     async def _authorize(
         self,
         *,
         principal_ref: str,
         context: OperationContext,
+        actor_type: str | None,
         action: str,
         resource_ref: str,
         owner_ref: OwnerRef,
@@ -240,7 +261,7 @@ class ModelRoutingProfileService:
                     action=action,
                     resource_ref=resource_ref,
                     context=context,
-                    actor_type=context.owner_type or "service",
+                    actor_type=self._authorization_actor_type(context, actor_type),
                     resource_type="model_routing_profile",
                     organization_id=owner_ref.id if owner_ref.type == "organization" else None,
                     team_id=owner_ref.id if owner_ref.type == "team" else None,

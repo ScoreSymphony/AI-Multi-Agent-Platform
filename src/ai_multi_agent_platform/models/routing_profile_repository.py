@@ -111,6 +111,25 @@ class JsonModelRoutingProfileRepository:
                     "requested_project_id": definition.project_id,
                 },
             )
+        previous_revision = self.get_revision(
+            ModelRoutingProfileRef(definition.profile_id, current.current_revision)
+        )
+        if revision.created_at < previous_revision.created_at:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "routing profile revision chronology cannot move backwards",
+                details={
+                    "profile_id": definition.profile_id,
+                    "previous_revision": previous_revision.revision,
+                    "revision": revision.revision,
+                },
+            )
+        if definition.updated_at < current.updated_at:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "routing profile stable update timestamp cannot move backwards",
+                details={"profile_id": definition.profile_id},
+            )
         self._definitions[definition.profile_id] = definition
         self._revisions[(revision.profile_id, revision.revision)] = revision
         try:
@@ -152,7 +171,11 @@ class JsonModelRoutingProfileRepository:
         current = self.get_definition(profile_id)
         if current.enabled is enabled:
             return current
-        updated = replace(current, enabled=enabled, updated_at=datetime.now(UTC))
+        latest_revision = self.get_revision(
+            ModelRoutingProfileRef(profile_id, current.current_revision)
+        )
+        updated_at = max(datetime.now(UTC), current.updated_at, latest_revision.created_at)
+        updated = replace(current, enabled=enabled, updated_at=updated_at)
         self._definitions[profile_id] = updated
         try:
             self._persist()
@@ -204,6 +227,15 @@ class JsonModelRoutingProfileRepository:
                 ErrorCode.CONTRACT_VIOLATION,
                 "routing profile revision scope must match stable definition scope",
             )
+        if definition.updated_at < revision.created_at:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "routing profile updated_at cannot precede its latest revision",
+                details={
+                    "profile_id": definition.profile_id,
+                    "revision": revision.revision,
+                },
+            )
 
     def _load(self) -> None:
         if not self.path.exists():
@@ -247,26 +279,39 @@ class JsonModelRoutingProfileRepository:
                     ErrorCode.INVALID_CONFIGURATION,
                     "routing profile revisions must be contiguous from revision 1",
                 )
+            self._validate_loaded_history(definition, revisions)
             if definition.profile_id in self._definitions:
                 raise ContractError(ErrorCode.CONFLICT, "duplicate routing profile in store")
             self._definitions[definition.profile_id] = definition
             for revision in revisions:
-                self._validate_loaded_scope(definition, revision)
                 self._revisions[(revision.profile_id, revision.revision)] = revision
 
-    def _validate_loaded_scope(
+    def _validate_loaded_history(
         self,
         definition: ModelRoutingProfileDefinition,
-        revision: ModelRoutingProfileRevision,
+        revisions: tuple[ModelRoutingProfileRevision, ...],
     ) -> None:
-        if (
-            revision.profile_id != definition.profile_id
-            or revision.owner_ref != definition.owner_ref
-            or revision.project_id != definition.project_id
-        ):
+        previous: ModelRoutingProfileRevision | None = None
+        for revision in revisions:
+            if (
+                revision.profile_id != definition.profile_id
+                or revision.owner_ref != definition.owner_ref
+                or revision.project_id != definition.project_id
+            ):
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "persisted routing profile revision has inconsistent identity/scope",
+                )
+            if previous is not None and revision.created_at < previous.created_at:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    "persisted routing profile revision chronology moves backwards",
+                )
+            previous = revision
+        if definition.updated_at < revisions[-1].created_at:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "persisted routing profile revision has inconsistent identity/scope",
+                "persisted routing profile updated_at precedes the latest revision",
             )
 
     def _persist(self) -> None:

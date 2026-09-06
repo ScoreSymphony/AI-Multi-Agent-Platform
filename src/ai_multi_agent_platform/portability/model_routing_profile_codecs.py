@@ -46,12 +46,18 @@ class ModelRoutingProfilePortableSnapshot:
             raise ValueError("portable routing profile history must be contiguous from revision 1")
         if self.revisions[-1].revision != self.definition.current_revision:
             raise ValueError("routing profile definition must point at its latest revision")
+        previous_created_at: datetime | None = None
         for revision in self.revisions:
             if (
                 revision.owner_ref != self.definition.owner_ref
                 or revision.project_id != self.definition.project_id
             ):
                 raise ValueError("portable routing profile ownership scope is inconsistent")
+            if previous_created_at is not None and revision.created_at < previous_created_at:
+                raise ValueError("portable routing profile revision chronology moves backwards")
+            previous_created_at = revision.created_at
+        if self.definition.updated_at < self.revisions[-1].created_at:
+            raise ValueError("routing profile updated_at cannot precede its latest revision")
 
 
 def snapshot_model_routing_profile(
