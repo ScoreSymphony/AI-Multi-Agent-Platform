@@ -20,6 +20,7 @@ from ai_multi_agent_platform.models import (
     ModelRoutingProfileAssignmentGate,
     ModelRoutingProfilePolicy,
     ModelRoutingProfileRef,
+    ModelRoutingProfileRevision,
     ModelRoutingProfileService,
     new_model_routing_profile_id,
 )
@@ -32,6 +33,7 @@ from ai_multi_agent_platform.portability import (
     ImportMutationRegistry,
     ImportPreviewService,
     PackageProvenance,
+    PortableResource,
     ResourceSerializerRegistry,
     build_package,
 )
@@ -79,7 +81,7 @@ def _create_profile(
     *,
     project_id: str | None = None,
     profile_id: str | None = None,
-):
+) -> ModelRoutingProfileRevision:
     return asyncio.run(
         ModelRoutingProfileService(repository).create_profile(
             name="Issue 445 regression profile",
@@ -93,7 +95,11 @@ def _create_profile(
     )
 
 
-def _serialized_agent(routing_profile_ref: str, *, project_id: str | None = None):
+def _serialized_agent(
+    routing_profile_ref: str,
+    *,
+    project_id: str | None = None,
+) -> tuple[AgentService, ResourceSerializerRegistry, PortableResource]:
     source_agents = AgentService(InMemoryAgentRepository())
     revision = source_agents.create_agent(
         _agent_profile(routing_profile_ref),
@@ -115,7 +121,13 @@ def test_portable_agent_import_rejects_malformed_canonical_reference_before_muta
     target = InMemoryAgentRepository()
 
     with pytest.raises(ContractError) as caught:
-        asyncio.run(AgentImportMutationHandler(target).preflight(resource, snapshot, ImportContext()))
+        asyncio.run(
+            AgentImportMutationHandler(target).preflight(
+                resource,
+                snapshot,
+                ImportContext(),
+            )
+        )
 
     assert caught.value.code is ErrorCode.INVALID_CONFIGURATION
     assert target.list_agents() == ()
@@ -129,7 +141,13 @@ def test_portable_agent_import_rejects_undeclared_canonical_dependency_before_mu
     target = InMemoryAgentRepository()
 
     with pytest.raises(ContractError) as caught:
-        asyncio.run(AgentImportMutationHandler(target).preflight(resource, snapshot, ImportContext()))
+        asyncio.run(
+            AgentImportMutationHandler(target).preflight(
+                resource,
+                snapshot,
+                ImportContext(),
+            )
+        )
 
     assert caught.value.code is ErrorCode.INVALID_CONFIGURATION
     assert target.list_agents() == ()
@@ -164,7 +182,13 @@ def test_portable_agent_import_checks_canonical_dependencies_across_immutable_hi
     target = InMemoryAgentRepository()
 
     with pytest.raises(ContractError) as caught:
-        asyncio.run(AgentImportMutationHandler(target).preflight(resource, snapshot, ImportContext()))
+        asyncio.run(
+            AgentImportMutationHandler(target).preflight(
+                resource,
+                snapshot,
+                ImportContext(),
+            )
+        )
 
     assert caught.value.code is ErrorCode.INVALID_CONFIGURATION
     assert target.list_agents() == ()
@@ -180,7 +204,8 @@ def test_pre_309_legacy_routing_key_remains_compatibility_data() -> None:
     asyncio.run(handler.preflight(resource, snapshot, ImportContext()))
     token = asyncio.run(handler.apply(resource, snapshot, ImportContext()))
 
-    assert target.get_agent_revision(token, 1).profile.model.routing_profile_ref == legacy_key
+    imported = target.get_agent_revision(token, 1)
+    assert imported.profile.model.routing_profile_ref == legacy_key
 
 
 def test_portable_agent_assignment_uses_imported_target_project_scope(tmp_path) -> None:
@@ -195,16 +220,20 @@ def test_portable_agent_assignment_uses_imported_target_project_scope(tmp_path) 
     authorization = FakeAuthorizationProvider(allowed=True)
     target = InMemoryAgentRepository()
     access = RoutingProfileAssignmentAccess(
-        gate=ModelRoutingProfileAssignmentGate(profiles, authorization=authorization),
+        gate=ModelRoutingProfileAssignmentGate(
+            profiles,
+            authorization=authorization,
+        ),
         principal_ref=OWNER.id,
         actor_type="human",
         correlation_id="corr-issue-445-target-scope",
         causation_id="request-issue-445-target-scope",
     )
+    handler = AgentImportMutationHandler(target)
 
     with activate_routing_profile_assignment_access(access):
-        asyncio.run(AgentImportMutationHandler(target).preflight(resource, snapshot, ImportContext()))
-        asyncio.run(AgentImportMutationHandler(target).apply(resource, snapshot, ImportContext()))
+        asyncio.run(handler.preflight(resource, snapshot, ImportContext()))
+        asyncio.run(handler.apply(resource, snapshot, ImportContext()))
 
     call = authorization.calls[-1]
     assert call.action == "model-routing-profile:assign"
@@ -213,12 +242,12 @@ def test_portable_agent_assignment_uses_imported_target_project_scope(tmp_path) 
     assert call.context.owner_id == OWNER.id
 
 
-def test_assignment_denial_rolls_back_earlier_in_package_routing_profile_import(tmp_path) -> None:
+def test_assignment_denial_rolls_back_earlier_in_package_routing_profile_import(
+    tmp_path,
+) -> None:
     source_profiles = JsonModelRoutingProfileRepository(tmp_path / "source-profiles.json")
     routing_profile = _create_profile(source_profiles)
-    source_agents, serializers, agent_resource = _serialized_agent(
-        routing_profile.ref.canonical_ref
-    )
+    _, serializers, agent_resource = _serialized_agent(routing_profile.ref.canonical_ref)
     serializers.register(ModelRoutingProfilePortableCodec())
     profile_resource = serializers.serialize(
         MODEL_ROUTING_PROFILE_RESOURCE_TYPE,
@@ -241,7 +270,10 @@ def test_assignment_denial_rolls_back_earlier_in_package_routing_profile_import(
     mutations.register(AgentImportMutationHandler(target_agents))
     authorization = FakeAuthorizationProvider(allowed=False)
     access = RoutingProfileAssignmentAccess(
-        gate=ModelRoutingProfileAssignmentGate(target_profiles, authorization=authorization),
+        gate=ModelRoutingProfileAssignmentGate(
+            target_profiles,
+            authorization=authorization,
+        ),
         principal_ref=OWNER.id,
         actor_type="human",
         correlation_id="corr-issue-445-package-rollback",
