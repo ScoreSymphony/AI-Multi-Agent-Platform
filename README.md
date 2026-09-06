@@ -25,7 +25,7 @@ The dependency-driven implementation order, current parallel work lanes and conv
 
 Material implementation choices and architecture refinements are recorded through [`docs/adr/`](docs/adr/README.md). Implementations must not silently contradict the normative product or architecture documents.
 
-The platform-owned kernel under `src/ai_multi_agent_platform/kernel/` is the authoritative source for externally visible Task/Run lifecycle state. Orchestrators and executors integrate through contracts and must not become implicit lifecycle owners. A platform-owned durable Plan/Step coordinator core is now implemented for restart-safe task-bound workflow progression; #384 remains open for its remaining distributed, operational and acceptance hardening rather than because lifecycle ownership is undecided.
+The platform-owned kernel under `src/ai_multi_agent_platform/kernel/` is the authoritative source for externally visible Task/Run lifecycle state. Orchestrators and executors integrate through contracts and must not become implicit lifecycle owners. The platform-owned durable Plan/Step coordinator from #384 is accepted for restart-safe task-bound workflow progression, including durable dependency/wait/retry state, canonical Run reconciliation, distributed Worker cancellation/recovery evidence, orchestrator-replacement invariance and conservative authorized repair of inconsistent coordination state. Genuine multi-Control-Plane authority remains a deployment/HA concern behind the existing replaceable coordination/fencing contracts rather than a second workflow lifecycle.
 
 ## Development
 
