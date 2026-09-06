@@ -20,6 +20,10 @@ The #252 usable single-node prototype gate has passed and is maintained by the r
 
 No GitHub release or semantic-version tag has been published yet. Passing #252 therefore does **not** by itself mean that `0.1.0` has been released: publication still requires an exact release commit, the checklist below, current changelog/provenance and verification of the produced artifacts.
 
+The release/update system itself is no longer only policy documentation. The merged #42 work provides release-manifest validation, compatibility inventory, advisory upstream discovery, fail-closed adoption/release gates, operator-visible release status and the upstream review workflow. PR #492 further hardened this foundation with manifest schema v2, cryptographic dependency/artifact provenance, typed gate evidence, exact source-commit binding and complete canonical `VersionSnapshot` compatibility state.
+
+#42 intentionally remains open for operationalization: deterministic manifest generation, persistence of reviewed advisory discovery results into operator/runtime/UI state, stronger frontend typing for schema-v2 release data and optional provider-neutral scheduled discovery adapters are still outstanding. These items improve repeatability and operator experience; update discovery remains advisory and cannot silently mutate production pins, approve, merge or deploy changes.
+
 The `1.0.0` operational target remains gated by #46 full platform conformance. Current open implementation work may add capabilities before that point, but compatibility must not be claimed beyond the profiles that have explicit evidence.
 
 ## Release candidate checklist
@@ -51,6 +55,8 @@ The `1.0.0` operational target remains gated by #46 full platform conformance. C
 8. Publish a GitHub release using the matching changelog section.
 9. Record artifact checksums, canonical source revision and tested compatibility profiles.
 10. Verify a clean installation using the published artifacts.
+
+Until deterministic `platform-release generate` (or equivalent workflow integration) is complete under #42, manifest population may remain an explicit reviewed release step. The absence of automated generation must not weaken the required manifest-v2 validation or evidence binding.
 
 ## Rollback
 
