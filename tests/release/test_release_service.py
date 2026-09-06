@@ -169,9 +169,7 @@ def test_release_provenance_generation_is_traceable_and_complete() -> None:
     ]
     assert payload["provenance_ref"] == "attestation:1.2.3"
     assert payload["sbom_ref"] == "sbom:1.2.3"
-    assert payload["artifact_hashes"] == {
-        "ai_multi_agent_platform-1.2.3.whl": PLATFORM_DIGEST
-    }
+    assert payload["artifact_hashes"] == {"ai_multi_agent_platform-1.2.3.whl": PLATFORM_DIGEST}
 
     upstreams = payload["upstreams"]
     assert isinstance(upstreams, list)
