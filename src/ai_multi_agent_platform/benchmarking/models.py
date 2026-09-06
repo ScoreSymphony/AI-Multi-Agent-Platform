@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any
+from typing import Any, cast
 
 BENCHMARK_REPORT_SCHEMA_VERSION = "1.0"
 
@@ -120,7 +120,7 @@ class BenchmarkReport:
     baseline_comparison: BaselineComparison | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        return cast(dict[str, Any], _json_compatible(asdict(self)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,3 +246,13 @@ def _positive_float(value: object) -> float | None:
         return None
     converted = float(value)
     return converted if converted > 0 else None
+
+
+def _json_compatible(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _json_compatible(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_json_compatible(item) for item in value]
+    if isinstance(value, list):
+        return [_json_compatible(item) for item in value]
+    return value
