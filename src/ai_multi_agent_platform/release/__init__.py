@@ -1,0 +1,65 @@
+"""Release/provenance public API."""
+
+from .codec import ReleaseManifestError, load_release_manifest, release_manifest_from_dict
+from .discovery import (
+    COMPATIBILITY_INVENTORY_SCHEMA_VERSION,
+    UPDATE_OBSERVATION_SCHEMA_VERSION,
+    CompatibilityInventory,
+    ObservedUpstream,
+    UpdateCandidate,
+    UpdateClassification,
+    UpdateDiscoveryError,
+    UpdateDiscoveryReport,
+    UpdateDisposition,
+    UpstreamInventoryEntry,
+    evaluate_update_candidates,
+    load_compatibility_inventory,
+    load_observations,
+    record_reviewed_candidate,
+)
+from .models import (
+    RELEASE_MANIFEST_SCHEMA_VERSION,
+    CompatibilityRecord,
+    CompatibilityStatus,
+    GateStatus,
+    ReleaseGate,
+    ReleaseKind,
+    ReleaseManifest,
+    ReleaseReadinessReport,
+    UpstreamProvenance,
+)
+from .operator import ReleaseOperatorService
+from .service import REQUIRED_RELEASE_GATES, evaluate_release, release_metadata
+
+__all__ = [
+    "COMPATIBILITY_INVENTORY_SCHEMA_VERSION",
+    "RELEASE_MANIFEST_SCHEMA_VERSION",
+    "REQUIRED_RELEASE_GATES",
+    "UPDATE_OBSERVATION_SCHEMA_VERSION",
+    "CompatibilityInventory",
+    "CompatibilityRecord",
+    "CompatibilityStatus",
+    "GateStatus",
+    "ObservedUpstream",
+    "ReleaseGate",
+    "ReleaseKind",
+    "ReleaseManifest",
+    "ReleaseManifestError",
+    "ReleaseOperatorService",
+    "ReleaseReadinessReport",
+    "UpdateCandidate",
+    "UpdateClassification",
+    "UpdateDiscoveryError",
+    "UpdateDiscoveryReport",
+    "UpdateDisposition",
+    "UpstreamInventoryEntry",
+    "UpstreamProvenance",
+    "evaluate_release",
+    "evaluate_update_candidates",
+    "load_compatibility_inventory",
+    "load_observations",
+    "load_release_manifest",
+    "record_reviewed_candidate",
+    "release_manifest_from_dict",
+    "release_metadata",
+]

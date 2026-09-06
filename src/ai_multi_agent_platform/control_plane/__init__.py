@@ -76,6 +76,14 @@ from .plugin_api import (
     PLUGIN_COMMANDS,
     PluginPermissionResolver,
 )
+from .release_api import (
+    RELEASE_STATUS_PATH,
+    AuthenticatedControlPlaneHTTP,
+    ControlPlane,
+    ControlPlaneASGI,
+    ControlPlaneHTTP,
+    build_openapi,
+)
 from .service import ScopeStore
 from .task_management_contract import (
     TASK_MANAGEMENT_BULK_UPDATE_COMMAND,
@@ -87,11 +95,6 @@ from .task_project_reassignment import (
     TASK_PROJECT_MOVE_ACTION,
     TASK_PROJECT_MOVE_COMMAND,
     TASK_PROJECT_MOVE_COMMANDS,
-    AuthenticatedControlPlaneHTTP,
-    ControlPlane,
-    ControlPlaneASGI,
-    ControlPlaneHTTP,
-    build_openapi,
 )
 
 # Conversations remain optional runtime resources. Notifications are always-composed
@@ -156,6 +159,7 @@ __all__ = [
     "PLUGIN_COMMANDS",
     "PageQuery",
     "PluginPermissionResolver",
+    "RELEASE_STATUS_PATH",
     "REQUIRED_COMMANDS",
     "RESOURCE_OWNERSHIP_COLLECTION",
     "RESOURCE_SHARE_COLLECTION",

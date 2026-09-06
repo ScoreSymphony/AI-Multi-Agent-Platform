@@ -19,6 +19,7 @@ The project uses semantic versioning once a public prototype is released. Until 
 - Canonical model-routing profiles with durable immutable revisions and fail-closed schema-version validation.
 - Reusable no-paid-service prototype acceptance profiles and machine-readable acceptance reporting.
 - Repository governance, ownership, issue-quality automation and supply-chain review.
+- Release-manifest validation, compatibility/provenance metadata, fail-closed release gates, an upstream-update PR convention and a security-hotfix runbook.
 
 ### Changed
 
