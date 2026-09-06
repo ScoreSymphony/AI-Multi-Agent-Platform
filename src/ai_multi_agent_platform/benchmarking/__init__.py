@@ -8,6 +8,13 @@ from .endurance import (
     ResourceSnapshot,
     SingleNodeEnduranceHarness,
 )
+from .faults import (
+    FAULT_REPORT_SCHEMA_VERSION,
+    FaultCorrectnessSummary,
+    FaultUnderLoadReport,
+    FaultUnderLoadSpec,
+    SingleNodeFaultUnderLoadHarness,
+)
 from .models import (
     BENCHMARK_REPORT_SCHEMA_VERSION,
     BaselineComparison,
@@ -20,6 +27,14 @@ from .models import (
     compare_with_baseline,
 )
 from .single_node import SingleNodeBenchmarkHarness, attach_baseline_comparison
+from .stress import (
+    STRESS_REPORT_SCHEMA_VERSION,
+    SingleNodeStressExecution,
+    SingleNodeStressHarness,
+    StressBenchmarkReport,
+    StressBenchmarkSpec,
+    StressPoint,
+)
 from .sweep import (
     SWEEP_REPORT_SCHEMA_VERSION,
     SingleNodeSweepExecution,
@@ -38,6 +53,8 @@ from .workloads import (
 __all__ = [
     "BENCHMARK_REPORT_SCHEMA_VERSION",
     "ENDURANCE_REPORT_SCHEMA_VERSION",
+    "FAULT_REPORT_SCHEMA_VERSION",
+    "STRESS_REPORT_SCHEMA_VERSION",
     "SWEEP_REPORT_SCHEMA_VERSION",
     "WORKLOAD_REPORT_SCHEMA_VERSION",
     "BaselineComparison",
@@ -47,16 +64,25 @@ __all__ = [
     "EnduranceBenchmarkReport",
     "EnduranceBenchmarkSpec",
     "EnduranceCorrectnessSummary",
+    "FaultCorrectnessSummary",
+    "FaultUnderLoadReport",
+    "FaultUnderLoadSpec",
     "LatencyDistribution",
     "RegressionThresholds",
     "ResourceMetrics",
     "ResourceSnapshot",
     "SingleNodeBenchmarkHarness",
     "SingleNodeEnduranceHarness",
+    "SingleNodeFaultUnderLoadHarness",
+    "SingleNodeStressExecution",
+    "SingleNodeStressHarness",
     "SingleNodeSweepExecution",
     "SingleNodeSweepHarness",
     "SingleNodeSweepReport",
     "SingleNodeWorkloadHarness",
+    "StressBenchmarkReport",
+    "StressBenchmarkSpec",
+    "StressPoint",
     "SweepPoint",
     "WorkloadBenchmarkReport",
     "WorkloadBenchmarkSpec",
