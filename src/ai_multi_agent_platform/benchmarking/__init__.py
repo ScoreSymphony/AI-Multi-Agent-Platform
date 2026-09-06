@@ -1,5 +1,12 @@
 """Performance, load and scalability benchmark contracts and harnesses."""
 
+from .coordination_contention import (
+    COORDINATION_CONTENTION_REPORT_SCHEMA_VERSION,
+    CoordinationContentionCorrectnessSummary,
+    CoordinationContentionHarness,
+    CoordinationContentionReport,
+    CoordinationContentionSpec,
+)
 from .coordination_pressure import (
     COORDINATION_PRESSURE_REPORT_SCHEMA_VERSION,
     CoordinationPressureCorrectnessSummary,
@@ -89,6 +96,7 @@ from .workloads import (
 
 __all__ = [
     "BENCHMARK_REPORT_SCHEMA_VERSION",
+    "COORDINATION_CONTENTION_REPORT_SCHEMA_VERSION",
     "COORDINATION_PRESSURE_REPORT_SCHEMA_VERSION",
     "ENDURANCE_REPORT_SCHEMA_VERSION",
     "FAULT_REPORT_SCHEMA_VERSION",
@@ -102,6 +110,10 @@ __all__ = [
     "BaselineComparison",
     "BenchmarkReport",
     "BenchmarkSpec",
+    "CoordinationContentionCorrectnessSummary",
+    "CoordinationContentionHarness",
+    "CoordinationContentionReport",
+    "CoordinationContentionSpec",
     "CoordinationPressureCorrectnessSummary",
     "CoordinationPressureHarness",
     "CoordinationPressureReport",
