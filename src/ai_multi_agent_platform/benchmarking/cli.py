@@ -15,6 +15,7 @@ from ai_multi_agent_platform.deployment import SingleNodeConfig
 from .models import BenchmarkSpec, RegressionThresholds, compare_with_baseline
 from .single_node import SingleNodeBenchmarkHarness, attach_baseline_comparison
 from .sweep import SingleNodeSweepHarness
+from .workloads import SingleNodeWorkloadHarness, WorkloadBenchmarkSpec
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -52,6 +53,26 @@ def _parser() -> argparse.ArgumentParser:
     sweep.add_argument("--timeout-seconds", type=float, default=30.0)
     sweep.add_argument("--output-dir", type=Path, required=True)
     sweep.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
+
+    workload = subparsers.add_parser(
+        "single-node-workload",
+        help="run read-heavy, mixed, history or restart single-node workloads",
+    )
+    workload.add_argument(
+        "--scenario",
+        choices=("read-heavy", "mixed", "history", "restart"),
+        required=True,
+    )
+    workload.add_argument("--data-dir", type=Path)
+    workload.add_argument("--operations", type=int, default=100)
+    workload.add_argument("--concurrency", type=int, default=10)
+    workload.add_argument("--seed-tasks", type=int)
+    workload.add_argument("--warmup-operations", type=int, default=5)
+    workload.add_argument("--timeout-seconds", type=float, default=30.0)
+    workload.add_argument("--read-weight", type=int, default=4)
+    workload.add_argument("--write-weight", type=int, default=1)
+    workload.add_argument("--output", type=Path, required=True)
+    workload.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
     return parser
 
 
@@ -61,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_run_single_node(args))
     if args.command == "single-node-sweep":
         return asyncio.run(_run_single_node_sweep(args))
+    if args.command == "single-node-workload":
+        return asyncio.run(_run_single_node_workload(args))
     raise AssertionError(f"unsupported benchmark command: {args.command}")
 
 
@@ -150,6 +173,64 @@ async def _run_single_node_sweep(args: argparse.Namespace) -> int:
     finally:
         if temporary is not None:
             temporary.cleanup()
+
+
+async def _run_single_node_workload(args: argparse.Namespace) -> int:
+    temporary: tempfile.TemporaryDirectory[str] | None = None
+    if args.data_dir is None:
+        temporary = tempfile.TemporaryDirectory(prefix="ai-map-benchmark-workload-")
+        data_dir = Path(temporary.name)
+    else:
+        data_dir = args.data_dir
+
+    seed_tasks = args.seed_tasks
+    if seed_tasks is None:
+        seed_tasks = 1000 if args.scenario == "history" else 50
+    benchmark_id, distribution = _workload_identity(args.scenario)
+    read_weight = args.read_weight if args.scenario == "mixed" else 1
+    write_weight = args.write_weight if args.scenario == "mixed" else 0
+    spec = WorkloadBenchmarkSpec(
+        benchmark_id=benchmark_id,
+        benchmark_version="1.0",
+        scenario=args.scenario,
+        deployment_profile="single-node-reference",
+        persistence_profile="sqlite-reference",
+        workload_distribution=distribution,
+        operation_count=args.operations,
+        concurrency=args.concurrency,
+        seed_tasks=seed_tasks,
+        warmup_operations=args.warmup_operations,
+        timeout_seconds=args.timeout_seconds,
+        read_weight=read_weight,
+        write_weight=write_weight,
+    )
+    try:
+        report = await SingleNodeWorkloadHarness(
+            SingleNodeConfig(data_dir=data_dir, secure_cookie=False),
+            platform_commit=args.platform_commit,
+        ).run(spec)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return 0 if report.correctness.passed else 2
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+
+
+def _workload_identity(scenario: str) -> tuple[str, str]:
+    identities = {
+        "read-heavy": ("single-node.api.read-heavy", "list-detail-runs-timeline"),
+        "mixed": ("single-node.api.mixed", "weighted-read-write-lifecycle"),
+        "history": ("single-node.api.history", "large-state-query-mix"),
+        "restart": ("single-node.restart.accumulated-state", "restart-then-query"),
+    }
+    try:
+        return identities[scenario]
+    except KeyError as exc:
+        raise ValueError(f"unsupported workload scenario: {scenario}") from exc
 
 
 def _load_json_object(path: Path) -> dict[str, Any]:
