@@ -128,7 +128,7 @@ The following optional scenarios have maintained executable #46 evidence and can
 | T — Repository/Git | exact repository revision -> canonical Workspace/Run -> change Artifact/commit provenance and retry identity |
 | V — Organizations | membership suspension/removal plus resource sharing/revocation and cross-organization isolation |
 | X — HA | stale-leader fencing, promotion reconciliation preserving Worker identity and duplicate-command replay without duplicate Task/Run |
-| Y — durable Plan/Step coordination | crash/restart-safe Run creation, waits/retries/fan-in, stale-fence rejection, lost-Worker reconciliation, restore/history consistency and explicit coordination observability |
+| Y — durable Plan/Step coordination | crash/restart-safe Run creation, waits/retries/fan-in, stale-fence rejection, real distributed lost-ack/cancellation reconciliation, restore/history consistency, orchestrator-replacement invariance, conservative authorized repair and explicit coordination observability |
 
 Q, S and Y were previously unavailable while their owning implementation issues were still open. Their owning work is now complete and each has retained executable evidence. They remain optional deployment claims rather than becoming implicit requirements of the reference release profile.
 
