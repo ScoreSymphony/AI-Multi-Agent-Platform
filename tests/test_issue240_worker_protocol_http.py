@@ -143,6 +143,7 @@ def test_worker_protocol_codec_preserves_registration_and_heartbeat_reports() ->
     serialized_registration = repr(encoded_registration)
     assert "registered_at" not in serialized_registration
     assert "last_heartbeat_at" not in serialized_registration
+    assert "updated_at" not in serialized_registration
 
     heartbeat = WorkerHeartbeatRequest(
         heartbeat=Heartbeat(
@@ -167,6 +168,7 @@ def test_worker_protocol_codec_preserves_registration_and_heartbeat_reports() ->
     serialized_heartbeat = repr(encoded_heartbeat)
     assert "registered_at" not in serialized_heartbeat
     assert "last_heartbeat_at" not in serialized_heartbeat
+    assert "updated_at" not in serialized_heartbeat
 
 
 def test_private_http_surface_registers_heartbeats_and_rejects_replay() -> None:
