@@ -10,6 +10,7 @@ from ai_multi_agent_platform.connectors import (
     ConnectorService,
     ReferenceConnectorProvider,
     SqliteConnectorRepository,
+    SyncMode,
 )
 from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.domain import new_id
@@ -67,7 +68,9 @@ def test_incremental_sync_resumes_after_repository_and_provider_recreation(tmp_p
         )
         assert len(initial.resources) == 2
         assert initial.checkpoint.cursor == "2"
-        original_ids = {resource.native_reference.native_id: resource.id for resource in initial.resources}
+        original_ids = {
+            resource.native_reference.native_id: resource.id for resource in initial.resources
+        }
 
         reconstructed_repository = SqliteConnectorRepository(database_path)
         reconstructed_service = ConnectorService(reconstructed_repository, ConnectorRegistry())
@@ -94,8 +97,10 @@ def test_incremental_sync_resumes_after_repository_and_provider_recreation(tmp_p
             "records",
             actor=actor,
             context=context,
-            mode="rebuild",
+            mode=SyncMode.REBUILD,
         )
-        assert {resource.native_reference.native_id: resource.id for resource in rebuilt.resources} == original_ids
+        assert {
+            resource.native_reference.native_id: resource.id for resource in rebuilt.resources
+        } == original_ids
 
     asyncio.run(scenario())
