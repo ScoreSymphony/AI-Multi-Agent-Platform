@@ -37,6 +37,8 @@ _SINGLE_NODE_SCHEMA = ConfigurationSchema(
                         "type": "string",
                         "enum": ["critical", "error", "warning", "info", "debug"],
                     },
+                    "registry_catalog": {"type": ["string", "null"]},
+                    "registry_signature_keys": {"type": ["string", "null"]},
                 },
             }
         },
@@ -52,6 +54,8 @@ _DEFAULTS = ConfigLayer(
             "port": 8000,
             "secure_cookie": True,
             "log_level": "info",
+            "registry_catalog": None,
+            "registry_signature_keys": None,
         }
     },
     ConfigSource("single-node-defaults", "built-in"),
@@ -67,6 +71,8 @@ class SingleNodeConfig:
     port: int = 8000
     secure_cookie: bool = True
     log_level: str = "info"
+    registry_catalog: Path | None = None
+    registry_signature_keys: Path | None = None
 
     @property
     def database_dir(self) -> Path:
@@ -161,6 +167,14 @@ def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleN
         )
     if "AI_MAP_LOG_LEVEL" in source:
         target["log_level"] = source["AI_MAP_LOG_LEVEL"].strip().lower()
+    if "AI_MAP_REGISTRY_CATALOG" in source:
+        target["registry_catalog"] = _optional_path_text(
+            source["AI_MAP_REGISTRY_CATALOG"], "AI_MAP_REGISTRY_CATALOG"
+        )
+    if "AI_MAP_REGISTRY_SIGNATURE_KEYS" in source:
+        target["registry_signature_keys"] = _optional_path_text(
+            source["AI_MAP_REGISTRY_SIGNATURE_KEYS"], "AI_MAP_REGISTRY_SIGNATURE_KEYS"
+        )
 
     layers = [_DEFAULTS]
     if target:
@@ -191,7 +205,22 @@ def load_single_node_config(environ: Mapping[str, str] | None = None) -> SingleN
         port=int(deployment["port"]),
         secure_cookie=secure_cookie,
         log_level=str(deployment["log_level"]),
+        registry_catalog=_resolved_path(deployment.get("registry_catalog")),
+        registry_signature_keys=_resolved_path(deployment.get("registry_signature_keys")),
     )
+
+
+def _resolved_path(value: object) -> Path | None:
+    if value is None:
+        return None
+    return Path(str(value)).expanduser()
+
+
+def _optional_path_text(value: str, name: str) -> str | None:
+    stripped = value.strip()
+    if not stripped:
+        raise ConfigurationError(f"{name} must be a non-blank path when set")
+    return stripped
 
 
 def _parse_bool(value: str, name: str) -> bool:

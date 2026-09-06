@@ -13,6 +13,7 @@ import { NotificationClient } from "../api/notifications";
 import { OnboardingClient } from "../api/onboarding";
 import { OrganizationClient } from "../api/organizations";
 import { PluginsClient } from "../api/plugins";
+import { RegistryClient } from "../api/registry";
 import { RepositoryCollectionClient } from "../api/repositories";
 import { TemplateClient } from "../api/templates";
 import { VerificationClient } from "../api/verification";
@@ -55,6 +56,7 @@ import {
   ConnectorDefinitionDetailPage,
   IntegrationsPage,
 } from "../pages/IntegrationsPage";
+import { MarketplacePage } from "../pages/MarketplacePage";
 import {
   KnowledgeDetailPage,
   KnowledgePage,
@@ -157,6 +159,10 @@ export function Shell() {
   );
   const pluginsClient = useMemo(
     () => new PluginsClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
+  const registryClient = useMemo(
+    () => new RegistryClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
   const templateClient = useMemo(
@@ -486,6 +492,17 @@ export function Shell() {
       <ManifestResourcesPage state={manifestState} manifest={manifest} label="Evaluations" resources={EVALUATION_RESOURCES}>
         <EvaluationRunDetailPage client={evaluationClient} evaluationRunId={evaluationRunMatch.evaluationRunId} />
       </ManifestResourcesPage>
+    );
+  } else if (path === "/marketplace") {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Marketplace"
+        resource="registry-items"
+      >
+        <MarketplacePage client={registryClient} />
+      </ManifestResourcePage>
     );
   } else if (path === "/compute") {
     content = (
