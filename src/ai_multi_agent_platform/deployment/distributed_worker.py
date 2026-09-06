@@ -70,7 +70,9 @@ class DistributedWorkerProcessConfig:
 
     @property
     def worker(self) -> WorkerRecord:
-        return next(worker for worker in self.registration.workers if worker.worker_id == self.worker_id)
+        return next(
+            worker for worker in self.registration.workers if worker.worker_id == self.worker_id
+        )
 
 
 class DistributedWorkerProcess:
@@ -161,11 +163,19 @@ class DistributedWorkerProcess:
             )
             try:
                 await protocol.heartbeat(heartbeat)
-            except WorkerProtocolHTTPClientError:
-                # The Control Plane may have restarted and lost volatile distributed state.
-                # Registration is idempotent/re-registration-safe and re-establishes the exact
-                # canonical snapshot before the next heartbeat attempt.
-                await self._register()
+            except WorkerProtocolHTTPClientError as exc:
+                if exc.retryable:
+                    # A transport outage is not evidence that Control-Plane state disappeared.
+                    # Keep the current remote dispatcher/materialization ownership intact and
+                    # retry heartbeat after the normal interval.
+                    pass
+                elif exc.status == 400:
+                    # A restarted Control Plane may have lost volatile Node/Worker registration.
+                    # Re-registration is safe with the same canonical identities and restores the
+                    # snapshot before subsequent heartbeat attempts.
+                    await self._register()
+                else:
+                    raise
             try:
                 await asyncio.wait_for(
                     self._stop.wait(),
