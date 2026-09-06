@@ -6,6 +6,15 @@ from .control_plane import (
     coordination_command_handlers,
     coordination_resource_services,
 )
+from .migrations import (
+    COORDINATOR_MIGRATION_REVISION,
+    COORDINATOR_SCHEMA_VERSION,
+    CoordinatorMigrationError,
+    CoordinatorStoreMetadata,
+    coordinator_migration_plan,
+    inspect_coordinator_store,
+    migrate_coordinator_store,
+)
 from .models import (
     ApprovalOutcome,
     CoordinationPhase,
@@ -23,16 +32,20 @@ from .models import (
 )
 from .repository import CoordinatorRepository, InMemoryCoordinatorRepository
 from .service import CanonicalRunKernel, DurablePlanStepCoordinator
-from .sqlite_repository import SQLiteCoordinatorRepository
+from .sqlite_repository_v2 import SQLiteCoordinatorRepository
 
 __all__ = [
     "ApprovalOutcome",
+    "COORDINATOR_MIGRATION_REVISION",
+    "COORDINATOR_SCHEMA_VERSION",
     "CanonicalRunKernel",
     "CoordinationPhase",
     "CoordinatorClaim",
     "CoordinatorCommandHandlers",
+    "CoordinatorMigrationError",
     "CoordinatorPlanResourceService",
     "CoordinatorRepository",
+    "CoordinatorStoreMetadata",
     "DurablePlanStepCoordinator",
     "InMemoryCoordinatorRepository",
     "PlanCoordinationProjection",
@@ -48,4 +61,7 @@ __all__ = [
     "WaitType",
     "coordination_command_handlers",
     "coordination_resource_services",
+    "coordinator_migration_plan",
+    "inspect_coordinator_store",
+    "migrate_coordinator_store",
 ]
