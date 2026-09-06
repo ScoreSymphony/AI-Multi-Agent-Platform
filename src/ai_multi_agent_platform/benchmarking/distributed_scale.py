@@ -336,18 +336,14 @@ class DistributedWorkerWorkspaceScaleHarness:
                             if record.job.worker_job_id in current_ids
                         )
                         for record in current_records:
+                            worker_job_id = record.job.worker_job_id
                             if record.state is not DispatchState.TERMINAL:
-                                errors.append(
-                                    "non-terminal worker job: "
-                                    f"{record.job.worker_job_id}"
-                                )
+                                errors.append(f"non-terminal worker job: {worker_job_id}")
                             result_started = time.perf_counter()
-                            result = await runtime.result(record.job.worker_job_id)
+                            result = await runtime.result(worker_job_id)
                             terminal_result_samples.append(time.perf_counter() - result_started)
                             if result is None:
-                                errors.append(
-                                    f"terminal worker job has no result: {record.job.worker_job_id}"
-                                )
+                                errors.append(f"terminal worker job has no result: {worker_job_id}")
         except TimeoutError:
             errors.append("distributed benchmark exceeded timeout")
         except Exception as exc:
