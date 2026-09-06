@@ -96,6 +96,18 @@ The reference release tier extends integration with representative operational p
 
 G is intentionally one coherent test rather than two unrelated assertions: a real canonical Run fails through the lifecycle backend, the Task becomes failed, `retry_task()` creates a distinct second Run with `attempt == 2`, canonical history contains the failed and retry events, and the Observability event provider emits exactly one `platform.run.retries` metric for that retry.
 
+#### Required release-lifecycle evidence
+
+The release tier also has explicit claim-blocking lifecycle checks required by the #46 release acceptance matrix. These are not additional A–X product scenarios; `REL-*` IDs distinguish release-level evidence from the product-surface scenario IDs:
+
+| Release check | Maintained acceptance evidence | Owner |
+| --- | --- | --- |
+| REL-BACKUP | functioning single-node deployment -> quiesced checksummed backup -> clean replacement data root -> normal restore recovery -> preserved canonical user/Task/Run identity and `ready_for_service=true` | #40 |
+| REL-UPGRADE | controlled previous-schema fixture -> preflight -> recorded migration -> target version state, plus verified-backup enforcement for forward-only migration and explicit resume after interrupted restart-safe migration | #41 |
+| REL-EVAL | checked-in deterministic no-paid-service suite/policy/baseline executed by the real #19 CI regression gate | #19 |
+
+All three are `required=true` whenever `--profile release` is selected. A release report therefore cannot be `compatible` merely because these capabilities have unit tests elsewhere; the representative acceptance commands must pass inside the same #46 release claim.
+
 ## Optional compatibility evidence
 
 The following optional scenarios now have maintained executable #46 evidence and can be promoted from `disabled` to claim-blocking with `--enable-optional`:
@@ -178,6 +190,8 @@ The repository treats conformance as three different cost/coverage tiers rather 
 - `conformance-fast`;
 - `conformance-release` for the reference single-node release claim;
 - `conformance-extended-reference`, which additionally enables E/N/R/T/V/X and therefore treats all six as required.
+
+Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE` and `REL-EVAL` automatically because those checks are required members of the release profile rather than separately enabled options.
 
 Hermes and Forge retain their real upstream/sidecar setup in adapter-specific integration jobs; their conformance activation is valid only after those external preconditions are satisfied. The default reference jobs never install or require either runtime.
 

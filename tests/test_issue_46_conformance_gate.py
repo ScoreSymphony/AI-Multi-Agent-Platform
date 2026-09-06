@@ -103,6 +103,27 @@ def test_release_profile_has_no_required_placeholders() -> None:
     assert pending_required == set()
 
 
+def test_release_lifecycle_checks_are_required_and_bound_to_real_evidence() -> None:
+    scenarios = {
+        scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.RELEASE)
+    }
+    expected_evidence = {
+        "REL-BACKUP": "test_clean_replacement_machine_restore_preserves_canonical_history",
+        "REL-UPGRADE": "test_upgrade_from_previous_schema_fixture_records_history",
+        "REL-EVAL": "scripts/ci/issue19_evaluation_gate.py",
+    }
+
+    for scenario_id, marker in expected_evidence.items():
+        scenario = scenarios[scenario_id]
+        assert scenario.required is True
+        assert scenario.command is not None
+        assert marker in " ".join(scenario.command)
+
+    upgrade_command = " ".join(scenarios["REL-UPGRADE"].command or ())
+    assert "test_forward_only_migration_requires_matching_verified_backup" in upgrade_command
+    assert "test_failed_upgrade_stays_in_maintenance_until_explicit_resume" in upgrade_command
+
+
 def test_operational_release_paths_are_bound_to_owning_acceptance_evidence() -> None:
     scenarios = {
         scenario.scenario_id: scenario for scenario in profile_scenarios(ConformanceProfile.RELEASE)
