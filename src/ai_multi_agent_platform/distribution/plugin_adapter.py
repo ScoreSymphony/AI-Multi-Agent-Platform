@@ -37,7 +37,9 @@ class PluginRegistryArtifactInstaller:
             ) from exc
         validate_manifest_document(document)
         if not isinstance(document, dict):
-            raise ContractError(ErrorCode.INVALID_CONFIGURATION, "plugin manifest must be an object")
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION, "plugin manifest must be an object"
+            )
         manifest = _manifest_from_document(document)
         if manifest.plugin_id != item.item_id:
             raise ContractError(
