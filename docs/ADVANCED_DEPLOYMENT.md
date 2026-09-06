@@ -2,14 +2,14 @@
 
 Issue: #240
 
-This document extends the single-server deployment baseline from #39 without changing the
-canonical runtime architecture. Node/Worker identity, registration, heartbeat, scheduling,
-reservations, dispatch, reconciliation, workspace/artifact references and security continue to
-come from #14, #35, #36 and #37.
+This document extends the single-server deployment baseline from #39 without changing canonical
+platform ownership. Node/Worker identity, registration, heartbeat, scheduling, reservations,
+dispatch, reconciliation, Workspace/artifact references, authentication and authorization remain
+owned by the existing #14, #35, #36 and #37 contracts.
 
 ## Architecture boundary
 
-Advanced deployment is composition, not a second orchestration system:
+Advanced deployment is composition, not a second orchestration or lifecycle system:
 
 ```text
 client / optional frontend
@@ -22,25 +22,38 @@ Authenticated Control Plane
         |       |
         |       `-- DeterministicScheduler
         |
-        +-- local Worker(s) -----------------> LifecycleBackend / executor
+        +-- Worker protocol HTTP (registration / heartbeat / deregistration)
         |
-        `-- replaceable #35 transport -------> remote Worker endpoint
-                    |                                |
-                    |                                +-- local workspace materialization
-                    |                                +-- local secret resolution
-                    |                                `-- LifecycleBackend / executor
+        `-- #35 TcpMessageTransport <------> Worker process
+                    |                           |
+                    |                           +-- WorkerTransportEndpoint
+                    |                           +-- WorkerWorkspaceTransportEndpoint
+                    |                           +-- WorkerWorkspaceMaterializationStore
+                    |                           `-- WorkspaceBoundLocalWorker / executor
                     |
-                    `-- canonical WorkerJobRequest only
+                    `-- canonical WorkerJobRequest + Workspace references
 ```
 
 Deployment hostnames, filesystem paths, ports, process IDs, container IDs and service-manager
 units remain deployment metadata. They never replace `node_*`, `worker_*`, `workspace_*`,
-`artifact_*`, `task_*`, `run_*` or other canonical identities.
+`workspace_snapshot_*`, `artifact_*`, `task_*`, `run_*` or other canonical identities.
 
-The checked-in profile loader in `ai_multi_agent_platform.deployment.advanced_profiles`
-materializes canonical `NodeRecord`, `WorkerRecord` and `RegistrationRequest` objects from a
-strict credential-free JSON profile. Machine-local binding metadata is kept in separate
-`WorkerHostBinding` objects.
+The strict profile loader in `ai_multi_agent_platform.deployment.advanced_profiles` materializes
+canonical `NodeRecord`, `WorkerRecord` and `RegistrationRequest` objects while keeping
+machine-local bindings in `WorkerHostBinding`.
+
+## Shipped entrypoints
+
+The package exposes four independent deployment modes/commands:
+
+| Command | Purpose |
+| --- | --- |
+| `platform-server` | unchanged #39 single-node fallback |
+| `platform-distributed-server` | Control Plane with canonical distributed runtime and Worker-protocol surface |
+| `platform-message-broker` | self-hosted TCP implementation of the existing #35 `MessageTransport` contract |
+| `platform-worker` | independently running Worker process from one #240 profile binding |
+
+The distributed commands are deployment adapters. They do not replace any canonical interface.
 
 ## Reference profiles
 
@@ -49,239 +62,333 @@ Credential-free examples are under `deploy/distributed/profiles/`:
 | Profile | Purpose |
 | --- | --- |
 | `multi-local-workers.json` | one Control Plane host with two schedulable local Workers |
-| `remote-worker.json` | one Control Plane plus one authenticated Worker on another device |
+| `remote-worker.json` | one Control Plane plus one authenticated remote Worker |
 | `cpu-control-gpu-worker.json` | CPU/general host plus a generic accelerator-capable remote Worker |
 | `heterogeneous-three-node.json` | general, accelerator/model-local and data-local Nodes |
 
-The examples intentionally do not encode VPS plans, GPU vendors, cloud products, container
-orchestration systems or operating-system-specific roles. Placement is derived from canonical
-resources, capabilities, runtimes, models, labels, trust and locality.
+The examples deliberately avoid VPS plans, GPU vendors, cloud products and fixed machine roles.
+Placement follows canonical resources, capabilities, runtimes, models, labels, trust and locality.
 
 ## Capability-based role composition
 
-Roles are emergent from Node/Worker facts rather than fixed machine names.
+Roles emerge from Node/Worker facts rather than host names. Examples:
 
-Examples:
-
-- a job requiring no accelerator may run on any healthy Worker that satisfies CPU/RAM/storage,
-  executor, runtime, capability and policy constraints;
-- a job with `gpu="required"` and a VRAM floor is rejected from CPU-only Nodes and can be placed
-  on any matching accelerator Node;
+- a CPU-only job can run on any healthy Worker satisfying CPU/RAM/storage, executor, runtime,
+  capability and policy requirements;
+- `gpu="required"` and a VRAM floor reject CPU-only Nodes and select any matching accelerator;
 - `model_ref` constrains placement to Workers reporting that model;
-- `capability_refs` can represent browser/tool/model-serving or application-specific execution
-  abilities without creating hard-coded host roles;
-- `locality_refs` influence placement when workspace, dataset, model or artifact locality is
-  useful;
-- drain, maintenance, trust and health remain explicit scheduler gates.
+- `capability_refs` can represent browser, tool, model-serving or application-specific abilities;
+- `locality_refs` can prefer data/Workspace/model locality without creating hard-coded roles;
+- drain, maintenance, trust, heartbeat health and concurrency remain scheduler gates.
 
-Equal candidates still use canonical Worker ID as the deterministic tie-break defined by #14.
+Equal candidates retain #14's deterministic Worker-ID tie-break.
 
 ## Registration and discovery
 
-### Multiple local Workers
+### Reporter ownership
 
-Local Workers register through the same canonical `RegistrationRequest` used by the distributed
-runtime. A deployment may run multiple Worker processes on one Node; Node-wide CPU/RAM/storage
-capacity accounting prevents them from independently overcommitting the same host resources.
+A profile Node may declare several Worker processes. Exactly one `reporter_worker_id` owns the
+complete remote Node registration and heartbeat snapshot. Sibling Worker processes expose their
+own execution/Workspace endpoints but do not create competing Node reporters.
 
-Local process supervision is replaceable. systemd, Windows services, containers or another
-service manager may start Workers, but the supervisor's process identity does not become the
-Worker ID.
+The reporter:
 
-### Remote Workers
-
-Remote reporters use `WorkerProtocolService` rather than an ad-hoc registration endpoint. The
-reporter:
-
-1. authenticates with the existing #36 Worker credential mechanism;
-2. binds the authenticated identity to `RegistrationRequest.service_identity_ref`;
-3. passes its credential scope and #15 authorization;
-4. registers the complete Node/Worker snapshot;
+1. authenticates with the existing #36 Worker credential;
+2. binds authenticated identity to `RegistrationRequest.service_identity_ref`;
+3. passes credential scope plus #15 authorization;
+4. registers the complete canonical Node/Worker snapshot;
 5. sends monotonic authenticated heartbeats;
-6. re-registers with the same canonical IDs after restart or reconnect.
+6. re-registers with the same canonical IDs when the Control Plane reports missing registration;
+7. deregisters its Worker best-effort during graceful shutdown.
 
 Remote registration cannot self-grant Control-Plane-owned trust, drain or maintenance state.
 
-The deployment JSON stores only a canonical `SecretReference` describing where the service
-credential is provisioned. Raw credential material is neither valid profile state nor committed
-to the repository.
+### Control-Plane attachment
 
-## Worker transport status and adapter boundary
+A successful authenticated registration is composed into the existing runtime as:
 
-The canonical remote-job protocol is already implemented by `TransportWorkerDispatcher`,
-`WorkerTransportEndpoint` and `WorkerTransportCodec` over the #35 `MessageTransport` contract.
-The repository's dependency-free reference `InProcessMessageTransport` is intentionally an
-in-process implementation for single-host operation and tests.
+```text
+TransportWorkerDispatcher
+        |
+        v
+MaterializingWorkerDispatcher
+        |
+        +-- TransportRemoteWorkspaceMaterializer
+        `-- WorkspaceJobMaterializationResolver
+        |
+        v
+DistributedRuntime.attach_worker(...)
+```
 
-A real cross-host deployment therefore requires a conforming network-capable #35
-`MessageTransport` adapter. Issue #240 does **not** redefine that transport contract or pretend
-the in-process reference is a network broker. The profile field `transport_endpoint_ref` is a
-deployment lookup reference for whichever approved adapter the operator wires into the
-composition; it is not a canonical Worker or Node identifier.
+Re-registration on the same running Control Plane does not replace an already attached dispatcher,
+which prevents heartbeat/reconnect traffic from discarding in-flight materialization/result state.
 
-Until such a network adapter is selected/configured, the remote profiles validate architecture,
-security, registration and placement composition but are not by themselves a runnable
-cross-machine daemon package. This is an explicit deployment dependency, not hidden fallback.
+## Network transport
+
+The repository now ships a real network-capable #35 adapter:
+
+- `TcpMessageBroker` — self-hosted broker/server;
+- `TcpMessageTransport` — Control Plane and Worker client adapter.
+
+The existing `InProcessMessageTransport` remains useful for same-process tests and local
+composition. It is no longer the only reference transport.
+
+Security defaults fail closed:
+
+- loopback TCP may run without TLS for local development/tests;
+- non-loopback broker listeners require TLS plus HMAC authentication or mTLS identity;
+- non-loopback `TcpMessageTransport` clients require TLS;
+- the private Worker-protocol HTTP client requires HTTPS for non-loopback Control Plane URLs;
+- bearer credentials and transport HMAC keys are supplied at runtime, not committed in profiles.
+
+The profile field `transport_endpoint_ref` remains deployment metadata; it does not become a
+canonical Worker/Node/transport identity.
 
 ## Workspace, snapshots and artifacts
 
-Only canonical references cross the Worker job boundary:
+Only canonical references cross the job boundary:
 
 - `workspace_ref`;
 - `snapshot_ref`;
 - input/output `artifact_refs`;
 - secret references.
 
-A Control-Plane filesystem path must never be sent as a remote Worker workspace identity.
-Each `WorkerHostBinding` declares a machine-local absolute `workspace_root`. The deployment
-helper maps a canonical Workspace ID deterministically to:
+A Control-Plane filesystem path is never transmitted as Worker Workspace identity.
+`TransportRemoteWorkspaceMaterializer` reads the exact canonical Workspace snapshot and streams
+its files through #35. `WorkerWorkspaceMaterializationStore` validates paths/checksums and builds a
+machine-local execution tree under the Worker's configured absolute root. The actual execution
+path is adapter-private.
+
+For an execution requiring materialization, the sequence is:
 
 ```text
-<workspace_root>/<workspace_id>
+canonical Workspace + snapshot
+        |
+        v
+TransportRemoteWorkspaceMaterializer
+        |
+        | prepare / chunks / commit
+        v
+WorkerWorkspaceMaterializationStore
+        |
+        v
+WorkspaceBoundLocalWorker
+        |
+        | execute in Worker-local tree
+        v
+result manifest / changed files
+        |
+        v
+canonical FileProvider + artifact refs
+        |
+        v
+cleanup / retain according to outcome
 ```
 
-That local path remains adapter-private. #37 materialization/snapshot rules decide how content
-is reconstructed or synchronized on the destination Worker.
+Changed output files are reconstructed as canonical files/artifacts before terminal Worker result
+state becomes authoritative at the Control Plane.
 
 ## Network and exposure matrix
 
-Ports are deployment choices, so examples use logical endpoint references instead of hard-coded
-provider ports. The required exposure policy is:
+Ports are operator choices. The profiles therefore use logical endpoint references rather than
+provider-specific fixed ports.
 
-| Flow | Default scope | TLS / identity | Notes |
+| Flow | Default scope | Required protection | Notes |
 | --- | --- | --- | --- |
-| browser/client -> Control Plane | public only when explicitly enabled | TLS for public exposure; normal Control Plane auth | canonical northbound API only |
-| Control Plane -> local Worker | loopback/in-process | local process boundary | no public listener required |
-| Control Plane <-> remote Worker transport | private | authenticated TLS and Worker service identity | use conforming #35 network adapter |
-| remote Worker registration/heartbeat | private | #36 Worker credential, replay protection, optional TLS-peer binding | through `WorkerProtocolService` |
-| Worker -> workspace/artifact backing service | private when networked | authenticated service boundary | canonical refs, never Control-Plane paths |
-| Worker -> local model endpoint | private/loopback | deployment-specific auth if required | optional and replaceable |
-| browser/tool/connector service | private by default | scoped service identity/auth | optional; not a direct browser backend |
-| SQLite/local filesystem stores | no listener | filesystem permissions | never exposed as network services |
+| browser/client -> Control Plane | public only when explicitly enabled | normal Control Plane auth; TLS for public exposure | canonical northbound API |
+| Control Plane -> local Worker | loopback/private | local or authenticated #35 transport | no public Worker listener |
+| Control Plane <-> remote Worker messages | private | TLS plus HMAC or mTLS | `TcpMessageTransport` |
+| remote Worker -> registration/heartbeat | private | HTTPS, scoped #36 Worker credential, nonce/replay protection | Worker-protocol ASGI route |
+| Workspace/artifact transfer | same private #35 transport | transport identity + canonical access context | no Control-Plane paths |
+| Worker -> local model endpoint | loopback/private | deployment-specific auth if needed | optional and replaceable |
+| browser/tool/connector service | private by default | scoped service identity | optional |
+| SQLite/local filesystem stores | no listener | filesystem permissions | never direct network services |
 
-No optional service becomes public merely because a deployment tool can publish a port.
+## Minimal local multi-process flow
 
-## Failure and recovery behavior
+For development on one machine, loopback is sufficient. Example shape:
 
-### Missed heartbeats / network interruption
+```bash
+# terminal 1
+platform-message-broker --host 127.0.0.1 --port 8765
 
-`DistributedRegistry.expire_heartbeats()` marks stale Nodes and Workers offline. The canonical
-scheduler excludes them from new placement. Existing accepted jobs are reconciled through the
-runtime rather than assumed to have stopped.
+# terminal 2
+export PLATFORM_MESSAGE_BROKER_HOST=127.0.0.1
+export PLATFORM_MESSAGE_BROKER_PORT=8765
+platform-distributed-server --host 127.0.0.1 --port 8000
 
-A network partition is not proof that remote execution ended. Cross-Worker failover therefore
-uses the existing fencing contract before ownership moves to another Worker.
+# terminal 3 (reporter Worker; credential must already be provisioned)
+export PLATFORM_WORKER_TOKEN='<runtime-only-worker-credential>'
+platform-worker \
+  --profile deploy/distributed/profiles/remote-worker.json \
+  --host-ref device-worker \
+  --worker-id worker_00000000-0000-4000-8000-000000000251 \
+  --control-plane-url http://127.0.0.1:8000 \
+  --broker-host 127.0.0.1 \
+  --broker-port 8765
+```
+
+Treat IDs above as examples only; use the actual values declared by the selected profile. A
+profile containing multiple Workers may start additional `platform-worker` processes for sibling
+Worker IDs; only `reporter_worker_id` performs Node reporting.
+
+## Reproducible two-machine flow
+
+A physical two-host deployment uses the same composition with network security enabled.
+
+### Machine A — Control Plane / broker
+
+1. choose private DNS/IP names reachable by the Worker host;
+2. provision a server certificate for the message broker and an HTTPS certificate/edge for the
+   Control Plane Worker-protocol route;
+3. provision either a shared high-entropy #35 HMAC key or mTLS client identity;
+4. start `platform-message-broker` on the private interface with `--cert-file`/`--key-file`
+   (and `--client-ca-file` when using mTLS);
+5. configure `PLATFORM_MESSAGE_BROKER_HOST`, `PLATFORM_MESSAGE_BROKER_PORT`, CA/client TLS values
+   and optionally `PLATFORM_TRANSPORT_AUTH_KEY` for `platform-distributed-server`;
+6. expose the Control Plane through an HTTPS reverse proxy/private TLS edge; the standard HTTP
+   application remains deployment-neutral and does not own certificate termination.
+
+### Machine B — Worker
+
+1. install the same platform package/version;
+2. copy only the credential-free profile/configuration required by that Worker;
+3. provision its scoped #36 Worker credential outside the Workspace/repository;
+4. provision CA/client TLS files and/or the transport HMAC key outside the Workspace;
+5. set `PLATFORM_WORKER_TOKEN` and, when used, `PLATFORM_TRANSPORT_AUTH_KEY` in the process
+   environment/secret manager;
+6. run `platform-worker` with the HTTPS Control Plane URL and private broker host/port;
+7. verify canonical Node/Worker registration, heartbeat and scheduler eligibility from Machine A;
+8. submit a job that actually requires that Worker's capabilities and verify the terminal result.
+
+The repository's automated socket/process tests establish real TCP/process boundaries on one CI
+host. They do **not** claim that CI itself owns two physical machines. The two-machine procedure
+above is the reproducible operator acceptance path for an actual cross-host installation.
+
+## Credential provisioning
+
+Committed profile JSON contains only `SecretReference` locator/scope metadata. It never contains
+the credential value. A Worker credential must be created by the existing #36 authentication
+service with:
+
+- actor type `worker`;
+- the exact canonical `worker_*` owner identity;
+- scoped `CREATE`, `MODIFY` and `DELETE` permissions for Node/Worker resources required by the
+  private protocol;
+- a corresponding #15 Worker policy for the same operations/resources.
+
+The issued bearer secret is one-time runtime material. Store/inject it through the operator's
+secret mechanism and expose it only to the corresponding Worker process.
+
+## Failure and recovery
+
+### Missed heartbeat / network interruption
+
+`DistributedRegistry.expire_heartbeats()` marks stale Nodes and Workers offline. New placement
+excludes them. Existing accepted jobs are reconciled rather than assumed to have stopped.
+
+A retryable transport outage does not trigger blind re-registration or replacement of an active
+Control-Plane dispatcher. A network partition is also not proof that remote execution ended;
+cross-Worker failover must satisfy the existing ownership-fencing rules.
 
 ### Worker restart
 
 For a normal Worker restart:
 
-1. start the Worker with the same canonical Node/Worker IDs;
-2. load the credential through the configured SecretReference provider;
-3. establish the configured authenticated transport;
-4. re-register the full Node/Worker snapshot;
-5. resume heartbeats with a fresh request nonce;
-6. let runtime reconciliation inspect any previously owned Worker Jobs.
+1. retain the same canonical Node/Worker IDs;
+2. load the scoped credential from runtime secret storage;
+3. reconnect to the configured #35 transport;
+4. register/re-register the canonical snapshot when needed;
+5. resume heartbeats using fresh nonces/request IDs;
+6. let canonical reconciliation resolve previously owned Worker Jobs.
 
-Do not mint a replacement canonical Worker ID merely because a process restarted.
+Do not mint a new Worker ID merely because an OS process restarted.
 
 ### Control Plane restart
 
-Persisted health is not treated as fresh liveness evidence. Workers re-register/heartbeat and
-re-establish reachability. Canonical dispatch ownership and reservation recovery remain owned by
-#14 persistence/reconciliation semantics.
+Persisted health is not treated as fresh liveness evidence. Workers reconnect/re-register and
+re-establish reachability. Dispatch ownership/reservation recovery remains a #14 concern.
+
+### Graceful shutdown
+
+Use canonical drain state before planned maintenance. Stop assigning new work, allow the intended
+in-flight state to settle, then stop the Worker. The process attempts explicit deregistration; if
+the Control Plane is unreachable, heartbeat expiry provides the canonical fallback.
 
 ## Operator lifecycle
 
 ### Add a Worker
 
-1. provision an operator-controlled canonical Worker ID;
-2. define its Node/resource/capability declaration;
-3. for remote Workers, provision a scoped #36 credential outside source control;
-4. add only its `SecretReference` to deployment configuration;
-5. start the transport/Worker process;
-6. verify registration, health and scheduler eligibility through canonical Node/Worker views.
+1. choose/provision canonical Node and Worker IDs;
+2. declare resources/capabilities/runtimes/locality in the profile;
+3. provision the scoped Worker credential and transport identity outside source control;
+4. start the broker/Control Plane transport if not already running;
+5. start the Worker process;
+6. verify registration, heartbeat and scheduler eligibility.
 
 ### Drain a Worker
 
-Set canonical Worker drain state before planned maintenance. New jobs are rejected for that
-Worker while existing ownership remains visible for reconciliation. Stop the process only after
-accepted work has reached the operator's intended state.
+Set canonical Worker drain state before maintenance. New jobs are rejected while existing
+ownership remains visible for reconciliation. Stop only after reaching the intended in-flight
+state.
 
-### Remove or replace a Worker
+### Remove a Worker
 
-Use explicit deregistration when permanently removing a Worker. Replacing hardware does not
-require changing the Worker ID when the operator intends to preserve that same logical Worker
-identity and the security/operational policy allows it; changing logical ownership should use a
-new canonical ID.
+Use explicit deregistration for permanent removal. A hardware/process replacement may retain the
+same canonical Worker identity only when it represents the same logical Worker and security
+policy permits it.
 
-### Rotate a Worker credential
+### Rotate credentials
 
-1. create/activate the replacement scoped Worker credential through #36/#34;
-2. update the deployment SecretReference if the secret locator/version changes;
-3. restart/reload the Worker with the replacement credential;
-4. re-register and verify heartbeat;
-5. revoke the previous credential.
+1. create/activate the replacement scoped credential;
+2. update runtime secret injection/`SecretReference` locator if needed;
+3. restart/reload the Worker with the replacement;
+4. verify registration and heartbeat;
+5. revoke the old credential.
 
-Never place the new token value in the profile, service unit, compose file or command history.
+Never put the new token or HMAC key in committed JSON, compose files, unit files or command-line
+arguments.
 
-### Move an optional service endpoint
+### Move optional services
 
-Update only the deployment endpoint reference/adapter configuration. Model/tool/browser service
-addresses do not become canonical model, tool, Node or Worker IDs.
+Change only deployment endpoint/adapter configuration. Model/tool/browser/connector addresses do
+not become canonical model/tool/Node/Worker IDs.
 
 ### Fall back to #39
 
-Advanced components are extensions. An operator may remove remote Workers and optional services
-and return to the single-server profile from #39 without migrating Task/Run identity or creating
-a second canonical store.
+Stop/remove remote Workers and optional distributed services, then run `platform-server` again.
+Canonical Task/Run/Workspace identity does not require migration into a second store.
 
-## Optional services
+## Optional services and no-paid-service path
 
-The profile format can declare optional logical services such as a model endpoint, browser
-service or connector service. Disabled services have no endpoint. Enabled services remain
-replaceable deployment dependencies and are private by default.
+Profiles may declare optional model, browser, connector or other services. Disabled services have
+no endpoint. Enabled services remain replaceable/private and their degradation affects only
+dependent capabilities.
 
-Absence of an optional service does not invalidate unrelated Workers. If an enabled optional
-service degrades, only capabilities depending on that service should become unavailable or
-report degraded health; the whole platform must not be treated as failed when unaffected
-capabilities remain usable.
+The checked-in no-paid-service path uses local/reference execution and requires no paid external
+service. Advanced distributed deployment itself does not introduce a paid API dependency.
 
-The checked-in no-paid-service profile keeps model/browser/connector services disabled and uses
-the local/reference execution path.
+## Security checklist
 
-## Security and least privilege
+- scoped/replay-protected Worker credentials;
+- TLS for every non-loopback Worker/message connection;
+- HMAC or mTLS identity on non-loopback message broker listeners;
+- no raw credentials in profiles/source control;
+- remote registration cannot alter administrative trust/drain/maintenance ownership;
+- Worker Workspace roots contain only materialized execution data, not application credentials;
+- private-by-default optional services;
+- no direct browser access to Worker/broker/private backend services;
+- telemetry/logging follows existing redaction rules.
 
-Advanced profiles preserve the same security baseline as #39 and the distributed runtime:
+## Validation coverage
 
-- Worker credentials are scoped and replay-protected;
-- raw secret values are not configuration state;
-- remote communication requires authenticated TLS in the profile contract;
-- remote Workers cannot overwrite administrative trust/drain/maintenance state;
-- local workspace roots are writable only by the Worker identity that needs them;
-- application code, credentials and service configuration remain outside untrusted Workspaces;
-- optional service listeners are private/loopback unless explicitly justified;
-- no direct browser access to Worker transports or backend-private services;
-- logs/telemetry must preserve redaction rules.
+The #240 suite covers profile parsing/secret rejection, canonical registration and scheduling,
+resource/capability placement, drain/maintenance and heartbeat behavior, Worker-protocol HTTP,
+Worker process registration/heartbeat/shutdown, transport dispatch, automatic Control-Plane
+attachment and #39 regression. The #388/#433 suites additionally exercise real TCP transport,
+reconnect/redelivery, exact remote Workspace transfer, process isolation, checksums, result
+collection and cleanup.
 
-## Validation and smoke coverage
-
-`tests/test_issue240_advanced_deployment.py` verifies:
-
-- all four reference profiles parse;
-- deployment host references do not become canonical identities;
-- plaintext credential fields are rejected;
-- multiple local Workers register and use the canonical deterministic scheduler;
-- remote profile TLS/SecretReference/reporter requirements;
-- authenticated remote registration, re-registration and heartbeat;
-- canonical dispatch through the Worker transport adapter boundary;
-- heartbeat expiry prevents new placement;
-- accelerator requirements exclude CPU-only Workers;
-- drain state excludes a Worker;
-- heterogeneous capability/locality selection;
-- workspace paths remain machine-local while canonical refs survive the transport codec;
-- optional services may all be absent;
-- the #39 single-node baseline remains valid independently.
-
-The transport dispatch test intentionally uses the in-process #35 reference transport as a
-contract fixture. It proves the canonical message path, not cross-host socket reachability.
+The remaining acceptance bar for closing #240 is evaluated against the actual composed path, not
+merely against profile parsing: scheduler -> network Worker dispatch -> exact Workspace
+materialization -> execution -> canonical result/artifact collection -> reconciliation/cleanup.
