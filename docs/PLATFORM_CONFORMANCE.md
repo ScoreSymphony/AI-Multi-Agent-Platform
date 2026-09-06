@@ -107,7 +107,7 @@ The following optional scenarios now have maintained executable #46 evidence and
 | E — Distributed Worker | authorization context + canonical terminal result identity + correlated safe distributed telemetry |
 | N — Notifications | recipient scope, authenticated anti-spoofing, idempotent inbox commands and replay-safe event projection |
 | R — Import/export | package integrity, secret/runtime-state exclusion, successful import and rollback on failed import |
-| T — Repository/Git | exact repository revision -> canonical Workspace/Run -> change Artifact/commit provenance, retry identity and provider-ID namespacing |
+| T — Repository/Git | exact repository revision -> canonical Workspace/Run -> change Artifact/commit provenance and retry identity |
 | V — Organizations | membership suspension/removal plus resource sharing/revocation and cross-organization isolation |
 | X — HA | stale-leader fencing, promotion reconciliation preserving Worker identity and duplicate-command replay without duplicate Task/Run |
 
