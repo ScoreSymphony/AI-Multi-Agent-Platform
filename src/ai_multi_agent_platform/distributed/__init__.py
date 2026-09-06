@@ -50,6 +50,12 @@ from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
 from .scheduler import DeterministicScheduler, NoEligibleWorkerError, ScheduledPlacement
 from .telemetry import DistributedTelemetry
+from .tool_lineage import (
+    WorkerToolLineage,
+    bind_worker_job_to_tool_invocation,
+    tool_lineage,
+    worker_job_id_for_tool_invocation,
+)
 from .transport import (
     WORKER_COMMAND_TOPIC_PREFIX,
     WORKER_REPLY_TOPIC_PREFIX,
@@ -142,12 +148,16 @@ __all__ = [
     "WorkerResourceService",
     "WorkerResultProvider",
     "WorkerStatus",
+    "WorkerToolLineage",
     "WorkerTransportCodec",
     "WorkerTransportEndpoint",
     "WorkerWorkspaceResolver",
     "WorkspaceDispatchEvidence",
     "WorkspaceJobMaterializationResolver",
+    "bind_worker_job_to_tool_invocation",
     "prepare_registry_disaster_recovery",
     "register_distributed_control_plane",
+    "tool_lineage",
     "worker_command_topic",
+    "worker_job_id_for_tool_invocation",
 ]
