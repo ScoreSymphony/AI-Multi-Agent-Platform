@@ -27,6 +27,7 @@ from ai_multi_agent_platform.distribution import (
     PlatformRegistryValidationContextResolver,
     PluginRegistryArtifactInstaller,
     load_hmac_signature_keys,
+    reconcile_registry_plugins,
     register_distribution_control_plane,
 )
 from ai_multi_agent_platform.plugins import (
@@ -101,6 +102,21 @@ def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployme
             },
         )
         deployment.control_plane.attach_plugin_runtime(plugin_registry)
+
+    signature_verifier = None
+    if config.registry_signature_keys is not None:
+        signature_verifier = HmacSha256SignatureVerifier(
+            load_hmac_signature_keys(config.registry_signature_keys)
+        )
+    asyncio.run(
+        reconcile_registry_plugins(
+            provider,
+            installations,
+            plugin_registry,
+            signature_verifier=signature_verifier,
+        )
+    )
+
     plugin_installer = PluginRegistryArtifactInstaller(plugin_registry)
     portability = deployment.control_plane.portability_workflow
     if portability is None:
@@ -109,11 +125,6 @@ def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployme
         plugin_installer=plugin_installer,
         portability=portability,
     )
-    signature_verifier = None
-    if config.registry_signature_keys is not None:
-        signature_verifier = HmacSha256SignatureVerifier(
-            load_hmac_signature_keys(config.registry_signature_keys)
-        )
     distribution = DistributionService(
         provider,
         router,
@@ -130,6 +141,9 @@ def _configure_registry(config: SingleNodeConfig, deployment: SingleNodeDeployme
             )
         ),
         plugins=lambda: (snapshot.plugin_id for snapshot in plugin_registry.list_plugins()),
+        connectors=lambda: (
+            definition.id for definition in deployment.connector_registry.definitions()
+        ),
         models=lambda: (model.config_id for model in deployment.models.list_models(enabled=True)),
         grantable_permissions=lambda context: (
             action.value
