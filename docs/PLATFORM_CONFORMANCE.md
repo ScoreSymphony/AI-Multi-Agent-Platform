@@ -98,15 +98,18 @@ G is intentionally one coherent test rather than two unrelated assertions: a rea
 
 #### Required release-lifecycle evidence
 
-The release tier also has explicit claim-blocking lifecycle checks required by the #46 release acceptance matrix. These are not additional A–X product scenarios; `REL-*` IDs distinguish release-level evidence from the product-surface scenario IDs:
+The release tier also has explicit claim-blocking lifecycle and cross-layer checks required by the #46 release acceptance matrix. These are not additional A–X product scenarios; `REL-*` IDs distinguish release-level evidence from the product-surface scenario IDs:
 
 | Release check | Maintained acceptance evidence | Owner |
 | --- | --- | --- |
 | REL-BACKUP | functioning single-node deployment -> quiesced checksummed backup -> clean replacement data root -> normal restore recovery -> preserved canonical user/Task/Run identity and `ready_for_service=true` | #40 |
 | REL-UPGRADE | controlled previous-schema fixture -> preflight -> recorded migration -> target version state, plus verified-backup enforcement for forward-only migration and explicit resume after interrupted restart-safe migration | #41 |
 | REL-EVAL | checked-in deterministic no-paid-service suite/policy/baseline executed by the real #19 CI regression gate | #19 |
+| REL-VERTICAL | authenticated HTTP -> Control Plane -> canonical Task/Run -> AgentRuntime -> local ModelRuntime -> exact Workspace binding -> Result + file-backed Artifact -> exact Verification -> accepted Task -> canonical API/timeline/observability | #46 |
 
-All three are `required=true` whenever `--profile release` is selected. A release report therefore cannot be `compatible` merely because these capabilities have unit tests elsewhere; the representative acceptance commands must pass inside the same #46 release claim.
+All four are `required=true` whenever `--profile release` is selected. A release report therefore cannot be `compatible` merely because these capabilities have unit tests elsewhere; the representative acceptance commands must pass inside the same #46 release claim.
+
+`REL-VERTICAL` is intentionally the strongest maintained **continuous reference slice currently available**, not a declaration that the ideal full #46 path is complete. The current Agent lifecycle still executes Agent/Model work directly while the reference Executor/Worker path is a separate lifecycle path. Until one production-valid canonical flow also crosses `Capability/Tool -> Executor -> Worker/Node` without test-only shortcuts, that boundary remains an explicit #46 closure blocker.
 
 ## Optional compatibility evidence
 
@@ -127,7 +130,7 @@ The following remain deliberately unavailable as compatibility claims:
 
 - Q — Templates: #78 is reopened and still has unresolved authorization/compatibility/rollback integration gaps;
 - S — Registry: #81 is reopened and still has unresolved deployment-grade registry/install/trust/update gaps;
-- Y — durable Plan/Step coordination: remains unsupported until the #384 coordination path is available.
+- Y — durable Plan/Step coordination: the coordinator core is present, but the profile remains unsupported until #384's remaining hardening and acceptance work is complete.
 
 Explicitly enabling Q, S or Y therefore blocks compatibility with `not_implemented`; it does not convert unfinished subsystem work into a conformance claim.
 
@@ -191,7 +194,7 @@ The repository treats conformance as three different cost/coverage tiers rather 
 - `conformance-release` for the reference single-node release claim;
 - `conformance-extended-reference`, which additionally enables E/N/R/T/V/X and therefore treats all six as required.
 
-Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE` and `REL-EVAL` automatically because those checks are required members of the release profile rather than separately enabled options.
+Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE`, `REL-EVAL` and `REL-VERTICAL` automatically because those checks are required members of the release profile rather than separately enabled options.
 
 Hermes and Forge retain their real upstream/sidecar setup in adapter-specific integration jobs; their conformance activation is valid only after those external preconditions are satisfied. The default reference jobs never install or require either runtime.
 
