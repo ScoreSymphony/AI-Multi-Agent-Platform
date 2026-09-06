@@ -251,6 +251,22 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         }
         return worker_actions.get(worker_verb, AuthorizationAction.MODIFY), ResourceType.WORKER
 
+    if action.startswith("model-routing-profile:"):
+        routing_profile_verb = action.removeprefix("model-routing-profile:")
+        routing_profile_actions = {
+            "list": AuthorizationAction.MODEL_ROUTING_PROFILE_LIST,
+            "read": AuthorizationAction.MODEL_ROUTING_PROFILE_READ,
+            "create": AuthorizationAction.MODEL_ROUTING_PROFILE_CREATE,
+            "version": AuthorizationAction.MODEL_ROUTING_PROFILE_VERSION,
+            "enable": AuthorizationAction.MODEL_ROUTING_PROFILE_ENABLE,
+            "disable": AuthorizationAction.MODEL_ROUTING_PROFILE_DISABLE,
+            "assign": AuthorizationAction.MODEL_ROUTING_PROFILE_ASSIGN,
+        }
+        return routing_profile_actions.get(
+            routing_profile_verb,
+            AuthorizationAction.MODIFY,
+        ), ResourceType.MODEL_ROUTING_PROFILE
+
     resource_name, separator, verb = action.partition(":")
     if not separator:
         resource_name, verb = "generic", action
@@ -290,6 +306,7 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "knowledge-source": ResourceType.KNOWLEDGE_SOURCE,
         "model-provider": ResourceType.PROVIDER_CONFIGURATION,
         "model": ResourceType.MODEL_CONFIGURATION,
+        "model-routing-profile": ResourceType.MODEL_ROUTING_PROFILE,
         "agent": ResourceType.AGENT,
         "agent-team": ResourceType.AGENT_TEAM,
         "worker": ResourceType.WORKER,
