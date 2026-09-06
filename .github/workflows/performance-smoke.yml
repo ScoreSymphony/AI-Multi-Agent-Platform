@@ -26,7 +26,8 @@ jobs:
             tests/test_issue_440_workloads.py \
             tests/test_issue_440_endurance.py \
             tests/test_issue_440_stress_fault.py \
-            tests/test_issue_440_transport_faults.py
+            tests/test_issue_440_transport_faults.py \
+            tests/test_issue_440_persistence.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking \
             tests/test_issue_440_benchmarking.py \
@@ -34,7 +35,8 @@ jobs:
             tests/test_issue_440_workloads.py \
             tests/test_issue_440_endurance.py \
             tests/test_issue_440_stress_fault.py \
-            tests/test_issue_440_transport_faults.py
+            tests/test_issue_440_transport_faults.py \
+            tests/test_issue_440_persistence.py
           mypy src/ai_multi_agent_platform/benchmarking
           pytest \
             tests/test_issue_440_benchmarking.py \
@@ -42,7 +44,8 @@ jobs:
             tests/test_issue_440_workloads.py \
             tests/test_issue_440_endurance.py \
             tests/test_issue_440_stress_fault.py \
-            tests/test_issue_440_transport_faults.py
+            tests/test_issue_440_transport_faults.py \
+            tests/test_issue_440_persistence.py
       - name: Run deterministic single-node performance smoke
         run: |
           mkdir -p artifacts/benchmarks
@@ -61,6 +64,16 @@ jobs:
             --repetitions 1 \
             --platform-commit "$GITHUB_SHA" \
             --output-dir artifacts/benchmarks/pr-sweep
+      - name: Run tiny growing-state persistence sweep
+        run: |
+          platform-benchmark single-node-persistence-sweep \
+            --seed-task-levels 1,2 \
+            --operations-per-level 2 \
+            --concurrency 1 \
+            --warmup-operations 0 \
+            --repetitions 1 \
+            --platform-commit "$GITHUB_SHA" \
+            --output-dir artifacts/benchmarks/pr-persistence-sweep
       - name: Run tiny single-node workload profiles
         shell: bash
         run: |
@@ -169,9 +182,31 @@ jobs:
               Draft202012Validator(report_schema).validate(point_report)
               assert point_report["correctness"]["passed"] is True
 
+          persistence_sweep = json.loads(
+              Path("artifacts/benchmarks/pr-persistence-sweep/summary.json").read_text()
+          )
+          persistence_sweep_schema = json.loads(
+              Path("docs/schemas/benchmark-persistence-sweep.v1.schema.json").read_text()
+          )
+          Draft202012Validator(persistence_sweep_schema).validate(persistence_sweep)
+          assert persistence_sweep["correctness_passed"] is True
+          assert persistence_sweep["seed_task_levels"] == [1, 2]
+          assert len(persistence_sweep["points"]) == 2
+
           workload_schema = json.loads(
               Path("docs/schemas/benchmark-workload.v1.schema.json").read_text()
           )
+          for point in persistence_sweep["points"]:
+              point_report = json.loads(
+                  (
+                      Path("artifacts/benchmarks/pr-persistence-sweep")
+                      / point["report_file"]
+                  ).read_text()
+              )
+              Draft202012Validator(workload_schema).validate(point_report)
+              assert point_report["benchmark"]["scenario"] == "restart"
+              assert point_report["correctness"]["passed"] is True
+
           for scenario in ("read-heavy", "mixed", "history", "restart"):
               workload = json.loads(
                   Path(f"artifacts/benchmarks/pr-workloads/{scenario}.json").read_text()

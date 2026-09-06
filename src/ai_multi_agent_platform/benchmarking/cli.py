@@ -15,6 +15,7 @@ from ai_multi_agent_platform.deployment import SingleNodeConfig
 from .endurance import EnduranceBenchmarkSpec, SingleNodeEnduranceHarness
 from .faults import FaultUnderLoadSpec, SingleNodeFaultUnderLoadHarness
 from .models import BenchmarkSpec, RegressionThresholds, compare_with_baseline
+from .persistence import SingleNodePersistenceScaleHarness
 from .single_node import SingleNodeBenchmarkHarness, attach_baseline_comparison
 from .stress import SingleNodeStressHarness, StressBenchmarkSpec
 from .sweep import SingleNodeSweepHarness
@@ -57,6 +58,23 @@ def _parser() -> argparse.ArgumentParser:
     sweep.add_argument("--timeout-seconds", type=float, default=30.0)
     sweep.add_argument("--output-dir", type=Path, required=True)
     sweep.add_argument("--platform-commit", default=os.environ.get("GITHUB_SHA", "unknown"))
+
+    persistence_sweep = subparsers.add_parser(
+        "single-node-persistence-sweep",
+        help="measure query, storage and restart behavior as durable state grows",
+    )
+    persistence_sweep.add_argument("--data-root", type=Path)
+    persistence_sweep.add_argument("--seed-task-levels", default="10,100,1000")
+    persistence_sweep.add_argument("--operations-per-level", type=int, default=100)
+    persistence_sweep.add_argument("--concurrency", type=int, default=10)
+    persistence_sweep.add_argument("--warmup-operations", type=int, default=5)
+    persistence_sweep.add_argument("--repetitions", type=int, default=1)
+    persistence_sweep.add_argument("--timeout-seconds", type=float, default=30.0)
+    persistence_sweep.add_argument("--output-dir", type=Path, required=True)
+    persistence_sweep.add_argument(
+        "--platform-commit",
+        default=os.environ.get("GITHUB_SHA", "unknown"),
+    )
 
     workload = subparsers.add_parser(
         "single-node-workload",
@@ -157,6 +175,8 @@ def main(argv: list[str] | None = None) -> int:
         return asyncio.run(_run_single_node(args))
     if args.command == "single-node-sweep":
         return asyncio.run(_run_single_node_sweep(args))
+    if args.command == "single-node-persistence-sweep":
+        return asyncio.run(_run_single_node_persistence_sweep(args))
     if args.command == "single-node-workload":
         return asyncio.run(_run_single_node_workload(args))
     if args.command == "single-node-endurance":
@@ -238,6 +258,43 @@ async def _run_single_node_sweep(args: argparse.Namespace) -> int:
         ).run(
             concurrency_levels=concurrency_levels,
             operation_count=args.operations_per_level,
+            warmup_operations=args.warmup_operations,
+            timeout_seconds=args.timeout_seconds,
+            repetitions=args.repetitions,
+        )
+        args.output_dir.mkdir(parents=True, exist_ok=True)
+        for point, report in execution.point_reports:
+            (args.output_dir / point.report_file).write_text(
+                json.dumps(report.to_dict(), indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        (args.output_dir / "summary.json").write_text(
+            json.dumps(execution.summary.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return 0 if execution.summary.correctness_passed else 2
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
+
+
+async def _run_single_node_persistence_sweep(args: argparse.Namespace) -> int:
+    seed_task_levels = _parse_seed_task_levels(args.seed_task_levels)
+    temporary: tempfile.TemporaryDirectory[str] | None = None
+    if args.data_root is None:
+        temporary = tempfile.TemporaryDirectory(prefix="ai-map-persistence-sweep-")
+        data_root = Path(temporary.name) / "data"
+    else:
+        data_root = args.data_root
+
+    try:
+        execution = await SingleNodePersistenceScaleHarness(
+            data_root,
+            platform_commit=args.platform_commit,
+        ).run(
+            seed_task_levels=seed_task_levels,
+            operation_count=args.operations_per_level,
+            concurrency=args.concurrency,
             warmup_operations=args.warmup_operations,
             timeout_seconds=args.timeout_seconds,
             repetitions=args.repetitions,
@@ -520,6 +577,23 @@ def _parse_concurrency_levels(value: str) -> tuple[int, ...]:
         raise ValueError("concurrency levels must be positive")
     if len(set(levels)) != len(levels):
         raise ValueError("concurrency levels must be unique")
+    return levels
+
+
+def _parse_seed_task_levels(value: str) -> tuple[int, ...]:
+    fields = tuple(field.strip() for field in value.split(",") if field.strip())
+    if not fields:
+        raise ValueError("at least one seed-task level is required")
+    try:
+        levels = tuple(int(field) for field in fields)
+    except ValueError as exc:
+        raise ValueError("seed-task levels must be comma-separated integers") from exc
+    if any(level < 1 for level in levels):
+        raise ValueError("seed-task levels must be positive")
+    if len(set(levels)) != len(levels):
+        raise ValueError("seed-task levels must be unique")
+    if tuple(sorted(levels)) != levels:
+        raise ValueError("seed-task levels must be strictly increasing")
     return levels
 
 
