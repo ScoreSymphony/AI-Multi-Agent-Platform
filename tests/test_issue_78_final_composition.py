@@ -84,6 +84,13 @@ def test_standard_single_node_exposes_final_template_integrations(tmp_path) -> N
         SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
     )
 
+    collections = set(deployment.control_plane.registered_collections)
+    assert {
+        "workflows",
+        "capability-assignments",
+        "model-routing-profiles",
+    }.issubset(collections)
+
     commands = set(deployment.control_plane.registered_commands)
     assert "template.create-from-capability-assignment" in commands
     assert "template.create-from-workflow" in commands
