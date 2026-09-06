@@ -208,7 +208,9 @@ class DurablePlanStepCoordinator:
                 step = by_id[record.step_id]
                 if record.phase is CoordinationPhase.RETRY_SCHEDULED:
                     if record.retry_due_at is not None and record.retry_due_at <= current_time:
-                        made_progress = await self._activate_retry(step, record, current_time) or made_progress
+                        made_progress = (
+                            await self._activate_retry(step, record, current_time) or made_progress
+                        )
                     continue
                 if record.phase is CoordinationPhase.BLOCKED:
                     made_progress = (
@@ -217,7 +219,9 @@ class DurablePlanStepCoordinator:
                     )
                     continue
                 if record.phase is CoordinationPhase.READY:
-                    made_progress = await self._start_attempt(step, record, current_time) or made_progress
+                    made_progress = (
+                        await self._start_attempt(step, record, current_time) or made_progress
+                    )
         await self._aggregate_task(plan_id)
         return self.projection(plan_id)
 
@@ -362,7 +366,10 @@ class DurablePlanStepCoordinator:
             if record.wait.wait_key == wait.wait_key:
                 return self.projection(wait.plan_id)
             raise ContractError(ErrorCode.CONFLICT, "Step already has a different durable wait")
-        if step.status is not StepStatus.RUNNING or record.phase is not CoordinationPhase.ATTEMPT_ACTIVE:
+        if (
+            step.status is not StepStatus.RUNNING
+            or record.phase is not CoordinationPhase.ATTEMPT_ACTIVE
+        ):
             raise ContractError(ErrorCode.CONFLICT, "only an active running Step can enter a wait")
         claim = self._required_claim(step.id, current_time)
         try:
@@ -413,7 +420,9 @@ class DurablePlanStepCoordinator:
             or wait.approval_subject_id != subject_id
             or wait.approval_action != action
         ):
-            raise ContractError(ErrorCode.CONFLICT, "Approval identity/subject/action does not match wait")
+            raise ContractError(
+                ErrorCode.CONFLICT, "Approval identity/subject/action does not match wait"
+            )
         self._require_scope(wait, owner_ref, project_id)
         resolution = {
             "approved": WaitResolution.SATISFIED,
@@ -807,7 +816,10 @@ class DurablePlanStepCoordinator:
         try:
             current = self.repository.get_step_record(step.id)
             current_step = self.repository.get_plan(step.plan_id).step(step.id)
-            if current.phase is not CoordinationPhase.READY or current_step.status is not StepStatus.READY:
+            if (
+                current.phase is not CoordinationPhase.READY
+                or current_step.status is not StepStatus.READY
+            ):
                 return False
             attempt = current.current_attempt + 1
             run = await self.kernel.create_run(

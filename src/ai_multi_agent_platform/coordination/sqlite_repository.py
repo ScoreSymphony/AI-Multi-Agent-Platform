@@ -101,7 +101,9 @@ def _plan_from_dict(value: dict[str, Any]) -> Plan:
         schema_version=str(value["schema_version"]),
         provenance=_provenance_from_dict(cast(dict[str, Any] | None, value.get("provenance"))),
         external_refs=tuple(
-            ExternalRef(system=str(item["system"]), kind=str(item["kind"]), value=str(item["value"]))
+            ExternalRef(
+                system=str(item["system"]), kind=str(item["kind"]), value=str(item["value"])
+            )
             for item in cast(list[dict[str, Any]], value.get("external_refs", []))
         ),
     )
@@ -142,7 +144,9 @@ def _step_from_dict(value: dict[str, Any]) -> Step:
         schema_version=str(value["schema_version"]),
         provenance=_provenance_from_dict(cast(dict[str, Any] | None, value.get("provenance"))),
         external_refs=tuple(
-            ExternalRef(system=str(item["system"]), kind=str(item["kind"]), value=str(item["value"]))
+            ExternalRef(
+                system=str(item["system"]), kind=str(item["kind"]), value=str(item["value"])
+            )
             for item in cast(list[dict[str, Any]], value.get("external_refs", []))
         ),
     )

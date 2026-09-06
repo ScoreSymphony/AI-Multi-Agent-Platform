@@ -596,10 +596,7 @@ def test_reconciliation_never_blindly_recreates_missing_canonical_run() -> None:
         assert kernel.recover_calls == 1
         assert kernel.create_calls == before
         assert projection.steps[0].phase is CoordinationPhase.INCONSISTENT
-        assert (
-            projection.steps[0].reconciliation
-            is ReconciliationDisposition.MISSING_CANONICAL_RUN
-        )
+        assert projection.steps[0].reconciliation is ReconciliationDisposition.MISSING_CANONICAL_RUN
         assert store.get_step_record(steps[0].id).reconciliation_detail is not None
 
     asyncio.run(scenario())

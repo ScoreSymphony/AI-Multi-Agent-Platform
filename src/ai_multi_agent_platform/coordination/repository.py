@@ -95,7 +95,9 @@ class InMemoryCoordinatorRepository:
             try:
                 return self._plans[plan_id]
             except KeyError as exc:
-                raise ContractError(ErrorCode.NOT_FOUND, f"coordination plan {plan_id} not found") from exc
+                raise ContractError(
+                    ErrorCode.NOT_FOUND, f"coordination plan {plan_id} not found"
+                ) from exc
 
     def get_step_record(self, step_id: str) -> StepCoordinationRecord:
         with self._lock:
