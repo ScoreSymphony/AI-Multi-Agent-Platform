@@ -29,6 +29,7 @@ from .reference import (
 from .registry import ConnectorRegistry
 from .repository import ConnectorRepository, InMemoryConnectorRepository
 from .service import ConnectorService
+from .sqlite_repository import SqliteConnectorRepository
 
 __all__ = [
     "ConflictPolicy",
@@ -54,6 +55,7 @@ __all__ = [
     "REFERENCE_CONNECTOR_TYPE",
     "REFERENCE_CONNECTOR_VERSION",
     "ReferenceConnectorProvider",
+    "SqliteConnectorRepository",
     "SyncCheckpoint",
     "SyncMode",
     "SyncStatus",
