@@ -1,7 +1,7 @@
 # Issue #44 completion map
 
 This document maps the implemented connector framework to the requirements and validation scenarios
-of issue #44. `docs/CONNECTORS.md` is the normative design explanation for this domain.
+of issue #44. `docs/integrations/CONNECTORS.md` is the normative design explanation for this domain.
 
 ## Deliverables
 

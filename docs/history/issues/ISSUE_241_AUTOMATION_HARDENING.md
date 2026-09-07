@@ -1,7 +1,7 @@
 # Issue #241 — Automation hardening decisions
 
 This document records the implementation decisions for the follow-up hardening slice owned by
-#241. It supplements `docs/AUTOMATION.md`; it does not redefine the canonical invariant from #18:
+#241. It supplements `docs/runtime/AUTOMATION.md`; it does not redefine the canonical invariant from #18:
 
 `Trigger -> Automation evaluation -> canonical Task creation -> normal platform lifecycle`
 

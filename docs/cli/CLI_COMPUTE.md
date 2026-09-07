@@ -71,4 +71,4 @@ This keeps deployment-neutral health semantics: a laptop, server, VPS or other h
 - authorization denial with no runtime mutation;
 - healthy and degraded `doctor` results.
 
-Authentication/session/credential and Approval-decision coverage for the other #214 workstreams lives in `tests/test_issue_214_auth_approval_cli.py` and is documented in `docs/CLI_AUTHENTICATION.md` and `docs/CLI_APPROVALS.md`.
+Authentication/session/credential and Approval-decision coverage for the other #214 workstreams lives in `tests/test_issue_214_auth_approval_cli.py` and is documented in `docs/cli/CLI_AUTHENTICATION.md` and `docs/cli/CLI_APPROVALS.md`.
