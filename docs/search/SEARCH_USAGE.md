@@ -2,7 +2,7 @@
 
 This document records the Issue #45 integration of the completed Issue #76 accounting domain into the platform-wide Search layer.
 
-The general Search invariants in `docs/SEARCH.md` continue to apply: Search is derived and non-authoritative, canonical IDs remain primary identity, provider/private storage is not queried directly by Search, and authorization is applied before caller-visible counts, snippets, cursors or exact-ID results are calculated.
+The general Search invariants in `docs/search/SEARCH.md` continue to apply: Search is derived and non-authoritative, canonical IDs remain primary identity, provider/private storage is not queried directly by Search, and authorization is applied before caller-visible counts, snippets, cursors or exact-ID results are calculated.
 
 ## Searchable accounting resources
 
