@@ -4,6 +4,8 @@
 # before enforced_providers imports configuration, whose package root imports them back.
 # ruff: noqa: I001
 
+from ai_multi_agent_platform.contracts import AuthorizationOutcome
+
 from .approvals import ApprovalRecord, ApprovalService
 from .authentication import (
     AuthenticatedActor,
@@ -125,6 +127,7 @@ __all__ = [
     "AuthorizationAuditSink",
     "AuthorizationContext",
     "AuthorizationGate",
+    "AuthorizationOutcome",
     "AuthorizationPolicyAssignment",
     "AuthorizationPolicyConditions",
     "AuthorizationPolicyProfileCallContext",

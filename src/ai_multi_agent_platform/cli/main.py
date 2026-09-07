@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -35,6 +36,7 @@ from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default
 from .render import Renderer
 from .search import add_search_parser, execute_search
 from .task_management import parse_changes, parse_updates
+from .workflow import add_task_workflow_parser, execute_task_workflow
 from .workspace import parse_json_array
 
 
@@ -230,6 +232,7 @@ def _build_parser() -> argparse.ArgumentParser:
     task_timeline = task_commands.add_parser("timeline", help="inspect canonical task timeline")
     task_timeline.add_argument("task_id")
     _add_pagination_arguments(task_timeline)
+    add_task_workflow_parser(task_commands)
     task_management_update = task_commands.add_parser(
         "update-management",
         help="update canonical Task planning metadata",
@@ -332,10 +335,18 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_pagination_arguments(extension_list)
     extension_show = extension_commands.add_parser(
         "show",
-        help="show one resource from a registered extension collection",
+        help="show one resource from one registered extension collection",
     )
     extension_show.add_argument("collection")
     extension_show.add_argument("resource_id")
+    extension_execute = extension_commands.add_parser(
+        "execute",
+        help="execute one explicitly registered canonical extension command",
+    )
+    extension_execute.add_argument("canonical_command")
+    extension_execute.add_argument("resource_ref")
+    extension_execute.add_argument("--payload", default="{}", help="JSON object command payload")
+    extension_execute.add_argument("--idempotency-key", required=True)
 
     return parser
 
@@ -706,6 +717,8 @@ def _task_command(
         )
     if args.command == "show":
         return CommandResult(client.get(f"/tasks/{_segment(args.task_id)}"))
+    if args.command == "workflow":
+        return CommandResult(execute_task_workflow(args, client))
     if args.command == "update-management":
         _require_confirmation(args, "update task management", args.task_id)
         changes = parse_changes(args.changes_json)
@@ -822,6 +835,18 @@ def _extension_command(args: argparse.Namespace, client: ControlPlaneClient) -> 
         return CommandResult(_name_page(specification, collections))
     if args.command == "commands":
         return CommandResult(_name_page(specification, commands))
+    if args.command == "execute":
+        command = str(args.canonical_command)
+        if command not in commands:
+            raise ProfileError(f"canonical extension command is not registered: {command}")
+        body = {"resource_ref": str(args.resource_ref), **_json_object(str(args.payload))}
+        return CommandResult(
+            client.post(
+                f"/commands/{_segment(command)}",
+                body=body,
+                idempotency_key=str(args.idempotency_key),
+            )
+        )
 
     collection = str(args.collection)
     if collection not in collections:
@@ -831,6 +856,16 @@ def _extension_command(args: argparse.Namespace, client: ControlPlaneClient) -> 
     if args.command == "show":
         return CommandResult(client.get(f"/{_segment(collection)}/{_segment(args.resource_id)}"))
     raise ProfileError(f"unsupported extension command: {args.command}")
+
+
+def _json_object(raw: str) -> dict[str, JsonValue]:
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ProfileError("--payload must be valid JSON") from exc
+    if not isinstance(decoded, dict):
+        raise ProfileError("--payload must decode to a JSON object")
+    return cast(dict[str, JsonValue], decoded)
 
 
 def _extension_names(response: ClientResponse, field: str) -> tuple[str, ...]:

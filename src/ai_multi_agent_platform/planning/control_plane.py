@@ -233,14 +233,20 @@ def _optional_string(payload: dict[str, JsonValue], key: str) -> str | None:
 
 def _string_tuple(payload: dict[str, JsonValue], key: str) -> tuple[str, ...]:
     value = payload.get(key, [])
-    if not isinstance(value, list) or any(
-        not isinstance(item, str) or not item.strip() for item in value
-    ):
+    if not isinstance(value, list):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             f"{key} must be a list of non-blank strings",
         )
-    return tuple(value)
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                f"{key} must be a list of non-blank strings",
+            )
+        result.append(item)
+    return tuple(result)
 
 
 def _positive_int(payload: dict[str, JsonValue], key: str, default: int) -> int:
