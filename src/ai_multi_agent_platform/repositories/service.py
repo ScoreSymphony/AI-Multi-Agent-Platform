@@ -32,6 +32,7 @@ from .models import (
     RepositoryRevision,
     RepositoryRunProvenance,
     RepositoryStatus,
+    RepositoryTree,
 )
 
 
@@ -126,6 +127,23 @@ class RepositoryService:
         binding = self._registry.resolve(repository_id)
         operation = await self._enforce(binding, RepositoryOperation.READ, context)
         return await binding.provider.read(binding.reference, operation)
+
+    async def read_tree(
+        self,
+        repository_id: str,
+        revision: str,
+        context: RepositoryCallContext,
+    ) -> RepositoryTree:
+        """Read one exact tree through the canonical repository authorization boundary."""
+
+        if not revision.strip():
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "repository tree revision must not be blank",
+            )
+        binding = self._registry.resolve(repository_id)
+        operation = await self._enforce(binding, RepositoryOperation.READ, context)
+        return await binding.provider.read_tree(binding.reference, revision, operation)
 
     async def list(
         self,
