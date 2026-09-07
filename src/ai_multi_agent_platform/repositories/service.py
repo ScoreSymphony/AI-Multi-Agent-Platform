@@ -133,17 +133,31 @@ class RepositoryService:
         repository_id: str,
         revision: str,
         context: RepositoryCallContext,
+        *,
+        max_entries: int,
+        max_total_bytes: int,
     ) -> RepositoryTree:
-        """Read one exact tree through the canonical repository authorization boundary."""
+        """Materialize one exact tree through policy and provider-enforced resource bounds."""
 
         if not revision.strip():
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "repository tree revision must not be blank",
             )
+        if max_entries < 1 or max_total_bytes < 1:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "repository tree limits must be positive",
+            )
         binding = self._registry.resolve(repository_id)
-        operation = await self._enforce(binding, RepositoryOperation.READ, context)
-        return await binding.provider.read_tree(binding.reference, revision, operation)
+        operation = await self._enforce(binding, RepositoryOperation.MATERIALIZE, context)
+        return await binding.provider.read_tree_bounded(
+            binding.reference,
+            revision,
+            operation,
+            max_entries=max_entries,
+            max_total_bytes=max_total_bytes,
+        )
 
     async def list(
         self,
