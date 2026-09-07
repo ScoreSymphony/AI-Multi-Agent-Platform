@@ -60,6 +60,33 @@ function renderWorkflow(value: PlanCoordinationProjection): string {
 }
 
 describe("WorkflowProgress acceptance scenarios", () => {
+  it("renders linear progression from the canonical Step sequence", () => {
+    const markup = renderWorkflow(
+      projection([
+        step({
+          id: "step_linear_done",
+          status: "succeeded",
+          coordination_phase: "terminal",
+          current_attempt: 1,
+        }),
+        step({
+          id: "step_linear_running",
+          status: "running",
+          coordination_phase: "attempt_active",
+          dependency_ids: ["step_linear_done"],
+          satisfied_dependency_ids: ["step_linear_done"],
+          latest_run_id: "run_linear_running",
+          current_attempt: 1,
+        }),
+      ]),
+    );
+
+    expect(markup).toContain("step_linear_done");
+    expect(markup).toContain("step_linear_running");
+    expect(markup).toContain("1/1 satisfied");
+    expect(markup).toContain("run_linear_running");
+  });
+
   it("renders diamond fan-in dependency satisfaction and an exact approval wait", () => {
     const markup = renderWorkflow(
       projection([
@@ -103,6 +130,52 @@ describe("WorkflowProgress acceptance scenarios", () => {
     expect(markup).toContain("approval_42");
     expect(markup).toContain("repository:write");
     expect(markup).toContain("subject step:step_right");
+  });
+
+  it("renders safe Event and external-job summaries plus expired deadline state", () => {
+    const markup = renderWorkflow(
+      projection([
+        step({
+          id: "step_event",
+          status: "waiting",
+          coordination_phase: "waiting",
+          current_attempt: 1,
+          wait_key: "wait_event_560",
+          wait_type: "event",
+          wait_state: "active",
+          wait_event_type: "connector.completed",
+          wait_correlation_key: "corr_event_560",
+        }),
+        step({
+          id: "step_external",
+          status: "waiting",
+          coordination_phase: "waiting",
+          current_attempt: 1,
+          wait_key: "wait_external_560",
+          wait_type: "external_job",
+          wait_state: "active",
+          wait_external_job_ref: "adapter-job-560",
+        }),
+        step({
+          id: "step_deadline",
+          status: "failed",
+          coordination_phase: "terminal",
+          current_attempt: 1,
+          wait_key: "wait_deadline_560",
+          wait_type: "deadline",
+          wait_state: "expired",
+          wait_deadline_at: "2026-09-08T12:00:00+00:00",
+          wait_resolved_at: "2026-09-08T12:00:01+00:00",
+        }),
+      ]),
+    );
+
+    expect(markup).toContain("connector.completed");
+    expect(markup).toContain("corr_event_560");
+    expect(markup).toContain("adapter-job-560");
+    expect(markup).toContain("expired");
+    expect(markup).toContain("deadline");
+    expect(markup).toContain("resolved");
   });
 
   it("keeps resolved wait identity and resolution visible from the canonical projection", () => {
