@@ -1,0 +1,417 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/benchmark-host-pressure-observer.v1.schema.json",
+  "title": "AI Multi-Agent Platform Host Pressure Observer Benchmark Report v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "benchmark",
+    "platform_version",
+    "platform_commit",
+    "started_at",
+    "duration_seconds",
+    "environment",
+    "observations",
+    "transitions",
+    "summary",
+    "safety",
+    "correctness",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "benchmark_id",
+        "benchmark_version",
+        "duration_seconds",
+        "sample_interval_seconds",
+        "max_samples",
+        "safety_max_duration_seconds",
+        "workload_class",
+        "include_provider_metadata",
+        "expected_invariants",
+        "captured_metrics"
+      ],
+      "properties": {
+        "benchmark_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "benchmark_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sample_interval_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_samples": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "safety_max_duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "workload_class": {
+          "type": "string",
+          "minLength": 1
+        },
+        "include_provider_metadata": {
+          "type": "boolean"
+        },
+        "expected_invariants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "captured_metrics": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "platform_version": {
+      "type": "string"
+    },
+    "platform_commit": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "environment": {
+      "type": "object"
+    },
+    "observations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/transition"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "safety": {
+      "$ref": "#/$defs/safety"
+    },
+    "correctness": {
+      "$ref": "#/$defs/correctness"
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "signal": {
+      "type": "object",
+      "required": [
+        "kind",
+        "state",
+        "value",
+        "unit"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "enum": [
+            "healthy",
+            "elevated",
+            "critical",
+            "unknown"
+          ]
+        },
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "providerEvidence": {
+      "type": "object",
+      "required": [
+        "namespace",
+        "values"
+      ],
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "minLength": 1
+        },
+        "values": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "observation": {
+      "type": "object",
+      "required": [
+        "sample_index",
+        "offset_seconds",
+        "observed_at",
+        "pressure_state",
+        "signals",
+        "admission_action",
+        "admission_reason_codes",
+        "scheduler_accepted",
+        "provider_metadata"
+      ],
+      "properties": {
+        "sample_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "offset_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "observed_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "pressure_state": {
+          "enum": [
+            "healthy",
+            "elevated",
+            "critical",
+            "unknown"
+          ]
+        },
+        "signals": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/signal"
+          }
+        },
+        "admission_action": {
+          "type": "string",
+          "minLength": 1
+        },
+        "admission_reason_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "scheduler_accepted": {
+          "type": "boolean"
+        },
+        "provider_metadata": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerEvidence"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "transition": {
+      "type": "object",
+      "required": [
+        "offset_seconds",
+        "from_state",
+        "to_state"
+      ],
+      "properties": {
+        "offset_seconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "from_state": {
+          "enum": [
+            "healthy",
+            "elevated",
+            "critical",
+            "unknown"
+          ]
+        },
+        "to_state": {
+          "enum": [
+            "healthy",
+            "elevated",
+            "critical",
+            "unknown"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "countMap": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "sample_count",
+        "state_counts",
+        "admission_action_counts",
+        "admission_reason_counts",
+        "scheduler_acceptance_counts",
+        "signal_state_counts",
+        "observed_pressure",
+        "recovered_after_pressure",
+        "recovery_latency_seconds"
+      ],
+      "properties": {
+        "sample_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state_counts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "admission_action_counts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "admission_reason_counts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "scheduler_acceptance_counts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "signal_state_counts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "observed_pressure": {
+          "type": "boolean"
+        },
+        "recovered_after_pressure": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "recovery_latency_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "safety": {
+      "type": "object",
+      "required": [
+        "read_only_observer",
+        "host_mutation_attempted",
+        "destructive_load_generated",
+        "duration_seconds",
+        "safety_max_duration_seconds",
+        "sample_interval_seconds",
+        "max_samples"
+      ],
+      "properties": {
+        "read_only_observer": {
+          "const": true
+        },
+        "host_mutation_attempted": {
+          "const": false
+        },
+        "destructive_load_generated": {
+          "const": false
+        },
+        "duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "safety_max_duration_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sample_interval_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "max_samples": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "correctness": {
+      "type": "object",
+      "required": [
+        "sample_count",
+        "missing_decisions",
+        "active_reservations_after",
+        "monotonic_sample_offsets",
+        "passed"
+      ],
+      "properties": {
+        "sample_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "missing_decisions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "active_reservations_after": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "monotonic_sample_offsets": {
+          "type": "boolean"
+        },
+        "passed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
