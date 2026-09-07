@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+from jsonschema import Draft202012Validator
+
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.contracts.types import (
     HealthStatus,
@@ -60,6 +62,62 @@ def test_baseline_capabilities_are_read_only_and_provider_neutral() -> None:
         assert "source-provenance" in spec.features
 
 
+def test_output_schemas_require_provider_neutral_result_contracts() -> None:
+    specs = {spec.capability_id: spec for spec in repository_intelligence_capability_specs()}
+    required = {
+        "repository.map": {
+            "entries",
+            "returned_entries",
+            "total_matching_entries",
+            "truncated",
+            "provenance",
+        },
+        "repository.text_search": {
+            "query",
+            "hits",
+            "truncated",
+            "skipped_binary_files",
+            "provenance",
+        },
+        "repository.source_slice": {
+            "path",
+            "start_line",
+            "end_line",
+            "requested_end_line",
+            "total_lines",
+            "lines",
+            "truncated",
+            "provenance",
+        },
+        "repository.health": {"provider_id", "health", "available"},
+        "repository.index_status": {
+            "provider_id",
+            "indexed",
+            "state_class",
+            "freshness",
+            "rebuild_required",
+            "notes",
+        },
+    }
+
+    for capability_id, expected_required in required.items():
+        schema = specs[capability_id].output_schema
+        assert schema is not None
+        schema_required = schema.get("required")
+        assert isinstance(schema_required, list)
+        assert set(schema_required) == expected_required
+
+    map_schema = specs["repository.map"].output_schema
+    assert map_schema is not None
+    invalid_without_provenance = {
+        "entries": [],
+        "returned_entries": 0,
+        "total_matching_entries": 0,
+        "truncated": False,
+    }
+    assert list(Draft202012Validator(map_schema).iter_errors(invalid_without_provenance))
+
+
 def test_baseline_map_search_and_source_slice_carry_exact_revision_provenance() -> None:
     async def scenario() -> None:
         provider = BaselineRepositoryIntelligenceProvider(_snapshot)
@@ -113,8 +171,98 @@ def test_baseline_map_search_and_source_slice_carry_exact_revision_provenance() 
             )
         )
         assert isinstance(sliced.output, dict)
-        assert sliced.output["lines"] == [{"line": 2, "text": "    return 'Needle'"}]
+        assert sliced.output["lines"] == [
+            {"line": 2, "text": "    return 'Needle'", "text_truncated": False}
+        ]
+        assert sliced.output["truncated"] is False
         assert sliced.output["provenance"]["resolved_revision"] == _SHA
+
+    asyncio.run(scenario())
+
+
+def test_text_search_reports_truncation_only_when_a_match_is_omitted() -> None:
+    async def exact_loader(
+        repository_id: str,
+        revision: str,
+        context: OperationContext,
+    ) -> RepositoryTree:
+        del context
+        return RepositoryTree(
+            repository_id=repository_id,
+            requested_ref=revision,
+            resolved_revision=_SHA,
+            entries=(RepositoryTreeEntry("one.txt", b"needle\n"),),
+        )
+
+    async def overflow_loader(
+        repository_id: str,
+        revision: str,
+        context: OperationContext,
+    ) -> RepositoryTree:
+        del context
+        return RepositoryTree(
+            repository_id=repository_id,
+            requested_ref=revision,
+            resolved_revision=_SHA,
+            entries=(RepositoryTreeEntry("two.txt", b"needle\nneedle again\n"),),
+        )
+
+    async def scenario() -> None:
+        arguments: dict[str, JsonValue] = {
+            "repository_id": _REPOSITORY_ID,
+            "query": "needle",
+            "max_results": 1,
+        }
+        exact = await BaselineRepositoryIntelligenceProvider(exact_loader).invoke(
+            _invocation("repository.text_search", arguments)
+        )
+        overflow = await BaselineRepositoryIntelligenceProvider(overflow_loader).invoke(
+            _invocation("repository.text_search", arguments)
+        )
+
+        assert isinstance(exact.output, dict)
+        assert exact.output["truncated"] is False
+        assert isinstance(overflow.output, dict)
+        assert overflow.output["truncated"] is True
+        assert len(overflow.output["hits"]) == 1
+
+    asyncio.run(scenario())
+
+
+def test_source_slice_bounds_oversized_lines_and_total_output() -> None:
+    async def long_line_loader(
+        repository_id: str,
+        revision: str,
+        context: OperationContext,
+    ) -> RepositoryTree:
+        del context
+        huge_line = ("x" * 100_000).encode()
+        return RepositoryTree(
+            repository_id=repository_id,
+            requested_ref=revision,
+            resolved_revision=_SHA,
+            entries=(RepositoryTreeEntry("minified.js", huge_line),),
+        )
+
+    async def scenario() -> None:
+        sliced = await BaselineRepositoryIntelligenceProvider(long_line_loader).invoke(
+            _invocation(
+                "repository.source_slice",
+                {
+                    "repository_id": _REPOSITORY_ID,
+                    "path": "minified.js",
+                    "start_line": 1,
+                    "end_line": 1,
+                },
+            )
+        )
+        assert isinstance(sliced.output, dict)
+        lines = sliced.output["lines"]
+        assert isinstance(lines, list)
+        assert len(lines) == 1
+        assert len(lines[0]["text"]) == 4096
+        assert lines[0]["text_truncated"] is True
+        assert sliced.output["truncated"] is True
 
     asyncio.run(scenario())
 
@@ -134,6 +282,7 @@ def test_unavailable_high_priority_provider_falls_back_to_baseline() -> None:
             health=HealthStatus.UNAVAILABLE,
         )
         await registry.register_provider(baseline)
+        await registry.refresh_health()
         await registry.register_provider(optional)
         await registry.refresh_health()
 
@@ -147,7 +296,7 @@ def test_unavailable_high_priority_provider_falls_back_to_baseline() -> None:
     asyncio.run(scenario())
 
 
-def test_healthy_high_priority_optional_provider_is_preferred_without_becoming_canonical() -> None:
+def test_provider_can_register_after_health_refresh_and_be_preferred() -> None:
     async def scenario() -> None:
         registry = CapabilityRegistry()
         baseline = BaselineRepositoryIntelligenceProvider(
@@ -161,6 +310,7 @@ def test_healthy_high_priority_optional_provider_is_preferred_without_becoming_c
             priority=100,
         )
         await registry.register_provider(baseline)
+        await registry.refresh_health()
         await registry.register_provider(optional)
         await registry.refresh_health()
 
