@@ -1,9 +1,9 @@
-"""Canonical Task metadata contract for routing a Run through AgentRuntime.
+"""Canonical metadata contracts for routing Runs through AgentRuntime.
 
-The keys in this module are platform-owned execution metadata, not onboarding- or
-Evaluation-private lifecycle state. Producers such as onboarding and Evaluation may
-bind an exact Agent execution request to a canonical Task; the lifecycle backend
-consumes the same contract.
+The keys in this module are platform-owned execution metadata, not onboarding-,
+Evaluation- or Planning-private lifecycle state. Producers may bind either one exact
+Agent execution request to a canonical Task or exact Agent execution requests to
+canonical Step IDs; the lifecycle backend consumes the same contract.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.domain import validate_id
 
 AGENT_EXECUTION_PROFILE_KEY = "agent.execution.profile"
 AGENT_EXECUTION_PROFILE = "agent"
@@ -20,11 +21,12 @@ AGENT_EXECUTION_AGENT_REVISION_KEY = "agent.execution.agent_revision"
 AGENT_EXECUTION_MODEL_CONFIG_ID_KEY = "agent.execution.model_config_id"
 AGENT_EXECUTION_CAPABILITY_IDS_KEY = "agent.execution.capability_ids"
 AGENT_EXECUTION_WORKSPACE_ID_KEY = "agent.execution.workspace_id"
+AGENT_STEP_EXECUTION_BINDINGS_KEY = "agent.execution.step_bindings"
 
 
 @dataclass(frozen=True, slots=True)
 class AgentExecutionBinding:
-    """Exact canonical Agent execution identity decoded from Task metadata."""
+    """Exact canonical Agent execution identity decoded from platform metadata."""
 
     agent_id: str
     agent_revision: int | None = None
@@ -68,8 +70,30 @@ def decode_agent_execution_binding(
     )
 
 
+def decode_agent_step_execution_binding(
+    metadata: Mapping[str, JsonValue],
+    step_id: str,
+) -> AgentExecutionBinding | None:
+    """Decode an exact Agent binding for one canonical Step ID when present."""
+
+    validate_id(step_id, "step")
+    raw_bindings = metadata.get(AGENT_STEP_EXECUTION_BINDINGS_KEY)
+    if raw_bindings is None:
+        return None
+    if not isinstance(raw_bindings, Mapping):
+        raise ValueError(f"{AGENT_STEP_EXECUTION_BINDINGS_KEY} must be an object")
+    raw_binding = raw_bindings.get(step_id)
+    if raw_binding is None:
+        return None
+    if not isinstance(raw_binding, Mapping):
+        raise ValueError(
+            f"{AGENT_STEP_EXECUTION_BINDINGS_KEY}[{step_id!r}] must be an object"
+        )
+    return decode_agent_execution_binding(raw_binding)
+
+
 def encode_agent_execution_binding(binding: AgentExecutionBinding) -> dict[str, JsonValue]:
-    """Encode one exact Agent execution binding into canonical Task metadata."""
+    """Encode one exact Agent execution binding into canonical metadata."""
 
     payload: dict[str, JsonValue] = {
         AGENT_EXECUTION_PROFILE_KEY: AGENT_EXECUTION_PROFILE,
@@ -83,6 +107,18 @@ def encode_agent_execution_binding(binding: AgentExecutionBinding) -> dict[str, 
     if binding.workspace_id is not None:
         payload[AGENT_EXECUTION_WORKSPACE_ID_KEY] = binding.workspace_id
     return payload
+
+
+def encode_agent_step_execution_bindings(
+    bindings: Mapping[str, AgentExecutionBinding],
+) -> dict[str, JsonValue]:
+    """Encode exact Step-ID-scoped Agent bindings for canonical Task metadata."""
+
+    encoded: dict[str, JsonValue] = {}
+    for step_id, binding in bindings.items():
+        validate_id(step_id, "step")
+        encoded[step_id] = encode_agent_execution_binding(binding)
+    return {AGENT_STEP_EXECUTION_BINDINGS_KEY: encoded}
 
 
 def _required_string(metadata: Mapping[str, JsonValue], key: str) -> str:
@@ -118,7 +154,10 @@ __all__ = [
     "AGENT_EXECUTION_PROFILE",
     "AGENT_EXECUTION_PROFILE_KEY",
     "AGENT_EXECUTION_WORKSPACE_ID_KEY",
+    "AGENT_STEP_EXECUTION_BINDINGS_KEY",
     "AgentExecutionBinding",
     "decode_agent_execution_binding",
+    "decode_agent_step_execution_binding",
     "encode_agent_execution_binding",
+    "encode_agent_step_execution_bindings",
 ]
