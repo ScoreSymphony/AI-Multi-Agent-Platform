@@ -62,24 +62,12 @@ class PlanningService(BasePlanningService):
         if prior is None:
             return proposal
 
-        predecessors = [
-            record
-            for record in self.repository.list_for_task(request.task_id)
-            if record.status is ProposalStatus.ACTIVATED
-            and record.activation_plan_id == prior.plan_id
-        ]
-        if not predecessors:
+        predecessor = self._activated_proposal_for_plan(request.task_id, prior.plan_id)
+        if predecessor is None:
             return proposal
-        predecessors.sort(
-            key=lambda item: (
-                item.proposal.created_at,
-                item.updated_at,
-                item.proposal.proposal_id,
-            )
-        )
         return replace(
             proposal,
-            supersedes_proposal_id=predecessors[-1].proposal.proposal_id,
+            supersedes_proposal_id=predecessor.proposal.proposal_id,
         )
 
     async def activate(
@@ -115,18 +103,35 @@ class PlanningService(BasePlanningService):
             return activated
 
     async def _supersede_if_stale(self, proposal_id: str) -> None:
+        """Persist staleness only when its authority can be proven safely.
+
+        A Task revision change with the same canonical Plan is sufficient evidence that the
+        proposal's immutable Task snapshot is obsolete. A canonical Plan change is different:
+        ``plan.created`` alone is not proof that planning authorized the replacement. In that case
+        we supersede only when this PlanningRepository contains the activated proposal that owns
+        the Task's current Plan. This preserves the base service's activation-provenance guard.
+        """
+
         record = self.repository.get(proposal_id)
         if record.status not in _SUPERSEDABLE_STATUSES:
             return
-        task = await self.kernel.get_task(record.proposal.task_id)
-        if (
-            task.revision == record.proposal.task_revision
-            and task.plan_ref == record.proposal.base_plan_id
-        ):
+        proposal = record.proposal
+        task = await self.kernel.get_task(proposal.task_id)
+        revision_changed = task.revision != proposal.task_revision
+        plan_changed = task.plan_ref != proposal.base_plan_id
+        if not revision_changed and not plan_changed:
             return
+
+        superseded_by_proposal_id: str | None = None
+        if plan_changed:
+            replacement = self._activated_proposal_for_plan(proposal.task_id, task.plan_ref)
+            if replacement is None:
+                return
+            superseded_by_proposal_id = replacement.proposal.proposal_id
+
         await self._mark_superseded(
             record,
-            superseded_by_proposal_id=None,
+            superseded_by_proposal_id=superseded_by_proposal_id,
             reason="canonical Task/Plan state moved beyond the proposal base",
         )
 
@@ -149,6 +154,29 @@ class PlanningService(BasePlanningService):
                 superseded_by_proposal_id=proposal.proposal_id,
                 reason="competing proposal lost canonical activation",
             )
+
+    def _activated_proposal_for_plan(
+        self,
+        task_id: str,
+        plan_id: str | None,
+    ) -> ProposalRecord | None:
+        if plan_id is None:
+            return None
+        candidates = [
+            record
+            for record in self.repository.list_for_task(task_id)
+            if record.status is ProposalStatus.ACTIVATED and record.activation_plan_id == plan_id
+        ]
+        if not candidates:
+            return None
+        candidates.sort(
+            key=lambda item: (
+                item.proposal.created_at,
+                item.updated_at,
+                item.proposal.proposal_id,
+            )
+        )
+        return candidates[-1]
 
     async def _mark_superseded(
         self,
