@@ -72,19 +72,13 @@ class TaskMutationBoundary:
         validate_id(task_id, "task")
         self._validate_planning_metadata(planning_metadata)
         metadata: dict[str, JsonValue] = {_TASK_MANAGEMENT_METADATA_KEY: dict(planning_metadata)}
-        duplicate = await self._kernel._task_command(
-            task_id,
-            idempotency_key,
-            _UPDATE_TASK_OPERATION,
+        duplicate = await self._replayed_planning_metadata(
+            task_id=task_id,
+            idempotency_key=idempotency_key,
+            metadata=metadata,
         )
         if duplicate is not None:
-            event = await self._command_event(duplicate, _UPDATE_TASK_EVENT)
-            if event.payload.get("metadata") != metadata:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "Idempotency-Key is already bound to a different Task planning metadata update",
-                )
-            return await self._kernel.get_task(task_id)
+            return duplicate
 
         task = await self._kernel.get_task(task_id)
         await self._kernel._commit_task_command(
@@ -104,7 +98,17 @@ class TaskMutationBoundary:
             actor_ref=actor_ref,
             source=source,
         )
-        return await self._kernel.get_task(task_id)
+        committed = await self._replayed_planning_metadata(
+            task_id=task_id,
+            idempotency_key=idempotency_key,
+            metadata=metadata,
+        )
+        if committed is None:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "Task planning metadata commit produced no canonical command record",
+            )
+        return committed
 
     async def replayed_project_reassignment(
         self,
@@ -199,8 +203,12 @@ class TaskMutationBoundary:
             actor_ref=actor_ref,
             source=source,
         )
-        moved = await self._kernel.get_task(task_id)
-        if moved.task.project_id != destination_project_id:
+        moved = await self.replayed_project_reassignment(
+            task_id=task_id,
+            destination_project_id=destination_project_id,
+            idempotency_key=idempotency_key,
+        )
+        if moved is None or moved.task.project_id != destination_project_id:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
                 "canonical Task Project move did not project the requested destination",
@@ -310,6 +318,32 @@ class TaskMutationBoundary:
             return
         await self._kernel._mirror(events)
 
+    async def _replayed_planning_metadata(
+        self,
+        *,
+        task_id: str,
+        idempotency_key: str,
+        metadata: Mapping[str, JsonValue],
+    ) -> TaskState | None:
+        record = await self._kernel._task_command(
+            task_id,
+            idempotency_key,
+            _UPDATE_TASK_OPERATION,
+        )
+        if record is None:
+            return None
+        event = await self._command_event(record, _UPDATE_TASK_EVENT)
+        if (
+            event.payload.get("metadata") != metadata
+            or "title" in event.payload
+            or "objective" in event.payload
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Idempotency-Key is already bound to a different Task update",
+            )
+        return await self._kernel.get_task(task_id)
+
     async def _command_event(
         self,
         record: CommandRecord,
@@ -338,9 +372,9 @@ class TaskMutationBoundary:
         if missing or unknown:
             details: dict[str, JsonValue] = {}
             if missing:
-                details["missing_fields"] = sorted(missing)
+                details["missing_fields"] = cast(JsonValue, sorted(missing))
             if unknown:
-                details["unknown_fields"] = sorted(unknown)
+                details["unknown_fields"] = cast(JsonValue, sorted(unknown))
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "Task planning metadata does not match the owned task_management schema",
