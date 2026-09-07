@@ -8,7 +8,7 @@ from typing import cast
 
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .client import ClientResponse, ControlPlaneClient, TransportError
+from .client import APIClientError, ClientResponse, ControlPlaneClient, TransportError
 from .profiles import ProfileError
 
 _STEP_FIELDS = (
@@ -57,13 +57,20 @@ def execute_task_workflow(
     if task_id != args.task_id:
         raise TransportError("Control Plane returned a Task with a mismatched canonical ID")
 
+    command = str(args.workflow_command)
     plan_ref = task.get("plan_ref")
     if plan_ref is None:
-        return _without_plan(task_response, args.task_id, str(args.workflow_command))
+        return _empty_workflow(task_response, args.task_id, command, plan_id=None)
     if not isinstance(plan_ref, str) or not plan_ref:
         raise TransportError("Control Plane Task plan_ref must be a canonical string ID or null")
 
-    projection_response = client.get(f"/plan-coordination/{_segment(plan_ref)}")
+    try:
+        projection_response = client.get(f"/plan-coordination/{_segment(plan_ref)}")
+    except APIClientError as exc:
+        if exc.status == 404 and exc.code == "not_found":
+            return _empty_workflow(task_response, args.task_id, command, plan_id=plan_ref)
+        raise
+
     projection = _require_object(projection_response.body, "Plan coordination projection")
     projection_task_id = projection.get("task_id")
     projection_plan_id = projection.get("id")
@@ -77,7 +84,6 @@ def execute_task_workflow(
         )
 
     steps = _steps(projection)
-    command = str(args.workflow_command)
     if command == "show":
         body = _summary(projection, steps)
     elif command == "steps":
@@ -108,15 +114,17 @@ def execute_task_workflow(
     )
 
 
-def _without_plan(
+def _empty_workflow(
     response: ClientResponse,
     task_id: str,
     command: str,
+    *,
+    plan_id: str | None,
 ) -> ClientResponse:
     if command == "show":
         body: JsonValue = {
             "task_id": task_id,
-            "plan_id": None,
+            "plan_id": plan_id,
             "plan_revision": None,
             "step_count": 0,
             "status_counts": {},
@@ -126,7 +134,7 @@ def _without_plan(
     elif command in {"steps", "waits", "retries"}:
         body = {
             "task_id": task_id,
-            "plan_id": None,
+            "plan_id": plan_id,
             "plan_revision": None,
             "items": [],
             "total": 0,
