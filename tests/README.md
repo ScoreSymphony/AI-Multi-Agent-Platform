@@ -73,6 +73,8 @@ Examples:
 pytest tests/unit
 pytest tests/contract
 pytest tests/integration
+pytest tests/e2e
+pytest tests/performance
 pytest -m integration
 pytest -m "contract or integration"
 ```
