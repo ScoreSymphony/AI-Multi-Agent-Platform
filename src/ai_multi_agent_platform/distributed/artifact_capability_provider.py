@@ -35,17 +35,26 @@ DISTRIBUTED_WORKSPACE_ARTIFACT_TOOL_REF = "distributed.executor.write_artifact"
 
 
 class DistributedExecutorArtifactProvider(CapabilityToolProvider):
-    """Write one text artifact through canonical Capability -> Executor -> Worker boundaries."""
+    """Write one text artifact through canonical Capability -> Executor -> Worker boundaries.
+
+    The normal shipped provider is placement-neutral: the distributed scheduler chooses an
+    eligible Worker from current registry state at invocation time. ``worker_id`` remains an
+    optional pin for focused tests or explicit deployments that intentionally bind one provider
+    to one Worker. This keeps ordinary capability discovery free of duplicate worker-provider
+    registrations and makes drain/maintenance/liveness state authoritative at dispatch time.
+    """
 
     def __init__(
         self,
         runtime: DistributedRuntime,
         *,
-        worker_id: str,
         workspace_bindings: RunWorkspaceBindingRepository,
+        worker_id: str | None = None,
         provider_id: str = "distributed.executor.reference-artifact",
         executor_type: str = "reference",
     ) -> None:
+        if worker_id is not None and not worker_id.strip():
+            raise ValueError("worker_id must not be blank when provided")
         if not provider_id.strip():
             raise ValueError("provider_id must not be blank")
         if not executor_type.strip():
@@ -74,14 +83,19 @@ class DistributedExecutorArtifactProvider(CapabilityToolProvider):
         )
 
     async def capability_registrations(self) -> tuple[CapabilityRegistration, ...]:
-        try:
-            worker = self.runtime.registry.get_worker(self.worker_id)
-        except RegistryError as exc:
-            raise ContractError(
-                ErrorCode.INVALID_CONFIGURATION,
-                f"distributed artifact Worker is not registered: {self.worker_id}",
-                provider_id=self.provider_id,
-            ) from exc
+        node_id = None
+        worker_id = self.worker_id
+        if worker_id is not None:
+            try:
+                worker = self.runtime.registry.get_worker(worker_id)
+            except RegistryError as exc:
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION,
+                    f"distributed artifact Worker is not registered: {worker_id}",
+                    provider_id=self.provider_id,
+                ) from exc
+            node_id = worker.node_id
+
         spec = CapabilitySpec(
             capability_id=WORKSPACE_ARTIFACT_CAPABILITY_ID,
             name="Write Workspace Artifact",
@@ -119,8 +133,8 @@ class DistributedExecutorArtifactProvider(CapabilityToolProvider):
                 provider_id=self.provider_id,
                 provider_tool_ref=DISTRIBUTED_WORKSPACE_ARTIFACT_TOOL_REF,
                 priority=200,
-                node_id=worker.node_id,
-                worker_id=worker.worker_id,
+                node_id=node_id,
+                worker_id=worker_id,
             ),
         )
 
@@ -169,6 +183,7 @@ class DistributedExecutorArtifactProvider(CapabilityToolProvider):
                 provider_id=self.provider_id,
             )
 
+        preferred_worker_ids = () if self.worker_id is None else (self.worker_id,)
         try:
             job = bind_worker_job_to_tool_invocation(
                 WorkerJobRequest(
@@ -185,7 +200,7 @@ class DistributedExecutorArtifactProvider(CapabilityToolProvider):
                     requirements=JobRequirements(
                         executor_type=self.executor_type,
                         capability_refs=(WORKSPACE_ARTIFACT_CAPABILITY_ID,),
-                        preferred_worker_ids=(self.worker_id,),
+                        preferred_worker_ids=preferred_worker_ids,
                     ),
                     workspace_ref=binding.workspace_id,
                     snapshot_ref=binding.workspace_snapshot_id,
@@ -203,7 +218,10 @@ class DistributedExecutorArtifactProvider(CapabilityToolProvider):
 
         worker_job_id = job.worker_job_id
         try:
-            record = await self.runtime.dispatch_to_worker(job, self.worker_id)
+            if self.worker_id is None:
+                record = await self.runtime.dispatch(job)
+            else:
+                record = await self.runtime.dispatch_to_worker(job, self.worker_id)
             result = await self.runtime.result(worker_job_id)
         except NoEligibleWorkerError as exc:
             raise ContractError(
