@@ -6,12 +6,22 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Protocol
 
+from ai_multi_agent_platform.agents.repository import AgentRepository
+from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.kernel.models import TaskState
-from ai_multi_agent_platform.security import ActorIdentity, ActorType
+from ai_multi_agent_platform.models import ModelRegistry
+from ai_multi_agent_platform.security import ActorIdentity, ActorType, AuthorizationGate
 
-from .models import PlanningInventory, PlanningTrigger, ProposalRecord
-from .service import PlanningService as _BasePlanningService
+from .models import PlanningInventory, PlanningTrigger, ProposalRecord, ReplanPolicy
+from .providers import Planner
+from .repository import PlanningRepository
+from .service import (
+    ActivatedPlanCoordinator,
+    PlanningEventSink,
+    PlanningKernel,
+    PlanningService as _BasePlanningService,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,19 +72,39 @@ _ENVIRONMENT: ContextVar[_EnvironmentSnapshot | None] = ContextVar(
 class PlanningService(_BasePlanningService):
     """PlanningService facade whose authority inputs are resolved only by the server.
 
-    The core planning engine still owns proposal validation/activation. This facade removes
-    permission and Worker-availability facts from the public ``propose`` call, resolves them via a
-    server-injected ``PlanningEnvironmentResolver``, and filters planner inventory before the core
-    engine sees it. Direct callers therefore cannot turn arbitrary strings into planning authority.
+    The core planning engine still owns proposal validation/activation. This facade rejects
+    caller-supplied permission and Worker-availability facts, resolves them via a server-injected
+    ``PlanningEnvironmentResolver``, and filters planner inventory before the core engine sees it.
+    Direct callers therefore cannot turn arbitrary strings into planning authority.
     """
 
     def __init__(
         self,
-        *args: object,
+        *,
+        planner: Planner,
+        repository: PlanningRepository,
+        kernel: PlanningKernel,
+        agents: AgentRepository | None = None,
+        capabilities: CapabilityRegistry | None = None,
+        models: ModelRegistry | None = None,
+        authorization: AuthorizationGate | None = None,
+        coordinator: ActivatedPlanCoordinator | None = None,
+        replan_policy: ReplanPolicy | None = None,
+        event_sink: PlanningEventSink | None = None,
         environment_resolver: PlanningEnvironmentResolver | None = None,
-        **kwargs: object,
     ) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(
+            planner=planner,
+            repository=repository,
+            kernel=kernel,
+            agents=agents,
+            capabilities=capabilities,
+            models=models,
+            authorization=authorization,
+            coordinator=coordinator,
+            replan_policy=replan_policy,
+            event_sink=event_sink,
+        )
         self.environment_resolver = environment_resolver
 
     async def propose(
@@ -87,11 +117,25 @@ class PlanningService(_BasePlanningService):
         workspace_id: str | None = None,
         evidence_refs: tuple[str, ...] = (),
         task_constraints: tuple[str, ...] = (),
+        granted_permissions: frozenset[str] | None = None,
+        available_worker_capabilities: frozenset[str] | None = None,
         max_steps: int = 128,
         max_parallel_steps: int | None = None,
         actor: ActorIdentity | None = None,
     ) -> ProposalRecord:
         """Create a proposal using server-resolved authorization and availability facts."""
+
+        caller_authority_fields: list[str] = []
+        if granted_permissions is not None:
+            caller_authority_fields.append("granted_permissions")
+        if available_worker_capabilities is not None:
+            caller_authority_fields.append("available_worker_capabilities")
+        if caller_authority_fields:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "planning authority and availability fields are resolved by the server",
+                details={"fields": caller_authority_fields},
+            )
 
         existing = self.repository.get_by_idempotency(task_id, idempotency_key)
         if existing is not None:
