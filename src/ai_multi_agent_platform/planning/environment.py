@@ -76,6 +76,11 @@ class PolicyAwarePlanningEnvironmentResolver:
     ``require_approval`` remains discoverable, while a denial is removed. Agent and
     Team assignments require an immediate allow because planning activation does not
     itself grant Agent/Team execution authority.
+
+    Capability ``required_permissions`` are capability-local permission labels, not
+    necessarily members of the canonical ``AuthorizationAction`` enum. They therefore
+    become planning grants only after the server has authorized that exact capability
+    candidate; they are never inferred from a caller or from global action vocabulary.
     """
 
     def __init__(
@@ -102,10 +107,10 @@ class PolicyAwarePlanningEnvironmentResolver:
     ) -> PlanningEnvironment:
         del workspace_id
         actor = _task_actor(task)
-        permissions = (
-            frozenset()
+        resolved_permissions = set(
+            ()
             if self.permission_resolver is None
-            else frozenset(self.permission_resolver(actor, task))
+            else self.permission_resolver(actor, task)
         )
         worker_capabilities = (
             frozenset()
@@ -115,7 +120,7 @@ class PolicyAwarePlanningEnvironmentResolver:
 
         if self.authorization is None:
             return PlanningEnvironment(
-                granted_permissions=permissions,
+                granted_permissions=frozenset(resolved_permissions),
                 available_worker_capabilities=worker_capabilities,
             )
 
@@ -170,18 +175,16 @@ class PolicyAwarePlanningEnvironmentResolver:
                     authorized_teams.add((definition.team_id, revision.revision))
 
         if self.capabilities is not None:
-            eligible = self.capabilities.list_capabilities(
-                granted_permissions=permissions,
-                available_worker_capabilities=worker_capabilities,
-                include_unavailable=False,
-            )
-            for capability in eligible:
+            for capability in self.capabilities.inventory_capabilities(include_unavailable=False):
+                if not set(capability.required_worker_capabilities).issubset(worker_capabilities):
+                    continue
                 action = _capability_action(actor, task, context, capability)
                 if await self._allowed(action, allow_approval=True):
                     authorized_capabilities.add((capability.capability_id, capability.version))
+                    resolved_permissions.update(capability.required_permissions)
 
         return PlanningEnvironment(
-            granted_permissions=permissions,
+            granted_permissions=frozenset(resolved_permissions),
             available_worker_capabilities=worker_capabilities,
             authorized_agent_revisions=frozenset(authorized_agents),
             authorized_team_revisions=frozenset(authorized_teams),
@@ -203,7 +206,7 @@ class PolicyAwarePlanningEnvironmentResolver:
 def _task_actor(task: TaskState) -> ActorIdentity:
     owner = task.task.owner_ref
     actor_type = ActorType.HUMAN if owner.type == "user" else ActorType.SERVICE
-    return ActorIdentity(actor_id=f"{owner.type}:{owner.id}", actor_type=actor_type)
+    return ActorIdentity(actor_id=owner.id, actor_type=actor_type)
 
 
 def _capability_action(
