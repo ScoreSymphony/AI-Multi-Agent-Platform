@@ -172,6 +172,82 @@ def doctor_compute(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
                     "maintenance": item.get("maintenance", False) if kind == "node" else False,
                 }
             )
+
+    try:
+        pressure_response = client.get(
+            "/node-pressure",
+            query={"limit": "200"},
+            raise_for_status=False,
+        )
+    except TransportError as exc:
+        overall = "degraded"
+        checks.append(
+            {
+                "name": "host_pressure",
+                "status": "degraded",
+                "message": str(exc),
+            }
+        )
+    else:
+        pressure_status, pressure_checks = _doctor_pressure(pressure_response)
+        if pressure_status == "degraded":
+            overall = "degraded"
+        checks.extend(pressure_checks)
+
+    return overall, checks
+
+
+def _doctor_pressure(response: ClientResponse) -> tuple[str, list[JsonValue]]:
+    """Interpret the optional #500 diagnostics collection without assuming Linux details."""
+
+    if response.status == 404:
+        return "healthy", []
+    if response.status >= 400:
+        return "degraded", [
+            {
+                "name": "host_pressure",
+                "status": "degraded",
+                "http_status": response.status,
+            }
+        ]
+
+    items = _page_items(response.body)
+    if items is None:
+        return "degraded", [
+            {
+                "name": "host_pressure",
+                "status": "degraded",
+                "message": "host-pressure diagnostics returned an invalid page",
+            }
+        ]
+
+    overall = "healthy"
+    checks: list[JsonValue] = []
+    for item in items:
+        enabled = item.get("enabled") is True
+        state = item.get("state")
+        report_status = item.get("report_status")
+        healthy = not enabled or (state == "healthy" and report_status == "current")
+        status = "healthy" if healthy else "degraded"
+        if status == "degraded":
+            overall = "degraded"
+        policy = item.get("policy")
+        require_pressure_report = (
+            policy.get("require_pressure_report") if isinstance(policy, dict) else None
+        )
+        checks.append(
+            {
+                "name": "host_pressure",
+                "status": status,
+                "resource_id": item.get("id"),
+                "enabled": enabled,
+                "pressure_state": state,
+                "report_status": report_status,
+                "observed_at": item.get("observed_at"),
+                "snapshot_age_seconds": item.get("snapshot_age_seconds"),
+                "require_pressure_report": require_pressure_report,
+            }
+        )
     return overall, checks
 
 
