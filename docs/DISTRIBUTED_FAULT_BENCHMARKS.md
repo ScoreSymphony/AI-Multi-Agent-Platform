@@ -31,7 +31,9 @@ This profile proves **loss/rejoin and degraded scheduling**. It does not claim c
 
 ## Workspace materialization failure and recovery
 
-After rejoin, the harness makes the reference MessageTransport unavailable through its documented deterministic outage hook immediately before a Workspace-aware dispatch.
+After rejoin, the harness arms a narrow fault injector on the same reference `InProcessMessageTransport`. The transport continues to serve all ordinary Worker subscriptions, but the **next Workspace command publish only** fails with canonical retryable `UNAVAILABLE`. All later operations delegate to the unchanged reference transport.
+
+This scope is deliberate. Making the entire in-process transport unavailable would also wake and terminate active reference Worker subscriptions, turning a Workspace-materialization fault into a cluster-wide transport outage. The one-shot publish fault isolates the boundary #440 intends to measure while still exercising the real `TransportRemoteWorkspaceMaterializer`, Worker transport endpoint and distributed runtime.
 
 The expected boundary behavior is:
 
@@ -40,7 +42,7 @@ The expected boundary behavior is:
 - Worker execution is never reached, so the failed record has no execution handle;
 - no duplicate Worker Job or Run identity is created.
 
-The transport is then restored. The harness advances explicit observation time beyond the reservation TTL, refreshes Worker heartbeats, and reconciles so the stranded reservation no longer consumes capacity. A new canonical recovery job must dispatch successfully, reach terminal state, return a result and leave no remote Workspace materialization behind.
+The next Workspace publish is healthy automatically. The harness advances explicit observation time beyond the reservation TTL, refreshes Worker heartbeats, and reconciles so the stranded reservation no longer consumes capacity. A new canonical recovery job must dispatch successfully, reach terminal state, return a result and leave no remote Workspace materialization behind.
 
 The recovery uses a new Worker Job/Run identity. It does not silently replay the failed dispatch under the same ownership record.
 
