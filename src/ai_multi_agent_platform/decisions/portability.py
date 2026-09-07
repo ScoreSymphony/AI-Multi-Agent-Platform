@@ -7,9 +7,8 @@ from typing import cast
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
-from .models import DecisionStatus
+from .models import DecisionRecord, DecisionStatus
 from .repository import (
-    _load,
     _record_from_json,
     _record_to_json,
     _reference_from_json,
@@ -58,18 +57,17 @@ def import_decision_bundle(
     if not isinstance(raw_records, list):
         raise ContractError(ErrorCode.INVALID_REQUEST, "DecisionRecord bundle records must be an array")
 
-    pending: dict[str, tuple[object, dict[str, JsonValue]]] = {}
+    pending: dict[str, tuple[DecisionRecord, dict[str, JsonValue]]] = {}
     for raw in raw_records:
         item = _object(raw)
-        record_value = item.get("record")
-        record = _record_from_json(_object(record_value))
+        record = _record_from_json(_object(item.get("record")))
         pending[record.id] = (record, item)
 
     imported: list[str] = []
     while pending:
         progressed = False
-        for record_id, (raw_record, item) in tuple(pending.items()):
-            record = cast("DecisionRecord", raw_record)
+        for record_id, (record, item) in tuple(pending.items()):
+            del item
             predecessor = record.supersedes
             if predecessor is not None and predecessor in pending:
                 continue
@@ -126,8 +124,3 @@ def _object(value: JsonValue) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ContractError(ErrorCode.INVALID_REQUEST, "DecisionRecord bundle item must be an object")
     return cast(dict[str, JsonValue], value)
-
-
-# Kept imported above intentionally: repository codecs are the durable storage codec, so
-# portability cannot silently drift from the on-disk canonical representation.
-del _load
