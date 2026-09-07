@@ -109,7 +109,9 @@ class WorkflowTransport:
                             "wait_type": None,
                             "wait_deadline_at": None,
                             "reconciliation": "run_reconciled",
-                            "reconciliation_detail": "canonical Run reconciled after operator repair",
+                            "reconciliation_detail": (
+                                "canonical Run reconciled after operator repair"
+                            ),
                         },
                     ],
                 }
