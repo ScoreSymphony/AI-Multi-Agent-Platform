@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -110,16 +111,19 @@ def test_public_single_node_composes_planning_and_hands_activation_to_coordinato
         assert "planning.reject" in deployment.control_plane.registered_commands
 
         history = await deployment.kernel.history(created.task_id)
-        planning_plan_events = [
-            event
-            for event in history
-            if event.event_type == "plan.created"
-            and any(
-                metadata.namespace == "platform-planning"
-                and metadata.values.get("proposal_id") == proposal.proposal.proposal_id
-                for metadata in event.adapter_metadata
-            )
-        ]
+        planning_plan_events = []
+        for event in history:
+            if event.event_type != "plan.created":
+                continue
+            adapter_metadata = event.payload.get("adapter_metadata")
+            if not isinstance(adapter_metadata, Mapping):
+                continue
+            planning_metadata = adapter_metadata.get("platform-planning")
+            if (
+                isinstance(planning_metadata, Mapping)
+                and planning_metadata.get("proposal_id") == proposal.proposal.proposal_id
+            ):
+                planning_plan_events.append(event)
         assert len(planning_plan_events) == 1
         assert any(
             entry.event_name == "planning.revision.activated"

@@ -22,7 +22,6 @@ from ai_multi_agent_platform.repository_intelligence import (
 )
 from ai_multi_agent_platform.testing.conformance import assert_provider_contract
 
-
 _SHA = "a" * 40
 _REPOSITORY_ID = new_id("external_resource")
 

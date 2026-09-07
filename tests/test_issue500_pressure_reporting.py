@@ -97,7 +97,9 @@ def _node() -> NodeRecord:
     )
 
 
-def _security(reporter_id: str) -> tuple[LocalAuthenticationService, LocalAuthorizationProvider, str]:
+def _security(
+    reporter_id: str,
+) -> tuple[LocalAuthenticationService, LocalAuthorizationProvider, str]:
     authentication = LocalAuthenticationService(
         password_hasher=ScryptPasswordHasher(n=2**10, r=8, p=1, maxmem=8 * 1024 * 1024)
     )
@@ -198,7 +200,9 @@ def test_distributed_worker_samples_provider_and_places_report_only_on_reporter(
     )
     assert provider.calls == [node.node_id]
     assert any(item.namespace == PRESSURE_REPORT_NAMESPACE for item in reported.adapter_metadata)
-    assert not any(item.namespace == PRESSURE_REPORT_NAMESPACE for item in untouched.adapter_metadata)
+    assert not any(
+        item.namespace == PRESSURE_REPORT_NAMESPACE for item in untouched.adapter_metadata
+    )
     assert request.heartbeat.sequence == 1
     serialized = repr(reported.adapter_metadata)
     assert "provider-private-source" not in serialized
@@ -318,7 +322,9 @@ def test_authenticated_future_dated_report_is_not_treated_as_fresh_pressure() ->
 
     asyncio.run(scenario())
 
-    assert RegistryPressureSnapshotProvider(runtime.registry).snapshot_for_node(node.node_id) is None
+    assert (
+        RegistryPressureSnapshotProvider(runtime.registry).snapshot_for_node(node.node_id) is None
+    )
 
 
 def test_authenticate_pressure_report_keeps_report_untrusted_until_protocol_acceptance() -> None:
