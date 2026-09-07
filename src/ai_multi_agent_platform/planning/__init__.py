@@ -7,6 +7,11 @@ from .control_plane import (
     planning_command_handlers,
     planning_resource_services,
 )
+from .evidence import (
+    CoordinationEvidenceRepository,
+    ReplanningEvidenceBridge,
+    ReplanningEventSink,
+)
 from .models import (
     AgentAssignment,
     CapabilityRequirement,
@@ -50,6 +55,7 @@ __all__ = [
     "ActivatedPlanCoordinator",
     "AgentAssignment",
     "CapabilityRequirement",
+    "CoordinationEvidenceRepository",
     "DeterministicReferencePlanner",
     "InMemoryPlanningRepository",
     "JsonPlanningRepository",
@@ -80,6 +86,8 @@ __all__ = [
     "ProposalStatus",
     "ProposalValidation",
     "ReplanPolicy",
+    "ReplanningEvidenceBridge",
+    "ReplanningEventSink",
     "draft_from_mapping",
     "new_plan_proposal_id",
     "planning_command_handlers",
