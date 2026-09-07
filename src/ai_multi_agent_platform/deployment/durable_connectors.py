@@ -34,7 +34,11 @@ from ai_multi_agent_platform.planning import (
     planning_command_handlers,
     planning_resource_services,
 )
-from ai_multi_agent_platform.planning.composition import PlanningOnlyLifecycleBackend
+from ai_multi_agent_platform.planning.composition import (
+    PlanningBindingCoordinator,
+    PlanningOnlyLifecycleBackend,
+    ReferencePlanningService,
+)
 from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
 from ai_multi_agent_platform.repositories.connector_bootstrap import (
     connector_repository_discovery_resolver,
@@ -123,7 +127,12 @@ def build_single_node_deployment(
         lifecycle=PlanningOnlyLifecycleBackend(),
         repository=base.kernel_repository,
     )
-    planning = PlanningService(
+    planning_coordinator = PlanningBindingCoordinator(
+        repository=planning_repository,
+        kernel=base.kernel,
+        delegate=base.coordination,
+    )
+    planning = ReferencePlanningService(
         planner=DeterministicReferencePlanner(),
         repository=planning_repository,
         kernel=planning_kernel,
@@ -131,7 +140,7 @@ def build_single_node_deployment(
         capabilities=base.capabilities,
         models=base.models,
         authorization=base.approval_gate,
-        coordinator=base.coordination,
+        coordinator=planning_coordinator,
         event_sink=_planning_event_sink(base.telemetry),
     )
     for collection, service in planning_resource_services(planning).items():
