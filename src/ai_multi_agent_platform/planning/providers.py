@@ -46,7 +46,9 @@ class Planner(Protocol):
 class DeterministicReferencePlanner:
     """No-LLM reference planner used for local operation and contract fixtures."""
 
-    def __init__(self, draft: PlanDraft | None = None, *, planner_id: str = "reference-planner") -> None:
+    def __init__(
+        self, draft: PlanDraft | None = None, *, planner_id: str = "reference-planner"
+    ) -> None:
         self._draft = draft
         self._descriptor = PlannerDescriptor(planner_id, PlannerKind.DETERMINISTIC)
 
@@ -59,9 +61,13 @@ class DeterministicReferencePlanner:
         if draft is None:
             assignment = None
             model_requirements = RoutingRequirements()
-            enabled_agents = [candidate for candidate in request.inventory.agents if candidate.enabled]
+            enabled_agents = [
+                candidate for candidate in request.inventory.agents if candidate.enabled
+            ]
             if enabled_agents:
-                selected = sorted(enabled_agents, key=lambda item: (item.agent_id, item.revision))[0]
+                selected = sorted(enabled_agents, key=lambda item: (item.agent_id, item.revision))[
+                    0
+                ]
                 assignment = AgentAssignment(
                     agent_id=selected.agent_id,
                     agent_revision=selected.revision,

@@ -35,6 +35,8 @@ from ai_multi_agent_platform.security import (
 )
 
 from .models import (
+    PlanProposal,
+    PlannerOutput,
     PlanningAgentCandidate,
     PlanningCapabilityCandidate,
     PlanningInventory,
@@ -43,8 +45,6 @@ from .models import (
     PlanningStepDraft,
     PlanningTeamCandidate,
     PlanningTrigger,
-    PlanProposal,
-    PlannerOutput,
     PriorPlanSnapshot,
     ProposalRecord,
     ProposalStatus,
@@ -355,7 +355,10 @@ class PlanningService:
                     errors.append(
                         f"Step {step.key} requires unavailable capability {candidate.capability_id}"
                     )
-                if requirement.exact_version is not None and candidate.version != requirement.exact_version:
+                if (
+                    requirement.exact_version is not None
+                    and candidate.version != requirement.exact_version
+                ):
                     errors.append(
                         f"Step {step.key} requires {candidate.capability_id}@"
                         f"{requirement.exact_version}, found {candidate.version}"
@@ -489,7 +492,10 @@ class PlanningService:
                     "current_plan_id": task.plan_ref,
                 },
             )
-        if self.coordinator is not None and task.status not in {TaskStatus.READY, TaskStatus.RUNNING}:
+        if self.coordinator is not None and task.status not in {
+            TaskStatus.READY,
+            TaskStatus.RUNNING,
+        }:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Plan activation with durable execution handoff requires Task ready/running state",
@@ -517,7 +523,9 @@ class PlanningService:
                     "authority is configured",
                     details={"proposal_id": proposal_id},
                 )
-            if approval_id is None or not self.authorization.approvals.valid_for(approval_id, action):
+            if approval_id is None or not self.authorization.approvals.valid_for(
+                approval_id, action
+            ):
                 pending = await self.authorization.ensure_pending_approval_with_event(
                     action,
                     reason="planning proposal introduces approval-gated capability requirements",
@@ -707,7 +715,9 @@ class PlanningService:
                     )
                 )
             for definition in self.agents.list_teams():
-                team = self.agents.get_team_revision(definition.team_id, definition.current_revision)
+                team = self.agents.get_team_revision(
+                    definition.team_id, definition.current_revision
+                )
                 if not self._scope_compatible(
                     definition.project_id,
                     definition.workspace_id,
@@ -800,7 +810,9 @@ class PlanningService:
             summary=output.draft.summary,
             steps=output.draft.steps,
             assumptions=output.draft.assumptions,
-            constraints=tuple(dict.fromkeys((*request.task_constraints, *output.draft.constraints))),
+            constraints=tuple(
+                dict.fromkeys((*request.task_constraints, *output.draft.constraints))
+            ),
             evidence_refs=request.evidence_refs,
             planner=output.planner,
             model_config_id=output.model_config_id,
@@ -1005,7 +1017,9 @@ class PlanningService:
         )
 
     @staticmethod
-    def _model_matches(candidate: PlanningModelCandidate, requirements: RoutingRequirements) -> bool:
+    def _model_matches(
+        candidate: PlanningModelCandidate, requirements: RoutingRequirements
+    ) -> bool:
         if not candidate.enabled or not candidate.available:
             return False
         if (
@@ -1021,7 +1035,10 @@ class PlanningService:
         }:
             return False
         if requirements.min_context_window is not None:
-            if candidate.context_window is None or candidate.context_window < requirements.min_context_window:
+            if (
+                candidate.context_window is None
+                or candidate.context_window < requirements.min_context_window
+            ):
                 return False
         if requirements.tool_calling and not candidate.tool_calling:
             return False
@@ -1029,7 +1046,9 @@ class PlanningService:
             return False
         if requirements.streaming and not candidate.streaming:
             return False
-        if requirements.modalities and not set(requirements.modalities).issubset(candidate.modalities):
+        if requirements.modalities and not set(requirements.modalities).issubset(
+            candidate.modalities
+        ):
             return False
         if requirements.reasoning and not set(requirements.reasoning).issubset(candidate.reasoning):
             return False

@@ -137,8 +137,7 @@ class InMemoryPlanningRepository:
             pending = [
                 record
                 for record in self._records.values()
-                if record.proposal.task_id == task_id
-                and record.status is ProposalStatus.ACTIVATING
+                if record.proposal.task_id == task_id and record.status is ProposalStatus.ACTIVATING
             ]
             if not pending:
                 return None
