@@ -20,11 +20,15 @@ from .control_plane_helpers import (
     revision_refs,
 )
 from .control_plane_resources import binding_resource, bundle_resource
+from .models import SkillRevisionRef
 from .resolver import SkillResolutionRequest
 from .runtime import SkillExecutionCoordinator
 
 _SERVER_RESOLVED_FIELDS = frozenset(
     {
+        "required_skills",
+        "planner_skills",
+        "default_skills",
         "allowed_capability_ids",
         "available_capability_versions",
         "granted_permissions",
@@ -38,6 +42,9 @@ _SERVER_RESOLVED_FIELDS = frozenset(
 class SkillExecutionEnvironment:
     """Trusted runtime facts supplied by platform composition, never by the caller."""
 
+    required_skills: tuple[SkillRevisionRef, ...] = ()
+    planner_skills: tuple[SkillRevisionRef, ...] = ()
+    default_skills: tuple[SkillRevisionRef, ...] = ()
     allowed_capability_ids: frozenset[str] = frozenset()
     available_capability_versions: Mapping[str, str] | None = None
     granted_permissions: frozenset[str] = frozenset()
@@ -79,7 +86,7 @@ class SkillRuntimeCommands:
         if caller_supplied:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
-                "Skill execution authorization/model fields are server-resolved",
+                "Skill policy/authorization/model fields are server-resolved",
                 details={"fields": cast(JsonValue, caller_supplied)},
             )
         agent_revision = self.agents.get_agent_revision(
@@ -102,10 +109,10 @@ class SkillRuntimeCommands:
                 agent_id=agent_revision.agent_id,
                 agent_revision=agent_revision.revision,
                 agent_role=agent_revision.profile.role,
-                required_skills=revision_refs(payload, "required_skills"),
+                required_skills=environment.required_skills,
                 explicit_skills=revision_refs(payload, "explicit_skills"),
-                planner_skills=revision_refs(payload, "planner_skills"),
-                default_skills=revision_refs(payload, "default_skills"),
+                planner_skills=environment.planner_skills,
+                default_skills=environment.default_skills,
                 allowed_capability_ids=environment.allowed_capability_ids,
                 available_capability_versions=environment.available_capability_versions,
                 granted_permissions=environment.granted_permissions,
