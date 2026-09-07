@@ -50,6 +50,14 @@ from .faults import (
     FaultUnderLoadSpec,
     SingleNodeFaultUnderLoadHarness,
 )
+from .heterogeneous_placement import (
+    HETEROGENEOUS_PLACEMENT_REPORT_SCHEMA_VERSION,
+    HETEROGENEOUS_WORKLOAD_PROFILES,
+    HeterogeneousPlacementBenchmarkHarness,
+    HeterogeneousPlacementCorrectnessSummary,
+    HeterogeneousPlacementReport,
+    HeterogeneousPlacementSpec,
+)
 from .models import (
     BENCHMARK_REPORT_SCHEMA_VERSION,
     BaselineComparison,
@@ -124,6 +132,8 @@ __all__ = [
     "DISTRIBUTED_SCALE_REPORT_SCHEMA_VERSION",
     "ENDURANCE_REPORT_SCHEMA_VERSION",
     "FAULT_REPORT_SCHEMA_VERSION",
+    "HETEROGENEOUS_PLACEMENT_REPORT_SCHEMA_VERSION",
+    "HETEROGENEOUS_WORKLOAD_PROFILES",
     "PERSISTENCE_SWEEP_REPORT_SCHEMA_VERSION",
     "PLAN_STEP_REPORT_SCHEMA_VERSION",
     "PROVIDER_FAULT_REPORT_SCHEMA_VERSION",
@@ -160,6 +170,10 @@ __all__ = [
     "FaultCorrectnessSummary",
     "FaultUnderLoadReport",
     "FaultUnderLoadSpec",
+    "HeterogeneousPlacementBenchmarkHarness",
+    "HeterogeneousPlacementCorrectnessSummary",
+    "HeterogeneousPlacementReport",
+    "HeterogeneousPlacementSpec",
     "LatencyDistribution",
     "PersistenceScaleExecution",
     "PersistenceScalePoint",
