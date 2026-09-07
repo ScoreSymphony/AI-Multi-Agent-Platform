@@ -71,16 +71,28 @@ The canonical scheduler continues to satisfy `ram_min_bytes` only from the ordin
 
 A Linux provider may report paging, swap and zRAM diagnostics as pressure evidence, but must not model `physical RAM + swap/zRAM` as equivalent physical RAM.
 
+## Optional Linux provider
+
+`LinuxHostPressureProvider` is a read-only adapter behind the portable pressure contract. It accepts injected procfs, sysfs, cgroup-v2 and storage roots so tests and constrained deployments can expose only the evidence they support. Missing files or unsupported Linux facilities produce incomplete or `unknown` evidence instead of mutating the host or failing the scheduler.
+
+The provider currently normalizes:
+
+- Linux PSI CPU, memory and I/O stall evidence;
+- swap utilization, paging deltas and major-fault rates;
+- zRAM device size, utilization, compression effectiveness and configured swap priority as namespaced diagnostics;
+- cgroup-v2 memory limits/events, PID pressure, CPU throttling and new OOM/OOM-kill events;
+- filesystem free-space and inode pressure;
+- host file-descriptor utilization.
+
+Linux-specific paths, counters and device details remain under the `linux.host_pressure` adapter metadata namespace. Only normalized `PressureSignal` values cross into scheduler policy. Collection is read-only and does not tune swap, zRAM, cgroups, kernel parameters or filesystem limits.
+
+Provider thresholds are deployment-overridable normalization inputs, not canonical hardware requirements. Counter-based signals use deltas between observations; the first observation therefore has no fabricated rate.
+
 ## Follow-up #500 slices
 
-This core intentionally precedes platform-specific providers and wider operational integration. Remaining issue-owned work includes:
+The portable core and optional Linux collector intentionally precede wider operational integration. Remaining issue-owned work includes:
 
-- Linux PSI parsing/provider;
-- swap/paging and major-fault evidence;
-- zRAM metrics and effectiveness;
-- cgroup v2 memory/PID/throttling/OOM evidence;
-- disk/inode/descriptor collection;
-- authenticated remote pressure report plumbing;
+- authenticated remote pressure report plumbing and provenance;
 - #16 metrics/timeline integration and recovery transitions;
 - Control Plane/doctor visibility;
 - #39/#240 deployment hooks and operator guidance;
