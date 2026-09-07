@@ -83,7 +83,7 @@ class DeterministicReferencePlanner:
                         objective=request.objective,
                         assignment=assignment,
                         model_requirements=model_requirements,
-                        requires_model=assignment is not None,
+                        requires_model=False,
                     ),
                 ),
                 constraints=request.task_constraints,
