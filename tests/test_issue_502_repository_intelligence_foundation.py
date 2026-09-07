@@ -109,13 +109,29 @@ def test_output_schemas_require_provider_neutral_result_contracts() -> None:
 
     map_schema = specs["repository.map"].output_schema
     assert map_schema is not None
+    validator = Draft202012Validator(map_schema)
     invalid_without_provenance = {
         "entries": [],
         "returned_entries": 0,
         "total_matching_entries": 0,
         "truncated": False,
     }
-    assert list(Draft202012Validator(map_schema).iter_errors(invalid_without_provenance))
+    assert list(validator.iter_errors(invalid_without_provenance))
+
+    invalid_mutable_revision = {
+        "entries": [],
+        "returned_entries": 0,
+        "total_matching_entries": 0,
+        "truncated": False,
+        "provenance": {
+            "repository_id": _REPOSITORY_ID,
+            "requested_revision": "main",
+            "resolved_revision": "main",
+            "intelligence_provider_id": "optional-indexer",
+            "freshness": "fresh_index",
+        },
+    }
+    assert list(validator.iter_errors(invalid_mutable_revision))
 
 
 def test_baseline_map_search_and_source_slice_carry_exact_revision_provenance() -> None:
@@ -175,7 +191,9 @@ def test_baseline_map_search_and_source_slice_carry_exact_revision_provenance() 
             {"line": 2, "text": "    return 'Needle'", "text_truncated": False}
         ]
         assert sliced.output["truncated"] is False
-        assert sliced.output["provenance"]["resolved_revision"] == _SHA
+        provenance = sliced.output["provenance"]
+        assert isinstance(provenance, dict)
+        assert provenance["resolved_revision"] == _SHA
 
     asyncio.run(scenario())
 
@@ -224,7 +242,9 @@ def test_text_search_reports_truncation_only_when_a_match_is_omitted() -> None:
         assert exact.output["truncated"] is False
         assert isinstance(overflow.output, dict)
         assert overflow.output["truncated"] is True
-        assert len(overflow.output["hits"]) == 1
+        overflow_hits = overflow.output["hits"]
+        assert isinstance(overflow_hits, list)
+        assert len(overflow_hits) == 1
 
     asyncio.run(scenario())
 
@@ -260,14 +280,18 @@ def test_source_slice_bounds_oversized_lines_and_total_output() -> None:
         lines = sliced.output["lines"]
         assert isinstance(lines, list)
         assert len(lines) == 1
-        assert len(lines[0]["text"]) == 4096
-        assert lines[0]["text_truncated"] is True
+        line = lines[0]
+        assert isinstance(line, dict)
+        text = line["text"]
+        assert isinstance(text, str)
+        assert len(text) == 4096
+        assert line["text_truncated"] is True
         assert sliced.output["truncated"] is True
 
     asyncio.run(scenario())
 
 
-def test_unavailable_high_priority_provider_falls_back_to_baseline() -> None:
+def test_unavailable_high_priority_provider_falls_back_immediately() -> None:
     async def scenario() -> None:
         registry = CapabilityRegistry()
         baseline = BaselineRepositoryIntelligenceProvider(
@@ -284,7 +308,6 @@ def test_unavailable_high_priority_provider_falls_back_to_baseline() -> None:
         await registry.register_provider(baseline)
         await registry.refresh_health()
         await registry.register_provider(optional)
-        await registry.refresh_health()
 
         registration, provider = registry.resolve(
             "repository.map",
@@ -296,7 +319,33 @@ def test_unavailable_high_priority_provider_falls_back_to_baseline() -> None:
     asyncio.run(scenario())
 
 
-def test_provider_can_register_after_health_refresh_and_be_preferred() -> None:
+def test_unavailable_by_configuration_provider_falls_back_immediately() -> None:
+    async def scenario() -> None:
+        registry = CapabilityRegistry()
+        baseline = BaselineRepositoryIntelligenceProvider(
+            _snapshot,
+            provider_id="baseline",
+            priority=0,
+        )
+        optional = BaselineRepositoryIntelligenceProvider(
+            _snapshot,
+            provider_id="disabled-indexer",
+            priority=100,
+            available=False,
+        )
+        await registry.register_provider(baseline)
+        await registry.register_provider(optional)
+
+        registration, _provider = registry.resolve(
+            "repository.text_search",
+            granted_permissions=frozenset({"repository.text_search"}),
+        )
+        assert registration.provider_id == "baseline"
+
+    asyncio.run(scenario())
+
+
+def test_provider_can_register_after_health_refresh_and_be_preferred_immediately() -> None:
     async def scenario() -> None:
         registry = CapabilityRegistry()
         baseline = BaselineRepositoryIntelligenceProvider(
@@ -312,7 +361,6 @@ def test_provider_can_register_after_health_refresh_and_be_preferred() -> None:
         await registry.register_provider(baseline)
         await registry.refresh_health()
         await registry.register_provider(optional)
-        await registry.refresh_health()
 
         registration, _provider = registry.resolve(
             "repository.source_slice",
