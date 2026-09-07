@@ -1,9 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   PlanCoordinationProjection,
   PlanCoordinationStep,
 } from "../api/workflowProgress";
+import { RouterProvider } from "../app/router";
 import { WorkflowProgress } from "./WorkflowProgress";
 
 function step(overrides: Partial<PlanCoordinationStep> & Pick<PlanCoordinationStep, "id">): PlanCoordinationStep {
@@ -33,39 +34,50 @@ function projection(steps: PlanCoordinationStep[]): PlanCoordinationProjection {
   };
 }
 
+function renderWorkflow(value: PlanCoordinationProjection): string {
+  vi.stubGlobal("window", { location: { pathname: "/" } });
+  try {
+    return renderToStaticMarkup(
+      <RouterProvider>
+        <WorkflowProgress projection={value} />
+      </RouterProvider>,
+    );
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
+
 describe("WorkflowProgress acceptance scenarios", () => {
   it("renders diamond fan-in dependency satisfaction and an approval wait with deadline", () => {
-    const markup = renderToStaticMarkup(
-      <WorkflowProgress
-        projection={projection([
-          step({ id: "step_root", status: "succeeded", coordination_phase: "terminal", current_attempt: 1 }),
-          step({
-            id: "step_left",
-            status: "succeeded",
-            coordination_phase: "terminal",
-            dependency_ids: ["step_root"],
-            satisfied_dependency_ids: ["step_root"],
-            current_attempt: 1,
-          }),
-          step({
-            id: "step_right",
-            status: "waiting",
-            coordination_phase: "waiting",
-            dependency_ids: ["step_root"],
-            satisfied_dependency_ids: ["step_root"],
-            current_attempt: 1,
-            wait_type: "approval",
-            wait_deadline_at: "2026-09-08T12:00:00+00:00",
-          }),
-          step({
-            id: "step_join",
-            status: "pending",
-            coordination_phase: "blocked",
-            dependency_ids: ["step_left", "step_right"],
-            satisfied_dependency_ids: ["step_left"],
-          }),
-        ])}
-      />,
+    const markup = renderWorkflow(
+      projection([
+        step({ id: "step_root", status: "succeeded", coordination_phase: "terminal", current_attempt: 1 }),
+        step({
+          id: "step_left",
+          status: "succeeded",
+          coordination_phase: "terminal",
+          dependency_ids: ["step_root"],
+          satisfied_dependency_ids: ["step_root"],
+          current_attempt: 1,
+        }),
+        step({
+          id: "step_right",
+          status: "waiting",
+          coordination_phase: "waiting",
+          dependency_ids: ["step_root"],
+          satisfied_dependency_ids: ["step_root"],
+          current_attempt: 1,
+          wait_type: "approval",
+          wait_deadline_at: "2026-09-08T12:00:00+00:00",
+        }),
+        step({
+          id: "step_join",
+          status: "pending",
+          coordination_phase: "blocked",
+          dependency_ids: ["step_left", "step_right"],
+          satisfied_dependency_ids: ["step_left"],
+        }),
+      ]),
     );
 
     expect(markup).toContain("step_join");
@@ -75,31 +87,27 @@ describe("WorkflowProgress acceptance scenarios", () => {
   });
 
   it("reflects approval resolution from the next canonical projection instead of retaining client state", () => {
-    const waiting = renderToStaticMarkup(
-      <WorkflowProgress
-        projection={projection([
-          step({
-            id: "step_review",
-            status: "waiting",
-            coordination_phase: "waiting",
-            current_attempt: 1,
-            wait_type: "approval",
-          }),
-        ])}
-      />,
+    const waiting = renderWorkflow(
+      projection([
+        step({
+          id: "step_review",
+          status: "waiting",
+          coordination_phase: "waiting",
+          current_attempt: 1,
+          wait_type: "approval",
+        }),
+      ]),
     );
-    const resolved = renderToStaticMarkup(
-      <WorkflowProgress
-        projection={projection([
-          step({
-            id: "step_review",
-            status: "succeeded",
-            coordination_phase: "terminal",
-            current_attempt: 1,
-            wait_type: null,
-          }),
-        ])}
-      />,
+    const resolved = renderWorkflow(
+      projection([
+        step({
+          id: "step_review",
+          status: "succeeded",
+          coordination_phase: "terminal",
+          current_attempt: 1,
+          wait_type: null,
+        }),
+      ]),
     );
 
     expect(waiting).toContain("approval");
@@ -108,28 +116,26 @@ describe("WorkflowProgress acceptance scenarios", () => {
   });
 
   it("renders cancellation, terminal retry history and reconciliation disposition from canonical fields", () => {
-    const markup = renderToStaticMarkup(
-      <WorkflowProgress
-        projection={projection([
-          step({
-            id: "step_cancelled",
-            status: "cancelled",
-            coordination_phase: "terminal",
-            current_attempt: 1,
-            reconciliation: "canonical_terminal",
-          }),
-          step({
-            id: "step_exhausted",
-            status: "failed",
-            coordination_phase: "terminal",
-            latest_run_id: "run_exhausted",
-            current_attempt: 3,
-            retry_due_at: null,
-            reconciliation: "run_reconciled",
-            reconciliation_detail: "terminal canonical Run reconciled after restart",
-          }),
-        ])}
-      />,
+    const markup = renderWorkflow(
+      projection([
+        step({
+          id: "step_cancelled",
+          status: "cancelled",
+          coordination_phase: "terminal",
+          current_attempt: 1,
+          reconciliation: "canonical_terminal",
+        }),
+        step({
+          id: "step_exhausted",
+          status: "failed",
+          coordination_phase: "terminal",
+          latest_run_id: "run_exhausted",
+          current_attempt: 3,
+          retry_due_at: null,
+          reconciliation: "run_reconciled",
+          reconciliation_detail: "terminal canonical Run reconciled after restart",
+        }),
+      ]),
     );
 
     expect(markup).toContain("cancelled");
@@ -150,9 +156,7 @@ describe("WorkflowProgress acceptance scenarios", () => {
       raw_provider_payload: "provider-secret-421",
     } as PlanCoordinationStep;
 
-    const markup = renderToStaticMarkup(
-      <WorkflowProgress projection={projection([unsafe])} />,
-    );
+    const markup = renderWorkflow(projection([unsafe]));
 
     expect(markup).toContain("step_safe");
     expect(markup).not.toContain("lease-secret-421");
