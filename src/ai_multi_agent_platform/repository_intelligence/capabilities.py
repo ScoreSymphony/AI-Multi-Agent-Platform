@@ -11,6 +11,8 @@ from ai_multi_agent_platform.capabilities import (
 )
 from ai_multi_agent_platform.contracts.types import JsonValue
 
+_IMMUTABLE_GIT_REVISION_PATTERN = r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+
 
 class RepositoryIntelligenceOperation(StrEnum):
     """Provider-neutral repository-intelligence operations.
@@ -243,7 +245,10 @@ def _provenance_schema() -> dict[str, JsonValue]:
         {
             "repository_id": {"type": "string", "minLength": 1},
             "requested_revision": {"type": "string", "minLength": 1},
-            "resolved_revision": {"type": "string", "minLength": 1},
+            "resolved_revision": {
+                "type": "string",
+                "pattern": _IMMUTABLE_GIT_REVISION_PATTERN,
+            },
             "intelligence_provider_id": {"type": "string", "minLength": 1},
             "freshness": {
                 "type": "string",
