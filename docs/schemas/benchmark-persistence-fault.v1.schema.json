@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchmark-persistence-fault.v1.schema.json",
+  "title": "Transient Persistence Fault Benchmark Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "benchmark",
+    "platform_version",
+    "platform_commit",
+    "started_at",
+    "duration_seconds",
+    "environment",
+    "throughput_logical_operations_per_second",
+    "logical_operation_latency",
+    "attempt_latency",
+    "recovery_latency",
+    "resources",
+    "faults",
+    "correctness",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "task_count",
+        "concurrency",
+        "failure_mode",
+        "failure_every",
+        "max_attempts",
+        "timeout_seconds",
+        "safety_max_tasks",
+        "safety_max_concurrency",
+        "safety_max_attempts",
+        "benchmark_id",
+        "benchmark_version",
+        "deployment_profile",
+        "persistence_profile",
+        "logical_operation_count",
+        "expected_invariants",
+        "captured_metrics",
+        "scope_limitations"
+      ],
+      "properties": {
+        "task_count": {"type": "integer", "minimum": 1},
+        "concurrency": {"type": "integer", "minimum": 1},
+        "failure_mode": {"enum": ["before-commit", "after-commit", "mixed"]},
+        "failure_every": {"type": "integer", "minimum": 1},
+        "max_attempts": {"type": "integer", "minimum": 1},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "safety_max_tasks": {"type": "integer", "minimum": 1},
+        "safety_max_concurrency": {"type": "integer", "minimum": 1},
+        "safety_max_attempts": {"type": "integer", "minimum": 1},
+        "benchmark_id": {"const": "persistence.sqlite.transient-fault"},
+        "benchmark_version": {"const": "1.0"},
+        "deployment_profile": {"const": "single-node-reference"},
+        "persistence_profile": {"const": "sqlite-reference"},
+        "logical_operation_count": {"type": "integer", "minimum": 2},
+        "expected_invariants": {"type": "array", "items": {"type": "string"}},
+        "captured_metrics": {"type": "array", "items": {"type": "string"}},
+        "scope_limitations": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "platform_version": {"type": "string", "minLength": 1},
+    "platform_commit": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "minLength": 1},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "environment": {"type": "object"},
+    "throughput_logical_operations_per_second": {"type": "number", "minimum": 0},
+    "logical_operation_latency": {"$ref": "#/$defs/latency"},
+    "attempt_latency": {"$ref": "#/$defs/latency"},
+    "recovery_latency": {"$ref": "#/$defs/latency"},
+    "resources": {"$ref": "#/$defs/resources"},
+    "faults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "planned_faults",
+        "injected_failures",
+        "injected_before_commit",
+        "injected_after_commit",
+        "repository_commit_calls",
+        "delegated_commit_calls"
+      ],
+      "properties": {
+        "planned_faults": {"type": "integer", "minimum": 0},
+        "injected_failures": {"type": "integer", "minimum": 0},
+        "injected_before_commit": {"type": "integer", "minimum": 0},
+        "injected_after_commit": {"type": "integer", "minimum": 0},
+        "repository_commit_calls": {"type": "integer", "minimum": 0},
+        "delegated_commit_calls": {"type": "integer", "minimum": 0}
+      }
+    },
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_tasks",
+        "completed_tasks",
+        "expected_logical_operations",
+        "successful_logical_operations",
+        "retryable_failures_observed",
+        "recovered_faulted_operations",
+        "exhausted_retries",
+        "unexpected_failures",
+        "task_state_failures",
+        "history_failures",
+        "command_record_failures",
+        "stream_set_failures",
+        "passed"
+      ],
+      "properties": {
+        "expected_tasks": {"type": "integer", "minimum": 1},
+        "completed_tasks": {"type": "integer", "minimum": 0},
+        "expected_logical_operations": {"type": "integer", "minimum": 2},
+        "successful_logical_operations": {"type": "integer", "minimum": 0},
+        "retryable_failures_observed": {"type": "integer", "minimum": 0},
+        "recovered_faulted_operations": {"type": "integer", "minimum": 0},
+        "exhausted_retries": {"type": "integer", "minimum": 0},
+        "unexpected_failures": {"type": "integer", "minimum": 0},
+        "task_state_failures": {"type": "integer", "minimum": 0},
+        "history_failures": {"type": "integer", "minimum": 0},
+        "command_record_failures": {"type": "integer", "minimum": 0},
+        "stream_set_failures": {"type": "integer", "minimum": 0},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "min_ms", "mean_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "min_ms": {"type": "number", "minimum": 0},
+        "mean_ms": {"type": "number", "minimum": 0},
+        "p50_ms": {"type": "number", "minimum": 0},
+        "p95_ms": {"type": "number", "minimum": 0},
+        "p99_ms": {"type": "number", "minimum": 0},
+        "max_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "process_cpu_seconds",
+        "traced_memory_current_bytes",
+        "traced_memory_peak_bytes",
+        "peak_rss_bytes",
+        "storage_bytes_before",
+        "storage_bytes_after",
+        "storage_growth_bytes",
+        "open_file_descriptors"
+      ],
+      "properties": {
+        "process_cpu_seconds": {"type": "number", "minimum": 0},
+        "traced_memory_current_bytes": {"type": "integer", "minimum": 0},
+        "traced_memory_peak_bytes": {"type": "integer", "minimum": 0},
+        "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "storage_bytes_before": {"type": "integer", "minimum": 0},
+        "storage_bytes_after": {"type": "integer", "minimum": 0},
+        "storage_growth_bytes": {"type": "integer"},
+        "open_file_descriptors": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  }
+}
