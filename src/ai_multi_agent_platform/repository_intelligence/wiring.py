@@ -243,7 +243,10 @@ class AuthorizedRunWorkspaceSnapshotLoader:
             if not isinstance(self._workspaces, LocalMaterializationPathProvider):
                 raise ContractError(
                     ErrorCode.UNAVAILABLE,
-                    "active Workspace materialization is not locally readable for baseline intelligence",
+                    (
+                        "active Workspace materialization is not locally readable "
+                        "for baseline intelligence"
+                    ),
                     retryable=True,
                     details={"run_id": run_id, "workspace_id": workspace.id},
                 )
@@ -330,7 +333,10 @@ class AuthorizedRunWorkspaceSnapshotLoader:
             if len(data) != record.size_bytes or hashlib.sha256(data).hexdigest() != entry.sha256:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    f"Workspace snapshot file content disagrees with manifest: {entry.relative_path}",
+                    (
+                        "Workspace snapshot file content disagrees with manifest: "
+                        f"{entry.relative_path}"
+                    ),
                 )
             total_bytes += len(data)
             entries.append(RepositoryTreeEntry(entry.relative_path, data))
