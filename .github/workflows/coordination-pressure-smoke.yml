@@ -114,7 +114,7 @@ jobs:
           PY
       - name: Upload coordination pressure evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-coordination-pressure-benchmarks
           path: artifacts/benchmarks/pr-coordination-pressure

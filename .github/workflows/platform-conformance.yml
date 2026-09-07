@@ -35,7 +35,7 @@ jobs:
           --json-report conformance-fast.json
       - name: Upload conformance evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: platform-conformance-fast
           path: conformance-fast.json
@@ -66,7 +66,7 @@ jobs:
           --json-report conformance-release.json
       - name: Upload release conformance evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: platform-conformance-release
           path: conformance-release.json
@@ -98,7 +98,7 @@ jobs:
           --json-report conformance-extended-reference.json
       - name: Upload extended reference evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: platform-conformance-extended-reference
           path: conformance-extended-reference.json

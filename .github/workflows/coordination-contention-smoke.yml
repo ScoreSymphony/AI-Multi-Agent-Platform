@@ -97,7 +97,7 @@ jobs:
           PY
       - name: Upload coordination contention evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-coordination-contention-benchmarks
           path: artifacts/benchmarks/pr-coordination-contention
