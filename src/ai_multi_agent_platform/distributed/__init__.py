@@ -84,6 +84,13 @@ from .pressure import (
     PressureState,
     ProtectedHeadroom,
 )
+from .pressure_reporting import (
+    PRESSURE_PROVENANCE_NAMESPACE,
+    PRESSURE_REPORT_NAMESPACE,
+    RegistryPressureSnapshotProvider,
+    attach_pressure_report,
+    pressure_report_metadata,
+)
 from .providers import DistributedNodeProvider, DistributedWorkerProvider
 from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
@@ -130,6 +137,8 @@ __all__ = [
     "EXECUTOR_WORKER_INPUT_KEY",
     "EXECUTOR_WORKER_INPUT_SCHEMA",
     "NODE_COLLECTION",
+    "PRESSURE_PROVENANCE_NAMESPACE",
+    "PRESSURE_REPORT_NAMESPACE",
     "WORKER_COLLECTION",
     "WORKER_JOB_COLLECTION",
     "WORKER_COMMAND_TOPIC_PREFIX",
@@ -185,6 +194,7 @@ __all__ = [
     "RatioThreshold",
     "RegistrationRequest",
     "RegistryError",
+    "RegistryPressureSnapshotProvider",
     "RegistrySnapshot",
     "RejectionCode",
     "RejectionReason",
@@ -218,6 +228,7 @@ __all__ = [
     "WorkerWorkspaceResolver",
     "WorkspaceDispatchEvidence",
     "WorkspaceJobMaterializationResolver",
+    "attach_pressure_report",
     "bind_worker_job_to_tool_invocation",
     "executor_worker_input",
     "parse_int_fields",
@@ -226,6 +237,7 @@ __all__ = [
     "parse_proc_swaps",
     "parse_psi",
     "prepare_registry_disaster_recovery",
+    "pressure_report_metadata",
     "register_distributed_control_plane",
     "tool_lineage",
     "worker_command_topic",

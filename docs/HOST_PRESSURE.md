@@ -80,9 +80,26 @@ Repeated use of the same Node observation is de-duplicated for Node-level observ
 
 A pressure snapshot has an observation timestamp and trust flag. `max_snapshot_age` bounds how long it may influence admission. Stale or untrusted data is treated as `unknown`.
 
-This is the portable seam needed for authenticated remote Worker reports: transport/authentication code determines whether received evidence is trusted; the admission policy does not authenticate transports itself.
-
 Missing pressure support does not make a non-Linux or otherwise unsupported Worker unusable unless deployment policy explicitly sets `require_pressure_report=True`.
+
+## Authenticated remote pressure reporting
+
+Remote Workers reuse the existing authenticated #14 Worker protocol and its `WorkerRecord.adapter_metadata` transport. No second pressure transport or credential model is introduced.
+
+A reporting Worker may attach `platform.host-pressure-report.v1` metadata containing only the portable pressure state, observation timestamp and normalized signals. `pressure_report_metadata()` intentionally omits provider-private source references, Linux metadata and any Worker-supplied trust assertion. `attach_pressure_report()` also removes stale report/provenance copies before attaching the current portable report.
+
+`DistributedWorkerProcess` accepts a replaceable `PressureSnapshotProvider`. The reporting Worker samples it for registration and heartbeat snapshots and attaches the portable report only to the authenticated reporter Worker record. The shipped Linux Worker CLI composes `LinuxHostPressureProvider` automatically on Linux; the collector remains read-only.
+
+Trust is assigned only after the existing Worker authentication/authorization boundary succeeds. `WorkerProtocolService`:
+
+1. binds the request to the authenticated `service_identity_ref`;
+2. removes any remotely supplied `platform.host-pressure-provenance.v1` claim;
+3. removes pressure reports from non-reporter sibling Worker records;
+4. adds service-owned provenance only to the authenticated reporter when a portable report is present.
+
+`RegistryPressureSnapshotProvider` resolves only report/provenance pairs that match Node ID, reporter Worker ID and the `worker_protocol` authentication marker. A remote report timestamp more than five seconds ahead of the Control Plane acceptance time is rejected instead of being treated as indefinitely fresh. Older reports remain valid evidence but are still subject to the normal `PressureAdmissionPolicy.max_snapshot_age` freshness bound.
+
+The HTTP Worker codec already serializes Worker `adapter_metadata`, so these reports cross the existing TLS/authenticated Worker protocol without changing its wire identity or adding credentials to canonical payloads.
 
 ## Physical RAM, swap and zRAM
 
@@ -109,11 +126,10 @@ Provider thresholds are deployment-overridable normalization inputs, not canonic
 
 ## Follow-up #500 slices
 
-The portable core, Linux collector and #16 projection intentionally precede wider operational integration. Remaining issue-owned work includes:
+The portable core, Linux collector, #16 projection and authenticated remote reporting intentionally precede wider operational integration. Remaining issue-owned work includes:
 
-- authenticated remote pressure report plumbing and provenance;
 - Control Plane/doctor visibility;
-- #39/#240 deployment hooks and operator guidance;
+- additional #39/#240 operator configuration and guidance;
 - #440 dedicated host-pressure benchmark profiles with hard safety bounds.
 
 None of those follow-ups may silently tune kernel, swap, zRAM or cgroup settings; collection remains read-only by default.
