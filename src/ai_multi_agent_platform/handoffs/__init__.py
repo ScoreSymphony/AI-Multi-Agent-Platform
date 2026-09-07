@@ -1,6 +1,7 @@
 """Canonical structured work-transfer contracts for Agents and Agent Teams."""
 
 from .control_plane import HandoffControlPlaneProjection, HandoffViewAuthorizer
+from .coordination import CoordinatedHandoffService
 from .models import (
     HANDOFF_SCHEMA_VERSION,
     AgentHandoff,
@@ -38,6 +39,7 @@ __all__ = [
     "HANDOFF_SCHEMA_VERSION",
     "AgentHandoff",
     "ConsumerRequirementEvaluator",
+    "CoordinatedHandoffService",
     "HandoffAgentRevisionRepository",
     "HandoffAuditEvent",
     "HandoffAuditSink",
