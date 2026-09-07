@@ -37,7 +37,9 @@ from ai_multi_agent_platform.plugins import (
 )
 from ai_multi_agent_platform.repositories import RepositoryCapabilityProvider
 from ai_multi_agent_platform.repository_intelligence import BaselineRepositoryIntelligenceProvider
-from ai_multi_agent_platform.repository_intelligence.wiring import AuthorizedRepositorySnapshotLoader
+from ai_multi_agent_platform.repository_intelligence.wiring import (
+    AuthorizedRepositorySnapshotLoader,
+)
 
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
 
