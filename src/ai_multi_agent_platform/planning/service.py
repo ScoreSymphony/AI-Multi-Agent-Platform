@@ -513,10 +513,15 @@ class PlanningService:
                     "current_plan_id": task.plan_ref,
                 },
             )
-        if self.coordinator is not None and task.status not in {
-            TaskStatus.READY,
-            TaskStatus.RUNNING,
-        } and not self._failed_replan_can_activate(proposal, task):
+        if (
+            self.coordinator is not None
+            and task.status
+            not in {
+                TaskStatus.READY,
+                TaskStatus.RUNNING,
+            }
+            and not self._failed_replan_can_activate(proposal, task)
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Plan activation with durable execution handoff requires Task ready/running state "
