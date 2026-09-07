@@ -1,7 +1,18 @@
-"""Composition helpers that make the planner unable to execute canonical Runs."""
+"""Reference composition boundaries for platform-owned planning.
+
+The helpers in this module deliberately keep planning away from Run execution while
+making validated planning decisions effective at the existing canonical runtime seam.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Protocol
+
+from ai_multi_agent_platform.agents.execution_profile import (
+    AgentExecutionBinding,
+    encode_agent_step_execution_bindings,
+)
 from ai_multi_agent_platform.contracts import (
     Capability,
     CapabilityKind,
@@ -15,6 +26,12 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
     ProviderDescriptor,
 )
+from ai_multi_agent_platform.domain import Plan, Step
+from ai_multi_agent_platform.models import RoutingRequirements
+
+from .models import PlanProposal, ProposalRecord, ProposalStatus
+from .repository import PlanningRepository
+from .service import PlanningService
 
 
 class PlanningOnlyLifecycleBackend(LifecycleBackend):
@@ -54,9 +71,204 @@ class PlanningOnlyLifecycleBackend(LifecycleBackend):
         raise _execution_forbidden()
 
 
+class StepBindingKernel(Protocol):
+    """Narrow canonical Task mutation seam needed to persist Step execution bindings."""
+
+    async def update_task(
+        self,
+        *,
+        idempotency_key: str,
+        task_id: str,
+        metadata: dict[str, object],
+        actor_ref: str | None = None,
+        source: str = "platform-kernel",
+    ) -> object: ...
+
+
+class PlanCoordinator(Protocol):
+    """Existing #384 registration seam; planning does not own progression."""
+
+    async def register_plan(self, plan: Plan, steps: tuple[Step, ...]) -> object: ...
+
+
+class PlanningBindingCoordinator:
+    """Persist exact Step execution bindings before delegating activation to #384.
+
+    Canonical Step IDs do not exist until ``plan.created`` is committed. The PlanningService
+    therefore hands the reconstructed canonical Plan/Steps here while its proposal is still
+    ``ACTIVATING``. This wrapper binds those IDs to the already validated Agent/model/capability
+    requirements on the canonical Task and only then delegates to the durable coordinator.
+
+    The Task update uses a proposal-scoped idempotency key, so a crash after binding but before
+    #384 registration is restart-safe. Repeated registration after a fully activated proposal is
+    also safe and resolves the proposal through its canonical activation Plan ID.
+    """
+
+    def __init__(
+        self,
+        *,
+        repository: PlanningRepository,
+        kernel: StepBindingKernel,
+        delegate: PlanCoordinator,
+    ) -> None:
+        self._repository = repository
+        self._kernel = kernel
+        self._delegate = delegate
+
+    async def register_plan(self, plan: Plan, steps: tuple[Step, ...]) -> object:
+        record = self._proposal_for_plan(plan)
+        proposal = record.proposal
+        if len(proposal.steps) != len(steps):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "activated canonical Step count does not match planning proposal",
+                details={
+                    "proposal_id": proposal.proposal_id,
+                    "proposal_steps": len(proposal.steps),
+                    "canonical_steps": len(steps),
+                },
+            )
+
+        bindings: dict[str, AgentExecutionBinding] = {}
+        for draft, step in zip(proposal.steps, steps, strict=True):
+            if draft.title != step.title:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "activated canonical Step order/title does not match planning proposal",
+                    details={
+                        "proposal_id": proposal.proposal_id,
+                        "step_key": draft.key,
+                        "canonical_step_id": step.id,
+                    },
+                )
+            assignment = draft.assignment
+            if assignment is None or assignment.agent_id is None:
+                raise ContractError(
+                    ErrorCode.UNSUPPORTED_CAPABILITY,
+                    "reference planning activation requires an exact Agent assignment per Step",
+                    details={"proposal_id": proposal.proposal_id, "step_key": draft.key},
+                )
+            bindings[step.id] = AgentExecutionBinding(
+                agent_id=assignment.agent_id,
+                agent_revision=assignment.agent_revision,
+                model_config_id=draft.model_requirements.explicit_model_id,
+                model_requirements=(
+                    draft.model_requirements
+                    if _has_model_requirements(draft.model_requirements)
+                    else None
+                ),
+                capability_ids=tuple(
+                    requirement.capability_id
+                    for requirement in draft.capability_requirements
+                    if requirement.required
+                ),
+                workspace_id=draft.workspace_id,
+                objective=draft.objective or draft.title,
+                input_refs=draft.input_refs,
+                output_refs=draft.output_refs,
+                expected_evidence=draft.expected_evidence,
+                verification_policy_refs=draft.verification_policy_refs,
+            )
+
+        await self._kernel.update_task(
+            idempotency_key=f"planning:{proposal.proposal_id}:bind-steps",
+            task_id=proposal.task_id,
+            metadata=encode_agent_step_execution_bindings(bindings),
+            actor_ref=proposal.planner.planner_id,
+            source="platform-planning",
+        )
+        return await self._delegate.register_plan(plan, steps)
+
+    def _proposal_for_plan(self, plan: Plan) -> ProposalRecord:
+        records = self._repository.list_for_task(plan.task_id)
+        activating = [
+            record
+            for record in records
+            if record.status is ProposalStatus.ACTIVATING
+            and record.proposal.plan_revision == plan.revision
+        ]
+        if len(activating) == 1:
+            return activating[0]
+        activated = [
+            record
+            for record in records
+            if record.status is ProposalStatus.ACTIVATED
+            and record.activation_plan_id == plan.id
+            and record.proposal.plan_revision == plan.revision
+        ]
+        if len(activated) == 1:
+            return activated[0]
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "cannot resolve one planning proposal for canonical Plan registration",
+            details={"task_id": plan.task_id, "plan_id": plan.id, "plan_revision": plan.revision},
+        )
+
+
+class ReferencePlanningService(PlanningService):
+    """Standard local profile that fails closed on assignments it cannot execute exactly.
+
+    The generic planning contract intentionally permits exact Agents, Teams and role requirements.
+    The current single-node lifecycle executes one Agent per canonical Step. Until a Team/role
+    execution adapter is explicitly composed, activating such a proposal would silently discard
+    planner intent. This reference service rejects that activation before any canonical Plan
+    mutation while leaving the provider-neutral PlanningService contract unchanged.
+    """
+
+    async def activate(self, proposal_id: str, **kwargs: object) -> ProposalRecord:
+        record = self.repository.get(proposal_id)
+        _validate_reference_assignments(record.proposal)
+        return await super().activate(proposal_id, **kwargs)  # type: ignore[arg-type]
+
+
+def _validate_reference_assignments(proposal: PlanProposal) -> None:
+    for step in proposal.steps:
+        assignment = step.assignment
+        if assignment is None or assignment.agent_id is None:
+            kind = "unassigned"
+            if assignment is not None and assignment.team_id is not None:
+                kind = "Agent Team"
+            elif assignment is not None and assignment.role_requirement is not None:
+                kind = "role requirement"
+            raise ContractError(
+                ErrorCode.UNSUPPORTED_CAPABILITY,
+                f"reference single-node planning cannot execute {kind} Step assignment exactly",
+                details={"proposal_id": proposal.proposal_id, "step_key": step.key},
+            )
+        if assignment.agent_revision is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "validated reference planning Agent assignment is missing its revision",
+                details={"proposal_id": proposal.proposal_id, "step_key": step.key},
+            )
+
+
+def _has_model_requirements(requirements: RoutingRequirements) -> bool:
+    return any(
+        (
+            requirements.explicit_model_id is not None,
+            requirements.min_context_window is not None,
+            requirements.tool_calling,
+            requirements.structured_output,
+            requirements.streaming,
+            bool(requirements.modalities),
+            bool(requirements.reasoning),
+            requirements.local_only,
+            requirements.self_hosted_only,
+        )
+    )
+
+
 def _execution_forbidden() -> ContractError:
     return ContractError(
         ErrorCode.FORBIDDEN,
         "autonomous planning cannot execute or control canonical Runs",
         provider_id=PlanningOnlyLifecycleBackend.descriptor.provider_id,
     )
+
+
+__all__ = [
+    "PlanningBindingCoordinator",
+    "PlanningOnlyLifecycleBackend",
+    "ReferencePlanningService",
+]
