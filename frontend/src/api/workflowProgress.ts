@@ -1,4 +1,4 @@
-import type { ControlPlaneClient } from "./client";
+import { ControlPlaneError, type ControlPlaneClient } from "./client";
 import type { ReferenceCollection } from "./references";
 
 export type PlanStepStatus =
@@ -69,4 +69,13 @@ export async function getPlanCoordination(
     PLAN_COORDINATION_COLLECTION,
     planId,
   ) as unknown as Promise<PlanCoordinationProjection>;
+}
+
+/** A canonical Plan may exist before durable coordination state is registered for it. */
+export function isMissingPlanCoordinationError(error: unknown): boolean {
+  return (
+    error instanceof ControlPlaneError &&
+    error.status === 404 &&
+    error.body.code === "not_found"
+  );
 }
