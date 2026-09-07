@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-from jsonschema import Draft202012Validator
 import pytest
+from jsonschema import Draft202012Validator
 
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -21,7 +21,6 @@ from ai_multi_agent_platform.repository_intelligence import (
     repository_intelligence_capability_specs,
 )
 from ai_multi_agent_platform.testing.conformance import assert_provider_contract
-
 
 _SHA = "a" * 40
 _REPOSITORY_ID = new_id("external_resource")
