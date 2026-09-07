@@ -21,8 +21,20 @@ _STEP_FIELDS = (
     "latest_run_id",
     "current_attempt",
     "retry_due_at",
+    "retry_state",
+    "retry_max_attempts",
+    "wait_key",
     "wait_type",
+    "wait_state",
     "wait_deadline_at",
+    "wait_resolved_at",
+    "wait_approval_id",
+    "wait_approval_subject_type",
+    "wait_approval_subject_id",
+    "wait_approval_action",
+    "wait_event_type",
+    "wait_correlation_key",
+    "wait_external_job_ref",
     "reconciliation",
     "reconciliation_detail",
 )
@@ -40,8 +52,8 @@ def add_task_workflow_parser(
     for name, help_text in (
         ("show", "show workflow summary"),
         ("steps", "show all workflow steps"),
-        ("waits", "show waiting workflow steps"),
-        ("retries", "show retrying or retried workflow steps"),
+        ("waits", "show workflow steps with durable wait history/state"),
+        ("retries", "show workflow steps with retry history/state"),
     ):
         command = commands.add_parser(name, help=help_text)
         command.add_argument("task_id")
@@ -91,16 +103,16 @@ def execute_task_workflow(
     elif command == "waits":
         body = _page(
             projection,
-            [
-                step
-                for step in steps
-                if step.get("wait_type") is not None or step.get("wait_deadline_at") is not None
-            ],
+            [step for step in steps if step.get("wait_state") is not None],
         )
     elif command == "retries":
         body = _page(
             projection,
-            [step for step in steps if step.get("retry_due_at") is not None or _attempt(step) > 1],
+            [
+                step
+                for step in steps
+                if step.get("retry_state") not in {None, "none"}
+            ],
         )
     else:
         raise ProfileError(f"unsupported task workflow command: {command}")
@@ -163,12 +175,9 @@ def _summary(
         "plan_revision": projection.get("plan_revision"),
         "step_count": len(steps),
         "status_counts": dict(sorted(statuses.items())),
-        "waiting_step_count": sum(
-            step.get("wait_type") is not None or step.get("wait_deadline_at") is not None
-            for step in steps
-        ),
+        "waiting_step_count": sum(step.get("wait_state") == "active" for step in steps),
         "retry_step_count": sum(
-            step.get("retry_due_at") is not None or _attempt(step) > 1 for step in steps
+            step.get("retry_state") not in {None, "none"} for step in steps
         ),
     }
 
@@ -196,13 +205,6 @@ def _steps(projection: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
             raise TransportError("Control Plane Plan coordination step must be a JSON object")
         steps.append({field: item[field] for field in _STEP_FIELDS if field in item})
     return steps
-
-
-def _attempt(step: dict[str, JsonValue]) -> int:
-    value = step.get("current_attempt")
-    if isinstance(value, bool) or not isinstance(value, int):
-        return 0
-    return value
 
 
 def _require_object(value: JsonValue, label: str) -> dict[str, JsonValue]:
