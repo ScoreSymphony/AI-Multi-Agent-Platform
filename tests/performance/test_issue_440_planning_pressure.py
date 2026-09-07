@@ -17,9 +17,7 @@ from ai_multi_agent_platform.benchmarking.planning_pressure_cli import main
 
 def _schema() -> dict[str, object]:
     return json.loads(
-        Path("docs/schemas/benchmark-planning-pressure.v1.schema.json").read_text(
-            encoding="utf-8"
-        )
+        Path("docs/schemas/benchmark-planning-pressure.v1.schema.json").read_text(encoding="utf-8")
     )
 
 
@@ -134,6 +132,15 @@ def test_planning_pressure_cli_bounds_warmup_work(tmp_path: Path) -> None:
         (
             {"operation_count": 2, "concurrency": 1, "safety_max_operations": 1},
             "operation_count exceeds configured planning-pressure safety bound",
+        ),
+        (
+            {
+                "operation_count": 1,
+                "concurrency": 1,
+                "warmup_operations": 2,
+                "safety_max_operations": 1,
+            },
+            "warmup_operations exceeds configured planning-pressure safety bound",
         ),
         (
             {"operation_count": 1, "concurrency": 2, "safety_max_concurrency": 1},
