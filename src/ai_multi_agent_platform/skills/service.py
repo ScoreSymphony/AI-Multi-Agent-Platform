@@ -55,13 +55,10 @@ _TRUST_TRANSITIONS: dict[SkillTrustStatus, frozenset[SkillTrustStatus]] = {
         {SkillTrustStatus.REJECTED, SkillTrustStatus.DEFERRED}
     ),
     SkillTrustStatus.REJECTED: frozenset(),
+    # DEFERRED deliberately forgets no review requirement in the safe direction:
+    # resuming always restarts at source verification before later stages can be reached.
     SkillTrustStatus.DEFERRED: frozenset(
-        {
-            SkillTrustStatus.SOURCE_VERIFIED,
-            SkillTrustStatus.SECURITY_REVIEWED,
-            SkillTrustStatus.PILOT,
-            SkillTrustStatus.REJECTED,
-        }
+        {SkillTrustStatus.SOURCE_VERIFIED, SkillTrustStatus.REJECTED}
     ),
 }
 
