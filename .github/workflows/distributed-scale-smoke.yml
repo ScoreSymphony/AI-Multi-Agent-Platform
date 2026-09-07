@@ -22,15 +22,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/distributed_scale.py \
             src/ai_multi_agent_platform/benchmarking/distributed_scale_cli.py \
-            tests/test_issue_440_distributed_scale.py
+            tests/performance/test_issue_440_distributed_scale.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/distributed_scale.py \
             src/ai_multi_agent_platform/benchmarking/distributed_scale_cli.py \
-            tests/test_issue_440_distributed_scale.py
+            tests/performance/test_issue_440_distributed_scale.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/distributed_scale.py \
             src/ai_multi_agent_platform/benchmarking/distributed_scale_cli.py
-          pytest tests/test_issue_440_distributed_scale.py
+          pytest tests/performance/test_issue_440_distributed_scale.py
       - name: Run tiny distributed scale profile
         run: |
           mkdir -p artifacts/benchmarks/pr-distributed-scale

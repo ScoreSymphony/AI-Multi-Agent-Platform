@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import TaskStatus, validate_id
-from ai_multi_agent_platform.kernel import PlatformKernel, TaskState
+from ai_multi_agent_platform.kernel import PlatformKernel, TaskMutationBoundary, TaskState
 
 from .models import (
     TASK_MANAGEMENT_METADATA_KEY,
@@ -78,6 +78,7 @@ class TaskManagementService:
         now: NowProvider | None = None,
     ) -> None:
         self._kernel = kernel
+        self._mutations = TaskMutationBoundary(kernel)
         self._workspace_project_resolver = workspace_project_resolver
         self._now = now or (lambda: datetime.now(UTC))
 
@@ -201,37 +202,13 @@ class TaskManagementService:
         actor_ref: str | None,
         source: str = "task-management",
     ) -> TaskManagementView:
-        metadata: dict[str, JsonValue] = {TASK_MANAGEMENT_METADATA_KEY: prepared.metadata.to_json()}
-        if prepared.task.status in {TaskStatus.SUCCEEDED, TaskStatus.CANCELLED}:
-            # Lifecycle-terminal Tasks still accept planning-only metadata such as
-            # archived/hidden state. Use the kernel's canonical command/event path
-            # directly so lifecycle state stays immutable while audit/idempotency
-            # and event mirroring remain identical to ordinary task.updated events.
-            await self._kernel._commit_task_command(
-                task=prepared.task,
-                key=idempotency_key,
-                operation="update_task",
-                event_specs=(
-                    (
-                        "task.updated",
-                        "task",
-                        prepared.task.task_id,
-                        {"metadata": metadata},
-                        (),
-                    ),
-                ),
-                result_id=prepared.task.task_id,
-                actor_ref=actor_ref,
-                source=source,
-            )
-        else:
-            await self._kernel.update_task(
-                idempotency_key=idempotency_key,
-                task_id=prepared.task.task_id,
-                metadata=metadata,
-                actor_ref=actor_ref,
-                source=source,
-            )
+        await self._mutations.update_planning_metadata(
+            task_id=prepared.task.task_id,
+            planning_metadata=prepared.metadata.to_json(),
+            idempotency_key=idempotency_key,
+            actor_ref=actor_ref,
+            source=source,
+        )
         return await self.get(prepared.task.task_id)
 
     async def update(
