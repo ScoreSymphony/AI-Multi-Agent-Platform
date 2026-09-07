@@ -5,9 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts import ExecutionRequest as KernelExecutionRequest
-from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.contracts.types import ToolInvocation
 from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.domain import OwnerRef, new_id
