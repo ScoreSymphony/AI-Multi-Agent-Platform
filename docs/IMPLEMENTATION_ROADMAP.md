@@ -2,7 +2,7 @@
 
 > Status baseline: 2026-09-07, post-closure audit refresh
 
-This roadmap describes the remaining work from current `main` toward the operational v1 baseline and the wider ideal end state. The project is no longer in foundational platform construction. Most canonical domains, runtime boundaries, client surfaces, distributed execution building blocks and operational foundations are implemented; the remaining work is concentrated in convergence, architecture hardening, real-host acceptance, performance evidence and optional end-state extensions.
+This roadmap describes the remaining work from current `main` toward the operational v1 baseline and the wider ideal end state. The project is no longer in foundational platform construction. Most canonical domains, runtime boundaries, client surfaces, distributed execution building blocks and operational foundations are implemented; the remaining work is concentrated in convergence, architecture hardening, real-host acceptance, performance evidence, repository maintainability and optional end-state extensions.
 
 GitHub issue state, current issue comments and merged code remain the point-in-time source of truth. The normative product and architecture baseline remains:
 
@@ -14,13 +14,13 @@ Issue numbers are identifiers, not an implementation sequence. Explicit hard dep
 
 ## Current snapshot
 
-There are **11 open issues out of 112 repository issues**:
+There are **12 open issues out of 113 repository issues**:
 
-`#46, #388, #439, #440, #500, #501, #502, #560, #562, #566, #567`
+`#46, #388, #439, #440, #500, #501, #502, #560, #562, #566, #567, #568`
 
-That is **101 closed / 112 total = about 90.2% closed by issue count**.
+That is **101 closed / 113 total = about 89.4% closed by issue count**.
 
-This percentage is bookkeeping only. It fell from the previous snapshot because post-closure audits added new follow-up issues; it does not imply that merged implementation was lost. Issue scope is highly uneven and several remaining issues are optional profile owners rather than baseline blockers.
+This percentage is bookkeeping only. It fell from the previous snapshot because post-closure audits and maintainability follow-ups added new tracked work; it does not imply that merged implementation was lost. Issue scope is highly uneven and several remaining issues are optional profile owners or behavior-neutral maintenance rather than baseline capability blockers.
 
 There are **no open pull requests** at this snapshot, so `main` is at a useful synchronization point for choosing the next parallel work split.
 
@@ -71,6 +71,7 @@ Important changes:
 - #562 was added for production-shaped two-VPS/private-tunnel validation.
 - #566 was added by a post-#89 audit for real multi-process/multi-host Control Plane HA productionization.
 - #567 was added by a post-#88/#157 audit to remove canonical application dependence on the private kernel `_commit_task_command()` primitive.
+- #568 was added as a behavior-neutral repository-maintainability follow-up to reorganize the growing Python test suite into stable suite categories without changing production semantics.
 
 ## Remaining work by ownership lane
 
@@ -333,6 +334,24 @@ Once stable it can feed:
 - optional HA fault-under-load profiles in #440;
 - real HA conformance evidence in #46.
 
+### Lane K — #568 test-suite layout refactor
+
+#568 is behavior-neutral repository maintenance, but its change surface is broad because it can move many test files and update exact-path references across CI, scripts and documentation.
+
+Required outcome:
+
+- introduce stable suite categories such as `unit/`, `contract/`, `integration/`, `e2e/` and `performance/`/`regression/` where appropriate;
+- preserve intentional roots such as `tests/conftest.py`, `tests/fixtures/` and `tests/release/`;
+- migrate tests in safe cohorts rather than mechanically moving path-sensitive tests;
+- preserve shared-helper imports and repository-root/fixture semantics;
+- add stable pytest markers/documentation;
+- update CI/scripts/docs that invoke exact test paths;
+- keep production/domain behavior unchanged and preserve full intended test discovery.
+
+This lane is not a new product capability and should not silently extend the operational-v1 feature scope. Its main scheduling risk is merge churn: broad test moves can collide with nearly every active implementation branch that adds or edits tests.
+
+**Recommended execution:** prefer a synchronization window with few outstanding code PRs, or migrate in small stable cohorts. If several core implementation branches are already active, avoid a single repository-wide move until they have converged.
+
 ## What can run in parallel now
 
 Technically many issues are open, but maximum branch count is not the goal. The safest useful split is based on ownership/collision zones.
@@ -349,10 +368,11 @@ Technically many issues are open, but maximum branch count is not the goal. The 
 | 8 | #46 | Yes as evidence accumulation; final close later | Final convergence | conformance/CI/release evidence |
 | 9 | #560 | Full lane waits on current #439 dependency | Client semantics | coordination projection/Web/CLI |
 | 10 | #566 | Yes, optional | Large HA productionization | Control Plane, persistence, deployment/security |
+| 11 | #568 | Yes, but schedule carefully | Behavior-neutral maintainability | broad test paths, CI exact-path references, active test-editing branches |
 
 ## Recommended active concurrency
 
-Do **not** run all ten lanes as heavy code branches simultaneously.
+Do **not** run all eleven lanes as heavy code branches simultaneously.
 
 A practical current split is **five to six focused workstreams**:
 
@@ -366,6 +386,8 @@ A practical current split is **five to six focused workstreams**:
 #46 can accumulate conformance evidence alongside these without necessarily becoming a separate broad implementation branch.
 
 #566 can also start in parallel, but because it touches Control Plane/persistence/deployment architecture broadly, it is better treated as a dedicated optional architecture stream rather than mixed into every current branch. If engineering capacity is limited, defer heavy #566 implementation until the core convergence branches are quieter.
+
+#568 should normally **not** be added as another simultaneous repository-wide branch while several of the streams above are actively creating or moving tests. Use a low-traffic synchronization window or small migration cohorts so the maintainability gain is not paid for with unnecessary merge conflicts.
 
 ## Collision map
 
@@ -383,6 +405,7 @@ A practical current split is **five to six focused workstreams**:
 - #500 with #440 pressure profiles: implement/stabilize the pressure contract first, then benchmark it.
 - #439 with #440 planner profiles: stabilize planner loop first, then measure it.
 - #566 with broad Control Plane/deployment changes: avoid simultaneous rewrites of the same composition/persistence/security seams.
+- #568 with almost any branch that adds, renames or invokes Python tests by exact path: prefer convergence first or tightly scoped migration cohorts.
 - #46 with all unfinished core owners: accumulate evidence continuously, but reserve final issue-wide audit for a stable candidate.
 
 ## Recommended sequence from here
@@ -400,6 +423,8 @@ Run in parallel:
 ```
 
 At the same time, prepare the secure two-VPS acceptance topology without exposing internal Worker services publicly.
+
+#568 can be handled in small non-conflicting cohorts, but a repository-wide test move is better placed at a synchronization point after the active Wave-1 code branches have converged.
 
 ### Wave 2 — fan out after #439
 
@@ -426,6 +451,21 @@ Once #500 is closed/stable:
 ```
 
 Again, these are parallel consumers of the stable pressure contract.
+
+### Maintenance synchronization — #568
+
+At the first quiet merge window after the major active test-producing branches converge:
+
+```text
+current main
+   -> classify tests by stable suite responsibility
+   -> migrate small cohorts
+   -> update exact-path CI/scripts/docs
+   -> verify complete pytest discovery + required CI
+   -> continue remaining implementation work on the stable layout
+```
+
+Do not use #568 to mix production refactors into the same change set.
 
 ### Wave 4 — real-host distributed acceptance
 
@@ -496,6 +536,8 @@ Do not make this a prerequisite for ordinary single-node release readiness unles
 
 #566* real Control Plane HA --------------------> #440/#46 optional HA evidence
 
+#568 test-layout maintenance -----> schedule at a low-conflict synchronization window
+
 * optional ideal-end-state/profile work; not a hidden single-node baseline prerequisite.
 ```
 
@@ -505,9 +547,9 @@ Use three different progress views rather than one misleading percentage.
 
 ### 1. Objective issue-count progress
 
-**101 / 112 issues closed = about 90.2%.**
+**101 / 113 issues closed = about 89.4%.**
 
-This is the only objective percentage. It is sensitive to new audit follow-ups and says nothing about issue size.
+This is the only objective percentage. It is sensitive to new audit/maintenance follow-ups and says nothing about issue size.
 
 ### 2. Core operational-v1 maturity
 
@@ -524,13 +566,15 @@ Why this is high:
 - #440 already has substantial benchmark coverage;
 - remaining core work is concentrated in #439, #567, #500, #560, selected #440 evidence and final #46 convergence.
 
+#568 is behavior-neutral maintainability work and does not by itself reduce product-capability maturity, although completing it improves repository navigability and long-term CI ownership.
+
 This is a planning heuristic, not a release claim.
 
 ### 3. Expanded ideal-end-state maturity
 
 Planning estimate: **roughly 84–89%** when optional Proposal/Specification completion, repository-intelligence provider ecosystem work, real two-VPS acceptance and the newly added production-shaped HA profile are counted as part of the target.
 
-The range is lower mainly because #566 is a large new optional productionization lane and #502 still includes genuine provider-evaluation/packaging work.
+The range is lower mainly because #566 is a large new optional productionization lane and #502 still includes genuine provider-evaluation/packaging work. #568 adds maintenance effort but not a new end-user capability.
 
 ## Relative remaining effort
 
@@ -541,6 +585,7 @@ A rough remaining-effort ordering is:
 #439 final planning/replanning closure       = high-value core integration
 #440 final operating-envelope evidence       = broad evidence workload
 #562 real two-VPS deployment acceptance      = operational/infrastructure-heavy
+#568 test-suite layout refactor              = broad mechanical/CI churn, behavior-neutral
 #500 final pressure closure                  = smaller than before; architecture largely merged
 #560 workflow semantic/live-refresh followup = focused medium block after #439
 #502 optional provider ecosystem work        = medium, scope depends on candidate quality
@@ -550,7 +595,7 @@ A rough remaining-effort ordering is:
 #46 final audit                              = convergence/evidence rather than greenfield code
 ```
 
-This ordering is about likely remaining work, not issue priority. A smaller core architecture issue such as #567 can be more urgent than a larger optional issue such as #566.
+This ordering is about likely remaining work, not issue priority. A smaller core architecture issue such as #567 can be more urgent than a larger optional issue such as #566, and #568's broad file churn does not make it a product-critical feature.
 
 ## Release interpretation
 
@@ -563,6 +608,7 @@ The release candidate should be judged by the exact supported profile:
 - disabled optional Registry/intelligence/governance/HA profiles do not invalidate the baseline;
 - real cross-host compatibility is claimed only when #388/#562 evidence exists;
 - real multi-Control-Plane HA compatibility is claimed only when #566 evidence exists;
+- #568 remains behavior-neutral repository maintenance rather than a hidden product-capability prerequisite, while required CI/test discovery must of course remain green;
 - #46 records explicit evidence for every capability the release actually claims.
 
-The project should therefore optimize for **clean convergence of the claimed baseline**, while allowing optional #501/#502/#566 work and real-host validation to proceed in parallel without silently extending the release critical path.
+The project should therefore optimize for **clean convergence of the claimed baseline**, while allowing optional #501/#502/#566 work, #568 repository maintenance and real-host validation to proceed without silently extending the release critical path.
