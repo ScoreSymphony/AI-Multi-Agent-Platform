@@ -15,6 +15,7 @@ from typing import Protocol
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
 from ai_multi_agent_platform.coordination import CoordinationPhase, StepCoordinationRecord
 from ai_multi_agent_platform.domain import RunStatus
+from ai_multi_agent_platform.kernel.models import RunState
 from ai_multi_agent_platform.verification import VerificationOutcome
 from ai_multi_agent_platform.verification.audit import (
     VerificationAuditEvent,
@@ -72,21 +73,9 @@ class ReplanningEvidenceBridge:
         run_id: str,
         workspace_id: str | None = None,
     ) -> ProposalRecord:
-        """Request replanning from one canonical failed/timed-out Run."""
+        """Request replanning from one current canonical failed/timed-out Run."""
 
-        run = await self._planning.kernel.get_run(task_id, run_id)
-        if run.task_id != task_id:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "canonical Run does not belong to requested Task",
-                details={"task_id": task_id, "run_id": run_id},
-            )
-        if run.status not in {RunStatus.FAILED, RunStatus.TIMED_OUT}:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "terminal-failure replanning requires a failed or timed-out canonical Run",
-                details={"run_id": run_id, "run_status": run.status.value},
-            )
+        run = await self._current_terminal_run(task_id=task_id, run_id=run_id)
         reason = f"canonical Run {run_id} ended {run.status.value}"
         return await self._request(
             task_id=task_id,
@@ -124,12 +113,12 @@ class ReplanningEvidenceBridge:
                 "retry-exhaustion replanning requires terminal canonical Step coordination",
                 details={"task_id": task_id, "step_id": step_id},
             )
-        run = await self._planning.kernel.get_run(task_id, run_id)
-        if run.status not in {RunStatus.FAILED, RunStatus.TIMED_OUT}:
+        run = await self._current_terminal_run(task_id=task_id, run_id=run_id)
+        if run.run.subject_type != "step" or run.run.subject_id != step_id:
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "retry-exhaustion evidence must reference a failed or timed-out canonical Run",
-                details={"run_id": run_id, "run_status": run.status.value},
+                "retry-exhaustion evidence does not match the canonical coordinated Step",
+                details={"step_id": step_id, "run_id": run_id},
             )
         reason = f"canonical retry policy exhausted for Step {step_id}"
         return await self._request(
@@ -276,6 +265,78 @@ class ReplanningEvidenceBridge:
             workspace_id=workspace_id,
         )
 
+    async def _current_terminal_run(self, *, task_id: str, run_id: str) -> RunState:
+        """Resolve a failure Run only when it still describes the current Plan/attempt."""
+
+        task = await self._planning.kernel.get_task(task_id)
+        run = await self._planning.kernel.get_run(task_id, run_id)
+        if run.task_id != task_id:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "canonical Run does not belong to requested Task",
+                details={"task_id": task_id, "run_id": run_id},
+            )
+        if run.status not in {RunStatus.FAILED, RunStatus.TIMED_OUT}:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "terminal-failure replanning requires a failed or timed-out canonical Run",
+                details={"run_id": run_id, "run_status": run.status.value},
+            )
+
+        history = await self._planning.kernel.history(task_id)
+        created = next(
+            (
+                event
+                for event in history
+                if event.event_type == "run.created"
+                and event.subject_type == "run"
+                and event.subject_id == run_id
+            ),
+            None,
+        )
+        if created is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical Run is missing its run.created history event",
+                details={"task_id": task_id, "run_id": run_id},
+            )
+        created_plan_ref = created.payload.get("plan_ref")
+        if (
+            task.plan_ref is None
+            or not isinstance(created_plan_ref, str)
+            or created_plan_ref != task.plan_ref
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "terminal Run evidence was superseded by the current canonical Plan",
+                details={
+                    "run_id": run_id,
+                    "run_plan_id": created_plan_ref if isinstance(created_plan_ref, str) else None,
+                    "current_plan_id": task.plan_ref,
+                },
+            )
+
+        latest = run
+        for candidate_id in task.run_ids:
+            candidate = await self._planning.kernel.get_run(task_id, candidate_id)
+            if (
+                candidate.run.subject_type != run.run.subject_type
+                or candidate.run.subject_id != run.run.subject_id
+            ):
+                continue
+            if (candidate.attempt, candidate.run.created_at) > (
+                latest.attempt,
+                latest.run.created_at,
+            ):
+                latest = candidate
+        if latest.run_id != run_id:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "terminal Run evidence was superseded by a later canonical attempt",
+                details={"run_id": run_id, "latest_run_id": latest.run_id},
+            )
+        return run
+
     async def _request(
         self,
         *,
@@ -323,6 +384,16 @@ class ReplanningEvidenceBridge:
                 evidence_refs=list(evidence_refs),
                 trigger_fingerprint=fingerprint,
                 error_code=exc.code.value,
+            )
+            raise
+        except Exception as exc:
+            await self._emit(
+                "planning.replan.failed",
+                task_id=task_id,
+                trigger=trigger.value,
+                evidence_refs=list(evidence_refs),
+                trigger_fingerprint=fingerprint,
+                error_type=type(exc).__name__,
             )
             raise
         await self._emit(
