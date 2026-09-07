@@ -28,6 +28,7 @@ from .pressure import (
     PressureAdmissionPolicy,
     PressureSnapshotProvider,
 )
+from .pressure_telemetry import PressureTelemetry
 from .registry import DistributedRegistry, RegistryError
 
 if TYPE_CHECKING:
@@ -66,6 +67,9 @@ class DeterministicScheduler:
         self.pressure_provider = pressure_provider
         self.pressure_policy = pressure_policy
         self.workload_class_resolver = workload_class_resolver
+        self.pressure_telemetry = (
+            None if telemetry is None else PressureTelemetry(telemetry.telemetry)
+        )
 
     def evaluate(
         self,
@@ -138,6 +142,7 @@ class DeterministicScheduler:
             available=available,
             snapshot=snapshot,
             now=now,
+            workload_class=self._workload_class(job),
         )
 
     def schedule(
@@ -302,14 +307,27 @@ class DeterministicScheduler:
         # snapshot is shared by all otherwise-eligible Workers on the same Node in this evaluation
         # so stateful/delta-based providers are sampled consistently.
         if not reasons and self.pressure_policy is not None:
+            snapshot = self._pressure_snapshot(node.node_id, pressure_snapshots)
+            workload_class = self._workload_class(job)
             admission = self._pressure_decision(
                 job=job,
                 node=node,
                 worker=worker,
                 available=available,
-                snapshot=self._pressure_snapshot(node.node_id, pressure_snapshots),
+                snapshot=snapshot,
                 now=now,
+                workload_class=workload_class,
             )
+            if self.pressure_telemetry is not None:
+                if snapshot is not None:
+                    self.pressure_telemetry.snapshot(node.node_id, snapshot)
+                self.pressure_telemetry.admission(
+                    job,
+                    node_id=node.node_id,
+                    worker_id=worker.worker_id,
+                    decision=admission,
+                    workload_class=workload_class,
+                )
             if not admission.admits:
                 reasons.append(self._pressure_rejection(admission))
 
@@ -344,12 +362,10 @@ class DeterministicScheduler:
         available: ResourceSnapshot,
         snapshot: HostPressureSnapshot | None,
         now: datetime | None,
+        workload_class: str | None,
     ) -> AdmissionDecision:
         policy = self.pressure_policy
         assert policy is not None
-        workload_class = (
-            None if self.workload_class_resolver is None else self.workload_class_resolver(job)
-        )
         return policy.decide(
             node=node,
             worker=worker,
@@ -359,6 +375,9 @@ class DeterministicScheduler:
             now=now,
             workload_class=workload_class,
         )
+
+    def _workload_class(self, job: WorkerJobRequest) -> str | None:
+        return None if self.workload_class_resolver is None else self.workload_class_resolver(job)
 
     @staticmethod
     def _score(worker: WorkerRecord, node: NodeRecord, requirements: JobRequirements) -> int:
