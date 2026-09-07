@@ -188,11 +188,7 @@ def _step_resource(
         "wait_key": None if wait is None else wait.wait_key,
         "wait_type": step.wait_type.value if step.wait_type is not None else None,
         "wait_state": (
-            None
-            if wait is None
-            else "active"
-            if wait.resolution is None
-            else wait.resolution.value
+            None if wait is None else "active" if wait.resolution is None else wait.resolution.value
         ),
         "wait_deadline_at": (
             step.wait_deadline_at.isoformat() if step.wait_deadline_at is not None else None

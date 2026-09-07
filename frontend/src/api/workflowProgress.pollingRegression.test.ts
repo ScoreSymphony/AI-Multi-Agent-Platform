@@ -62,6 +62,7 @@ describe("workflow progress polling regressions", () => {
     });
 
     poller.start();
+    await vi.advanceTimersByTimeAsync(0);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(25);

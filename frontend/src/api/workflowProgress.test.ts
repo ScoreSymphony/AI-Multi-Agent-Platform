@@ -138,6 +138,8 @@ describe("workflow progress client", () => {
           category: "resource",
           message: "plan coordination projection not found",
           retryable: false,
+          request_id: "req_poll_missing_560",
+          correlation_id: "corr_poll_missing_560",
         }),
         { status: 404 },
       ),

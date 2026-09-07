@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PlanCoordinationProjection } from "../api/workflowProgress";
+import { RouterProvider } from "../app/router";
 import { WorkflowProgress } from "./WorkflowProgress";
 
 const projection: PlanCoordinationProjection = {
@@ -67,17 +68,26 @@ const projection: PlanCoordinationProjection = {
 
 describe("WorkflowProgress", () => {
   it("renders canonical dependency, safe wait, retry and reconciliation state as a table", () => {
-    const markup = renderToStaticMarkup(<WorkflowProgress projection={projection} />);
+    vi.stubGlobal("window", { location: { pathname: "/" } });
+    try {
+      const markup = renderToStaticMarkup(
+        <RouterProvider>
+          <WorkflowProgress projection={projection} />
+        </RouterProvider>,
+      );
 
-    expect(markup).toContain("plan_421");
-    expect(markup).toContain("step_a");
-    expect(markup).toContain("step_b");
-    expect(markup).toContain("1/1 satisfied");
-    expect(markup).toContain("external_job");
-    expect(markup).toContain("adapter-job-42");
-    expect(markup).toContain("active");
-    expect(markup).toContain("canonical Run reconciled after operator repair");
-    expect(markup).toContain("<table>");
-    expect(markup).toContain("Retry state");
+      expect(markup).toContain("plan_421");
+      expect(markup).toContain("step_a");
+      expect(markup).toContain("step_b");
+      expect(markup).toContain("1/1 satisfied");
+      expect(markup).toContain("external_job");
+      expect(markup).toContain("adapter-job-42");
+      expect(markup).toContain("active");
+      expect(markup).toContain("canonical Run reconciled after operator repair");
+      expect(markup).toContain("<table>");
+      expect(markup).toContain("Retry state");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

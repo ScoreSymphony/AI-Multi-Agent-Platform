@@ -149,9 +149,7 @@ class CoordinatorRepairService:
                 else current.retry_state
             )
             retained_wait = (
-                current.wait
-                if current.wait is not None and current.wait.resolved
-                else None
+                current.wait if current.wait is not None and current.wait.resolved else None
             )
             updated = replace(
                 current,

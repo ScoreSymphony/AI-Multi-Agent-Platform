@@ -253,7 +253,10 @@ def _record_from_dict(value: dict[str, Any]) -> StepCoordinationRecord:
             retry_state = RetryState.SCHEDULED
         elif phase is CoordinationPhase.READY and current_attempt >= 1:
             retry_state = RetryState.ACTIVE
-        elif phase in {CoordinationPhase.ATTEMPT_ACTIVE, CoordinationPhase.WAITING} and current_attempt > 1:
+        elif (
+            phase in {CoordinationPhase.ATTEMPT_ACTIVE, CoordinationPhase.WAITING}
+            and current_attempt > 1
+        ):
             retry_state = RetryState.ACTIVE
         else:
             retry_state = RetryState.NONE

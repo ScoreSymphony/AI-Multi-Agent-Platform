@@ -108,11 +108,7 @@ def execute_task_workflow(
     elif command == "retries":
         body = _page(
             projection,
-            [
-                step
-                for step in steps
-                if step.get("retry_state") not in {None, "none"}
-            ],
+            [step for step in steps if step.get("retry_state") not in {None, "none"}],
         )
     else:
         raise ProfileError(f"unsupported task workflow command: {command}")
@@ -176,9 +172,7 @@ def _summary(
         "step_count": len(steps),
         "status_counts": dict(sorted(statuses.items())),
         "waiting_step_count": sum(step.get("wait_state") == "active" for step in steps),
-        "retry_step_count": sum(
-            step.get("retry_state") not in {None, "none"} for step in steps
-        ),
+        "retry_step_count": sum(step.get("retry_state") not in {None, "none"} for step in steps),
     }
 
 
