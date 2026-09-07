@@ -35,7 +35,6 @@ from ai_multi_agent_platform.security import (
 )
 
 from .models import (
-    PlanProposal,
     PlannerOutput,
     PlanningAgentCandidate,
     PlanningCapabilityCandidate,
@@ -45,6 +44,7 @@ from .models import (
     PlanningStepDraft,
     PlanningTeamCandidate,
     PlanningTrigger,
+    PlanProposal,
     PriorPlanSnapshot,
     ProposalRecord,
     ProposalStatus,
@@ -112,7 +112,7 @@ class PlanningService:
         models: ModelRegistry | None = None,
         authorization: AuthorizationGate | None = None,
         coordinator: ActivatedPlanCoordinator | None = None,
-        replan_policy: ReplanPolicy = ReplanPolicy(),
+        replan_policy: ReplanPolicy | None = None,
         event_sink: PlanningEventSink | None = None,
     ) -> None:
         self.planner = planner
@@ -123,7 +123,7 @@ class PlanningService:
         self.models = models
         self.authorization = authorization
         self.coordinator = coordinator
-        self.replan_policy = replan_policy
+        self.replan_policy = replan_policy or ReplanPolicy()
         self._event_sink = event_sink
 
     async def propose(
@@ -398,7 +398,8 @@ class PlanningService:
                         and candidate.capability_id not in assignment_agent.allowed_capability_ids
                     ):
                         errors.append(
-                            f"Step {step.key} capability {candidate.capability_id} is outside Agent "
+                            f"Step {step.key} capability {candidate.capability_id} is "
+                            "outside Agent "
                             f"{assignment_agent.agent_id} allowlist"
                         )
                 if assignment_team is not None and assignment_team.shared_capability_ids:
@@ -419,7 +420,8 @@ class PlanningService:
                 explicit = step.model_requirements.explicit_model_id
                 if explicit is not None and explicit not in models:
                     errors.append(
-                        f"Step {step.key} references unknown canonical model configuration {explicit}"
+                        f"Step {step.key} references unknown canonical model "
+                        f"configuration {explicit}"
                     )
 
             if step.reuse_step_ids:
