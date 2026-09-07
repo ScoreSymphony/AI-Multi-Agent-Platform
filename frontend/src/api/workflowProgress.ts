@@ -1,19 +1,49 @@
 import type { ControlPlaneClient } from "./client";
 import type { ReferenceCollection } from "./references";
 
+export type PlanStepStatus =
+  | "pending"
+  | "ready"
+  | "running"
+  | "waiting"
+  | "succeeded"
+  | "failed"
+  | "skipped"
+  | "cancelled";
+
+export type CoordinationPhase =
+  | "blocked"
+  | "ready"
+  | "attempt_active"
+  | "waiting"
+  | "retry_scheduled"
+  | "terminal"
+  | "inconsistent";
+
+export type CoordinationWaitType = "deadline" | "approval" | "event" | "external_job";
+
+export type ReconciliationDisposition =
+  | "consistent"
+  | "run_reconciled"
+  | "wait_resumed"
+  | "retry_resumed"
+  | "canonical_terminal"
+  | "missing_canonical_run"
+  | "inconsistent";
+
 export interface PlanCoordinationStep {
   id: string;
-  status: string;
-  coordination_phase: string;
+  status: PlanStepStatus;
+  coordination_phase: CoordinationPhase;
   coordination_revision: number | null;
   dependency_ids: string[];
   satisfied_dependency_ids: string[];
   latest_run_id: string | null;
   current_attempt: number;
   retry_due_at: string | null;
-  wait_type: string | null;
+  wait_type: CoordinationWaitType | null;
   wait_deadline_at: string | null;
-  reconciliation: string;
+  reconciliation: ReconciliationDisposition;
   reconciliation_detail: string | null;
 }
 
