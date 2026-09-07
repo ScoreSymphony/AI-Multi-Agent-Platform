@@ -20,6 +20,7 @@ from .models import (
     PlanRuntimeState,
     PredecessorFailurePolicy,
     ReconciliationDisposition,
+    RetryState,
     StepCoordinationRecord,
     StepRetryPolicy,
     StepWait,
@@ -226,6 +227,7 @@ def _record_to_dict(record: StepCoordinationRecord) -> dict[str, Any]:
             "version": retry.version,
         },
         "retry_due_at": record.retry_due_at.isoformat() if record.retry_due_at else None,
+        "retry_state": record.retry_state.value,
         "wait": _wait_to_dict(record.wait),
         "predecessor_failure_policy": record.predecessor_failure_policy.value,
         "processed_keys": list(record.processed_keys),
@@ -242,16 +244,34 @@ def _record_to_dict(record: StepCoordinationRecord) -> dict[str, Any]:
 
 def _record_from_dict(value: dict[str, Any]) -> StepCoordinationRecord:
     retry = cast(dict[str, Any], value["retry_policy"])
+    phase = CoordinationPhase(str(value["phase"]))
+    current_attempt = int(value["current_attempt"])
+    retry_due_at = _dt(cast(str | None, value.get("retry_due_at")))
+    retry_state_value = value.get("retry_state")
+    if retry_state_value is None:
+        if phase is CoordinationPhase.RETRY_SCHEDULED and retry_due_at is not None:
+            retry_state = RetryState.SCHEDULED
+        elif phase is CoordinationPhase.READY and current_attempt >= 1:
+            retry_state = RetryState.ACTIVE
+        elif (
+            phase in {CoordinationPhase.ATTEMPT_ACTIVE, CoordinationPhase.WAITING}
+            and current_attempt > 1
+        ):
+            retry_state = RetryState.ACTIVE
+        else:
+            retry_state = RetryState.NONE
+    else:
+        retry_state = RetryState(str(retry_state_value))
     return StepCoordinationRecord(
         task_id=str(value["task_id"]),
         plan_id=str(value["plan_id"]),
         plan_revision=int(value["plan_revision"]),
         step_id=str(value["step_id"]),
-        phase=CoordinationPhase(str(value["phase"])),
+        phase=phase,
         dependency_ids=tuple(cast(list[str], value["dependency_ids"])),
         satisfied_dependency_ids=tuple(cast(list[str], value["satisfied_dependency_ids"])),
         latest_run_id=cast(str | None, value.get("latest_run_id")),
-        current_attempt=int(value["current_attempt"]),
+        current_attempt=current_attempt,
         retry_policy=StepRetryPolicy(
             max_attempts=int(retry["max_attempts"]),
             initial_delay_seconds=float(retry["initial_delay_seconds"]),
@@ -260,7 +280,8 @@ def _record_from_dict(value: dict[str, Any]) -> StepCoordinationRecord:
             retryable_categories=tuple(cast(list[str], retry["retryable_categories"])),
             version=int(retry["version"]),
         ),
-        retry_due_at=_dt(cast(str | None, value.get("retry_due_at"))),
+        retry_due_at=retry_due_at,
+        retry_state=retry_state,
         wait=_wait_from_dict(cast(dict[str, Any] | None, value.get("wait"))),
         predecessor_failure_policy=PredecessorFailurePolicy(
             str(value["predecessor_failure_policy"])

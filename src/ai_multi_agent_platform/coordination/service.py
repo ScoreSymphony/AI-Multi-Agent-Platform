@@ -31,6 +31,7 @@ from .models import (
     PlanCoordinationProjection,
     PredecessorFailurePolicy,
     ReconciliationDisposition,
+    RetryState,
     StepCoordinationProjection,
     StepCoordinationRecord,
     StepRetryPolicy,
@@ -268,7 +269,16 @@ class DurablePlanStepCoordinator:
             if run.status is RunStatus.SUCCEEDED:
                 if step.status is StepStatus.RUNNING:
                     next_step = step.transition_to(StepStatus.SUCCEEDED)
-                    next_record = replace(next_record, phase=CoordinationPhase.TERMINAL)
+                    retry_state = (
+                        RetryState.COMPLETED
+                        if current.retry_state is RetryState.ACTIVE
+                        else current.retry_state
+                    )
+                    next_record = replace(
+                        next_record,
+                        phase=CoordinationPhase.TERMINAL,
+                        retry_state=retry_state,
+                    )
                 elif step.status is StepStatus.WAITING and current.wait is not None:
                     next_record = replace(next_record, phase=CoordinationPhase.WAITING)
                 elif step.status is not StepStatus.SUCCEEDED:
@@ -283,7 +293,14 @@ class DurablePlanStepCoordinator:
                 if step.status in {StepStatus.RUNNING, StepStatus.WAITING}:
                     next_step = step.transition_to(StepStatus.FAILED)
                 next_attempt = max(current.current_attempt, run.attempt) + 1
-                if current.retry_policy.permits(category=category, next_attempt=next_attempt):
+                category_retryable = category in current.retry_policy.retryable_categories
+                closed_wait = self._close_wait(
+                    current.wait,
+                    resolution=WaitResolution.CANCELLED,
+                    resolution_key=key,
+                    now=current_time,
+                )
+                if category_retryable and next_attempt <= current.retry_policy.max_attempts:
                     next_record = replace(
                         next_record,
                         phase=CoordinationPhase.RETRY_SCHEDULED,
@@ -291,7 +308,8 @@ class DurablePlanStepCoordinator:
                         retry_due_at=(
                             current_time + current.retry_policy.delay_for_attempt(next_attempt)
                         ),
-                        wait=None,
+                        retry_state=RetryState.SCHEDULED,
+                        wait=closed_wait,
                     )
                     self._emit(
                         "coordination.retry.scheduled",
@@ -301,13 +319,14 @@ class DurablePlanStepCoordinator:
                         run_id=run_id,
                         attributes={"attempt": next_attempt, "category": category},
                     )
-                else:
+                elif category_retryable:
                     next_record = replace(
                         next_record,
                         phase=CoordinationPhase.TERMINAL,
                         current_attempt=max(current.current_attempt, run.attempt),
                         retry_due_at=None,
-                        wait=None,
+                        retry_state=RetryState.EXHAUSTED,
+                        wait=closed_wait,
                     )
                     self._emit(
                         "coordination.retry.exhausted",
@@ -318,14 +337,43 @@ class DurablePlanStepCoordinator:
                         outcome=TelemetryOutcome.FAILED,
                         attributes={"category": category},
                     )
+                else:
+                    next_record = replace(
+                        next_record,
+                        phase=CoordinationPhase.TERMINAL,
+                        current_attempt=max(current.current_attempt, run.attempt),
+                        retry_due_at=None,
+                        retry_state=RetryState.NOT_RETRYABLE,
+                        wait=closed_wait,
+                    )
+                    self._emit(
+                        "coordination.retry.not_retryable",
+                        task_id,
+                        current.plan_id,
+                        current.step_id,
+                        run_id=run_id,
+                        outcome=TelemetryOutcome.FAILED,
+                        attributes={"category": category},
+                    )
             else:
                 if step.status in {StepStatus.RUNNING, StepStatus.WAITING}:
                     next_step = step.transition_to(StepStatus.CANCELLED)
+                retry_state = (
+                    RetryState.CANCELLED
+                    if current.retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}
+                    else current.retry_state
+                )
                 next_record = replace(
                     next_record,
                     phase=CoordinationPhase.TERMINAL,
                     retry_due_at=None,
-                    wait=None,
+                    retry_state=retry_state,
+                    wait=self._close_wait(
+                        current.wait,
+                        resolution=WaitResolution.CANCELLED,
+                        resolution_key=key,
+                        now=current_time,
+                    ),
                 )
 
             self.repository.save_step(
@@ -364,7 +412,8 @@ class DurablePlanStepCoordinator:
         if record.wait is not None:
             if record.wait.wait_key == wait.wait_key:
                 return self.projection(wait.plan_id)
-            raise ContractError(ErrorCode.CONFLICT, "Step already has a different durable wait")
+            if not record.wait.resolved:
+                raise ContractError(ErrorCode.CONFLICT, "Step already has a different durable wait")
         if (
             step.status is not StepStatus.RUNNING
             or record.phase is not CoordinationPhase.ATTEMPT_ACTIVE
@@ -553,11 +602,22 @@ class DurablePlanStepCoordinator:
                     StepStatus.WAITING,
                 }:
                     current_step = current_step.transition_to(StepStatus.CANCELLED)
+                retry_state = (
+                    RetryState.CANCELLED
+                    if current.retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}
+                    else current.retry_state
+                )
                 updated = replace(
                     current,
                     phase=CoordinationPhase.TERMINAL,
                     retry_due_at=None,
-                    wait=None,
+                    retry_state=retry_state,
+                    wait=self._close_wait(
+                        current.wait,
+                        resolution=WaitResolution.CANCELLED,
+                        resolution_key=f"{idempotency_key}:wait:{step.id}",
+                        now=current_time,
+                    ),
                     reconciliation=ReconciliationDisposition.CANONICAL_TERMINAL,
                 )
                 self.repository.save_step(
@@ -937,7 +997,12 @@ class DurablePlanStepCoordinator:
             ):
                 return False
             ready = current_step.transition_to(StepStatus.READY)
-            updated = replace(current, phase=CoordinationPhase.READY, retry_due_at=None)
+            updated = replace(
+                current,
+                phase=CoordinationPhase.READY,
+                retry_due_at=None,
+                retry_state=RetryState.ACTIVE,
+            )
             self.repository.save_step(
                 step=ready,
                 record=updated,
@@ -969,7 +1034,7 @@ class DurablePlanStepCoordinator:
         if resolution_key in record.processed_keys:
             return self.projection(record.plan_id)
         wait = record.wait
-        if wait is None or record.phase is not CoordinationPhase.WAITING:
+        if wait is None or wait.resolved or record.phase is not CoordinationPhase.WAITING:
             raise ContractError(ErrorCode.CONFLICT, "Step has no active durable wait")
         claim = self._required_claim(step_id, now)
         try:
@@ -979,44 +1044,70 @@ class DurablePlanStepCoordinator:
             state = self.repository.get_plan(current.plan_id)
             step = state.step(step_id)
             processed = (*current.processed_keys, resolution_key)
+            resolved_wait = self._close_wait(
+                wait,
+                resolution=resolution,
+                resolution_key=resolution_key,
+                now=now,
+            )
             if resolution is WaitResolution.SATISFIED:
                 next_step = step.transition_to(StepStatus.RUNNING)
                 phase = CoordinationPhase.ATTEMPT_ACTIVE
+                retry_state = current.retry_state
                 if current.latest_run_id is not None:
                     run = await self.kernel.get_run(current.task_id, current.latest_run_id)
                     if run.status is RunStatus.SUCCEEDED:
                         next_step = next_step.transition_to(StepStatus.SUCCEEDED)
                         phase = CoordinationPhase.TERMINAL
+                        if retry_state is RetryState.ACTIVE:
+                            retry_state = RetryState.COMPLETED
                     elif run.status in {RunStatus.FAILED, RunStatus.TIMED_OUT}:
                         next_step = next_step.transition_to(StepStatus.FAILED)
                         phase = CoordinationPhase.TERMINAL
+                        if retry_state is RetryState.ACTIVE:
+                            retry_state = RetryState.NOT_RETRYABLE
                     elif run.status is RunStatus.CANCELLED:
                         next_step = next_step.transition_to(StepStatus.CANCELLED)
                         phase = CoordinationPhase.TERMINAL
+                        if retry_state is RetryState.ACTIVE:
+                            retry_state = RetryState.CANCELLED
                 updated = replace(
                     current,
                     phase=phase,
-                    wait=None,
+                    wait=resolved_wait,
+                    retry_state=retry_state,
                     processed_keys=processed,
                 )
             elif resolution is WaitResolution.CANCELLED:
                 await self._cancel_active_run(current, f"wait:{resolution_key}:cancel")
                 next_step = step.transition_to(StepStatus.CANCELLED)
+                retry_state = (
+                    RetryState.CANCELLED
+                    if current.retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}
+                    else current.retry_state
+                )
                 updated = replace(
                     current,
                     phase=CoordinationPhase.TERMINAL,
-                    wait=None,
+                    wait=resolved_wait,
                     retry_due_at=None,
+                    retry_state=retry_state,
                     processed_keys=processed,
                 )
             else:
                 await self._cancel_active_run(current, f"wait:{resolution_key}:fail")
                 next_step = step.transition_to(StepStatus.FAILED)
+                retry_state = (
+                    RetryState.NOT_RETRYABLE
+                    if current.retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}
+                    else current.retry_state
+                )
                 updated = replace(
                     current,
                     phase=CoordinationPhase.TERMINAL,
-                    wait=None,
+                    wait=resolved_wait,
                     retry_due_at=None,
+                    retry_state=retry_state,
                     processed_keys=processed,
                 )
             self.repository.save_step(
@@ -1240,6 +1331,23 @@ class DurablePlanStepCoordinator:
                 ErrorCode.FORBIDDEN,
                 "foreign-scope signal cannot resolve a durable Step wait",
             )
+
+    @staticmethod
+    def _close_wait(
+        wait: StepWait | None,
+        *,
+        resolution: WaitResolution,
+        resolution_key: str,
+        now: datetime,
+    ) -> StepWait | None:
+        if wait is None or wait.resolved:
+            return wait
+        return replace(
+            wait,
+            resolved_at=now,
+            resolution=resolution,
+            resolution_key=resolution_key,
+        )
 
     @staticmethod
     def _attempt_key(record: StepCoordinationRecord, attempt: int) -> str:

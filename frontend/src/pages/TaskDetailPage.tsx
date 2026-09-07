@@ -12,9 +12,8 @@ import type {
   TimelineItem,
 } from "../api/types";
 import {
-  getPlanCoordination,
-  isMissingPlanCoordinationError,
   type PlanCoordinationProjection,
+  WorkflowProgressPoller,
 } from "../api/workflowProgress";
 import { AppLink } from "../app/router";
 import {
@@ -85,29 +84,10 @@ export function TaskDetailPage({
       setRuns(nextRuns.items);
       setEvents(timeline.items);
       setError(null);
-      setWorkflow(null);
-      setWorkflowError(null);
-      setWorkflowUnavailable(false);
-
-      if (nextTask.plan_ref) {
-        try {
-          const nextWorkflow = await getPlanCoordination(client, nextTask.plan_ref);
-          if (generation !== loadGeneration.current) return;
-          if (nextWorkflow.task_id !== taskId || nextWorkflow.id !== nextTask.plan_ref) {
-            throw new Error("Control Plane returned a workflow projection for a different Task or Plan.");
-          }
-          setWorkflow(nextWorkflow);
-        } catch (nextWorkflowError) {
-          if (generation !== loadGeneration.current) return;
-          setWorkflow(null);
-          if (isMissingPlanCoordinationError(nextWorkflowError)) {
-            setWorkflowUnavailable(true);
-            setWorkflowError(null);
-          } else {
-            setWorkflowUnavailable(false);
-            setWorkflowError(nextWorkflowError);
-          }
-        }
+      if (nextTask.plan_ref === null) {
+        setWorkflow(null);
+        setWorkflowError(null);
+        setWorkflowUnavailable(false);
       }
     } catch (nextError) {
       if (generation === loadGeneration.current) setError(nextError);
@@ -154,6 +134,37 @@ export function TaskDetailPage({
       stream.close();
     };
   }, [client, load, taskId]);
+
+  useEffect(() => {
+    const planId = task?.plan_ref;
+    if (planId === null || planId === undefined) return;
+
+    setWorkflow(null);
+    setWorkflowError(null);
+    setWorkflowUnavailable(false);
+    const poller = new WorkflowProgressPoller({
+      client,
+      taskId,
+      planId,
+      onProjection: (projection) => {
+        setWorkflow(projection);
+        setWorkflowError(null);
+        setWorkflowUnavailable(false);
+      },
+      onMissing: () => {
+        setWorkflow(null);
+        setWorkflowError(null);
+        setWorkflowUnavailable(true);
+      },
+      onError: (nextWorkflowError) => {
+        setWorkflowError(nextWorkflowError);
+        setWorkflowUnavailable(false);
+      },
+    });
+    void poller.refresh();
+    poller.start();
+    return () => poller.stop();
+  }, [client, task?.plan_ref, taskId]);
 
   const command = async (action: "queue" | "start" | "cancel" | "retry") => {
     setBusy(true);
@@ -288,7 +299,7 @@ export function TaskDetailPage({
       </div>
       <Card title="Durable workflow progress">
         {workflowError != null ? (
-          <ErrorState error={workflowError} onRetry={() => void load()} />
+          <ErrorState error={workflowError} />
         ) : task.plan_ref === null ? (
           <EmptyState title="No active Plan workflow" />
         ) : workflowUnavailable ? (

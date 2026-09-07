@@ -17,7 +17,7 @@ from .service import DurablePlanStepCoordinator
 
 
 class CoordinatorPlanResourceService:
-    """Read-only extension resource; UI/CLI surfaces remain owned by downstream #421."""
+    """Read-only extension resource for safe backend-neutral workflow progress."""
 
     def __init__(self, coordinator: DurablePlanStepCoordinator) -> None:
         self._coordinator = coordinator
@@ -172,6 +172,7 @@ def _step_resource(
     *,
     record: StepCoordinationRecord | None = None,
 ) -> dict[str, JsonValue]:
+    wait = None if record is None else record.wait
     return {
         "id": step.step_id,
         "status": step.status.value,
@@ -182,10 +183,26 @@ def _step_resource(
         "latest_run_id": step.latest_run_id,
         "current_attempt": step.current_attempt,
         "retry_due_at": step.retry_due_at.isoformat() if step.retry_due_at is not None else None,
+        "retry_state": None if record is None else record.retry_state.value,
+        "retry_max_attempts": None if record is None else record.retry_policy.max_attempts,
+        "wait_key": None if wait is None else wait.wait_key,
         "wait_type": step.wait_type.value if step.wait_type is not None else None,
+        "wait_state": (
+            None if wait is None else "active" if wait.resolution is None else wait.resolution.value
+        ),
         "wait_deadline_at": (
             step.wait_deadline_at.isoformat() if step.wait_deadline_at is not None else None
         ),
+        "wait_resolved_at": (
+            None if wait is None or wait.resolved_at is None else wait.resolved_at.isoformat()
+        ),
+        "wait_approval_id": None if wait is None else wait.approval_id,
+        "wait_approval_subject_type": None if wait is None else wait.approval_subject_type,
+        "wait_approval_subject_id": None if wait is None else wait.approval_subject_id,
+        "wait_approval_action": None if wait is None else wait.approval_action,
+        "wait_event_type": None if wait is None else wait.event_type,
+        "wait_correlation_key": None if wait is None else wait.correlation_key,
+        "wait_external_job_ref": None if wait is None else wait.external_job_ref,
         "reconciliation": step.reconciliation.value,
         "reconciliation_detail": None if record is None else record.reconciliation_detail,
     }

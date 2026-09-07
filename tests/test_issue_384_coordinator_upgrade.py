@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -12,6 +13,7 @@ from ai_multi_agent_platform.coordination import (
     COORDINATOR_MIGRATION_REVISION,
     COORDINATOR_SCHEMA_VERSION,
     CoordinationPhase,
+    RetryState,
     SQLiteCoordinatorRepository,
     StepCoordinationRecord,
     StepRetryPolicy,
@@ -130,10 +132,26 @@ def _legacy_coordination_fixture(root: Path) -> tuple[Plan, tuple[Step, ...], in
                 retryable_categories=("transient",),
             ),
             retry_due_at=now + timedelta(seconds=30),
+            retry_state=RetryState.SCHEDULED,
         ),
     )
     legacy = LegacySQLiteCoordinatorRepository(database)
     legacy.create_plan(plan, (waiting, predecessor, barrier, retry), records)
+
+    # Materialize the actual pre-#560 v1 payload: the old store had no explicit
+    # retry_state key. The v2 reader must recover it from canonical phase/due-at state.
+    with sqlite3.connect(database) as connection:
+        rows = connection.execute(
+            "SELECT step_id, record_json FROM coordinator_steps ORDER BY step_id"
+        ).fetchall()
+        for step_id, record_json in rows:
+            payload = json.loads(str(record_json))
+            payload.pop("retry_state", None)
+            connection.execute(
+                "UPDATE coordinator_steps SET record_json = ? WHERE step_id = ?",
+                (json.dumps(payload, sort_keys=True, separators=(",", ":")), step_id),
+            )
+
     claim = legacy.acquire_claim(
         step_id=barrier.id,
         owner_id="pre-upgrade-coordinator",
@@ -189,6 +207,7 @@ def test_explicit_v1_to_v2_migration_preserves_runtime_state_and_invalidates_cla
     assert records[barrier.id].satisfied_dependency_ids == (predecessor.id,)
     assert records[retry.id].phase is CoordinationPhase.RETRY_SCHEDULED
     assert records[retry.id].current_attempt == 1
+    assert records[retry.id].retry_state is RetryState.SCHEDULED
     assert records[retry.id].retry_due_at == datetime(2026, 9, 6, 10, 0, tzinfo=UTC) + timedelta(
         seconds=30
     )
