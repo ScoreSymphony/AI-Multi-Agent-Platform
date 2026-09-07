@@ -82,10 +82,7 @@ def _registered() -> tuple[DistributedRegistry, NodeRecord, WorkerRecord]:
 
 
 def _snapshot(
-    state: PressureState,
-    *,
-    age_seconds: int = 0,
-    trusted: bool = True,
+    state: PressureState, *, age_seconds: int = 0, trusted: bool = True
 ) -> HostPressureSnapshot:
     return HostPressureSnapshot(
         state=state,
