@@ -21,6 +21,7 @@ from ai_multi_agent_platform.security import (
 )
 
 from .models import (
+    ConversionStatus,
     GovernanceAuditEvent,
     Proposal,
     ProposalStatus,
@@ -28,6 +29,14 @@ from .models import (
     TaskConversion,
 )
 from .repository import GovernanceRepository
+
+_TERMINAL_PROPOSAL_STATUSES = frozenset(
+    {
+        ProposalStatus.DISMISSED,
+        ProposalStatus.SUPERSEDED,
+        ProposalStatus.CONVERTED_TO_TASK,
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,17 +140,8 @@ class GovernanceService:
         actor_ref: str,
     ) -> Proposal:
         current = self.repository.get_proposal(proposal.id)
-        if current.status in {
-            ProposalStatus.DISMISSED,
-            ProposalStatus.SUPERSEDED,
-            ProposalStatus.CONVERTED_TO_TASK,
-        }:
-            raise ContractError(ErrorCode.CONFLICT, "terminal proposal cannot be revised")
-        if proposal.status in {
-            ProposalStatus.DISMISSED,
-            ProposalStatus.SUPERSEDED,
-            ProposalStatus.CONVERTED_TO_TASK,
-        }:
+        self._require_non_terminal_proposal(current, "be revised")
+        if proposal.status in _TERMINAL_PROPOSAL_STATUSES:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "terminal proposal state requires its dedicated lifecycle operation",
@@ -161,15 +161,7 @@ class GovernanceService:
         self, proposal_id: str, *, expected_revision: int, actor_ref: str
     ) -> Proposal:
         current = self.repository.get_proposal(proposal_id)
-        if current.status in {
-            ProposalStatus.DISMISSED,
-            ProposalStatus.SUPERSEDED,
-            ProposalStatus.CONVERTED_TO_TASK,
-        }:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "terminal proposal cannot request clarification",
-            )
+        self._require_non_terminal_proposal(current, "request clarification")
         updated = replace(
             current,
             status=ProposalStatus.NEEDS_SPEC,
@@ -192,10 +184,9 @@ class GovernanceService:
         self, proposal_id: str, *, expected_revision: int, actor_ref: str
     ) -> Proposal:
         current = self.repository.get_proposal(proposal_id)
-        if current.status is ProposalStatus.CONVERTED_TO_TASK:
-            raise ContractError(ErrorCode.CONFLICT, "converted proposal cannot be dismissed")
         if current.status is ProposalStatus.DISMISSED:
             return current
+        self._require_non_terminal_proposal(current, "be dismissed")
         updated = replace(
             current,
             status=ProposalStatus.DISMISSED,
@@ -222,10 +213,7 @@ class GovernanceService:
         actor_ref: str,
     ) -> tuple[Proposal, Proposal]:
         current = self.repository.get_proposal(proposal_id)
-        if current.status in {ProposalStatus.SUPERSEDED, ProposalStatus.CONVERTED_TO_TASK}:
-            raise ContractError(
-                ErrorCode.CONFLICT, "proposal cannot be superseded from current state"
-            )
+        self._require_non_terminal_proposal(current, "be superseded")
         if replacement.supersedes_id != proposal_id:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
@@ -253,8 +241,6 @@ class GovernanceService:
                 superseded, expected_revision=expected_revision
             )
         except Exception:
-            # The replacement remains an auditable intake artifact rather than being
-            # silently deleted. Its supersedes link makes the interrupted operation clear.
             self._audit(
                 "proposal.supersession-incomplete",
                 "proposal",
@@ -286,12 +272,7 @@ class GovernanceService:
         if specification.proposal_id is not None:
             proposal = self.repository.get_proposal(specification.proposal_id)
             self._require_same_scope(proposal, specification)
-            if proposal.status in {
-                ProposalStatus.DISMISSED,
-                ProposalStatus.SUPERSEDED,
-                ProposalStatus.CONVERTED_TO_TASK,
-            }:
-                raise ContractError(ErrorCode.CONFLICT, "proposal cannot receive a specification")
+            self._require_non_terminal_proposal(proposal, "receive a specification")
         created = self.repository.create_specification(specification)
         if created.proposal_id is not None:
             self._mark_proposal_ready(created.proposal_id)
@@ -326,6 +307,16 @@ class GovernanceService:
             specification, expected_revision=expected_revision
         )
         self._audit_spec("specification.revised", revised, actor_ref)
+        if current.approval_required and current.content_digest != revised.content_digest:
+            self._audit_spec(
+                "specification.approval-binding-invalidated",
+                revised,
+                actor_ref,
+                metadata={
+                    "previous_revision": current.revision,
+                    "previous_digest": current.content_digest,
+                },
+            )
         return revised
 
     async def request_approval(
@@ -357,6 +348,55 @@ class GovernanceService:
         context: GovernanceCallContext,
     ) -> TaskState:
         specification = self.repository.get_specification(specification_id)
+        existing = self.repository.get_conversion(specification.id)
+        if existing is not None and (
+            existing.specification_revision != specification.revision
+            or existing.specification_digest != specification.content_digest
+        ):
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Specification was revised after its Task conversion was reserved",
+            )
+
+        if existing is not None and existing.status is ConversionStatus.COMPLETED:
+            task = await self.kernel.get_task(existing.task_id)
+            if specification.proposal_id is not None:
+                proposal = self.repository.get_proposal(specification.proposal_id)
+                if proposal.status in {ProposalStatus.DISMISSED, ProposalStatus.SUPERSEDED}:
+                    self._audit(
+                        "proposal.completed-conversion-state-drift",
+                        "proposal",
+                        proposal.id,
+                        context.actor_ref,
+                        proposal.project_id,
+                        revision=proposal.revision,
+                        metadata={
+                            "status": proposal.status.value,
+                            "task_id": existing.task_id,
+                            "specification_id": specification.id,
+                        },
+                    )
+                else:
+                    self._mark_proposal_converted(proposal.id, existing.task_id)
+            self._audit(
+                "specification.conversion-replayed",
+                "conversion",
+                specification.id,
+                context.actor_ref,
+                specification.project_id,
+                revision=specification.revision,
+                digest=specification.content_digest,
+                metadata={
+                    "task_id": existing.task_id,
+                    "approval_id": existing.approval_id,
+                },
+            )
+            return task
+
+        if specification.proposal_id is not None:
+            proposal = self.repository.get_proposal(specification.proposal_id)
+            self._require_non_terminal_proposal(proposal, "be converted to a Task")
+
         action = self._conversion_action(specification, context.actor_ref, context.correlation_id)
         approval_id = context.approval_id
 
@@ -390,15 +430,11 @@ class GovernanceService:
                         "content_digest": specification.content_digest,
                     },
                 )
-
-        existing = self.repository.get_conversion(specification.id)
-        if existing is not None and (
-            existing.specification_revision != specification.revision
-            or existing.specification_digest != specification.content_digest
-        ):
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "Specification was revised after its Task conversion was reserved",
+            self._audit_spec(
+                "specification.approval-resolved",
+                specification,
+                context.actor_ref,
+                metadata={"approval_id": approval_id, "decision": "approved"},
             )
 
         reserved = self.repository.reserve_conversion(
@@ -554,16 +590,16 @@ class GovernanceService:
         if proposal.owner_ref != specification.owner_ref:
             raise ContractError(ErrorCode.INVALID_REQUEST, "Proposal/Specification owner mismatch")
 
+    @staticmethod
+    def _require_non_terminal_proposal(proposal: Proposal, operation: str) -> None:
+        if proposal.status in _TERMINAL_PROPOSAL_STATUSES:
+            raise ContractError(ErrorCode.CONFLICT, f"terminal proposal cannot {operation}")
+
     def _mark_proposal_ready(self, proposal_id: str) -> None:
         current = self.repository.get_proposal(proposal_id)
         if current.status is ProposalStatus.READY:
             return
-        if current.status in {
-            ProposalStatus.DISMISSED,
-            ProposalStatus.SUPERSEDED,
-            ProposalStatus.CONVERTED_TO_TASK,
-        }:
-            raise ContractError(ErrorCode.CONFLICT, "terminal proposal cannot become ready")
+        self._require_non_terminal_proposal(current, "become ready")
         updated = replace(
             current,
             status=ProposalStatus.READY,
@@ -574,12 +610,11 @@ class GovernanceService:
 
     def _mark_proposal_converted(self, proposal_id: str, task_id: str) -> None:
         current = self.repository.get_proposal(proposal_id)
-        if current.status in {ProposalStatus.DISMISSED, ProposalStatus.SUPERSEDED}:
-            raise ContractError(ErrorCode.CONFLICT, "terminal proposal cannot be converted")
         if current.status is ProposalStatus.CONVERTED_TO_TASK:
             if current.converted_task_id != task_id:
                 raise ContractError(ErrorCode.CONTRACT_VIOLATION, "proposal maps to multiple Tasks")
             return
+        self._require_non_terminal_proposal(current, "be converted")
         updated = replace(
             current,
             status=ProposalStatus.CONVERTED_TO_TASK,

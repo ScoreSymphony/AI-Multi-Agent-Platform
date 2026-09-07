@@ -153,6 +153,22 @@ class SqliteGovernanceRepository(GovernanceRepository):
                         "actual_revision": int(row["revision"]),
                     },
                 )
+            if proposal.status in {ProposalStatus.DISMISSED, ProposalStatus.SUPERSEDED}:
+                conversion = connection.execute(
+                    "SELECT specification_id, task_id, status FROM governance_conversions "
+                    "WHERE proposal_id = ? LIMIT 1",
+                    (proposal.id,),
+                ).fetchone()
+                if conversion is not None:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "proposal with a Task conversion reservation cannot become terminal",
+                        details={
+                            "specification_id": str(conversion["specification_id"]),
+                            "task_id": str(conversion["task_id"]),
+                            "conversion_status": str(conversion["status"]),
+                        },
+                    )
             connection.execute(
                 "INSERT INTO governance_proposal_revisions(proposal_id, revision, payload_json) "
                 "VALUES (?, ?, ?)",
@@ -336,6 +352,40 @@ class SqliteGovernanceRepository(GovernanceRepository):
                         "specification already has a conversion for another revision",
                     )
                 return existing
+
+            if conversion.proposal_id is not None:
+                proposal_row = connection.execute(
+                    "SELECT payload_json FROM governance_proposals WHERE proposal_id = ?",
+                    (conversion.proposal_id,),
+                ).fetchone()
+                if proposal_row is None:
+                    raise ContractError(ErrorCode.NOT_FOUND, "proposal was not found")
+                proposal = _proposal_from_json(_load(str(proposal_row["payload_json"])))
+                if proposal.status in {
+                    ProposalStatus.DISMISSED,
+                    ProposalStatus.SUPERSEDED,
+                    ProposalStatus.CONVERTED_TO_TASK,
+                }:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "terminal proposal cannot reserve a Task conversion",
+                    )
+                other = connection.execute(
+                    "SELECT specification_id, task_id, status FROM governance_conversions "
+                    "WHERE proposal_id = ? LIMIT 1",
+                    (conversion.proposal_id,),
+                ).fetchone()
+                if other is not None:
+                    raise ContractError(
+                        ErrorCode.CONFLICT,
+                        "proposal already has a Task conversion reservation",
+                        details={
+                            "specification_id": str(other["specification_id"]),
+                            "task_id": str(other["task_id"]),
+                            "conversion_status": str(other["status"]),
+                        },
+                    )
+
             connection.execute(
                 "INSERT INTO governance_conversions"
                 "(specification_id, specification_revision, specification_digest, proposal_id, "
