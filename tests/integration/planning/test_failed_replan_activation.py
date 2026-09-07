@@ -158,7 +158,7 @@ def test_failed_replan_commits_plan_then_readies_before_coordinator_dispatch() -
             kernel,
             _lifecycle,
             _agents_repo,
-            _coordinator,
+            coordinator,
             _coord_repo,
             *_rest,
         ) = await _failed_task(planning_repository=repository)
@@ -209,7 +209,11 @@ def test_failed_replan_commits_plan_then_readies_before_coordinator_dispatch() -
         assert ready_event.provenance is not None
         assert ready_event.provenance.source == "platform-planning"
         assert ready_event.provenance.actor_ref == replacement_plan.provenance.actor_ref
-        assert (await kernel.get_task(failed.task_id)).status is TaskStatus.RUNNING
+
+        await coordinator.reconcile_all()
+        reconciled = await kernel.get_task(failed.task_id)
+        assert reconciled.status is TaskStatus.RUNNING
+        assert reconciled.plan_ref == activated.activation_plan_id
 
     asyncio.run(scenario())
 
