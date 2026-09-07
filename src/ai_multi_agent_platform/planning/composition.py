@@ -6,7 +6,6 @@ making validated planning decisions effective at the existing canonical runtime 
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Protocol
 
 from ai_multi_agent_platform.agents.execution_profile import (
@@ -22,12 +21,14 @@ from ai_multi_agent_platform.contracts import (
     ExecutionRequest,
     ExecutionSnapshot,
     HealthStatus,
+    JsonValue,
     LifecycleBackend,
     OperationContext,
     ProviderDescriptor,
 )
 from ai_multi_agent_platform.domain import Plan, Step
 from ai_multi_agent_platform.models import RoutingRequirements
+from ai_multi_agent_platform.security import ActorIdentity
 
 from .models import PlanProposal, ProposalRecord, ProposalStatus
 from .repository import PlanningRepository
@@ -79,7 +80,7 @@ class StepBindingKernel(Protocol):
         *,
         idempotency_key: str,
         task_id: str,
-        metadata: dict[str, object],
+        metadata: dict[str, JsonValue],
         actor_ref: str | None = None,
         source: str = "platform-kernel",
     ) -> object: ...
@@ -215,10 +216,22 @@ class ReferencePlanningService(PlanningService):
     mutation while leaving the provider-neutral PlanningService contract unchanged.
     """
 
-    async def activate(self, proposal_id: str, **kwargs: object) -> ProposalRecord:
+    async def activate(
+        self,
+        proposal_id: str,
+        *,
+        idempotency_key: str,
+        actor: ActorIdentity | None = None,
+        approval_id: str | None = None,
+    ) -> ProposalRecord:
         record = self.repository.get(proposal_id)
         _validate_reference_assignments(record.proposal)
-        return await super().activate(proposal_id, **kwargs)  # type: ignore[arg-type]
+        return await super().activate(
+            proposal_id,
+            idempotency_key=idempotency_key,
+            actor=actor,
+            approval_id=approval_id,
+        )
 
 
 def _validate_reference_assignments(proposal: PlanProposal) -> None:
