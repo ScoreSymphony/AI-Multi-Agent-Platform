@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 
 from ai_multi_agent_platform.capabilities import (
     CapabilityRegistration,
@@ -87,7 +88,11 @@ class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
         specs = {spec.capability_id: spec for spec in repository_intelligence_capability_specs()}
         return tuple(
             CapabilityRegistration(
-                capability=specs[operation.value],
+                capability=replace(
+                    specs[operation.value],
+                    health=self._health,
+                    available=self._available,
+                ),
                 provider_id=self._provider_id,
                 provider_tool_ref=operation.value,
                 priority=self._priority,
