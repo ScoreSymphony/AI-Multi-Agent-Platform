@@ -163,7 +163,9 @@ class AuthorizedRunWorkspaceSnapshotLoader:
             )
 
         repository_sources = tuple(
-            source for source in snapshot.source_refs if source.kind is WorkspaceSourceKind.REPOSITORY
+            source
+            for source in snapshot.source_refs
+            if source.kind is WorkspaceSourceKind.REPOSITORY
         )
         matching_sources = tuple(
             source for source in repository_sources if source.ref == repository_id
