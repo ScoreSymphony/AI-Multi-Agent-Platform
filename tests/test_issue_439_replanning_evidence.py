@@ -17,14 +17,18 @@ from ai_multi_agent_platform.coordination import (
     DurablePlanStepCoordinator,
     InMemoryCoordinatorRepository,
 )
-from ai_multi_agent_platform.domain import OwnerRef, new_id
+from ai_multi_agent_platform.domain import OwnerRef, TaskStatus, new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.planning import (
     AgentAssignment,
     DeterministicReferencePlanner,
     InMemoryPlanningRepository,
     PlanDraft,
+    PlannerDescriptor,
+    PlannerKind,
+    PlannerOutput,
     PlanningOrchestratorAdapter,
+    PlanningRequest,
     PlanningService,
     PlanningStepDraft,
     PlanningTrigger,
@@ -57,6 +61,16 @@ class _VerificationEvidenceStore:
             if (task_id is None or event.task_id == task_id)
             and (verification_id is None or event.verification_id == verification_id)
         )
+
+
+class _ExplodingPlanner:
+    @property
+    def descriptor(self) -> PlannerDescriptor:
+        return PlannerDescriptor("exploding-planner", PlannerKind.DETERMINISTIC)
+
+    async def propose(self, request: PlanningRequest) -> PlannerOutput:
+        del request
+        raise TimeoutError("sensitive planner backend detail")
 
 
 def _agent_repository() -> tuple[InMemoryAgentRepository, str, int]:
@@ -104,6 +118,33 @@ async def _ready_task(kernel: PlatformKernel, key: str) -> str:
     return ready.task_id
 
 
+async def _failed_step_run(
+    kernel: PlatformKernel,
+    lifecycle: FakeLifecycleBackend,
+    *,
+    task_id: str,
+    step_id: str,
+    key: str,
+):
+    run = await kernel.create_run(
+        idempotency_key=f"{key}:create",
+        task_id=task_id,
+        subject_type="step",
+        subject_id=step_id,
+    )
+    await kernel.start_run(
+        idempotency_key=f"{key}:start",
+        task_id=task_id,
+        run_id=run.run_id,
+    )
+    lifecycle.complete(run.run_id, status=ExecutionStatus.FAILED)
+    return await kernel.refresh_run(
+        idempotency_key=f"{key}:refresh",
+        task_id=task_id,
+        run_id=run.run_id,
+    )
+
+
 def test_terminal_run_failure_triggers_one_idempotent_replan() -> None:
     async def scenario() -> None:
         agents, agent_id, revision = _agent_repository()
@@ -131,22 +172,12 @@ def test_terminal_run_failure_triggers_one_idempotent_replan() -> None:
         )
 
         task = await kernel.get_task(task_id)
-        run = await kernel.create_run(
-            idempotency_key="run-failure:create-run",
+        run = await _failed_step_run(
+            kernel,
+            lifecycle,
             task_id=task_id,
-            subject_type="step",
-            subject_id=task.step_ids[0],
-        )
-        await kernel.start_run(
-            idempotency_key="run-failure:start-run",
-            task_id=task_id,
-            run_id=run.run_id,
-        )
-        lifecycle.complete(run.run_id, status=ExecutionStatus.FAILED)
-        await kernel.refresh_run(
-            idempotency_key="run-failure:refresh-run",
-            task_id=task_id,
-            run_id=run.run_id,
+            step_id=task.step_ids[0],
+            key="run-failure",
         )
 
         bridge = ReplanningEvidenceBridge(planning)
@@ -157,6 +188,133 @@ def test_terminal_run_failure_triggers_one_idempotent_replan() -> None:
         assert first.proposal.trigger is PlanningTrigger.TERMINAL_FAILURE
         assert first.proposal.evidence_refs == (run.run_id,)
         assert first.proposal.base_plan_id == task.plan_ref
+        assert len(planning.history(task_id)) == 2
+
+    asyncio.run(scenario())
+
+
+def test_terminal_run_rejects_failure_superseded_by_later_attempt() -> None:
+    async def scenario() -> None:
+        agents, agent_id, revision = _agent_repository()
+        repository = InMemoryPlanningRepository()
+        lifecycle = FakeLifecycleBackend()
+        kernel = PlatformKernel(
+            orchestrator=PlanningOrchestratorAdapter(repository, fallback=FakeOrchestrator()),
+            lifecycle=lifecycle,
+            repository=InMemoryKernelRepository(),
+        )
+        planning = PlanningService(
+            planner=DeterministicReferencePlanner(_draft(agent_id, revision)),
+            repository=repository,
+            kernel=kernel,
+            agents=agents,
+        )
+        task_id = await _ready_task(kernel, "superseded-attempt")
+        initial = await planning.propose(
+            task_id=task_id,
+            idempotency_key="superseded-attempt:initial",
+        )
+        await planning.activate(
+            initial.proposal.proposal_id,
+            idempotency_key="superseded-attempt:activate",
+        )
+        task = await kernel.get_task(task_id)
+        step_id = task.step_ids[0]
+        failed = await _failed_step_run(
+            kernel,
+            lifecycle,
+            task_id=task_id,
+            step_id=step_id,
+            key="superseded-attempt:first",
+        )
+
+        current = await kernel.get_task(task_id)
+        if current.status is TaskStatus.FAILED:
+            await kernel.ready_task(
+                idempotency_key="superseded-attempt:ready",
+                task_id=task_id,
+            )
+        retry = await kernel.create_run(
+            idempotency_key="superseded-attempt:retry:create",
+            task_id=task_id,
+            subject_type="step",
+            subject_id=step_id,
+        )
+        await kernel.start_run(
+            idempotency_key="superseded-attempt:retry:start",
+            task_id=task_id,
+            run_id=retry.run_id,
+        )
+        lifecycle.complete(retry.run_id, status=ExecutionStatus.SUCCEEDED)
+        await kernel.refresh_run(
+            idempotency_key="superseded-attempt:retry:refresh",
+            task_id=task_id,
+            run_id=retry.run_id,
+        )
+
+        bridge = ReplanningEvidenceBridge(planning)
+        with pytest.raises(ContractError) as exc_info:
+            await bridge.from_terminal_run(task_id=task_id, run_id=failed.run_id)
+        assert exc_info.value.code is ErrorCode.CONFLICT
+        assert exc_info.value.details.get("latest_run_id") == retry.run_id
+        assert len(planning.history(task_id)) == 1
+
+    asyncio.run(scenario())
+
+
+def test_terminal_run_rejects_failure_from_superseded_plan() -> None:
+    async def scenario() -> None:
+        agents, agent_id, revision = _agent_repository()
+        repository = InMemoryPlanningRepository()
+        lifecycle = FakeLifecycleBackend()
+        kernel = PlatformKernel(
+            orchestrator=PlanningOrchestratorAdapter(repository, fallback=FakeOrchestrator()),
+            lifecycle=lifecycle,
+            repository=InMemoryKernelRepository(),
+        )
+        planning = PlanningService(
+            planner=DeterministicReferencePlanner(_draft(agent_id, revision)),
+            repository=repository,
+            kernel=kernel,
+            agents=agents,
+        )
+        task_id = await _ready_task(kernel, "superseded-plan")
+        initial = await planning.propose(
+            task_id=task_id,
+            idempotency_key="superseded-plan:initial",
+        )
+        await planning.activate(
+            initial.proposal.proposal_id,
+            idempotency_key="superseded-plan:activate",
+        )
+        task = await kernel.get_task(task_id)
+        failed = await _failed_step_run(
+            kernel,
+            lifecycle,
+            task_id=task_id,
+            step_id=task.step_ids[0],
+            key="superseded-plan:failed",
+        )
+
+        replacement = await planning.propose(
+            task_id=task_id,
+            idempotency_key="superseded-plan:replacement",
+            trigger=PlanningTrigger.MANUAL,
+            reason="authorized replacement before delayed failure delivery",
+            evidence_refs=("event_superseded-plan",),
+        )
+        await planning.activate(
+            replacement.proposal.proposal_id,
+            idempotency_key="superseded-plan:replacement:activate",
+        )
+        current = await kernel.get_task(task_id)
+        assert current.plan_ref != task.plan_ref
+
+        bridge = ReplanningEvidenceBridge(planning)
+        with pytest.raises(ContractError) as exc_info:
+            await bridge.from_terminal_run(task_id=task_id, run_id=failed.run_id)
+        assert exc_info.value.code is ErrorCode.CONFLICT
+        assert exc_info.value.details.get("current_plan_id") == current.plan_ref
         assert len(planning.history(task_id)) == 2
 
     asyncio.run(scenario())
@@ -357,5 +515,52 @@ def test_replanning_budget_exhaustion_emits_explicit_evidence_event() -> None:
             await bridge.from_verification(second_event)
         assert exc_info.value.code is ErrorCode.RESOURCE_EXHAUSTED
         assert any(name == "planning.replan.exhausted" for name, _ in events)
+
+    asyncio.run(scenario())
+
+
+def test_unexpected_planner_failure_emits_sanitized_replan_failure_event() -> None:
+    async def scenario() -> None:
+        agents, agent_id, revision = _agent_repository()
+        repository = InMemoryPlanningRepository()
+        kernel = PlatformKernel(
+            orchestrator=PlanningOrchestratorAdapter(repository, fallback=FakeOrchestrator()),
+            lifecycle=FakeLifecycleBackend(),
+            repository=InMemoryKernelRepository(),
+        )
+        planning = PlanningService(
+            planner=DeterministicReferencePlanner(_draft(agent_id, revision)),
+            repository=repository,
+            kernel=kernel,
+            agents=agents,
+        )
+        task_id = await _ready_task(kernel, "unexpected-failure")
+        initial = await planning.propose(
+            task_id=task_id,
+            idempotency_key="unexpected-failure:initial",
+        )
+        await planning.activate(
+            initial.proposal.proposal_id,
+            idempotency_key="unexpected-failure:activate",
+        )
+        planning.planner = _ExplodingPlanner()
+
+        events: list[tuple[str, dict[str, JsonValue]]] = []
+
+        def capture(event_type: str, attributes: dict[str, JsonValue]) -> None:
+            events.append((event_type, attributes))
+
+        bridge = ReplanningEvidenceBridge(planning, event_sink=capture)
+        with pytest.raises(TimeoutError, match="sensitive planner backend detail"):
+            await bridge.manual(
+                task_id=task_id,
+                evidence_ref="event_unexpected-planner-failure",
+                reason="canonical operator requested replacement planning",
+            )
+
+        failure_events = [attributes for name, attributes in events if name == "planning.replan.failed"]
+        assert len(failure_events) == 1
+        assert failure_events[0].get("error_type") == "TimeoutError"
+        assert "sensitive planner backend detail" not in repr(events)
 
     asyncio.run(scenario())
