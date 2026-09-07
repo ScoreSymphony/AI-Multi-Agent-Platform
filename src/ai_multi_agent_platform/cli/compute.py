@@ -256,11 +256,7 @@ def _doctor_host_pressure(client: ControlPlaneClient) -> tuple[str, list[JsonVal
         raw_cursor = body.get("next_cursor") if isinstance(body, dict) else None
         if raw_cursor is None:
             return overall, checks
-        if (
-            not isinstance(raw_cursor, str)
-            or not raw_cursor.strip()
-            or raw_cursor in seen_cursors
-        ):
+        if not isinstance(raw_cursor, str) or not raw_cursor.strip() or raw_cursor in seen_cursors:
             return "degraded", checks + [
                 {
                     "name": "host_pressure",
