@@ -94,7 +94,9 @@ def _pressure_resource(
         "report_status": report_status,
         "observed_at": None if snapshot is None else snapshot.observed_at.isoformat(),
         "snapshot_age_seconds": age,
-        "signals": [] if snapshot is None else [_signal_resource(signal) for signal in snapshot.signals],
+        "signals": []
+        if snapshot is None
+        else [_signal_resource(signal) for signal in snapshot.signals],
         "policy": {
             "max_snapshot_age_seconds": policy.max_snapshot_age.total_seconds(),
             "require_pressure_report": policy.require_pressure_report,
