@@ -85,16 +85,21 @@ export interface GovernanceAuditEvent {
 }
 
 export interface ApprovalRequestResult {
-  approval_id: string;
+  id: string;
+  type: "approval";
   status: string;
-  requested_action_digest: string;
+  specification_id: string;
+  specification_revision: number;
+  specification_digest: string;
+  expires_at: string;
 }
 
 export interface TaskConversionResult {
   id: string;
-  type: string;
-  task_id?: string;
-  [key: string]: unknown;
+  type: "task";
+  status: string;
+  project_id: string | null;
+  governance: unknown;
 }
 
 const COMMAND_PATTERN = /^[a-z0-9][a-z0-9.-]*$/;

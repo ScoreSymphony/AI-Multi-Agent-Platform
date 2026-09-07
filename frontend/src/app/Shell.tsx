@@ -8,6 +8,7 @@ import { ConversationClient } from "../api/conversations";
 import { ComputeClient } from "../api/compute";
 import { EvaluationClient } from "../api/evaluations";
 import { IntegrationsClient } from "../api/integrations";
+import { GovernanceClient } from "../api/governance";
 import { MemoryKnowledgeClient } from "../api/memoryKnowledge";
 import { NotificationClient } from "../api/notifications";
 import { OnboardingClient } from "../api/onboarding";
@@ -57,6 +58,11 @@ import {
   ConnectorDefinitionDetailPage,
   IntegrationsPage,
 } from "../pages/IntegrationsPage";
+import {
+  GovernancePage,
+  ProposalGovernanceDetailPage,
+  SpecificationGovernanceDetailPage,
+} from "../pages/GovernancePage";
 import { MarketplacePage } from "../pages/MarketplacePage";
 import {
   KnowledgeDetailPage,
@@ -142,6 +148,10 @@ export function Shell() {
     () => new EvaluationClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
+  const governanceClient = useMemo(
+    () => new GovernanceClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
   const integrationsClient = useMemo(
     () => new IntegrationsClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
@@ -197,6 +207,8 @@ export function Shell() {
   const repositoryMatch = matchPath("/repositories/:repositoryId", path);
   const taskManagementMatch = matchPath("/tasks/:taskId/manage", path);
   const taskMatch = matchPath("/tasks/:taskId", path);
+  const governanceProposalMatch = matchPath("/governance/proposals/:proposalId", path);
+  const governanceSpecificationMatch = matchPath("/governance/specifications/:specificationId", path);
   const runMatch = matchPath("/runs/:runId", path);
   const agentMatch = matchPath("/agents/:agentId", path);
   const agentTeamMatch = matchPath("/agent-teams/:teamId", path);
@@ -298,6 +310,46 @@ export function Shell() {
         verificationClient={verificationClient}
         taskId={taskMatch.taskId}
       />
+    );
+  }
+  else if (path === "/governance") {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Proposal and Specification governance"
+        resources={["proposals", "specifications"]}
+      >
+        <GovernancePage client={governanceClient} />
+      </ManifestResourcesPage>
+    );
+  } else if (governanceProposalMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Proposal governance"
+        resource="proposals"
+      >
+        <ProposalGovernanceDetailPage
+          client={governanceClient}
+          proposalId={governanceProposalMatch.proposalId}
+        />
+      </ManifestResourcePage>
+    );
+  } else if (governanceSpecificationMatch) {
+    content = (
+      <ManifestResourcePage
+        state={manifestState}
+        manifest={manifest}
+        label="Specification governance"
+        resource="specifications"
+      >
+        <SpecificationGovernanceDetailPage
+          client={governanceClient}
+          specificationId={governanceSpecificationMatch.specificationId}
+        />
+      </ManifestResourcePage>
     );
   }
   else if (path === "/runs") content = <RunsPage client={client} />;
