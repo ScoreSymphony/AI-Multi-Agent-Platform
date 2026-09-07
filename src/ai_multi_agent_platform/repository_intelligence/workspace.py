@@ -13,7 +13,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue, ToolInvocation, ToolResult
+from ai_multi_agent_platform.contracts.types import (
+    HealthStatus,
+    JsonValue,
+    ToolInvocation,
+    ToolResult,
+)
 from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.repositories import RepositoryTree
 from ai_multi_agent_platform.workspaces.models import validate_sha256
@@ -93,9 +98,19 @@ class WorkspaceAwareRepositoryIntelligenceProvider(BaselineRepositoryIntelligenc
         self,
         snapshot_loader: RepositorySnapshotLoader,
         workspace_snapshot_loader: WorkspaceRepositorySnapshotLoader,
-        **kwargs: object,
+        *,
+        provider_id: str = "platform.repository-intelligence.baseline",
+        priority: int = 0,
+        health: HealthStatus = HealthStatus.HEALTHY,
+        available: bool = True,
     ) -> None:
-        super().__init__(snapshot_loader, **kwargs)
+        super().__init__(
+            snapshot_loader,
+            provider_id=provider_id,
+            priority=priority,
+            health=health,
+            available=available,
+        )
         self._workspace_snapshot_loader = workspace_snapshot_loader
 
     async def invoke(self, invocation: ToolInvocation) -> ToolResult:
