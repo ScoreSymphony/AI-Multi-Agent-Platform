@@ -17,7 +17,12 @@ from ai_multi_agent_platform.capabilities import (
     CapabilitySpec,
 )
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, HealthStatus, OperationContext
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    HealthStatus,
+    OperationContext,
+)
 from ai_multi_agent_platform.contracts.types import (
     Capability,
     CapabilityKind,
@@ -31,6 +36,7 @@ from ai_multi_agent_platform.kernel.models import TaskState
 from ai_multi_agent_platform.planning import (
     DeterministicReferencePlanner,
     InMemoryPlanningRepository,
+    PlannerOutput,
     PlanningEnvironment,
     PlanningOrchestratorAdapter,
     PlanningRequest,
@@ -108,7 +114,7 @@ class RecordingPlanner(DeterministicReferencePlanner):
         super().__init__()
         self.requests: list[PlanningRequest] = []
 
-    async def propose(self, request: PlanningRequest):  # type: ignore[no-untyped-def]
+    async def propose(self, request: PlanningRequest) -> PlannerOutput:
         self.requests.append(request)
         return await super().propose(request)
 
