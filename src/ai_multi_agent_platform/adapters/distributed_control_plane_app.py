@@ -26,13 +26,17 @@ from ai_multi_agent_platform.deployment.server import main as run_server
 from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment
 from ai_multi_agent_platform.distributed import (
     DistributedExecutorArtifactProvider,
+    PressureAdmissionPolicy,
+    RegistryPressureSnapshotProvider,
     register_distributed_control_plane,
 )
+from ai_multi_agent_platform.distributed.pressure_control_plane import register_pressure_control_plane
 from ai_multi_agent_platform.messaging import TcpMessageTransport
 
 from .single_node_app import build_default_single_node_deployment
 
 _PROFILE_ENV = "PLATFORM_DISTRIBUTED_PROFILE"
+_HOST_PRESSURE_ENABLED_ENV = "PLATFORM_HOST_PRESSURE_ENABLED"
 
 
 def build_distributed_control_plane_deployment(
@@ -74,10 +78,17 @@ def build_distributed_control_plane_deployment(
     if runtime is None:
         raise RuntimeError("distributed deployment was built without a distributed runtime")
 
+    # #500 is an explicit distributed-deployment opt-in. The scheduler remains the sole admission
+    # authority and consumes the same authenticated registry evidence exposed by diagnostics.
+    if _host_pressure_enabled():
+        runtime.scheduler.pressure_provider = RegistryPressureSnapshotProvider(runtime.registry)
+        runtime.scheduler.pressure_policy = PressureAdmissionPolicy()
+
     # The shipped distributed server exposes the already-existing canonical #14 compute resources
     # and admin commands. Runtime inspection/drain/maintenance therefore use the same northbound
     # Control Plane as the rest of the platform rather than a deployment-private shortcut.
     register_distributed_control_plane(deployment.control_plane, runtime)
+    register_pressure_control_plane(deployment.control_plane, runtime)
     register_distributed_worker_admin(
         deployment.control_plane,
         profile=profile,
@@ -147,6 +158,20 @@ def _validate_runnable_profile(profile: AdvancedDeploymentProfile) -> None:
             raise ValueError(
                 f"deployment node {node.binding.host_ref!r} has no Worker credential reference"
             )
+
+
+def _host_pressure_enabled() -> bool:
+    raw = os.environ.get(_HOST_PRESSURE_ENABLED_ENV)
+    if raw is None:
+        return False
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off", ""}:
+        return False
+    raise ValueError(
+        f"{_HOST_PRESSURE_ENABLED_ENV} must be a boolean value (true/false, 1/0, yes/no, on/off)"
+    )
 
 
 def _client_ssl_context() -> ssl.SSLContext | None:
