@@ -133,8 +133,21 @@ The planning extension exposes the `planning-proposals` resource projection and 
 
 Proposal resources expose status, digest, planner provenance, assumptions, constraints, Step graph, assignment/capability/model requirements, validation findings, approval reference and activation Plan ID.
 
+## Standard single-node composition
+
+The public `build_single_node_deployment(...)` path composes #439 as a normal durable platform service:
+
+- `JsonPlanningRepository` persists proposal/replanning state in `db/planning.json`;
+- a dedicated `PlatformKernel` shares the canonical kernel event store solely for Task/Plan mutation and history;
+- that planning kernel uses `PlanningOnlyLifecycleBackend`, which rejects `start`, `get` and `cancel` execution operations with `FORBIDDEN`;
+- activated Plan/Step graphs are handed to the already composed `DurablePlanStepCoordinator` rather than being executed by the planning kernel;
+- `planning-proposals` and the three planning commands are registered on the authenticated Control Plane;
+- safe planning transition evidence is projected into the normal observability timeline.
+
+The separate planning kernel is an enforcement boundary, not a second Task/Run authority: it uses the same canonical event repository, but its lifecycle dependency makes direct Run execution impossible. The normal deployment kernel remains the execution path used by #384 and, when enabled, #14 distributed scheduling.
+
 ## Observability and evaluation
 
-Planning emits safe proposal/validation/activation/handoff events through its optional event sink. Canonical `plan.created` history additionally carries the `platform-planning` adapter namespace with proposal digest, planner/version, canonical model configuration, trigger, constraints, evidence and reused/superseded Plan references.
+Planning emits safe proposal/validation/activation/handoff events through its event sink. Canonical `plan.created` history additionally carries the `platform-planning` adapter namespace with proposal digest, planner/version, canonical model configuration, trigger, constraints, evidence and reused/superseded Plan references.
 
-Issue-specific tests exercise deterministic and model-backed planning, DAG validation, satisfiability failures, stale and duplicate proposals, approval fail-closed behavior, restart recovery, #384 handoff, completed-work reuse and bounded replanning. These behaviors are suitable as deterministic #19 evaluation subjects without making the evaluator or planner a lifecycle authority.
+Issue-specific tests exercise deterministic and model-backed planning, DAG validation, satisfiability failures, stale and duplicate proposals, approval fail-closed behavior, restart recovery, #384 handoff, completed-work reuse, bounded replanning and the standard single-node composition. These behaviors are suitable as deterministic #19 evaluation subjects without making the evaluator or planner a lifecycle authority.
