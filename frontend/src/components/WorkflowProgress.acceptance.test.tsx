@@ -8,7 +8,6 @@ import { WorkflowProgress } from "./WorkflowProgress";
 
 function step(overrides: Partial<PlanCoordinationStep> & Pick<PlanCoordinationStep, "id">): PlanCoordinationStep {
   return {
-    id: overrides.id,
     status: "pending",
     coordination_phase: "blocked",
     coordination_revision: 1,

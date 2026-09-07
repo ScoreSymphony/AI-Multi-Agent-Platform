@@ -17,7 +17,16 @@ from ai_multi_agent_platform.coordination import (
     InMemoryCoordinatorRepository,
     coordination_resource_services,
 )
-from ai_multi_agent_platform.domain import OwnerRef, Plan, Run, RunStatus, Step, Task, TaskStatus, new_id
+from ai_multi_agent_platform.domain import (
+    OwnerRef,
+    Plan,
+    Run,
+    RunStatus,
+    Step,
+    Task,
+    TaskStatus,
+    new_id,
+)
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository
 from ai_multi_agent_platform.kernel.models import RunState, TaskState
 
@@ -166,7 +175,9 @@ def _write_config(path: Path) -> None:
     )
 
 
-def test_cli_reads_real_reference_coordinator_projection_through_control_plane(tmp_path: Path) -> None:
+def test_cli_reads_real_reference_coordinator_projection_through_control_plane(
+    tmp_path: Path,
+) -> None:
     owner = OwnerRef(type="user", id="test")
     plan = Plan(
         task_id=new_id("task"),
