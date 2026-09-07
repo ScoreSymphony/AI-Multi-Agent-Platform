@@ -22,15 +22,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/coordination_contention.py \
             src/ai_multi_agent_platform/benchmarking/coordination_contention_cli.py \
-            tests/test_issue_440_coordination_contention.py
+            tests/performance/test_issue_440_coordination_contention.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/coordination_contention.py \
             src/ai_multi_agent_platform/benchmarking/coordination_contention_cli.py \
-            tests/test_issue_440_coordination_contention.py
+            tests/performance/test_issue_440_coordination_contention.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/coordination_contention.py \
             src/ai_multi_agent_platform/benchmarking/coordination_contention_cli.py
-          pytest tests/test_issue_440_coordination_contention.py
+          pytest tests/performance/test_issue_440_coordination_contention.py
       - name: Run tiny coordination contention profiles
         run: |
           mkdir -p artifacts/benchmarks/pr-coordination-contention

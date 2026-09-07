@@ -22,15 +22,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/provider_faults.py \
             src/ai_multi_agent_platform/benchmarking/provider_fault_cli.py \
-            tests/test_issue_440_provider_faults.py
+            tests/performance/test_issue_440_provider_faults.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/provider_faults.py \
             src/ai_multi_agent_platform/benchmarking/provider_fault_cli.py \
-            tests/test_issue_440_provider_faults.py
+            tests/performance/test_issue_440_provider_faults.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/provider_faults.py \
             src/ai_multi_agent_platform/benchmarking/provider_fault_cli.py
-          pytest tests/test_issue_440_provider_faults.py
+          pytest tests/performance/test_issue_440_provider_faults.py
       - name: Run tiny provider degradation profiles
         shell: bash
         run: |

@@ -22,15 +22,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/api_pressure.py \
             src/ai_multi_agent_platform/benchmarking/api_pressure_cli.py \
-            tests/test_issue_440_api_pressure.py
+            tests/performance/test_issue_440_api_pressure.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/api_pressure.py \
             src/ai_multi_agent_platform/benchmarking/api_pressure_cli.py \
-            tests/test_issue_440_api_pressure.py
+            tests/performance/test_issue_440_api_pressure.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/api_pressure.py \
             src/ai_multi_agent_platform/benchmarking/api_pressure_cli.py
-          pytest tests/test_issue_440_api_pressure.py
+          pytest tests/performance/test_issue_440_api_pressure.py
       - name: Run tiny API pressure profile
         run: |
           mkdir -p artifacts/benchmarks/pr-api-pressure
