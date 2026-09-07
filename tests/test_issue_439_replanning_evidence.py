@@ -558,7 +558,9 @@ def test_unexpected_planner_failure_emits_sanitized_replan_failure_event() -> No
                 reason="canonical operator requested replacement planning",
             )
 
-        failure_events = [attributes for name, attributes in events if name == "planning.replan.failed"]
+        failure_events = [
+            attributes for name, attributes in events if name == "planning.replan.failed"
+        ]
         assert len(failure_events) == 1
         assert failure_events[0].get("error_type") == "TimeoutError"
         assert "sensitive planner backend detail" not in repr(events)
