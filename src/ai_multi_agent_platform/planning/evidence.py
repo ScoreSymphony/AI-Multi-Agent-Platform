@@ -161,7 +161,9 @@ class ReplanningEvidenceBridge:
                     "outcome": None if event.outcome is None else event.outcome.value,
                 },
             )
-        reason = f"canonical Verification outcome {event.outcome.value}"
+        outcome = event.outcome
+        assert outcome is not None
+        reason = f"canonical Verification outcome {outcome.value}"
         evidence_refs = tuple(
             dict.fromkeys(
                 value
