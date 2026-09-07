@@ -1,10 +1,10 @@
 # Dependency-Driven Implementation Roadmap
 
-> Status baseline: 2026-09-06, after PR #494
+> Status baseline: 2026-09-07
 
-This roadmap describes the remaining work from the current `main` branch toward the ideal end-state platform. The repository is no longer in its foundation-building stage: most canonical domains and the usable single-node product path are implemented. The remaining work is concentrated in late cross-domain integration, distributed deployment hardening, durable workflow productization, autonomous planning, performance evidence, release operationalization and final platform conformance.
+This roadmap describes the remaining work from current `main` toward the operational v1 baseline and the wider ideal end state. The repository is no longer in foundation construction: the canonical platform, durable workflow runtime, distributed execution path, Registry/Marketplace and release/update machinery are implemented. The remaining work is now concentrated in product-facing workflow/planning capabilities, final conformance, performance/operating-envelope evidence, host-pressure admission, a very small Template reconciliation, one real two-host transport acceptance gap, and optional governance/repository-intelligence extensions.
 
-GitHub issue state and the current wording/comments of each issue remain the point-in-time source of truth. The normative product and architecture baseline remains:
+GitHub issue state, current issue comments and merged code remain the point-in-time source of truth. The normative product and architecture baseline remains:
 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md)
 - [`ARCHITECTURE_PRINCIPLES.md`](ARCHITECTURE_PRINCIPLES.md)
@@ -12,304 +12,372 @@ GitHub issue state and the current wording/comments of each issue remain the poi
 
 ## Current maturity
 
-### Broad platform baseline reached
+### Platform baseline already reached
 
-The repository now has concrete implementations covering:
+`main` now has concrete platform-owned implementations for:
 
-- product/repository/provenance foundations;
-- canonical Task/Plan/Step/Run/Event domain and Task/Run kernel;
-- replaceable orchestration, execution, model, capability/tool and persistence/provider contracts;
+- canonical Goal/Task/Plan/Step/Run/Event lifecycle and persistence;
+- replaceable orchestration, execution, model, capability/tool, persistence and transport contracts;
 - reference execution plus Hermes, Forge and LiteLLM compatibility paths;
-- Control Plane, authentication, authorization/approvals and secret-reference handling;
+- Control Plane, authentication, authorization/Approvals and secret references;
 - Agents and Agent Teams;
 - Projects, Workspaces, Files, Artifacts, Memory and Knowledge;
-- Automations, global Search, Verification/Review and Notifications;
-- Browser, Terminal, Chat, Web UI and CLI client paths;
+- Automations, Search, Verification/Review and Notifications;
+- Browser, Terminal, Chat, Web UI and CLI entry points;
 - Organizations/Teams/Memberships and practical Task-management metadata;
-- accounting and resource-attribution integrations;
-- durable Connector persistence and Repository/Git integration;
-- reusable workflow definitions and portable import/export;
-- supported single-node deployment plus optional Control Plane HA/failover;
-- canonical Node/Worker scheduling, network-capable transport and remote Workspace materialization;
-- reusable no-paid-service prototype acceptance (#252);
-- performance benchmark infrastructure and multiple production-shaped profiles;
-- release/provenance/compatibility infrastructure;
-- a platform-wide conformance framework with required and optional evidence profiles.
-
-The latest completed hardening wave also closed #171, #414, #416 and the routing-profile follow-up cluster #443–#447.
+- accounting/resource attribution;
+- durable Connectors and Repository/Git integration;
+- reusable workflow definitions, capability assignments and model-routing profiles;
+- portable import/export and Templates;
+- supported single-node deployment and optional HA/failover;
+- canonical Node/Worker scheduling and authenticated distributed runtime;
+- network-capable MessageTransport and remote Workspace materialization;
+- platform-owned durable Plan/Step coordination with waits, retries, fan-out/fan-in, cancellation, reconciliation, backup/restore, upgrades, observability and authorized repair;
+- optional Registry/Marketplace with shared canonical plugin/import ownership;
+- release/update/upstream synchronization with deterministic manifest generation and reviewed evidence;
+- a reusable prototype gate and platform-wide conformance framework;
+- substantial single-node, coordination, fault and API-pressure performance evidence.
 
 ### Current open set
 
-At this snapshot there are **9 open issues out of 98 repository issues**:
+There are **9 open issues out of 105 repository issues**:
 
-`#42, #46, #78, #81, #240, #384, #421, #439, #440`
+`#46, #78, #388, #421, #439, #440, #500, #501, #502`
 
-The raw issue-closure ratio is therefore about **90.8%**, but the remaining issues are disproportionately large. The repository should be treated as a late-stage platform with several substantial end-state capabilities and acceptance gates still open, not as a product that is literally 90.8% complete by engineering effort.
+That is **96 closed / 105 total = about 91.4% closed by issue count**. This is useful as a repository bookkeeping metric, but it is not a literal engineering-completion percentage: #439, #421, #500, #440 and #46 are much higher-weight than a typical small hardening issue, while #501/#502 deliberately expand the optional ideal end state after earlier platform foundations were already complete.
 
-## What changed since the previous roadmap snapshot
+### Completed since the previous snapshot
 
-The previous roadmap listed 17 open issues and an open #240 PR. That snapshot has been overtaken by the following merged work:
+Four issues that were previously major frontier items are now closed:
 
-- #443–#447 routing-profile management/invariant/assignment/provenance/compensation hardening completed;
-- #414 canonical Node/Worker state-change timestamps completed;
-- #416 restart-durable Connector persistence completed;
-- #171 remaining accounting integration gaps completed;
-- #384 received the platform-owned durable Plan/Step coordinator implementation through PR #472;
-- #240 received the real distributed deployment integration path through PR #487;
-- #78 received final canonical Workflow/Capability Assignment/model-routing Template integrations and create-from-existing surfaces through PR #481;
-- #81 received owner-domain activation and northbound CLI/frontend integration through PRs #478 and #488;
-- #440 gained single-node sweeps, read/mixed/history/restart profiles, idle/soak, bounded stress, restart-under-load and transport degradation/recovery profiles;
-- #42 gained the release/update baseline plus provenance/compatibility hardening through PRs #461 and #492;
-- #46 gained the conformance foundation, required release scenarios, optional compatibility profiles, release lifecycle evidence and an authenticated production-shaped vertical slice.
+- **#42** — release/update/upstream synchronization is operationalized, including deterministic release-manifest generation, durable reviewed discovery reports and stronger adoption evidence/pin consistency;
+- **#81** — Registry/Marketplace is complete after the final installation, update, connector-inventory, pinning and restart/plugin-lifecycle hardening;
+- **#240** — distributed/heterogeneous deployment is complete after the production operator path, Worker isolation, secure entry-point acceptance and canonical Task/Run distributed integration were hardened;
+- **#384** — the durable Plan/Step coordinator is complete and accepted, including the final Worker acknowledgement/cancellation, orchestrator replacement, repair and conformance evidence.
 
-The remaining plan must therefore start from these merged capabilities rather than replay the old implementation waves.
+This changes the dependency graph materially: **#421 and #439 are no longer waiting on #384**, and distributed #440 evidence no longer waits on #240.
 
-## Remaining dependency lanes
+## Remaining work by ownership lane
 
-### Lane A — Completion and acceptance audits: #78, #81, #384
+### Lane A — Final operational-v1 convergence
 
-These three issues now have substantial or near-complete implementations on `main`, but they remain open and must be closed by verifying their current Definition of Done against the merged state rather than assuming a merge automatically proves every acceptance item.
-
-#### #78 Templates
-
-Recent work completed canonical Workflow and Capability Assignment integration, model-routing-policy activation, create-from-existing coverage, Single-Node composition and frontend/API exposure. The immediate next action is a current-state acceptance audit against the issue's reopened gaps and required regressions.
-
-If that audit finds no remaining production gap, close #78. If it finds a real gap, extract only the concrete missing work rather than reopening already completed integration slices.
-
-#### #81 optional Registry / Marketplace
-
-The provider-neutral Registry foundation, canonical owner handoff and CLI/frontend client hooks are merged. PR #488, which the issue body still lists as pending, is already merged. The remaining work is therefore primarily final CI/current-main acceptance reconciliation and issue closure, unless the audit identifies a genuine missing contract or safety path.
-
-#81 remains optional and must never become a startup/runtime dependency for the ordinary self-hosted platform.
-
-#### #384 durable Plan/Step coordinator
-
-PR #472 merged the platform-owned coordinator covering durable coordination records, dependency progression, fan-out/fan-in, waits, Step retries, cancellation, restart reconciliation, optimistic revisions/claims, Control Plane projections, telemetry, backup inventory participation and broad regression coverage.
-
-The issue remains open because its post-merge Definition of Done still requires explicit proof/hardening in several high-risk areas:
-
-- a production-grade shared claim/fencing backend for genuine multi-Control-Plane coordination;
-- end-to-end distributed Task -> Step -> Run -> Worker cancellation/reconciliation, including late results and lost acknowledgements;
-- restore/fencing crash-boundary regressions that prevent stale tokens or duplicate canonical Runs/Events after takeover/restore;
-- release-to-release migration/upgrade evidence for the coordinator persistence schema/store;
-- a final authorized operator repair workflow for inconsistent coordinator state;
-- broader evaluation, performance, security and conformance evidence, including representative large fan-out limits.
-
-Do not treat the merged core as permission to weaken the platform-owned lifecycle boundary or to move canonical coordination ownership into an orchestrator/workflow engine.
-
-### Lane B — Workflow product layer unlocked by #384: #421 and #439
-
-Once #384's backend-neutral projections are treated as stable enough for consumers, two major tracks can progress **in parallel**.
+The M3/core endgame is now centered on:
 
 ```text
-                 #384 durable coordinator
-                         |
-              +----------+----------+
-              |                     |
-              v                     v
-     #421 Web/CLI progress     #439 planning/replanning
-              |                     |
-              +----------+----------+
-                         |
-                         v
-                   #46 conformance
+#78 tiny closure          #421 workflow clients
+       \                  /
+        \                /
+         +--> #46 <------+----- #439 autonomous planning
+        /        ^        \
+       /         |         \
+#440 performance |          #500 host pressure/admission
+                 |
+          completed runtime foundations
 ```
 
-#### #421 Web/CLI workflow progress
+The exact dependency arrows are not all hard blockers: #46 and #440 can accumulate evidence continuously. The diagram shows convergence ownership, not a strict serial schedule.
 
-Expose canonical Plan/Step progression, Runs, waits, retries, fan-in state, cancellation and reconciliation through the existing Control Plane. This is client work over #384; it must not read coordinator stores directly or invent a frontend lifecycle.
+#### #78 — Templates: final two-gap reconciliation
 
-#### #439 autonomous goal decomposition, planning and bounded replanning
+The Template domain, security, compatibility, materialization, trust/activation, rollback, Workflow/Capability Assignment/model-routing integration, create-from-existing surface and owner-domain navigation work are already implemented.
 
-This is the largest genuinely new end-state capability still open. It owns:
+The latest completion audit leaves only two explicit #78-owned gaps:
 
-`Goal/Task intent -> planning provider -> validated canonical Plan/Steps -> #384 execution -> canonical evidence -> bounded replanning`
+1. safe read-only owner-domain links/detail routes for Template-created Workflow, Capability Assignment and Model Routing Profile resources;
+2. `docs/FRONTEND.md` reconciliation so create-from-existing documentation lists those newer supported resource types.
 
-It can be developed independently from #421 once the #384 contract is stable. It must not absorb Worker scheduling, model routing, authorization, Verification or durable Step progression.
+Treat #78 as a **small closure task**, not as another Template redesign. It can and should be finished independently from #421/#439.
 
-### Lane C — Distributed and heterogeneous deployment hardening: #240
+#### #421 — Web/CLI durable workflow progress
 
-The architecture prerequisites are no longer missing:
+#384 is closed, so #421 is now fully unblocked.
 
-```text
-#14 Node/Worker runtime
-#35 MessageTransport
-#36 service identity
-#37 Workspace contracts
-#433 remote materialization
-        |
-        v
-#240 distributed deployment integration (major path merged)
-```
+Implement one canonical client surface over the existing Control Plane projections for:
 
-PR #487 routes ordinary canonical Task/Run execution through the distributed runtime when advanced deployment is enabled, shares the scheduler/runtime composition, propagates exact Workspace bindings and proves an authenticated HTTP Task reaching a registered distributed Worker.
+- active Plan revision and Plan/Step IDs;
+- dependency/progression state;
+- current/latest Run attempts;
+- waits/deadlines;
+- retries/exhaustion;
+- fan-out/fan-in/barrier progress;
+- cancellation propagation;
+- reconciliation/repair disposition;
+- safe canonical Event/timeline evidence;
+- matching human-readable and JSON CLI views.
 
-The issue remains open for focused final hardening, including the residual acceptance items explicitly recorded by the merged work:
+This work must remain `Web/CLI -> Control Plane -> canonical coordinator projection`; clients must not read coordinator persistence directly.
 
-- zero-byte Workspace/File transfer regression coverage;
-- positive TLS/mTLS broker/client acceptance rather than rejection-only tests;
-- final `ADVANCED_DEPLOYMENT.md` and operator-example synchronization with profile-aware startup;
-- a full current-`main` CI/conformance/security/regression pass and final acceptance review.
+#### #439 — Autonomous planning and bounded replanning
 
-Do not expand #240 into HA, cloud provisioning or a second scheduler. Those boundaries are already owned elsewhere.
+#439 is the largest genuinely new core capability still open and is now also fully unblocked by #384.
 
-### Lane D — Performance and scalability evidence: #440
+It owns:
 
-#440 is no longer a benchmark-foundation issue. The following substantial profiles are already merged:
+`Goal/Task intent -> Planner -> validated canonical Plan/Steps -> #384 execution -> canonical evidence -> bounded replanning`
 
-- deterministic single-node lifecycle benchmark;
-- concurrency sweeps;
-- read-heavy and mixed read/write workloads;
-- large-history and restart workloads;
-- idle-footprint and soak/endurance profiles;
-- bounded saturation/stress and restart-under-load;
-- transport backpressure, outage/recovery and duplicate-delivery evidence.
+The first implementation should establish:
 
-The newly unlocked high-value work is now:
+- replaceable planner contract;
+- deterministic/reference planner fixture;
+- model-backed planner through canonical model APIs;
+- Agent/Team, capability and model-requirement resolution;
+- graph validation and satisfiability checks;
+- safe parallel/dependency decomposition;
+- immutable Plan revisions;
+- explicit replanning triggers from canonical failure/Verification/evidence;
+- completed-work reuse with provenance;
+- idempotent/restart-safe bounded replanning;
+- Control Plane projections/commands and evaluation coverage.
 
-1. **Plan/Step profiles** using the merged #384 coordinator: long linear plans, 10/100/1000-step graphs where practical, wide fan-out/fan-in, waits/retries under load and restart/reconciliation under workflow load.
-2. **Distributed profiles** using the merged #240/#433 path: multiple local Workers, remote Worker dispatch, N-worker sweeps, Worker heartbeat/registration load, Workspace materialization payload sweeps and Worker loss/rejoin under load.
-3. **Remaining deterministic faults** where stable seams exist: transient persistence failure, model/tool/provider unavailability, Workspace materialization failure and optional HA promotion.
-4. **Comparable operating envelopes and regression budgets** based on measured evidence rather than guessed universal limits.
+Do not let #439 absorb #384 durable execution, #14 scheduling, #10 routing, #12 capability ownership, #15 Approval or #86 Verification.
 
-The workflow and distributed #440 tracks can run in parallel once their respective owning paths are accepted.
+#### #500 — Host resource pressure telemetry and admission control
 
-### Lane E — Release/update operationalization: #42
+#500 is a **v1 runtime issue**, not merely an optional ecosystem enhancement. It can start immediately because its hard foundations (#14 scheduler, #16 observability, #32 Control Plane, #39 single-node deployment) already exist.
 
-The release/update foundation and hardening are already merged. #42 now has typed release manifests, compatibility inventory, upstream pins, evidence gates, provenance validation, advisory update discovery and operator/read-only status surfaces.
+Split it into a portable core plus platform-specific adapters:
 
-The current issue body identifies the remaining operationalization work:
+- portable pressure snapshot (`healthy/elevated/critical/unknown` plus normalized evidence);
+- deterministic pressure-aware admission hook that augments but never replaces #14 scheduling;
+- configurable protected-headroom policy;
+- authenticated/staleness-aware Node/Worker pressure reporting;
+- Linux PSI/swap/zRAM/cgroup reference provider behind an optional adapter boundary;
+- #16 telemetry and diagnostics;
+- deployment hooks/docs;
+- later #440 pressure benchmarks.
 
-- deterministic release-manifest generation/workflow integration;
-- persistent advisory discovery reports wired into operator/runtime/UI state after restart;
-- explicit frontend typing for the richer release schema v2 structures;
-- optional provider-neutral scheduled discovery adapters where useful, while preserving manual adoption and the no-recurring-paid-service constraint.
+Linux-specific measurements must remain provider metadata; unsupported pressure reporting must stay explicit rather than making non-Linux Workers unusable.
 
-This lane is largely independent from #421/#439/#240 and can progress continuously in parallel. #41 remains authoritative for persisted upgrade/version state; update discovery stays advisory and must not silently approve, mutate pins, merge or deploy changes.
+### Lane B — #46 final platform conformance
 
-### Lane F — Final platform convergence: #46
+#46 is now a convergence/closure lane rather than a framework-construction lane.
 
-#46 already has a real conformance framework, fast/integration/release profiles, required single-node release evidence, optional compatibility claims, release lifecycle checks and a production-shaped authenticated vertical slice.
+Already merged evidence covers the authenticated Control Plane, Task/Run lifecycle, Agent/Model execution, native Capability invocation, canonical ToolInvocation identity, Executor/Worker lineage, many product domains, #384 coordinator conformance and release-profile registration.
 
-It must remain the **consumer of completed production behavior**, not the place where missing product behavior is faked for tests.
+The strongest remaining continuous vertical is being closed by active PR **#536**, targeting:
 
-Immediate expandable evidence now includes:
+`authenticated HTTP -> Task/Run -> AgentRun -> local model -> ToolInvocation -> Capability -> Executor -> Worker/Node -> remote Workspace change -> canonical File -> distinct canonical Artifact -> same Run -> Verification -> Task completion`
 
-- Templates/Q after #78 acceptance;
-- Registry/S after #81 acceptance;
-- durable Plan/Step workflow evidence after #384 acceptance;
-- stronger distributed evidence after #240 acceptance;
-- workflow/planning coverage after #421/#439;
-- performance/release evidence from #440/#42.
+After that production path lands, #46 should perform a final issue-wide audit rather than simply close because individual subsystem tests are green. Final closure should verify:
 
-The current authenticated vertical slice still explicitly separates Agent/Model execution from the ReferenceExecutor/Worker path. Final conformance must keep that gap visible until a production-valid cross-layer path or explicitly separated canonical scenario set proves the intended architecture without test-only shortcuts.
+- the strongest maintained vertical crosses the intended layers without a shadow lifecycle;
+- required release scenarios are executable/compatible;
+- optional profiles are honestly reported as compatible, disabled, unsupported or not implemented;
+- canonical IDs/ownership remain intact across the final Agent/Tool/Worker return path;
+- #421 workflow-client parity and #439 planning/replanning evidence are added when those v1 features land;
+- #500 pressure-aware conformance is claimed only where actually enabled/tested;
+- all required CI, security/static, conformance, prototype and relevant real-adapter checks pass on the exact release candidate.
 
-#46 is the convergence gate and should close last among the core 1.0-target issues.
+**Recommendation:** keep #46 open as the last core convergence issue rather than closing and reopening it after each newly completed M3 capability.
+
+### Lane C — #440 performance, load, stress and scalability
+
+#440 is already a mature benchmark system rather than an empty foundation.
+
+Merged evidence includes:
+
+- deterministic single-node lifecycle/concurrency sweeps;
+- read-heavy, mixed and large-state/restart profiles;
+- persistence growth/reopen measurements;
+- idle/soak/stress/restart-under-load profiles;
+- provider/transport fault evidence;
+- Plan/Step linear, fan-out and fan-in scale;
+- retry/wait/restart coordination pressure;
+- concurrent multi-Plan and coordinator claim contention;
+- authenticated Control Plane API/session/authorization/pagination pressure.
+
+Active PR **#534** adds the first distributed Worker/remote Workspace scale profile.
+
+After #534, remaining high-value work is:
+
+- TCP/cross-host distributed operating envelopes where stable and reproducible;
+- Worker loss/rejoin and remote Workspace failure under load;
+- persistence-failure/contention evidence only through a stable provider/fixture seam, not a SQLite-specific production bypass;
+- release-sized comparable operating-envelope runs and initial regression budgets;
+- optional HA/live-update profiles where justified;
+- #500 host-pressure/admission benchmark family after the portable pressure contract exists;
+- #439 planner latency/activation/replanning overhead after the planner is implemented.
+
+#440 can run in parallel with #421/#439/#500; only its feature-specific profiles should wait for the corresponding owner contract.
+
+### Lane D — #388 real two-host transport acceptance
+
+#388 was reopened by a completion audit. The TCP/network transport implementation already exists; the remaining work is evidence, not redesign.
+
+Before re-closing it, prove on **two independent hosts**:
+
+- authenticated encrypted Control Plane/Worker transport;
+- dispatch and result retrieval;
+- restart/reconnect without changing canonical Worker identity;
+- canonical artifact/evidence references surviving the real network return path;
+- recorded acceptance evidence plus green validation.
+
+This track is operationally independent from most core coding work and is an excellent parallel task when a two-host test environment is available. Do not substitute same-host sockets/processes for the explicit two-host criterion.
+
+### Lane E — Optional ideal-end-state expansion: #501 and #502
+
+These issues are intentionally optional M4-style extensions. Their absence must not break the direct Task path or the ordinary repository/tool baseline.
+
+#### #501 — Proposal/Specification governance
+
+Build an optional intake path:
+
+`Idea/signal -> Proposal -> Specification -> exact-revision Approval -> canonical Task`
+
+The **core Proposal/Specification resource model, persistence, Approval binding and idempotent Task conversion can start now in parallel** with #439.
+
+Defer only the deeper planner-specific integration until #439's planner contract stabilizes. #439 may later consume an approved Specification or help draft one, but it must never own or silently rewrite Specification truth.
+
+#### #502 — Repository/code intelligence providers
+
+Build from the deterministic fallback first:
+
+`Git + ripgrep + LSP -> measured baseline -> optional provider evaluation -> plugin/capability integration -> optional Marketplace catalog`
+
+The baseline harness, capability taxonomy, security/resource classification and candidate evaluation can start immediately. Do not wait for #439.
+
+Defer only planner-specific context-funnel integration until #439 is stable, and use #500 for heavy indexing/admission integration once its pressure contract exists. No named provider becomes canonical architecture.
 
 ## Safe parallel work now
 
-A practical high-throughput split from current `main` is:
+A high-throughput current split is:
 
-| Track | Work | Dependency status |
-|---|---|---|
-| A | #384 final DoD / crash-recovery-backup/distributed audit | Core implementation merged |
-| B | #240 distributed deployment hardening | Major integration path merged |
-| C | #42 release/update operationalization | Independent |
-| D | #440 remaining workflow/distributed/fault profiles | Partially unlocked now |
-| E | #78 final Template acceptance audit | Major integrations merged |
-| F | #81 final Registry acceptance audit | Northbound integration merged; coordinate with #78 findings |
-| G | #46 add only already-supported conformance evidence | Continuous convergence lane |
+| Track | Owner | Can start now? | Main collision risk |
+|---|---|---:|---|
+| A | #78 final two-gap closure | Yes | frontend routes/docs |
+| B | #46 / PR #536 continuous vertical + final audit | Yes | distributed/File/Artifact/conformance files |
+| C | #440 / PR #534 distributed benchmark | Yes | distributed test/runtime harness |
+| D | #421 Web/CLI workflow progress | Yes | Control Plane/client registration |
+| E | #439 planner/replanning | Yes | Task/Plan services and Control Plane |
+| F | #500 pressure/admission core | Yes | #14 scheduler/Node reporting/observability |
+| G | #388 real two-host acceptance | Yes, with environment | distributed operator fixtures/docs |
+| H | #501 Proposal/Specification core | Yes | Control Plane/Search/Approval surfaces |
+| I | #502 repository-intelligence baseline/evaluation | Yes | Repository/Search/plugin capability surfaces |
 
-This means **5–7 focused agents** can work safely if branch overlap is managed. The main collision risks are shared Single-Node composition, Control Plane registration, release/conformance CI files and common documentation.
+With disciplined branches, **7–9 focused tracks can make useful progress concurrently**. More concurrency is not automatically better: the files most likely to collide are Single-Node/deployment composition, Control Plane resource registration, shared frontend routing/manifest code, distributed runtime helpers and conformance/CI documents.
 
-## Next parallel expansion after #384 acceptance
+## Recommended immediate sequencing
 
-Once #384's final audit confirms its public projections/contracts are stable, start these simultaneously:
+### Immediate closure first
 
-| Track | Issue/work |
+Before opening many cross-cutting branches, prefer to land these small/currently active changes quickly:
+
+1. finish #78's two explicit gaps;
+2. finish and validate PR #536 for the #46 same-Run Worker Artifact -> Verification vertical;
+3. finish and validate PR #534 for the first distributed #440 scale profile.
+
+This reduces overlapping frontend/distributed/conformance edits while the larger new tracks continue separately.
+
+### In parallel immediately
+
+Start #421, #439 and #500 as independent core lanes. In parallel, #501 and #502 may begin their owner-domain/baseline work because they do not need #439 to define their canonical resources. Run #388 acceptance whenever the two-host environment is available.
+
+## What becomes newly parallel after #439
+
+Once the planner contract and first working planning/replanning path are stable, several follow-ups unlock simultaneously:
+
+| Track | Newly unlocked work |
 |---|---|
-| W1 | #421 Web/CLI workflow-progress surfaces |
-| W2 | #439 autonomous planning and bounded replanning |
-| W3 | #440 Plan/Step performance profiles |
-| W4 | #46 durable-workflow conformance evidence |
+| P1 | #46 Goal/Task -> generated Plan -> durable execution -> Verification -> bounded replan conformance |
+| P2 | #440 planner latency, Plan activation and replanning overhead benchmarks |
+| P3 | #501 approved Specification -> planner input and optional draft-Spec integration |
+| P4 | #502 planner repository-intelligence/context-funnel integration |
+| P5 | optional Template/planner-policy packaging where it remains canonical and portable |
 
-#421 and #439 do not depend on each other. They share #384 as a foundation and should coordinate only where both extend Task/Plan client projections.
+These should not be serialized behind one another; they all consume #439's stable public contract.
 
-## Next parallel expansion after #240 acceptance
+## What becomes newly parallel after #500
 
-Once the distributed deployment profile passes its final acceptance:
+Once the portable pressure/admission contract is stable:
 
-| Track | Work |
+| Track | Newly unlocked work |
 |---|---|
-| D1 | #440 distributed Worker/load/materialization benchmarks |
-| D2 | #46 distributed conformance strengthening |
-| D3 | deployment/release evidence integration for #42 where applicable |
+| R1 | #440 PSI/swap/zRAM/cgroup/admission-under-pressure benchmark profiles |
+| R2 | distributed Node/Worker pressure-report integration and acceptance |
+| R3 | #502 resource-aware admission for heavy indexing/rebuild workloads |
+| R4 | #46 pressure-aware profile evidence if the release chooses to claim it |
 
-These can proceed alongside the workflow/product tracks above.
+Again, these are consumers of #500; they should not force Linux-specific fields into the canonical contract.
 
-## Final convergence order
+## What becomes newly parallel after #421
 
-A dependency-safe endgame is:
+Once Web/CLI workflow progress is complete:
+
+- #46 can add explicit coordinator client-parity evidence;
+- #501 can link Proposal/Specification conversions cleanly into Task/Plan progress views without creating a second Task board;
+- future planner/proposal UX can reuse the same canonical Task/Plan navigation instead of creating client-private workflow state.
+
+## Endgame dependency picture
 
 ```text
-Current main
-   |
-   +--> audit/close #78
-   +--> audit/close #81
-   +--> audit/close #384
-   +--> finish #240
-   +--> continue #42
-   +--> continue #440
-             |
-             +-----------------------------+
-             |                             |
-             v                             v
-        #421 Web/CLI                  #439 Planner
-             |                             |
-             +--------------+--------------+
-                            |
-                #440 remaining workflow /
-                  distributed evidence
-                            |
-                            v
-                     #42 release-ready
-                            |
-                            v
-                   #46 final conformance
-                            |
-                            v
-                 operational 1.0 baseline
+                         current main
+                              |
+      +-----------+-----------+-----------+-----------+
+      |           |           |           |           |
+     #78         #421        #439        #500        #388
+      |           |           |           |           |
+      |           |     +-----+-----+     |           |
+      |           |     |           |     |           |
+      |           |   #501*       #502*   |           |
+      |           |   integrate   integrate|           |
+      |           |     |           |     |           |
+      +-----------+-----+-----------+-----+-----------+
+                              |
+                    #440 accumulated evidence
+                              |
+                              v
+                       #46 final audit
+                              |
+                              v
+                  operational v1 acceptance
+
+* #501/#502 remain optional; their absence must not invalidate the ordinary baseline.
 ```
 
-This is not a strict serial pipeline: #42, #440 and supported portions of #46 should continue throughout. The serial constraints are primarily that clients/planning must not outrun unstable #384 contracts, distributed benchmarks must not substitute for unfinished #240 deployment behavior, and final #46 compatibility claims must not precede the owning production paths.
+#46 and #440 run continuously rather than waiting idle at the bottom. The diagram shows when their **final claims** should converge.
 
 ## Progress interpretation
 
-Two different progress measures should be kept separate:
+Use three separate progress views rather than one misleading number:
 
-- **Issue-count progress:** 89 of 98 issues closed, about 90.8%.
-- **End-state engineering maturity:** lower than the raw issue ratio because #439, #46, #440, #42 and the remaining #240/#384 work are high-weight platform capabilities and acceptance gates.
+### 1. Repository issue-count progress
 
-The project is therefore best described as **late-stage architecture/product integration with most canonical subsystems implemented**, while autonomous planning, final workflow/distributed productization and full release/conformance evidence remain the main path to the ideal end state.
+**96 / 105 issues closed = 91.4%.**
+
+This is objective bookkeeping but ignores issue size and optional scope expansion.
+
+### 2. Operational-v1/core maturity
+
+The foundational architecture, durable workflows, distributed runtime, Registry, release/update lifecycle and most product domains are implemented. The remaining high-weight core work is concentrated in #421, #439, #500, the remaining #440 evidence and final #46 convergence, with #78 almost entirely complete.
+
+A reasonable planning heuristic is therefore **roughly 88–92% core maturity**, not because that percentage can be measured exactly, but because the remaining work is now a small number of substantial end-product capabilities rather than missing foundational domains.
+
+### 3. Expanded ideal-end-state maturity
+
+If the optional #501 Proposal/Specification layer, #502 repository-intelligence ecosystem and full #388 two-host acceptance are counted as part of the target denominator, the maturity estimate should be lower: **roughly 82–87%**. These issues add genuine new scope after much of the earlier platform had already been completed.
+
+These heuristic ranges are for planning only. Release readiness is determined by explicit acceptance evidence and #46, not by a percentage.
 
 ## Release interpretation
 
-The planned `0.1.0` prerequisite (#252) has passed, but no GitHub release is published yet. A formal prototype release still requires the publication checklist in [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md), current changelog/provenance, a validated release manifest and an exact passing release commit.
+No GitHub release is currently published. The release/update system itself (#42) is complete, including deterministic manifest generation and reviewed update evidence. Publication still requires the repository release process, exact evidence/manifest, changelog/provenance and a passing release commit.
 
-The planned `1.0.0` operational baseline remains tied to #46 full conformance for the profiles the release explicitly claims. Optional Registry and advanced distributed capabilities must not become hidden prerequisites for the ordinary local/self-hosted baseline unless a release explicitly claims them.
+The operational `1.0.0` target should be tied to the supported M3 profile and #46 acceptance. Optional M4 features such as #501/#502 must not become hidden release blockers unless the release explicitly claims those profiles. #388 likewise governs the strength of a true cross-host compatibility claim rather than the validity of the ordinary single-node baseline.
 
 ## Consistency rules for every remaining issue
 
-Each implementation must continue to preserve:
+Every implementation must continue to preserve:
 
-- exactly one canonical owner and no competing private contract;
-- explicit hard dependencies separated from follow-up integrations;
-- provider/model/hardware/deployment neutrality in canonical state;
-- self-hostable reference behavior without a recurring paid AI/API dependency;
-- security and Verification as authoritative platform boundaries rather than planner/orchestrator hints;
-- restart/deduplication semantics where durable state is involved;
-- backend-neutral Control Plane projections for Web/CLI clients;
-- tests proportional to the failure mode being closed;
-- no acceptance-only bypass that hides a production integration gap.
+- one canonical owner per lifecycle/resource;
+- no backend/provider/private identity promoted to canonical state;
+- hard dependencies separated from progressive integrations;
+- provider/model/hardware/deployment neutrality in canonical contracts;
+- self-hostable reference behavior without recurring paid AI/API dependencies;
+- authorization, Approval and Verification as authoritative platform boundaries;
+- restart/idempotency/deduplication semantics for durable state;
+- backend-neutral Control Plane projections for clients;
+- tests proportional to the actual failure mode;
+- explicit unsupported/disabled reporting instead of false compatibility claims;
+- no acceptance-only shortcut that hides missing production behavior.
 
-When this roadmap and a GitHub issue diverge, the current issue wording, issue comments and merged code are authoritative until the roadmap is refreshed again.
+When this roadmap and GitHub diverge, current issue wording/comments and merged code are authoritative until the roadmap is refreshed again.
