@@ -11,11 +11,12 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
-COORDINATOR_SCHEMA_VERSION = 2
-COORDINATOR_MIGRATION_REVISION = "coordination-0002"
-LEGACY_COORDINATOR_SCHEMA_VERSION = 1
+COORDINATOR_SCHEMA_VERSION = 3
+COORDINATOR_MIGRATION_REVISION = "coordination-0003"
+LEGACY_COORDINATOR_SCHEMA_VERSIONS = frozenset({1, 2})
+_V2_MIGRATION_REVISION = "coordination-0002"
 
-_REQUIRED_TABLES = frozenset(
+_BASE_REQUIRED_TABLES = frozenset(
     {
         "coordinator_meta",
         "coordinator_plans",
@@ -24,6 +25,7 @@ _REQUIRED_TABLES = frozenset(
         "coordinator_fences",
     }
 )
+_CURRENT_REQUIRED_TABLES = _BASE_REQUIRED_TABLES | {"coordinator_plan_retirements"}
 
 
 class CoordinatorMigrationError(RuntimeError):
@@ -54,7 +56,7 @@ def inspect_coordinator_store(path: str | Path) -> CoordinatorStoreMetadata | No
         with sqlite3.connect(uri, uri=True) as connection:
             if not _table_exists(connection, "coordinator_meta"):
                 return None
-            _validate_required_tables(connection)
+            _validate_required_tables(connection, _BASE_REQUIRED_TABLES)
             _quick_check(connection)
             schema_row = connection.execute(
                 "SELECT value FROM coordinator_meta WHERE key = 'schema_version'"
@@ -65,6 +67,8 @@ def inspect_coordinator_store(path: str | Path) -> CoordinatorStoreMetadata | No
                 schema_version = int(schema_row[0])
             except (TypeError, ValueError) as exc:
                 raise CoordinatorMigrationError("invalid coordinator schema_version") from exc
+            if schema_version >= COORDINATOR_SCHEMA_VERSION:
+                _validate_required_tables(connection, _CURRENT_REQUIRED_TABLES)
             revision_row = connection.execute(
                 "SELECT value FROM coordinator_meta WHERE key = 'migration_revision'"
             ).fetchone()
@@ -80,10 +84,17 @@ def coordinator_migration_plan(path: str | Path) -> tuple[str, ...]:
     metadata = inspect_coordinator_store(path)
     if metadata is None or metadata.current:
         return ()
-    if metadata.schema_version == LEGACY_COORDINATOR_SCHEMA_VERSION:
+    if metadata.schema_version == 1:
         if metadata.migration_revision not in {None, "", "baseline"}:
             raise CoordinatorMigrationError(
                 "legacy coordinator store has an unknown migration revision "
+                f"{metadata.migration_revision!r}"
+            )
+        return (COORDINATOR_MIGRATION_REVISION,)
+    if metadata.schema_version == 2:
+        if metadata.migration_revision != _V2_MIGRATION_REVISION:
+            raise CoordinatorMigrationError(
+                "coordinator v2 store has an unknown migration revision "
                 f"{metadata.migration_revision!r}"
             )
         return (COORDINATOR_MIGRATION_REVISION,)
@@ -94,10 +105,11 @@ def coordinator_migration_plan(path: str | Path) -> tuple[str, ...]:
 
 
 def migrate_coordinator_store(path: str | Path) -> tuple[str, ...]:
-    """Migrate the supported v1 store to v2 atomically and idempotently.
+    """Migrate supported v1/v2 stores to v3 atomically and idempotently.
 
-    Canonical Plan/Step payloads, optimistic revisions, Run references, retry/wait/barrier state
-    and monotonic fencing counters are preserved byte-for-byte. Ephemeral coordinator claims are
+    v3 adds durable Plan-retirement records so a superseded Plan cannot re-enter dispatch after a
+    restart. Canonical Plan/Step payloads, optimistic revisions, Run references, retry/wait/barrier
+    state and monotonic fencing counters are preserved. Ephemeral coordinator claims are
     deliberately invalidated across planned maintenance so stale process ownership is never
     restored after an upgrade. Fencing counters remain, therefore a post-upgrade claim receives a
     strictly newer fence.
@@ -112,21 +124,48 @@ def migrate_coordinator_store(path: str | Path) -> tuple[str, ...]:
         with sqlite3.connect(store) as connection:
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("BEGIN IMMEDIATE")
-            _validate_required_tables(connection)
+            _validate_required_tables(connection, _BASE_REQUIRED_TABLES)
             _quick_check(connection)
 
             schema_row = connection.execute(
                 "SELECT value FROM coordinator_meta WHERE key = 'schema_version'"
             ).fetchone()
-            if schema_row is None or int(schema_row[0]) != LEGACY_COORDINATOR_SCHEMA_VERSION:
+            if schema_row is None:
+                raise CoordinatorMigrationError("coordinator store has no schema_version")
+            schema_version = int(schema_row[0])
+            if schema_version not in LEGACY_COORDINATOR_SCHEMA_VERSIONS:
                 raise CoordinatorMigrationError(
                     "coordinator schema changed after preflight; rerun upgrade preflight"
+                )
+            revision_row = connection.execute(
+                "SELECT value FROM coordinator_meta WHERE key = 'migration_revision'"
+            ).fetchone()
+            revision = None if revision_row is None else str(revision_row[0])
+            if schema_version == 1 and revision not in {None, "", "baseline"}:
+                raise CoordinatorMigrationError(
+                    "legacy coordinator store changed after preflight; rerun upgrade preflight"
+                )
+            if schema_version == 2 and revision != _V2_MIGRATION_REVISION:
+                raise CoordinatorMigrationError(
+                    "coordinator v2 store changed after preflight; rerun upgrade preflight"
                 )
 
             # Claims are process ownership, not canonical workflow state. A planned upgrade must
             # reacquire them after restart. Keeping fences prevents pre-upgrade owners/tokens from
             # becoming valid again after the maintenance boundary.
             connection.execute("DELETE FROM coordinator_claims")
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS coordinator_plan_retirements (
+                    plan_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    superseded_by_plan_id TEXT,
+                    reason TEXT NOT NULL,
+                    retired_at TEXT NOT NULL,
+                    FOREIGN KEY(plan_id) REFERENCES coordinator_plans(plan_id) ON DELETE CASCADE
+                )
+                """
+            )
             connection.execute(
                 "INSERT INTO coordinator_meta(key, value) VALUES('migration_revision', ?) "
                 "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -136,6 +175,7 @@ def migrate_coordinator_store(path: str | Path) -> tuple[str, ...]:
                 "UPDATE coordinator_meta SET value = ? WHERE key = 'schema_version'",
                 (str(COORDINATOR_SCHEMA_VERSION),),
             )
+            _validate_required_tables(connection, _CURRENT_REQUIRED_TABLES)
             _quick_check(connection)
     except (OSError, sqlite3.DatabaseError, ValueError) as exc:
         raise CoordinatorMigrationError(f"coordinator migration failed: {exc}") from exc
@@ -146,14 +186,17 @@ def migrate_coordinator_store(path: str | Path) -> tuple[str, ...]:
     return planned
 
 
-def _validate_required_tables(connection: sqlite3.Connection) -> None:
+def _validate_required_tables(
+    connection: sqlite3.Connection,
+    required: frozenset[str],
+) -> None:
     tables = {
         str(row[0])
         for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
         ).fetchall()
     }
-    missing = sorted(_REQUIRED_TABLES - tables)
+    missing = sorted(required - tables)
     if missing:
         raise CoordinatorMigrationError(
             "coordinator store is missing required tables: " + ", ".join(missing)
