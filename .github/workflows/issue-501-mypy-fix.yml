@@ -29,7 +29,7 @@ jobs:
           text = repository.read_text()
           text = text.replace(
               'OwnerRef(type=cast(object, owner["type"]), id=str(owner["id"])),  # type: ignore[arg-type]',
-              'OwnerRef(\n            type=cast(\n                Literal["user", "organization", "team", "service"], owner["type"]\n            ),\n            id=str(owner["id"]),\n        )',
+              'OwnerRef(\n            type=cast(\n                Literal["user", "organization", "team", "service"], owner["type"]\n            ),\n            id=str(owner["id"]),\n        ),',
           )
           repository.write_text(text)
 
