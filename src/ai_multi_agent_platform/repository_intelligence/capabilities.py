@@ -196,6 +196,7 @@ def _output_schema(operation: RepositoryIntelligenceOperation) -> dict[str, Json
                         ("line", "text", "text_truncated"),
                     ),
                 },
+                "truncated": {"type": "boolean"},
                 "provenance": _provenance_schema(),
             },
             (
@@ -205,6 +206,7 @@ def _output_schema(operation: RepositoryIntelligenceOperation) -> dict[str, Json
                 "requested_end_line",
                 "total_lines",
                 "lines",
+                "truncated",
                 "provenance",
             ),
         )
