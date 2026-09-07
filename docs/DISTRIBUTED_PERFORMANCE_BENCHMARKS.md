@@ -84,6 +84,13 @@ recorded reference environment. For true remote/cross-host claims, run a separat
 shipped TCP broker/Worker process deployment and retain host/network metadata. Do not compare the
 in-process transport profile to TCP/cross-host results as if they were the same environment.
 
+## Heterogeneous placement profile
+
+Capability/resource/GPU placement pressure is now measured separately by
+`platform-heterogeneous-placement`; see `docs/HETEROGENEOUS_PLACEMENT_BENCHMARKS.md`. Keeping this
+profile separate prevents scheduler-only latency from being mixed with Workspace-transfer and
+transport variance.
+
 ## Deliberately separate follow-up profiles
 
 This v1 scale block does **not** claim evidence for:
@@ -91,7 +98,6 @@ This v1 scale block does **not** claim evidence for:
 - Worker loss/rejoin or cross-Worker fenced failover under load;
 - transient registration/heartbeat/network outages;
 - Workspace materialization interruption/failure and recovery under load;
-- heterogeneous capability/GPU placement pressure;
 - real multi-process or cross-host network throughput limits;
 - HA promotion/failover;
 - host PSI/zRAM/swap/cgroup pressure;
