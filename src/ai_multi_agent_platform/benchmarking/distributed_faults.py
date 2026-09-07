@@ -38,6 +38,7 @@ from ai_multi_agent_platform.distributed import (
     WorkerRequestCredentials,
     WorkerStatus,
 )
+from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 
 from .distributed_scale import DistributedScaleSpec, DistributedWorkerWorkspaceScaleHarness
@@ -315,6 +316,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                             fixture.token,
                             nonce=f"fault-register-{index}",
                             correlation_id=f"fault-register-{index}",
+                            issued_at=base_time,
                         ),
                         now=base_time,
                     )
@@ -333,6 +335,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                             fixture.token,
                             nonce=f"fault-heartbeat-{index}",
                             correlation_id=f"fault-heartbeat-{index}",
+                            issued_at=base_time,
                         ),
                         now=base_time,
                     )
@@ -374,6 +377,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                             fixture.token,
                             nonce=f"fault-healthy-heartbeat-{index}",
                             correlation_id=f"fault-healthy-heartbeat-{index}",
+                            issued_at=fault_time,
                         ),
                         now=fault_time,
                     )
@@ -426,6 +430,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                         victim.token,
                         nonce="fault-rejoin-register",
                         correlation_id="fault-rejoin-register",
+                        issued_at=rejoin_time,
                     ),
                     now=rejoin_time,
                 )
@@ -445,6 +450,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                         victim.token,
                         nonce="fault-rejoin-heartbeat",
                         correlation_id="fault-rejoin-heartbeat",
+                        issued_at=rejoin_time,
                     ),
                     now=rejoin_time,
                 )
@@ -529,6 +535,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                             fixture.token,
                             nonce=f"fault-recovery-heartbeat-{index}",
                             correlation_id=f"fault-recovery-heartbeat-{index}",
+                            issued_at=recovery_time,
                         ),
                         now=recovery_time,
                     )
@@ -697,10 +704,12 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
         current_records = tuple(
             record for record in reconciled if record.job.worker_job_id in current_ids
         )
+        final_records: list[DispatchRecord] = []
         for record in current_records:
             await runtime.result(record.job.worker_job_id)
+            final_records.append(runtime.get_record(record.job.worker_job_id))
         return _RoundResult(
-            records=current_records,
+            records=tuple(final_records),
             dispatch_samples=tuple(elapsed for _record, elapsed in dispatched),
             worker_job_ids=tuple(job.worker_job_id for job in jobs),
             run_ids=tuple(job.execution.run_id for job in jobs),
@@ -730,11 +739,17 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
         run_ids.extend(result.run_ids)
 
 
-def _credentials(token: str, *, nonce: str, correlation_id: str) -> WorkerRequestCredentials:
+def _credentials(
+    token: str,
+    *,
+    nonce: str,
+    correlation_id: str,
+    issued_at: datetime,
+) -> WorkerRequestCredentials:
     return WorkerRequestCredentials(
         token=token,
         nonce=nonce,
-        issued_at=datetime.now(UTC),
+        issued_at=issued_at,
         tls_peer_ref="spiffe://benchmark/distributed-worker",
         request_id=nonce,
         correlation_id=correlation_id,
@@ -748,8 +763,8 @@ def _job(
     round_index: int,
     ordinal: int,
 ) -> WorkerJobRequest:
-    task_id = f"task_{phase.replace('-', '_')}_{round_index}_{ordinal}_{time.time_ns()}"
-    run_id = f"run_{phase.replace('-', '_')}_{round_index}_{ordinal}_{time.time_ns()}"
+    task_id = new_id("task")
+    run_id = new_id("run")
     key = f"distributed-fault:{phase}:{round_index}:{ordinal}:{run_id}"
     return WorkerJobRequest(
         execution=ExecutionRequest(
