@@ -106,7 +106,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[litellm]" pytest
       - name: Run real pinned LiteLLM adapter integration test
-        run: pytest -q tests/test_issue_11_litellm_pinned_integration.py
+        run: pytest -q tests/integration/upstreams/test_litellm_pinned.py
 
   hermes-pinned-compat:
     needs: test
@@ -141,7 +141,7 @@ jobs:
         env:
           HERMES_UPSTREAM_DIR: ${{ github.workspace }}/.upstream/hermes
           HERMES_UPSTREAM_REVISION: 63279301bcbdc185c1b07b98a9312eb0c862f26d
-        run: pytest -q tests/test_issue_8_hermes_pinned_integration.py
+        run: pytest -q tests/integration/upstreams/test_hermes_pinned.py
 
   forge-sidecar-integration:
     needs: test
@@ -203,7 +203,7 @@ jobs:
         env:
           FORGE_SIDECAR_BASE_URL: http://127.0.0.1:8787
           FORGE_SIDECAR_WORKSPACE_ROOT: ${{ github.workspace }}/.forge-sidecar-workspaces
-        run: pytest -q tests/test_forge_sidecar_integration.py
+        run: pytest -q tests/integration/forge/test_sidecar.py
       - name: Show Forge sidecar log
         if: always()
         run: cat "$GITHUB_WORKSPACE/.forge-sidecar.log" || true

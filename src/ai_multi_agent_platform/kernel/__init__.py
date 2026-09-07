@@ -23,6 +23,7 @@ from .repository import (
 )
 from .sqlite_repository import SqliteKernelRepository
 from .state import reduce_run, reduce_task
+from .task_mutations import TaskMutationBoundary
 
 __all__ = [
     "CommandRecord",
@@ -40,6 +41,7 @@ __all__ = [
     "RunStatus",
     "SqliteKernelRepository",
     "TERMINAL_RUN_STATUSES",
+    "TaskMutationBoundary",
     "TaskRepository",
     "TaskState",
     "TaskStatus",

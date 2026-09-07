@@ -46,7 +46,7 @@ sudo install -d -o root -g root -m 0755 /srv/ai-multi-agent-platform/frontend
 ```
 
 Clone/install the application under `/opt/ai-multi-agent-platform`, create its virtual
-environment and install `.[server]` as described in `docs/DEPLOYMENT.md`. The application
+environment and install `.[server]` as described in `docs/operations/DEPLOYMENT.md`. The application
 source and virtual environment should not be writable by untrusted executor workloads.
 
 Copy the example environment file outside the repository:

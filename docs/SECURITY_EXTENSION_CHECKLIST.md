@@ -108,7 +108,7 @@ For a security-sensitive subsystem, the PR must:
 
 1. update `docs/SECURITY_THREAT_MODEL.md` with the new/changed boundary, abuse cases, mitigations and residual risks;
 2. update this checklist only when a reusable review requirement changes;
-3. update `docs/SECURE_DEVELOPMENT.md` or `docs/SECURE_DEPLOYMENT.md` when contributor/operator behavior changes;
+3. update `docs/security/SECURE_DEVELOPMENT.md` or `docs/security/SECURE_DEPLOYMENT.md` when contributor/operator behavior changes;
 4. update `SECURITY.md` if vulnerability-reporting or incident-response policy changes;
 5. add or extend regression tests in the shared security baseline or the subsystem's contract suite;
 6. create/update an ADR if a canonical security ownership decision materially changes.

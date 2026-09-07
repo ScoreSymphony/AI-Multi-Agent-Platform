@@ -105,14 +105,14 @@ A health transport failure marks the Forge executor unhealthy rather than breaki
 
 ## Provenance
 
-The implementation was designed from the behavior audit recorded in `docs/FORGE_REUSE_AUDIT.md` and `upstream/forge-ai-agent-vps.yaml`.
+The implementation was designed from the behavior audit recorded in `docs/integrations/FORGE_REUSE_AUDIT.md` and `upstream/forge-ai-agent-vps.yaml`.
 
 No source from `ScoreSymphony/AI-Agent-VPS` is copied into this adapter. The current reuse mode is adapter integration plus reference-only behavioral influence.
 
 ## Concrete runtime coverage
 
 `tests/test_forge_http.py` validates protocol and identity translation for the concrete HTTP
-client. `tests/test_forge_sidecar_integration.py`, run by the `forge-sidecar-integration` CI job,
+client. `tests/integration/forge/test_sidecar.py`, run by the `forge-sidecar-integration` CI job,
 builds the exact pinned Rust sidecar and verifies real health, execution and cancellation behavior.
 The sidecar is loopback-only and optional; removing it does not affect core startup or reference
 execution.

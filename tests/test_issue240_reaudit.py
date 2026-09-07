@@ -12,7 +12,7 @@ from ai_multi_agent_platform.distributed.worker_protocol_http import WorkerProto
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 
 _PROFILE = Path("deploy/distributed/profiles/multi-local-workers.json")
-_DOC = Path("docs/ADVANCED_DEPLOYMENT.md")
+_DOC = Path("docs/operations/ADVANCED_DEPLOYMENT.md")
 
 
 def test_shipped_multi_local_workers_receive_private_workspace_roots(tmp_path: Path) -> None:

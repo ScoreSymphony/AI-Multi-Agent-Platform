@@ -22,15 +22,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/plan_step.py \
             src/ai_multi_agent_platform/benchmarking/plan_step_cli.py \
-            tests/test_issue_440_plan_step.py
+            tests/performance/test_issue_440_plan_step.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/plan_step.py \
             src/ai_multi_agent_platform/benchmarking/plan_step_cli.py \
-            tests/test_issue_440_plan_step.py
+            tests/performance/test_issue_440_plan_step.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/plan_step.py \
             src/ai_multi_agent_platform/benchmarking/plan_step_cli.py
-          pytest tests/test_issue_440_plan_step.py
+          pytest tests/performance/test_issue_440_plan_step.py
       - name: Run tiny durable Plan Step profiles
         run: |
           mkdir -p artifacts/benchmarks/pr-plan-step

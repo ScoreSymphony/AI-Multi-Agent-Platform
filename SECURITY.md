@@ -67,8 +67,8 @@ See [`docs/SECURITY_THREAT_MODEL.md`](docs/SECURITY_THREAT_MODEL.md) for assets,
 
 Security-sensitive work must follow:
 
-- [`docs/SECURE_DEVELOPMENT.md`](docs/SECURE_DEVELOPMENT.md)
-- [`docs/SECURE_DEPLOYMENT.md`](docs/SECURE_DEPLOYMENT.md)
+- [`docs/security/SECURE_DEVELOPMENT.md`](docs/security/SECURE_DEVELOPMENT.md)
+- [`docs/security/SECURE_DEPLOYMENT.md`](docs/security/SECURE_DEPLOYMENT.md)
 - [`docs/SECURITY_EXTENSION_CHECKLIST.md`](docs/SECURITY_EXTENSION_CHECKLIST.md)
 - [`LICENSE_POLICY.md`](LICENSE_POLICY.md) and upstream provenance requirements for supply-chain changes
 
