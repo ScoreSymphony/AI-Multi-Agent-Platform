@@ -18,6 +18,15 @@ from .codec import (
     skill_revision_from_json,
     skill_revision_to_json,
 )
+from .control_plane import (
+    SKILL_BINDING_COLLECTION,
+    SKILL_BUNDLE_COLLECTION,
+    SKILL_COLLECTION,
+    SKILL_COMMANDS,
+    SkillExecutionEnvironment,
+    SkillExecutionEnvironmentResolver,
+    register_skill_control_plane,
+)
 from .models import (
     SkillBundle,
     SkillBundleEntry,
@@ -54,6 +63,10 @@ __all__ = [
     "MarkdownSkillRenderer",
     "ReferenceSkillRenderer",
     "RenderedSkillBundle",
+    "SKILL_BINDING_COLLECTION",
+    "SKILL_BUNDLE_COLLECTION",
+    "SKILL_COLLECTION",
+    "SKILL_COMMANDS",
     "SKILL_REPOSITORY_SCHEMA_VERSION",
     "SKILL_RESOLVER_POLICY_VERSION",
     "SKILL_RESOLVER_VERSION",
@@ -65,6 +78,8 @@ __all__ = [
     "SkillDefinition",
     "SkillEvaluationStatus",
     "SkillExecutionCoordinator",
+    "SkillExecutionEnvironment",
+    "SkillExecutionEnvironmentResolver",
     "SkillProfile",
     "SkillRepository",
     "SkillResolutionRequest",
@@ -79,6 +94,7 @@ __all__ = [
     "new_skill_binding_id",
     "new_skill_bundle_id",
     "new_skill_id",
+    "register_skill_control_plane",
     "skill_binding_from_json",
     "skill_binding_to_json",
     "skill_bundle_from_json",
