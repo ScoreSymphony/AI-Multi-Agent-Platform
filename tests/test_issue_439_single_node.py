@@ -7,17 +7,25 @@ from pathlib import Path
 import pytest
 
 from ai_multi_agent_platform.agents import AgentInstructions, AgentProfile, InstructionSource
+from ai_multi_agent_platform.agents.execution_profile import decode_agent_step_execution_binding
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
     ExecutionRequest,
+    HealthStatus,
     OperationContext,
 )
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.domain import OwnerRef, new_id
+from ai_multi_agent_platform.models import (
+    ModelCapabilities,
+    ModelConfiguration,
+    ModelLocation,
+)
 from ai_multi_agent_platform.planning import ProposalStatus
 from ai_multi_agent_platform.planning.composition import PlanningOnlyLifecycleBackend
 from ai_multi_agent_platform.security import ActorIdentity, ActorType
+from ai_multi_agent_platform.testing import FakeModelProvider
 
 
 def _profile() -> AgentProfile:
@@ -31,6 +39,27 @@ def _profile() -> AgentProfile:
             )
         ),
     )
+
+
+def _register_local_model(deployment: object) -> str:
+    models = deployment.models  # type: ignore[attr-defined]
+    provider = FakeModelProvider()
+    models.register_provider(provider)
+    config_id = "model-issue-439-single-node"
+    models.register_model(
+        ModelConfiguration(
+            config_id=config_id,
+            display_name="Issue 439 local test model",
+            provider_id=provider.descriptor.provider_id,
+            capabilities=ModelCapabilities(
+                context_window=32_768,
+                modalities=("text",),
+            ),
+            location=ModelLocation.LOCAL,
+            health=HealthStatus.HEALTHY,
+        )
+    )
+    return config_id
 
 
 def test_planning_only_lifecycle_rejects_every_execution_operation() -> None:
@@ -67,6 +96,7 @@ def test_public_single_node_composes_planning_and_hands_activation_to_coordinato
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "single-node", secure_cookie=False)
         )
+        model_config_id = _register_local_model(deployment)
         admin = deployment.bootstrap_admin(
             "planning-admin",
             "correct horse battery staple for planning",
@@ -91,8 +121,9 @@ def test_public_single_node_composes_planning_and_hands_activation_to_coordinato
             idempotency_key="issue-439:single-node:propose",
         )
         assert proposal.status is ProposalStatus.VALIDATED
-        assert proposal.proposal.steps[0].assignment is not None
-        assert proposal.proposal.steps[0].assignment.agent_id == agent.agent_id
+        planned_step = proposal.proposal.steps[0]
+        assert planned_step.assignment is not None
+        assert planned_step.assignment.agent_id == agent.agent_id
 
         activated = await deployment.planning.activate(
             proposal.proposal.proposal_id,
@@ -104,6 +135,28 @@ def test_public_single_node_composes_planning_and_hands_activation_to_coordinato
         assert deployment.coordination.projection(activated.activation_plan_id).plan_id == (
             activated.activation_plan_id
         )
+
+        task = await deployment.kernel.get_task(created.task_id)
+        assert len(task.step_ids) == 1
+        canonical_step_id = task.step_ids[0]
+        binding = decode_agent_step_execution_binding(task.task.metadata, canonical_step_id)
+        assert binding is not None
+        assert binding.agent_id == agent.agent_id
+        assert binding.agent_revision == 1
+        assert binding.objective == planned_step.objective
+
+        step_runs = []
+        for run_id in task.run_ids:
+            run = await deployment.kernel.get_run(task.task_id, run_id)
+            if run.run.subject_type == "step" and run.run.subject_id == canonical_step_id:
+                step_runs.append(run)
+        assert len(step_runs) == 1
+        agent_runs = deployment.agents.repository.list_agent_runs(step_runs[0].run_id)
+        assert len(agent_runs) == 1
+        assert agent_runs[0].agent.agent_id == agent.agent_id
+        assert agent_runs[0].agent.revision == 1
+        assert agent_runs[0].selected_model_config_id == model_config_id
+        assert agent_runs[0].task_context["objective"] == planned_step.objective
 
         assert "planning-proposals" in deployment.control_plane.registered_collections
         assert "planning.propose" in deployment.control_plane.registered_commands
