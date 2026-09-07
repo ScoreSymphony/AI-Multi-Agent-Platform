@@ -137,13 +137,6 @@ def build_single_node_deployment(
         agents=base.agents.repository,
         capabilities=base.capabilities,
         authorization=base.approval_gate,
-        permission_resolver=lambda actor, _task: frozenset(
-            action.value
-            for action in base.authorization.globally_grantable_actions(
-                actor.actor_id,
-                actor_type=actor.actor_type.value,
-            )
-        ),
     )
     planning = ReferencePlanningService(
         planner=DeterministicReferencePlanner(),
