@@ -137,6 +137,7 @@ export class WorkflowProgressPoller {
   start(): void {
     if (this.timer !== null) return;
     this.stopped = false;
+    void this.refresh();
     this.timer = setInterval(() => {
       void this.refresh();
     }, this.intervalMs);
