@@ -90,7 +90,6 @@ def skill_revision_from_json(value: object) -> SkillRevision:
 
 
 def skill_profile_to_json(value: SkillProfile) -> dict[str, JsonValue]:
-    routing = value.routing_requirements
     return {
         "name": value.name,
         "description": value.description,
@@ -100,6 +99,7 @@ def skill_profile_to_json(value: SkillProfile) -> dict[str, JsonValue]:
             "ref": value.content.ref,
             "version": value.content.version,
         },
+        "dependencies": [revision_ref_to_json(item) for item in value.dependencies],
         "capability_requirements": [
             {
                 "capability_id": item.capability_id,
@@ -111,21 +111,16 @@ def skill_profile_to_json(value: SkillProfile) -> dict[str, JsonValue]:
             for item in value.capability_requirements
         ],
         "compatible_agent_roles": list(value.compatible_agent_roles),
-        "routing_requirements": {
-            "explicit_model_id": routing.explicit_model_id,
-            "min_context_window": routing.min_context_window,
-            "tool_calling": routing.tool_calling,
-            "structured_output": routing.structured_output,
-            "streaming": routing.streaming,
-            "modalities": list(routing.modalities),
-            "reasoning": list(routing.reasoning),
-            "local_only": routing.local_only,
-            "self_hosted_only": routing.self_hosted_only,
-        },
+        "routing_requirements": routing_requirements_to_json(value.routing_requirements),
+        "expected_inputs": list(value.expected_inputs),
+        "expected_outputs": list(value.expected_outputs),
+        "workspace_assumptions": list(value.workspace_assumptions),
+        "side_effects": list(value.side_effects),
         "conflicts_with_skill_ids": list(value.conflicts_with_skill_ids),
         "risk_level": value.risk_level.value,
         "trust_status": value.trust_status.value,
         "evaluation_status": value.evaluation_status.value,
+        "evaluation_metadata": dict(value.evaluation_metadata),
         "source": skill_source_to_json(value.source),
         "enabled": value.enabled,
         "deprecated": value.deprecated,
@@ -147,19 +142,31 @@ def skill_profile_from_json(value: object) -> SkillProfile:
                 ref=_optional_string(content_data, "ref"),
                 version=_optional_string(content_data, "version"),
             ),
+            dependencies=_revision_ref_array(data.get("dependencies", []), "dependencies"),
             capability_requirements=tuple(
                 _capability_requirement(item)
-                for item in _array(data.get("capability_requirements", []), "capability_requirements")
+                for item in _array(
+                    data.get("capability_requirements", []),
+                    "capability_requirements",
+                )
             ),
             compatible_agent_roles=_string_tuple(data, "compatible_agent_roles"),
             routing_requirements=routing_requirements_from_json(
                 data.get("routing_requirements", {})
             ),
+            expected_inputs=_string_tuple(data, "expected_inputs"),
+            expected_outputs=_string_tuple(data, "expected_outputs"),
+            workspace_assumptions=_string_tuple(data, "workspace_assumptions"),
+            side_effects=_string_tuple(data, "side_effects"),
             conflicts_with_skill_ids=_string_tuple(data, "conflicts_with_skill_ids"),
             risk_level=SkillRiskLevel(_optional_string(data, "risk_level") or "low"),
             trust_status=SkillTrustStatus(_optional_string(data, "trust_status") or "adopted"),
             evaluation_status=SkillEvaluationStatus(
                 _optional_string(data, "evaluation_status") or "not_evaluated"
+            ),
+            evaluation_metadata=_json_mapping(
+                data.get("evaluation_metadata", {}),
+                "Skill evaluation metadata",
             ),
             source=skill_source_from_json(data.get("source")),
             enabled=_boolean(data, "enabled", default=True),
@@ -243,7 +250,10 @@ def skill_bundle_from_json(value: object) -> SkillBundle:
         entry = _object(item, "Skill Bundle entry")
         ref = revision_ref_from_json(entry.get("ref"))
         if ref is None:
-            raise ContractError(ErrorCode.INVALID_CONFIGURATION, "Skill Bundle entry requires ref")
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                "Skill Bundle entry requires ref",
+            )
         entries.append(
             SkillBundleEntry(
                 ref=ref,
@@ -268,9 +278,15 @@ def skill_bundle_from_json(value: object) -> SkillBundle:
             project_id=_optional_string(data, "project_id"),
             workspace_id=_optional_string(data, "workspace_id"),
             capability_ids=_string_tuple(data, "capability_ids"),
-            capability_versions=_string_mapping(data.get("capability_versions", {}), "capability_versions"),
+            capability_versions=_string_mapping(
+                data.get("capability_versions", {}),
+                "capability_versions",
+            ),
             created_at=_datetime(data, "created_at"),
-            audit_metadata=_json_mapping(data.get("audit_metadata", {}), "Skill Bundle audit metadata"),
+            audit_metadata=_json_mapping(
+                data.get("audit_metadata", {}),
+                "Skill Bundle audit metadata",
+            ),
         )
     except ValueError as exc:
         raise _invalid("invalid Skill Bundle", exc) from exc
@@ -399,6 +415,19 @@ def _capability_requirement(value: object) -> SkillCapabilityRequirement:
         maximum_version=_optional_string(data, "maximum_version"),
         required_features=_string_tuple(data, "required_features"),
     )
+
+
+def _revision_ref_array(value: object, name: str) -> tuple[SkillRevisionRef, ...]:
+    refs: list[SkillRevisionRef] = []
+    for item in _array(value, name):
+        ref = revision_ref_from_json(item)
+        if ref is None:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"{name} cannot contain null revision refs",
+            )
+        refs.append(ref)
+    return tuple(refs)
 
 
 def _object(value: object, name: str) -> dict[str, object]:
