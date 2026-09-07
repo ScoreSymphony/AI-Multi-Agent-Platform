@@ -54,9 +54,7 @@ class AgentExecutionBinding:
             and self.model_requirements.explicit_model_id is not None
             and self.model_requirements.explicit_model_id != self.model_config_id
         ):
-            raise ValueError(
-                "model_config_id conflicts with model_requirements.explicit_model_id"
-            )
+            raise ValueError("model_config_id conflicts with model_requirements.explicit_model_id")
         if self.objective is not None and not self.objective.strip():
             raise ValueError("objective must be non-blank when supplied")
         for values, name in (
@@ -130,9 +128,7 @@ def decode_agent_step_execution_binding(
     if raw_binding is None:
         return None
     if not isinstance(raw_binding, Mapping):
-        raise ValueError(
-            f"{AGENT_STEP_EXECUTION_BINDINGS_KEY}[{step_id!r}] must be an object"
-        )
+        raise ValueError(f"{AGENT_STEP_EXECUTION_BINDINGS_KEY}[{step_id!r}] must be an object")
     return decode_agent_execution_binding(raw_binding)
 
 
