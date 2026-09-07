@@ -60,7 +60,9 @@ class WorkspaceRepositorySnapshot:
         if self.materialization_id is not None:
             validate_id(self.materialization_id, "materialization")
             if self.freshness is not RepositoryIntelligenceFreshness.LIVE_WORKSPACE:
-                raise ValueError("live materialization provenance requires live_workspace freshness")
+                raise ValueError(
+                    "live materialization provenance requires live_workspace freshness"
+                )
         elif self.freshness is not RepositoryIntelligenceFreshness.WORKSPACE_SNAPSHOT:
             raise ValueError("immutable Workspace provenance requires workspace_snapshot freshness")
         if self.dirty and self.materialization_id is None:
@@ -119,10 +121,14 @@ class WorkspaceAwareRepositoryIntelligenceProvider(BaselineRepositoryIntelligenc
         except ValueError:
             return await super().invoke(invocation)
 
-        if operation in {
-            RepositoryIntelligenceOperation.HEALTH,
-            RepositoryIntelligenceOperation.INDEX_STATUS,
-        } or invocation.run_id is None:
+        if (
+            operation
+            in {
+                RepositoryIntelligenceOperation.HEALTH,
+                RepositoryIntelligenceOperation.INDEX_STATUS,
+            }
+            or invocation.run_id is None
+        ):
             return await super().invoke(invocation)
 
         arguments = invocation.arguments_json()
