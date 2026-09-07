@@ -1,0 +1,101 @@
+name: Distributed faults smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  distributed-faults-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install benchmark environment
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Validate distributed fault implementation
+        run: |
+          ruff format --check \
+            src/ai_multi_agent_platform/benchmarking/distributed_faults.py \
+            src/ai_multi_agent_platform/benchmarking/distributed_faults_cli.py \
+            tests/test_issue_440_distributed_faults.py
+          ruff check \
+            src/ai_multi_agent_platform/benchmarking/distributed_faults.py \
+            src/ai_multi_agent_platform/benchmarking/distributed_faults_cli.py \
+            tests/test_issue_440_distributed_faults.py
+          mypy \
+            src/ai_multi_agent_platform/benchmarking/distributed_faults.py \
+            src/ai_multi_agent_platform/benchmarking/distributed_faults_cli.py
+          pytest tests/test_issue_440_distributed_faults.py
+      - name: Run tiny distributed fault profile
+        run: |
+          mkdir -p artifacts/benchmarks/pr-distributed-faults
+          platform-distributed-faults \
+            --worker-count 3 \
+            --pre-fault-rounds 1 \
+            --degraded-rounds 1 \
+            --post-rejoin-rounds 1 \
+            --payload-bytes 1024 \
+            --heartbeat-timeout-seconds 1 \
+            --reservation-ttl-seconds 1 \
+            --timeout-seconds 20 \
+            --safety-max-operations 16 \
+            --safety-max-payload-bytes 4096 \
+            --platform-commit "$GITHUB_SHA" \
+            --output artifacts/benchmarks/pr-distributed-faults/report.json
+      - name: Validate distributed fault report
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          from jsonschema import Draft202012Validator
+
+          schema = json.loads(
+              Path("docs/schemas/benchmark-distributed-faults.v1.schema.json").read_text()
+          )
+          report = json.loads(
+              Path("artifacts/benchmarks/pr-distributed-faults/report.json").read_text()
+          )
+          Draft202012Validator(schema).validate(report)
+
+          benchmark = report["benchmark"]
+          correctness = report["correctness"]
+          assert benchmark["worker_count"] == 3
+          assert benchmark["pre_fault_jobs"] == 3
+          assert benchmark["degraded_jobs"] == 2
+          assert benchmark["post_rejoin_jobs"] == 3
+          assert benchmark["expected_successful_jobs"] == 9
+          assert benchmark["total_attempts"] == 10
+          assert correctness["passed"] is True
+          assert correctness["stable_worker_ids"] == 3
+          assert correctness["lost_worker_offline"] is True
+          assert correctness["degraded_avoided_lost_worker"] is True
+          assert correctness["rejoin_preserved_identity"] is True
+          assert correctness["post_rejoin_used_rejoined_worker"] is True
+          assert correctness["workspace_failure_code"] == "unavailable"
+          assert correctness["workspace_failure_retryable"] is True
+          assert correctness["workspace_failure_record_lost"] is True
+          assert correctness["workspace_failure_reached_execution"] is False
+          assert correctness["workspace_recovery_terminal"] is True
+          assert correctness["workspace_cleanup_succeeded"] is True
+          assert correctness["terminal_successful_jobs"] == 9
+          assert report["pre_fault_dispatch_latency"]["count"] == 3
+          assert report["worker_loss_reconciliation_latency"]["count"] == 1
+          assert report["degraded_dispatch_latency"]["count"] == 2
+          assert report["worker_rejoin_latency"]["count"] == 1
+          assert report["post_rejoin_dispatch_latency"]["count"] == 3
+          assert report["workspace_failure_latency"]["count"] == 1
+          assert report["workspace_recovery_dispatch_latency"]["count"] == 1
+          PY
+      - name: Upload distributed fault evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-distributed-fault-benchmark
+          path: artifacts/benchmarks/pr-distributed-faults
+          if-no-files-found: ignore

@@ -1,5 +1,10 @@
 """Canonical distributed node, worker and scheduling primitives."""
 
+from .artifact_capability_provider import (
+    DISTRIBUTED_WORKSPACE_ARTIFACT_TOOL_REF,
+    WORKSPACE_ARTIFACT_CAPABILITY_ID,
+    DistributedExecutorArtifactProvider,
+)
 from .capability_provider import (
     DISTRIBUTED_ECHO_TOOL_REF,
     DistributedExecutorEchoProvider,
@@ -84,6 +89,13 @@ from .pressure import (
     PressureState,
     ProtectedHeadroom,
 )
+from .pressure_reporting import (
+    PRESSURE_PROVENANCE_NAMESPACE,
+    PRESSURE_REPORT_NAMESPACE,
+    RegistryPressureSnapshotProvider,
+    attach_pressure_report,
+    pressure_report_metadata,
+)
 from .providers import DistributedNodeProvider, DistributedWorkerProvider
 from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
@@ -122,30 +134,43 @@ from .workspace import (
     WorkspaceDispatchEvidence,
     WorkspaceJobMaterializationResolver,
 )
+from .workspace_artifacts import (
+    ArtifactPublishingWorkerDispatcher,
+    CanonicalWorkspaceArtifactPublisher,
+    WorkspaceArtifactContextResolver,
+    WorkspaceArtifactPublisher,
+)
 
 __all__ = [
     "DISTRIBUTED_ADMIN_COMMANDS",
     "DISTRIBUTED_ECHO_TOOL_REF",
     "DISTRIBUTED_STATE_SCHEMA_VERSION",
+    "DISTRIBUTED_WORKSPACE_ARTIFACT_TOOL_REF",
     "EXECUTOR_WORKER_INPUT_KEY",
     "EXECUTOR_WORKER_INPUT_SCHEMA",
     "NODE_COLLECTION",
+    "PRESSURE_PROVENANCE_NAMESPACE",
+    "PRESSURE_REPORT_NAMESPACE",
     "WORKER_COLLECTION",
     "WORKER_JOB_COLLECTION",
     "WORKER_COMMAND_TOPIC_PREFIX",
     "WORKER_PROTOCOL_VERSION",
     "WORKER_REPLY_TOPIC_PREFIX",
     "WORKER_TRANSPORT_SCHEMA_VERSION",
+    "WORKSPACE_ARTIFACT_CAPABILITY_ID",
     "AcceleratorResource",
     "AdmissionAction",
     "AdmissionDecision",
     "AdmissionReason",
     "AdmissionReasonCode",
+    "ArtifactPublishingWorkerDispatcher",
     "CandidateEvaluation",
+    "CanonicalWorkspaceArtifactPublisher",
     "DeterministicScheduler",
     "DispatchRecord",
     "DispatchState",
     "DistributedAdminCommandHandlers",
+    "DistributedExecutorArtifactProvider",
     "DistributedExecutorEchoProvider",
     "DistributedLifecycleBackend",
     "DistributedNodeProvider",
@@ -185,6 +210,7 @@ __all__ = [
     "RatioThreshold",
     "RegistrationRequest",
     "RegistryError",
+    "RegistryPressureSnapshotProvider",
     "RegistrySnapshot",
     "RejectionCode",
     "RejectionReason",
@@ -216,8 +242,11 @@ __all__ = [
     "WorkerTransportCodec",
     "WorkerTransportEndpoint",
     "WorkerWorkspaceResolver",
+    "WorkspaceArtifactContextResolver",
+    "WorkspaceArtifactPublisher",
     "WorkspaceDispatchEvidence",
     "WorkspaceJobMaterializationResolver",
+    "attach_pressure_report",
     "bind_worker_job_to_tool_invocation",
     "executor_worker_input",
     "parse_int_fields",
@@ -226,6 +255,7 @@ __all__ = [
     "parse_proc_swaps",
     "parse_psi",
     "prepare_registry_disaster_recovery",
+    "pressure_report_metadata",
     "register_distributed_control_plane",
     "tool_lineage",
     "worker_command_topic",
