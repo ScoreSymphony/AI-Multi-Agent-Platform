@@ -9,7 +9,6 @@ from jsonschema import Draft202012Validator
 from ai_multi_agent_platform.benchmarking.operating_envelope import OperatingEnvelopeAnalyzer
 from ai_multi_agent_platform.benchmarking.operating_envelope_cli import main
 
-
 _ENVIRONMENT = {
     "system": "Linux",
     "release": "test-release",
