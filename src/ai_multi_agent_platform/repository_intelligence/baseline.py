@@ -37,6 +37,7 @@ RepositorySnapshotLoader = Callable[
 
 _MAX_SOURCE_SLICE_LINES = 500
 _MAX_LINE_PREVIEW_CHARS = 4096
+_MAX_SOURCE_SLICE_CHARS = 65_536
 
 
 class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
@@ -200,6 +201,13 @@ class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
                 haystack = line if case_sensitive else line.casefold()
                 if needle not in haystack:
                     continue
+                if len(hits) == max_results:
+                    return {
+                        "query": query,
+                        "hits": hits,
+                        "truncated": True,
+                        "skipped_binary_files": skipped_binary_files,
+                    }
                 preview = line[:_MAX_LINE_PREVIEW_CHARS]
                 hits.append(
                     {
@@ -209,13 +217,6 @@ class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
                         "preview_truncated": len(preview) < len(line),
                     }
                 )
-                if len(hits) >= max_results:
-                    return {
-                        "query": query,
-                        "hits": hits,
-                        "truncated": True,
-                        "skipped_binary_files": skipped_binary_files,
-                    }
         return {
             "query": query,
             "hits": hits,
@@ -266,16 +267,41 @@ class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
         lines = text.splitlines()
         actual_end = min(end_line, len(lines))
         selected = lines[start_line - 1 : actual_end] if start_line <= len(lines) else []
+        output_lines: list[JsonValue] = []
+        remaining_chars = _MAX_SOURCE_SLICE_CHARS
+        truncated = False
+        returned_end = min(actual_end, start_line - 1)
+
+        for number, value in enumerate(selected, start=start_line):
+            if remaining_chars == 0:
+                truncated = True
+                break
+            preview_limit = min(_MAX_LINE_PREVIEW_CHARS, remaining_chars)
+            preview = value[:preview_limit]
+            text_truncated = len(preview) < len(value)
+            output_lines.append(
+                {
+                    "line": number,
+                    "text": preview,
+                    "text_truncated": text_truncated,
+                }
+            )
+            returned_end = number
+            remaining_chars -= len(preview)
+            if text_truncated:
+                truncated = True
+            if remaining_chars == 0 and number < actual_end:
+                truncated = True
+                break
+
         return {
             "path": path,
             "start_line": start_line,
-            "end_line": actual_end,
+            "end_line": returned_end,
             "requested_end_line": end_line,
             "total_lines": len(lines),
-            "lines": [
-                {"line": number, "text": value}
-                for number, value in enumerate(selected, start=start_line)
-            ],
+            "lines": output_lines,
+            "truncated": truncated or returned_end < actual_end,
         }
 
     def _result(
