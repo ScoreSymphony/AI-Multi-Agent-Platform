@@ -247,8 +247,7 @@ class ModelBackedPlanner:
             "and constraints. Each step may contain key, title, objective, depends_on, assignment, "
             "capability_requirements, model_requirements, requires_model, workspace_id, "
             "input_refs, output_refs, expected_evidence, verification_policy_refs and "
-            "reuse_step_ids.\n"
-            + json.dumps(payload, sort_keys=True)
+            "reuse_step_ids.\n" + json.dumps(payload, sort_keys=True)
         )
 
 
