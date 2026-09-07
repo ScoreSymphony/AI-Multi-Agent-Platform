@@ -8,7 +8,7 @@ Step attempts once ``Task.plan_ref`` moves to a replacement Plan.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Protocol, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
@@ -137,13 +137,34 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         retry_policies: dict[str, StepRetryPolicy] | None = None,
         predecessor_failure_policy: PredecessorFailurePolicy = PredecessorFailurePolicy.FAIL_FAST,
     ) -> PlanCoordinationProjection:
+        # Retirement is a destructive coordination transition. Repeat the base contract checks
+        # first so an invalid replacement can never retire a valid predecessor as a side effect.
+        self._validate_graph(plan, steps)
         task = await self.kernel.get_task(plan.task_id)
-        if task.plan_ref == plan.id:
-            await self._retire_other_task_plans(
-                task_id=plan.task_id,
-                active_plan_id=plan.id,
-                now=datetime.now(UTC),
+        if task.plan_ref != plan.id:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "coordinator Plan does not match the active canonical task Plan",
+                details={"task_id": plan.task_id, "plan_id": plan.id},
             )
+        if set(task.step_ids) != {step.id for step in steps}:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "coordinator Steps do not match the active canonical task Plan",
+            )
+        policies = retry_policies or {}
+        unknown = set(policies) - {step.id for step in steps}
+        if unknown:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "retry policy references unknown Steps",
+            )
+
+        await self._retire_other_task_plans(
+            task_id=plan.task_id,
+            active_plan_id=plan.id,
+            now=self._now(None),
+        )
         return await super().register_plan(
             plan,
             steps,
