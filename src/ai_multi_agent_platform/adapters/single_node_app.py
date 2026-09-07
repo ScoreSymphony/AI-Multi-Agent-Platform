@@ -87,7 +87,6 @@ def build_default_single_node_deployment(
             BaselineRepositoryIntelligenceProvider(
                 AuthorizedRepositorySnapshotLoader(
                     deployment.repositories,
-                    deployment.repository_registry,
                     actor_resolver=_repository_actor_ref,
                 )
             )
