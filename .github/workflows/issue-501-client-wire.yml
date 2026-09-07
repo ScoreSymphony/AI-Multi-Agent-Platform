@@ -1,0 +1,112 @@
+name: Issue 501 client wiring
+
+on:
+  push:
+    branches:
+      - feature/501-proposal-specification-governance
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/501-proposal-specification-governance
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Wire canonical governance clients
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          shell = Path("frontend/src/app/Shell.tsx")
+          text = shell.read_text()
+          text = text.replace(
+              'import { IntegrationsClient } from "../api/integrations";\n',
+              'import { IntegrationsClient } from "../api/integrations";\nimport { GovernanceClient } from "../api/governance";\n',
+          )
+          text = text.replace(
+              'import { IntegrationsPage,\n',
+              'import {\n  GovernancePage,\n  ProposalGovernanceDetailPage,\n  SpecificationGovernanceDetailPage,\n} from "../pages/GovernancePage";\nimport { IntegrationsPage,\n',
+          ) if 'import { IntegrationsPage,\n' in text else text
+          if 'from "../pages/GovernancePage"' not in text:
+              marker = 'import { MarketplacePage } from "../pages/MarketplacePage";\n'
+              text = text.replace(
+                  marker,
+                  'import {\n  GovernancePage,\n  ProposalGovernanceDetailPage,\n  SpecificationGovernanceDetailPage,\n} from "../pages/GovernancePage";\n' + marker,
+              )
+          marker = '  const integrationsClient = useMemo(\n'
+          if 'const governanceClient = useMemo' not in text:
+              text = text.replace(
+                  marker,
+                  '  const governanceClient = useMemo(\n    () => new GovernanceClient({ baseUrl, fetchImpl: session.fetch }),\n    [baseUrl, session],\n  );\n' + marker,
+              )
+          marker = '  const taskMatch = matchPath("/tasks/:taskId", path);\n'
+          text = text.replace(
+              marker,
+              marker
+              + '  const governanceProposalMatch = matchPath("/governance/proposals/:proposalId", path);\n'
+              + '  const governanceSpecificationMatch = matchPath("/governance/specifications/:specificationId", path);\n',
+          )
+          route_marker = '  else if (path === "/runs") content = <RunsPage client={client} />;\n'
+          governance_routes = '''  else if (path === "/governance") {\n    content = (\n      <ManifestResourcesPage\n        state={manifestState}\n        manifest={manifest}\n        label="Proposal and Specification governance"\n        resources={["proposals", "specifications"]}\n      >\n        <GovernancePage client={governanceClient} />\n      </ManifestResourcesPage>\n    );\n  } else if (governanceProposalMatch) {\n    content = (\n      <ManifestResourcePage\n        state={manifestState}\n        manifest={manifest}\n        label="Proposal governance"\n        resource="proposals"\n      >\n        <ProposalGovernanceDetailPage\n          client={governanceClient}\n          proposalId={governanceProposalMatch.proposalId}\n        />\n      </ManifestResourcePage>\n    );\n  } else if (governanceSpecificationMatch) {\n    content = (\n      <ManifestResourcePage\n        state={manifestState}\n        manifest={manifest}\n        label="Specification governance"\n        resource="specifications"\n      >\n        <SpecificationGovernanceDetailPage\n          client={governanceClient}\n          specificationId={governanceSpecificationMatch.specificationId}\n        />\n      </ManifestResourcePage>\n    );\n  }\n'''
+          if 'path === "/governance"' not in text:
+              text = text.replace(route_marker, governance_routes + route_marker)
+          shell.write_text(text)
+
+          navigation = Path("frontend/src/app/navigation.ts")
+          text = navigation.read_text()
+          marker = '  { label: "Tasks", path: "/tasks", group: "Work", apiResource: "tasks" },\n'
+          if 'path: "/governance"' not in text:
+              text = text.replace(
+                  marker,
+                  marker
+                  + '  { label: "Governance", path: "/governance", group: "Work", apiResource: "proposals" },\n',
+              )
+          navigation.write_text(text)
+
+          governance = Path("frontend/src/api/governance.ts")
+          text = governance.read_text()
+          text = text.replace(
+              '''export interface ApprovalRequestResult {\n  approval_id: string;\n  status: string;\n  requested_action_digest: string;\n}\n\nexport interface TaskConversionResult {\n  id: string;\n  type: string;\n  task_id?: string;\n  [key: string]: unknown;\n}\n''',
+              '''export interface ApprovalRequestResult {\n  id: string;\n  type: "approval";\n  status: string;\n  specification_id: string;\n  specification_revision: number;\n  specification_digest: string;\n  expires_at: string;\n}\n\nexport interface TaskConversionResult {\n  id: string;\n  type: "task";\n  status: string;\n  project_id: string | null;\n  governance: unknown;\n}\n''',
+          )
+          governance.write_text(text)
+
+          cli = Path("src/ai_multi_agent_platform/cli/main.py")
+          text = cli.read_text()
+          text = text.replace("import argparse\n", "import argparse\nimport json\n", 1)
+          parser_marker = '    extension_show.add_argument("resource_id")\n\n    return parser\n'
+          parser_replacement = '''    extension_show.add_argument("resource_id")\n    extension_execute = extension_commands.add_parser(\n        "execute",\n        help="execute one explicitly registered canonical extension command",\n    )\n    extension_execute.add_argument("canonical_command")\n    extension_execute.add_argument("resource_ref")\n    extension_execute.add_argument("--payload", default="{}", help="JSON object command payload")\n    extension_execute.add_argument("--idempotency-key", required=True)\n\n    return parser\n'''
+          text = text.replace(parser_marker, parser_replacement)
+          command_marker = '''    if args.command == "commands":\n        return CommandResult(_name_page(specification, commands))\n\n    collection = str(args.collection)\n'''
+          command_replacement = '''    if args.command == "commands":\n        return CommandResult(_name_page(specification, commands))\n    if args.command == "execute":\n        command = str(args.canonical_command)\n        if command not in commands:\n            raise ProfileError(f"canonical extension command is not registered: {command}")\n        body = {"resource_ref": str(args.resource_ref), **_json_object(str(args.payload))}\n        return CommandResult(\n            client.post(\n                f"/commands/{_segment(command)}",\n                body=body,\n                idempotency_key=str(args.idempotency_key),\n            )\n        )\n\n    collection = str(args.collection)\n'''
+          text = text.replace(command_marker, command_replacement)
+          helper_marker = '\ndef _extension_names(response: ClientResponse, field: str) -> tuple[str, ...]:\n'
+          helper = '''\ndef _json_object(raw: str) -> dict[str, JsonValue]:\n    try:\n        decoded = json.loads(raw)\n    except json.JSONDecodeError as exc:\n        raise ProfileError("--payload must be valid JSON") from exc\n    if not isinstance(decoded, dict):\n        raise ProfileError("--payload must decode to a JSON object")\n    return cast(dict[str, JsonValue], decoded)\n\n\ndef _extension_names(response: ClientResponse, field: str) -> tuple[str, ...]:\n'''
+          if "def _json_object(" not in text:
+              text = text.replace(helper_marker, helper)
+          cli.write_text(text)
+
+          test = Path("tests/test_issue_501_governance_cli.py")
+          test.write_text('''from __future__ import annotations\n\nimport json\nfrom collections.abc import Mapping\nfrom io import StringIO\nfrom pathlib import Path\nfrom urllib.parse import urlsplit\n\nfrom ai_multi_agent_platform.cli.client import RawResponse\nfrom ai_multi_agent_platform.cli.main import run_cli\n\n\nclass GovernanceExtensionTransport:\n    def __init__(self) -> None:\n        self.command_body: object | None = None\n        self.idempotency_key: str | None = None\n\n    def request(\n        self,\n        method: str,\n        url: str,\n        *,\n        headers: Mapping[str, str],\n        body: bytes | None,\n        timeout: float,\n    ) -> RawResponse:\n        del timeout\n        path = urlsplit(url).path\n        if path == "/api/v1/openapi.json":\n            payload: object = {\n                "openapi": "3.1.0",\n                "x-registered-extension-collections": ["proposals", "specifications"],\n                "x-registered-extension-commands": ["specification.convert-to-task"],\n            }\n        elif path == "/api/v1/commands/specification.convert-to-task":\n            assert method == "POST"\n            self.command_body = json.loads(body or b"{}")\n            self.idempotency_key = headers.get("Idempotency-Key")\n            payload = {"id": "task_test", "type": "task", "status": "draft"}\n        else:\n            raise AssertionError(f"unexpected request: {method} {path}")\n        return RawResponse(\n            status=200,\n            body=json.dumps(payload).encode("utf-8"),\n            headers={"x-api-version": "v1"},\n        )\n\n\ndef test_extension_execute_uses_registered_command_and_canonical_mutation_contract(\n    tmp_path: Path,\n) -> None:\n    transport = GovernanceExtensionTransport()\n    stdout = StringIO()\n    stderr = StringIO()\n    code = run_cli(\n        [\n            "--config",\n            str(tmp_path / "cli.json"),\n            "--json",\n            "extension",\n            "execute",\n            "specification.convert-to-task",\n            "specification_test",\n            "--payload",\n            '{"approval_id":"approval_test"}',\n            "--idempotency-key",\n            "governance-cli-convert",\n        ],\n        transport=transport,\n        stdout=stdout,\n        stderr=stderr,\n    )\n    assert code == 0 and not stderr.getvalue()\n    assert transport.command_body == {\n        "resource_ref": "specification_test",\n        "approval_id": "approval_test",\n    }\n    assert transport.idempotency_key == "governance-cli-convert"\n\n\ndef test_extension_execute_rejects_unregistered_command_before_post(tmp_path: Path) -> None:\n    transport = GovernanceExtensionTransport()\n    stdout = StringIO()\n    stderr = StringIO()\n    code = run_cli(\n        [\n            "--config",\n            str(tmp_path / "cli.json"),\n            "extension",\n            "execute",\n            "specification.bypass",\n            "specification_test",\n            "--idempotency-key",\n            "governance-cli-reject",\n        ],\n        transport=transport,\n        stdout=stdout,\n        stderr=stderr,\n    )\n    assert code == 2\n    assert "not registered" in stderr.getvalue()\n    assert transport.command_body is None\n''')
+          PY
+      - run: python -m pip install 'ruff==0.16.6'
+      - run: ruff format src/ai_multi_agent_platform/cli/main.py tests/test_issue_501_governance_cli.py
+      - run: ruff check src/ai_multi_agent_platform/cli/main.py tests/test_issue_501_governance_cli.py
+      - name: Commit wiring
+        shell: bash
+        run: |
+          git config user.name "Score Symphony CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add frontend/src/app/Shell.tsx frontend/src/app/navigation.ts frontend/src/api/governance.ts src/ai_multi_agent_platform/cli/main.py tests/test_issue_501_governance_cli.py
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "feat: expose issue 501 governance in web and CLI"
+          git push origin HEAD:feature/501-proposal-specification-governance
