@@ -34,7 +34,7 @@ def _hermes() -> int:
             file=sys.stderr,
         )
         return 2
-    return _run_pytest("tests/test_issue_8_hermes_pinned_integration.py")
+    return _run_pytest("tests/integration/upstreams/test_hermes_pinned.py")
 
 
 def _forge() -> int:
@@ -49,7 +49,7 @@ def _forge() -> int:
     if not Path(workspace_root).is_dir():
         print(f"Forge workspace root does not exist: {workspace_root}", file=sys.stderr)
         return 2
-    return _run_pytest("tests/test_forge_sidecar_integration.py")
+    return _run_pytest("tests/integration/forge/test_sidecar.py")
 
 
 def main(argv: list[str] | None = None) -> int:

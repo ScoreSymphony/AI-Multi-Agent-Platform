@@ -64,6 +64,15 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+  "unit: isolated component tests",
+  "contract: canonical platform contract and conformance tests",
+  "integration: multi-component or real upstream integration tests",
+  "e2e: end-to-end platform flow tests",
+  "performance: benchmark, pressure, scale, latency and throughput tests",
+  "regression: durable reproductions of previously observed defects",
+  "release: release artifact and compatibility verification tests",
+]
 
 [tool.ruff]
 target-version = "py312"

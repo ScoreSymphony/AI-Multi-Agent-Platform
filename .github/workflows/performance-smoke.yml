@@ -21,31 +21,31 @@ jobs:
         run: |
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking \
-            tests/test_issue_440_benchmarking.py \
-            tests/test_issue_440_sweep.py \
-            tests/test_issue_440_workloads.py \
-            tests/test_issue_440_endurance.py \
-            tests/test_issue_440_stress_fault.py \
-            tests/test_issue_440_transport_faults.py \
-            tests/test_issue_440_persistence.py
+            tests/performance/test_issue_440_benchmarking.py \
+            tests/performance/test_issue_440_sweep.py \
+            tests/performance/test_issue_440_workloads.py \
+            tests/performance/test_issue_440_endurance.py \
+            tests/performance/test_issue_440_stress_fault.py \
+            tests/performance/test_issue_440_transport_faults.py \
+            tests/performance/test_issue_440_persistence.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking \
-            tests/test_issue_440_benchmarking.py \
-            tests/test_issue_440_sweep.py \
-            tests/test_issue_440_workloads.py \
-            tests/test_issue_440_endurance.py \
-            tests/test_issue_440_stress_fault.py \
-            tests/test_issue_440_transport_faults.py \
-            tests/test_issue_440_persistence.py
+            tests/performance/test_issue_440_benchmarking.py \
+            tests/performance/test_issue_440_sweep.py \
+            tests/performance/test_issue_440_workloads.py \
+            tests/performance/test_issue_440_endurance.py \
+            tests/performance/test_issue_440_stress_fault.py \
+            tests/performance/test_issue_440_transport_faults.py \
+            tests/performance/test_issue_440_persistence.py
           mypy src/ai_multi_agent_platform/benchmarking
           pytest \
-            tests/test_issue_440_benchmarking.py \
-            tests/test_issue_440_sweep.py \
-            tests/test_issue_440_workloads.py \
-            tests/test_issue_440_endurance.py \
-            tests/test_issue_440_stress_fault.py \
-            tests/test_issue_440_transport_faults.py \
-            tests/test_issue_440_persistence.py
+            tests/performance/test_issue_440_benchmarking.py \
+            tests/performance/test_issue_440_sweep.py \
+            tests/performance/test_issue_440_workloads.py \
+            tests/performance/test_issue_440_endurance.py \
+            tests/performance/test_issue_440_stress_fault.py \
+            tests/performance/test_issue_440_transport_faults.py \
+            tests/performance/test_issue_440_persistence.py
       - name: Run deterministic single-node performance smoke
         run: |
           mkdir -p artifacts/benchmarks
