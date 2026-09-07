@@ -142,6 +142,6 @@ added to Task/Run state.
 - Do not put credential values in JSON, service definitions, compose files or command arguments
   committed to the repository.
 
-See `docs/ADVANCED_DEPLOYMENT.md` for the network matrix, placement examples, failure behavior,
+See `docs/operations/ADVANCED_DEPLOYMENT.md` for the network matrix, placement examples, failure behavior,
 credential rotation, drain/restart/replacement operations, reproducible two-machine flow and the
 #39 fallback path.
