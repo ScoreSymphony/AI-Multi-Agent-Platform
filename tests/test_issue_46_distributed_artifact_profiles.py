@@ -3,7 +3,6 @@ from pathlib import Path
 from ai_multi_agent_platform.deployment import load_advanced_deployment_profile
 from ai_multi_agent_platform.distributed import WORKSPACE_ARTIFACT_CAPABILITY_ID
 
-
 PROFILES = Path("deploy/distributed/profiles")
 
 
