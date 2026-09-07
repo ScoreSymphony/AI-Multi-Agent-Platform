@@ -73,7 +73,10 @@ class InMemorySkillRepository:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "skill revision must increase exactly by one",
-                details={"current_revision": current.current_revision, "new_revision": revision.revision},
+                details={
+                    "current_revision": current.current_revision,
+                    "new_revision": revision.revision,
+                },
             )
         self._validate_pair(definition, revision)
         key = (revision.skill_id, revision.revision)

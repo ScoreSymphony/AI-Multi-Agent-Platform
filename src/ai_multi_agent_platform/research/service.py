@@ -507,7 +507,12 @@ class ResearchService:
         item_id = claims[0].research_item_id
         bindings = self.repository.list_verification_bindings(item_id)
         required = {
-            (ResearchVerificationSubjectType.CLAIM, claim.claim_id, str(claim.revision), claim.digest)
+            (
+                ResearchVerificationSubjectType.CLAIM,
+                claim.claim_id,
+                str(claim.revision),
+                claim.digest,
+            )
             for claim in claims
         }
         required.update(

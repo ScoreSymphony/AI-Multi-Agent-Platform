@@ -50,9 +50,7 @@ class GoalResourceService(ResourceService):
         del context, query
         return tuple(_goal_resource(item) for item in await self._service.list_goals())
 
-    async def get_resource(
-        self, context: RequestContext, resource_id: str
-    ) -> dict[str, JsonValue]:
+    async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         del context
         return _goal_resource(await self._service.get_goal(resource_id))
 
@@ -68,7 +66,9 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         if resource_ref != GOAL_COLLECTION:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "goal.create resource_ref must be 'goals'")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "goal.create resource_ref must be 'goals'"
+            )
         owner_type = context.actor.owner_type
         owner_id = context.actor.owner_id
         if owner_type is None or owner_id is None:
@@ -85,9 +85,7 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
             project_id=_optional_string(payload, "project_id"),
             success_criteria=_parse_criteria(_required_array(payload, "success_criteria")),
             constraints=_parse_constraints(_optional_object(payload, "constraints")),
-            observation_policy=_parse_observation(
-                _optional_object(payload, "observation_policy")
-            ),
+            observation_policy=_parse_observation(_optional_object(payload, "observation_policy")),
             task_generation_policy=_parse_task_generation(
                 _optional_object(payload, "task_generation_policy")
             ),

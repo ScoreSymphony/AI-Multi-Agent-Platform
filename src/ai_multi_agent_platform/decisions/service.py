@@ -70,9 +70,13 @@ class DecisionService:
         previous = self.repository.get(previous_id)
         previous_view = self.view(previous_id)
         if previous_view.status is not DecisionStatus.CURRENT:
-            raise ContractError(ErrorCode.CONFLICT, "only a current DecisionRecord can be superseded")
+            raise ContractError(
+                ErrorCode.CONFLICT, "only a current DecisionRecord can be superseded"
+            )
         if replacement.status is not DecisionStatus.CURRENT:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "replacement DecisionRecord must be current")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "replacement DecisionRecord must be current"
+            )
         if replacement.supersedes != previous_id:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
@@ -83,10 +87,17 @@ class DecisionService:
                 ErrorCode.INVALID_REQUEST,
                 "replacement DecisionRecord revision must increment its predecessor by exactly one",
             )
-        if (replacement.scope_type, replacement.scope_id) != (previous.scope_type, previous.scope_id):
-            raise ContractError(ErrorCode.INVALID_REQUEST, "supersession must preserve decision scope")
+        if (replacement.scope_type, replacement.scope_id) != (
+            previous.scope_type,
+            previous.scope_id,
+        ):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "supersession must preserve decision scope"
+            )
         if replacement.subject != previous.subject:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "supersession must preserve decision subject")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "supersession must preserve decision subject"
+            )
         if not _same_subject_reference(replacement.subject_ref, previous.subject_ref):
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
@@ -96,10 +107,14 @@ class DecisionService:
         self.repository.create_superseding(previous_id, replacement)
         return self.view(replacement.id)
 
-    def withdraw(self, decision_record_id: str, *, actor_ref: str, reason: str) -> DecisionRecordView:
+    def withdraw(
+        self, decision_record_id: str, *, actor_ref: str, reason: str
+    ) -> DecisionRecordView:
         current = self.view(decision_record_id)
         if current.status is not DecisionStatus.CURRENT:
-            raise ContractError(ErrorCode.CONFLICT, "only a current DecisionRecord can be withdrawn")
+            raise ContractError(
+                ErrorCode.CONFLICT, "only a current DecisionRecord can be withdrawn"
+            )
         self.repository.withdraw(decision_record_id, actor_ref=actor_ref, reason=reason)
         return self.view(decision_record_id)
 
@@ -158,13 +173,17 @@ class DecisionService:
         if decision_record_id not in records:
             raise ContractError(ErrorCode.NOT_FOUND, "DecisionRecord was not found")
         predecessor_by_successor = {
-            record.id: record.supersedes for record in records.values() if record.supersedes is not None
+            record.id: record.supersedes
+            for record in records.values()
+            if record.supersedes is not None
         }
         root = decision_record_id
         seen: set[str] = set()
         while root in predecessor_by_successor:
             if root in seen:
-                raise ContractError(ErrorCode.CONFLICT, "DecisionRecord supersession cycle detected")
+                raise ContractError(
+                    ErrorCode.CONFLICT, "DecisionRecord supersession cycle detected"
+                )
             seen.add(root)
             predecessor = predecessor_by_successor[root]
             assert predecessor is not None
@@ -173,7 +192,9 @@ class DecisionService:
         cursor: str | None = root
         while cursor is not None:
             if cursor in {item.record.id for item in chain}:
-                raise ContractError(ErrorCode.CONFLICT, "DecisionRecord supersession cycle detected")
+                raise ContractError(
+                    ErrorCode.CONFLICT, "DecisionRecord supersession cycle detected"
+                )
             view = self.view(cursor)
             chain.append(view)
             cursor = view.superseded_by

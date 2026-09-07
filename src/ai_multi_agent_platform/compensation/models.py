@@ -147,10 +147,14 @@ class CompletedSideEffect:
             validate_id(action_id, "compensation_action")
             if action_id == self.action_id:
                 raise ValueError("side effect cannot depend on itself")
-        if self.reversibility in {
-            ReversibilityClassification.IRREVERSIBLE,
-            ReversibilityClassification.UNKNOWN,
-        } and self.compensation is not None:
+        if (
+            self.reversibility
+            in {
+                ReversibilityClassification.IRREVERSIBLE,
+                ReversibilityClassification.UNKNOWN,
+            }
+            and self.compensation is not None
+        ):
             raise ValueError("irreversible/unknown action cannot carry compensation support")
         if (
             self.reversibility is ReversibilityClassification.REVERSIBLE

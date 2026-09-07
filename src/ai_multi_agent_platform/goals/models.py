@@ -302,9 +302,7 @@ GOAL_TRANSITIONS: dict[GoalStatus, frozenset[GoalStatus]] = {
             GoalStatus.SUPERSEDED,
         }
     ),
-    GoalStatus.PAUSED: frozenset(
-        {GoalStatus.ACTIVE, GoalStatus.CANCELLED, GoalStatus.SUPERSEDED}
-    ),
+    GoalStatus.PAUSED: frozenset({GoalStatus.ACTIVE, GoalStatus.CANCELLED, GoalStatus.SUPERSEDED}),
     GoalStatus.SATISFIED: frozenset(),
     GoalStatus.FAILED: frozenset(),
     GoalStatus.CANCELLED: frozenset(),
@@ -346,7 +344,9 @@ def deterministic_review_id(goal_id: str, goal_revision: int, review_key: str) -
     return f"goal_review_{uuid5(NAMESPACE_URL, f'{goal_id}:{goal_revision}:{review_key}')}"
 
 
-def deterministic_goal_task_id(goal_id: str, goal_revision: int, review_key: str, index: int) -> str:
+def deterministic_goal_task_id(
+    goal_id: str, goal_revision: int, review_key: str, index: int
+) -> str:
     return f"task_{uuid5(NAMESPACE_URL, f'{goal_id}:{goal_revision}:{review_key}:{index}')}"
 
 

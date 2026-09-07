@@ -59,8 +59,7 @@ def test_checked_in_planning_suite_runs_through_issue_19_evaluation_runtime() ->
             case.case_id for case in suite.cases
         }
         references = {
-            (reference.kind, reference.ref_id)
-            for reference in summary.run.snapshot.references
+            (reference.kind, reference.ref_id) for reference in summary.run.snapshot.references
         }
         assert ("evaluation_suite", suite.suite_id) in references
         assert ("evaluator", "reference.deterministic") in references

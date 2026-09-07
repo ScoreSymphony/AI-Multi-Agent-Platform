@@ -76,7 +76,11 @@ class MarkdownSkillRenderer:
         for entry in bundle.entries:
             revision = repository.get_skill_revision(entry.ref.skill_id, entry.ref.revision)
             source = revision.profile.content
-            body = source.content if source.content is not None else f"Content reference: `{source.ref}`"
+            body = (
+                source.content
+                if source.content is not None
+                else f"Content reference: `{source.ref}`"
+            )
             sections.append(
                 f"## {revision.profile.name}\n\n"
                 f"Canonical Skill: `{revision.skill_id}@{revision.revision}`\n\n{body}"

@@ -147,7 +147,10 @@ class ReferencePlanningEvaluationCaseExecutor:
                 "parallel_layers": [list(layer) for layer in layers],
                 "peak_parallelism": peak,
             },
-            metrics={"peak_parallelism": float(peak), "step_count": float(len(record.proposal.steps))},
+            metrics={
+                "peak_parallelism": float(peak),
+                "step_count": float(len(record.proposal.steps)),
+            },
             task_id=task_id,
         )
 
@@ -290,7 +293,9 @@ class ReferencePlanningEvaluationCaseExecutor:
 
         replacement = PlanDraft(
             summary="Replacement plan",
-            steps=(PlanningStepDraft(key="replacement", title="Replacement", assignment=assignment),),
+            steps=(
+                PlanningStepDraft(key="replacement", title="Replacement", assignment=assignment),
+            ),
         )
         replanning = PlanningService(
             planner=DeterministicReferencePlanner(replacement),
@@ -352,7 +357,9 @@ class ReferencePlanningEvaluationCaseExecutor:
 
         replacement = PlanDraft(
             summary="Bounded replacement",
-            steps=(PlanningStepDraft(key="replacement", title="Replacement", assignment=assignment),),
+            steps=(
+                PlanningStepDraft(key="replacement", title="Replacement", assignment=assignment),
+            ),
         )
         replanning = PlanningService(
             planner=DeterministicReferencePlanner(replacement),

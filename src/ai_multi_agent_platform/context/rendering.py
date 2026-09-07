@@ -127,9 +127,7 @@ def assert_render_preserves_bundle(bundle: ContextBundle, rendered: RenderedCont
     expected = tuple(
         (entry.ordinal, entry.content_digest, entry.mandatory) for entry in bundle.entries
     )
-    actual = tuple(
-        (part.ordinal, part.content_digest, part.mandatory) for part in rendered.parts
-    )
+    actual = tuple((part.ordinal, part.content_digest, part.mandatory) for part in rendered.parts)
     if actual != expected:
         raise ContextRenderingError(
             "adapter rendering changed canonical ordering, content identity, or mandatory semantics"

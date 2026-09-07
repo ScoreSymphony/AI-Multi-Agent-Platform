@@ -147,7 +147,9 @@ class SkillResolver:
         self.repository.save_bundle(bundle)
         return bundle
 
-    def resolve_and_bind(self, request: SkillResolutionRequest) -> tuple[SkillBundle, SkillRunBinding]:
+    def resolve_and_bind(
+        self, request: SkillResolutionRequest
+    ) -> tuple[SkillBundle, SkillRunBinding]:
         """Persist immutable pre-execution evidence before an AgentRun is provider-mapped."""
 
         bundle = self.resolve(request)
@@ -245,7 +247,10 @@ class SkillResolver:
                 ErrorCode.FORBIDDEN,
                 f"Skill is not adopted/trusted: {revision.skill_id}@{revision.revision}",
             )
-        if profile.compatible_agent_roles and request.agent_role not in profile.compatible_agent_roles:
+        if (
+            profile.compatible_agent_roles
+            and request.agent_role not in profile.compatible_agent_roles
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Skill is incompatible with the selected Agent role",
@@ -340,9 +345,7 @@ class SkillResolver:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "resolved Skills have an explicit composition conflict",
-                details={
-                    "conflicts": cast(JsonValue, [list(pair) for pair in sorted(conflicts)])
-                },
+                details={"conflicts": cast(JsonValue, [list(pair) for pair in sorted(conflicts)])},
             )
 
     def _validate_capabilities(

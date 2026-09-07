@@ -451,7 +451,9 @@ class ContextResolver:
         for candidate in candidates:
             if candidate.conflict_key is None:
                 continue
-            groups.setdefault(candidate.conflict_key, set()).add(cast(str, candidate.content_digest))
+            groups.setdefault(candidate.conflict_key, set()).add(
+                cast(str, candidate.content_digest)
+            )
             sources.setdefault(candidate.conflict_key, candidate.source)
         for key, digests in groups.items():
             if len(digests) > 1:
@@ -611,11 +613,7 @@ class ContextResolver:
             return None
         assert candidate.inline_content is not None
         raw = candidate.inline_content.encode("utf-8")
-        byte_room = (
-            len(raw)
-            if budget.max_bytes is None
-            else max(0, budget.max_bytes - used_bytes)
-        )
+        byte_room = len(raw) if budget.max_bytes is None else max(0, budget.max_bytes - used_bytes)
         token_room = (
             math.ceil(len(raw) / 4)
             if budget.max_tokens is None

@@ -134,7 +134,9 @@ def decision_record_resource_services(
 def decision_record_command_handlers(
     decisions: DecisionService,
 ) -> dict[str, DecisionRecordCommandHandler]:
-    return {command: DecisionRecordCommandHandler(decisions, command) for command in DECISION_COMMANDS}
+    return {
+        command: DecisionRecordCommandHandler(decisions, command) for command in DECISION_COMMANDS
+    }
 
 
 def decision_view_resource(view: DecisionRecordView) -> dict[str, JsonValue]:

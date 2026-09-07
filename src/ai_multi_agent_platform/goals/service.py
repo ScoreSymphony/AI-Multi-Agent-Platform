@@ -426,16 +426,16 @@ class GoalService:
             else:
                 links.append(link)
         if not found:
-            raise ContractError(ErrorCode.NOT_FOUND, f"Task {task_id} is not linked to Goal {goal_id}")
+            raise ContractError(
+                ErrorCode.NOT_FOUND, f"Task {task_id} is not linked to Goal {goal_id}"
+            )
         failed_cycles = current.consecutive_failed_cycles
         if task_state is GoalTaskState.FAILED:
             failed_cycles += 1
         elif task_state is GoalTaskState.SUCCEEDED:
             failed_cycles = 0
         progress = (
-            GoalProgress.DEGRADED
-            if task_state is GoalTaskState.FAILED
-            else GoalProgress.MONITORING
+            GoalProgress.DEGRADED if task_state is GoalTaskState.FAILED else GoalProgress.MONITORING
         )
         updated = replace(
             current,
@@ -473,7 +473,9 @@ class GoalService:
         if existing is not None:
             return await self._repository.get_goal(existing.result_id)
         if not trigger_ref.strip():
-            raise ContractError(ErrorCode.INVALID_REQUEST, "Goal review trigger_ref must not be blank")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "Goal review trigger_ref must not be blank"
+            )
         current = await self._repository.get_goal(goal_id)
         self._require_revision(current, expected_revision)
         if current.status not in {GoalStatus.ACTIVE, GoalStatus.WAITING}:
@@ -499,10 +501,15 @@ class GoalService:
         if all_satisfied:
             status = GoalStatus.SATISFIED
             progress = GoalProgress.SATISFIED
-            terminal_reason = "all required success criteria satisfied by explicit verified evidence"
+            terminal_reason = (
+                "all required success criteria satisfied by explicit verified evidence"
+            )
             decision_reason = terminal_reason
             next_review_at = None
-        elif current.consecutive_failed_cycles >= current.autonomy_policy.max_consecutive_failed_cycles:
+        elif (
+            current.consecutive_failed_cycles
+            >= current.autonomy_policy.max_consecutive_failed_cycles
+        ):
             status = GoalStatus.PAUSED
             progress = GoalProgress.DEGRADED
             decision_reason = "bounded autonomy failure limit reached; human attention required"

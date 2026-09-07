@@ -106,16 +106,24 @@ class SqliteDecisionRepository(DecisionRepository):
             ).fetchone()
             if previous is None:
                 raise ContractError(ErrorCode.NOT_FOUND, "superseded DecisionRecord was not found")
-            if connection.execute(
-                "SELECT 1 FROM decision_supersessions WHERE predecessor_id = ?",
-                (previous_id,),
-            ).fetchone() is not None:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM decision_supersessions WHERE predecessor_id = ?",
+                    (previous_id,),
+                ).fetchone()
+                is not None
+            ):
                 raise ContractError(ErrorCode.CONFLICT, "DecisionRecord is already superseded")
-            if connection.execute(
-                "SELECT 1 FROM decision_withdrawals WHERE decision_record_id = ?",
-                (previous_id,),
-            ).fetchone() is not None:
-                raise ContractError(ErrorCode.CONFLICT, "withdrawn DecisionRecord cannot be superseded")
+            if (
+                connection.execute(
+                    "SELECT 1 FROM decision_withdrawals WHERE decision_record_id = ?",
+                    (previous_id,),
+                ).fetchone()
+                is not None
+            ):
+                raise ContractError(
+                    ErrorCode.CONFLICT, "withdrawn DecisionRecord cannot be superseded"
+                )
             self._insert_record(connection, record)
             connection.execute(
                 "INSERT INTO decision_supersessions(predecessor_id, successor_id, created_at) "
@@ -158,24 +166,39 @@ class SqliteDecisionRepository(DecisionRepository):
             raise ValueError("decision withdrawal actor_ref and reason must not be blank")
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            if connection.execute(
-                "SELECT 1 FROM decision_records WHERE decision_record_id = ?",
-                (decision_record_id,),
-            ).fetchone() is None:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM decision_records WHERE decision_record_id = ?",
+                    (decision_record_id,),
+                ).fetchone()
+                is None
+            ):
                 raise ContractError(ErrorCode.NOT_FOUND, "DecisionRecord was not found")
-            if connection.execute(
-                "SELECT 1 FROM decision_supersessions WHERE predecessor_id = ?",
-                (decision_record_id,),
-            ).fetchone() is not None:
-                raise ContractError(ErrorCode.CONFLICT, "superseded DecisionRecord cannot be withdrawn")
+            if (
+                connection.execute(
+                    "SELECT 1 FROM decision_supersessions WHERE predecessor_id = ?",
+                    (decision_record_id,),
+                ).fetchone()
+                is not None
+            ):
+                raise ContractError(
+                    ErrorCode.CONFLICT, "superseded DecisionRecord cannot be withdrawn"
+                )
             try:
                 connection.execute(
                     "INSERT INTO decision_withdrawals"
                     "(decision_record_id, actor_ref, reason, withdrawn_at) VALUES (?, ?, ?, ?)",
-                    (decision_record_id, actor_ref, reason, datetime.now().astimezone().isoformat()),
+                    (
+                        decision_record_id,
+                        actor_ref,
+                        reason,
+                        datetime.now().astimezone().isoformat(),
+                    ),
                 )
             except sqlite3.IntegrityError as exc:
-                raise ContractError(ErrorCode.CONFLICT, "DecisionRecord is already withdrawn") from exc
+                raise ContractError(
+                    ErrorCode.CONFLICT, "DecisionRecord is already withdrawn"
+                ) from exc
 
     def withdrawal(self, decision_record_id: str) -> tuple[datetime, str] | None:
         validate_id(decision_record_id, "decision_record")
@@ -194,10 +217,13 @@ class SqliteDecisionRepository(DecisionRepository):
         payload = _dump(_reference_to_json(reference))
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            if connection.execute(
-                "SELECT 1 FROM decision_records WHERE decision_record_id = ?",
-                (decision_record_id,),
-            ).fetchone() is None:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM decision_records WHERE decision_record_id = ?",
+                    (decision_record_id,),
+                ).fetchone()
+                is None
+            ):
                 raise ContractError(ErrorCode.NOT_FOUND, "DecisionRecord was not found")
             existing = connection.execute(
                 "SELECT payload_json FROM decision_downstream_refs WHERE decision_record_id = ?",
@@ -366,7 +392,9 @@ def _reference_tuple(value: dict[str, JsonValue], key: str) -> tuple[DecisionRef
 
 
 def _dump(value: dict[str, JsonValue]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
 
 
 def _load(value: str) -> dict[str, JsonValue]:

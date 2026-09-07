@@ -105,8 +105,12 @@ def test_create_decision_with_two_alternatives_and_exact_research_evaluation_ref
     assert created.status is DecisionStatus.CURRENT
 
 
-@pytest.mark.parametrize("outcome", [DecisionOutcome.ADOPT, DecisionOutcome.REJECT, DecisionOutcome.DEFER])
-def test_outcome_vocabulary_supports_adopt_reject_and_defer(tmp_path, outcome: DecisionOutcome) -> None:
+@pytest.mark.parametrize(
+    "outcome", [DecisionOutcome.ADOPT, DecisionOutcome.REJECT, DecisionOutcome.DEFER]
+)
+def test_outcome_vocabulary_supports_adopt_reject_and_defer(
+    tmp_path, outcome: DecisionOutcome
+) -> None:
     service = DecisionService(SqliteDecisionRepository(tmp_path / f"{outcome.value}.sqlite3"))
     assert service.create(_record(outcome=outcome)).record.outcome is outcome
 
@@ -193,13 +197,17 @@ def test_import_export_preserves_references_and_never_has_activation_semantics(t
 def test_resource_service_visibility_prevents_scope_existence_leak(tmp_path) -> None:
     service = DecisionService(SqliteDecisionRepository(tmp_path / "decisions.sqlite3"))
     visible = service.create(_record()).record
-    hidden = service.create(replace(_record(), id=new_id("decision_record"), content_digest="")).record
+    hidden = service.create(
+        replace(_record(), id=new_id("decision_record"), content_digest="")
+    ).record
 
     async def visibility(context: RequestContext, view: object) -> bool:
         del context
         return getattr(view, "record").id == visible.id
 
-    resources = decision_record_resource_services(service, visibility=visibility)[DECISION_COLLECTION]
+    resources = decision_record_resource_services(service, visibility=visibility)[
+        DECISION_COLLECTION
+    ]
     context = RequestContext(request_id="request", correlation_id="correlation")
     listed = asyncio.run(resources.list_resources(context, PageQuery()))
 

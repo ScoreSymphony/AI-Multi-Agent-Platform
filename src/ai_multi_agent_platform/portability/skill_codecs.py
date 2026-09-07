@@ -165,7 +165,10 @@ class SkillBundlePortableCodec:
                 details={"skill_bundle_id": resource.resource_id},
             )
         bundle = skill_bundle_from_json(resource.payload.get("bundle"))
-        if bundle.skill_bundle_id != resource.resource_id or bundle.digest != resource.resource_version:
+        if (
+            bundle.skill_bundle_id != resource.resource_id
+            or bundle.digest != resource.resource_version
+        ):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "portable Skill Bundle identity/hash does not match payload",
@@ -188,7 +191,9 @@ def _skill_dependencies(snapshot: SkillPortableSnapshot) -> tuple[DependencyRequ
         )
     if definition.workspace_id is not None:
         dependencies.add(
-            resource_dependency("workspace", definition.workspace_id, purpose="Skill workspace scope")
+            resource_dependency(
+                "workspace", definition.workspace_id, purpose="Skill workspace scope"
+            )
         )
     for revision in snapshot.revisions:
         profile = revision.profile
@@ -251,7 +256,9 @@ def _bundle_dependencies(bundle: SkillBundle) -> tuple[DependencyRequirement, ..
         )
     if bundle.workspace_id is not None:
         dependencies.add(
-            resource_dependency("workspace", bundle.workspace_id, purpose="Skill Bundle workspace scope")
+            resource_dependency(
+                "workspace", bundle.workspace_id, purpose="Skill Bundle workspace scope"
+            )
         )
     for entry in bundle.entries:
         dependencies.add(

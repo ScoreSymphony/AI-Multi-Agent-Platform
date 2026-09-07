@@ -47,9 +47,7 @@ class ResearchRepository(Protocol):
     def create_observation(self, observation: SourceObservation) -> SourceObservation: ...
     def get_observation(self, observation_id: str) -> SourceObservation: ...
     def list_observations(self, source_id: str) -> tuple[SourceObservation, ...]: ...
-    def observation_for_idempotency(
-        self, source_id: str, key: str
-    ) -> SourceObservation | None: ...
+    def observation_for_idempotency(self, source_id: str, key: str) -> SourceObservation | None: ...
     def create_claim(self, claim: Claim) -> Claim: ...
     def get_claim(self, claim_id: str) -> Claim: ...
     def save_claim(self, claim: Claim, *, expected_revision: int) -> Claim: ...
@@ -167,11 +165,15 @@ class InMemoryResearchRepository:
             try:
                 return self._observations[observation_id]
             except KeyError as exc:
-                raise ContractError(ErrorCode.NOT_FOUND, "Source Observation was not found") from exc
+                raise ContractError(
+                    ErrorCode.NOT_FOUND, "Source Observation was not found"
+                ) from exc
 
     def list_observations(self, source_id: str) -> tuple[SourceObservation, ...]:
         with self._lock:
-            values = [value for value in self._observations.values() if value.source_id == source_id]
+            values = [
+                value for value in self._observations.values() if value.source_id == source_id
+            ]
             return tuple(sorted(values, key=lambda value: value.retrieved_at))
 
     def observation_for_idempotency(self, source_id: str, key: str) -> SourceObservation | None:
@@ -214,7 +216,9 @@ class InMemoryResearchRepository:
     def list_claims(self, research_item_id: str) -> tuple[Claim, ...]:
         with self._lock:
             return tuple(
-                value for value in self._claims.values() if value.research_item_id == research_item_id
+                value
+                for value in self._claims.values()
+                if value.research_item_id == research_item_id
             )
 
     def create_evidence(self, evidence: EvidenceRecord) -> EvidenceRecord:
@@ -316,7 +320,9 @@ class SqliteResearchRepository(InMemoryResearchRepository):
                     "CREATE TABLE IF NOT EXISTS research_state (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)"
                 )
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to initialize Research store") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to initialize Research store"
+            ) from exc
 
     def _after_mutation(self) -> None:
         if not self._restoring:
@@ -340,21 +346,30 @@ class SqliteResearchRepository(InMemoryResearchRepository):
                     (encoded,),
                 )
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to persist Research state") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to persist Research state"
+            ) from exc
 
     def _restore(self) -> None:
         try:
             with self._connect() as connection:
                 row = connection.execute("SELECT payload FROM research_state WHERE id=1").fetchone()
         except sqlite3.Error as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "failed to restore Research state") from exc
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "failed to restore Research state"
+            ) from exc
         if row is None:
             return
         try:
             raw = json.loads(cast(str, row["payload"]))
         except (TypeError, json.JSONDecodeError) as exc:
-            raise ContractError(ErrorCode.BACKEND_ERROR, "persisted Research state is invalid") from exc
-        if not isinstance(raw, dict) or raw.get("schema_version") != RESEARCH_PERSISTENCE_SCHEMA_VERSION:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR, "persisted Research state is invalid"
+            ) from exc
+        if (
+            not isinstance(raw, dict)
+            or raw.get("schema_version") != RESEARCH_PERSISTENCE_SCHEMA_VERSION
+        ):
             raise ContractError(ErrorCode.BACKEND_ERROR, "unsupported Research persistence schema")
         self._items = _decode_map(raw, "items", ResearchItem, "research_item_id")
         self._sources = _decode_map(raw, "sources", SourceRecord, "source_id")
@@ -477,5 +492,7 @@ def _decode_map(
                 raise ValueError(f"invalid or duplicate identity in {key}")
             result[identifier] = value
     except (KeyError, TypeError, ValueError) as exc:
-        raise ContractError(ErrorCode.BACKEND_ERROR, f"persisted Research {key} is invalid") from exc
+        raise ContractError(
+            ErrorCode.BACKEND_ERROR, f"persisted Research {key} is invalid"
+        ) from exc
     return result

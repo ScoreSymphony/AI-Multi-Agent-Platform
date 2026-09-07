@@ -239,7 +239,9 @@ class ContextCandidate:
     def __post_init__(self) -> None:
         _require_nonblank(self.selection_reason, "context selection reason")
         if (self.inline_content is None) == (self.content_ref is None):
-            raise ValueError("context candidate requires exactly one of inline_content or content_ref")
+            raise ValueError(
+                "context candidate requires exactly one of inline_content or content_ref"
+            )
         if self.inline_content is not None and not self.inline_content:
             raise ValueError("inline context content must not be empty")
         _optional_nonblank(self.content_ref, "context content reference")
@@ -255,16 +257,20 @@ class ContextCandidate:
             raise ValueError("context security labels must be unique")
         if any(not item.strip() for item in self.security_labels):
             raise ValueError("context security labels must not contain blanks")
-        if (
-            self.trust is ContextTrust.UNTRUSTED
-            and self.role in {ContextEntryRole.SECURITY, ContextEntryRole.INSTRUCTION}
-        ):
-            raise ValueError("untrusted context cannot be promoted to security/instruction authority")
+        if self.trust is ContextTrust.UNTRUSTED and self.role in {
+            ContextEntryRole.SECURITY,
+            ContextEntryRole.INSTRUCTION,
+        }:
+            raise ValueError(
+                "untrusted context cannot be promoted to security/instruction authority"
+            )
         if (
             self.data_classification is ContextDataClassification.SECRET_REFERENCE
             and self.inline_content is not None
         ):
-            raise ValueError("secret-classified context must remain a reference, never inline content")
+            raise ValueError(
+                "secret-classified context must remain a reference, never inline content"
+            )
         if self.inline_content is not None:
             digest = _sha256_text(self.inline_content)
             if self.content_digest is not None and self.content_digest != digest:
@@ -320,10 +326,10 @@ class ContextEntry:
             raise ValueError("context entry budget accounting cannot be negative")
         if not 0.0 <= self.relevance <= 1.0:
             raise ValueError("context relevance must be between 0 and 1")
-        if (
-            self.trust is ContextTrust.UNTRUSTED
-            and self.role in {ContextEntryRole.SECURITY, ContextEntryRole.INSTRUCTION}
-        ):
+        if self.trust is ContextTrust.UNTRUSTED and self.role in {
+            ContextEntryRole.SECURITY,
+            ContextEntryRole.INSTRUCTION,
+        }:
             raise ValueError("untrusted context cannot have instruction authority")
         if (
             self.data_classification is ContextDataClassification.SECRET_REFERENCE
@@ -504,7 +510,9 @@ class ContextBundle:
         }
 
     def compute_digest(self) -> str:
-        return hashlib.sha256(_canonical_json(cast(JsonValue, self.canonical_payload()))).hexdigest()
+        return hashlib.sha256(
+            _canonical_json(cast(JsonValue, self.canonical_payload()))
+        ).hexdigest()
 
     @property
     def digest(self) -> str:
@@ -524,8 +532,7 @@ class ContextBundle:
             "skill_bundle_id": self.skill_bundle_id,
             "skill_bundle_digest": self.skill_bundle_digest,
             "entries": [
-                item.to_json(include_inline_content=include_inline_content)
-                for item in self.entries
+                item.to_json(include_inline_content=include_inline_content) for item in self.entries
             ],
             "omissions": [item.to_json() for item in self.omissions],
             "budget": self.budget.to_json(),

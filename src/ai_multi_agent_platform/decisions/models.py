@@ -142,12 +142,18 @@ class DecisionRecord:
         )
         if selected > 1:
             raise ValueError("decision may have at most one selected alternative")
-        if self.outcome in {
-            DecisionOutcome.ADOPT,
-            DecisionOutcome.EXPERIMENTAL,
-            DecisionOutcome.CUSTOM,
-        } and selected != 1:
-            raise ValueError(f"{self.outcome.value} decision requires exactly one selected alternative")
+        if (
+            self.outcome
+            in {
+                DecisionOutcome.ADOPT,
+                DecisionOutcome.EXPERIMENTAL,
+                DecisionOutcome.CUSTOM,
+            }
+            and selected != 1
+        ):
+            raise ValueError(
+                f"{self.outcome.value} decision requires exactly one selected alternative"
+            )
         for name in (
             "evidence_refs",
             "evaluation_refs",

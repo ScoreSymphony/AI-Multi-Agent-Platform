@@ -212,7 +212,9 @@ def test_disabled_and_deprecated_revisions_fail_closed() -> None:
     with pytest.raises(ContractError) as deprecated_error:
         resolver.resolve(request)
     assert deprecated_error.value.code is ErrorCode.UNAVAILABLE
-    assert resolver.resolve(replace(request, allow_deprecated=True)).entries[0].ref == deprecated.ref
+    assert (
+        resolver.resolve(replace(request, allow_deprecated=True)).entries[0].ref == deprecated.ref
+    )
 
 
 def test_task_explicit_precedes_agent_default_skill() -> None:
@@ -395,7 +397,9 @@ def test_portability_preserves_skill_revision_history_and_provenance() -> None:
     )
     serializers = ResourceSerializerRegistry()
     register_skill_portability_codecs(serializers)
-    resource = serializers.serialize(SKILL_RESOURCE_TYPE, snapshot_skill(source_repository, first.skill_id))
+    resource = serializers.serialize(
+        SKILL_RESOURCE_TYPE, snapshot_skill(source_repository, first.skill_id)
+    )
     decoded = serializers.deserialize(resource)
 
     assert isinstance(decoded, SkillPortableSnapshot)

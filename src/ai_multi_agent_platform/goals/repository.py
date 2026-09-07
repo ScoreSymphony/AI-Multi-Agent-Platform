@@ -232,7 +232,9 @@ def goal_state_to_json(state: GoalState) -> dict[str, JsonValue]:
         "evidence": [_evidence_to_json(value) for value in state.evidence],
         "reviews": [_review_to_json(value) for value in state.reviews],
         "consecutive_failed_cycles": state.consecutive_failed_cycles,
-        "next_review_at": None if state.next_review_at is None else state.next_review_at.isoformat(),
+        "next_review_at": None
+        if state.next_review_at is None
+        else state.next_review_at.isoformat(),
         "terminal_reason": state.terminal_reason,
         "created_actor_ref": state.created_actor_ref,
         "updated_actor_ref": state.updated_actor_ref,
@@ -467,8 +469,7 @@ def _review_from_json(value: dict[str, JsonValue]) -> GoalReview:
         goal_revision=_int(value, "goal_revision"),
         trigger_ref=_string(value, "trigger_ref"),
         criterion_evaluations=tuple(
-            _evaluation_from_json(item)
-            for item in _object_list(value, "criterion_evaluations")
+            _evaluation_from_json(item) for item in _object_list(value, "criterion_evaluations")
         ),
         generated_task_ids=_string_tuple(value, "generated_task_ids"),
         work_required=_bool(value, "work_required"),

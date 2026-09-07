@@ -43,7 +43,9 @@ def _profile(name: str, content: str, **changes: object) -> SkillProfile:
     return replace(base, **changes)
 
 
-def _request(skill_ref: SkillRevisionRef, *, model: ModelConfiguration | None = None) -> SkillResolutionRequest:
+def _request(
+    skill_ref: SkillRevisionRef, *, model: ModelConfiguration | None = None
+) -> SkillResolutionRequest:
     return SkillResolutionRequest(
         run_id=new_id("run"),
         task_id=new_id("task"),

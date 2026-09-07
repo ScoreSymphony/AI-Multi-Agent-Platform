@@ -55,7 +55,9 @@ def import_decision_bundle(
         raise ContractError(ErrorCode.INVALID_REQUEST, "invalid DecisionRecord bundle kind")
     raw_records = bundle.get("records")
     if not isinstance(raw_records, list):
-        raise ContractError(ErrorCode.INVALID_REQUEST, "DecisionRecord bundle records must be an array")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, "DecisionRecord bundle records must be an array"
+        )
 
     pending: dict[str, tuple[DecisionRecord, dict[str, JsonValue]]] = {}
     for raw in raw_records:
@@ -122,5 +124,7 @@ def import_decision_bundle(
 
 def _object(value: JsonValue) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
-        raise ContractError(ErrorCode.INVALID_REQUEST, "DecisionRecord bundle item must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, "DecisionRecord bundle item must be an object"
+        )
     return cast(dict[str, JsonValue], value)

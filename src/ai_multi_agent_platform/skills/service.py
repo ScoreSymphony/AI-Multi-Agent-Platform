@@ -51,9 +51,7 @@ _TRUST_TRANSITIONS: dict[SkillTrustStatus, frozenset[SkillTrustStatus]] = {
             SkillTrustStatus.DEFERRED,
         }
     ),
-    SkillTrustStatus.ADOPTED: frozenset(
-        {SkillTrustStatus.REJECTED, SkillTrustStatus.DEFERRED}
-    ),
+    SkillTrustStatus.ADOPTED: frozenset({SkillTrustStatus.REJECTED, SkillTrustStatus.DEFERRED}),
     SkillTrustStatus.REJECTED: frozenset(),
     # DEFERRED deliberately forgets no review requirement in the safe direction:
     # resuming always restarts at source verification before later stages can be reached.
@@ -206,7 +204,9 @@ class SkillService:
             if needle and needle not in f"{profile.name} {profile.description}".casefold():
                 continue
             matches.append(revision)
-        return tuple(sorted(matches, key=lambda item: (item.profile.name.casefold(), item.skill_id)))
+        return tuple(
+            sorted(matches, key=lambda item: (item.profile.name.casefold(), item.skill_id))
+        )
 
     def set_enabled(
         self,
@@ -331,7 +331,10 @@ class SkillService:
             if evaluation_metadata is None
             else evaluation_metadata
         )
-        if target is SkillTrustStatus.ADOPTED and next_evaluation is not SkillEvaluationStatus.PASSED:
+        if (
+            target is SkillTrustStatus.ADOPTED
+            and next_evaluation is not SkillEvaluationStatus.PASSED
+        ):
             raise ContractError(
                 ErrorCode.FORBIDDEN,
                 "third-party skill adoption requires a passed evaluation",
