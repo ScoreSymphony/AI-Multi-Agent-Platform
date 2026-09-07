@@ -27,6 +27,13 @@ def _require_nonblank(value: str, name: str) -> None:
         raise ValueError(f"{name} must not be blank")
 
 
+def _validate_unique_nonblank(values: tuple[str, ...], name: str) -> None:
+    for value in values:
+        _require_nonblank(value, name)
+    if len(set(values)) != len(values):
+        raise ValueError(f"{name} values must be unique")
+
+
 def _freeze_mapping(value: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
     return MappingProxyType(dict(value))
 
@@ -45,11 +52,11 @@ def _validate_optional_id(value: str | None, prefix: str) -> None:
 
 
 class SkillTrustStatus(StrEnum):
-    """Trust lifecycle for reusable methods, especially third-party content."""
+    """Explicit third-party trust lifecycle required before runtime activation."""
 
     DISCOVERED = "discovered"
     SOURCE_VERIFIED = "source_verified"
-    REVIEWED = "reviewed"
+    SECURITY_REVIEWED = "security_reviewed"
     PILOT = "pilot"
     ADOPTED = "adopted"
     REJECTED = "rejected"
@@ -114,10 +121,7 @@ class SkillCapabilityRequirement:
             or self.required_features
         ):
             raise ValueError("exact capability version cannot be combined with compatibility rules")
-        for feature in self.required_features:
-            _require_nonblank(feature, "required capability feature")
-        if len(set(self.required_features)) != len(self.required_features):
-            raise ValueError("required capability features must be unique")
+        _validate_unique_nonblank(self.required_features, "required capability feature")
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,14 +150,10 @@ class SkillSource:
         ):
             if value is not None:
                 _require_nonblank(value, name)
-        for capability_id in self.requested_capability_ids:
-            _require_nonblank(capability_id, "requested capability ID")
-        for item in (
-            *self.filesystem_implications,
-            *self.network_implications,
-            *self.embedded_hook_refs,
-        ):
-            _require_nonblank(item, "skill source implication/reference")
+        _validate_unique_nonblank(self.requested_capability_ids, "requested capability ID")
+        _validate_unique_nonblank(self.filesystem_implications, "filesystem implication")
+        _validate_unique_nonblank(self.network_implications, "network implication")
+        _validate_unique_nonblank(self.embedded_hook_refs, "embedded hook reference")
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,13 +173,19 @@ class SkillProfile:
     purpose_categories: tuple[str, ...]
     content: SkillContent
     description: str = ""
+    dependencies: tuple[SkillRevisionRef, ...] = ()
     capability_requirements: tuple[SkillCapabilityRequirement, ...] = ()
     compatible_agent_roles: tuple[str, ...] = ()
     routing_requirements: RoutingRequirements = field(default_factory=RoutingRequirements)
+    expected_inputs: tuple[str, ...] = ()
+    expected_outputs: tuple[str, ...] = ()
+    workspace_assumptions: tuple[str, ...] = ()
+    side_effects: tuple[str, ...] = ()
     conflicts_with_skill_ids: tuple[str, ...] = ()
     risk_level: SkillRiskLevel = SkillRiskLevel.LOW
     trust_status: SkillTrustStatus = SkillTrustStatus.ADOPTED
     evaluation_status: SkillEvaluationStatus = SkillEvaluationStatus.NOT_EVALUATED
+    evaluation_metadata: Mapping[str, JsonValue] = field(default_factory=dict)
     source: SkillSource | None = None
     enabled: bool = True
     deprecated: bool = False
@@ -190,21 +196,28 @@ class SkillProfile:
         _require_nonblank(self.name, "skill name")
         if not self.purpose_categories:
             raise ValueError("skill requires at least one purpose category")
-        for category in self.purpose_categories:
-            _require_nonblank(category, "skill purpose category")
-        if len(set(self.purpose_categories)) != len(self.purpose_categories):
-            raise ValueError("skill purpose categories must be unique")
+        _validate_unique_nonblank(self.purpose_categories, "skill purpose category")
+
+        dependency_keys = [(item.skill_id, item.revision) for item in self.dependencies]
+        if len(set(dependency_keys)) != len(dependency_keys):
+            raise ValueError("skill dependencies must be unique exact revisions")
+        dependency_ids = {item.skill_id for item in self.dependencies}
+
         requirement_ids = [item.capability_id for item in self.capability_requirements]
         if len(set(requirement_ids)) != len(requirement_ids):
             raise ValueError("skill capability requirements must use unique capability IDs")
-        for role in self.compatible_agent_roles:
-            _require_nonblank(role, "compatible agent role")
-        if len(set(self.compatible_agent_roles)) != len(self.compatible_agent_roles):
-            raise ValueError("compatible agent roles must be unique")
+        _validate_unique_nonblank(self.compatible_agent_roles, "compatible agent role")
+        _validate_unique_nonblank(self.expected_inputs, "expected input")
+        _validate_unique_nonblank(self.expected_outputs, "expected output")
+        _validate_unique_nonblank(self.workspace_assumptions, "workspace assumption")
+        _validate_unique_nonblank(self.side_effects, "side effect")
+
         for skill_id in self.conflicts_with_skill_ids:
             validate_id(skill_id, "skill")
         if len(set(self.conflicts_with_skill_ids)) != len(self.conflicts_with_skill_ids):
             raise ValueError("conflicting skill IDs must be unique")
+        if dependency_ids.intersection(self.conflicts_with_skill_ids):
+            raise ValueError("a Skill dependency cannot simultaneously be a composition conflict")
         if self.replacement is not None and not self.deprecated:
             raise ValueError("replacement metadata requires deprecated=True")
         if self.source is not None:
@@ -214,6 +227,11 @@ class SkillProfile:
                 raise ValueError(
                     "third-party requested capabilities must be declared capability requirements"
                 )
+        object.__setattr__(
+            self,
+            "evaluation_metadata",
+            _freeze_mapping(self.evaluation_metadata),
+        )
         object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
 
 
@@ -256,6 +274,10 @@ class SkillRevision:
             raise ValueError("skill revision must be >= 1")
         _validate_optional_id(self.project_id, "project")
         _validate_optional_id(self.workspace_id, "workspace")
+        if any(item.skill_id == self.skill_id for item in self.profile.dependencies):
+            raise ValueError("Skill cannot depend on another revision of itself")
+        if self.skill_id in self.profile.conflicts_with_skill_ids:
+            raise ValueError("Skill cannot conflict with itself")
 
     @property
     def ref(self) -> SkillRevisionRef:
@@ -318,6 +340,8 @@ class SkillBundle:
         refs = [(entry.ref.skill_id, entry.ref.revision) for entry in self.entries]
         if len(set(refs)) != len(refs):
             raise ValueError("skill bundle entries must be unique")
+        if len({entry.ref.skill_id for entry in self.entries}) != len(self.entries):
+            raise ValueError("skill bundle cannot contain multiple revisions of one Skill")
         if len(set(self.capability_ids)) != len(self.capability_ids):
             raise ValueError("skill bundle capability IDs must be unique")
         if set(self.capability_versions) - set(self.capability_ids):
