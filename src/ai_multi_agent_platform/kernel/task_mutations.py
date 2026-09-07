@@ -392,7 +392,10 @@ class TaskMutationBoundary:
             if set(move) != {"task_id", "destination_project_id"}:
                 raise ContractError(
                     ErrorCode.INVALID_REQUEST,
-                    "bulk Project move entries must contain only task_id and destination_project_id",
+                    (
+                        "bulk Project move entries must contain only task_id and "
+                        "destination_project_id"
+                    ),
                 )
             task_id = move["task_id"]
             destination = move["destination_project_id"]
