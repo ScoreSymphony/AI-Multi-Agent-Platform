@@ -13,6 +13,7 @@ import type {
 } from "../api/types";
 import {
   getPlanCoordination,
+  isMissingPlanCoordinationError,
   type PlanCoordinationProjection,
 } from "../api/workflowProgress";
 import { AppLink } from "../app/router";
@@ -54,6 +55,7 @@ export function TaskDetailPage({
   const [events, setEvents] = useState<TimelineItem[]>([]);
   const [workflow, setWorkflow] = useState<PlanCoordinationProjection | null>(null);
   const [workflowError, setWorkflowError] = useState<unknown>(null);
+  const [workflowUnavailable, setWorkflowUnavailable] = useState(false);
   const [projects, setProjects] = useState<CanonicalProject[]>([]);
   const [destinationProjectId, setDestinationProjectId] = useState("");
   const [error, setError] = useState<unknown>(null);
@@ -83,6 +85,9 @@ export function TaskDetailPage({
       setRuns(nextRuns.items);
       setEvents(timeline.items);
       setError(null);
+      setWorkflow(null);
+      setWorkflowError(null);
+      setWorkflowUnavailable(false);
 
       if (nextTask.plan_ref) {
         try {
@@ -92,15 +97,17 @@ export function TaskDetailPage({
             throw new Error("Control Plane returned a workflow projection for a different Task or Plan.");
           }
           setWorkflow(nextWorkflow);
-          setWorkflowError(null);
         } catch (nextWorkflowError) {
           if (generation !== loadGeneration.current) return;
           setWorkflow(null);
-          setWorkflowError(nextWorkflowError);
+          if (isMissingPlanCoordinationError(nextWorkflowError)) {
+            setWorkflowUnavailable(true);
+            setWorkflowError(null);
+          } else {
+            setWorkflowUnavailable(false);
+            setWorkflowError(nextWorkflowError);
+          }
         }
-      } else {
-        setWorkflow(null);
-        setWorkflowError(null);
       }
     } catch (nextError) {
       if (generation === loadGeneration.current) setError(nextError);
@@ -284,6 +291,8 @@ export function TaskDetailPage({
           <ErrorState error={workflowError} onRetry={() => void load()} />
         ) : task.plan_ref === null ? (
           <EmptyState title="No active Plan workflow" />
+        ) : workflowUnavailable ? (
+          <EmptyState title="No durable coordination state is registered for this Plan yet" />
         ) : workflow ? (
           <WorkflowProgress projection={workflow} />
         ) : (
