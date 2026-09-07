@@ -117,13 +117,15 @@ export interface WorkflowProgressPollerOptions {
  *
  * Task SSE remains the preferred event-driven refresh path. The coordinator also emits
  * transitions that are not guaranteed to create a Task Event, so this poller periodically
- * reloads only the versioned `plan-coordination` projection. A monotonically increasing
- * generation prevents overlapping/out-of-order HTTP responses from moving the client back
- * to an older projection.
+ * reloads only the versioned `plan-coordination` projection. Automatic polling is serialized:
+ * the next timer is scheduled only after the current request settles. Manual refreshes may
+ * still overlap, and a monotonically increasing generation prevents an older response from
+ * moving the client back to a stale projection.
  */
 export class WorkflowProgressPoller {
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
   private generation = 0;
+  private started = false;
   private stopped = false;
   private readonly intervalMs: number;
 
@@ -135,11 +137,18 @@ export class WorkflowProgressPoller {
   }
 
   start(): void {
-    if (this.timer !== null) return;
+    if (this.started) return;
+    this.started = true;
     this.stopped = false;
-    void this.refresh();
-    this.timer = setInterval(() => {
-      void this.refresh();
+    void this.pollOnce();
+  }
+
+  private async pollOnce(): Promise<void> {
+    await this.refresh();
+    if (this.stopped || !this.started) return;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.pollOnce();
     }, this.intervalMs);
   }
 
@@ -163,10 +172,11 @@ export class WorkflowProgressPoller {
   }
 
   stop(): void {
+    this.started = false;
     this.stopped = true;
     this.generation += 1;
     if (this.timer !== null) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
   }
