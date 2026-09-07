@@ -533,8 +533,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                 except Exception as exc:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
                     errors.append(
-                        "Workspace fault raised non-canonical error: "
-                        f"{type(exc).__name__}: {exc}"
+                        f"Workspace fault raised non-canonical error: {type(exc).__name__}: {exc}"
                     )
                 else:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
@@ -626,7 +625,8 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             and len(post_rejoin_workers) == spec.worker_count
         )
         stable_worker_ids = len(
-            {worker.worker_id for worker in runtime.registry.list_workers()} & set(initial_worker_ids)
+            {worker.worker_id for worker in runtime.registry.list_workers()}
+            & set(initial_worker_ids)
         )
         correctness = DistributedFaultCorrectnessSummary(
             expected_workers=spec.worker_count,
