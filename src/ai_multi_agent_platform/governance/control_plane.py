@@ -26,6 +26,7 @@ GOVERNANCE_AUDIT_COLLECTION = "governance-events"
 GOVERNANCE_COMMANDS = (
     "proposal.create",
     "proposal.revise",
+    "proposal.request-clarification",
     "proposal.dismiss",
     "proposal.supersede",
     "specification.create",
@@ -254,6 +255,18 @@ def register_governance_control_plane(
             )
         )
 
+    async def proposal_request_clarification(
+        context: RequestContext, resource_ref: str, payload: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        current = governance.repository.get_proposal(resource_ref)
+        await _require_allowed(control_plane, context, "proposal.request-clarification", current)
+        expected = _required_int(payload, "expected_revision")
+        return proposal_resource(
+            governance.request_clarification(
+                resource_ref, expected_revision=expected, actor_ref=_actor(context)
+            )
+        )
+
     async def proposal_dismiss(
         context: RequestContext, resource_ref: str, payload: dict[str, JsonValue]
     ) -> dict[str, JsonValue]:
@@ -361,6 +374,7 @@ def register_governance_control_plane(
     handlers = {
         "proposal.create": proposal_create,
         "proposal.revise": proposal_revise,
+        "proposal.request-clarification": proposal_request_clarification,
         "proposal.dismiss": proposal_dismiss,
         "proposal.supersede": proposal_supersede,
         "specification.create": specification_create,

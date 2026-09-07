@@ -157,6 +157,37 @@ class GovernanceService:
         )
         return revised
 
+    def request_clarification(
+        self, proposal_id: str, *, expected_revision: int, actor_ref: str
+    ) -> Proposal:
+        current = self.repository.get_proposal(proposal_id)
+        if current.status in {
+            ProposalStatus.DISMISSED,
+            ProposalStatus.SUPERSEDED,
+            ProposalStatus.CONVERTED_TO_TASK,
+        }:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "terminal proposal cannot request clarification",
+            )
+        updated = replace(
+            current,
+            status=ProposalStatus.NEEDS_SPEC,
+            revision=current.revision + 1,
+            updated_at=datetime.now(UTC),
+        )
+        persisted = self.repository.revise_proposal(updated, expected_revision=expected_revision)
+        self._audit(
+            "proposal.clarification-requested",
+            "proposal",
+            proposal_id,
+            actor_ref,
+            current.project_id,
+            revision=persisted.revision,
+            metadata={"previous_status": current.status.value},
+        )
+        return persisted
+
     def dismiss_proposal(
         self, proposal_id: str, *, expected_revision: int, actor_ref: str
     ) -> Proposal:

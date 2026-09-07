@@ -154,6 +154,15 @@ export class GovernanceClient {
     });
   }
 
+  requestClarification(
+    proposalId: string,
+    expectedRevision: number,
+  ): Promise<GovernanceProposal> {
+    return this.command<GovernanceProposal>("proposal.request-clarification", proposalId, {
+      expected_revision: expectedRevision,
+    });
+  }
+
   dismissProposal(proposalId: string, expectedRevision: number): Promise<GovernanceProposal> {
     return this.command<GovernanceProposal>("proposal.dismiss", proposalId, {
       expected_revision: expectedRevision,

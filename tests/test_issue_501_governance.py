@@ -332,3 +332,39 @@ def test_planner_consumes_exact_approved_revision_without_owning_it(tmp_path: Pa
     assert planning.revision == 1
     assert planning.content_digest == specification.content_digest
     assert planning.required_tests == specification.required_tests
+
+
+def test_request_clarification_is_versioned_audited_and_non_terminal(
+    tmp_path: Path,
+) -> None:
+    service, _gate_value = _service(tmp_path)
+    proposal = service.create_proposal(_proposal(), actor_ref=PRINCIPAL)
+
+    clarification = service.request_clarification(
+        proposal.id,
+        expected_revision=proposal.revision,
+        actor_ref=PRINCIPAL,
+    )
+
+    assert clarification.status is ProposalStatus.NEEDS_SPEC
+    assert clarification.revision == proposal.revision + 1
+    assert [value.revision for value in service.repository.proposal_history(proposal.id)] == [1, 2]
+    assert any(
+        event.event_type == "proposal.clarification-requested"
+        and event.resource_id == proposal.id
+        and event.revision == clarification.revision
+        for event in service.repository.list_audit()
+    )
+
+    revised = service.revise_proposal(
+        replace(
+            clarification,
+            summary="Clarified governance intake after follow-up.",
+            revision=clarification.revision + 1,
+            updated_at=datetime.now(UTC),
+        ),
+        expected_revision=clarification.revision,
+        actor_ref=PRINCIPAL,
+    )
+    assert revised.status is ProposalStatus.NEEDS_SPEC
+    assert revised.revision == 3

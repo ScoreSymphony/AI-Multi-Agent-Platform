@@ -185,6 +185,18 @@ export function ProposalGovernanceDetailPage({
     }
   };
 
+  const requestClarification = async () => {
+    setBusy(true);
+    try {
+      setProposal(await client.requestClarification(proposal.id, proposal.revision));
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const dismiss = async () => {
     setBusy(true);
     try {
@@ -252,6 +264,7 @@ export function ProposalGovernanceDetailPage({
         </label>
         <div className="actions">
           <button disabled={busy || terminal} onClick={() => void revise()}>Save revision</button>
+          <button disabled={busy || terminal} onClick={() => void requestClarification()}>Request clarification</button>
           <button disabled={busy || terminal} onClick={() => void dismiss()}>Dismiss</button>
         </div>
       </Card>
