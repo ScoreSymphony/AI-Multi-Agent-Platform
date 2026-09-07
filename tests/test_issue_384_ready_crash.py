@@ -11,17 +11,32 @@ from ai_multi_agent_platform.coordination import (
     InMemoryCoordinatorRepository,
     StepCoordinationRecord,
 )
-from ai_multi_agent_platform.domain import OwnerRef, Plan, Run, RunStatus, Step, StepStatus, new_id
-from ai_multi_agent_platform.kernel.models import RunState
+from ai_multi_agent_platform.domain import (
+    OwnerRef,
+    Plan,
+    Run,
+    RunStatus,
+    Step,
+    StepStatus,
+    Task,
+    TaskStatus,
+    new_id,
+)
+from ai_multi_agent_platform.kernel.models import RunState, TaskState
 
 
 class FailBeforeRunKernel:
-    def __init__(self) -> None:
+    def __init__(self, task: TaskState) -> None:
+        self.task = task
         self.fail_once = True
         self.create_calls = 0
         self.runs: dict[str, RunState] = {}
         self.by_key: dict[str, str] = {}
         self.start_keys: set[str] = set()
+
+    async def get_task(self, task_id: str) -> TaskState:
+        assert task_id == self.task.task_id
+        return self.task
 
     async def create_run(
         self,
@@ -103,7 +118,20 @@ def test_restart_from_persisted_ready_step_creates_exactly_one_run() -> None:
         )
         repository = InMemoryCoordinatorRepository()
         repository.create_plan(plan, (step,), (record,))
-        kernel = FailBeforeRunKernel()
+        kernel = FailBeforeRunKernel(
+            TaskState(
+                task=Task(
+                    id=plan.task_id,
+                    title="ready crash recovery",
+                    owner_ref=owner,
+                    project_id=plan.project_id,
+                    status=TaskStatus.READY,
+                ),
+                revision=1,
+                plan_ref=plan.id,
+                step_ids=(step.id,),
+            )
+        )
         first = DurablePlanStepCoordinator(
             repository=repository,
             kernel=kernel,
