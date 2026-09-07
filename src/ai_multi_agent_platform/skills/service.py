@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, Provenance
 
 from .models import (
@@ -30,12 +32,12 @@ _TRUST_TRANSITIONS: dict[SkillTrustStatus, frozenset[SkillTrustStatus]] = {
     ),
     SkillTrustStatus.SOURCE_VERIFIED: frozenset(
         {
-            SkillTrustStatus.REVIEWED,
+            SkillTrustStatus.SECURITY_REVIEWED,
             SkillTrustStatus.REJECTED,
             SkillTrustStatus.DEFERRED,
         }
     ),
-    SkillTrustStatus.REVIEWED: frozenset(
+    SkillTrustStatus.SECURITY_REVIEWED: frozenset(
         {
             SkillTrustStatus.PILOT,
             SkillTrustStatus.REJECTED,
@@ -53,9 +55,7 @@ _TRUST_TRANSITIONS: dict[SkillTrustStatus, frozenset[SkillTrustStatus]] = {
         {SkillTrustStatus.REJECTED, SkillTrustStatus.DEFERRED}
     ),
     SkillTrustStatus.REJECTED: frozenset(),
-    SkillTrustStatus.DEFERRED: frozenset(
-        {SkillTrustStatus.REVIEWED, SkillTrustStatus.REJECTED}
-    ),
+    SkillTrustStatus.DEFERRED: frozenset({SkillTrustStatus.REJECTED}),
 }
 
 
@@ -256,6 +256,9 @@ class SkillService:
                 if source.profile.source is not None
                 else source.profile.evaluation_status
             ),
+            evaluation_metadata=(
+                {} if source.profile.source is not None else source.profile.evaluation_metadata
+            ),
         )
         return self.create_skill(
             profile,
@@ -272,6 +275,7 @@ class SkillService:
         *,
         expected_revision: int,
         evaluation_status: SkillEvaluationStatus | None = None,
+        evaluation_metadata: Mapping[str, JsonValue] | None = None,
         provenance: Provenance | None = None,
     ) -> SkillRevision:
         current = self.get_skill_revision(skill_id, expected_revision)
@@ -291,6 +295,11 @@ class SkillService:
                 },
             )
         next_evaluation = evaluation_status or current.profile.evaluation_status
+        next_metadata = (
+            current.profile.evaluation_metadata
+            if evaluation_metadata is None
+            else evaluation_metadata
+        )
         if target is SkillTrustStatus.ADOPTED and next_evaluation is not SkillEvaluationStatus.PASSED:
             raise ContractError(
                 ErrorCode.FORBIDDEN,
@@ -300,6 +309,7 @@ class SkillService:
             current.profile,
             trust_status=target,
             evaluation_status=next_evaluation,
+            evaluation_metadata=next_metadata,
             enabled=False if target is not SkillTrustStatus.ADOPTED else current.profile.enabled,
         )
         return self.update_skill(
