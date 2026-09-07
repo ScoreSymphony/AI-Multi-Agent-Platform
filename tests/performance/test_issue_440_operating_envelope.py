@@ -75,7 +75,7 @@ def _endurance_report(
     return {
         "schema_version": "1.0",
         "benchmark": {
-            "benchmark_id": "single-node.reference.endurance",
+            "benchmark_id": "single-node.soak.mixed",
             "benchmark_version": "1.0",
             "scenario": "soak",
             "deployment_profile": "single-node-reference",
@@ -231,6 +231,33 @@ def test_operating_envelope_rejects_incomparable_or_failed_sweeps(
     with pytest.raises(ValueError, match=match):
         OperatingEnvelopeAnalyzer().analyze(
             sweep_reports=(_sweep_report(), candidate),
+        )
+
+
+def test_operating_envelope_rejects_unsupported_benchmark_identity_or_version() -> None:
+    sweep = _sweep_report()
+    sweep["benchmark_version"] = "2.0"
+    with pytest.raises(ValueError, match="sweep benchmark_version"):
+        OperatingEnvelopeAnalyzer().analyze(sweep_reports=(sweep,))
+
+    endurance = _endurance_report()
+    benchmark = endurance["benchmark"]
+    assert isinstance(benchmark, dict)
+    benchmark["benchmark_id"] = "not-the-canonical-soak-benchmark"
+    with pytest.raises(ValueError, match="endurance benchmark_id"):
+        OperatingEnvelopeAnalyzer().analyze(
+            sweep_reports=(_sweep_report(),),
+            endurance_reports=(endurance,),
+        )
+
+    endurance = _endurance_report()
+    benchmark = endurance["benchmark"]
+    assert isinstance(benchmark, dict)
+    benchmark["benchmark_version"] = "2.0"
+    with pytest.raises(ValueError, match="endurance benchmark_version"):
+        OperatingEnvelopeAnalyzer().analyze(
+            sweep_reports=(_sweep_report(),),
+            endurance_reports=(endurance,),
         )
 
 
