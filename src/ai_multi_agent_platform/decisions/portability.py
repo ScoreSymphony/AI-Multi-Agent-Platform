@@ -47,7 +47,10 @@ def import_decision_bundle(
     *,
     actor_ref: str,
 ) -> tuple[str, ...]:
-    """Import historical state only; no provider/plugin/policy/resource activation is callable here."""
+    """Import historical state only.
+
+    No provider/plugin/policy/resource activation is callable here.
+    """
 
     if bundle.get("schema_version") != DECISION_BUNDLE_SCHEMA_VERSION:
         raise ContractError(ErrorCode.INVALID_REQUEST, "unsupported DecisionRecord bundle version")

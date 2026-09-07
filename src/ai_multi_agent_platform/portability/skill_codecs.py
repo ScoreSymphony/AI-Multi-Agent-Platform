@@ -284,7 +284,8 @@ def _reject_historical_remapping(bundle: SkillBundle, context: ImportContext) ->
         if resource_id is not None and context.remap(resource_type, resource_id) != resource_id:
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "historical Skill Bundle dependencies cannot be remapped without changing its digest",
+                "historical Skill Bundle dependencies cannot be remapped "
+                "without changing its digest",
                 details={"resource_type": resource_type, "resource_id": resource_id},
             )
     for entry in bundle.entries:

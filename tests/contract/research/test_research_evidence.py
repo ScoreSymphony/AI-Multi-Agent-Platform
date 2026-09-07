@@ -46,7 +46,7 @@ def _supported_research(
     service: ResearchService,
     *,
     task_id: str | None = None,
-    freshness_policy: FreshnessPolicy = FreshnessPolicy(),
+    freshness_policy: FreshnessPolicy | None = None,
 ) -> tuple[str, str, str, str]:
     item = run(
         service.create_item(
@@ -55,7 +55,7 @@ def _supported_research(
             research_class=ResearchClass.TASK_RESEARCH,
             owner_ref=OWNER,
             task_id=task_id,
-            freshness_policy=freshness_policy,
+            freshness_policy=freshness_policy or FreshnessPolicy(),
         )
     )
     source = run(

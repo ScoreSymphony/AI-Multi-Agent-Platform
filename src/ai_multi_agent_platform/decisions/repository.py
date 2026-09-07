@@ -205,7 +205,8 @@ class SqliteDecisionRepository(DecisionRepository):
         self.get(decision_record_id)
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT withdrawn_at, reason FROM decision_withdrawals WHERE decision_record_id = ?",
+                "SELECT withdrawn_at, reason FROM decision_withdrawals "
+                "WHERE decision_record_id = ?",
                 (decision_record_id,),
             ).fetchone()
         if row is None:
@@ -254,7 +255,8 @@ class SqliteDecisionRepository(DecisionRepository):
         payload = _dump(_record_to_json(record))
         try:
             connection.execute(
-                "INSERT INTO decision_records(decision_record_id, digest, payload_json, created_at) "
+                "INSERT INTO decision_records"
+                "(decision_record_id, digest, payload_json, created_at) "
                 "VALUES (?, ?, ?, ?)",
                 (record.id, record.content_digest, payload, record.created_at.isoformat()),
             )

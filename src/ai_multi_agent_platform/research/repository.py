@@ -152,7 +152,8 @@ class InMemoryResearchRepository:
                         return existing
                     raise ContractError(
                         ErrorCode.CONFLICT,
-                        "Research source observation idempotency key was reused with changed content",
+                        "Research source observation idempotency key was reused "
+                        "with changed content",
                     )
             if observation.observation_id in self._observations:
                 raise ContractError(ErrorCode.CONFLICT, "Source Observation already exists")
@@ -317,7 +318,8 @@ class SqliteResearchRepository(InMemoryResearchRepository):
         try:
             with self._connect() as connection:
                 connection.execute(
-                    "CREATE TABLE IF NOT EXISTS research_state (id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)"
+                    "CREATE TABLE IF NOT EXISTS research_state "
+                    "(id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL)"
                 )
         except sqlite3.Error as exc:
             raise ContractError(
@@ -342,7 +344,8 @@ class SqliteResearchRepository(InMemoryResearchRepository):
         try:
             with self._connect() as connection:
                 connection.execute(
-                    "INSERT INTO research_state(id,payload) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
+                    "INSERT INTO research_state(id,payload) VALUES(1,?) "
+                    "ON CONFLICT(id) DO UPDATE SET payload=excluded.payload",
                     (encoded,),
                 )
         except sqlite3.Error as exc:

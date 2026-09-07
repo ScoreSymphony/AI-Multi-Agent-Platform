@@ -400,7 +400,8 @@ class SkillService:
         if review_state_changed and not allow_review_state_change:
             raise ContractError(
                 ErrorCode.FORBIDDEN,
-                "Skill trust/evaluation state may only change through the explicit review lifecycle",
+                "Skill trust/evaluation state may only change through the explicit "
+                "review lifecycle",
             )
         if previous.trust_status != updated.trust_status:
             allowed = _TRUST_TRANSITIONS[previous.trust_status]

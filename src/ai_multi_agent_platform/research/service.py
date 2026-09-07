@@ -69,7 +69,7 @@ class ResearchService:
         run_id: str | None = None,
         data_class: str = "standard",
         constraints: tuple[str, ...] = (),
-        freshness_policy: FreshnessPolicy = FreshnessPolicy(),
+        freshness_policy: FreshnessPolicy | None = None,
         provenance: Provenance | None = None,
         metadata: dict[str, JsonValue] | None = None,
         actor: ActorIdentity | None = None,
@@ -87,7 +87,7 @@ class ResearchService:
             run_id=run_id,
             data_class=data_class,
             constraints=constraints,
-            freshness_policy=freshness_policy,
+            freshness_policy=freshness_policy or FreshnessPolicy(),
             provenance=provenance,
             metadata=metadata or {},
         )

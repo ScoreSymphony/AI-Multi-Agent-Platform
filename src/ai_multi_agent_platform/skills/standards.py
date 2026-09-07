@@ -12,8 +12,9 @@ def standard_research_skill() -> SkillProfile:
         purpose_categories=("research",),
         content=SkillContent(
             content=(
-                "Identify the claim to establish, gather relevant evidence, distinguish source facts "
-                "from inference, and preserve citations/provenance in the result."
+                "Identify the claim to establish, gather relevant evidence, "
+                "distinguish source facts from inference, and preserve citations/provenance "
+                "in the result."
             ),
             version="1",
         ),
@@ -28,8 +29,8 @@ def standard_review_skill() -> SkillProfile:
         purpose_categories=("review", "quality"),
         content=SkillContent(
             content=(
-                "Review the supplied work against its stated requirements, identify concrete defects, "
-                "and report evidence without silently rewriting acceptance policy."
+                "Review the supplied work against its stated requirements, identify concrete "
+                "defects, and report evidence without silently rewriting acceptance policy."
             ),
             version="1",
         ),
