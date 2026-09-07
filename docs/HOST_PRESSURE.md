@@ -88,7 +88,7 @@ Remote Workers reuse the existing authenticated #14 Worker protocol and its `Wor
 
 A reporting Worker may attach `platform.host-pressure-report.v1` metadata containing only the portable pressure state, observation timestamp and normalized signals. `pressure_report_metadata()` intentionally omits provider-private source references, Linux metadata and any Worker-supplied trust assertion. `attach_pressure_report()` also removes stale report/provenance copies before attaching the current portable report.
 
-`DistributedWorkerProcess` accepts a replaceable `PressureSnapshotProvider`. The reporting Worker samples it for registration and heartbeat snapshots and attaches the portable report only to the authenticated reporter Worker record. The shipped Linux Worker CLI composes `LinuxHostPressureProvider` automatically on Linux; the collector remains read-only.
+`DistributedWorkerProcess` accepts a replaceable `PressureSnapshotProvider`. The reporting Worker samples it for registration and heartbeat snapshots and attaches the portable report only to the authenticated reporter Worker record. The shipped Worker CLI enables the read-only `LinuxHostPressureProvider` only when `--host-pressure` is explicitly supplied on Linux; without that opt-in no host-pressure provider is composed.
 
 Trust is assigned only after the existing Worker authentication/authorization boundary succeeds. `WorkerProtocolService`:
 
