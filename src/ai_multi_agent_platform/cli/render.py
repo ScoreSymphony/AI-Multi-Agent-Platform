@@ -85,6 +85,9 @@ class Renderer:
         if isinstance(value, dict):
             items = value.get("items")
             if isinstance(items, list):
+                for key in ("task_id", "plan_id", "plan_revision"):
+                    if key in value:
+                        self.stdout.write(f"{key}: {_display(value.get(key))}\n")
                 self._table(items)
                 total = value.get("total")
                 next_cursor = value.get("next_cursor")
