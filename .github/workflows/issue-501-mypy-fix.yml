@@ -1,0 +1,63 @@
+name: Issue 501 mypy cleanup
+
+on:
+  push:
+    branches:
+      - feature/501-proposal-specification-governance
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/501-proposal-specification-governance
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install 'ruff==0.16.6'
+      - name: Apply typed governance fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          repository = Path("src/ai_multi_agent_platform/governance/repository.py")
+          text = repository.read_text()
+          text = text.replace(
+              'OwnerRef(type=cast(object, owner["type"]), id=str(owner["id"])),  # type: ignore[arg-type]',
+              'OwnerRef(\n            type=cast(\n                Literal["user", "organization", "team", "service"], owner["type"]\n            ),\n            id=str(owner["id"]),\n        )',
+          )
+          repository.write_text(text)
+
+          control = Path("src/ai_multi_agent_platform/governance/control_plane.py")
+          text = control.read_text()
+          text = text.replace("from typing import cast", "from typing import Literal, cast")
+          start_marker = "    mutable = {\n"
+          end_marker = '    return replace(current, revision=expected_revision + 1, content_digest="", **mutable)\n'
+          start = text.index(start_marker, text.index("def _specification_revision_from_payload"))
+          end = text.index(end_marker, start) + len(end_marker)
+          replacement = '''    return replace(\n        current,\n        revision=expected_revision + 1,\n        content_digest="",\n        problem=_optional_string(payload, "problem") or current.problem,\n        goal=_optional_string(payload, "goal") or current.goal,\n        scope=_string_tuple(payload, "scope") if "scope" in payload else current.scope,\n        out_of_scope=(\n            _string_tuple(payload, "out_of_scope")\n            if "out_of_scope" in payload\n            else current.out_of_scope\n        ),\n        acceptance_criteria=(\n            _string_tuple(payload, "acceptance_criteria")\n            if "acceptance_criteria" in payload\n            else current.acceptance_criteria\n        ),\n        dependencies=(\n            _string_tuple(payload, "dependencies")\n            if "dependencies" in payload\n            else current.dependencies\n        ),\n        constraints=(\n            _string_tuple(payload, "constraints")\n            if "constraints" in payload\n            else current.constraints\n        ),\n        risk=RiskClassification(_optional_string(payload, "risk") or current.risk.value),\n        required_capabilities=(\n            _string_tuple(payload, "required_capabilities")\n            if "required_capabilities" in payload\n            else current.required_capabilities\n        ),\n        model_requirements=(\n            _json_mapping(payload, "model_requirements")\n            if "model_requirements" in payload\n            else current.model_requirements\n        ),\n        agent_requirements=(\n            _json_mapping(payload, "agent_requirements")\n            if "agent_requirements" in payload\n            else current.agent_requirements\n        ),\n        data_security_constraints=(\n            _string_tuple(payload, "data_security_constraints")\n            if "data_security_constraints" in payload\n            else current.data_security_constraints\n        ),\n        validation_strategy=(\n            _string_tuple(payload, "validation_strategy")\n            if "validation_strategy" in payload\n            else current.validation_strategy\n        ),\n        required_tests=(\n            _string_tuple(payload, "required_tests")\n            if "required_tests" in payload\n            else current.required_tests\n        ),\n        verification_requirements=(\n            _string_tuple(payload, "verification_requirements")\n            if "verification_requirements" in payload\n            else current.verification_requirements\n        ),\n        required_human_gates=(\n            _string_tuple(payload, "required_human_gates")\n            if "required_human_gates" in payload\n            else current.required_human_gates\n        ),\n        decomposition_hints=(\n            _string_tuple(payload, "decomposition_hints")\n            if "decomposition_hints" in payload\n            else current.decomposition_hints\n        ),\n        assumptions=(\n            _string_tuple(payload, "assumptions")\n            if "assumptions" in payload\n            else current.assumptions\n        ),\n        open_questions=(\n            _string_tuple(payload, "open_questions")\n            if "open_questions" in payload\n            else current.open_questions\n        ),\n    )\n'''
+          text = text[:start] + replacement + text[end:]
+          text = text.replace(
+              'OwnerRef(type=cast("object", owner_type), id=owner_id)  # type: ignore[arg-type]',
+              'OwnerRef(\n                type=cast(\n                    Literal["user", "organization", "team", "service"], owner_type\n                ),\n                id=owner_id,\n            )',
+          )
+          control.write_text(text)
+          PY
+      - run: ruff format src/ai_multi_agent_platform/governance
+      - run: ruff check src/ai_multi_agent_platform/governance
+      - name: Commit corrections
+        shell: bash
+        run: |
+          git config user.name "Score Symphony CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/ai_multi_agent_platform/governance
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "fix: type governance revision boundaries"
+          git push origin HEAD:feature/501-proposal-specification-governance
