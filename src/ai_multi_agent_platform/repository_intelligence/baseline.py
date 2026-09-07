@@ -64,7 +64,7 @@ class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
         self._provider_id = provider_id
         self._priority = priority
         self._health = health
-        self._available = available
+        self._available = available and health is not HealthStatus.UNAVAILABLE
 
     @property
     def descriptor(self) -> ProviderDescriptor:
@@ -138,6 +138,12 @@ class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
         repository_id = _required_string(arguments, "repository_id")
         revision = _optional_string(arguments, "revision") or "HEAD"
         tree = await self._snapshot_loader(repository_id, revision, invocation.context)
+        if tree.repository_id != repository_id:
+            raise ContractError(
+                ErrorCode.INVALID_PROVIDER_RESPONSE,
+                "repository-intelligence snapshot repository identity mismatch",
+                provider_id=self._provider_id,
+            )
         provenance = RepositoryIntelligenceProvenance(
             repository_id=tree.repository_id,
             requested_revision=tree.requested_ref,
