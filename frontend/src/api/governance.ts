@@ -94,6 +94,11 @@ export interface ApprovalRequestResult {
   expires_at: string;
 }
 
+export interface ProposalSupersedeResult {
+  proposal: GovernanceProposal;
+  replacement: GovernanceProposal;
+}
+
 export interface TaskConversionResult {
   id: string;
   type: "task";
@@ -160,6 +165,17 @@ export class GovernanceClient {
   ): Promise<GovernanceProposal> {
     return this.command<GovernanceProposal>("proposal.request-clarification", proposalId, {
       expected_revision: expectedRevision,
+    });
+  }
+
+  supersedeProposal(
+    proposalId: string,
+    expectedRevision: number,
+    replacement: Record<string, unknown>,
+  ): Promise<ProposalSupersedeResult> {
+    return this.command<ProposalSupersedeResult>("proposal.supersede", proposalId, {
+      expected_revision: expectedRevision,
+      replacement,
     });
   }
 

@@ -59,4 +59,36 @@ describe("GovernanceClient", () => {
     expect(task.id).toBe("task_test");
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
+  it("supersedes proposals through the canonical command with explicit lineage", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe("/api/v1/commands/proposal.supersede");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        resource_ref: "proposal_original",
+        expected_revision: 3,
+        replacement: {
+          title: "Replacement",
+          summary: "Replacement summary",
+          reason: "Clarified scope",
+          project_id: "project_test",
+        },
+      });
+      return jsonResponse({
+        proposal: { id: "proposal_original", status: "superseded", revision: 4 },
+        replacement: { id: "proposal_replacement", status: "draft", revision: 1 },
+      });
+    });
+    const client = new GovernanceClient({ fetchImpl });
+
+    const result = await client.supersedeProposal("proposal_original", 3, {
+      title: "Replacement",
+      summary: "Replacement summary",
+      reason: "Clarified scope",
+      project_id: "project_test",
+    });
+
+    expect(result.replacement.id).toBe("proposal_replacement");
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
 });

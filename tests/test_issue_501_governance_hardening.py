@@ -280,3 +280,28 @@ def test_baseline_governance_requires_no_external_spec_adapter(tmp_path: Path) -
     assert proposal.id.startswith("proposal_")
     assert specification.id.startswith("specification_")
     assert specification.content_digest
+
+
+def test_supersession_cannot_cross_governance_scope(tmp_path: Path) -> None:
+    project_a = new_id("project")
+    project_b = new_id("project")
+    service = _service(tmp_path)
+    original = service.create_proposal(
+        _proposal(project_a, title="Scoped original"), actor_ref=PRINCIPAL
+    )
+    replacement = replace(
+        _proposal(project_b, title="Cross-project replacement"),
+        supersedes_id=original.id,
+    )
+
+    with pytest.raises(ContractError) as error:
+        service.supersede_proposal(
+            original.id,
+            replacement,
+            expected_revision=original.revision,
+            actor_ref=PRINCIPAL,
+        )
+
+    assert error.value.code is ErrorCode.INVALID_REQUEST
+    assert service.repository.get_proposal(original.id).status is ProposalStatus.PROPOSED
+    assert {value.id for value in service.repository.list_proposals()} == {original.id}

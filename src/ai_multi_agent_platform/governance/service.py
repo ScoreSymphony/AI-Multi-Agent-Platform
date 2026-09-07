@@ -231,6 +231,15 @@ class GovernanceService:
                 ErrorCode.INVALID_REQUEST,
                 "replacement proposal must reference supersedes_id",
             )
+        if (
+            replacement.owner_ref != current.owner_ref
+            or replacement.project_id != current.project_id
+            or replacement.workspace_id != current.workspace_id
+        ):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "replacement proposal must preserve owner/project/workspace scope",
+            )
         created = self.repository.create_proposal(replacement)
         superseded = replace(
             current,

@@ -22,6 +22,9 @@ export function GovernancePage({ client }: { client: GovernanceClient }) {
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [reason, setReason] = useState("");
+  const [replacementTitle, setReplacementTitle] = useState("");
+  const [replacementSummary, setReplacementSummary] = useState("");
+  const [replacementReason, setReplacementReason] = useState("");
   const [projectId, setProjectId] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -156,6 +159,9 @@ export function ProposalGovernanceDetailPage({
       setProposal(loaded);
       setSummary(loaded.summary);
       setReason(loaded.reason);
+      setReplacementTitle(loaded.title);
+      setReplacementSummary(loaded.summary);
+      setReplacementReason(loaded.reason);
       setError(null);
     } catch (nextError) {
       setError(nextError);
@@ -193,6 +199,35 @@ export function ProposalGovernanceDetailPage({
     } catch (nextError) {
       setError(nextError);
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const supersede = async () => {
+    if (!replacementTitle.trim() || !replacementSummary.trim() || !replacementReason.trim()) return;
+    setBusy(true);
+    try {
+      const result = await client.supersedeProposal(proposal.id, proposal.revision, {
+        title: replacementTitle.trim(),
+        summary: replacementSummary.trim(),
+        reason: replacementReason.trim(),
+        source: "web-governance-supersede",
+        ...(proposal.project_id ? { project_id: proposal.project_id } : {}),
+        ...(proposal.workspace_id ? { workspace_id: proposal.workspace_id } : {}),
+        evidence_refs: proposal.evidence_refs,
+        confidence: proposal.confidence,
+        expected_value: proposal.expected_value,
+        risk: proposal.risk,
+        ...(proposal.fingerprint ? { fingerprint: proposal.fingerprint } : {}),
+      });
+      window.history.pushState(
+        {},
+        "",
+        `/governance/proposals/${encodeURIComponent(result.replacement.id)}`,
+      );
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    } catch (nextError) {
+      setError(nextError);
       setBusy(false);
     }
   };
@@ -268,6 +303,28 @@ export function ProposalGovernanceDetailPage({
           <button disabled={busy || terminal} onClick={() => void dismiss()}>Dismiss</button>
         </div>
       </Card>
+
+      {!terminal ? (
+        <Card title="Supersede Proposal">
+          <div className="stack">
+            <p>Create a replacement Proposal while preserving owner, Project and Workspace lineage.</p>
+            <label>Replacement title<input value={replacementTitle} onChange={(event) => setReplacementTitle(event.target.value)} /></label>
+            <label>Replacement summary<textarea value={replacementSummary} onChange={(event) => setReplacementSummary(event.target.value)} /></label>
+            <label>Replacement reason<textarea value={replacementReason} onChange={(event) => setReplacementReason(event.target.value)} /></label>
+            <button
+              disabled={
+                busy
+                || !replacementTitle.trim()
+                || !replacementSummary.trim()
+                || !replacementReason.trim()
+              }
+              onClick={() => void supersede()}
+            >
+              Supersede Proposal
+            </button>
+          </div>
+        </Card>
+      ) : null}
 
       {!terminal ? (
         <Card title="Create Specification">

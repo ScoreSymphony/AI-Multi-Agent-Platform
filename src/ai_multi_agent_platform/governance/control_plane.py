@@ -291,6 +291,7 @@ def register_governance_control_plane(
             context,
             supersedes_id=resource_ref,
         )
+        await _require_allowed(control_plane, context, "proposal.create", replacement)
         superseded, created = governance.supersede_proposal(
             resource_ref,
             replacement,
