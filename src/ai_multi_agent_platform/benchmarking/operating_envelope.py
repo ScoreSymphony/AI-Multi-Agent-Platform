@@ -14,7 +14,10 @@ OPERATING_ENVELOPE_REPORT_SCHEMA_VERSION = "1.0"
 _CLAIM_SEMANTICS = "tested-envelope-only"
 _BUDGET_STATUS = "not-established"
 _SWEEP_BENCHMARK_ID = "single-node.reference.lifecycle.sweep"
+_SWEEP_BENCHMARK_VERSION = "1.0"
 _SWEEP_SCHEMA_VERSION = "1.0"
+_ENDURANCE_BENCHMARK_ID = "single-node.soak.mixed"
+_ENDURANCE_BENCHMARK_VERSION = "1.0"
 _ENDURANCE_SCHEMA_VERSION = "1.0"
 
 
@@ -243,6 +246,8 @@ def _parse_sweep(report: Mapping[str, Any], *, source: str) -> _SweepInput:
         raise ValueError(f"{source}: unsupported sweep schema_version")
     if _require_str(report, "benchmark_id") != _SWEEP_BENCHMARK_ID:
         raise ValueError(f"{source}: unsupported sweep benchmark_id")
+    if _require_str(report, "benchmark_version") != _SWEEP_BENCHMARK_VERSION:
+        raise ValueError(f"{source}: unsupported sweep benchmark_version")
     if not _require_bool(report, "correctness_passed"):
         raise ValueError(f"{source}: sweep correctness did not pass")
     if _require_string_list(report, "errors"):
@@ -389,6 +394,10 @@ def _parse_endurance(
         raise ValueError(f"{source}: endurance report contains errors")
 
     benchmark = _require_mapping(report.get("benchmark"), f"{source}: benchmark")
+    if _require_str(benchmark, "benchmark_id") != _ENDURANCE_BENCHMARK_ID:
+        raise ValueError(f"{source}: unsupported endurance benchmark_id")
+    if _require_str(benchmark, "benchmark_version") != _ENDURANCE_BENCHMARK_VERSION:
+        raise ValueError(f"{source}: unsupported endurance benchmark_version")
     if _require_str(benchmark, "scenario") != "soak":
         raise ValueError(f"{source}: operating-envelope endurance evidence must be scenario=soak")
     if _require_str(benchmark, "deployment_profile") != reference.deployment_profile:
