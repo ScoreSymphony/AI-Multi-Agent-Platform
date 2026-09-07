@@ -21,6 +21,8 @@ class RepositoryIntelligenceFreshness(StrEnum):
     """Normalized freshness evidence for intelligence results."""
 
     LIVE_REVISION = "live_revision"
+    WORKSPACE_SNAPSHOT = "workspace_snapshot"
+    LIVE_WORKSPACE = "live_workspace"
     FRESH_INDEX = "fresh_index"
     STALE_INDEX = "stale_index"
     UNKNOWN = "unknown"
