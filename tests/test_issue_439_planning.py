@@ -55,7 +55,11 @@ from ai_multi_agent_platform.planning import (
     ReplanPolicy,
 )
 from ai_multi_agent_platform.planning.repository import advance_record
-from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeModelProvider, FakeOrchestrator
+from ai_multi_agent_platform.testing import (
+    FakeLifecycleBackend,
+    FakeModelProvider,
+    FakeOrchestrator,
+)
 
 OWNER = OwnerRef(type="user", id="issue-439-user")
 
@@ -292,9 +296,7 @@ def test_missing_agent_capability_and_model_are_reported_canonically() -> None:
                     key="unsatisfied",
                     title="Unsatisfied",
                     assignment=AgentAssignment(agent_id=missing_agent, agent_revision=1),
-                    capability_requirements=(
-                        CapabilityRequirement(capability_id="cap.missing"),
-                    ),
+                    capability_requirements=(CapabilityRequirement(capability_id="cap.missing"),),
                     model_requirements=RoutingRequirements(structured_output=True),
                     requires_model=True,
                 ),
