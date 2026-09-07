@@ -141,8 +141,8 @@ class CapabilitySpec:
     required_approvals: tuple[str, ...] = ()
     required_worker_capabilities: tuple[str, ...] = ()
     timeout_seconds: float | None = None
-    health: HealthStatus = HealthStatus.UNKNOWN
-    available: bool = True
+    health: HealthStatus = field(default=HealthStatus.UNKNOWN, compare=False)
+    available: bool = field(default=True, compare=False)
     features: tuple[str, ...] = ()
     credential_requirement: CredentialRequirement = CredentialRequirement.NONE
 
