@@ -218,9 +218,7 @@ def test_running_predecessor_conflict_keeps_replan_actionable() -> None:
             )
         assert exc_info.value.code is ErrorCode.CONFLICT
         assert "prior Steps are running" in exc_info.value.message
-        assert (
-            repository.get(replacement.proposal.proposal_id).status is ProposalStatus.VALIDATED
-        )
+        assert repository.get(replacement.proposal.proposal_id).status is ProposalStatus.VALIDATED
 
     asyncio.run(scenario())
 
