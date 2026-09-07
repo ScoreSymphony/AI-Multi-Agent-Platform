@@ -17,6 +17,7 @@ from .models import (
     consumption_to_dict,
     handoff_from_dict,
     handoff_to_dict,
+    participant_key,
 )
 
 
@@ -77,17 +78,7 @@ class InMemoryHandoffRepository:
             if current_id == handoff.handoff_id
         ]
         latest = max(revisions, default=0)
-        if latest != expected_previous_revision:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "stale handoff revision expectation",
-                details={"expected_previous_revision": expected_previous_revision, "latest": latest},
-            )
-        if handoff.revision != expected_previous_revision + 1:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "handoff revision must increase exactly by one",
-            )
+        _require_expected_revision(handoff, latest, expected_previous_revision)
         key = (handoff.handoff_id, handoff.revision)
         if key in self._handoffs:
             raise ContractError(ErrorCode.CONFLICT, "handoff revision already exists")
@@ -142,8 +133,7 @@ class InMemoryHandoffRepository:
         self, consumption: HandoffConsumption
     ) -> tuple[HandoffConsumption, bool]:
         handoff = self.get_handoff(consumption.handoff_id, consumption.handoff_revision)
-        if handoff.content_digest != consumption.handoff_digest:
-            raise ContractError(ErrorCode.CONFLICT, "handoff digest does not match stored revision")
+        _require_matching_digest(handoff, consumption)
         key = (
             consumption.handoff_id,
             consumption.handoff_revision,
@@ -151,11 +141,7 @@ class InMemoryHandoffRepository:
         )
         existing = self._consumptions.get(key)
         if existing is not None:
-            if existing != consumption:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "consuming Run is already bound to different handoff evidence",
-                )
+            _require_same_consumption_binding(existing, consumption)
             return existing, False
         self._consumptions[key] = consumption
         return consumption, True
@@ -187,6 +173,7 @@ class SQLiteHandoffRepository:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(str(self._path))
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
     def _initialize(self) -> None:
@@ -214,7 +201,9 @@ class SQLiteHandoffRepository:
                     idempotency_key TEXT PRIMARY KEY,
                     request_digest TEXT NOT NULL,
                     handoff_id TEXT NOT NULL,
-                    revision INTEGER NOT NULL
+                    revision INTEGER NOT NULL,
+                    FOREIGN KEY (handoff_id, revision)
+                        REFERENCES agent_handoffs(handoff_id, revision)
                 );
 
                 CREATE TABLE IF NOT EXISTS agent_handoff_consumptions (
@@ -265,20 +254,7 @@ class SQLiteHandoffRepository:
             ).fetchone()
             latest_value = latest_row["latest"] if latest_row is not None else None
             latest = int(latest_value) if latest_value is not None else 0
-            if latest != expected_previous_revision:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "stale handoff revision expectation",
-                    details={
-                        "expected_previous_revision": expected_previous_revision,
-                        "latest": latest,
-                    },
-                )
-            if handoff.revision != expected_previous_revision + 1:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "handoff revision must increase exactly by one",
-                )
+            _require_expected_revision(handoff, latest, expected_previous_revision)
             payload = json.dumps(handoff_to_dict(handoff), sort_keys=True, separators=(",", ":"))
             try:
                 connection.execute(
@@ -351,7 +327,9 @@ class SQLiteHandoffRepository:
             (step_id, step_id),
         )
 
-    def _list_handoffs(self, query: str, parameters: tuple[object, ...]) -> tuple[AgentHandoff, ...]:
+    def _list_handoffs(
+        self, query: str, parameters: tuple[object, ...]
+    ) -> tuple[AgentHandoff, ...]:
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
         return tuple(
@@ -371,8 +349,7 @@ class SQLiteHandoffRepository:
                 consumption.handoff_id,
                 consumption.handoff_revision,
             )
-            if handoff.content_digest != consumption.handoff_digest:
-                raise ContractError(ErrorCode.CONFLICT, "handoff digest does not match stored revision")
+            _require_matching_digest(handoff, consumption)
             row = connection.execute(
                 "SELECT payload_json FROM agent_handoff_consumptions "
                 "WHERE handoff_id = ? AND revision = ? AND consuming_run_id = ?",
@@ -386,11 +363,7 @@ class SQLiteHandoffRepository:
                 existing = consumption_from_dict(
                     cast(Mapping[str, Any], json.loads(str(row["payload_json"])))
                 )
-                if existing != consumption:
-                    raise ContractError(
-                        ErrorCode.CONFLICT,
-                        "consuming Run is already bound to different handoff evidence",
-                    )
+                _require_same_consumption_binding(existing, consumption)
                 connection.commit()
                 return existing, False
             payload = json.dumps(
@@ -426,4 +399,51 @@ class SQLiteHandoffRepository:
                 cast(Mapping[str, Any], json.loads(str(row["payload_json"])))
             )
             for row in rows
+        )
+
+
+def _require_expected_revision(
+    handoff: AgentHandoff,
+    latest_revision: int,
+    expected_previous_revision: int,
+) -> None:
+    if latest_revision != expected_previous_revision:
+        raise ContractError(
+            ErrorCode.CONFLICT,
+            "stale handoff revision expectation",
+            details={
+                "expected_previous_revision": expected_previous_revision,
+                "latest": latest_revision,
+            },
+        )
+    if handoff.revision != expected_previous_revision + 1:
+        raise ContractError(
+            ErrorCode.CONFLICT,
+            "handoff revision must increase exactly by one",
+        )
+
+
+def _require_matching_digest(
+    handoff: AgentHandoff, consumption: HandoffConsumption
+) -> None:
+    if handoff.content_digest != consumption.handoff_digest:
+        raise ContractError(ErrorCode.CONFLICT, "handoff digest does not match stored revision")
+
+
+def _require_same_consumption_binding(
+    existing: HandoffConsumption,
+    candidate: HandoffConsumption,
+) -> None:
+    same = (
+        existing.handoff_id == candidate.handoff_id
+        and existing.handoff_revision == candidate.handoff_revision
+        and existing.handoff_digest == candidate.handoff_digest
+        and existing.consuming_run_id == candidate.consuming_run_id
+        and participant_key(existing.consumer) == participant_key(candidate.consumer)
+        and existing.context_bundle_ref == candidate.context_bundle_ref
+    )
+    if not same:
+        raise ContractError(
+            ErrorCode.CONFLICT,
+            "consuming Run is already bound to different handoff evidence",
         )
