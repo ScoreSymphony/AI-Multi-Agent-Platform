@@ -21,7 +21,6 @@ from .models import (
 )
 from .repository import SkillRepository
 
-
 _TRUST_TRANSITIONS: dict[SkillTrustStatus, frozenset[SkillTrustStatus]] = {
     SkillTrustStatus.DISCOVERED: frozenset(
         {

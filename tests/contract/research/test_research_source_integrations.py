@@ -21,7 +21,6 @@ from ai_multi_agent_platform.research import (
 )
 from ai_multi_agent_platform.security import AuthorizationGate
 
-
 OWNER = OwnerRef(type="user", id="researcher")
 
 

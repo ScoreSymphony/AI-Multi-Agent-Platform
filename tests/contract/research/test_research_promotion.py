@@ -22,7 +22,6 @@ from ai_multi_agent_platform.research import (
     ResearchSourceType,
 )
 
-
 OWNER = OwnerRef(type="user", id="researcher")
 
 

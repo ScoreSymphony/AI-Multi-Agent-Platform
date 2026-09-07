@@ -203,7 +203,7 @@ def test_resource_service_visibility_prevents_scope_existence_leak(tmp_path) -> 
 
     async def visibility(context: RequestContext, view: object) -> bool:
         del context
-        return getattr(view, "record").id == visible.id
+        return view.record.id == visible.id
 
     resources = decision_record_resource_services(service, visibility=visibility)[
         DECISION_COLLECTION

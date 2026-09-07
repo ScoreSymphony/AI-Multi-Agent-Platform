@@ -36,7 +36,6 @@ from ai_multi_agent_platform.skills import (
     new_skill_id,
 )
 
-
 OWNER = OwnerRef(type="user", id="issue-588-test")
 
 

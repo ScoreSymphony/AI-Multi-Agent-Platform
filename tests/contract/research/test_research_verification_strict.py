@@ -20,7 +20,6 @@ from ai_multi_agent_platform.verification import (
     VerifierKind,
 )
 
-
 OWNER = OwnerRef(type="user", id="researcher")
 
 

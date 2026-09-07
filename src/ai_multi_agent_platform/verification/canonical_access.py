@@ -12,9 +12,9 @@ from datetime import datetime
 
 from .models import ProducerIdentity, VerificationRequest, VerificationResult, VerificationSubject
 from .service import (
-    VerificationService,
     _CANONICAL_RESULT_TOKEN,
     _CANONICAL_SUBJECT_TOKEN,
+    VerificationService,
 )
 
 

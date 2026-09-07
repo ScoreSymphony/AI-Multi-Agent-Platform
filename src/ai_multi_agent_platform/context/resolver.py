@@ -16,7 +16,6 @@ from ai_multi_agent_platform.contracts import (
     OperationContext,
     normalize_authorization_decision,
 )
-from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.security.authorization import ActorIdentity
 

@@ -19,7 +19,6 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .models import (
-    CompletedSideEffect,
     CompensationAutomation,
     CompensationFailureMode,
     CompensationGroup,
@@ -28,6 +27,7 @@ from .models import (
     CompensationResult,
     CompensationStatus,
     CompensationTrigger,
+    CompletedSideEffect,
 )
 
 
