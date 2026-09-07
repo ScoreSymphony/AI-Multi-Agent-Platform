@@ -178,9 +178,7 @@ class PolicyAwarePlanningEnvironmentResolver:
             for capability in eligible:
                 action = _capability_action(actor, task, context, capability)
                 if await self._allowed(action, allow_approval=True):
-                    authorized_capabilities.add(
-                        (capability.capability_id, capability.version)
-                    )
+                    authorized_capabilities.add((capability.capability_id, capability.version))
 
         return PlanningEnvironment(
             granted_permissions=permissions,
