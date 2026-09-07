@@ -65,7 +65,7 @@ The following stable markers are registered in `pyproject.toml`:
 - `regression`
 - `release`
 
-Markers are optional metadata; **directory placement is the primary ownership signal**. Add a marker when selecting that test type independently of its path is useful.
+`tests/conftest.py` automatically assigns the matching marker from a test's first canonical suite directory. Directory placement remains the source of truth; historical root tests remain unmarked until they are safely migrated.
 
 Examples:
 
