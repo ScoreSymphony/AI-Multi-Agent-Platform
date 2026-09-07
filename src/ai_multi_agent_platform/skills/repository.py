@@ -20,6 +20,8 @@ class SkillRepository(Protocol):
 
     def update_skill(self, definition: SkillDefinition, revision: SkillRevision) -> None: ...
 
+    def delete_skill(self, skill_id: str) -> None: ...
+
     def get_skill(self, skill_id: str) -> SkillDefinition: ...
 
     def list_skills(self) -> tuple[SkillDefinition, ...]: ...
@@ -29,6 +31,8 @@ class SkillRepository(Protocol):
     def list_skill_revisions(self, skill_id: str) -> tuple[SkillRevision, ...]: ...
 
     def save_bundle(self, bundle: SkillBundle) -> None: ...
+
+    def delete_bundle(self, skill_bundle_id: str) -> None: ...
 
     def get_bundle(self, skill_bundle_id: str) -> SkillBundle: ...
 
@@ -78,6 +82,20 @@ class InMemorySkillRepository:
         self._revisions[key] = revision
         self._skills[definition.skill_id] = definition
 
+    def delete_skill(self, skill_id: str) -> None:
+        self.get_skill(skill_id)
+        for bundle in self._bundles.values():
+            if any(entry.ref.skill_id == skill_id for entry in bundle.entries):
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "skill cannot be deleted while historical bundle evidence references it",
+                    details={"skill_id": skill_id, "skill_bundle_id": bundle.skill_bundle_id},
+                )
+        del self._skills[skill_id]
+        for key in tuple(self._revisions):
+            if key[0] == skill_id:
+                del self._revisions[key]
+
     def get_skill(self, skill_id: str) -> SkillDefinition:
         try:
             return self._skills[skill_id]
@@ -119,6 +137,17 @@ class InMemorySkillRepository:
             if revision.ref != entry.ref:
                 raise ContractError(ErrorCode.CONTRACT_VIOLATION, "invalid skill bundle revision")
         self._bundles[bundle.skill_bundle_id] = bundle
+
+    def delete_bundle(self, skill_bundle_id: str) -> None:
+        self.get_bundle(skill_bundle_id)
+        for binding in self._bindings.values():
+            if binding.skill_bundle_id == skill_bundle_id:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "skill bundle cannot be deleted while Run evidence references it",
+                    details={"skill_bundle_id": skill_bundle_id, "binding_id": binding.binding_id},
+                )
+        del self._bundles[skill_bundle_id]
 
     def get_bundle(self, skill_bundle_id: str) -> SkillBundle:
         try:
