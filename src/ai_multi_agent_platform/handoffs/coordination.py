@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
+from ai_multi_agent_platform.coordination.models import PlanRuntimeState
 from ai_multi_agent_platform.coordination.repository import CoordinatorRepository
 
 from .models import (
     AgentHandoff,
+    HandoffConsumption,
     HandoffContent,
     HandoffRuntimeContext,
     HandoffSourceRef,
@@ -72,6 +74,11 @@ class CoordinatedHandoffService:
     def list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]:
         return self._handoffs.list_handoffs_for_step(step_id)
 
+    def list_consumptions(
+        self, handoff_id: str, revision: int
+    ) -> tuple[HandoffConsumption, ...]:
+        return self._handoffs.list_consumptions(handoff_id, revision)
+
     def _require_creation_binding(self, content: HandoffContent) -> None:
         state = self._coordinator.get_plan(content.plan_id)
         if state.plan.task_id != content.task_id:
@@ -131,11 +138,9 @@ class CoordinatedHandoffService:
             )
 
     @staticmethod
-    def _require_step(state: object, step_id: str, role: str) -> None:
+    def _require_step(state: PlanRuntimeState, step_id: str, role: str) -> None:
         try:
-            # PlanRuntimeState owns this lookup; keeping the local type use structural avoids
-            # introducing a second Step registry or persistence dependency.
-            state.step(step_id)  # type: ignore[attr-defined]
+            state.step(step_id)
         except KeyError as exc:
             raise ContractError(
                 ErrorCode.NOT_FOUND,
