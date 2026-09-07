@@ -63,9 +63,7 @@ def test_terminal_planning_metadata_uses_supported_boundary_and_preserves_lifecy
         assert (await kernel.get_task(task.task_id)).status is TaskStatus.SUCCEEDED
 
         history = await kernel.history(task.task_id)
-        mutation_events = [
-            event for event in history if event.causation_id == "issue-567:archive"
-        ]
+        mutation_events = [event for event in history if event.causation_id == "issue-567:archive"]
         assert len(mutation_events) == 1
         event = mutation_events[0]
         assert event.event_type == "task.updated"
@@ -161,9 +159,7 @@ def test_project_reassignment_boundary_owns_fixed_event_and_retry_contract() -> 
 
 
 def test_non_kernel_modules_cannot_call_private_task_commit_primitive() -> None:
-    package_root = (
-        Path(__file__).resolve().parents[1] / "src" / "ai_multi_agent_platform"
-    )
+    package_root = Path(__file__).resolve().parents[1] / "src" / "ai_multi_agent_platform"
     violations: list[str] = []
     for path in package_root.rglob("*.py"):
         relative = path.relative_to(package_root)
@@ -181,9 +177,7 @@ def test_non_kernel_modules_cannot_call_private_task_commit_primitive() -> None:
 
 
 def test_task_services_have_no_direct_private_kernel_access() -> None:
-    package_root = (
-        Path(__file__).resolve().parents[1] / "src" / "ai_multi_agent_platform"
-    )
+    package_root = Path(__file__).resolve().parents[1] / "src" / "ai_multi_agent_platform"
     for relative in (
         Path("task_management/service.py"),
         Path("task_reassignment/service.py"),
