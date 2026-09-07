@@ -133,9 +133,7 @@ def test_scheduler_emits_portable_pressure_metrics_and_structured_admission_reas
         if metric.name == "platform.scheduler.pressure_admission_reasons"
     ]
     assert reasons[-1].attributes["reason_code"] == "pressure_critical"
-    assert any(
-        entry.event_name == "scheduler.pressure_admission" for entry in exporter.timeline
-    )
+    assert any(entry.event_name == "scheduler.pressure_admission" for entry in exporter.timeline)
 
     serialized = repr((exporter.metrics, exporter.logs, exporter.timeline, exporter.spans))
     assert "/private/host/path-that-must-not-be-exported" not in serialized
