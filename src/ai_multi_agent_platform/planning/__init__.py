@@ -9,8 +9,9 @@ from .control_plane import (
 )
 from .evidence import (
     CoordinationEvidenceRepository,
-    ReplanningEvidenceBridge,
     ReplanningEventSink,
+    ReplanningEvidenceBridge,
+    VerificationEvidenceRepository,
 )
 from .models import (
     AgentAssignment,
@@ -86,8 +87,9 @@ __all__ = [
     "ProposalStatus",
     "ProposalValidation",
     "ReplanPolicy",
-    "ReplanningEvidenceBridge",
     "ReplanningEventSink",
+    "ReplanningEvidenceBridge",
+    "VerificationEvidenceRepository",
     "draft_from_mapping",
     "new_plan_proposal_id",
     "planning_command_handlers",
