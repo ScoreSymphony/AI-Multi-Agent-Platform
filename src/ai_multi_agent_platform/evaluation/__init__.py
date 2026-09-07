@@ -85,6 +85,7 @@ from .models import (
     SnapshotValue,
     VersionReference,
 )
+from .planning import ReferencePlanningEvaluationCaseExecutor
 from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
@@ -176,6 +177,7 @@ __all__ = [
     "ModelJudgeEvaluator",
     "NoopEvaluationIsolation",
     "ObservationRubricEvaluator",
+    "ReferencePlanningEvaluationCaseExecutor",
     "RegressionEngine",
     "RegressionPolicy",
     "RegressionRule",
