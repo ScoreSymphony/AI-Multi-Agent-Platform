@@ -1200,6 +1200,8 @@ class DurablePlanStepCoordinator:
         if not state.steps or any(step.status not in _TERMINAL_STEPS for step in state.steps):
             return
         task = await self.kernel.get_task(state.plan.task_id)
+        if task.plan_ref != plan_id:
+            return
         if task.status in {TaskStatus.SUCCEEDED, TaskStatus.CANCELLED}:
             return
         if any(step.status is StepStatus.FAILED for step in state.steps):

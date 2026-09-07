@@ -16,6 +16,7 @@ from ai_multi_agent_platform.coordination import (
     StepCoordinationRecord,
     StepRetryPolicy,
     StepWait,
+    WaitResolution,
     WaitType,
 )
 from ai_multi_agent_platform.domain import (
@@ -333,7 +334,7 @@ def test_approval_non_success_outcomes_are_deterministic(
 
 def test_waiting_step_cancelled_before_deadline_never_wakes() -> None:
     async def scenario() -> None:
-        plan, steps, _, kernel, coordinator = _runtime()
+        plan, steps, repository, kernel, coordinator = _runtime()
         t0 = datetime(2026, 9, 6, 10, 0, tzinfo=UTC)
         await coordinator.register_plan(plan, steps)
         await coordinator.wait_step(
@@ -354,7 +355,11 @@ def test_waiting_step_cancelled_before_deadline_never_wakes() -> None:
         projection = coordinator.projection(plan.id)
         assert projection.steps[0].status is StepStatus.CANCELLED
         assert projection.steps[0].phase is CoordinationPhase.TERMINAL
-        assert projection.steps[0].wait_type is None
+        assert projection.steps[0].wait_type is WaitType.DEADLINE
+        record = repository.get_step_record(steps[0].id)
+        assert record.wait is not None
+        assert record.wait.resolution is WaitResolution.CANCELLED
+        assert record.wait.resolved_at == t0
         assert kernel.task.status is TaskStatus.CANCELLED
         assert kernel.create_calls == 1
 

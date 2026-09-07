@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from ai_multi_agent_platform.coordination import (
     CoordinationPhase,
     InMemoryCoordinatorRepository,
+    RetryState,
     StepCoordinationRecord,
     StepRetryPolicy,
     StepWait,
@@ -93,6 +94,7 @@ def test_coordination_state_is_deterministic_evaluation_evidence() -> None:
                     version=7,
                 ),
                 retry_due_at=now + timedelta(seconds=30),
+                retry_state=RetryState.SCHEDULED,
             ),
             StepCoordinationRecord(
                 task_id=plan.task_id,
