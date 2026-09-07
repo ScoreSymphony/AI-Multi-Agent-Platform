@@ -140,6 +140,8 @@ class DistributedWorkerProcess:
                 group.create_task(self.workspace_endpoint.serve())
                 group.create_task(self.worker_endpoint.serve())
                 group.create_task(self.presence_endpoint.serve())
+                # Let subscription coroutines establish their transport consumers before the
+                # Control Plane probes reachability during registration.
                 await asyncio.sleep(0)
                 if self.config.reporting:
                     await self._register()
@@ -202,8 +204,13 @@ class DistributedWorkerProcess:
                 await protocol.heartbeat(heartbeat)
             except WorkerProtocolHTTPClientError as exc:
                 if exc.retryable:
+                    # A Worker-protocol outage is not evidence that Control-Plane state vanished.
+                    # Keep retrying; #35 presence evidence independently bounds sibling liveness.
                     pass
                 elif exc.status == 400:
+                    # A restarted Control Plane may have lost volatile Node/Worker registration.
+                    # Re-registration is safe with the same canonical identities and restores the
+                    # snapshot before subsequent heartbeat attempts.
                     await self._register()
                 else:
                     raise
@@ -223,6 +230,8 @@ class DistributedWorkerProcess:
                 self.config.registration.node.node_id,
             )
         except (WorkerProtocolHTTPClientError, OSError):
+            # Loss of the Control Plane during shutdown must not prevent the Worker process from
+            # terminating. The Control Plane will expire the last heartbeat and reconcile.
             return
 
     def _required_protocol(self) -> WorkerProtocolHTTPClient:
@@ -244,7 +253,17 @@ def build_worker_process_from_deployment_node(
     heartbeat_interval_seconds: float = _DEFAULT_HEARTBEAT_SECONDS,
     pressure_provider: PressureSnapshotProvider | None = None,
 ) -> DistributedWorkerProcess:
-    """Compose one process from a validated #240 deployment node."""
+    """Compose one process from a validated #240 deployment node.
+
+    Exactly the declared reporter performs registration/heartbeat. Additional Worker processes
+    for the same Node run execution/Workspace/presence endpoints with ``reporting=False`` while
+    the reporter owns the complete Node heartbeat snapshot. Local and remote reporters use the
+    same authenticated Worker-protocol contract; ``connection_mode`` is locality metadata only.
+
+    The profile's ``workspace_root`` is a host-level parent. Every independently running Worker
+    receives a private child root named by its canonical ``worker_id`` so sibling processes cannot
+    replace or clean up one another's materialized Workspace trees.
+    """
 
     worker_ids = {worker.worker_id for worker in node.workers}
     if worker_id not in worker_ids:
