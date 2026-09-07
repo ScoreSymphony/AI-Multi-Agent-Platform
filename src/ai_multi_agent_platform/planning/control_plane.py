@@ -9,8 +9,19 @@ from ai_multi_agent_platform.control_plane.models import PageQuery, RequestConte
 from ai_multi_agent_platform.models import RoutingRequirements
 from ai_multi_agent_platform.security import ActorIdentity, ActorType
 
+from .environment import PlanningService
 from .models import PlanningStepDraft, PlanningTrigger, ProposalRecord
-from .service import PlanningService
+
+_SERVER_RESOLVED_PLANNING_FIELDS = frozenset(
+    {
+        "granted_permissions",
+        "available_worker_capabilities",
+        "allowed_agent_ids",
+        "allowed_team_ids",
+        "allowed_capability_ids",
+        "allowed_model_config_ids",
+    }
+)
 
 
 class PlanningProposalResourceService:
@@ -46,6 +57,13 @@ class PlanningCommandHandlers:
     ) -> dict[str, JsonValue]:
         if context.idempotency_key is None:
             raise ContractError(ErrorCode.INVALID_REQUEST, "idempotency key is required")
+        caller_supplied = sorted(_SERVER_RESOLVED_PLANNING_FIELDS.intersection(payload))
+        if caller_supplied:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "planning authority and availability fields are resolved by the server",
+                details={"fields": caller_supplied},
+            )
         trigger_raw = payload.get("trigger", PlanningTrigger.INITIAL.value)
         if not isinstance(trigger_raw, str):
             raise ContractError(ErrorCode.INVALID_REQUEST, "planning trigger must be a string")
@@ -72,6 +90,7 @@ class PlanningCommandHandlers:
             task_constraints=task_constraints,
             max_steps=max_steps,
             max_parallel_steps=max_parallel_steps,
+            actor=_actor_identity(context),
         )
         return _record_resource(record)
 
@@ -83,22 +102,10 @@ class PlanningCommandHandlers:
     ) -> dict[str, JsonValue]:
         if context.idempotency_key is None:
             raise ContractError(ErrorCode.INVALID_REQUEST, "idempotency key is required")
-        actor_type = context.actor.actor_type or ActorType.SERVICE.value
-        try:
-            canonical_actor_type = ActorType(actor_type)
-        except ValueError as exc:
-            raise ContractError(
-                ErrorCode.INVALID_REQUEST,
-                f"unsupported planning actor type: {actor_type}",
-            ) from exc
-        actor = ActorIdentity(
-            actor_id=context.actor.principal_ref,
-            actor_type=canonical_actor_type,
-        )
         record = await self._planning.activate(
             resource_ref,
             idempotency_key=context.idempotency_key,
-            actor=actor,
+            actor=_actor_identity(context),
             approval_id=_optional_string(payload, "approval_id"),
         )
         return _record_resource(record)
@@ -130,6 +137,21 @@ def planning_command_handlers(planning: PlanningService) -> dict[str, CommandHan
         "planning.activate": handlers.activate,
         "planning.reject": handlers.reject,
     }
+
+
+def _actor_identity(context: RequestContext) -> ActorIdentity:
+    actor_type = context.actor.actor_type or ActorType.SERVICE.value
+    try:
+        canonical_actor_type = ActorType(actor_type)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"unsupported planning actor type: {actor_type}",
+        ) from exc
+    return ActorIdentity(
+        actor_id=context.actor.principal_ref,
+        actor_type=canonical_actor_type,
+    )
 
 
 def _record_resource(record: ProposalRecord) -> dict[str, JsonValue]:
