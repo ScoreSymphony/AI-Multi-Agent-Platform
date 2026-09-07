@@ -123,7 +123,6 @@ def test_authorized_loader_reads_exact_tree_through_repository_policy(tmp_path: 
             BaselineRepositoryIntelligenceProvider(
                 AuthorizedRepositorySnapshotLoader(
                     repository_service,
-                    repository_registry,
                     actor_resolver=_actor_ref,
                 )
             )
