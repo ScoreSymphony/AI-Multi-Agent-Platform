@@ -2,7 +2,7 @@
 
 This document records the Issue #45 integration of canonical lifecycle Events into the platform-wide Search layer.
 
-The general invariants in `docs/SEARCH.md` continue to apply: Search is derived and non-authoritative, canonical IDs remain primary identity, the Search provider is replaceable, and authorization happens before caller-visible totals, snippets, cursors or exact-ID results are calculated.
+The general invariants in `docs/search/SEARCH.md` continue to apply: Search is derived and non-authoritative, canonical IDs remain primary identity, the Search provider is replaceable, and authorization happens before caller-visible totals, snippets, cursors or exact-ID results are calculated.
 
 ## Searchable Event scope
 
