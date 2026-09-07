@@ -35,7 +35,14 @@ class GovernanceExtensionTransport:
         elif path == "/api/v1/commands/specification.convert-to-task":
             assert method == "POST"
             self.command_body = json.loads(body or b"{}")
-            self.idempotency_key = headers.get("Idempotency-Key")
+            self.idempotency_key = next(
+                (
+                    value
+                    for key, value in headers.items()
+                    if key.casefold() == "idempotency-key"
+                ),
+                None,
+            )
             payload = {"id": "task_test", "type": "task", "status": "draft"}
         else:
             raise AssertionError(f"unexpected request: {method} {path}")
@@ -86,6 +93,7 @@ def test_extension_execute_rejects_unregistered_command_before_post(tmp_path: Pa
         [
             "--config",
             str(tmp_path / "cli.json"),
+            "--json",
             "extension",
             "execute",
             "specification.bypass",
