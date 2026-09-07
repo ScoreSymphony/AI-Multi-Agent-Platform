@@ -141,9 +141,9 @@ def test_worker_registration_publishes_and_withdraws_artifact_capability(tmp_pat
             )
             providers = {item.provider_id for item in capabilities.inventory_providers()}
             assert providers == {f"distributed.executor.reference-artifact.{worker_id}"}
-            assert [
-                item.capability_id for item in capabilities.inventory_capabilities()
-            ] == [WORKSPACE_ARTIFACT_CAPABILITY_ID]
+            assert [item.capability_id for item in capabilities.inventory_capabilities()] == [
+                WORKSPACE_ARTIFACT_CAPABILITY_ID
+            ]
 
             unhealthy_at = start + timedelta(seconds=1)
             await service.heartbeat(
