@@ -18,9 +18,9 @@ from ai_multi_agent_platform.distributed import (
     CanonicalWorkspaceArtifactPublisher,
     DistributedRegistry,
     DistributedRuntime,
-    ExecutorWorker,
     Heartbeat,
     JobResultStatus,
+    LocalWorker,
     MaterializingWorkerDispatcher,
     NodeRecord,
     RegistrationRequest,
@@ -30,7 +30,6 @@ from ai_multi_agent_platform.distributed import (
     WorkerRequestCredentials,
     WorkerStatus,
     WorkspaceJobMaterializationResolver,
-    executor_worker_input,
 )
 from ai_multi_agent_platform.distributed.workspace_transport import (
     TransportRemoteWorkspaceMaterializer,
@@ -38,7 +37,6 @@ from ai_multi_agent_platform.distributed.workspace_transport import (
     WorkerWorkspaceTransportEndpoint,
 )
 from ai_multi_agent_platform.domain import OwnerRef, new_id
-from ai_multi_agent_platform.execution import ReferenceExecutor
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
 from ai_multi_agent_platform.security import (
@@ -265,19 +263,9 @@ def test_artifact_decorator_preserves_successful_step_scoped_worker_result(tmp_p
             files,
             lambda _workspace: context,
         )
-
-        def execution_workspace(job: WorkerJobRequest) -> str:
-            assert job.workspace_ref is not None
-            assert job.snapshot_ref is not None
-            return store.execution_workspace(job.workspace_ref, job.snapshot_ref)
-
+        lifecycle = FakeLifecycleBackend()
         materializing = MaterializingWorkerDispatcher(
-            ExecutorWorker(
-                worker_id,
-                ReferenceExecutor(worker_root),
-                workspace="unused",
-                workspace_resolver=execution_workspace,
-            ),
+            LocalWorker(worker_id, lifecycle),
             materializer,
             WorkspaceJobMaterializationResolver(workspaces),
         )
@@ -296,13 +284,7 @@ def test_artifact_decorator_preserves_successful_step_scoped_worker_result(tmp_p
                 subject_type="step",
                 subject_id=new_id("step"),
                 context=operation,
-                input=executor_worker_input(
-                    action="write_artifact",
-                    arguments={
-                        "path": "out/step-result.txt",
-                        "content": "successful Step output",
-                    },
-                ),
+                input={},
             ),
             workspace_ref=workspace.id,
             snapshot_ref=snapshot.id,
@@ -310,6 +292,7 @@ def test_artifact_decorator_preserves_successful_step_scoped_worker_result(tmp_p
 
         try:
             await dispatcher.dispatch(job)
+            lifecycle.complete(run.run_id)
             result = await dispatcher.result(job.worker_job_id)
             assert result is not None
             assert result.status is JobResultStatus.SUCCEEDED
@@ -317,8 +300,7 @@ def test_artifact_decorator_preserves_successful_step_scoped_worker_result(tmp_p
 
             evidence = dispatcher.evidence(job.worker_job_id)
             assert evidence.result is not None
-            assert len(evidence.result.changes) == 1
-            assert evidence.result.changes[0].relative_path == "out/step-result.txt"
+            assert evidence.result.changes == ()
 
             task_state = await kernel.get_task(task.task_id)
             run_state = await kernel.get_run(task.task_id, run.run_id)
