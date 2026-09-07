@@ -78,11 +78,7 @@ def execute_task_workflow(
     elif command == "retries":
         body = _page(
             projection,
-            [
-                step
-                for step in steps
-                if step.get("retry_due_at") is not None or _attempt(step) > 1
-            ],
+            [step for step in steps if step.get("retry_due_at") is not None or _attempt(step) > 1],
         )
     else:
         raise ProfileError(f"unsupported task workflow command: {command}")
@@ -135,9 +131,7 @@ def _summary(
     steps: list[dict[str, JsonValue]],
 ) -> dict[str, JsonValue]:
     statuses = Counter(
-        cast(str, step["status"])
-        for step in steps
-        if isinstance(step.get("status"), str)
+        cast(str, step["status"]) for step in steps if isinstance(step.get("status"), str)
     )
     return {
         "task_id": projection.get("task_id"),
