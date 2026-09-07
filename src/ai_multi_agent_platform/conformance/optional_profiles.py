@@ -134,6 +134,8 @@ _OPTIONAL_EVIDENCE: dict[str, tuple[str, ...]] = {
         "test_coordination_repair_commands_are_authorized_before_handler_execution",
         "tests/test_issue_421_reference_coordinator_cli.py::"
         "test_cli_reads_real_reference_coordinator_projection_through_control_plane",
+        "tests/test_issue_560_workflow_progress.py",
+        "tests/test_cli_workflow_progress.py",
         "tests/test_issue_384_operator_repair.py::"
         "test_operator_can_cancel_only_an_explicit_missing_run_inconsistency_idempotently",
         "tests/test_issue_384_operator_repair.py::"
