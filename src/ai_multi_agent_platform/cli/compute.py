@@ -172,6 +172,77 @@ def doctor_compute(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
                     "maintenance": item.get("maintenance", False) if kind == "node" else False,
                 }
             )
+
+    pressure_status, pressure_checks = _doctor_host_pressure(client)
+    if pressure_status == "degraded":
+        overall = "degraded"
+    checks.extend(pressure_checks)
+    return overall, checks
+
+
+def _doctor_host_pressure(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
+    """Inspect the optional #500 pressure projection when the deployment enables it."""
+
+    try:
+        response = client.get(
+            "/node-pressure",
+            query={"limit": "200"},
+            raise_for_status=False,
+        )
+    except TransportError as exc:
+        return "degraded", [
+            {
+                "name": "host_pressure",
+                "status": "degraded",
+                "message": str(exc),
+            }
+        ]
+
+    # #500 is opt-in. A deployment without the collection remains a valid platform profile.
+    if response.status == 404:
+        return "healthy", []
+    if response.status >= 400:
+        return "degraded", [
+            {
+                "name": "host_pressure",
+                "status": "degraded",
+                "http_status": response.status,
+            }
+        ]
+
+    items = _page_items(response.body)
+    if items is None:
+        return "degraded", [
+            {
+                "name": "host_pressure",
+                "status": "degraded",
+                "message": "host-pressure collection returned an invalid page",
+            }
+        ]
+
+    overall = "healthy"
+    checks: list[JsonValue] = []
+    for item in items:
+        state = item.get("state")
+        trusted = item.get("trusted") is True
+        if state in {"elevated", "critical"}:
+            item_status = "degraded"
+            overall = "degraded"
+        elif state in {"healthy", "unknown"}:
+            item_status = "healthy"
+        else:
+            item_status = "degraded"
+            overall = "degraded"
+        checks.append(
+            {
+                "name": "host_pressure",
+                "status": item_status,
+                "resource_id": item.get("node_id") or item.get("id"),
+                "pressure_state": state,
+                "trusted": trusted,
+                "observed_at": item.get("observed_at"),
+            }
+        )
     return overall, checks
 
 
