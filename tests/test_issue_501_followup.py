@@ -322,7 +322,8 @@ def test_completed_high_risk_conversion_replays_after_approval_expiry_and_restar
         ).fetchone()
         assert row is not None
         payload = json.loads(str(row[0]))
-        payload["expires_at"] = (datetime.now(UTC) - timedelta(minutes=1)).isoformat()
+        created_at = datetime.fromisoformat(str(payload["approval"]["created_at"]))
+        payload["expires_at"] = (created_at + timedelta(microseconds=1)).isoformat()
         connection.execute(
             "UPDATE approvals SET payload_json = ? WHERE approval_id = ?",
             (json.dumps(payload, sort_keys=True, separators=(",", ":")), approval.approval_id),
