@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -70,9 +71,9 @@ def test_terminal_planning_metadata_uses_supported_boundary_and_preserves_lifecy
         assert event.correlation_id == task.task_id
         assert event.payload["source"] == "task-management"
         metadata = event.payload["metadata"]
-        assert isinstance(metadata, dict)
+        assert isinstance(metadata, Mapping)
         planning = metadata["task_management"]
-        assert isinstance(planning, dict)
+        assert isinstance(planning, Mapping)
         assert planning["archived"] is True
 
         replay = await management.update(
