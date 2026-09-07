@@ -20,7 +20,7 @@ const projection: PlanCoordinationProjection = {
       retry_due_at: null,
       wait_type: null,
       wait_deadline_at: null,
-      reconciliation: "clean",
+      reconciliation: "consistent",
       reconciliation_detail: null,
     },
     {
@@ -33,10 +33,10 @@ const projection: PlanCoordinationProjection = {
       latest_run_id: null,
       current_attempt: 2,
       retry_due_at: "2026-09-08T12:05:00+00:00",
-      wait_type: "external_signal",
+      wait_type: "external_job",
       wait_deadline_at: "2026-09-08T12:00:00+00:00",
-      reconciliation: "repaired",
-      reconciliation_detail: "operator repair applied",
+      reconciliation: "run_reconciled",
+      reconciliation_detail: "canonical Run reconciled after operator repair",
     },
   ],
 };
@@ -49,8 +49,8 @@ describe("WorkflowProgress", () => {
     expect(markup).toContain("step_a");
     expect(markup).toContain("step_b");
     expect(markup).toContain("1/1 satisfied");
-    expect(markup).toContain("external_signal");
-    expect(markup).toContain("operator repair applied");
+    expect(markup).toContain("external_job");
+    expect(markup).toContain("canonical Run reconciled after operator repair");
     expect(markup).toContain("<table>");
     expect(markup).toContain("Retrying / retried");
   });
