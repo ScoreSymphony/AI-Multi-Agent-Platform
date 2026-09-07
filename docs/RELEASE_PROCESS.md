@@ -10,7 +10,7 @@
 
 Optional ecosystem and advanced-deployment capabilities do not redefine the ordinary local/self-hosted baseline unless a release explicitly claims support for the corresponding profile.
 
-The detailed release-manifest, dependency/provenance/SBOM, compatibility-state, upstream-update and fail-closed gate rules are defined in [`RELEASE_AND_UPSTREAM_POLICY.md`](RELEASE_AND_UPSTREAM_POLICY.md). Security-sensitive releases additionally follow [`SECURITY_HOTFIX_RELEASE_RUNBOOK.md`](SECURITY_HOTFIX_RELEASE_RUNBOOK.md). These documents extend this publication process; they do not create a separate versioning authority.
+The detailed release-manifest, dependency/provenance/SBOM, compatibility-state, upstream-update and fail-closed gate rules are defined in [`operations/RELEASE_AND_UPSTREAM_POLICY.md`](operations/RELEASE_AND_UPSTREAM_POLICY.md). Security-sensitive releases additionally follow [`security/SECURITY_HOTFIX_RELEASE_RUNBOOK.md`](security/SECURITY_HOTFIX_RELEASE_RUNBOOK.md). These documents extend this publication process; they do not create a separate versioning authority.
 
 ## Current status
 

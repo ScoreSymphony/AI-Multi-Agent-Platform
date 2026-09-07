@@ -37,8 +37,8 @@ PR #129 added the first code-bearing adapter/recovery slice:
 
 | Acceptance criterion | Status | Evidence / remaining gap |
 | --- | --- | --- |
-| Reuse matrix with reuse/adapt/reimplement/reject/defer decisions | **Done** | `docs/FORGE_REUSE_AUDIT.md` |
-| Architecture-significant decisions have rationale | **Done** | Audit plus `docs/FORGE_TRANSPORT_ASSESSMENT.md` |
+| Reuse matrix with reuse/adapt/reimplement/reject/defer decisions | **Done** | `docs/integrations/FORGE_REUSE_AUDIT.md` |
+| Architecture-significant decisions have rationale | **Done** | Audit plus `docs/integrations/FORGE_TRANSPORT_ASSESSMENT.md` |
 | Copied/adapted code has provenance/license metadata | **Done for current implementation** | `upstream/forge-ai-agent-vps.yaml`; current adapter is new platform-owned code and no Forge source is copied. File-level copied-source provenance becomes mandatory if source is later ported. |
 | Forge capabilities sit behind canonical execution/lifecycle adapter boundary | **Partially done** | `ForgeExecutor` and `ExecutorLifecycleBackend` are implemented and tested. A real Forge runtime implementation of `ForgeClient` is not yet connected. |
 | Forge-private IDs/types do not become canonical contracts | **Done** | Forge execution ID is namespaced adapter metadata; Step/Task identity regression coverage exists. |
@@ -46,7 +46,7 @@ PR #129 added the first code-bearing adapter/recovery slice:
 | Forge adapter passes executor contract tests where applicable | **Done for adapter boundary** | `tests/test_forge_executor.py` applies `ExecutorContractSuite`. A real-runtime conformance run remains dependent on selecting/extracting a runtime. |
 | Recovery/idempotency/event behavior covered by regression tests | **Done for canonical reuse behavior** | `tests/test_forge_kernel_regressions.py` plus existing kernel persistence/recovery coverage. No second Forge event store was introduced. |
 | Disabling Forge leaves core/reference execution functional | **Done** | `tests/test_forge_optionality.py` plus existing reference executor suite. |
-| Rejected legacy assumptions are documented | **Done** | `docs/FORGE_REUSE_AUDIT.md` and transport assessment. |
+| Rejected legacy assumptions are documented | **Done** | `docs/integrations/FORGE_REUSE_AUDIT.md` and transport assessment. |
 
 ## Current blocker: a genuine execution-only Forge runtime boundary
 
