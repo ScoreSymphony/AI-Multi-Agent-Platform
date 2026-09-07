@@ -1,0 +1,53 @@
+name: Format issue 592 branch
+
+on:
+  push:
+    branches: [feat/592-agent-handoffs]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feat/592-agent-handoffs
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install repository formatter
+        run: python -m pip install -e ".[dev]"
+      - name: Format and apply safe lint fixes
+        shell: bash
+        run: |
+          files=(
+            src/ai_multi_agent_platform/handoffs/__init__.py
+            src/ai_multi_agent_platform/handoffs/models.py
+            src/ai_multi_agent_platform/handoffs/repository.py
+            src/ai_multi_agent_platform/handoffs/service.py
+            src/ai_multi_agent_platform/handoffs/control_plane.py
+            tests/test_issue_592_agent_handoffs.py
+          )
+          ruff format "${files[@]}"
+          ruff check --fix "${files[@]}"
+          ruff format "${files[@]}"
+      - name: Commit formatter output
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/ai_multi_agent_platform/handoffs/__init__.py \
+            src/ai_multi_agent_platform/handoffs/models.py \
+            src/ai_multi_agent_platform/handoffs/repository.py \
+            src/ai_multi_agent_platform/handoffs/service.py \
+            src/ai_multi_agent_platform/handoffs/control_plane.py \
+            tests/test_issue_592_agent_handoffs.py
+          git commit -m "style(handoffs): apply repository formatting (#592)"
+          git push origin HEAD:feat/592-agent-handoffs
