@@ -17,6 +17,13 @@ from .models import (
 from .repository import DecisionRepository
 
 ReferenceResolver = Callable[[DecisionReference], bool]
+_ACTIONABLE_OUTCOMES = frozenset(
+    {
+        DecisionOutcome.ADOPT,
+        DecisionOutcome.EXPERIMENTAL,
+        DecisionOutcome.CUSTOM,
+    }
+)
 
 
 class DecisionReferenceValidator:
@@ -71,6 +78,11 @@ class DecisionService:
                 ErrorCode.INVALID_REQUEST,
                 "replacement DecisionRecord must reference the record it supersedes",
             )
+        if replacement.revision != previous.revision + 1:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "replacement DecisionRecord revision must increment its predecessor by exactly one",
+            )
         if (replacement.scope_type, replacement.scope_id) != (previous.scope_type, previous.scope_id):
             raise ContractError(ErrorCode.INVALID_REQUEST, "supersession must preserve decision scope")
         if replacement.subject != previous.subject:
@@ -99,20 +111,7 @@ class DecisionService:
         """Append provenance only; this method deliberately cannot activate the target resource."""
 
         current = self.view(decision_record_id)
-        if current.status is not DecisionStatus.CURRENT:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "superseded or withdrawn DecisionRecord cannot drive new downstream provenance",
-            )
-        if current.record.outcome not in {
-            DecisionOutcome.ADOPT,
-            DecisionOutcome.EXPERIMENTAL,
-            DecisionOutcome.CUSTOM,
-        }:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "rejected/deferred DecisionRecord cannot drive downstream action provenance",
-            )
+        self._require_actionable(current)
         self.reference_validator.validate(reference)
         self.repository.add_downstream_ref(decision_record_id, reference)
         return self.view(decision_record_id)
@@ -121,8 +120,7 @@ class DecisionService:
         """Return safe metadata an owner-domain action may persist after its own policy gates."""
 
         current = self.view(decision_record_id)
-        if current.status is not DecisionStatus.CURRENT:
-            raise ContractError(ErrorCode.CONFLICT, "DecisionRecord is no longer current")
+        self._require_actionable(current)
         return {
             "decision_record_id": current.record.id,
             "decision_digest": current.record.content_digest,
@@ -184,6 +182,19 @@ class DecisionService:
     def _validate_references(self, record: DecisionRecord) -> None:
         for reference in _all_references(record):
             self.reference_validator.validate(reference)
+
+    @staticmethod
+    def _require_actionable(view: DecisionRecordView) -> None:
+        if view.status is not DecisionStatus.CURRENT:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "superseded or withdrawn DecisionRecord cannot drive new downstream provenance",
+            )
+        if view.record.outcome not in _ACTIONABLE_OUTCOMES:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "rejected/deferred DecisionRecord cannot drive downstream action provenance",
+            )
 
 
 def _all_references(record: DecisionRecord) -> Iterable[DecisionReference]:
