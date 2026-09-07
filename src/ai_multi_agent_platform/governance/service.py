@@ -21,7 +21,6 @@ from ai_multi_agent_platform.security import (
 )
 
 from .models import (
-    ConversionStatus,
     GovernanceAuditEvent,
     Proposal,
     ProposalStatus,

@@ -124,7 +124,9 @@ class _ProjectScopedControlPlane:
         return scope.get("project_id") == self.project_id
 
 
-def test_restart_preserves_proposal_and_exact_specification_revision_history(tmp_path: Path) -> None:
+def test_restart_preserves_proposal_and_exact_specification_revision_history(
+    tmp_path: Path,
+) -> None:
     project_id = new_id("project")
     first = _service(tmp_path)
     proposal = first.create_proposal(
@@ -154,7 +156,9 @@ def test_restart_preserves_proposal_and_exact_specification_revision_history(tmp
     assert persisted_proposal.id == proposal.id
     assert persisted_specification.revision == 2
     assert persisted_specification.content_digest == revised.content_digest
-    assert [value.revision for value in restarted.repository.specification_history(specification.id)] == [
+    assert [
+        value.revision for value in restarted.repository.specification_history(specification.id)
+    ] == [
         1,
         2,
     ]
@@ -196,12 +200,8 @@ def test_control_plane_search_and_audit_reads_are_project_isolated(tmp_path: Pat
     proposal_b = service.create_proposal(
         _proposal(project_b, title="Project B"), actor_ref=PRINCIPAL
     )
-    specification_a = service.create_specification(
-        _specification(proposal_a), actor_ref=PRINCIPAL
-    )
-    specification_b = service.create_specification(
-        _specification(proposal_b), actor_ref=PRINCIPAL
-    )
+    specification_a = service.create_specification(_specification(proposal_a), actor_ref=PRINCIPAL)
+    specification_b = service.create_specification(_specification(proposal_b), actor_ref=PRINCIPAL)
 
     scoped = cast(Any, _ProjectScopedControlPlane(project_a))
     proposal_api = ProposalResourceService(scoped, service)
@@ -226,7 +226,9 @@ def test_control_plane_search_and_audit_reads_are_project_isolated(tmp_path: Pat
     assert asyncio.run(proposal_api.search_result_allowed(context, proposal_a.id)) is True
     assert asyncio.run(proposal_api.search_result_allowed(context, proposal_b.id)) is False
     assert asyncio.run(specification_api.search_result_allowed(context, specification_a.id)) is True
-    assert asyncio.run(specification_api.search_result_allowed(context, specification_b.id)) is False
+    assert (
+        asyncio.run(specification_api.search_result_allowed(context, specification_b.id)) is False
+    )
 
     audit_events = asyncio.run(audit_api.list_resources(context, PageQuery()))
     assert audit_events
@@ -245,9 +247,7 @@ def test_api_and_search_projections_are_json_safe_and_search_minimal(tmp_path: P
     proposal = service.create_proposal(
         _proposal(project_id, title="Projection contract"), actor_ref=PRINCIPAL
     )
-    specification = service.create_specification(
-        _specification(proposal), actor_ref=PRINCIPAL
-    )
+    specification = service.create_specification(_specification(proposal), actor_ref=PRINCIPAL)
     scoped = cast(Any, _ProjectScopedControlPlane(project_id))
     proposal_api = ProposalResourceService(scoped, service)
     specification_api = SpecificationResourceService(scoped, service)
@@ -275,9 +275,7 @@ def test_baseline_governance_requires_no_external_spec_adapter(tmp_path: Path) -
     proposal = service.create_proposal(
         _proposal(project_id, title="No external adapter"), actor_ref=PRINCIPAL
     )
-    specification = service.create_specification(
-        _specification(proposal), actor_ref=PRINCIPAL
-    )
+    specification = service.create_specification(_specification(proposal), actor_ref=PRINCIPAL)
 
     assert proposal.id.startswith("proposal_")
     assert specification.id.startswith("specification_")

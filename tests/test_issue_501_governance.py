@@ -97,7 +97,10 @@ def _specification(
     return SpecificationRevision(
         proposal_id=proposal.id,
         problem="Deployment intermittently fails during the release verification stage.",
-        goal="Identify and correct the deterministic cause without changing unrelated runtime behavior.",
+        goal=(
+            "Identify and correct the deterministic cause without changing "
+            "unrelated runtime behavior."
+        ),
         scope=("release verification", "failure reproduction"),
         out_of_scope=("provider migration",),
         acceptance_criteria=("failure is reproduced", "targeted regression test passes"),

@@ -7,7 +7,7 @@ import sqlite3
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol, cast, runtime_checkable
+from typing import Literal, Protocol, cast, runtime_checkable
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -124,8 +124,8 @@ class SqliteGovernanceRepository(GovernanceRepository):
                     (proposal.id, proposal.revision, payload),
                 )
                 connection.execute(
-                    "INSERT INTO governance_proposal_revisions(proposal_id, revision, payload_json) "
-                    "VALUES (?, ?, ?)",
+                    "INSERT INTO governance_proposal_revisions("
+                    "proposal_id, revision, payload_json) VALUES (?, ?, ?)",
                     (proposal.id, proposal.revision, payload),
                 )
         except sqlite3.IntegrityError as exc:
@@ -159,7 +159,8 @@ class SqliteGovernanceRepository(GovernanceRepository):
                 (proposal.id, proposal.revision, payload),
             )
             connection.execute(
-                "UPDATE governance_proposals SET revision = ?, payload_json = ? WHERE proposal_id = ?",
+                "UPDATE governance_proposals SET revision = ?, payload_json = ? "
+                "WHERE proposal_id = ?",
                 (proposal.revision, payload, proposal.id),
             )
         return proposal
@@ -371,8 +372,9 @@ class SqliteGovernanceRepository(GovernanceRepository):
                 return current
             completed_at = datetime.now(current.created_at.tzinfo).isoformat()
             connection.execute(
-                "UPDATE governance_conversions SET status = ?, approval_id = COALESCE(?, approval_id), "
-                "completed_at = ? WHERE specification_id = ?",
+                "UPDATE governance_conversions SET status = ?, "
+                "approval_id = COALESCE(?, approval_id), completed_at = ? "
+                "WHERE specification_id = ?",
                 (ConversionStatus.COMPLETED.value, approval_id, completed_at, specification_id),
             )
             updated = connection.execute(
@@ -395,8 +397,8 @@ class SqliteGovernanceRepository(GovernanceRepository):
     def append_audit(self, event: GovernanceAuditEvent) -> None:
         with self._connect() as connection:
             connection.execute(
-                "INSERT OR IGNORE INTO governance_audit_events(event_id, occurred_at, payload_json) "
-                "VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO governance_audit_events("
+                "event_id, occurred_at, payload_json) VALUES (?, ?, ?)",
                 (event.id, event.occurred_at.isoformat(), _dump(_audit_to_json(event))),
             )
 
@@ -582,7 +584,7 @@ def _audit_from_json(raw: Mapping[str, object]) -> GovernanceAuditEvent:
     return GovernanceAuditEvent(
         id=_string(raw, "id"),
         event_type=_string(raw, "event_type"),
-        resource_type=cast("Literal['proposal', 'specification', 'conversion']", resource_type),
+        resource_type=cast(Literal["proposal", "specification", "conversion"], resource_type),
         resource_id=_string(raw, "resource_id"),
         actor_ref=_string(raw, "actor_ref"),
         project_id=_optional_string(raw, "project_id"),
