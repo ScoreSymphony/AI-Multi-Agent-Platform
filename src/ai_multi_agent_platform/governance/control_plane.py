@@ -176,20 +176,37 @@ class SpecificationRevisionResourceService(ResourceService):
 class GovernanceAuditResourceService(ResourceService):
     search_indexable = False
 
-    def __init__(self, governance: GovernanceService) -> None:
+    def __init__(self, control_plane: ControlPlane, governance: GovernanceService) -> None:
+        self._control_plane = control_plane
         self._governance = governance
 
     async def list_resources(
         self, context: RequestContext, query: PageQuery
     ) -> tuple[dict[str, JsonValue], ...]:
-        del context, query
-        return tuple(_audit_resource(value) for value in self._governance.repository.list_audit())
+        del query
+        resources: list[dict[str, JsonValue]] = []
+        for event in self._governance.repository.list_audit():
+            if await self._control_plane._allowed(
+                context,
+                "governance-event:list",
+                event.id,
+                project_id=event.project_id,
+            ):
+                resources.append(_audit_resource(event))
+        return tuple(resources)
 
     async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
-        del context
         for event in self._governance.repository.list_audit():
-            if event.id == resource_id:
-                return _audit_resource(event)
+            if event.id != resource_id:
+                continue
+            if not await self._control_plane._allowed(
+                context,
+                "governance-event:read",
+                event.id,
+                project_id=event.project_id,
+            ):
+                raise ContractError(ErrorCode.FORBIDDEN, "governance event is forbidden")
+            return _audit_resource(event)
         raise ContractError(ErrorCode.NOT_FOUND, "governance event was not found")
 
 
@@ -213,7 +230,7 @@ def register_governance_control_plane(
         SpecificationRevisionResourceService(control_plane, governance),
     )
     control_plane.register_resource_service(
-        GOVERNANCE_AUDIT_COLLECTION, GovernanceAuditResourceService(governance)
+        GOVERNANCE_AUDIT_COLLECTION, GovernanceAuditResourceService(control_plane, governance)
     )
 
     async def proposal_create(

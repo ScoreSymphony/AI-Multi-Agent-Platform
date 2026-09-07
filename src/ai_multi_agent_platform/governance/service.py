@@ -138,6 +138,15 @@ class GovernanceService:
             ProposalStatus.CONVERTED_TO_TASK,
         }:
             raise ContractError(ErrorCode.CONFLICT, "terminal proposal cannot be revised")
+        if proposal.status in {
+            ProposalStatus.DISMISSED,
+            ProposalStatus.SUPERSEDED,
+            ProposalStatus.CONVERTED_TO_TASK,
+        }:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "terminal proposal state requires its dedicated lifecycle operation",
+            )
         revised = self.repository.revise_proposal(proposal, expected_revision=expected_revision)
         self._audit(
             "proposal.revised",
@@ -510,6 +519,12 @@ class GovernanceService:
         current = self.repository.get_proposal(proposal_id)
         if current.status is ProposalStatus.READY:
             return
+        if current.status in {
+            ProposalStatus.DISMISSED,
+            ProposalStatus.SUPERSEDED,
+            ProposalStatus.CONVERTED_TO_TASK,
+        }:
+            raise ContractError(ErrorCode.CONFLICT, "terminal proposal cannot become ready")
         updated = replace(
             current,
             status=ProposalStatus.READY,
@@ -520,6 +535,8 @@ class GovernanceService:
 
     def _mark_proposal_converted(self, proposal_id: str, task_id: str) -> None:
         current = self.repository.get_proposal(proposal_id)
+        if current.status in {ProposalStatus.DISMISSED, ProposalStatus.SUPERSEDED}:
+            raise ContractError(ErrorCode.CONFLICT, "terminal proposal cannot be converted")
         if current.status is ProposalStatus.CONVERTED_TO_TASK:
             if current.converted_task_id != task_id:
                 raise ContractError(ErrorCode.CONTRACT_VIOLATION, "proposal maps to multiple Tasks")
