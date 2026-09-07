@@ -32,18 +32,14 @@ class HandoffControlPlaneProjection:
         self._require_view(principal_ref, handoff)
         return self._project(handoff)
 
-    def list_task_handoffs(
-        self, principal_ref: str, task_id: str
-    ) -> list[dict[str, JsonValue]]:
+    def list_task_handoffs(self, principal_ref: str, task_id: str) -> list[dict[str, JsonValue]]:
         projected: list[dict[str, JsonValue]] = []
         for handoff in self._service.list_handoffs_for_task(task_id):
             if self._authorization.can_view(principal_ref, handoff):
                 projected.append(self._project(handoff))
         return projected
 
-    def list_step_handoffs(
-        self, principal_ref: str, step_id: str
-    ) -> list[dict[str, JsonValue]]:
+    def list_step_handoffs(self, principal_ref: str, step_id: str) -> list[dict[str, JsonValue]]:
         projected: list[dict[str, JsonValue]] = []
         for handoff in self._service.list_handoffs_for_step(step_id):
             if self._authorization.can_view(principal_ref, handoff):

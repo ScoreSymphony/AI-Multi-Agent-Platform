@@ -8,7 +8,6 @@ from ai_multi_agent_platform.agents.models import (
     AgentRevision,
     AgentRevisionRef,
     AgentTeamRevision,
-    AgentTeamRevisionRef,
 )
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -212,9 +211,7 @@ class HandoffService:
         validate_id(step_id, "step")
         return self._repository.list_handoffs_for_step(step_id)
 
-    def list_consumptions(
-        self, handoff_id: str, revision: int
-    ) -> tuple[HandoffConsumption, ...]:
+    def list_consumptions(self, handoff_id: str, revision: int) -> tuple[HandoffConsumption, ...]:
         return self._repository.list_consumptions(handoff_id, revision)
 
     def _validate_sources_for_creation(self, content: HandoffContent) -> None:
@@ -247,9 +244,7 @@ class HandoffService:
                 )
                 raise
 
-    def _require_expected_consumer(
-        self, handoff: AgentHandoff, consumer: ParticipantRef
-    ) -> None:
+    def _require_expected_consumer(self, handoff: AgentHandoff, consumer: ParticipantRef) -> None:
         expected = handoff.content.intended_consumer
         if expected is not None:
             if participant_key(expected) != participant_key(consumer):

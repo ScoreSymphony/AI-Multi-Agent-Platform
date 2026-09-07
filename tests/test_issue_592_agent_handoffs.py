@@ -13,9 +13,9 @@ from ai_multi_agent_platform.handoffs import (
     AgentHandoff,
     HandoffContent,
     HandoffControlPlaneProjection,
+    HandoffService,
     HandoffSourceKind,
     HandoffSourceRef,
-    HandoffService,
     InMemoryHandoffAuditSink,
     InMemoryHandoffRepository,
     SQLiteHandoffRepository,
@@ -63,14 +63,16 @@ class _AgentDirectory:
 class _ReferenceGateway:
     def __init__(self) -> None:
         self.existing: set[tuple[str, str, str | None, str | None]] = set()
-        self.denied: set[
-            tuple[tuple[str, str, int], tuple[str, str, str | None, str | None]]
-        ] = set()
+        self.denied: set[tuple[tuple[str, str, int], tuple[str, str, str | None, str | None]]] = (
+            set()
+        )
 
     def add(self, reference: HandoffSourceRef) -> None:
         self.existing.add(reference.identity)
 
-    def deny(self, participant: AgentRevisionRef | AgentTeamRevisionRef, reference: HandoffSourceRef) -> None:
+    def deny(
+        self, participant: AgentRevisionRef | AgentTeamRevisionRef, reference: HandoffSourceRef
+    ) -> None:
         self.denied.add((participant_key(participant), reference.identity))
 
     def exists(self, reference: HandoffSourceRef) -> bool:
@@ -223,7 +225,9 @@ def test_artifact_result_and_research_evidence_references_round_trip() -> None:
     directory.add_agent(producer)
     directory.add_agent(consumer)
     refs = (
-        HandoffSourceRef(HandoffSourceKind.ARTIFACT, new_id("artifact"), digest=_digest("artifact")),
+        HandoffSourceRef(
+            HandoffSourceKind.ARTIFACT, new_id("artifact"), digest=_digest("artifact")
+        ),
         HandoffSourceRef(HandoffSourceKind.RESULT, new_id("result"), digest=_digest("result")),
         HandoffSourceRef(
             HandoffSourceKind.RESEARCH_CLAIM,

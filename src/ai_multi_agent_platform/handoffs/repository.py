@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 import json
-from pathlib import Path
 import sqlite3
+from collections.abc import Mapping
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
@@ -73,9 +73,7 @@ class InMemoryHandoffRepository:
             return self.get_handoff(existing_id, existing_revision), False
 
         revisions = [
-            revision
-            for current_id, revision in self._handoffs
-            if current_id == handoff.handoff_id
+            revision for current_id, revision in self._handoffs if current_id == handoff.handoff_id
         ]
         latest = max(revisions, default=0)
         _require_expected_revision(handoff, latest, expected_previous_revision)
@@ -129,9 +127,7 @@ class InMemoryHandoffRepository:
             )
         )
 
-    def bind_consumption(
-        self, consumption: HandoffConsumption
-    ) -> tuple[HandoffConsumption, bool]:
+    def bind_consumption(self, consumption: HandoffConsumption) -> tuple[HandoffConsumption, bool]:
         handoff = self.get_handoff(consumption.handoff_id, consumption.handoff_revision)
         _require_matching_digest(handoff, consumption)
         key = (
@@ -146,9 +142,7 @@ class InMemoryHandoffRepository:
         self._consumptions[key] = consumption
         return consumption, True
 
-    def list_consumptions(
-        self, handoff_id: str, revision: int
-    ) -> tuple[HandoffConsumption, ...]:
+    def list_consumptions(self, handoff_id: str, revision: int) -> tuple[HandoffConsumption, ...]:
         self.get_handoff(handoff_id, revision)
         return tuple(
             sorted(
@@ -333,15 +327,11 @@ class SQLiteHandoffRepository:
         with self._connect() as connection:
             rows = connection.execute(query, parameters).fetchall()
         return tuple(
-            handoff_from_dict(
-                cast(Mapping[str, Any], json.loads(str(row["payload_json"])))
-            )
+            handoff_from_dict(cast(Mapping[str, Any], json.loads(str(row["payload_json"]))))
             for row in rows
         )
 
-    def bind_consumption(
-        self, consumption: HandoffConsumption
-    ) -> tuple[HandoffConsumption, bool]:
+    def bind_consumption(self, consumption: HandoffConsumption) -> tuple[HandoffConsumption, bool]:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             handoff = self._get_handoff_with_connection(
@@ -384,9 +374,7 @@ class SQLiteHandoffRepository:
             connection.commit()
             return consumption, True
 
-    def list_consumptions(
-        self, handoff_id: str, revision: int
-    ) -> tuple[HandoffConsumption, ...]:
+    def list_consumptions(self, handoff_id: str, revision: int) -> tuple[HandoffConsumption, ...]:
         with self._connect() as connection:
             self._get_handoff_with_connection(connection, handoff_id, revision)
             rows = connection.execute(
@@ -395,9 +383,7 @@ class SQLiteHandoffRepository:
                 (handoff_id, revision),
             ).fetchall()
         return tuple(
-            consumption_from_dict(
-                cast(Mapping[str, Any], json.loads(str(row["payload_json"])))
-            )
+            consumption_from_dict(cast(Mapping[str, Any], json.loads(str(row["payload_json"]))))
             for row in rows
         )
 
@@ -423,9 +409,7 @@ def _require_expected_revision(
         )
 
 
-def _require_matching_digest(
-    handoff: AgentHandoff, consumption: HandoffConsumption
-) -> None:
+def _require_matching_digest(handoff: AgentHandoff, consumption: HandoffConsumption) -> None:
     if handoff.content_digest != consumption.handoff_digest:
         raise ContractError(ErrorCode.CONFLICT, "handoff digest does not match stored revision")
 

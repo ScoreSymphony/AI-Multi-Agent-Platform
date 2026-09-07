@@ -7,12 +7,12 @@ source resources without copying those source payloads.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
 from hashlib import sha256
-import json
 from types import MappingProxyType
 from typing import Any, Literal, cast
 
@@ -104,7 +104,9 @@ class HandoffSourceRef:
         if self.revision is not None:
             _require_nonblank(self.revision, "handoff source revision")
         if self.digest is not None:
-            object.__setattr__(self, "digest", _require_digest(self.digest, "handoff source digest"))
+            object.__setattr__(
+                self, "digest", _require_digest(self.digest, "handoff source digest")
+            )
 
     @property
     def identity(self) -> tuple[str, str, str | None, str | None]:
