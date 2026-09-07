@@ -108,9 +108,7 @@ class PolicyAwarePlanningEnvironmentResolver:
         del workspace_id
         actor = _task_actor(task)
         resolved_permissions = set(
-            ()
-            if self.permission_resolver is None
-            else self.permission_resolver(actor, task)
+            () if self.permission_resolver is None else self.permission_resolver(actor, task)
         )
         worker_capabilities = (
             frozenset()
