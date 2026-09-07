@@ -6,12 +6,16 @@ making validated planning decisions effective at the existing canonical runtime 
 
 from __future__ import annotations
 
+from contextvars import ContextVar
+from dataclasses import replace
 from typing import Protocol
 
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     encode_agent_step_execution_bindings,
 )
+from ai_multi_agent_platform.agents.repository import AgentRepository
+from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.contracts import (
     Capability,
     CapabilityKind,
@@ -27,12 +31,27 @@ from ai_multi_agent_platform.contracts import (
     ProviderDescriptor,
 )
 from ai_multi_agent_platform.domain import Plan, Step
-from ai_multi_agent_platform.models import RoutingRequirements
-from ai_multi_agent_platform.security import ActorIdentity
+from ai_multi_agent_platform.kernel.models import TaskState
+from ai_multi_agent_platform.models import ModelRegistry, RoutingRequirements
+from ai_multi_agent_platform.security import ActorIdentity, AuthorizationGate
 
-from .models import PlanProposal, ProposalRecord, ProposalStatus
+from .environment import PlanningEnvironment, PlanningEnvironmentResolver
+from .models import (
+    PlanProposal,
+    PlanningInventory,
+    PlanningTrigger,
+    ProposalRecord,
+    ProposalStatus,
+    ReplanPolicy,
+)
+from .providers import Planner
 from .repository import PlanningRepository
-from .service import PlanningService
+from .service import (
+    ActivatedPlanCoordinator,
+    PlanningEventSink,
+    PlanningKernel,
+    PlanningService,
+)
 
 
 class PlanningOnlyLifecycleBackend(LifecycleBackend):
@@ -207,14 +226,151 @@ class PlanningBindingCoordinator:
 
 
 class ReferencePlanningService(PlanningService):
-    """Standard local profile that fails closed on assignments it cannot execute exactly.
+    """Standard local profile with server-resolved planning and exact execution bindings.
 
     The generic planning contract intentionally permits exact Agents, Teams and role requirements.
     The current single-node lifecycle executes one Agent per canonical Step. Until a Team/role
     execution adapter is explicitly composed, activating such a proposal would silently discard
     planner intent. This reference service rejects that activation before any canonical Plan
     mutation while leaving the provider-neutral PlanningService contract unchanged.
+
+    When ``environment_resolver`` is configured, planning inventory authority is resolved from
+    trusted server state. Direct permission/worker claims are rejected and unauthorized Agent,
+    Team or Capability revisions are removed before the planner sees the inventory.
     """
+
+    def __init__(
+        self,
+        *,
+        planner: Planner,
+        repository: PlanningRepository,
+        kernel: PlanningKernel,
+        agents: AgentRepository | None = None,
+        capabilities: CapabilityRegistry | None = None,
+        models: ModelRegistry | None = None,
+        authorization: AuthorizationGate | None = None,
+        coordinator: ActivatedPlanCoordinator | None = None,
+        replan_policy: ReplanPolicy | None = None,
+        event_sink: PlanningEventSink | None = None,
+        environment_resolver: PlanningEnvironmentResolver | None = None,
+    ) -> None:
+        super().__init__(
+            planner=planner,
+            repository=repository,
+            kernel=kernel,
+            agents=agents,
+            capabilities=capabilities,
+            models=models,
+            authorization=authorization,
+            coordinator=coordinator,
+            replan_policy=replan_policy,
+            event_sink=event_sink,
+        )
+        self.environment_resolver = environment_resolver
+        self._planning_environment: ContextVar[PlanningEnvironment | None] = ContextVar(
+            f"planning-environment-{id(self)}",
+            default=None,
+        )
+
+    async def propose(
+        self,
+        *,
+        task_id: str,
+        idempotency_key: str,
+        trigger: PlanningTrigger = PlanningTrigger.INITIAL,
+        reason: str | None = None,
+        workspace_id: str | None = None,
+        evidence_refs: tuple[str, ...] = (),
+        task_constraints: tuple[str, ...] = (),
+        granted_permissions: frozenset[str] = frozenset(),
+        available_worker_capabilities: frozenset[str] = frozenset(),
+        max_steps: int = 128,
+        max_parallel_steps: int | None = None,
+    ) -> ProposalRecord:
+        resolver = self.environment_resolver
+        if resolver is None:
+            return await super().propose(
+                task_id=task_id,
+                idempotency_key=idempotency_key,
+                trigger=trigger,
+                reason=reason,
+                workspace_id=workspace_id,
+                evidence_refs=evidence_refs,
+                task_constraints=task_constraints,
+                granted_permissions=granted_permissions,
+                available_worker_capabilities=available_worker_capabilities,
+                max_steps=max_steps,
+                max_parallel_steps=max_parallel_steps,
+            )
+        if granted_permissions or available_worker_capabilities:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "planning availability and authorization fields are server-resolved",
+            )
+
+        task = await self.kernel.get_task(task_id)
+        environment = await resolver.resolve(
+            task=task,
+            context=self._operation_context(task, idempotency_key),
+            workspace_id=workspace_id,
+        )
+        token = self._planning_environment.set(environment)
+        try:
+            return await super().propose(
+                task_id=task_id,
+                idempotency_key=idempotency_key,
+                trigger=trigger,
+                reason=reason,
+                workspace_id=workspace_id,
+                evidence_refs=evidence_refs,
+                task_constraints=task_constraints,
+                granted_permissions=environment.granted_permissions,
+                available_worker_capabilities=environment.available_worker_capabilities,
+                max_steps=max_steps,
+                max_parallel_steps=max_parallel_steps,
+            )
+        finally:
+            self._planning_environment.reset(token)
+
+    def _inventory(self, task: TaskState, workspace_id: str | None) -> PlanningInventory:
+        inventory = super()._inventory(task, workspace_id)
+        environment = self._planning_environment.get()
+        if environment is None:
+            return inventory
+
+        statically_eligible_capabilities: frozenset[tuple[str, str]] = frozenset()
+        if self.capabilities is not None:
+            statically_eligible_capabilities = frozenset(
+                (capability.capability_id, capability.version)
+                for capability in self.capabilities.list_capabilities(
+                    granted_permissions=environment.granted_permissions,
+                    available_worker_capabilities=environment.available_worker_capabilities,
+                    include_unavailable=False,
+                )
+            )
+        allowed_capabilities = (
+            environment.authorized_capability_versions & statically_eligible_capabilities
+        )
+        return replace(
+            inventory,
+            agents=tuple(
+                candidate
+                for candidate in inventory.agents
+                if (candidate.agent_id, candidate.revision)
+                in environment.authorized_agent_revisions
+            ),
+            teams=tuple(
+                candidate
+                for candidate in inventory.teams
+                if (candidate.team_id, candidate.revision)
+                in environment.authorized_team_revisions
+            ),
+            capabilities=tuple(
+                candidate
+                for candidate in inventory.capabilities
+                if (candidate.capability_id, candidate.version) in allowed_capabilities
+            ),
+        )
 
     async def activate(
         self,
