@@ -153,9 +153,15 @@ def _planning_metadata(event) -> Mapping[str, object] | None:
 def test_failed_replan_commits_plan_then_readies_before_coordinator_dispatch() -> None:
     async def scenario() -> None:
         repository = InMemoryPlanningRepository()
-        planning, kernel, _lifecycle, _agents_repo, _coordinator, _coord_repo, *_rest = (
-            await _failed_task(planning_repository=repository)
-        )
+        (
+            planning,
+            kernel,
+            _lifecycle,
+            _agents_repo,
+            _coordinator,
+            _coord_repo,
+            *_rest,
+        ) = await _failed_task(planning_repository=repository)
         failed = _rest[-1]
         prior_plan_id = failed.plan_ref
         assert prior_plan_id is not None
@@ -195,8 +201,10 @@ def test_failed_replan_commits_plan_then_readies_before_coordinator_dispatch() -
             if event.event_type == "run.created"
             and event.payload.get("plan_ref") == activated.activation_plan_id
         )
-        assert history.index(replacement_plan) < history.index(ready_event) < history.index(
-            replacement_run
+        assert (
+            history.index(replacement_plan)
+            < history.index(ready_event)
+            < history.index(replacement_run)
         )
         assert ready_event.provenance is not None
         assert ready_event.provenance.source == "platform-planning"
@@ -268,14 +276,21 @@ def test_restart_after_replan_plan_commit_readies_and_hands_off_once(tmp_path: P
 
         history = await kernel.history(failed.task_id)
         ready_key = f"planning:{replacement.proposal.proposal_id}:ready-for-handoff"
-        assert sum(
-            event.event_type == "task.ready" and event.causation_id == ready_key
-            for event in history
-        ) == 1
-        assert sum(
-            event.event_type == "run.created" and event.payload.get("plan_ref") == planned.plan_ref
-            for event in history
-        ) == 1
+        assert (
+            sum(
+                event.event_type == "task.ready" and event.causation_id == ready_key
+                for event in history
+            )
+            == 1
+        )
+        assert (
+            sum(
+                event.event_type == "run.created"
+                and event.payload.get("plan_ref") == planned.plan_ref
+                for event in history
+            )
+            == 1
+        )
 
     asyncio.run(scenario())
 
@@ -380,6 +395,9 @@ def test_existing_plan_event_cannot_bypass_proposal_activation_state() -> None:
             )
         assert exc_info.value.code is ErrorCode.CONFLICT
         assert "never entered authorized activation" in exc_info.value.message
-        assert unactivated_repository.get(proposal.proposal.proposal_id).status is ProposalStatus.VALIDATED
+        assert (
+            unactivated_repository.get(proposal.proposal.proposal_id).status
+            is ProposalStatus.VALIDATED
+        )
 
     asyncio.run(scenario())
