@@ -75,6 +75,12 @@ class AuthorizationAction(StrEnum):
     EVALUATION_RUN_READ = "evaluation-run:read"
     EVALUATION_RUN = "evaluation.run"
     EVALUATION_COMPARE = "evaluation.compare"
+    DECISION_RECORD_LIST = "decision-record:list"
+    DECISION_RECORD_READ = "decision-record:read"
+    DECISION_RECORD_CREATE = "decision-record.create"
+    DECISION_RECORD_SUPERSEDE = "decision-record.supersede"
+    DECISION_RECORD_WITHDRAW = "decision-record.withdraw"
+    DECISION_RECORD_LINK_PROVENANCE = "decision-record.link-provenance"
     TEMPLATE_LIST = "template:list"
     TEMPLATE_READ = "template:read"
     TEMPLATE_INSTANCE_LIST = "template-instance:list"
@@ -121,6 +127,7 @@ class ResourceType(StrEnum):
     SECRET_REFERENCE = "secret_reference"
     PLUGIN = "plugin"
     ADMINISTRATIVE_SETTINGS = "administrative_settings"
+    DECISION_RECORD = "decision_record"
     GENERIC = "generic"
 
 
