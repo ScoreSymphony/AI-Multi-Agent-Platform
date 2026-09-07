@@ -68,7 +68,7 @@ Before activation the platform validates at least:
 7. enabled Team members;
 8. required Agent capabilities represented by the Step;
 9. capability availability, exact version and required features;
-10. capability permission requirements supplied by the trusted caller boundary;
+10. capability permission and Worker-placement requirements against server-resolved planning authority;
 11. Agent allow/deny capability policy;
 12. model satisfiability using canonical model metadata only;
 13. completed-work reuse references only completed prior Steps;
@@ -108,9 +108,30 @@ A non-initial proposal requires an existing canonical Plan and a non-empty reaso
 
 A replacement proposal may refer to previous Steps through `reuse_step_ids`, but only Steps whose latest canonical Run succeeded are eligible. Prior running work cannot be silently detached: replacement activation is rejected while predecessor Steps remain active. The previous Plan and proposal history remain immutable provenance.
 
+## Server-resolved planning environment
+
+Planning availability and authorization facts are server-owned. The public planning service accepts an optional `PlanningEnvironmentResolver`, which receives the canonical Task, platform `OperationContext`, authenticated `ActorIdentity`, Workspace scope and planning trigger.
+
+The resolver can provide:
+
+- granted permission IDs;
+- currently available Worker capability IDs;
+- optional allowsets for canonical Agent IDs;
+- optional allowsets for Agent Team IDs;
+- optional allowsets for Capability IDs;
+- optional allowsets for canonical model configuration IDs.
+
+The planner only sees the resulting filtered canonical inventory. Capability visibility is additionally resolved through `CapabilityRegistry.list_capabilities(...)` using the server-resolved permissions and Worker capabilities. Administrative capability registration is therefore not equivalent to planner-visible usability.
+
+A missing resolver is fail-closed for authority: it grants no permissions and exposes no protected capability that requires unavailable Worker features. `None` on an inventory allowset means “no additional restriction by this resolver”; an explicit empty allowset hides all candidates in that category.
+
+The environment snapshot is bound to the canonical Task revision and active Plan reference used for the planning request. If that state changes before inventory construction, planning rejects the stale environment rather than applying old authority to newer canonical state.
+
 ## Authorization and approvals
 
-Planning does not grant permissions. Control Plane clients cannot claim `granted_permissions` through the planning command payload.
+Planning does not grant permissions. Control Plane clients cannot claim `granted_permissions`, `available_worker_capabilities` or inventory allowsets through the planning command payload; those fields are rejected with `INVALID_REQUEST`. Direct callers of the public `PlanningService` likewise cannot supply permission or Worker-capability authority explicitly.
+
+The authenticated Control Plane actor is forwarded to `PlanningEnvironmentResolver`, so a server composition can derive policy-aware Agent/Team/Capability/model visibility from authenticated identity and canonical scope rather than caller-controlled JSON.
 
 Sensitive capability requirements mark a proposal as approval-gated. Activation fails closed if an approval authority is required but unavailable. When #15 is configured, activation binds authorization/approval to the exact proposal digest and Plan-revision action. Capability execution later still passes through the normal #12/#15 invocation gates; approving a Plan does not bypass capability authorization.
 
@@ -142,6 +163,7 @@ The public `build_single_node_deployment(...)` path composes #439 as a normal du
 - that planning kernel uses `PlanningOnlyLifecycleBackend`, which rejects `start`, `get` and `cancel` execution operations with `FORBIDDEN`;
 - activated Plan/Step graphs are handed to the already composed `DurablePlanStepCoordinator` rather than being executed by the planning kernel;
 - `planning-proposals` and the three planning commands are registered on the authenticated Control Plane;
+- `planning_environment_resolver` is an explicit deployment injection point for trusted planning permissions, Worker availability and inventory policy;
 - safe planning transition evidence is projected into the normal observability timeline.
 
 The separate planning kernel is an enforcement boundary, not a second Task/Run authority: it uses the same canonical event repository, but its lifecycle dependency makes direct Run execution impossible. The normal deployment kernel remains the execution path used by #384 and, when enabled, #14 distributed scheduling.
@@ -150,4 +172,4 @@ The separate planning kernel is an enforcement boundary, not a second Task/Run a
 
 Planning emits safe proposal/validation/activation/handoff events through its event sink. Canonical `plan.created` history additionally carries the `platform-planning` adapter namespace with proposal digest, planner/version, canonical model configuration, trigger, constraints, evidence and reused/superseded Plan references.
 
-Issue-specific tests exercise deterministic and model-backed planning, DAG validation, satisfiability failures, stale and duplicate proposals, approval fail-closed behavior, restart recovery, #384 handoff, completed-work reuse, bounded replanning and the standard single-node composition. These behaviors are suitable as deterministic #19 evaluation subjects without making the evaluator or planner a lifecycle authority.
+Issue-specific tests exercise deterministic and model-backed planning, DAG validation, satisfiability failures, stale and duplicate proposals, approval fail-closed behavior, restart recovery, #384 handoff, completed-work reuse, bounded replanning, server-resolved planning authority and the standard single-node composition. These behaviors are suitable as deterministic #19 evaluation subjects without making the evaluator or planner a lifecycle authority.
