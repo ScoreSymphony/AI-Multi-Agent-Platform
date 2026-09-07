@@ -10,6 +10,7 @@ from ai_multi_agent_platform.agents import AgentService
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import RequestContext
+from ai_multi_agent_platform.models import ModelConfiguration
 
 from .control_plane_helpers import (
     boolean,
@@ -28,16 +29,20 @@ _SERVER_RESOLVED_FIELDS = frozenset(
         "available_capability_versions",
         "granted_permissions",
         "available_worker_capabilities",
+        "model_configuration",
     }
 )
 
 
 @dataclass(frozen=True, slots=True)
 class SkillExecutionEnvironment:
+    """Trusted runtime facts supplied by platform composition, never by the caller."""
+
     allowed_capability_ids: frozenset[str] = frozenset()
     available_capability_versions: Mapping[str, str] | None = None
     granted_permissions: frozenset[str] = frozenset()
     available_worker_capabilities: frozenset[str] = frozenset()
+    model_configuration: ModelConfiguration | None = None
 
 
 class SkillExecutionEnvironmentResolver(Protocol):
@@ -74,7 +79,7 @@ class SkillRuntimeCommands:
         if caller_supplied:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
-                "Skill execution authorization fields are server-resolved",
+                "Skill execution authorization/model fields are server-resolved",
                 details={"fields": cast(JsonValue, caller_supplied)},
             )
         agent_revision = self.agents.get_agent_revision(
@@ -105,6 +110,7 @@ class SkillRuntimeCommands:
                 available_capability_versions=environment.available_capability_versions,
                 granted_permissions=environment.granted_permissions,
                 available_worker_capabilities=environment.available_worker_capabilities,
+                model_configuration=environment.model_configuration,
                 step_id=optional_string(payload, "step_id"),
                 project_id=agent_revision.project_id,
                 workspace_id=agent_revision.workspace_id,
