@@ -30,7 +30,9 @@ from ai_multi_agent_platform.distributed import (
     RegistryPressureSnapshotProvider,
     register_distributed_control_plane,
 )
-from ai_multi_agent_platform.distributed.pressure_control_plane import register_pressure_control_plane
+from ai_multi_agent_platform.distributed.pressure_control_plane import (
+    register_pressure_control_plane,
+)
 from ai_multi_agent_platform.messaging import TcpMessageTransport
 
 from .single_node_app import build_default_single_node_deployment
