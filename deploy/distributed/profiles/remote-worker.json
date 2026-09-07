@@ -30,7 +30,7 @@
         "labels": ["placement:remote"],
         "supported_runtimes": ["python"],
         "model_refs": [],
-        "capability_refs": ["execution:general"],
+        "capability_refs": ["execution:general", "tool.workspace.write_artifact"],
         "locality_refs": [],
         "resources": {
           "cpu_cores": 8,
@@ -44,7 +44,7 @@
           "worker_id": "worker_00000000-0000-4000-8000-000000000251",
           "worker_type": "execution",
           "supported_executors": ["reference"],
-          "capability_refs": ["execution:general"],
+          "capability_refs": ["execution:general", "tool.workspace.write_artifact"],
           "supported_runtimes": ["python"],
           "model_refs": [],
           "concurrency_limit": 2,
