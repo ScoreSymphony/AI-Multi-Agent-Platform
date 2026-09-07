@@ -15,7 +15,12 @@ from ai_multi_agent_platform.skills.codec import (
     skill_revision_from_json,
     skill_revision_to_json,
 )
-from ai_multi_agent_platform.skills.models import SkillBundle, SkillDefinition, SkillRevision
+from ai_multi_agent_platform.skills.models import (
+    SkillBundle,
+    SkillCapabilityRequirement,
+    SkillDefinition,
+    SkillRevision,
+)
 from ai_multi_agent_platform.skills.repository import SkillRepository
 
 from .dependencies import resource_dependency
@@ -98,22 +103,20 @@ class SkillPortableCodec:
         if context.remap(SKILL_RESOURCE_TYPE, resource.resource_id) != resource.resource_id:
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "portable Skill histories preserve canonical identity; remapping requires cloning after import",
+                "portable Skill histories preserve identity; clone after import to change IDs",
                 details={"skill_id": resource.resource_id},
             )
+        definition = skill_definition_from_json(resource.payload.get("definition"))
+        revisions = tuple(
+            skill_revision_from_json(item)
+            for item in _array(resource.payload.get("revisions"), "Skill revisions")
+        )
         try:
-            definition = skill_definition_from_json(resource.payload.get("definition"))
-            revisions = tuple(
-                skill_revision_from_json(item)
-                for item in _array(resource.payload.get("revisions"), "Skill revisions")
-            )
             snapshot = SkillPortableSnapshot(definition, revisions)
-        except ContractError:
-            raise
-        except (TypeError, ValueError) as exc:
+        except ValueError as exc:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
-                "invalid portable Skill payload",
+                "invalid portable Skill history",
                 details={"resource_id": resource.resource_id},
             ) from exc
         if snapshot.definition.skill_id != resource.resource_id:
@@ -167,27 +170,7 @@ class SkillBundlePortableCodec:
                 ErrorCode.CONTRACT_VIOLATION,
                 "portable Skill Bundle identity/hash does not match payload",
             )
-        for resource_type, resource_id in (
-            ("run", bundle.run_id),
-            ("task", bundle.task_id),
-            ("agent", bundle.agent_id),
-            ("step", bundle.step_id),
-            ("project", bundle.project_id),
-            ("workspace", bundle.workspace_id),
-        ):
-            if resource_id is not None and context.remap(resource_type, resource_id) != resource_id:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "historical Skill Bundle dependencies cannot be remapped without changing its digest",
-                    details={"resource_type": resource_type, "resource_id": resource_id},
-                )
-        for entry in bundle.entries:
-            if context.remap(SKILL_RESOURCE_TYPE, entry.ref.skill_id) != entry.ref.skill_id:
-                raise ContractError(
-                    ErrorCode.CONFLICT,
-                    "historical Skill Bundle Skill references cannot be remapped",
-                    details={"skill_id": entry.ref.skill_id},
-                )
+        _reject_historical_remapping(bundle, context)
         return bundle
 
 
@@ -209,6 +192,15 @@ def _skill_dependencies(snapshot: SkillPortableSnapshot) -> tuple[DependencyRequ
         )
     for revision in snapshot.revisions:
         profile = revision.profile
+        for dependency in profile.dependencies:
+            dependencies.add(
+                resource_dependency(
+                    SKILL_RESOURCE_TYPE,
+                    dependency.skill_id,
+                    version_constraint=f"=={dependency.revision}",
+                    purpose="Exact Skill dependency",
+                )
+            )
         for requirement in profile.capability_requirements:
             dependencies.add(
                 DependencyRequirement(
@@ -273,17 +265,38 @@ def _bundle_dependencies(bundle: SkillBundle) -> tuple[DependencyRequirement, ..
     return _sorted_dependencies(dependencies)
 
 
-def _capability_constraint(requirement: object) -> str | None:
-    from ai_multi_agent_platform.skills.models import SkillCapabilityRequirement
+def _reject_historical_remapping(bundle: SkillBundle, context: ImportContext) -> None:
+    for resource_type, resource_id in (
+        ("run", bundle.run_id),
+        ("task", bundle.task_id),
+        ("agent", bundle.agent_id),
+        ("step", bundle.step_id),
+        ("project", bundle.project_id),
+        ("workspace", bundle.workspace_id),
+    ):
+        if resource_id is not None and context.remap(resource_type, resource_id) != resource_id:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "historical Skill Bundle dependencies cannot be remapped without changing its digest",
+                details={"resource_type": resource_type, "resource_id": resource_id},
+            )
+    for entry in bundle.entries:
+        if context.remap(SKILL_RESOURCE_TYPE, entry.ref.skill_id) != entry.ref.skill_id:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "historical Skill Bundle Skill references cannot be remapped",
+                details={"skill_id": entry.ref.skill_id},
+            )
 
-    item = cast(SkillCapabilityRequirement, requirement)
-    if item.exact_version is not None:
-        return f"=={item.exact_version}"
+
+def _capability_constraint(requirement: SkillCapabilityRequirement) -> str | None:
+    if requirement.exact_version is not None:
+        return f"=={requirement.exact_version}"
     parts: list[str] = []
-    if item.minimum_version is not None:
-        parts.append(f">={item.minimum_version}")
-    if item.maximum_version is not None:
-        parts.append(f"<={item.maximum_version}")
+    if requirement.minimum_version is not None:
+        parts.append(f">={requirement.minimum_version}")
+    if requirement.maximum_version is not None:
+        parts.append(f"<={requirement.maximum_version}")
     return ",".join(parts) or None
 
 
