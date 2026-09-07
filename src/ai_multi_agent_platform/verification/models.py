@@ -112,7 +112,7 @@ class VerificationScope:
         for agent_id in self.agent_ids:
             validate_id(agent_id, "agent")
         for capability_id in self.capability_ids:
-            validate_id(capability_id, "cap")
+            _require_nonblank(capability_id, "verification policy capability ID")
         if len(set(self.task_ids)) != len(self.task_ids):
             raise ValueError("verification policy task scopes must be unique")
         if len(set(self.project_ids)) != len(self.project_ids):
@@ -292,7 +292,7 @@ class VerificationRequest:
         _validate_optional_id(self.result_id, "result")
         _validate_optional_id(self.project_id, "project")
         for capability_id in self.capability_ids:
-            validate_id(capability_id, "cap")
+            _require_nonblank(capability_id, "verification capability ID")
         if len(set(self.capability_ids)) != len(self.capability_ids):
             raise ValueError("verification capability references must be unique")
         for artifact_id in self.artifact_ids:
