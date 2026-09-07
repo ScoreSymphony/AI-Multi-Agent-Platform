@@ -45,7 +45,7 @@ The policy is exercised against multiple integration models in [`docs/UPSTREAM_P
 
 ## Status
 
-> Status snapshot: 2026-09-07, after the post-closure architecture audits that added #566 and #567
+> Status snapshot: 2026-09-07, after the post-closure architecture audits and the test-structure follow-up #568
 
 The repository is in late product integration, architecture hardening, acceptance and operating-envelope work rather than foundational platform construction. The usable single-node prototype gate (#252) is complete, and `main` contains the canonical kernel and Control Plane, reference execution, model routing, capabilities/tools, Agents and Agent Teams, authentication and authorization/approvals, Workspaces/files/Artifacts, Memory and Knowledge, Search, Automations, Notifications, Organizations/Teams/Memberships, Chat, Browser and Terminal entry points, reusable workflow definitions, Verification/Review, accounting, durable Connectors, portable import/export, Repository/Git integration, optional HA/failover semantics, extensive Web/CLI coverage, distributed Worker/Workspace execution, the durable Plan/Step coordinator, Registry/Marketplace support and the release/update system.
 
@@ -62,18 +62,20 @@ Recent convergence materially moved the frontier forward:
 - **#562 adds the broader production-shaped two-VPS/private-tunnel validation**. It should share infrastructure and evidence with #388 rather than creating a duplicate deployment path.
 - **#566 is a new optional HA productionization follow-up** to #89. It owns a real multi-process/multi-host CoordinationProvider plus shared/replicated durable-state composition and must not become a hidden dependency of the single-node baseline.
 - **#567 is a new focused core architecture-hardening follow-up**. It replaces external application coupling to the private `PlatformKernel._commit_task_command()` primitive with a narrow supported Task-mutation boundary and an automated encapsulation guard.
+- **#568 is a behavior-neutral maintainability follow-up** to reorganize the growing Python test suite into stable suite categories while preserving discovery, fixture/path semantics and exact-path CI references.
 
-There are currently **11 open issues out of 112 repository issues** (**101 closed; about 90.2% closed by issue count**):
+There are currently **12 open issues out of 113 repository issues** (**101 closed; about 89.4% closed by issue count**):
 
-`#46, #388, #439, #440, #500, #501, #502, #560, #562, #566, #567`
+`#46, #388, #439, #440, #500, #501, #502, #560, #562, #566, #567, #568`
 
-The raw closure percentage is lower than the previous snapshot because post-closure audits expanded the tracked scope; it is not evidence that merged implementation regressed.
+The raw closure percentage is lower than the previous snapshot because follow-up audits and maintainability work expanded the tracked scope; it is not evidence that merged implementation regressed.
 
 The current frontier is split deliberately:
 
 - **Operational-v1/core convergence:** #46 final conformance, #439 planning/replanning closure, #440 remaining performance/operating-envelope evidence, #500 host-pressure completion, #560 workflow-progress semantics/live-refresh completion and #567 kernel Task-mutation boundary hardening.
 - **Real distributed acceptance:** #388 transport-specific two-host acceptance plus #562 full two-VPS/private-tunnel deployment validation. These should use one hardened private test topology where practical.
 - **Optional ideal-end-state expansion:** #501 Proposal/Specification governance, #502 repository intelligence and #566 production-shaped Control Plane HA. They extend the platform without becoming mandatory for ordinary direct-Task, Git/ripgrep/LSP or single-node operation.
+- **Repository maintainability:** #568 test-suite layout refactoring is behavior-neutral and should be coordinated with CI/path-sensitive work rather than treated as a new product capability.
 
 There are **no open pull requests** at this snapshot. Current implementation work should therefore be selected from the open issues and their actual dependencies rather than from stale PR references or numeric issue order.
 
