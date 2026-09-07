@@ -1,0 +1,25 @@
+name: Issue 501 format helper
+
+on:
+  push:
+    branches:
+      - feature/501-proposal-specification-governance
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install 'ruff==0.16.6'
+      - run: ruff format src/ai_multi_agent_platform/governance
+      - uses: actions/upload-artifact@v4
+        with:
+          name: issue-501-formatted-governance
+          path: src/ai_multi_agent_platform/governance
+          if-no-files-found: error
