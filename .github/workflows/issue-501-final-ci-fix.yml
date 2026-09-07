@@ -1,0 +1,57 @@
+name: Issue 501 final CI fix
+
+on:
+  push:
+    branches:
+      - feature/501-proposal-specification-governance
+    paths:
+      - .github/workflows/issue-501-final-ci-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/501-proposal-specification-governance
+          fetch-depth: 0
+      - name: Apply final CI fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          page = Path("frontend/src/pages/GovernancePage.tsx")
+          text = page.read_text(encoding="utf-8")
+          needle = '  const [reason, setReason] = useState("");\n  const [problem, setProblem] = useState("");'
+          replacement = (
+              '  const [reason, setReason] = useState("");\n'
+              '  const [replacementTitle, setReplacementTitle] = useState("");\n'
+              '  const [replacementSummary, setReplacementSummary] = useState("");\n'
+              '  const [replacementReason, setReplacementReason] = useState("");\n'
+              '  const [problem, setProblem] = useState("");'
+          )
+          if needle not in text:
+              raise SystemExit("GovernancePage state insertion point not found")
+          page.write_text(text.replace(needle, replacement, 1), encoding="utf-8")
+
+          cli = Path("tests/test_issue_501_governance_cli.py")
+          text = cli.read_text(encoding="utf-8")
+          old = '''            self.idempotency_key = next(\n                (\n                    value\n                    for key, value in headers.items()\n                    if key.casefold() == "idempotency-key"\n                ),\n                None,\n            )'''
+          new = '''            self.idempotency_key = next(\n                (value for key, value in headers.items() if key.casefold() == "idempotency-key"),\n                None,\n            )'''
+          if old not in text:
+              raise SystemExit("CLI formatting replacement point not found")
+          cli.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Commit fixes and remove helper
+        shell: bash
+        run: |
+          rm .github/workflows/issue-501-final-ci-fix.yml
+          git config user.name "Score Symphony"
+          git config user.email "scoresymphony@gmail.com"
+          git add frontend/src/pages/GovernancePage.tsx tests/test_issue_501_governance_cli.py .github/workflows/issue-501-final-ci-fix.yml
+          git commit -m "fix: resolve issue 501 final CI blockers"
+          git push origin HEAD:feature/501-proposal-specification-governance
