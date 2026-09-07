@@ -71,9 +71,7 @@ class TaskMutationBoundary:
 
         validate_id(task_id, "task")
         self._validate_planning_metadata(planning_metadata)
-        metadata: dict[str, JsonValue] = {
-            _TASK_MANAGEMENT_METADATA_KEY: dict(planning_metadata)
-        }
+        metadata: dict[str, JsonValue] = {_TASK_MANAGEMENT_METADATA_KEY: dict(planning_metadata)}
         duplicate = await self._kernel._task_command(
             task_id,
             idempotency_key,
