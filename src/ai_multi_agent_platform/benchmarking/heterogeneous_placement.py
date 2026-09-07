@@ -17,8 +17,8 @@ from ai_multi_agent_platform.distributed import (
     DeterministicScheduler,
     DistributedRegistry,
     JobRequirements,
-    NoEligibleWorkerError,
     NodeRecord,
+    NoEligibleWorkerError,
     RegistrationRequest,
     RejectionCode,
     ResourceSnapshot,
@@ -78,9 +78,11 @@ class HeterogeneousPlacementSpec:
                 "GPU/model work lands only on the accelerator/model-capable Worker",
                 "browser/network work lands only on the browser-capable Worker",
                 "an impossible VRAM request is rejected without creating a reservation",
-                "overlapping logical Worker capabilities make resource/label/network filters decisive",
+                "overlapping logical Worker capabilities make "
+                "resource/label/network filters decisive",
                 "expected decoy rejection reasons are observed for every profile iteration",
-                "every successful scheduling decision releases its reservation before the next sample",
+                "every successful scheduling decision releases its reservation "
+                "before the next sample",
             ],
             "captured_metrics": [
                 "scheduler placement latency p50/p95/p99 by workload profile",
