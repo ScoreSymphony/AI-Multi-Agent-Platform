@@ -126,9 +126,7 @@ class DeterministicScheduler:
             else self.pressure_provider.snapshot_for_node(node.node_id)
         )
         workload_class = (
-            None
-            if self.workload_class_resolver is None
-            else self.workload_class_resolver(job)
+            None if self.workload_class_resolver is None else self.workload_class_resolver(job)
         )
         return self.pressure_policy.decide(
             node=node,
