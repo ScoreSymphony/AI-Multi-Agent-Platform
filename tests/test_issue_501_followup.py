@@ -485,7 +485,10 @@ def test_material_revision_audits_approval_binding_invalidation(tmp_path: Path) 
         replace(
             first,
             revision=2,
-            goal="Preserve exact durable governance semantics and audit invalidated approval binding.",
+            goal=(
+                "Preserve exact durable governance semantics and audit invalidated "
+                "approval binding."
+            ),
             content_digest="",
             created_at=datetime.now(UTC),
         ),
