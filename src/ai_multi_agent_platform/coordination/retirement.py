@@ -18,6 +18,7 @@ from .models import (
     CoordinationPhase,
     PlanCoordinationProjection,
     PlanRuntimeState,
+    PredecessorFailurePolicy,
     ReconciliationDisposition,
     RetryState,
     StepCoordinationRecord,
@@ -134,7 +135,7 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         steps: tuple[Step, ...],
         *,
         retry_policies: dict[str, StepRetryPolicy] | None = None,
-        predecessor_failure_policy=None,
+        predecessor_failure_policy: PredecessorFailurePolicy = PredecessorFailurePolicy.FAIL_FAST,
     ) -> PlanCoordinationProjection:
         task = await self.kernel.get_task(plan.task_id)
         if task.plan_ref == plan.id:
@@ -143,10 +144,12 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
                 active_plan_id=plan.id,
                 now=datetime.now(UTC),
             )
-        kwargs = {"retry_policies": retry_policies}
-        if predecessor_failure_policy is not None:
-            kwargs["predecessor_failure_policy"] = predecessor_failure_policy
-        return await super().register_plan(plan, steps, **kwargs)
+        return await super().register_plan(
+            plan,
+            steps,
+            retry_policies=retry_policies,
+            predecessor_failure_policy=predecessor_failure_policy,
+        )
 
     async def advance(
         self,
@@ -277,7 +280,6 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         if existing is not None:
             return existing
 
-        by_id = {step.id: step for step in state.steps}
         for record in self.repository.list_step_records(state.plan.id):
             if record.phase is CoordinationPhase.TERMINAL:
                 continue
