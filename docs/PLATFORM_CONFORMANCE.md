@@ -106,11 +106,11 @@ The release tier also has explicit claim-blocking lifecycle and cross-layer chec
 | REL-BACKUP | functioning single-node deployment -> quiesced checksummed backup -> clean replacement data root -> normal restore recovery -> preserved canonical user/Task/Run identity and `ready_for_service=true` | #40 |
 | REL-UPGRADE | controlled previous-schema fixture -> preflight -> recorded migration -> target version state, plus verified-backup enforcement for forward-only migration and explicit resume after interrupted restart-safe migration | #41 |
 | REL-EVAL | checked-in deterministic no-paid-service suite/policy/baseline executed by the real #19 CI regression gate | #19 |
-| REL-VERTICAL | authenticated HTTP -> Control Plane -> canonical Task/Run -> AgentRuntime -> local ModelRuntime -> exact Workspace binding -> Result + file-backed Artifact -> exact Verification -> accepted Task -> canonical API/timeline/observability | #46 |
+| REL-VERTICAL | authenticated HTTP -> Control Plane -> canonical Task/Run -> AgentRuntime -> local ModelRuntime -> canonical Capability/ToolInvocation -> ReferenceExecutor -> Worker/Node -> exact remote Workspace materialization -> canonical File + distinct Artifact -> exact Verification evidence -> accepted Task -> canonical API/timeline/observability | #46 |
 
 All four are `required=true` whenever `--profile release` is selected. A release report therefore cannot be `compatible` merely because these capabilities have unit tests elsewhere; the representative acceptance commands must pass inside the same #46 release claim.
 
-`REL-VERTICAL` is intentionally the strongest maintained **continuous reference slice currently available**, not a declaration that the ideal full #46 path is complete. `D-vertical` now separately proves that one authenticated AgentRun crosses the real local-model HTTP boundary, binds the model tool call to a canonical `tool_invocation_*`, executes the pinned capability through `DistributedExecutorEchoProvider -> ReferenceExecutor -> Worker/Node`, and retains the original canonical Run plus exact Workspace/Snapshot binding. #518's same-Run lineage is therefore exercised behaviorally rather than only as a helper contract: the `worker_job_*` is a child subexecution caused by the canonical ToolInvocation and never becomes a second Run. The remaining vertical gap is now the return path: Worker-produced Workspace/File content still needs to come back through canonical remote materialization, become canonical Artifact evidence through the existing File/Artifact contracts, and feed that exact evidence into Verification in the same maintained `REL-VERTICAL` flow. Until that Worker -> Workspace/File -> Artifact -> Verification path is continuous, #46 remains open.
+`REL-VERTICAL` is the maintained **continuous full reference slice** for the canonical #46 path. The authenticated AgentRun keeps one platform-owned `task_*`/`run_*` identity while the local model requests `tool.workspace.write_artifact`; that semantic capability is pinned to a canonical `tool_invocation_*`, dispatched through the reference Executor to an exact Worker/Node and materialized back into the bound Workspace/Snapshot. Worker-produced content becomes a canonical `file_*` plus a distinct canonical `artifact_*`, is attached to the original Run/Task, is propagated through the AgentRun and becomes the exact Artifact evidence for canonical Verification before final Task acceptance. The `worker_job_*` remains a child subexecution caused by the ToolInvocation and never becomes a second Run. The completed state, Result and Verification are then read through the maintained Control Plane resources and Task timeline, where canonical lifecycle and verification telemetry are asserted. This closes the previously documented Agent/Model-versus-Executor/Worker split without making Worker, Executor or model-provider state canonical.
 
 ## Optional compatibility evidence
 
@@ -130,7 +130,7 @@ The following optional scenarios have maintained executable #46 evidence and can
 | X — HA | stale-leader fencing, promotion reconciliation preserving Worker identity and duplicate-command replay without duplicate Task/Run |
 | Y — durable Plan/Step coordination | crash/restart-safe Run creation, waits/retries/fan-in, stale-fence rejection, real distributed lost-ack/cancellation reconciliation, restore/history consistency, orchestrator-replacement invariance, conservative authorized repair and explicit coordination observability |
 
-Q, S and Y were previously unavailable while their owning implementation issues were still open. Their owning work is now complete and each has retained executable evidence. They remain optional deployment claims rather than becoming implicit requirements of the reference release profile.
+Q, S and Y were previously unavailable while their owning implementation issues were still open. Their owning work is now complete and each has retained executable evidence. They remain optional deployment claims rather than becoming implicit requirements of the reference release profile, and therefore report `disabled` by default unless explicitly enabled.
 
 B and C still require prepared external Hermes/Forge environments. Explicit activation remains fail-closed when those external preconditions are absent.
 
@@ -194,7 +194,7 @@ The repository treats conformance as three different cost/coverage tiers rather 
 - `conformance-release` for the reference single-node release claim;
 - `conformance-extended-reference`, which additionally enables E/N/Q/R/S/T/V/X/Y and therefore treats all nine as required.
 
-Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE`, `REL-EVAL` and `REL-VERTICAL` automatically because those checks are required members of the release profile rather than separately enabled options.
+Both release-based jobs execute `REL-BACKUP`, `REL-UPGRADE`, `REL-EVAL` and the complete `REL-VERTICAL` automatically because those checks are required members of the release profile rather than separately enabled options.
 
 Hermes and Forge retain their real upstream/sidecar setup in adapter-specific integration jobs; their conformance activation is valid only after those external preconditions are satisfied. The default reference jobs never install or require either runtime.
 

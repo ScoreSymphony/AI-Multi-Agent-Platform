@@ -19,6 +19,7 @@ from .observer import EventRepositoryInvocationObserver
 from .provider import CapabilityToolProvider
 from .registry import CapabilityDiscoveryPolicyHook, CapabilityRegistry
 from .types import (
+    ISOLATED_WORKSPACE_WRITE_FEATURE,
     CapabilityCompatibilityRequest,
     CapabilityDiscoveryRequest,
     CapabilityInvocation,
@@ -51,6 +52,7 @@ __all__ = [
     "ECHO_CAPABILITY_ID",
     "EventRepositoryInvocationObserver",
     "GovernanceBindingHook",
+    "ISOLATED_WORKSPACE_WRITE_FEATURE",
     "InvocationObserver",
     "InvocationRecord",
     "InvocationStatus",

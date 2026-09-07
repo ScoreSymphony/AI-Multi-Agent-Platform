@@ -332,14 +332,15 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
         ),
         ConformanceScenario(
             "REL-VERTICAL",
-            "#46 authenticated reference vertical slice",
+            "#46 authenticated full reference vertical slice",
             (
-                "authenticated Control Plane work preserves one canonical Task/Run through "
-                "Agent/Model, Workspace, Result/Artifact, Verification and timeline evidence"
+                "one authenticated canonical Task/Run crosses Agent/Model, Capability/Tool, "
+                "Executor/Worker/Node, Workspace/File/Artifact, Verification and returns through "
+                "canonical API/timeline/observability without shadow lifecycle state"
             ),
             _pytest(
-                "tests/test_issue_46_reference_vertical_slice.py::"
-                "test_authenticated_reference_vertical_preserves_canonical_evidence_end_to_end"
+                "tests/test_issue_46_worker_artifact_verification_vertical.py::"
+                "test_authenticated_worker_artifact_is_exact_verification_evidence_same_run"
             ),
         ),
         ConformanceScenario(
@@ -458,8 +459,7 @@ def profile_scenarios(profile: ConformanceProfile) -> tuple[ConformanceScenario,
             "Y",
             "#384 durable Plan/Step coordination",
             "durable fan-out/fan-in, waits, retries and cancellation advance exactly once",
-            "scenario Y is activated after the #384 coordination path is available",
-            status=ConformanceStatus.UNSUPPORTED,
+            "durable Plan/Step coordination profile is optional and not enabled",
         ),
     )
 

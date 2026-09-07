@@ -16,6 +16,8 @@ from ai_multi_agent_platform.contracts.types import (
 )
 from ai_multi_agent_platform.domain import validate_id
 
+ISOLATED_WORKSPACE_WRITE_FEATURE = "isolated_workspace_write"
+
 
 def _utc_now() -> datetime:
     """Return an aware UTC timestamp without expanding the public domain API."""
@@ -141,8 +143,8 @@ class CapabilitySpec:
     required_approvals: tuple[str, ...] = ()
     required_worker_capabilities: tuple[str, ...] = ()
     timeout_seconds: float | None = None
-    health: HealthStatus = HealthStatus.UNKNOWN
-    available: bool = True
+    health: HealthStatus = field(default=HealthStatus.UNKNOWN, compare=False)
+    available: bool = field(default=True, compare=False)
     features: tuple[str, ...] = ()
     credential_requirement: CredentialRequirement = CredentialRequirement.NONE
 
