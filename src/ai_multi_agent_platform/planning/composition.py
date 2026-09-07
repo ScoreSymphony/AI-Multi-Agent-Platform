@@ -37,9 +37,9 @@ from ai_multi_agent_platform.security import ActorIdentity, AuthorizationGate
 
 from .environment import PlanningEnvironment, PlanningEnvironmentResolver
 from .models import (
-    PlanProposal,
     PlanningInventory,
     PlanningTrigger,
+    PlanProposal,
     ProposalRecord,
     ProposalStatus,
     ReplanPolicy,
