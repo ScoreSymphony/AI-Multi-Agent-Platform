@@ -1,0 +1,105 @@
+name: Issue 501 clarification lifecycle fix
+
+on:
+  push:
+    branches:
+      - feature/501-proposal-specification-governance
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/501-proposal-specification-governance
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Apply clarification lifecycle
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          service = Path("src/ai_multi_agent_platform/governance/service.py")
+          text = service.read_text()
+          anchor = "    def dismiss_proposal(\n"
+          if "    def request_clarification(\n" not in text:
+              method = '''    def request_clarification(\n        self, proposal_id: str, *, expected_revision: int, actor_ref: str\n    ) -> Proposal:\n        current = self.repository.get_proposal(proposal_id)\n        if current.status in {\n            ProposalStatus.DISMISSED,\n            ProposalStatus.SUPERSEDED,\n            ProposalStatus.CONVERTED_TO_TASK,\n        }:\n            raise ContractError(\n                ErrorCode.CONFLICT,\n                "terminal proposal cannot request clarification",\n            )\n        updated = replace(\n            current,\n            status=ProposalStatus.NEEDS_SPEC,\n            revision=current.revision + 1,\n            updated_at=datetime.now(UTC),\n        )\n        persisted = self.repository.revise_proposal(\n            updated, expected_revision=expected_revision\n        )\n        self._audit(\n            "proposal.clarification-requested",\n            "proposal",\n            proposal_id,\n            actor_ref,\n            current.project_id,\n            revision=persisted.revision,\n            metadata={"previous_status": current.status.value},\n        )\n        return persisted\n\n'''
+              if anchor not in text:
+                  raise SystemExit("service clarification anchor missing")
+              text = text.replace(anchor, method + anchor, 1)
+              service.write_text(text)
+
+          control = Path("src/ai_multi_agent_platform/governance/control_plane.py")
+          text = control.read_text()
+          if '    "proposal.request-clarification",\n' not in text:
+              text = text.replace(
+                  '    "proposal.revise",\n    "proposal.dismiss",',
+                  '    "proposal.revise",\n    "proposal.request-clarification",\n    "proposal.dismiss",',
+                  1,
+              )
+          function_anchor = "    async def proposal_dismiss(\n"
+          if "    async def proposal_request_clarification(\n" not in text:
+              function = '''    async def proposal_request_clarification(\n        context: RequestContext, resource_ref: str, payload: dict[str, JsonValue]\n    ) -> dict[str, JsonValue]:\n        current = governance.repository.get_proposal(resource_ref)\n        await _require_allowed(\n            control_plane, context, "proposal.request-clarification", current\n        )\n        expected = _required_int(payload, "expected_revision")\n        return proposal_resource(\n            governance.request_clarification(\n                resource_ref, expected_revision=expected, actor_ref=_actor(context)\n            )\n        )\n\n'''
+              if function_anchor not in text:
+                  raise SystemExit("control-plane clarification anchor missing")
+              text = text.replace(function_anchor, function + function_anchor, 1)
+          if '        "proposal.request-clarification": proposal_request_clarification,\n' not in text:
+              text = text.replace(
+                  '        "proposal.revise": proposal_revise,\n        "proposal.dismiss": proposal_dismiss,',
+                  '        "proposal.revise": proposal_revise,\n        "proposal.request-clarification": proposal_request_clarification,\n        "proposal.dismiss": proposal_dismiss,',
+                  1,
+              )
+          control.write_text(text)
+
+          client = Path("frontend/src/api/governance.ts")
+          text = client.read_text()
+          method_anchor = "  dismissProposal(proposalId: string, expectedRevision: number): Promise<GovernanceProposal> {\n"
+          if "  requestClarification(\n" not in text:
+              method = '''  requestClarification(\n    proposalId: string,\n    expectedRevision: number,\n  ): Promise<GovernanceProposal> {\n    return this.command<GovernanceProposal>("proposal.request-clarification", proposalId, {\n      expected_revision: expectedRevision,\n    });\n  }\n\n'''
+              if method_anchor not in text:
+                  raise SystemExit("governance client clarification anchor missing")
+              text = text.replace(method_anchor, method + method_anchor, 1)
+          client.write_text(text)
+
+          page = Path("frontend/src/pages/GovernancePage.tsx")
+          text = page.read_text()
+          dismiss_anchor = "  const dismiss = async () => {\n"
+          if "  const requestClarification = async () => {\n" not in text:
+              handler = '''  const requestClarification = async () => {\n    setBusy(true);\n    try {\n      setProposal(await client.requestClarification(proposal.id, proposal.revision));\n      setError(null);\n    } catch (nextError) {\n      setError(nextError);\n    } finally {\n      setBusy(false);\n    }\n  };\n\n'''
+              if dismiss_anchor not in text:
+                  raise SystemExit("governance page clarification anchor missing")
+              text = text.replace(dismiss_anchor, handler + dismiss_anchor, 1)
+          button_anchor = '          <button disabled={busy || terminal} onClick={() => void dismiss()}>Dismiss</button>\n'
+          clarification_button = '          <button disabled={busy || terminal} onClick={() => void requestClarification()}>Request clarification</button>\n'
+          if clarification_button not in text:
+              if button_anchor not in text:
+                  raise SystemExit("governance page button anchor missing")
+              text = text.replace(button_anchor, clarification_button + button_anchor, 1)
+          page.write_text(text)
+
+          tests = Path("tests/test_issue_501_governance.py")
+          text = tests.read_text()
+          marker = "def test_request_clarification_is_versioned_audited_and_non_terminal("
+          if marker not in text:
+              text += '''\n\ndef test_request_clarification_is_versioned_audited_and_non_terminal(\n    tmp_path: Path,\n) -> None:\n    service, _gate_value = _service(tmp_path)\n    proposal = service.create_proposal(_proposal(), actor_ref=PRINCIPAL)\n\n    clarification = service.request_clarification(\n        proposal.id,\n        expected_revision=proposal.revision,\n        actor_ref=PRINCIPAL,\n    )\n\n    assert clarification.status is ProposalStatus.NEEDS_SPEC\n    assert clarification.revision == proposal.revision + 1\n    assert [value.revision for value in service.repository.proposal_history(proposal.id)] == [1, 2]\n    assert any(\n        event.event_type == "proposal.clarification-requested"\n        and event.resource_id == proposal.id\n        and event.revision == clarification.revision\n        for event in service.repository.list_audit()\n    )\n\n    revised = service.revise_proposal(\n        replace(\n            clarification,\n            summary="Clarified governance intake after follow-up.",\n            revision=clarification.revision + 1,\n            updated_at=datetime.now(UTC),\n        ),\n        expected_revision=clarification.revision,\n        actor_ref=PRINCIPAL,\n    )\n    assert revised.status is ProposalStatus.NEEDS_SPEC\n    assert revised.revision == 3\n'''
+              tests.write_text(text)
+          PY
+      - name: Format Python changes
+        run: |
+          python -m pip install 'ruff==0.16.6'
+          ruff format src/ai_multi_agent_platform/governance tests/test_issue_501_governance.py
+          ruff check src/ai_multi_agent_platform/governance tests/test_issue_501_governance.py
+      - name: Commit lifecycle changes and remove helper
+        shell: bash
+        run: |
+          git config user.name "Score Symphony CI"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/issue-501-clarification-fix.yml
+          git add src/ai_multi_agent_platform/governance frontend/src/api/governance.ts frontend/src/pages/GovernancePage.tsx tests/test_issue_501_governance.py
+          git commit -m "feat: add proposal clarification lifecycle"
+          git push origin HEAD:feature/501-proposal-specification-governance
