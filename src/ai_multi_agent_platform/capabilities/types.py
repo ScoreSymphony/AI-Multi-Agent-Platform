@@ -59,6 +59,59 @@ class SideEffectClassification(StrEnum):
     DESTRUCTIVE = "destructive"
 
 
+class ReversibilityClassification(StrEnum):
+    """Whether an already-completed side effect has a real compensation path."""
+
+    REVERSIBLE = "reversible"
+    PARTIALLY_REVERSIBLE = "partially_reversible"
+    IRREVERSIBLE = "irreversible"
+    UNKNOWN = "unknown"
+
+
+class CompensationIdempotency(StrEnum):
+    """Declared duplicate-safety of the compensating external action."""
+
+    GUARANTEED = "guaranteed"
+    PROVIDER_DEPENDENT = "provider_dependent"
+    NONE = "none"
+    UNKNOWN = "unknown"
+
+
+@dataclass(frozen=True, slots=True)
+class CompensationDescriptor:
+    """Backend-neutral declaration of one explicitly supported compensating capability.
+
+    The descriptor is metadata only. Capability resolution, Authorization, Approval and execution
+    remain owned by the ordinary #12/#15 invocation pipeline.
+    """
+
+    capability_id: str
+    version: str | None = None
+    required_original_argument_keys: tuple[str, ...] = ()
+    requires_original_result_ref: bool = False
+    window_seconds: float | None = None
+    side_effects: SideEffectClassification = SideEffectClassification.EXTERNAL
+    requires_approval: bool = False
+    idempotency: CompensationIdempotency = CompensationIdempotency.UNKNOWN
+    known_limitations: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.capability_id.strip():
+            raise ValueError("compensating capability_id must not be blank")
+        if self.version is not None and not self.version.strip():
+            raise ValueError("compensating capability version must not be blank")
+        if self.window_seconds is not None and self.window_seconds <= 0:
+            raise ValueError("compensation window_seconds must be greater than zero")
+        if any(not key.strip() for key in self.required_original_argument_keys):
+            raise ValueError("required_original_argument_keys must not contain blank values")
+        if len(set(self.required_original_argument_keys)) != len(
+            self.required_original_argument_keys
+        ):
+            raise ValueError("required_original_argument_keys must not contain duplicates")
+        if any(not limitation.strip() for limitation in self.known_limitations):
+            raise ValueError("known_limitations must not contain blank values")
+
+
 class CredentialRequirement(StrEnum):
     """Backend-neutral classification for capabilities that require credentials."""
 
@@ -147,6 +200,8 @@ class CapabilitySpec:
     available: bool = field(default=True, compare=False)
     features: tuple[str, ...] = ()
     credential_requirement: CredentialRequirement = CredentialRequirement.NONE
+    reversibility: ReversibilityClassification = ReversibilityClassification.UNKNOWN
+    compensation: CompensationDescriptor | None = None
 
     def __post_init__(self) -> None:
         if not self.capability_id.strip():
@@ -161,6 +216,22 @@ class CapabilitySpec:
             raise ValueError("features must not contain blank values")
         if len(set(self.features)) != len(self.features):
             raise ValueError("features must not contain duplicates")
+        if (
+            self.reversibility is ReversibilityClassification.REVERSIBLE
+            and self.compensation is None
+        ):
+            raise ValueError("reversible capability must declare a compensation descriptor")
+        if (
+            self.reversibility
+            in {
+                ReversibilityClassification.IRREVERSIBLE,
+                ReversibilityClassification.UNKNOWN,
+            }
+            and self.compensation is not None
+        ):
+            raise ValueError(
+                "irreversible/unknown capability must not declare fabricated compensation support"
+            )
         object.__setattr__(self, "input_schema", _freeze_mapping(self.input_schema))
         if self.output_schema is not None:
             object.__setattr__(self, "output_schema", _freeze_mapping(self.output_schema))
