@@ -153,7 +153,6 @@ class DistributedFaultSpec:
 
     @property
     def total_attempts(self) -> int:
-        # One expected Workspace failure plus one recovery job are included.
         return self.expected_successful_jobs + 1
 
     def to_dict(self) -> dict[str, Any]:
@@ -390,9 +389,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                 victim.process.stop()
                 await process_tasks[victim_id]
 
-                fault_time = base_time + timedelta(
-                    seconds=spec.heartbeat_timeout_seconds + 0.1
-                )
+                fault_time = base_time + timedelta(seconds=spec.heartbeat_timeout_seconds + 0.1)
                 for index, fixture in enumerate(worker_fixtures[1:], start=1):
                     worker_id = fixture.worker.worker_id
                     sequences[worker_id] += 1
@@ -488,7 +485,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                     now=rejoin_time,
                 )
                 rejoined_worker_online = (
-                    runtime.registry.get_worker(victim_id).status is WorkerStatus.ONLINE
+                    runtime.registry.get_worker(victim_id).status is WorkerStatus.HEALTHY
                 )
                 rejoin_preserved_identity = (
                     receipt.node_id == victim.node.node_id
@@ -551,9 +548,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                     workspace_failure_record_lost = failed_record.state is DispatchState.LOST
                     workspace_failure_reached_execution = failed_record.handle is not None
 
-                recovery_time = outage_time + timedelta(
-                    seconds=spec.reservation_ttl_seconds + 0.1
-                )
+                recovery_time = outage_time + timedelta(seconds=spec.reservation_ttl_seconds + 0.1)
                 for index, fixture in enumerate(worker_fixtures):
                     worker_id = fixture.worker.worker_id
                     sequences[worker_id] += 1
