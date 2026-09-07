@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from jsonschema import Draft202012Validator
 
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import (
     HealthStatus,
     JsonValue,
@@ -18,6 +20,7 @@ from ai_multi_agent_platform.repository_intelligence import (
     RepositoryIntelligenceOperation,
     repository_intelligence_capability_specs,
 )
+from ai_multi_agent_platform.testing.conformance import assert_provider_contract
 
 
 _SHA = "a" * 40
@@ -133,6 +136,15 @@ def test_output_schemas_require_provider_neutral_result_contracts() -> None:
     }
     assert list(validator.iter_errors(invalid_mutable_revision))
 
+    health_schema = specs["repository.health"].output_schema
+    assert health_schema is not None
+    invalid_health = {
+        "provider_id": "optional-indexer",
+        "health": "green",
+        "available": True,
+    }
+    assert list(Draft202012Validator(health_schema).iter_errors(invalid_health))
+
 
 def test_baseline_map_search_and_source_slice_carry_exact_revision_provenance() -> None:
     async def scenario() -> None:
@@ -194,6 +206,33 @@ def test_baseline_map_search_and_source_slice_carry_exact_revision_provenance() 
         provenance = sliced.output["provenance"]
         assert isinstance(provenance, dict)
         assert provenance["resolved_revision"] == _SHA
+
+    asyncio.run(scenario())
+
+
+def test_snapshot_loader_rejects_repository_identity_mismatch() -> None:
+    other_repository_id = new_id("external_resource")
+
+    async def mismatched_loader(
+        repository_id: str,
+        revision: str,
+        context: OperationContext,
+    ) -> RepositoryTree:
+        del repository_id, context
+        return RepositoryTree(
+            repository_id=other_repository_id,
+            requested_ref=revision,
+            resolved_revision=_SHA,
+            entries=(RepositoryTreeEntry("README.md", b"secret from another repository\n"),),
+        )
+
+    async def scenario() -> None:
+        provider = BaselineRepositoryIntelligenceProvider(mismatched_loader)
+        with pytest.raises(ContractError) as caught:
+            await provider.invoke(
+                _invocation("repository.map", {"repository_id": _REPOSITORY_ID})
+            )
+        assert caught.value.code is ErrorCode.INVALID_PROVIDER_RESPONSE
 
     asyncio.run(scenario())
 
@@ -291,6 +330,28 @@ def test_source_slice_bounds_oversized_lines_and_total_output() -> None:
     asyncio.run(scenario())
 
 
+def test_unavailable_provider_normalizes_availability_and_conforms() -> None:
+    async def scenario() -> None:
+        provider = BaselineRepositoryIntelligenceProvider(
+            _snapshot,
+            provider_id="unavailable-indexer",
+            health=HealthStatus.UNAVAILABLE,
+        )
+        assert provider.descriptor.available is False
+        await assert_provider_contract(provider)
+
+        registrations = await provider.capability_registrations()
+        assert registrations
+        assert all(registration.capability.available is False for registration in registrations)
+
+        result = await provider.invoke(_invocation("repository.health", {}))
+        assert isinstance(result.output, dict)
+        assert result.output["health"] == HealthStatus.UNAVAILABLE.value
+        assert result.output["available"] is False
+
+    asyncio.run(scenario())
+
+
 def test_unavailable_high_priority_provider_falls_back_immediately() -> None:
     async def scenario() -> None:
         registry = CapabilityRegistry()
@@ -315,6 +376,41 @@ def test_unavailable_high_priority_provider_falls_back_immediately() -> None:
         )
         assert registration.provider_id == "baseline"
         assert provider.descriptor.provider_id == "baseline"
+
+    asyncio.run(scenario())
+
+
+def test_inventory_aggregates_health_across_equivalent_providers() -> None:
+    async def scenario() -> None:
+        registry = CapabilityRegistry()
+        unavailable = BaselineRepositoryIntelligenceProvider(
+            _snapshot,
+            provider_id="unavailable-baseline",
+            priority=0,
+            health=HealthStatus.UNAVAILABLE,
+        )
+        healthy = BaselineRepositoryIntelligenceProvider(
+            _snapshot,
+            provider_id="healthy-indexer",
+            priority=100,
+            health=HealthStatus.HEALTHY,
+        )
+        await registry.register_provider(unavailable)
+        await registry.register_provider(healthy)
+
+        inventory = {
+            capability.capability_id: capability
+            for capability in registry.inventory_capabilities(include_unavailable=False)
+        }
+        assert "repository.map" in inventory
+        assert inventory["repository.map"].available is True
+        assert inventory["repository.map"].health is HealthStatus.HEALTHY
+
+        registration, _provider = registry.resolve(
+            "repository.map",
+            granted_permissions=frozenset({"repository.map"}),
+        )
+        assert registration.provider_id == "healthy-indexer"
 
     asyncio.run(scenario())
 
