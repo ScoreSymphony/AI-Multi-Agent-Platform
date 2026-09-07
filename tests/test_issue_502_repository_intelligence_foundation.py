@@ -229,9 +229,7 @@ def test_snapshot_loader_rejects_repository_identity_mismatch() -> None:
     async def scenario() -> None:
         provider = BaselineRepositoryIntelligenceProvider(mismatched_loader)
         with pytest.raises(ContractError) as caught:
-            await provider.invoke(
-                _invocation("repository.map", {"repository_id": _REPOSITORY_ID})
-            )
+            await provider.invoke(_invocation("repository.map", {"repository_id": _REPOSITORY_ID}))
         assert caught.value.code is ErrorCode.INVALID_PROVIDER_RESPONSE
 
     asyncio.run(scenario())
