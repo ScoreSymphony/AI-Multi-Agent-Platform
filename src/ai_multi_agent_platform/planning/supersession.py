@@ -10,6 +10,7 @@ import asyncio
 from dataclasses import replace
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.security import ActorIdentity
 
 from .models import (
     PlannerOutput,
@@ -86,7 +87,7 @@ class PlanningService(BasePlanningService):
         proposal_id: str,
         *,
         idempotency_key: str,
-        actor=None,
+        actor: ActorIdentity | None = None,
         approval_id: str | None = None,
     ) -> ProposalRecord:
         initial = self.repository.get(proposal_id)
