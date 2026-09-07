@@ -2,34 +2,35 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from dataclasses import replace
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
-from ai_multi_agent_platform.contracts import ExecutionRequest, OperationContext
-from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
-from ai_multi_agent_platform.deployment.distributed_control_plane import (
-    DeploymentWorkerProtocolService,
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    ExecutionRequest,
+    OperationContext,
+    ToolInvocation,
 )
+from ai_multi_agent_platform.data import DataAccessContext, LocalFileProvider
 from ai_multi_agent_platform.distributed import (
     WORKSPACE_ARTIFACT_CAPABILITY_ID,
     ArtifactPublishingWorkerDispatcher,
     CanonicalWorkspaceArtifactPublisher,
+    DistributedExecutorArtifactProvider,
     DistributedRegistry,
     DistributedRuntime,
-    Heartbeat,
     JobResultStatus,
     LocalWorker,
     MaterializingWorkerDispatcher,
     NodeRecord,
     RegistrationRequest,
-    WorkerHeartbeatRequest,
     WorkerJobRequest,
     WorkerRecord,
-    WorkerRequestCredentials,
-    WorkerStatus,
     WorkspaceJobMaterializationResolver,
+)
+from ai_multi_agent_platform.distributed.artifact_capability_provider import (
+    DISTRIBUTED_WORKSPACE_ARTIFACT_TOOL_REF,
 )
 from ai_multi_agent_platform.distributed.workspace_transport import (
     TransportRemoteWorkspaceMaterializer,
@@ -39,165 +40,109 @@ from ai_multi_agent_platform.distributed.workspace_transport import (
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.messaging import InProcessMessageTransport
-from ai_multi_agent_platform.security import (
-    ActorType,
-    AuthorizationAction,
-    CredentialScope,
-    LocalAuthenticationService,
-    LocalAuthorizationProvider,
-    LocalPrincipalPolicy,
-    ResourceType,
-    ScryptPasswordHasher,
-)
 from ai_multi_agent_platform.testing import FakeOrchestrator
 from ai_multi_agent_platform.testing.fakes import FakeLifecycleBackend
 from ai_multi_agent_platform.workspaces import (
     InMemoryRunWorkspaceBindingRepository,
+    RunWorkspaceBinding,
     WorkspaceAccessMode,
     WorkspaceType,
 )
 from ai_multi_agent_platform.workspaces.reference import LocalWorkspaceProvider
 
 
-def _credentials(secret: str, nonce: str, issued_at: datetime) -> WorkerRequestCredentials:
-    return WorkerRequestCredentials(
-        token=secret,
-        nonce=nonce,
-        issued_at=issued_at,
-        request_id=nonce,
-        correlation_id=nonce,
-    )
-
-
-def test_worker_registration_publishes_and_withdraws_artifact_capability(tmp_path: Path) -> None:
+def test_scheduler_backed_artifact_provider_uses_current_worker_eligibility() -> None:
     async def scenario() -> None:
-        node_id = new_id("node")
-        worker_id = new_id("worker")
-        worker = WorkerRecord(
-            worker_id=worker_id,
-            node_id=node_id,
-            supported_executors=("reference",),
-            capability_refs=(WORKSPACE_ARTIFACT_CAPABILITY_ID,),
-        )
-        registration = RegistrationRequest(
-            node=NodeRecord(node_id=node_id, display_name="issue-46-artifact-node"),
-            workers=(worker,),
-            service_identity_ref=worker_id,
-        )
-
-        authentication = LocalAuthenticationService(
-            password_hasher=ScryptPasswordHasher(n=2**10, r=8, p=1, maxmem=8 * 1024 * 1024)
-        )
-        actions = frozenset(
-            {
-                AuthorizationAction.CREATE,
-                AuthorizationAction.MODIFY,
-                AuthorizationAction.DELETE,
-            }
-        )
-        scope = CredentialScope(
-            actions=actions,
-            resource_types=frozenset({ResourceType.NODE, ResourceType.WORKER}),
-        )
-        credential = authentication.create_worker_credential(worker_id, scope=scope)
-        authorization = LocalAuthorizationProvider(
-            (
-                LocalPrincipalPolicy(
-                    principal_ref=worker_id,
-                    actor_types=frozenset({ActorType.WORKER}),
-                    allowed_actions=actions,
-                    resource_types=frozenset({ResourceType.NODE, ResourceType.WORKER}),
-                ),
-            )
-        )
-
+        first_node_id = new_id("node")
+        second_node_id = new_id("node")
+        first_worker_id = new_id("worker")
+        second_worker_id = new_id("worker")
         runtime = DistributedRuntime(DistributedRegistry())
-        transport = InProcessMessageTransport(provider_id="issue-46-artifact-provider-lifecycle")
-        files = LocalFileProvider(tmp_path / "objects", tmp_path / "files.sqlite3")
-        workspaces = LocalWorkspaceProvider(tmp_path / "workspaces", files)
-        capabilities = CapabilityRegistry()
-        service = DeploymentWorkerProtocolService(
-            runtime,
-            authentication=authentication,
-            authorization=authorization,
-            transport=transport,
-            workspaces=workspaces,
-            files=files,
-            context_resolver=lambda _workspace: (_ for _ in ()).throw(
-                AssertionError("artifact provider lifecycle must not materialize a Workspace")
-            ),
-            capabilities=capabilities,
-            workspace_bindings=InMemoryRunWorkspaceBindingRepository(),
+        runtime.register(
+            RegistrationRequest(
+                node=NodeRecord(node_id=first_node_id, display_name="artifact-node-a"),
+                workers=(
+                    WorkerRecord(
+                        worker_id=first_worker_id,
+                        node_id=first_node_id,
+                        supported_executors=("reference",),
+                        capability_refs=(WORKSPACE_ARTIFACT_CAPABILITY_ID,),
+                    ),
+                ),
+            )
+        )
+        runtime.register(
+            RegistrationRequest(
+                node=NodeRecord(node_id=second_node_id, display_name="artifact-node-b"),
+                workers=(
+                    WorkerRecord(
+                        worker_id=second_worker_id,
+                        node_id=second_node_id,
+                        supported_executors=("reference",),
+                        capability_refs=(WORKSPACE_ARTIFACT_CAPABILITY_ID,),
+                    ),
+                ),
+            )
         )
 
-        start = datetime.now(UTC)
+        task_id = new_id("task")
+        run_id = new_id("run")
+        agent_id = new_id("agent")
+        bindings = InMemoryRunWorkspaceBindingRepository()
+        await bindings.bind(
+            RunWorkspaceBinding(
+                run_id=run_id,
+                task_id=task_id,
+                workspace_id=new_id("workspace"),
+                workspace_snapshot_id=new_id("workspace_snapshot"),
+                content_checksum="0" * 64,
+            )
+        )
+        provider = DistributedExecutorArtifactProvider(
+            runtime,
+            workspace_bindings=bindings,
+        )
+        capabilities = CapabilityRegistry()
+        await capabilities.register_provider(provider)
+
+        registration, resolved_provider = capabilities.resolve(
+            WORKSPACE_ARTIFACT_CAPABILITY_ID,
+            version="1.0",
+        )
+        assert resolved_provider is provider
+        assert registration.provider_id == "distributed.executor.reference-artifact"
+        assert registration.worker_id is None
+        assert registration.node_id is None
+        assert len(capabilities.inventory_providers()) == 1
+
+        runtime.set_worker_draining(first_worker_id, draining=True)
+        runtime.set_node_maintenance(second_node_id, maintenance=True)
+        repeated_registration, repeated_provider = capabilities.resolve(
+            WORKSPACE_ARTIFACT_CAPABILITY_ID,
+            version="1.0",
+        )
+        assert repeated_registration == registration
+        assert repeated_provider is provider
+
         try:
-            await service.register(
-                registration,
-                _credentials(credential.secret, "issue-46-artifact-register", start),
-                now=start,
-            )
-            providers = {item.provider_id for item in capabilities.inventory_providers()}
-            assert providers == {f"distributed.executor.reference-artifact.{worker_id}"}
-            assert [item.capability_id for item in capabilities.inventory_capabilities()] == [
-                WORKSPACE_ARTIFACT_CAPABILITY_ID
-            ]
-
-            unhealthy_at = start + timedelta(seconds=1)
-            await service.heartbeat(
-                WorkerHeartbeatRequest(
-                    heartbeat=Heartbeat(
-                        node_id=node_id,
-                        observed_at=unhealthy_at,
-                        sequence=2,
-                        workers=(replace(worker, status=WorkerStatus.UNHEALTHY),),
+            await provider.invoke(
+                ToolInvocation(
+                    invocation_id="issue-46-scheduler-backed-artifact",
+                    tool_ref=DISTRIBUTED_WORKSPACE_ARTIFACT_TOOL_REF,
+                    arguments={"path": "out/evidence.txt", "content": "evidence"},
+                    context=OperationContext(
+                        correlation_id=task_id,
+                        causation_id=new_id("tool_invocation"),
                     ),
-                    service_identity_ref=worker_id,
-                ),
-                _credentials(
-                    credential.secret,
-                    "issue-46-artifact-heartbeat-unhealthy",
-                    unhealthy_at,
-                ),
-                now=unhealthy_at,
+                    task_id=task_id,
+                    run_id=run_id,
+                    agent_id=agent_id,
+                )
             )
-            assert capabilities.inventory_providers() == ()
-            assert capabilities.inventory_capabilities() == ()
-
-            healthy_at = unhealthy_at + timedelta(seconds=1)
-            await service.heartbeat(
-                WorkerHeartbeatRequest(
-                    heartbeat=Heartbeat(
-                        node_id=node_id,
-                        observed_at=healthy_at,
-                        sequence=3,
-                        workers=(replace(worker, status=WorkerStatus.HEALTHY),),
-                    ),
-                    service_identity_ref=worker_id,
-                ),
-                _credentials(
-                    credential.secret,
-                    "issue-46-artifact-heartbeat-healthy",
-                    healthy_at,
-                ),
-                now=healthy_at,
-            )
-            assert len(capabilities.inventory_providers()) == 1
-            assert capabilities.inventory_capabilities()[0].capability_id == (
-                WORKSPACE_ARTIFACT_CAPABILITY_ID
-            )
-
-            removed_at = healthy_at + timedelta(seconds=1)
-            await service.deregister_worker(
-                worker_id,
-                node_id,
-                _credentials(credential.secret, "issue-46-artifact-deregister", removed_at),
-                now=removed_at,
-            )
-            assert capabilities.inventory_providers() == ()
-            assert capabilities.inventory_capabilities() == ()
-        finally:
-            await transport.close(graceful=False)
+        except ContractError as exc:
+            assert exc.code is ErrorCode.UNAVAILABLE
+        else:
+            raise AssertionError("artifact invocation must honor current drain/maintenance state")
 
     asyncio.run(scenario())
 
