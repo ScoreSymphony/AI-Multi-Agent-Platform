@@ -20,7 +20,6 @@ from ai_multi_agent_platform.coordination import (
     SQLiteCoordinatorRepository,
     StepRetryPolicy,
     StepWait,
-    WaitResolution,
     WaitType,
 )
 from ai_multi_agent_platform.domain import (
@@ -29,7 +28,6 @@ from ai_multi_agent_platform.domain import (
     Run,
     RunStatus,
     Step,
-    StepStatus,
     Task,
     TaskStatus,
     new_id,
@@ -256,18 +254,19 @@ def _coordinator(
     return coordinator, runtime_kernel
 
 
-def _resource(coordinator: DurablePlanStepCoordinator, plan_id: str) -> dict[str, object]:
-    resource = asyncio.run(
-        CoordinatorPlanResourceService(coordinator).get_resource(
-            RequestContext(request_id="req-560", correlation_id="corr-560"),
-            plan_id,
-        )
+async def _resource(
+    coordinator: DurablePlanStepCoordinator,
+    plan_id: str,
+) -> dict[str, object]:
+    resource = await CoordinatorPlanResourceService(coordinator).get_resource(
+        RequestContext(request_id="req-560", correlation_id="corr-560"),
+        plan_id,
     )
     return cast(dict[str, object], resource)
 
 
 def test_control_plane_projects_only_safe_wait_context_and_resolution() -> None:
-    async def scenario() -> tuple[DurablePlanStepCoordinator, Plan, tuple[Step, ...]]:
+    async def scenario() -> tuple[dict[str, object], tuple[Step, ...]]:
         plan, steps = _plan_and_steps(3)
         coordinator, _ = _coordinator(plan, steps)
         await coordinator.register_plan(plan, steps)
@@ -325,10 +324,9 @@ def test_control_plane_projects_only_safe_wait_context_and_resolution() -> None:
             project_id=steps[0].project_id,
             now=deadline + timedelta(seconds=1),
         )
-        return coordinator, plan, steps
+        return await _resource(coordinator, plan.id), steps
 
-    coordinator, plan, steps = asyncio.run(scenario())
-    resource = _resource(coordinator, plan.id)
+    resource, steps = asyncio.run(scenario())
     raw_steps = cast(list[dict[str, object]], resource["steps"])
     by_id = {cast(str, item["id"]): item for item in raw_steps}
 
@@ -364,7 +362,7 @@ def test_control_plane_projects_only_safe_wait_context_and_resolution() -> None:
         assert forbidden not in serialized
 
 
-def test_foreign_scope_signal_cannot_resolve_or_reveal_hidden_event_wait_context() -> None:
+def test_foreign_scope_signal_cannot_resolve_event_wait() -> None:
     async def scenario() -> None:
         plan, steps = _plan_and_steps()
         coordinator, _ = _coordinator(plan, steps)
@@ -425,13 +423,19 @@ def test_retry_state_is_explicit_for_scheduled_active_exhausted_and_non_retryabl
         scheduled = coordinator.repository.get_step_record(steps[0].id)
         assert scheduled.retry_state is RetryState.SCHEDULED
         assert scheduled.retry_due_at == t0 + timedelta(seconds=10)
-        assert _resource(coordinator, plan.id)["steps"][0]["retry_state"] == "scheduled"  # type: ignore[index]
+        scheduled_resource = await _resource(coordinator, plan.id)
+        scheduled_step = cast(list[dict[str, object]], scheduled_resource["steps"])[0]
+        assert scheduled_step["retry_state"] == "scheduled"
+        assert scheduled_step["retry_max_attempts"] == 2
 
         await coordinator.process_due(now=t0 + timedelta(seconds=10))
         active = coordinator.repository.get_step_record(steps[0].id)
         assert active.retry_state is RetryState.ACTIVE
         assert active.current_attempt == 2
         assert active.retry_due_at is None
+        active_resource = await _resource(coordinator, plan.id)
+        active_step = cast(list[dict[str, object]], active_resource["steps"])[0]
+        assert active_step["retry_state"] == "active"
 
         second_run = cast(str, coordinator.projection(plan.id).steps[0].latest_run_id)
         kernel.finish(second_run, RunStatus.FAILED)
@@ -444,11 +448,11 @@ def test_retry_state_is_explicit_for_scheduled_active_exhausted_and_non_retryabl
         exhausted = coordinator.repository.get_step_record(steps[0].id)
         assert exhausted.retry_state is RetryState.EXHAUSTED
         assert exhausted.current_attempt == 2
-        resource = _resource(coordinator, plan.id)
-        projected = cast(list[dict[str, object]], resource["steps"])[0]
-        assert projected["retry_state"] == "exhausted"
-        assert projected["retry_max_attempts"] == 2
-        assert projected["retry_due_at"] is None
+        exhausted_resource = await _resource(coordinator, plan.id)
+        exhausted_step = cast(list[dict[str, object]], exhausted_resource["steps"])[0]
+        assert exhausted_step["retry_state"] == "exhausted"
+        assert exhausted_step["retry_max_attempts"] == 2
+        assert exhausted_step["retry_due_at"] is None
 
     async def not_retryable_scenario() -> None:
         plan, steps = _plan_and_steps()
@@ -472,7 +476,7 @@ def test_retry_state_is_explicit_for_scheduled_active_exhausted_and_non_retryabl
         record = coordinator.repository.get_step_record(steps[0].id)
         assert record.current_attempt == 1
         assert record.retry_state is RetryState.NOT_RETRYABLE
-        resource = _resource(coordinator, plan.id)
+        resource = await _resource(coordinator, plan.id)
         projected = cast(list[dict[str, object]], resource["steps"])[0]
         assert projected["retry_state"] == "not_retryable"
         assert projected["retry_max_attempts"] == 3
@@ -519,10 +523,7 @@ def test_retry_state_survives_sqlite_restart_without_client_inference(tmp_path: 
         restored = restarted.repository.get_step_record(steps[0].id)
         assert restored.retry_state is RetryState.SCHEDULED
         assert restored.retry_due_at == t0 + timedelta(seconds=5)
-        resource = await CoordinatorPlanResourceService(restarted).get_resource(
-            RequestContext(request_id="req-restart-560", correlation_id="corr-restart-560"),
-            plan.id,
-        )
+        resource = await _resource(restarted, plan.id)
         projected = cast(list[dict[str, object]], resource["steps"])[0]
         assert projected["retry_state"] == "scheduled"
         assert projected["retry_due_at"] == (t0 + timedelta(seconds=5)).isoformat()
