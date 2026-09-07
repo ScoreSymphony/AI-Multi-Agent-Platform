@@ -24,7 +24,7 @@ The v1 schema remains backward-compatible with legacy string dependency entries 
 
 ## Operator runbook
 
-`docs/BACKUP_RESTORE.md` now documents the post-#302 orphaned-Run operator flow explicitly through `platform-server resolve-restore-run`, including its blocked-report safety boundary, accepted terminal outcomes, deterministic idempotency and automatic readiness retry.
+`docs/operations/BACKUP_RESTORE.md` now documents the post-#302 orphaned-Run operator flow explicitly through `platform-server resolve-restore-run`, including its blocked-report safety boundary, accepted terminal outcomes, deterministic idempotency and automatic readiness retry.
 
 ## Boundary with #240 and #41
 
