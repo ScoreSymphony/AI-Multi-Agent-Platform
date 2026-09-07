@@ -545,6 +545,20 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             assert verification_request.producer.agent_id == agent.agent_id
             assert verification_request.capability_ids == (WORKSPACE_ARTIFACT_CAPABILITY_ID,)
 
+            verification_view = await deployment.http.handle(
+                HTTPRequest(
+                    method="GET",
+                    path=f"/api/v1/verifications/{verification_request.verification_id}",
+                    headers=_headers(token),
+                )
+            )
+            assert verification_view.status == 200, verification_view.body
+            assert isinstance(verification_view.body, dict)
+            assert verification_view.body["task_id"] == task_id
+            assert verification_view.body["run_id"] == run_id
+            assert verification_view.body["result_id"] == result_id
+            assert verification_view.body["capability_ids"] == [WORKSPACE_ARTIFACT_CAPABILITY_ID]
+
             accepted = await deployment.http.handle(
                 HTTPRequest(
                     method="POST",
@@ -575,11 +589,72 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             assert final_run.run_id == run_id
             assert artifact_id in final_run.artifact_ids
             assert result_id in final_run.result_ids
+
+            task_view = await deployment.http.handle(
+                HTTPRequest(
+                    method="GET",
+                    path=f"/api/v1/tasks/{task_id}",
+                    headers=_headers(token),
+                )
+            )
+            run_view = await deployment.http.handle(
+                HTTPRequest(
+                    method="GET",
+                    path=f"/api/v1/runs/{run_id}",
+                    headers=_headers(token),
+                )
+            )
+            result_view = await deployment.http.handle(
+                HTTPRequest(
+                    method="GET",
+                    path=f"/api/v1/results/{result_id}",
+                    headers=_headers(token),
+                )
+            )
+            timeline = await deployment.http.handle(
+                HTTPRequest(
+                    method="GET",
+                    path=f"/api/v1/tasks/{task_id}/timeline",
+                    headers=_headers(token),
+                )
+            )
+            assert task_view.status == run_view.status == result_view.status == timeline.status == 200
+            assert isinstance(task_view.body, dict)
+            assert isinstance(run_view.body, dict)
+            assert isinstance(result_view.body, dict)
+            assert isinstance(timeline.body, dict)
+            assert task_view.body["status"] == TaskStatus.SUCCEEDED.value
+            assert run_view.body["status"] == RunStatus.SUCCEEDED.value
+            assert result_view.body["task_id"] == task_id
+            assert result_view.body["id"] == result_id
+
+            timeline_items = timeline.body["items"]
+            assert isinstance(timeline_items, list)
+            event_types = {
+                item.get("event_type")
+                for item in timeline_items
+                if isinstance(item, dict) and item.get("type") == "event"
+            }
+            telemetry_names = {
+                item.get("event_name")
+                for item in timeline_items
+                if isinstance(item, dict) and item.get("type") == "telemetry"
+            }
+            assert {
+                "run.succeeded",
+                "result.attached",
+                "artifact.attached",
+                "task.succeeded",
+            } <= event_types
+            assert {"verification.requested", "verification.result_recorded"} <= telemetry_names
+
             same_run_records = [
                 record for record in distributed.records() if record.job.execution.run_id == run_id
             ]
             assert len(same_run_records) == 1
             assert len(_ArtifactToolCallingModelHandler.chat_payloads) == 1
+            assert deployment.observability_exporter.logs
+            assert deployment.observability_exporter.metrics
         finally:
             endpoint_task.cancel()
             with suppress(asyncio.CancelledError):
