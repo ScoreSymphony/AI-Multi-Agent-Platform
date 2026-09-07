@@ -1,10 +1,10 @@
 # Dependency-Driven Implementation Roadmap
 
-> Status baseline: 2026-09-07, post-closure audit refresh
+> Status baseline: 2026-09-07, after closure of #500, #567 and #568
 
-This roadmap describes the remaining work from current `main` toward the operational v1 baseline and the wider ideal end state. The project is no longer in foundational platform construction. Most canonical domains, runtime boundaries, client surfaces, distributed execution building blocks and operational foundations are implemented; the remaining work is concentrated in convergence, architecture hardening, real-host acceptance, performance evidence, repository maintainability and optional end-state extensions.
+This roadmap describes the remaining work from current `main` toward the operational v1 baseline and the wider ideal end state. The project is no longer in foundational platform construction. Most canonical domains, runtime boundaries, client surfaces, distributed execution building blocks and operational foundations are implemented; the remaining work is concentrated in final planning/client convergence, performance and real-host evidence, platform conformance, and optional end-state extensions.
 
-GitHub issue state, current issue comments and merged code remain the point-in-time source of truth. The normative product and architecture baseline remains:
+GitHub issue state, current issue comments, current pull-request checks/reviews and merged code remain the point-in-time source of truth. The normative product and architecture baseline remains:
 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md)
 - [`ARCHITECTURE_PRINCIPLES.md`](ARCHITECTURE_PRINCIPLES.md)
@@ -14,70 +14,60 @@ Issue numbers are identifiers, not an implementation sequence. Explicit hard dep
 
 ## Current snapshot
 
-There are **12 open issues out of 113 repository issues**:
+There are **9 open issues out of 113 repository issues**:
 
-`#46, #388, #439, #440, #500, #501, #502, #560, #562, #566, #567, #568`
+`#46, #388, #439, #440, #501, #502, #560, #562, #566`
 
-That is **101 closed / 113 total = about 89.4% closed by issue count**.
+That is **104 closed / 113 total = about 92.0% closed by issue count**.
 
-This percentage is bookkeeping only. It fell from the previous snapshot because post-closure audits and maintainability follow-ups added new tracked work; it does not imply that merged implementation was lost. Issue scope is highly uneven and several remaining issues are optional profile owners or behavior-neutral maintenance rather than baseline capability blockers.
+The raw percentage is bookkeeping only. Issue scope is highly uneven, and several remaining issues are optional profile owners or acceptance/evidence owners rather than missing foundational capability.
 
-There are **no open pull requests** at this snapshot, so `main` is at a useful synchronization point for choosing the next parallel work split.
+Current open pull requests include:
 
-## What is already materially implemented
+- #569 — this documentation/status refresh;
+- #573 — #439 replanning evidence bridge;
+- #575 — #501 governance recovery/idempotency closure work;
+- #576 — #440 real-host pressure observer;
+- #577 — #560 workflow-progress semantic/conformance completion.
 
-The repository already contains, among other things:
+PR state can change faster than this snapshot. Before merge, always re-check current `main`, issue dependency state, mergeability, reviews and required protected-branch checks.
 
-- canonical Goal/Task/Plan/Step/Run/Event lifecycle and persistence;
-- platform-owned kernel lifecycle authority;
-- provider-neutral orchestration, execution, model, capability/tool, persistence and transport boundaries;
-- reference execution plus optional Hermes, Forge and LiteLLM integration paths;
-- versioned Control Plane, authentication, authorization/Approval and secret-reference boundaries;
-- Agents and Agent Teams;
-- Projects, Workspaces, Files, Artifacts, Memory and Knowledge;
-- Search, Automations, Notifications and Verification/Review;
-- Browser, Terminal, Chat, Web UI and CLI entry points;
-- Organizations/Teams/Memberships and practical Task management;
-- accounting/resource attribution;
-- durable Connectors and Repository/Git integration;
-- reusable workflow definitions, capability assignments and model-routing profiles;
-- portable import/export, Templates and optional Registry/Marketplace;
-- supported single-node deployment and optional HA semantics;
-- canonical Node/Worker scheduling and authenticated distributed execution;
-- network-capable MessageTransport implementation and remote Workspace materialization;
-- durable Plan/Step coordination with dependencies, waits, retries, fan-out/fan-in, cancellation and reconciliation;
-- Web/CLI workflow-progress views through the canonical Control Plane;
-- platform-owned autonomous planning/replanning foundations and planned Step-to-Agent runtime binding;
-- optional Proposal/Specification governance with exact-revision Approval binding and idempotent Task conversion;
-- provider-neutral repository-intelligence baseline and production Repository-policy wiring;
-- portable host-pressure admission, Linux pressure collection, observability, authenticated Worker reporting and deployment/doctor integration;
-- release/update/upstream synchronization machinery;
-- broad prototype/platform conformance frameworks;
-- substantial single-node, coordination, API, distributed fault and heterogeneous-placement performance evidence.
+## Recently completed convergence work
 
-## Changes since the previous snapshot
+Three lanes that were open in the previous snapshot are now complete:
 
-The previous 9-open/109-total snapshot became stale almost immediately after its documentation PR merged.
+### #500 — host-pressure/admission runtime contract
 
-Important changes:
+#500 is closed. The accepted platform now includes:
 
-- #78 remains closed.
-- #421 remains closed via PR #540; #560 is its narrower semantic/live-refresh follow-up.
-- #439 gained the substantial runtime-completion work merged in PR #559 after the initial planning implementation in PR #546; the parent issue remains open until its current Definition of Done is actually proven.
-- #500 now has the portable pressure core, Linux PSI/swap/zRAM/cgroup provider, observability integration, authenticated remote reporting and deployment/doctor integration merged.
-- #440 gained further distributed Worker/Workspace fault and heterogeneous-placement benchmark coverage.
-- #501 has a large merged governance implementation via PR #541.
-- #502 has both its deterministic provider-neutral foundation and production Repository-policy wiring merged through PRs #539 and #556.
-- #562 was added for production-shaped two-VPS/private-tunnel validation.
-- #566 was added by a post-#89 audit for real multi-process/multi-host Control Plane HA productionization.
-- #567 was added by a post-#88/#157 audit to remove canonical application dependence on the private kernel `_commit_task_command()` primitive.
-- #568 was added as a behavior-neutral repository-maintainability follow-up to reorganize the growing Python test suite into stable suite categories without changing production semantics.
+- OS/hardware-neutral pressure snapshots and normalized pressure states;
+- deterministic pressure-aware admission before reservation without creating a second scheduler;
+- protected-headroom policy;
+- optional Linux PSI/swap/paging/zRAM/cgroup/filesystem/descriptor evidence;
+- #16 observability integration;
+- authenticated/freshness-aware remote Worker pressure reporting;
+- distributed deployment and `platform doctor` integration;
+- a bounded semantic benchmark fixture.
+
+Further real-host pressure, OOM-containment, soak and measured operating-envelope work belongs to #440. PR #576 continues that evidence path without reopening #500.
+
+### #567 — supported canonical Task mutation boundary
+
+#567 is closed via PR #574. The platform now exposes a narrow supported Task mutation boundary for the legitimate #88/#157 use cases while keeping lifecycle authority and arbitrary low-level command/event construction private to the kernel.
+
+This removes the earlier direct external coupling to `PlatformKernel._commit_task_command()` and adds regression/architecture coverage against reintroduction.
+
+### #568 — stable test-suite layout
+
+#568 is closed via PR #570. The repository now has stable suite categories and pytest markers while preserving path-sensitive historical tests where required. CI, integration paths and benchmark locations were updated without changing production semantics.
+
+Future tests should follow the established taxonomy rather than reopening a repository-wide test-layout lane.
 
 ## Remaining work by ownership lane
 
 ### Lane A — #439 autonomous planning/replanning closure
 
-#439 remains one of the highest-weight core convergence owners.
+#439 remains the highest-weight open core integration owner.
 
 Already merged:
 
@@ -90,7 +80,17 @@ Already merged:
 - bounded-replanning foundations;
 - exact planned Step-to-Agent runtime binding and planned execution context reaching AgentRuntime.
 
-The issue must still close against its current audit, not against an older PR description. The intended completed loop is:
+PR #573 adds a platform-owned bridge from canonical runtime evidence into bounded replanning. It covers terminal Run failure, retry exhaustion and Verification outcomes with idempotent evidence fingerprints, stale-evidence rejection and explicit replanning telemetry.
+
+PR #573 deliberately does **not** claim #439 complete. Its own follow-up notes still identify at least:
+
+- authorization-aware/restart-safe activation after terminal Task failure;
+- running-Step supersession semantics;
+- additional server-owned inventory authority hardening;
+- provider configurability;
+- #19 planner evaluation coverage.
+
+The intended completed loop remains:
 
 ```text
 Goal/Task
@@ -103,61 +103,13 @@ Goal/Task
   -> #384 execution
 ```
 
-The final audit must prove any still-open evidence-to-replan, server-resolved policy-aware inventory, supersession/concurrency, evaluation, observability and required-test criteria. #439 must not absorb #384 coordination, #14 scheduling, #10 model routing, #12 capability ownership, #15 Approval or #86 Verification.
+#439 must not absorb #384 coordination, #14 scheduling, #10 model routing, #12 capability ownership, #15 Approval or #86 Verification.
 
-**Planning estimate:** implementation is advanced; treat this as final core integration/evidence work rather than a greenfield planner.
-
-### Lane B — #567 supported canonical Task mutation boundary
-
-#567 is new but focused. It is an architecture-hardening issue rather than a new product subsystem.
-
-Current problem:
-
-- `task_management` and `task_reassignment` have legitimate canonical operations that currently call private `PlatformKernel._commit_task_command()` internals.
-
-Required outcome:
-
-- expose the narrowest supported public Task mutation/command boundary;
-- preserve terminal Task planning-metadata behavior from #88;
-- preserve full #157 canonical Project reassignment semantics;
-- preserve idempotency, revisions, causation/correlation, event ordering, provenance and audit;
-- do not expose a generic arbitrary-event append escape hatch;
-- add an architecture guard that prevents non-kernel modules from coupling to selected private kernel command primitives again.
-
-This work is comparatively isolated in the kernel/task-management/task-reassignment area and is therefore a strong candidate for immediate parallel execution.
-
-It should finish before the final #46 core conformance audit so the new encapsulation invariant can be included where useful.
-
-### Lane C — #500 host-pressure/admission completion
-
-#500 is a core operational-v1 hardening lane and is now highly advanced.
-
-Merged implementation includes:
-
-- OS/hardware-neutral pressure snapshots and normalized pressure states;
-- deterministic pressure-aware admission integrated before reservation without creating a second scheduler;
-- protected-headroom policy;
-- optional Linux PSI/swap/paging/zRAM/cgroup/filesystem/descriptor evidence;
-- #16 observability integration;
-- authenticated and freshness-aware remote Worker pressure reporting;
-- distributed deployment composition and `platform doctor` visibility.
-
-Remaining work should be taken only from the current issue acceptance checklist and latest merged state. Likely remaining emphasis is final acceptance/operator guidance and the handoff to #440's dedicated pressure benchmark family rather than rebuilding the pressure architecture.
-
-Invariants remain:
-
-- #14 is the sole scheduler/reservation authority;
-- Linux specifics remain provider metadata;
-- `unknown` remains a valid portable state;
-- swap/zRAM is never treated as equivalent physical RAM;
-- collection is read-only by default;
-- no automatic host tuning is introduced silently.
-
-### Lane D — #440 performance/load/stress/scalability closure
+### Lane B — #440 performance/load/stress/scalability closure
 
 #440 is a mature benchmark program, not a missing benchmark foundation.
 
-Merged evidence includes:
+Merged evidence already includes:
 
 - deterministic single-node lifecycle and concurrency sweeps;
 - read-heavy/mixed/history/restart workloads;
@@ -169,23 +121,25 @@ Merged evidence includes:
 - authenticated Control Plane API/session/authorization/pagination pressure;
 - distributed Worker/Workspace scale and fault-under-load profiles;
 - Worker loss/rejoin and Workspace failure/recovery evidence;
-- heterogeneous capability/resource/GPU/label/network placement benchmarks.
+- heterogeneous capability/resource/GPU/label/network placement benchmarks;
+- #500 semantic pressure/admission benchmark coverage.
 
-High-value remaining blocks are now mainly:
+PR #576 adds a bounded read-only real-host pressure observer and explicitly keeps destructive host-load generation outside ordinary PR CI.
+
+High-value remaining #440 work is mainly:
 
 - real network/cross-host operating-envelope measurements where reproducible;
+- controlled dedicated-host memory/paging pressure and bounded OOM-containment evidence where safe;
 - release-sized comparable 1/10/50/100+ sweeps and longer endurance runs;
 - measured operating envelopes and justified regression/noise budgets;
-- persistence failure/contention only through stable provider seams;
-- #500 pressure-under-load profiles once #500's contract is considered complete;
-- #439 planner/replanning overhead profiles once #439 stabilizes;
+- planner/replanning overhead profiles once #439 stabilizes;
 - optional real HA load/failover profiles once #566 provides a production-shaped HA path.
 
 Correctness, security, Verification and durability remain hard benchmark invariants.
 
-### Lane E — #560 workflow-progress semantic/live-refresh completion
+### Lane C — #560 workflow-progress semantic/live-refresh completion
 
-#421 is closed; #560 owns the deliberately narrower follow-up:
+#421 is closed; #560 owns the narrower client/projection completion work:
 
 - safe canonical Approval/Event/external-job wait context;
 - explicit active/resolved/expired/rejected/cancelled wait semantics;
@@ -195,7 +149,7 @@ Correctness, security, Verification and durability remain hard benchmark invaria
 - production-shaped Web and CLI parity;
 - maintained #46 client-conformance evidence.
 
-The architecture stays:
+The architecture remains:
 
 ```text
 Web / CLI
@@ -206,44 +160,49 @@ Web / CLI
 
 No client shadow state or direct coordinator persistence access is allowed.
 
-**Dependency status:** #560 currently lists #439 as a hard dependency. Preparatory analysis/tests may be possible, but under the repository's dependency discipline the full implementation lane should be considered ready after #439 closes or after that dependency is explicitly revised.
+**Dependency status:** #560 currently declares #439 as a hard dependency. PR #577 exists and proposes to close #560, but that does not erase the declared dependency. Under repository dependency discipline, #577 must not be considered dependency-clean for merge until either:
 
-### Lane F — #46 final platform conformance
+1. #439 closes first; or
+2. #560's hard dependency is explicitly revised with a justified issue update.
 
-#46 is the core convergence owner and should be the last core issue to close for the operational profile.
+This is a dependency/merge-order constraint, not a statement that preparatory implementation work cannot exist on a branch.
 
-The repository already has a strong continuous vertical including the Worker-produced Artifact -> Verification return path. #46 should continuously accumulate evidence, but final closure should wait for the exact claimed core profile.
+### Lane D — #46 final platform conformance
+
+#46 remains the core convergence owner and should be the last core issue to close for the claimed operational profile.
+
+The repository already has a strong continuous vertical including Worker-produced Artifact -> Verification return paths. #46 should continuously accumulate evidence, but final closure should wait for the exact release/profile claim.
 
 Final audit should consume, where applicable:
 
 - #439 full planning/replanning loop;
-- #567 kernel encapsulation invariant;
 - #560 workflow-client parity/live semantics;
-- #500 pressure-aware evidence only if the claimed v1 profile enables it;
-- #440 release/operating-envelope evidence;
+- #440 release/operating-envelope evidence required by the claimed profile;
+- the completed #500 pressure-aware runtime contract only when the claimed profile enables it;
+- the completed #567 kernel encapsulation invariant;
 - #388/#562 evidence only for releases claiming real cross-host distributed compatibility;
 - #566 evidence only for releases claiming real multi-instance HA.
 
 Optional features must report `supported`, `disabled`, `unsupported` or `not-run` explicitly rather than silently blocking the baseline or creating false compatibility claims.
 
-### Lane G — shared real-host campaign: #388 + #562
+### Lane E — real-host distributed acceptance: #388 and #562
 
-These two issues should not be treated as two unrelated VPS projects, but their current dependency states are not identical.
+These issues can reuse infrastructure, but their dependency states are not identical.
 
 #### #388 transport-specific acceptance
 
-The transport implementation is present. Remaining acceptance requires:
+The network-capable MessageTransport implementation already exists. Remaining acceptance requires:
 
 - actual two-host encrypted/authenticated transport;
 - dispatch and result retrieval across the real network boundary;
 - restart/reconnect without changing canonical Worker identity;
 - explicit proof that canonical Artifact/evidence references survive the return path.
 
-#388 is ready to execute when the hardened two-host test environment is available.
+#388 is ready when the hardened two-host test environment is available.
 
 #### #562 full two-VPS private-tunnel acceptance
 
-#562 expands that infrastructure into a production-shaped distributed deployment:
+#562 broadens the same physical topology into production-shaped distributed deployment validation:
 
 ```text
 Host A: Control Plane / scheduler
@@ -253,7 +212,7 @@ Host A: Control Plane / scheduler
 Host B: remote Node / Worker
 ```
 
-It adds:
+It owns:
 
 - private tunnel/network exposure validation;
 - authenticated registration and heartbeat;
@@ -265,13 +224,15 @@ It adds:
 - independent Worker restart;
 - sanitized acceptance evidence.
 
-**Current dependency status:** #562 explicitly lists #46 as a hard dependency. Under repository dependency discipline, #562 therefore remains blocked until #46 closes or that dependency is explicitly revised. Preparing the private topology or reusable operator material is fine when it does not amount to starting blocked issue-owned implementation/acceptance work.
+**Current dependency status:** #562 explicitly lists #46 as a hard dependency. Therefore #562 remains blocked until #46 closes or that dependency is explicitly revised.
 
-If the #46 dependency is revised, reuse the same hardened topology first for #388's narrow transport assertions and then for #562's broader deployment/failure/security matrix. If the dependency is not revised, do not claim pre-#46 #562 evidence in the final #46 audit; the currently declared close-order and the desired evidence flow are incompatible and must not be silently assumed away.
+Preparing reusable private-network infrastructure is acceptable, but do not claim #562 issue execution/acceptance complete before its dependency is resolved.
 
-### Lane H — #501 optional Proposal/Specification governance
+If the project wants #562 evidence to feed the final pre-closure #46 audit, the #46 dependency on #562 must be revised explicitly rather than treated as an implicit exception.
 
-PR #541 already delivered a large portion of #501:
+### Lane F — #501 optional Proposal/Specification governance
+
+PR #541 already delivered the main governance foundation:
 
 - versioned Proposal intake;
 - immutable Specification revisions and stable digests;
@@ -283,9 +244,11 @@ PR #541 already delivered a large portion of #501:
 - Control Plane, Search, audit, Web and CLI surfaces;
 - persistence/recovery coverage.
 
-The remaining work should be identified through a fresh checklist audit, not by reimplementing the foundation. Any signal-to-Proposal automation, external specification adapter or deeper planner integration remains optional and must preserve the direct Task path.
+PR #575 targets remaining verified recovery/idempotency gaps and declares `Closes #501`.
 
-### Lane I — #502 optional repository intelligence
+Until it is actually merged and #501 is closed, #501 remains an open optional lane. The direct Task path must remain first-class regardless of whether #501 closes.
+
+### Lane G — #502 optional repository intelligence
 
 Already merged:
 
@@ -312,13 +275,13 @@ optional intelligence unavailable/stale
   -> work continues
 ```
 
-### Lane J — #566 optional production-shaped Control Plane HA
+### Lane H — #566 optional production-shaped Control Plane HA
 
-#89 established the HA semantics and deterministic reference fixtures. #566 is the new productionization owner for a real independent-process/host profile.
+#89 established HA semantics and deterministic reference fixtures. #566 owns productionization for a real independent-process/host profile.
 
 It requires:
 
-- at least one self-hostable `CoordinationProvider` implementation usable across independent processes/hosts;
+- at least one self-hostable `CoordinationProvider` usable across independent processes/hosts;
 - atomic acquire/renew/release and monotonic fencing epochs;
 - backend-owned lease expiry and stale-authority rejection;
 - health/readiness and fail-closed coordination outage behavior;
@@ -329,166 +292,103 @@ It requires:
 - optional two-host acceptance;
 - no paid hosted coordination requirement.
 
-#566 is architecturally important for the full ideal end state but **optional for ordinary single-node operational v1**. It is also a relatively large new subsystem-integration lane and should not be allowed to destabilize core convergence by colliding broadly with Control Plane/persistence/deployment changes.
+#566 is architecturally important for the full ideal end state but **optional for ordinary single-node operational v1**.
 
-Once stable it can feed:
-
-- optional HA fault-under-load profiles in #440;
-- real HA conformance evidence in #46.
-
-### Lane K — #568 test-suite layout refactor
-
-#568 is behavior-neutral repository maintenance, but its change surface is broad because it can move many test files and update exact-path references across CI, scripts and documentation.
-
-Required outcome:
-
-- introduce stable suite categories such as `unit/`, `contract/`, `integration/`, `e2e/` and `performance/`/`regression/` where appropriate;
-- preserve intentional roots such as `tests/conftest.py`, `tests/fixtures/` and `tests/release/`;
-- migrate tests in safe cohorts rather than mechanically moving path-sensitive tests;
-- preserve shared-helper imports and repository-root/fixture semantics;
-- add stable pytest markers/documentation;
-- update CI/scripts/docs that invoke exact test paths;
-- keep production/domain behavior unchanged and preserve full intended test discovery.
-
-This lane is not a new product capability and should not silently extend the operational-v1 feature scope. Its main scheduling risk is merge churn: broad test moves can collide with nearly every active implementation branch that adds or edits tests.
-
-**Recommended execution:** prefer a synchronization window with few outstanding code PRs, or migrate in small stable cohorts. If several core implementation branches are already active, avoid a single repository-wide move until they have converged.
+Once stable it can feed optional HA fault-under-load profiles in #440 and optional real-HA conformance evidence in #46.
 
 ## What can run in parallel now
 
-Technically many issues are open, but maximum branch count is not the goal. The safest useful split is based on ownership/collision zones.
+Maximum branch count is not the goal. The useful split is based on ownership, dependencies and collision zones.
 
-| Track | Owner | Ready now? | Character | Primary collision zone |
-|---|---|---:|---|---|
-| 1 | #439 | Yes | Core convergence | planning, AgentRuntime, #384 handoff, Control Plane |
-| 2 | #567 | Yes | Core architecture hardening | kernel, task management, task reassignment |
-| 3 | #500 | Yes | Core operational hardening | scheduler, Node/Worker pressure, telemetry, deployment |
-| 4 | #440 | Yes | Evidence/performance | benchmarks, runtime/distributed fixtures |
-| 5 | #501 | Yes | Optional completion audit | governance, Approval, Search, Web/CLI |
-| 6 | #502 | Yes | Optional capability expansion | Repository, Capability/Plugin, Search |
-| 7 | #388 + #562 | #388: Yes; #562: Blocked by #46 unless dependency is revised | Real-host acceptance | deployment/network/security evidence |
-| 8 | #46 | Yes as evidence accumulation; final close later | Final convergence | conformance/CI/release evidence |
-| 9 | #560 | Full lane waits on current #439 dependency | Client semantics | coordination projection/Web/CLI |
-| 10 | #566 | Yes, optional | Large HA productionization | Control Plane, persistence, deployment/security |
-| 11 | #568 | Yes, but schedule carefully | Behavior-neutral maintainability | broad test paths, CI exact-path references, active test-editing branches |
+| Track | Owner | Current state | Character | Primary collision zone |
+|---|---|---|---|---|
+| 1 | #439 | Active via #573 | Core convergence | planning, AgentRuntime, #384 handoff, Control Plane |
+| 2 | #440 | Active via #576 | Evidence/performance | benchmarks, runtime/distributed fixtures |
+| 3 | #501 | Active via #575 | Optional completion | governance, Approval, persistence, Search |
+| 4 | #502 | Ready | Optional capability expansion | Repository, Capability/Plugin, Search |
+| 5 | #388 | Ready when two-host environment exists | Real-host acceptance | deployment/network/security evidence |
+| 6 | #560 | Branch active via #577, but merge blocked by current #439 hard dependency | Client semantics | coordination projection/Web/CLI |
+| 7 | #46 | Evidence accumulation now; final close later | Final convergence | conformance/CI/release evidence |
+| 8 | #566 | Ready, optional | Large HA productionization | Control Plane, persistence, deployment/security |
+| 9 | #562 | Blocked by current #46 hard dependency | Real-host acceptance | deployment/network/security evidence |
 
 ## Recommended active concurrency
 
-Do **not** run all eleven lanes as heavy code branches simultaneously.
+The current open PR set already exercises a sensible parallel split, with one important dependency caveat:
 
-A practical current split is **five to six focused workstreams**:
+1. **#573 / #439** — continue planning/replanning closure.
+2. **#576 / #440** — continue non-destructive real-host pressure evidence.
+3. **#575 / #501** — finish optional governance recovery hardening.
+4. **#577 / #560** — implementation may continue, but merge must wait for #439 closure or explicit dependency revision.
+5. **#502** — can proceed in parallel when desired because it is comparatively isolated from the active core branches.
+6. **#388** — can proceed once the hardened two-host environment is available.
+7. **#46** — continuously accumulate evidence without turning it into another broad implementation rewrite.
+8. **#566** — may proceed as a dedicated optional architecture stream if capacity exists.
 
-1. **#439 final planning/replanning closure**.
-2. **#567 Task-mutation boundary hardening**.
-3. **#500 final host-pressure acceptance/integration**.
-4. **#440 remaining non-blocked benchmark evidence**.
-5. **one optional feature lane: #502 or #501**, selected by highest current value.
-6. **one operational lane: #388 transport acceptance**, with only safe shared-topology preparation for #562 until its #46 dependency is closed or explicitly revised.
-
-#46 can accumulate conformance evidence alongside these without necessarily becoming a separate broad implementation branch.
-
-#566 can also start in parallel, but because it touches Control Plane/persistence/deployment architecture broadly, it is better treated as a dedicated optional architecture stream rather than mixed into every current branch. If engineering capacity is limited, defer heavy #566 implementation until the core convergence branches are quieter.
-
-#568 should normally **not** be added as another simultaneous repository-wide branch while several of the streams above are actively creating or moving tests. Use a low-traffic synchronization window or small migration cohorts so the maintainability gain is not paid for with unnecessary merge conflicts.
+#562 remains blocked under its current dependency declaration.
 
 ## Collision map
 
-### Low collision / good parallel pairs
+### Low-collision / useful parallel pairs
 
-- #567 with #502;
-- #567 with most #440 benchmark work;
-- #439 with #500 when ownership boundaries are respected;
+- #439 with most #440 pressure/benchmark work;
 - #501 with #440;
-- #388 operational acceptance with repository-only #502 work; #562 joins this pairing only after its current #46 dependency is satisfied or revised.
+- #502 with #440;
+- #502 with #388 operational acceptance;
+- #566 with repository-only #502 work.
 
-### Higher collision / sequence carefully
+### Higher-collision / sequence carefully
 
-- #439 with #560: #560 consumes stable planning/coordinator semantics and currently hard-depends on #439.
-- #500 with #440 pressure profiles: implement/stabilize the pressure contract first, then benchmark it.
+- #439 with #560: #560 consumes stable planner/coordinator semantics and currently hard-depends on #439.
 - #439 with #440 planner profiles: stabilize planner loop first, then measure it.
-- #566 with broad Control Plane/deployment changes: avoid simultaneous rewrites of the same composition/persistence/security seams.
-- #568 with almost any branch that adds, renames or invokes Python tests by exact path: prefer convergence first or tightly scoped migration cohorts.
-- #46 with all unfinished core owners: accumulate evidence continuously, but reserve final issue-wide audit for a stable candidate.
+- #566 with broad Control Plane/persistence/deployment changes: avoid simultaneous rewrites of the same composition/security seams.
+- #46 with unfinished core owners: accumulate evidence continuously, but reserve final issue-wide closure for a stable candidate.
+- #388 and #562 may share infrastructure, but #562's hard dependency still governs issue execution/merge order.
 
 ## Recommended sequence from here
 
-### Wave 1 — close focused core architecture gaps
-
-Run in parallel:
+### Wave 1 — finish active core/optional PRs
 
 ```text
-#439  planning/replanning final loop
-#567  public Task mutation boundary
-#500  pressure/admission finalization
-#440  independent remaining benchmarks
-#501/#502 selected optional work
+#573 -> advance #439 replanning evidence bridge
+#576 -> advance #440 real-host pressure evidence
+#575 -> close #501 if all checks/reviews pass
+#577 -> finish #560 implementation branch, but do not merge while #439 dependency is unresolved
 ```
 
-At the same time, prepare the secure two-VPS topology for #388 without exposing internal Worker services publicly. Shared preparation may be reusable by #562, but #562 itself remains blocked by its current #46 hard dependency.
+In parallel, #502 and #388 may proceed in their own ownership zones.
 
-#568 can be handled in small non-conflicting cohorts, but a repository-wide test move is better placed at a synchronization point after the active Wave-1 code branches have converged.
+### Wave 2 — close #439, then consume the stable planner contract
 
-### Wave 2 — fan out after #439
-
-Once #439 is closed/stable, several consumers become safely parallel:
+Once #439 is actually closed/stable:
 
 ```text
-#560  workflow wait/retry/live-refresh completion
+#560  merge/close if #577 remains valid and green
 #440  planner/replanning performance profiles
 #46   Goal/Task -> generated Plan -> execution -> evidence -> bounded-replan conformance
-#501  deeper approved-Specification -> planner integration, if still needed
 #502  planner repository-intelligence context funnel, if justified
 ```
 
-These should run concurrently rather than serially because they consume the same stable planner contract in different ownership domains.
+If #560's dependency is intentionally changed instead, update the issue first and re-evaluate #577 against the revised contract before merge.
 
-### Wave 3 — fan out after #500
-
-Once #500 is closed/stable:
+### Wave 3 — real-host distributed evidence
 
 ```text
-#440  PSI/swap/zRAM/cgroup/admission pressure profiles
-#502  heavy indexing/rebuild pressure-aware admission evidence
-#46   pressure-aware profile evidence only if the release claims that profile
-```
-
-Again, these are parallel consumers of the stable pressure contract.
-
-### Maintenance synchronization — #568
-
-At the first quiet merge window after the major active test-producing branches converge:
-
-```text
-current main
-   -> classify tests by stable suite responsibility
-   -> migrate small cohorts
-   -> update exact-path CI/scripts/docs
-   -> verify complete pytest discovery + required CI
-   -> continue remaining implementation work on the stable layout
-```
-
-Do not use #568 to mix production refactors into the same change set.
-
-### Wave 4 — real-host distributed acceptance
-
-Under the current dependency graph, execute #388 and keep #562 blocked:
-
-```text
-private two-VPS topology
+private two-host topology
    -> #388 transport-specific acceptance
    -> sanitized transport evidence
-      -> #440 real-network evidence where applicable
+      -> #440 real-network operating-envelope evidence where applicable
 
 #46 closed OR #562 dependency explicitly revised
    -> #562 full distributed deployment/failure/security acceptance
    -> sanitized deployment evidence
 ```
 
-If #562 is intended to feed the final pre-closure #46 conformance audit, its #46 hard dependency must be explicitly revised first. Do not encode a circular close order as an implicit exception.
+Do not encode a circular close order as an undocumented exception.
 
-### Wave 5 — final core convergence
+### Wave 4 — final core convergence
 
-After #439, #567, #500 and #560 are accepted and the required #440 evidence for the claimed baseline is available:
+After #439 and #560 are accepted and the required #440 evidence for the claimed baseline is available:
 
 ```text
 exact release candidate
@@ -500,11 +400,11 @@ exact release candidate
    -> operational v1 release candidate
 ```
 
-#46 should be the last core convergence issue, not the first umbrella issue closed. Under the current issue dependency declaration, #562 is not a prerequisite to closing a single-node #46 profile; a release must not claim #562's broader cross-host profile without its later acceptance evidence.
+#46 should remain the final core convergence owner rather than being closed merely because most component issues are done.
 
 ### Optional HA wave — #566
 
-#566 can proceed independently of the baseline:
+#566 can proceed independently of the ordinary baseline:
 
 ```text
 real CoordinationProvider
@@ -520,44 +420,44 @@ Do not make this a prerequisite for ordinary single-node release readiness unles
 ## Dependency/convergence picture
 
 ```text
-                              current main
-                                   |
-         +------------+------------+------------+------------+
-         |            |            |            |            |
-       #439         #567         #500         #440       #501/#502*
-         |            |            |            |            |
-         v            |            +-------> #440             |
-       #560           |              pressure profiles        |
-         |            |                                    optional
-         +------------+------------------+---------------------+
-                                      |
-                                      v
-                               #46 core convergence
+                           current main
+                                |
+                 +--------------+--------------+
+                 |              |              |
+               #439           #440          #501/#502*
+                 |              |              |
+                 v              |              |
+               #560             |           optional
+                 |              |              |
+                 +--------------+--------------+
+                                |
+                                v
+                         #46 core convergence
 
-#388 transport acceptance ---> shared private topology/evidence
+#388 transport acceptance ---> real-host evidence
 
 #46 closed OR dependency revised ---> #562 full VPS acceptance
 
 #566* real Control Plane HA --------------------> #440/#46 optional HA evidence
 
-#568 test-layout maintenance -----> schedule at a low-conflict synchronization window
+#500, #567, #568 = completed convergence/maintenance lanes
 
 * optional ideal-end-state/profile work; not a hidden single-node baseline prerequisite.
 ```
 
 ## Progress interpretation
 
-Use three different progress views rather than one misleading percentage.
+Use separate progress views rather than one misleading percentage.
 
 ### 1. Objective issue-count progress
 
-**101 / 113 issues closed = about 89.4%.**
+**104 / 113 issues closed = about 92.0%.**
 
-This is the only objective percentage. It is sensitive to new audit/maintenance follow-ups and says nothing about issue size.
+This is the only objective percentage. It is sensitive to issue creation/closure and says nothing about issue size.
 
 ### 2. Core operational-v1 maturity
 
-Planning estimate: **roughly 92–95% implemented**, with release/conformance readiness somewhat lower because the remaining work is disproportionately acceptance-heavy.
+Planning estimate: **roughly 94–96% implemented**, with release/conformance readiness somewhat lower because the remaining work is disproportionately integration- and evidence-heavy.
 
 Why this is high:
 
@@ -565,20 +465,20 @@ Why this is high:
 - durable workflow coordination is complete;
 - distributed Worker/runtime foundations are present;
 - #421 is closed;
-- #439 has both planning foundation and runtime-binding work merged;
-- #500 has nearly its entire architecture stack merged;
+- #500 pressure/admission runtime work is closed;
+- #567 kernel mutation-boundary hardening is closed;
+- #568 test-layout maintenance is closed;
+- #439 has both planning foundation and runtime-binding work merged plus an active replanning-evidence PR;
 - #440 already has substantial benchmark coverage;
-- remaining core work is concentrated in #439, #567, #500, #560, selected #440 evidence and final #46 convergence.
-
-#568 is behavior-neutral maintainability work and does not by itself reduce product-capability maturity, although completing it improves repository navigability and long-term CI ownership.
+- remaining core work is concentrated in #439, #560, selected #440 evidence and final #46 convergence.
 
 This is a planning heuristic, not a release claim.
 
 ### 3. Expanded ideal-end-state maturity
 
-Planning estimate: **roughly 84–89%** when optional Proposal/Specification completion, repository-intelligence provider ecosystem work, real two-VPS acceptance and the newly added production-shaped HA profile are counted as part of the target.
+Planning estimate: **roughly 86–90%** when optional Proposal/Specification completion, repository-intelligence provider ecosystem work, real two-VPS acceptance and production-shaped HA are counted as part of the target.
 
-The range is lower mainly because #566 is a large new optional productionization lane and #502 still includes genuine provider-evaluation/packaging work. #568 adds maintenance effort but not a new end-user capability.
+The range remains lower mainly because #566 is a large optional productionization lane, #502 still includes genuine provider-evaluation/packaging work, and real-host acceptance remains unfinished.
 
 ## Relative remaining effort
 
@@ -588,18 +488,15 @@ A rough remaining-effort ordering is:
 #566 optional real HA productionization      = very large, but optional
 #439 final planning/replanning closure       = high-value core integration
 #440 final operating-envelope evidence       = broad evidence workload
-#562 real two-VPS deployment acceptance      = operational/infrastructure-heavy
-#568 test-suite layout refactor              = broad mechanical/CI churn, behavior-neutral
-#500 final pressure closure                  = smaller than before; architecture largely merged
-#560 workflow semantic/live-refresh followup = focused medium block after #439
+#562 real two-VPS deployment acceptance      = operational/infrastructure-heavy, currently blocked
+#560 workflow semantic/live-refresh followup = focused medium block, currently dependent on #439
 #502 optional provider ecosystem work        = medium, scope depends on candidate quality
-#501 optional final governance audit         = likely relatively small after PR #541
-#567 kernel mutation-boundary hardening      = focused bounded core cleanup
-#388 transport-specific two-host acceptance  = narrow if shared with #562
+#501 optional final governance closure       = likely small if #575 lands cleanly
+#388 transport-specific two-host acceptance  = narrow if shared with the later #562 topology
 #46 final audit                              = convergence/evidence rather than greenfield code
 ```
 
-This ordering is about likely remaining work, not issue priority. A smaller core architecture issue such as #567 can be more urgent than a larger optional issue such as #566, and #568's broad file churn does not make it a product-critical feature.
+This ordering estimates likely remaining work, not priority. Optional #566 may be the largest lane while still remaining outside the ordinary single-node release critical path.
 
 ## Release interpretation
 
@@ -610,9 +507,10 @@ The release candidate should be judged by the exact supported profile:
 - single-node baseline remains first-class;
 - no recurring paid AI/API service is required;
 - disabled optional Registry/intelligence/governance/HA profiles do not invalidate the baseline;
-- real cross-host compatibility is claimed only when #388/#562 evidence exists;
+- real cross-host compatibility is claimed only when the corresponding #388/#562 evidence exists;
 - real multi-Control-Plane HA compatibility is claimed only when #566 evidence exists;
-- #568 remains behavior-neutral repository maintenance rather than a hidden product-capability prerequisite, while required CI/test discovery must of course remain green;
+- completed #500 pressure support is claimed only for profiles that actually enable and exercise it;
+- completed #567/#568 hardening/maintenance should remain protected by regression and architecture checks;
 - #46 records explicit evidence for every capability the release actually claims.
 
-The project should therefore optimize for **clean convergence of the claimed baseline**, while allowing optional #501/#502/#566 work, #568 repository maintenance and real-host validation to proceed without silently extending the release critical path.
+The project should therefore optimize for **clean convergence of the claimed baseline** while allowing optional #501/#502/#566 work and real-host validation to proceed without silently extending the release critical path.
