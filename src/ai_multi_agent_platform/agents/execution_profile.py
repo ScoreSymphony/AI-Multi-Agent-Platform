@@ -23,12 +23,17 @@ AGENT_EXECUTION_MODEL_CONFIG_ID_KEY = "agent.execution.model_config_id"
 AGENT_EXECUTION_MODEL_REQUIREMENTS_KEY = "agent.execution.model_requirements"
 AGENT_EXECUTION_CAPABILITY_IDS_KEY = "agent.execution.capability_ids"
 AGENT_EXECUTION_WORKSPACE_ID_KEY = "agent.execution.workspace_id"
+AGENT_EXECUTION_OBJECTIVE_KEY = "agent.execution.objective"
+AGENT_EXECUTION_INPUT_REFS_KEY = "agent.execution.input_refs"
+AGENT_EXECUTION_OUTPUT_REFS_KEY = "agent.execution.output_refs"
+AGENT_EXECUTION_EXPECTED_EVIDENCE_KEY = "agent.execution.expected_evidence"
+AGENT_EXECUTION_VERIFICATION_POLICY_REFS_KEY = "agent.execution.verification_policy_refs"
 AGENT_STEP_EXECUTION_BINDINGS_KEY = "agent.execution.step_bindings"
 
 
 @dataclass(frozen=True, slots=True)
 class AgentExecutionBinding:
-    """Exact canonical Agent execution identity decoded from platform metadata."""
+    """Exact canonical Agent execution identity and safe execution context."""
 
     agent_id: str
     agent_revision: int | None = None
@@ -36,6 +41,11 @@ class AgentExecutionBinding:
     model_requirements: RoutingRequirements | None = None
     capability_ids: tuple[str, ...] = ()
     workspace_id: str | None = None
+    objective: str | None = None
+    input_refs: tuple[str, ...] = ()
+    output_refs: tuple[str, ...] = ()
+    expected_evidence: tuple[str, ...] = ()
+    verification_policy_refs: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if (
@@ -47,6 +57,17 @@ class AgentExecutionBinding:
             raise ValueError(
                 "model_config_id conflicts with model_requirements.explicit_model_id"
             )
+        if self.objective is not None and not self.objective.strip():
+            raise ValueError("objective must be non-blank when supplied")
+        for values, name in (
+            (self.capability_ids, "capability_ids"),
+            (self.input_refs, "input_refs"),
+            (self.output_refs, "output_refs"),
+            (self.expected_evidence, "expected_evidence"),
+            (self.verification_policy_refs, "verification_policy_refs"),
+        ):
+            if any(not value.strip() for value in values):
+                raise ValueError(f"{name} must contain non-blank strings")
 
 
 def decode_agent_execution_binding(
@@ -65,17 +86,11 @@ def decode_agent_execution_binding(
     revision = _optional_positive_int(metadata, AGENT_EXECUTION_AGENT_REVISION_KEY)
     model_config_id = _optional_string(metadata, AGENT_EXECUTION_MODEL_CONFIG_ID_KEY)
     workspace_id = _optional_string(metadata, AGENT_EXECUTION_WORKSPACE_ID_KEY)
+    objective = _optional_string(metadata, AGENT_EXECUTION_OBJECTIVE_KEY)
     model_requirements = _optional_routing_requirements(
         metadata.get(AGENT_EXECUTION_MODEL_REQUIREMENTS_KEY)
     )
-    raw_capabilities: object = metadata.get(AGENT_EXECUTION_CAPABILITY_IDS_KEY, [])
-    if not isinstance(raw_capabilities, list | tuple):
-        raise ValueError(f"{AGENT_EXECUTION_CAPABILITY_IDS_KEY} must be an array")
-    capability_ids: list[str] = []
-    for value in raw_capabilities:
-        if not isinstance(value, str) or not value.strip():
-            raise ValueError(f"{AGENT_EXECUTION_CAPABILITY_IDS_KEY} must contain non-blank strings")
-        capability_ids.append(value)
+    capability_ids = _metadata_string_tuple(metadata, AGENT_EXECUTION_CAPABILITY_IDS_KEY)
     if len(capability_ids) != len(set(capability_ids)):
         raise ValueError(f"{AGENT_EXECUTION_CAPABILITY_IDS_KEY} must be unique")
     return AgentExecutionBinding(
@@ -83,8 +98,19 @@ def decode_agent_execution_binding(
         agent_revision=revision,
         model_config_id=model_config_id,
         model_requirements=model_requirements,
-        capability_ids=tuple(capability_ids),
+        capability_ids=capability_ids,
         workspace_id=workspace_id,
+        objective=objective,
+        input_refs=_metadata_string_tuple(metadata, AGENT_EXECUTION_INPUT_REFS_KEY),
+        output_refs=_metadata_string_tuple(metadata, AGENT_EXECUTION_OUTPUT_REFS_KEY),
+        expected_evidence=_metadata_string_tuple(
+            metadata,
+            AGENT_EXECUTION_EXPECTED_EVIDENCE_KEY,
+        ),
+        verification_policy_refs=_metadata_string_tuple(
+            metadata,
+            AGENT_EXECUTION_VERIFICATION_POLICY_REFS_KEY,
+        ),
     )
 
 
@@ -117,6 +143,10 @@ def encode_agent_execution_binding(binding: AgentExecutionBinding) -> dict[str, 
         AGENT_EXECUTION_PROFILE_KEY: AGENT_EXECUTION_PROFILE,
         AGENT_EXECUTION_AGENT_ID_KEY: binding.agent_id,
         AGENT_EXECUTION_CAPABILITY_IDS_KEY: list(binding.capability_ids),
+        AGENT_EXECUTION_INPUT_REFS_KEY: list(binding.input_refs),
+        AGENT_EXECUTION_OUTPUT_REFS_KEY: list(binding.output_refs),
+        AGENT_EXECUTION_EXPECTED_EVIDENCE_KEY: list(binding.expected_evidence),
+        AGENT_EXECUTION_VERIFICATION_POLICY_REFS_KEY: list(binding.verification_policy_refs),
     }
     if binding.agent_revision is not None:
         payload[AGENT_EXECUTION_AGENT_REVISION_KEY] = binding.agent_revision
@@ -128,6 +158,8 @@ def encode_agent_execution_binding(binding: AgentExecutionBinding) -> dict[str, 
         )
     if binding.workspace_id is not None:
         payload[AGENT_EXECUTION_WORKSPACE_ID_KEY] = binding.workspace_id
+    if binding.objective is not None:
+        payload[AGENT_EXECUTION_OBJECTIVE_KEY] = binding.objective
     return payload
 
 
@@ -200,6 +232,18 @@ def _optional_positive_int(metadata: Mapping[str, JsonValue], key: str) -> int |
     return value
 
 
+def _metadata_string_tuple(metadata: Mapping[str, JsonValue], key: str) -> tuple[str, ...]:
+    value: object = metadata.get(key, ())
+    if not isinstance(value, list | tuple):
+        raise ValueError(f"{key} must be an array")
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"{key} must contain non-blank strings")
+        result.append(item)
+    return tuple(result)
+
+
 def _mapping_optional_string(metadata: Mapping[str, object], key: str) -> str | None:
     value = metadata.get(key)
     if value is None:
@@ -241,10 +285,15 @@ __all__ = [
     "AGENT_EXECUTION_AGENT_ID_KEY",
     "AGENT_EXECUTION_AGENT_REVISION_KEY",
     "AGENT_EXECUTION_CAPABILITY_IDS_KEY",
+    "AGENT_EXECUTION_EXPECTED_EVIDENCE_KEY",
+    "AGENT_EXECUTION_INPUT_REFS_KEY",
     "AGENT_EXECUTION_MODEL_CONFIG_ID_KEY",
     "AGENT_EXECUTION_MODEL_REQUIREMENTS_KEY",
+    "AGENT_EXECUTION_OBJECTIVE_KEY",
+    "AGENT_EXECUTION_OUTPUT_REFS_KEY",
     "AGENT_EXECUTION_PROFILE",
     "AGENT_EXECUTION_PROFILE_KEY",
+    "AGENT_EXECUTION_VERIFICATION_POLICY_REFS_KEY",
     "AGENT_EXECUTION_WORKSPACE_ID_KEY",
     "AGENT_STEP_EXECUTION_BINDINGS_KEY",
     "AgentExecutionBinding",
