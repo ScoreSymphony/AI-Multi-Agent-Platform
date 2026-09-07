@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 
@@ -130,4 +128,4 @@ def _object(value: JsonValue) -> dict[str, JsonValue]:
         raise ContractError(
             ErrorCode.INVALID_REQUEST, "DecisionRecord bundle item must be an object"
         )
-    return cast(dict[str, JsonValue], value)
+    return value

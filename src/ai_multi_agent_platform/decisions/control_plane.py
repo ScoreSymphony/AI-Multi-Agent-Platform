@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -298,7 +297,7 @@ def _required_object(payload: dict[str, JsonValue], key: str) -> dict[str, JsonV
 def _object(value: JsonValue, name: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ContractError(ErrorCode.INVALID_REQUEST, f"{name} must be an object")
-    return cast(dict[str, JsonValue], value)
+    return value
 
 
 def _string_item(value: JsonValue, name: str) -> str:

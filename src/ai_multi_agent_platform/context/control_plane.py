@@ -66,6 +66,10 @@ class ContextBundleResourceService:
 
     @staticmethod
     def _summary(bundle: ContextBundle) -> dict[str, JsonValue]:
+        source_categories: list[JsonValue] = [
+            category
+            for category in sorted({entry.source.source_type.value for entry in bundle.entries})
+        ]
         return {
             "id": bundle.context_bundle_id,
             "context_bundle_id": bundle.context_bundle_id,
@@ -74,9 +78,7 @@ class ContextBundleResourceService:
             "run_id": bundle.run_id,
             "agent_id": bundle.agent_id,
             "agent_revision": bundle.agent_revision,
-            "source_categories": sorted(
-                {entry.source.source_type.value for entry in bundle.entries}
-            ),
+            "source_categories": source_categories,
             "entry_count": len(bundle.entries),
             "omission_count": len(bundle.omissions),
             "budget": bundle.budget.to_json(),

@@ -493,8 +493,8 @@ class GoalService:
         all_satisfied = required_criteria_satisfied(current.success_criteria, evaluations)
         generated_task_ids: tuple[str, ...] = ()
         linked_tasks = current.linked_tasks
-        status = current.status
-        progress = current.progress
+        status: GoalStatus
+        progress: GoalProgress
         terminal_reason: str | None = None
         decision_reason: str
 

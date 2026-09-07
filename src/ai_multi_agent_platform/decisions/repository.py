@@ -409,7 +409,7 @@ def _load(value: str) -> dict[str, JsonValue]:
 def _object(value: JsonValue) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ValueError("decision payload value must be an object")
-    return cast(dict[str, JsonValue], value)
+    return value
 
 
 def _list(value: dict[str, JsonValue], key: str) -> list[JsonValue]:

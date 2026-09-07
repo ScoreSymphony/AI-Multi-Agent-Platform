@@ -482,7 +482,7 @@ def _object(payload: dict[str, JsonValue], key: str) -> dict[str, JsonValue]:
     value = payload.get(key)
     if not isinstance(value, dict):
         raise ContractError(ErrorCode.CONTRACT_VIOLATION, f"Goal field {key} must be an object")
-    return cast(dict[str, JsonValue], value)
+    return value
 
 
 def _object_list(payload: dict[str, JsonValue], key: str) -> tuple[dict[str, JsonValue], ...]:
@@ -496,7 +496,7 @@ def _object_list(payload: dict[str, JsonValue], key: str) -> tuple[dict[str, Jso
                 ErrorCode.CONTRACT_VIOLATION,
                 f"Goal field {key} must contain only objects",
             )
-        result.append(cast(dict[str, JsonValue], item))
+        result.append(item)
     return tuple(result)
 
 

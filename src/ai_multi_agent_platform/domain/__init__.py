@@ -38,6 +38,7 @@ from .models import (
     WorkerJob,
     WorkerJobStatus,
     new_id,
+    utc_now,
     validate_id,
     validate_subject_id,
 )
@@ -80,6 +81,7 @@ __all__ = [
     "can_transition",
     "new_id",
     "require_transition",
+    "utc_now",
     "validate_id",
     "validate_subject_id",
 ]

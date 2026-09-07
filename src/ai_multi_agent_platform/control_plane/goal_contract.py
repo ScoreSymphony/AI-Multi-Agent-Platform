@@ -161,11 +161,7 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
             expected_revision=_required_int(payload, "expected_revision"),
             title=_optional_string(payload, "title"),
             objective=_optional_string(payload, "objective"),
-            success_criteria=(
-                None
-                if raw_criteria is None
-                else _parse_criteria(cast(list[JsonValue], raw_criteria))
-            ),
+            success_criteria=(None if raw_criteria is None else _parse_criteria(raw_criteria)),
             constraints=(
                 None
                 if "constraints" not in payload
@@ -370,7 +366,7 @@ def _idempotency(context: RequestContext) -> str:
 def _object(value: JsonValue, field: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise ContractError(ErrorCode.INVALID_REQUEST, f"{field} must be an object")
-    return cast(dict[str, JsonValue], value)
+    return value
 
 
 def _required_array(payload: dict[str, JsonValue], key: str) -> list[JsonValue]:

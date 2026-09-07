@@ -486,6 +486,17 @@ def _revision_payload(revision: SkillRevision) -> dict[str, object]:
     profile = revision.profile
     routing = profile.routing_requirements
     source = profile.source
+    dependencies: object = [
+        {"skill_id": item.skill_id, "revision": item.revision} for item in profile.dependencies
+    ]
+    replacement: object = (
+        None
+        if profile.replacement is None
+        else {
+            "skill_id": profile.replacement.skill_id,
+            "revision": profile.replacement.revision,
+        }
+    )
     return {
         "skill_id": revision.skill_id,
         "revision": revision.revision,
@@ -502,10 +513,7 @@ def _revision_payload(revision: SkillRevision) -> dict[str, object]:
                 "ref": profile.content.ref,
                 "version": profile.content.version,
             },
-            "dependencies": [
-                {"skill_id": item.skill_id, "revision": item.revision}
-                for item in profile.dependencies
-            ],
+            "dependencies": dependencies,
             "capability_requirements": [
                 {
                     "capability_id": item.capability_id,
@@ -553,12 +561,7 @@ def _revision_payload(revision: SkillRevision) -> dict[str, object]:
             },
             "enabled": profile.enabled,
             "deprecated": profile.deprecated,
-            "replacement": None
-            if profile.replacement is None
-            else {
-                "skill_id": profile.replacement.skill_id,
-                "revision": profile.replacement.revision,
-            },
+            "replacement": replacement,
             "metadata": dict(profile.metadata),
         },
     }
