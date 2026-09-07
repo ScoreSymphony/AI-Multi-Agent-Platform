@@ -10,11 +10,9 @@ export function WorkflowProgress({
 }: {
   projection: PlanCoordinationProjection;
 }) {
-  const waiting = projection.steps.filter(
-    (step) => step.wait_type !== null || step.wait_deadline_at !== null,
-  ).length;
+  const waiting = projection.steps.filter((step) => step.wait_state === "active").length;
   const retrying = projection.steps.filter(
-    (step) => step.retry_due_at !== null || step.current_attempt > 1,
+    (step) => step.retry_state !== null && step.retry_state !== "none",
   ).length;
 
   if (projection.steps.length === 0) {
@@ -69,7 +67,7 @@ function WorkflowSummary({
       <dt>Revision</dt><dd>{projection.plan_revision}</dd>
       <dt>Steps</dt><dd>{projection.steps.length}</dd>
       <dt>Waiting</dt><dd>{waiting}</dd>
-      <dt>Retrying / retried</dt><dd>{retrying}</dd>
+      <dt>Retry state</dt><dd>{retrying}</dd>
     </dl>
   );
 }
@@ -77,7 +75,6 @@ function WorkflowSummary({
 function WorkflowStepRow({ step }: { step: PlanCoordinationStep }) {
   const satisfied = step.satisfied_dependency_ids.length;
   const totalDependencies = step.dependency_ids.length;
-  const wait = step.wait_type ?? (step.wait_deadline_at ? "deadline" : null);
 
   return (
     <tr>
@@ -110,19 +107,65 @@ function WorkflowStepRow({ step }: { step: PlanCoordinationStep }) {
           </AppLink>
         ) : "—"}
       </td>
-      <td>{step.current_attempt}</td>
       <td>
-        {wait ?? "—"}
-        {step.wait_deadline_at ? <div><small>until {formatDate(step.wait_deadline_at)}</small></div> : null}
+        {step.current_attempt}
+        {step.retry_max_attempts !== null ? <div><small>max {step.retry_max_attempts}</small></div> : null}
       </td>
-      <td>
-        {step.retry_due_at ? formatDate(step.retry_due_at) : step.current_attempt > 1 ? "previous retry" : "—"}
-      </td>
+      <td><WaitDetails step={step} /></td>
+      <td><RetryDetails step={step} /></td>
       <td>
         <StatusBadge value={step.reconciliation} />
         {step.reconciliation_detail ? <div><small>{step.reconciliation_detail}</small></div> : null}
       </td>
     </tr>
+  );
+}
+
+function WaitDetails({ step }: { step: PlanCoordinationStep }) {
+  if (step.wait_state === null || step.wait_type === null) return <>—</>;
+  return (
+    <div>
+      <StatusBadge value={step.wait_state} />
+      <div><small>{step.wait_type}</small></div>
+      {step.wait_key ? <div><small>wait {step.wait_key}</small></div> : null}
+      {step.wait_deadline_at ? <div><small>deadline {formatDate(step.wait_deadline_at)}</small></div> : null}
+      {step.wait_resolved_at ? <div><small>resolved {formatDate(step.wait_resolved_at)}</small></div> : null}
+      {step.wait_approval_id ? (
+        <div>
+          <small>
+            approval <CanonicalId value={step.wait_approval_id} />
+            {step.wait_approval_action ? ` · ${step.wait_approval_action}` : ""}
+          </small>
+        </div>
+      ) : null}
+      {step.wait_approval_subject_type && step.wait_approval_subject_id ? (
+        <div><small>subject {step.wait_approval_subject_type}:{step.wait_approval_subject_id}</small></div>
+      ) : null}
+      {step.wait_event_type ? (
+        <div>
+          <small>
+            event {step.wait_event_type}
+            {step.wait_correlation_key ? ` · ${step.wait_correlation_key}` : ""}
+          </small>
+        </div>
+      ) : null}
+      {step.wait_external_job_ref ? (
+        <div><small>external job {step.wait_external_job_ref}</small></div>
+      ) : null}
+    </div>
+  );
+}
+
+function RetryDetails({ step }: { step: PlanCoordinationStep }) {
+  if (step.retry_state === null || step.retry_state === "none") return <>—</>;
+  return (
+    <div>
+      <StatusBadge value={step.retry_state} />
+      {step.retry_due_at ? <div><small>due {formatDate(step.retry_due_at)}</small></div> : null}
+      {step.retry_max_attempts !== null ? (
+        <div><small>attempt {step.current_attempt}/{step.retry_max_attempts}</small></div>
+      ) : null}
+    </div>
   );
 }
 
