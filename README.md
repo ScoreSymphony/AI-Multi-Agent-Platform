@@ -45,32 +45,38 @@ The policy is exercised against multiple integration models in [`docs/UPSTREAM_P
 
 ## Status
 
-> Status snapshot: 2026-09-07, after the latest planning, workflow-client, host-pressure and distributed-benchmark merges
+> Status snapshot: 2026-09-07, after the post-closure architecture audits that added #566 and #567
 
-The repository is in late product integration, acceptance and operating-envelope work rather than foundational platform construction. The usable single-node prototype gate (#252) is complete, and `main` contains the canonical kernel and Control Plane, reference execution, model routing, capabilities/tools, Agents and Agent Teams, authentication and authorization/approvals, Workspaces/files/Artifacts, Memory and Knowledge, Search, Automations, Notifications, Organizations/Teams/Memberships, Chat, Browser and Terminal entry points, reusable workflow definitions, Verification/Review, accounting, durable Connectors, portable import/export, Repository/Git integration, optional HA/failover, extensive Web/CLI coverage, distributed Worker/Workspace execution, the durable Plan/Step coordinator, Registry/Marketplace support and the release/update system.
+The repository is in late product integration, architecture hardening, acceptance and operating-envelope work rather than foundational platform construction. The usable single-node prototype gate (#252) is complete, and `main` contains the canonical kernel and Control Plane, reference execution, model routing, capabilities/tools, Agents and Agent Teams, authentication and authorization/approvals, Workspaces/files/Artifacts, Memory and Knowledge, Search, Automations, Notifications, Organizations/Teams/Memberships, Chat, Browser and Terminal entry points, reusable workflow definitions, Verification/Review, accounting, durable Connectors, portable import/export, Repository/Git integration, optional HA/failover semantics, extensive Web/CLI coverage, distributed Worker/Workspace execution, the durable Plan/Step coordinator, Registry/Marketplace support and the release/update system.
 
 Recent convergence materially moved the frontier forward:
 
-- **#78 is closed**; the remaining Template frontend/documentation reconciliation is no longer an open work lane.
-- **#421 is closed via PR #540**; Web and CLI now expose canonical durable workflow progress through the versioned Control Plane. The narrower follow-up **#560** owns the remaining safe wait/retry projection semantics, reliable coordinator-driven live refresh and final Web conformance coverage.
+- **#78 is closed**; Template frontend/documentation reconciliation is no longer an open work lane.
+- **#421 is closed via PR #540**; Web and CLI expose canonical durable workflow progress through the versioned Control Plane. The narrower follow-up **#560** owns safe wait/retry projection semantics, reliable coordinator-driven live refresh and final Web conformance coverage.
 - **#439 has substantial planning/replanning implementation merged through PRs #546 and #559**, including platform-owned planning contracts, durable proposals/revisions, #384 handoff and exact planned Step-to-Agent execution bindings. The issue remains open until its current completion audit and end-to-end replanning requirements are fully satisfied.
-- **#500 has progressed through portable pressure/admission, observability, authenticated Worker reporting and deployment/doctor integration**, while the issue remains open for its remaining Definition-of-Done work and pressure benchmark integration.
-- **#501 has a merged Proposal/Specification governance core via PR #541**, while the parent issue remains open for any remaining issue-owned completion work.
-- **#502 has a merged provider-neutral repository-intelligence foundation and policy-enforced production wiring**, while dirty-Workspace freshness, candidate evaluation/pilots, plugin/Registry packaging and resource/evaluation work remain open.
-- **#440 now includes additional distributed fault and heterogeneous-placement benchmark evidence**, but still owns the wider operating-envelope, stress/soak and regression-budget work.
+- **#500 has progressed through portable pressure/admission, the Linux PSI/swap/zRAM/cgroup provider, observability, authenticated Worker reporting and deployment/doctor integration**. Remaining work is concentrated in final issue-owned acceptance/operator evidence and downstream pressure benchmark integration rather than the original core architecture.
+- **#501 has a merged Proposal/Specification governance core via PR #541**, including exact-revision Approval binding and idempotent Task conversion, while the parent issue remains open for its remaining issue-owned completion audit/integrations.
+- **#502 has a merged provider-neutral repository-intelligence foundation and policy-enforced production wiring**. Dirty-Workspace freshness, candidate evaluation/pilots, plugin/Registry packaging and resource/evaluation work remain open.
+- **#440 now includes substantial single-node, coordination, API-pressure, distributed Worker/Workspace fault and heterogeneous-placement benchmark evidence**, but still owns the final operating-envelope, host-pressure/planner profile and regression-budget work.
+- **#388 remains a narrow real-host transport acceptance gap**: the network adapter exists, but actual encrypted/authenticated two-host evidence and Artifact/evidence-reference return-path proof are still required.
+- **#562 adds the broader production-shaped two-VPS/private-tunnel validation**. It should share infrastructure and evidence with #388 rather than creating a duplicate deployment path.
+- **#566 is a new optional HA productionization follow-up** to #89. It owns a real multi-process/multi-host CoordinationProvider plus shared/replicated durable-state composition and must not become a hidden dependency of the single-node baseline.
+- **#567 is a new focused core architecture-hardening follow-up**. It replaces external application coupling to the private `PlatformKernel._commit_task_command()` primitive with a narrow supported Task-mutation boundary and an automated encapsulation guard.
 
-There are currently **9 open issues out of 109 repository issues** (**100 closed; about 91.7% closed by issue count**):
+There are currently **11 open issues out of 112 repository issues** (**101 closed; about 90.2% closed by issue count**):
 
-`#46, #388, #439, #440, #500, #501, #502, #560, #562`
+`#46, #388, #439, #440, #500, #501, #502, #560, #562, #566, #567`
+
+The raw closure percentage is lower than the previous snapshot because post-closure audits expanded the tracked scope; it is not evidence that merged implementation regressed.
 
 The current frontier is split deliberately:
 
-- **Operational-v1/core convergence:** #46 final conformance, #439 planning/replanning closure, #440 remaining performance/operating-envelope evidence, #500 host-pressure completion and #560 workflow-progress semantics/live-refresh completion.
-- **Real distributed acceptance:** #388 still needs explicit real two-host encrypted transport/result-reference evidence. #562 adds a production-shaped two-VPS private-tunnel validation covering registration, heartbeat, dispatch, interruption, recovery and security on real hosts.
-- **Optional ideal-end-state expansion:** #501 Proposal/Specification governance and #502 repository intelligence remain optional extensions; neither may become a hidden prerequisite for the ordinary direct-Task or Git/ripgrep/LSP baseline paths.
+- **Operational-v1/core convergence:** #46 final conformance, #439 planning/replanning closure, #440 remaining performance/operating-envelope evidence, #500 host-pressure completion, #560 workflow-progress semantics/live-refresh completion and #567 kernel Task-mutation boundary hardening.
+- **Real distributed acceptance:** #388 transport-specific two-host acceptance plus #562 full two-VPS/private-tunnel deployment validation. These should use one hardened private test topology where practical.
+- **Optional ideal-end-state expansion:** #501 Proposal/Specification governance, #502 repository intelligence and #566 production-shaped Control Plane HA. They extend the platform without becoming mandatory for ordinary direct-Task, Git/ripgrep/LSP or single-node operation.
 
-There are **no open pull requests** at this snapshot. Current implementation work should therefore be selected from the open issues and their current hard dependencies rather than from stale PR references or numeric issue order.
+There are **no open pull requests** at this snapshot. Current implementation work should therefore be selected from the open issues and their actual dependencies rather than from stale PR references or numeric issue order.
 
-No GitHub release has been published yet. The release/update machinery is implemented, but a published release still requires the repository release process, validated evidence/manifest and an exact accepted release commit. The operational `1.0.0` baseline remains tied to the supported M3 profile and #46 conformance rather than to optional ecosystem features.
+No GitHub release has been published yet. The release/update machinery is implemented, but a published release still requires the repository release process, validated evidence/manifest and an exact accepted release commit. The operational `1.0.0` baseline remains tied to the supported M3 profile and #46 conformance rather than to optional ecosystem or HA features.
 
 Current implementation work should follow [`docs/IMPLEMENTATION_ROADMAP.md`](docs/IMPLEMENTATION_ROADMAP.md) and each issue's current wording/comments rather than numeric issue order. GitHub issue state and merged code remain the point-in-time source of truth when a documentation snapshot becomes stale.
