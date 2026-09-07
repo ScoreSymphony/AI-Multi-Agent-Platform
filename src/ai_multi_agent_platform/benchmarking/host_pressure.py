@@ -348,9 +348,7 @@ def _fixture(
 def _phase_snapshot(phase: str, observed_at: datetime) -> HostPressureSnapshot:
     if phase == "elevated":
         state = PressureState.ELEVATED
-        signals = (
-            PressureSignal(PressureKind.MEMORY, PressureState.ELEVATED, 0.75, "ratio"),
-        )
+        signals = (PressureSignal(PressureKind.MEMORY, PressureState.ELEVATED, 0.75, "ratio"),)
     elif phase == "critical":
         state = PressureState.CRITICAL
         signals = (
@@ -363,9 +361,7 @@ def _phase_snapshot(phase: str, observed_at: datetime) -> HostPressureSnapshot:
         )
     else:
         state = PressureState.HEALTHY
-        signals = (
-            PressureSignal(PressureKind.MEMORY, PressureState.HEALTHY, 0.25, "ratio"),
-        )
+        signals = (PressureSignal(PressureKind.MEMORY, PressureState.HEALTHY, 0.25, "ratio"),)
     return HostPressureSnapshot(
         state=state,
         observed_at=observed_at,
