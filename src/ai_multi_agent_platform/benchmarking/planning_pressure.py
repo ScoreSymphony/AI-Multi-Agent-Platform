@@ -81,9 +81,9 @@ class PlanningPressureBenchmarkSpec:
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if self.operation_count > self.safety_max_operations:
-            raise ValueError(
-                "operation_count exceeds configured planning-pressure safety bound"
-            )
+            raise ValueError("operation_count exceeds configured planning-pressure safety bound")
+        if self.warmup_operations > self.safety_max_operations:
+            raise ValueError("warmup_operations exceeds configured planning-pressure safety bound")
         if self.concurrency > self.safety_max_concurrency:
             raise ValueError("concurrency exceeds configured planning-pressure safety bound")
         if self.steps_per_plan > self.safety_max_steps_per_plan:
@@ -297,15 +297,13 @@ class PlanningPressureBenchmarkHarness:
             tracemalloc.stop()
         storage_after = _directory_size(self._data_dir)
 
-        errors = tuple(result.error for result in results if result.error is not None)
+        errors = tuple(error for result in results if (error := result.error) is not None)
         completed = sum(result.error is None for result in results)
         initial_validated = sum(result.initial_validated for result in results)
         initial_activated = sum(result.initial_activated for result in results)
         replans_validated = sum(result.replan_validated for result in results)
         replans_activated = sum(result.replan_activated for result in results)
-        evidence_resolved = sum(
-            result.canonical_failure_evidence_resolved for result in results
-        )
+        evidence_resolved = sum(result.canonical_failure_evidence_resolved for result in results)
         distinct_replacements = sum(result.distinct_replacement_plan for result in results)
         passed = (
             not errors
