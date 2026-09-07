@@ -31,6 +31,7 @@ from ai_multi_agent_platform.planning import (
     JsonPlanningRepository,
     PlanningOrchestratorAdapter,
     PlanningService,
+    PolicyAwarePlanningEnvironmentResolver,
     planning_command_handlers,
     planning_resource_services,
 )
@@ -132,6 +133,18 @@ def build_single_node_deployment(
         kernel=base.kernel,
         delegate=base.coordination,
     )
+    planning_environment = PolicyAwarePlanningEnvironmentResolver(
+        agents=base.agents.repository,
+        capabilities=base.capabilities,
+        authorization=base.approval_gate,
+        permission_resolver=lambda actor, _task: frozenset(
+            action.value
+            for action in base.authorization.globally_grantable_actions(
+                actor.actor_id,
+                actor_type=actor.actor_type.value,
+            )
+        ),
+    )
     planning = ReferencePlanningService(
         planner=DeterministicReferencePlanner(),
         repository=planning_repository,
@@ -142,6 +155,7 @@ def build_single_node_deployment(
         authorization=base.approval_gate,
         coordinator=planning_coordinator,
         event_sink=_planning_event_sink(base.telemetry),
+        environment_resolver=planning_environment,
     )
     for collection, service in planning_resource_services(planning).items():
         base.control_plane.register_resource_service(collection, service)
