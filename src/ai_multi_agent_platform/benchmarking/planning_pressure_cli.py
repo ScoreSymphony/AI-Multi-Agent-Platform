@@ -34,9 +34,7 @@ def main(argv: list[str] | None = None) -> int:
 
 async def _run(args: argparse.Namespace) -> int:
     if args.warmup_operations > args.safety_max_operations:
-        raise ValueError(
-            "warmup_operations exceeds configured planning-pressure safety bound"
-        )
+        raise ValueError("warmup_operations exceeds configured planning-pressure safety bound")
 
     temporary: tempfile.TemporaryDirectory[str] | None = None
     if args.data_dir is None:
