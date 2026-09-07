@@ -74,9 +74,7 @@ class CoordinatedHandoffService:
     def list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]:
         return self._handoffs.list_handoffs_for_step(step_id)
 
-    def list_consumptions(
-        self, handoff_id: str, revision: int
-    ) -> tuple[HandoffConsumption, ...]:
+    def list_consumptions(self, handoff_id: str, revision: int) -> tuple[HandoffConsumption, ...]:
         return self._handoffs.list_consumptions(handoff_id, revision)
 
     def _require_creation_binding(self, content: HandoffContent) -> None:
@@ -107,9 +105,7 @@ class CoordinatedHandoffService:
                 },
             )
 
-    def _require_consumption_binding(
-        self, handoff: AgentHandoff, consuming_run_id: str
-    ) -> None:
+    def _require_consumption_binding(self, handoff: AgentHandoff, consuming_run_id: str) -> None:
         content = handoff.content
         state = self._coordinator.get_plan(content.plan_id)
         if state.plan.task_id != content.task_id:
