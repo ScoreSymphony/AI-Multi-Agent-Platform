@@ -67,6 +67,27 @@ cannot silently replace a newer revision.
 The service does not advance Steps or create Runs. Those operations remain owned by the
 canonical planning/coordinator path.
 
+## Durable Plan/Step coordination binding
+
+`CoordinatedHandoffService` is the read-only integration seam with the durable #384 coordinator.
+Production paths that transfer planned work use this wrapper around `HandoffService` so the
+semantic Handoff cannot drift away from canonical execution identity.
+
+Before creation it proves that:
+
+- the referenced Plan belongs to the referenced Task;
+- producer and consumer Steps exist in that canonical Plan;
+- the producer Step coordination record belongs to the same Task/Plan;
+- `producer_run_id` is the producer Step's canonical latest Run.
+
+Before consumption it proves that the consumer Step still belongs to the same Task/Plan and
+that the supplied consuming Run is the consumer Step's canonical latest Run. A mismatch fails
+before any Handoff-to-Run consumption binding is persisted.
+
+The wrapper only calls coordinator read methods. It cannot activate Plans, progress Steps,
+create Runs, assign Agents, retry work or repair coordinator state, so #384/#439 remain the
+sole lifecycle/progression authority.
+
 ## Consumption semantics
 
 `HandoffService.consume_handoff(...)` requires an exact consuming Run ID and exact consumer
