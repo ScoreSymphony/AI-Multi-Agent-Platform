@@ -9,7 +9,12 @@ from enum import StrEnum
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import RunStatus, StepStatus
 
-from .models import CoordinationPhase, PlanCoordinationProjection, ReconciliationDisposition
+from .models import (
+    CoordinationPhase,
+    PlanCoordinationProjection,
+    ReconciliationDisposition,
+    RetryState,
+)
 from .service import DurablePlanStepCoordinator
 
 _TERMINAL_RUNS = frozenset(
@@ -138,10 +143,16 @@ class CoordinatorRepairService:
                         )
                 repaired_step = step
 
+            retry_state = (
+                RetryState.CANCELLED
+                if current.retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}
+                else current.retry_state
+            )
             updated = replace(
                 current,
                 phase=CoordinationPhase.TERMINAL,
                 retry_due_at=None,
+                retry_state=retry_state,
                 wait=None,
                 processed_keys=(*current.processed_keys, repair_key),
                 reconciliation=ReconciliationDisposition.CANONICAL_TERMINAL,
