@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { ControlPlaneClient } from "./client";
-import { getPlanCoordination, type PlanCoordinationProjection } from "./workflowProgress";
+import {
+  getPlanCoordination,
+  isMissingPlanCoordinationError,
+  type PlanCoordinationProjection,
+} from "./workflowProgress";
 
 const projection: PlanCoordinationProjection = {
   id: "plan_421",
@@ -27,5 +31,33 @@ describe("workflow progress client", () => {
     expect(url).toBe("https://control.example.test/api/v1/plan-coordination/plan_421");
     expect(options.method).toBe("GET");
     expect(options.credentials).toBe("include");
+  });
+
+  it("classifies only canonical not-found responses as an absent coordination projection", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "not_found",
+          category: "resource",
+          message: "plan coordination projection not found",
+          retryable: false,
+        }),
+        { status: 404 },
+      ),
+    );
+    const client = new ControlPlaneClient({
+      baseUrl: "https://control.example.test",
+      fetchImpl: fetchSpy as unknown as typeof fetch,
+    });
+
+    let error: unknown;
+    try {
+      await getPlanCoordination(client, "plan_421");
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(isMissingPlanCoordinationError(error)).toBe(true);
+    expect(isMissingPlanCoordinationError(new Error("not found"))).toBe(false);
   });
 });
