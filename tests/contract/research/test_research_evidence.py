@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -92,7 +92,10 @@ def _supported_research(
             location_ref="section:behavior",
         )
     )
-    assessed = service.assess_claim(claim.claim_id)
+    assessed = service.assess_claim(
+        claim.claim_id,
+        now=datetime(2026, 9, 8, 10, 0, 30, tzinfo=UTC),
+    )
     assert assessed.status is ClaimStatus.SUPPORTED
     return item.research_item_id, source.source_id, claim.claim_id, evidence.evidence_id
 
