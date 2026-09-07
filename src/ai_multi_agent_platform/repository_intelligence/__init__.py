@@ -1,4 +1,4 @@
-"""Optional provider-neutral repository/code-intelligence integration."""
+"""Required provider-neutral repository/code-intelligence core and optional enhancements."""
 
 from .baseline import BaselineRepositoryIntelligenceProvider, RepositorySnapshotLoader
 from .capabilities import (
@@ -10,6 +10,11 @@ from .models import (
     RepositoryIntelligenceProvenance,
     RepositoryIntelligenceStateClass,
 )
+from .workspace import (
+    WorkspaceAwareRepositoryIntelligenceProvider,
+    WorkspaceRepositorySnapshot,
+    WorkspaceRepositorySnapshotLoader,
+)
 
 __all__ = [
     "BaselineRepositoryIntelligenceProvider",
@@ -18,5 +23,8 @@ __all__ = [
     "RepositoryIntelligenceProvenance",
     "RepositoryIntelligenceStateClass",
     "RepositorySnapshotLoader",
+    "WorkspaceAwareRepositoryIntelligenceProvider",
+    "WorkspaceRepositorySnapshot",
+    "WorkspaceRepositorySnapshotLoader",
     "repository_intelligence_capability_specs",
 ]
