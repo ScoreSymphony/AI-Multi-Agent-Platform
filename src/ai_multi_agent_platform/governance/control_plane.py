@@ -51,11 +51,12 @@ class ProposalResourceService(ResourceService):
         return tuple(visible)
 
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
-        return tuple(proposal_search_resource(value) for value in self._governance.repository.list_proposals())
+        return tuple(
+            proposal_search_resource(value)
+            for value in self._governance.repository.list_proposals()
+        )
 
-    async def get_resource(
-        self, context: RequestContext, resource_id: str
-    ) -> dict[str, JsonValue]:
+    async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         proposal = self._governance.repository.get_proposal(resource_id)
         await _require_allowed(self._control_plane, context, "proposal:read", proposal)
         return proposal_resource(proposal)
@@ -93,9 +94,7 @@ class SpecificationResourceService(ResourceService):
             for value in self._governance.repository.list_specifications()
         )
 
-    async def get_resource(
-        self, context: RequestContext, resource_id: str
-    ) -> dict[str, JsonValue]:
+    async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         specification = self._governance.repository.get_specification(resource_id)
         await _require_allowed_spec(
             self._control_plane, context, "specification:read", specification
@@ -135,9 +134,7 @@ class ProposalRevisionResourceService(ResourceService):
             )
         return tuple(resources)
 
-    async def get_resource(
-        self, context: RequestContext, resource_id: str
-    ) -> dict[str, JsonValue]:
+    async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         proposal_id, revision = _revision_ref(resource_id, "proposal")
         current = self._governance.repository.get_proposal(proposal_id)
         await _require_allowed(self._control_plane, context, "proposal:read", current)
@@ -159,9 +156,7 @@ class SpecificationRevisionResourceService(ResourceService):
         del query
         resources: list[dict[str, JsonValue]] = []
         for current in self._governance.repository.list_specifications():
-            if not await _allowed_spec(
-                self._control_plane, context, "specification:read", current
-            ):
+            if not await _allowed_spec(self._control_plane, context, "specification:read", current):
                 continue
             resources.extend(
                 specification_revision_resource(value)
@@ -169,14 +164,10 @@ class SpecificationRevisionResourceService(ResourceService):
             )
         return tuple(resources)
 
-    async def get_resource(
-        self, context: RequestContext, resource_id: str
-    ) -> dict[str, JsonValue]:
+    async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         specification_id, revision = _revision_ref(resource_id, "specification")
         current = self._governance.repository.get_specification(specification_id)
-        await _require_allowed_spec(
-            self._control_plane, context, "specification:read", current
-        )
+        await _require_allowed_spec(self._control_plane, context, "specification:read", current)
         return specification_revision_resource(
             self._governance.repository.get_specification(specification_id, revision)
         )
@@ -194,9 +185,7 @@ class GovernanceAuditResourceService(ResourceService):
         del context, query
         return tuple(_audit_resource(value) for value in self._governance.repository.list_audit())
 
-    async def get_resource(
-        self, context: RequestContext, resource_id: str
-    ) -> dict[str, JsonValue]:
+    async def get_resource(self, context: RequestContext, resource_id: str) -> dict[str, JsonValue]:
         del context
         for event in self._governance.repository.list_audit():
             if event.id == resource_id:
@@ -243,7 +232,9 @@ def register_governance_control_plane(
         expected = _required_int(payload, "expected_revision")
         revised = _proposal_revision_from_payload(current, payload, expected)
         return proposal_resource(
-            governance.revise_proposal(revised, expected_revision=expected, actor_ref=_actor(context))
+            governance.revise_proposal(
+                revised, expected_revision=expected, actor_ref=_actor(context)
+            )
         )
 
     async def proposal_dismiss(
@@ -253,7 +244,9 @@ def register_governance_control_plane(
         await _require_allowed(control_plane, context, "proposal.dismiss", current)
         expected = _required_int(payload, "expected_revision")
         return proposal_resource(
-            governance.dismiss_proposal(resource_ref, expected_revision=expected, actor_ref=_actor(context))
+            governance.dismiss_proposal(
+                resource_ref, expected_revision=expected, actor_ref=_actor(context)
+            )
         )
 
     async def proposal_supersede(
@@ -284,9 +277,7 @@ def register_governance_control_plane(
     ) -> dict[str, JsonValue]:
         del resource_ref
         specification = _specification_from_payload(payload, context)
-        await _require_allowed_spec(
-            control_plane, context, "specification.create", specification
-        )
+        await _require_allowed_spec(control_plane, context, "specification.create", specification)
         return specification_resource(
             governance.create_specification(specification, actor_ref=_actor(context))
         )
@@ -295,9 +286,7 @@ def register_governance_control_plane(
         context: RequestContext, resource_ref: str, payload: dict[str, JsonValue]
     ) -> dict[str, JsonValue]:
         current = governance.repository.get_specification(resource_ref)
-        await _require_allowed_spec(
-            control_plane, context, "specification.revise", current
-        )
+        await _require_allowed_spec(control_plane, context, "specification.revise", current)
         expected = _required_int(payload, "expected_revision")
         revised = _specification_revision_from_payload(current, payload, expected)
         return specification_resource(
@@ -315,9 +304,7 @@ def register_governance_control_plane(
         await _require_allowed_spec(
             control_plane, context, "specification.request-approval", current
         )
-        approval = await governance.request_approval(
-            resource_ref, context=_call_context(context)
-        )
+        approval = await governance.request_approval(resource_ref, context=_call_context(context))
         return {
             "id": approval.approval_id,
             "type": "approval",
@@ -496,7 +483,9 @@ def _proposal_from_payload(
         evidence_refs=_string_tuple(payload, "evidence_refs"),
         confidence=_optional_number(payload, "confidence"),
         expected_value=_optional_number(payload, "expected_value"),
-        risk=RiskClassification(_optional_string(payload, "risk") or RiskClassification.STANDARD.value),
+        risk=RiskClassification(
+            _optional_string(payload, "risk") or RiskClassification.STANDARD.value
+        ),
         fingerprint=_optional_string(payload, "fingerprint"),
         supersedes_id=supersedes_id,
         provenance={"source": "control-plane", "request_id": context.request_id},
@@ -513,10 +502,14 @@ def _proposal_revision_from_payload(
         reason=_optional_string(payload, "reason") or current.reason,
         status=ProposalStatus(_optional_string(payload, "status") or current.status.value),
         evidence_refs=(
-            _string_tuple(payload, "evidence_refs") if "evidence_refs" in payload else current.evidence_refs
+            _string_tuple(payload, "evidence_refs")
+            if "evidence_refs" in payload
+            else current.evidence_refs
         ),
         confidence=(
-            _optional_number(payload, "confidence") if "confidence" in payload else current.confidence
+            _optional_number(payload, "confidence")
+            if "confidence" in payload
+            else current.confidence
         ),
         expected_value=(
             _optional_number(payload, "expected_value")
@@ -525,7 +518,9 @@ def _proposal_revision_from_payload(
         ),
         risk=RiskClassification(_optional_string(payload, "risk") or current.risk.value),
         fingerprint=(
-            _optional_string(payload, "fingerprint") if "fingerprint" in payload else current.fingerprint
+            _optional_string(payload, "fingerprint")
+            if "fingerprint" in payload
+            else current.fingerprint
         ),
         revision=expected_revision + 1,
         updated_at=datetime.now(UTC),
@@ -549,7 +544,9 @@ def _specification_from_payload(
         acceptance_criteria=_required_string_tuple(payload, "acceptance_criteria"),
         dependencies=_string_tuple(payload, "dependencies"),
         constraints=_string_tuple(payload, "constraints"),
-        risk=RiskClassification(_optional_string(payload, "risk") or RiskClassification.STANDARD.value),
+        risk=RiskClassification(
+            _optional_string(payload, "risk") or RiskClassification.STANDARD.value
+        ),
         required_capabilities=_string_tuple(payload, "required_capabilities"),
         model_requirements=_json_mapping(payload, "model_requirements"),
         agent_requirements=_json_mapping(payload, "agent_requirements"),
@@ -574,22 +571,52 @@ def _specification_revision_from_payload(
         "problem": _optional_string(payload, "problem") or current.problem,
         "goal": _optional_string(payload, "goal") or current.goal,
         "scope": _string_tuple(payload, "scope") if "scope" in payload else current.scope,
-        "out_of_scope": _string_tuple(payload, "out_of_scope") if "out_of_scope" in payload else current.out_of_scope,
-        "acceptance_criteria": _string_tuple(payload, "acceptance_criteria") if "acceptance_criteria" in payload else current.acceptance_criteria,
-        "dependencies": _string_tuple(payload, "dependencies") if "dependencies" in payload else current.dependencies,
-        "constraints": _string_tuple(payload, "constraints") if "constraints" in payload else current.constraints,
+        "out_of_scope": _string_tuple(payload, "out_of_scope")
+        if "out_of_scope" in payload
+        else current.out_of_scope,
+        "acceptance_criteria": _string_tuple(payload, "acceptance_criteria")
+        if "acceptance_criteria" in payload
+        else current.acceptance_criteria,
+        "dependencies": _string_tuple(payload, "dependencies")
+        if "dependencies" in payload
+        else current.dependencies,
+        "constraints": _string_tuple(payload, "constraints")
+        if "constraints" in payload
+        else current.constraints,
         "risk": RiskClassification(_optional_string(payload, "risk") or current.risk.value),
-        "required_capabilities": _string_tuple(payload, "required_capabilities") if "required_capabilities" in payload else current.required_capabilities,
-        "model_requirements": _json_mapping(payload, "model_requirements") if "model_requirements" in payload else current.model_requirements,
-        "agent_requirements": _json_mapping(payload, "agent_requirements") if "agent_requirements" in payload else current.agent_requirements,
-        "data_security_constraints": _string_tuple(payload, "data_security_constraints") if "data_security_constraints" in payload else current.data_security_constraints,
-        "validation_strategy": _string_tuple(payload, "validation_strategy") if "validation_strategy" in payload else current.validation_strategy,
-        "required_tests": _string_tuple(payload, "required_tests") if "required_tests" in payload else current.required_tests,
-        "verification_requirements": _string_tuple(payload, "verification_requirements") if "verification_requirements" in payload else current.verification_requirements,
-        "required_human_gates": _string_tuple(payload, "required_human_gates") if "required_human_gates" in payload else current.required_human_gates,
-        "decomposition_hints": _string_tuple(payload, "decomposition_hints") if "decomposition_hints" in payload else current.decomposition_hints,
-        "assumptions": _string_tuple(payload, "assumptions") if "assumptions" in payload else current.assumptions,
-        "open_questions": _string_tuple(payload, "open_questions") if "open_questions" in payload else current.open_questions,
+        "required_capabilities": _string_tuple(payload, "required_capabilities")
+        if "required_capabilities" in payload
+        else current.required_capabilities,
+        "model_requirements": _json_mapping(payload, "model_requirements")
+        if "model_requirements" in payload
+        else current.model_requirements,
+        "agent_requirements": _json_mapping(payload, "agent_requirements")
+        if "agent_requirements" in payload
+        else current.agent_requirements,
+        "data_security_constraints": _string_tuple(payload, "data_security_constraints")
+        if "data_security_constraints" in payload
+        else current.data_security_constraints,
+        "validation_strategy": _string_tuple(payload, "validation_strategy")
+        if "validation_strategy" in payload
+        else current.validation_strategy,
+        "required_tests": _string_tuple(payload, "required_tests")
+        if "required_tests" in payload
+        else current.required_tests,
+        "verification_requirements": _string_tuple(payload, "verification_requirements")
+        if "verification_requirements" in payload
+        else current.verification_requirements,
+        "required_human_gates": _string_tuple(payload, "required_human_gates")
+        if "required_human_gates" in payload
+        else current.required_human_gates,
+        "decomposition_hints": _string_tuple(payload, "decomposition_hints")
+        if "decomposition_hints" in payload
+        else current.decomposition_hints,
+        "assumptions": _string_tuple(payload, "assumptions")
+        if "assumptions" in payload
+        else current.assumptions,
+        "open_questions": _string_tuple(payload, "open_questions")
+        if "open_questions" in payload
+        else current.open_questions,
     }
     return replace(current, revision=expected_revision + 1, content_digest="", **mutable)
 

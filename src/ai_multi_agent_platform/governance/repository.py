@@ -31,7 +31,9 @@ class GovernanceRepository(Protocol):
     def get_proposal(self, proposal_id: str, revision: int | None = None) -> Proposal: ...
     def list_proposals(self) -> tuple[Proposal, ...]: ...
     def proposal_history(self, proposal_id: str) -> tuple[Proposal, ...]: ...
-    def create_specification(self, specification: SpecificationRevision) -> SpecificationRevision: ...
+    def create_specification(
+        self, specification: SpecificationRevision
+    ) -> SpecificationRevision: ...
     def revise_specification(
         self, specification: SpecificationRevision, *, expected_revision: int
     ) -> SpecificationRevision: ...
@@ -146,7 +148,10 @@ class SqliteGovernanceRepository(GovernanceRepository):
                 raise ContractError(
                     ErrorCode.CONFLICT,
                     "proposal revision conflict",
-                    details={"expected_revision": expected_revision, "actual_revision": int(row["revision"])},
+                    details={
+                        "expected_revision": expected_revision,
+                        "actual_revision": int(row["revision"]),
+                    },
                 )
             connection.execute(
                 "INSERT INTO governance_proposal_revisions(proposal_id, revision, payload_json) "
@@ -204,12 +209,22 @@ class SqliteGovernanceRepository(GovernanceRepository):
                 connection.execute(
                     "INSERT INTO governance_specifications"
                     "(specification_id, revision, digest, payload_json) VALUES (?, ?, ?, ?)",
-                    (specification.id, specification.revision, specification.content_digest, payload),
+                    (
+                        specification.id,
+                        specification.revision,
+                        specification.content_digest,
+                        payload,
+                    ),
                 )
                 connection.execute(
                     "INSERT INTO governance_specification_revisions"
                     "(specification_id, revision, digest, payload_json) VALUES (?, ?, ?, ?)",
-                    (specification.id, specification.revision, specification.content_digest, payload),
+                    (
+                        specification.id,
+                        specification.revision,
+                        specification.content_digest,
+                        payload,
+                    ),
                 )
         except sqlite3.IntegrityError as exc:
             raise ContractError(ErrorCode.CONFLICT, "specification already exists") from exc
@@ -233,12 +248,18 @@ class SqliteGovernanceRepository(GovernanceRepository):
                 raise ContractError(
                     ErrorCode.CONFLICT,
                     "specification revision conflict",
-                    details={"expected_revision": expected_revision, "actual_revision": int(row["revision"])},
+                    details={
+                        "expected_revision": expected_revision,
+                        "actual_revision": int(row["revision"]),
+                    },
                 )
-            if connection.execute(
-                "SELECT 1 FROM governance_conversions WHERE specification_id = ?",
-                (specification.id,),
-            ).fetchone() is not None:
+            if (
+                connection.execute(
+                    "SELECT 1 FROM governance_conversions WHERE specification_id = ?",
+                    (specification.id,),
+                ).fetchone()
+                is not None
+            ):
                 raise ContractError(ErrorCode.CONFLICT, "converted specification cannot be revised")
             connection.execute(
                 "INSERT INTO governance_specification_revisions"
@@ -573,7 +594,9 @@ def _audit_from_json(raw: Mapping[str, object]) -> GovernanceAuditEvent:
 
 
 def _dump(value: Mapping[str, JsonValue]) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    )
 
 
 def _load(value: str) -> Mapping[str, object]:

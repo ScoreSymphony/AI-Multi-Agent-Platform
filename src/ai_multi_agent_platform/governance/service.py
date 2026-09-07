@@ -184,7 +184,9 @@ class GovernanceService:
     ) -> tuple[Proposal, Proposal]:
         current = self.repository.get_proposal(proposal_id)
         if current.status in {ProposalStatus.SUPERSEDED, ProposalStatus.CONVERTED_TO_TASK}:
-            raise ContractError(ErrorCode.CONFLICT, "proposal cannot be superseded from current state")
+            raise ContractError(
+                ErrorCode.CONFLICT, "proposal cannot be superseded from current state"
+            )
         if replacement.supersedes_id != proposal_id:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
@@ -230,7 +232,9 @@ class GovernanceService:
         self, specification: SpecificationRevision, *, actor_ref: str
     ) -> SpecificationRevision:
         if specification.revision != 1:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "new specification must start at revision 1")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "new specification must start at revision 1"
+            )
         if specification.proposal_id is not None:
             proposal = self.repository.get_proposal(specification.proposal_id)
             self._require_same_scope(proposal, specification)
@@ -255,10 +259,20 @@ class GovernanceService:
     ) -> SpecificationRevision:
         current = self.repository.get_specification(specification.id)
         if specification.proposal_id != current.proposal_id:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "specification intake reference is immutable")
-        if specification.goal_id != current.goal_id or specification.task_intake_id != current.task_intake_id:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "specification intake reference is immutable")
-        if specification.project_id != current.project_id or specification.workspace_id != current.workspace_id:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "specification intake reference is immutable"
+            )
+        if (
+            specification.goal_id != current.goal_id
+            or specification.task_intake_id != current.task_intake_id
+        ):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "specification intake reference is immutable"
+            )
+        if (
+            specification.project_id != current.project_id
+            or specification.workspace_id != current.workspace_id
+        ):
             raise ContractError(ErrorCode.INVALID_REQUEST, "specification scope is immutable")
         revised = self.repository.revise_specification(
             specification, expected_revision=expected_revision
@@ -302,7 +316,9 @@ class GovernanceService:
             if approval_id is None:
                 valid = self.approval_gate.approvals.find_valid_for(action)
                 approval_id = valid.approval_id if valid is not None else None
-            if approval_id is None or not self.approval_gate.approvals.valid_for(approval_id, action):
+            if approval_id is None or not self.approval_gate.approvals.valid_for(
+                approval_id, action
+            ):
                 if approval_id is not None:
                     self._audit_spec(
                         "specification.stale-approval-rejected",
@@ -371,9 +387,7 @@ class GovernanceService:
             actor_ref=context.actor_ref,
             source="proposal-specification-governance",
         )
-        completed = self.repository.complete_conversion(
-            specification.id, approval_id=approval_id
-        )
+        completed = self.repository.complete_conversion(specification.id, approval_id=approval_id)
         if specification.proposal_id is not None:
             self._mark_proposal_converted(specification.proposal_id, completed.task_id)
         self._audit(
@@ -482,9 +496,13 @@ class GovernanceService:
     @staticmethod
     def _require_same_scope(proposal: Proposal, specification: SpecificationRevision) -> None:
         if proposal.project_id != specification.project_id:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "Proposal/Specification project mismatch")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "Proposal/Specification project mismatch"
+            )
         if proposal.workspace_id != specification.workspace_id:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "Proposal/Specification workspace mismatch")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "Proposal/Specification workspace mismatch"
+            )
         if proposal.owner_ref != specification.owner_ref:
             raise ContractError(ErrorCode.INVALID_REQUEST, "Proposal/Specification owner mismatch")
 
