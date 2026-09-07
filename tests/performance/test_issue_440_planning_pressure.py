@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -24,8 +25,6 @@ def _schema() -> dict[str, object]:
 
 @pytest.mark.performance
 def test_planning_pressure_measures_canonical_replanning_without_provider(tmp_path: Path) -> None:
-    import asyncio
-
     async def scenario() -> None:
         report = await PlanningPressureBenchmarkHarness(
             tmp_path / "planning-pressure",
@@ -102,6 +101,29 @@ def test_planning_pressure_cli_writes_schema_valid_report(tmp_path: Path) -> Non
     assert payload["correctness"]["passed"] is True
     assert payload["correctness"]["provider_invocations"] == 0
     assert payload["benchmark"]["benchmark_id"] == "single-node.planning-pressure"
+
+
+def test_planning_pressure_cli_bounds_warmup_work(tmp_path: Path) -> None:
+    output = tmp_path / "report.json"
+    with pytest.raises(
+        ValueError,
+        match="warmup_operations exceeds configured planning-pressure safety bound",
+    ):
+        main(
+            [
+                "--operations",
+                "1",
+                "--concurrency",
+                "1",
+                "--warmup-operations",
+                "3",
+                "--safety-max-operations",
+                "2",
+                "--output",
+                str(output),
+            ]
+        )
+    assert not output.exists()
 
 
 @pytest.mark.parametrize(
