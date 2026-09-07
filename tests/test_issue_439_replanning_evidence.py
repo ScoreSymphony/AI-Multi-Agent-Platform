@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 
 import pytest
 
@@ -27,8 +28,8 @@ from ai_multi_agent_platform.planning import (
     PlanningService,
     PlanningStepDraft,
     PlanningTrigger,
-    ReplanPolicy,
     ReplanningEvidenceBridge,
+    ReplanPolicy,
 )
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
 from ai_multi_agent_platform.verification import VerificationOutcome
@@ -38,6 +39,24 @@ from ai_multi_agent_platform.verification.audit import (
 )
 
 OWNER = OwnerRef(type="user", id="issue-439-evidence-user")
+
+
+class _VerificationEvidenceStore:
+    def __init__(self, events: tuple[VerificationAuditEvent, ...]) -> None:
+        self._events = events
+
+    def audit_history(
+        self,
+        *,
+        task_id: str | None = None,
+        verification_id: str | None = None,
+    ) -> tuple[VerificationAuditEvent, ...]:
+        return tuple(
+            event
+            for event in self._events
+            if (task_id is None or event.task_id == task_id)
+            and (verification_id is None or event.verification_id == verification_id)
+        )
 
 
 def _agent_repository() -> tuple[InMemoryAgentRepository, str, int]:
@@ -209,7 +228,7 @@ def test_retry_exhaustion_is_proven_from_canonical_coordination_state() -> None:
     asyncio.run(scenario())
 
 
-def test_verification_outcomes_map_to_canonical_replan_triggers() -> None:
+def test_verification_outcomes_are_resolved_from_canonical_audit_history() -> None:
     async def scenario() -> None:
         agents, agent_id, revision = _agent_repository()
         repository = InMemoryPlanningRepository()
@@ -234,7 +253,6 @@ def test_verification_outcomes_map_to_canonical_replan_triggers() -> None:
             initial.proposal.proposal_id,
             idempotency_key="verification:activate",
         )
-        bridge = ReplanningEvidenceBridge(planning)
 
         expected = (
             (
@@ -247,26 +265,44 @@ def test_verification_outcomes_map_to_canonical_replan_triggers() -> None:
                 PlanningTrigger.VERIFICATION_INCONCLUSIVE,
             ),
         )
-        for outcome, trigger in expected:
-            event = VerificationAuditEvent(
+        canonical_events = tuple(
+            VerificationAuditEvent(
                 event_type=VerificationAuditEventType.RESULT_RECORDED,
                 task_id=task_id,
                 verification_id=new_id("verification"),
                 outcome=outcome,
             )
-            proposal = await bridge.from_verification(event)
-            assert proposal.proposal.trigger is trigger
-            assert event.event_id in proposal.proposal.evidence_refs
-
+            for outcome, _trigger in expected
+        )
         pass_event = VerificationAuditEvent(
             event_type=VerificationAuditEventType.RESULT_RECORDED,
             task_id=task_id,
             verification_id=new_id("verification"),
             outcome=VerificationOutcome.PASS,
         )
+        store = _VerificationEvidenceStore((*canonical_events, pass_event))
+        bridge = ReplanningEvidenceBridge(planning, verification_repository=store)
+
+        for canonical, (_outcome, trigger) in zip(canonical_events, expected, strict=True):
+            forged = replace(canonical, outcome=VerificationOutcome.PASS)
+            proposal = await bridge.from_verification(forged)
+            assert proposal.proposal.trigger is trigger
+            assert canonical.event_id in proposal.proposal.evidence_refs
+
+        forged_pass = replace(pass_event, outcome=VerificationOutcome.NEEDS_CHANGES)
         with pytest.raises(ContractError) as exc_info:
-            await bridge.from_verification(pass_event)
+            await bridge.from_verification(forged_pass)
         assert exc_info.value.code is ErrorCode.CONFLICT
+
+        unknown = VerificationAuditEvent(
+            event_type=VerificationAuditEventType.RESULT_RECORDED,
+            task_id=task_id,
+            verification_id=new_id("verification"),
+            outcome=VerificationOutcome.FAIL,
+        )
+        with pytest.raises(ContractError) as exc_info:
+            await bridge.from_verification(unknown)
+        assert exc_info.value.code is ErrorCode.NOT_FOUND
 
     asyncio.run(scenario())
 
@@ -297,21 +333,26 @@ def test_replanning_budget_exhaustion_emits_explicit_evidence_event() -> None:
         def capture(event_type: str, attributes: dict[str, JsonValue]) -> None:
             events.append((event_type, attributes))
 
-        bridge = ReplanningEvidenceBridge(planning, event_sink=capture)
         first_event = VerificationAuditEvent(
             event_type=VerificationAuditEventType.RESULT_RECORDED,
             task_id=task_id,
             verification_id=new_id("verification"),
             outcome=VerificationOutcome.NEEDS_CHANGES,
         )
-        await bridge.from_verification(first_event)
-
         second_event = VerificationAuditEvent(
             event_type=VerificationAuditEventType.RESULT_RECORDED,
             task_id=task_id,
             verification_id=new_id("verification"),
             outcome=VerificationOutcome.FAIL,
         )
+        store = _VerificationEvidenceStore((first_event, second_event))
+        bridge = ReplanningEvidenceBridge(
+            planning,
+            verification_repository=store,
+            event_sink=capture,
+        )
+        await bridge.from_verification(first_event)
+
         with pytest.raises(ContractError) as exc_info:
             await bridge.from_verification(second_event)
         assert exc_info.value.code is ErrorCode.RESOURCE_EXHAUSTED
