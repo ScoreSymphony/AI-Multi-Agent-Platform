@@ -55,7 +55,14 @@ _TRUST_TRANSITIONS: dict[SkillTrustStatus, frozenset[SkillTrustStatus]] = {
         {SkillTrustStatus.REJECTED, SkillTrustStatus.DEFERRED}
     ),
     SkillTrustStatus.REJECTED: frozenset(),
-    SkillTrustStatus.DEFERRED: frozenset({SkillTrustStatus.REJECTED}),
+    SkillTrustStatus.DEFERRED: frozenset(
+        {
+            SkillTrustStatus.SOURCE_VERIFIED,
+            SkillTrustStatus.SECURITY_REVIEWED,
+            SkillTrustStatus.PILOT,
+            SkillTrustStatus.REJECTED,
+        }
+    ),
 }
 
 
@@ -111,6 +118,29 @@ class SkillService:
         workspace_id: str | None = None,
         provenance: Provenance | None = None,
     ) -> SkillRevision:
+        return self._update_skill(
+            skill_id,
+            profile,
+            expected_revision=expected_revision,
+            owner_ref=owner_ref,
+            project_id=project_id,
+            workspace_id=workspace_id,
+            provenance=provenance,
+            allow_review_state_change=False,
+        )
+
+    def _update_skill(
+        self,
+        skill_id: str,
+        profile: SkillProfile,
+        *,
+        expected_revision: int,
+        owner_ref: OwnerRef | None,
+        project_id: str | None,
+        workspace_id: str | None,
+        provenance: Provenance | None,
+        allow_review_state_change: bool,
+    ) -> SkillRevision:
         current = self.repository.get_skill(skill_id)
         if current.current_revision != expected_revision:
             raise ContractError(
@@ -123,7 +153,11 @@ class SkillService:
             )
         self._validate_profile_for_registry(profile, creating=False)
         previous = self.repository.get_skill_revision(skill_id, expected_revision)
-        self._validate_trust_update(previous.profile, profile)
+        self._validate_trust_update(
+            previous.profile,
+            profile,
+            allow_review_state_change=allow_review_state_change,
+        )
         now = datetime.now(UTC)
         resolved_owner = owner_ref or current.owner_ref
         next_revision = expected_revision + 1
@@ -312,13 +346,15 @@ class SkillService:
             evaluation_metadata=next_metadata,
             enabled=False if target is not SkillTrustStatus.ADOPTED else current.profile.enabled,
         )
-        return self.update_skill(
+        return self._update_skill(
             skill_id,
             profile,
             expected_revision=expected_revision,
+            owner_ref=None,
             project_id=current.project_id,
             workspace_id=current.workspace_id,
             provenance=provenance,
+            allow_review_state_change=True,
         )
 
     @staticmethod
@@ -345,13 +381,28 @@ class SkillService:
             )
 
     @staticmethod
-    def _validate_trust_update(previous: SkillProfile, updated: SkillProfile) -> None:
+    def _validate_trust_update(
+        previous: SkillProfile,
+        updated: SkillProfile,
+        *,
+        allow_review_state_change: bool,
+    ) -> None:
         if previous.source != updated.source:
             if previous.source is not None or updated.source is not None:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
                     "third-party source provenance cannot be rewritten in-place; clone instead",
                 )
+        review_state_changed = (
+            previous.trust_status != updated.trust_status
+            or previous.evaluation_status != updated.evaluation_status
+            or previous.evaluation_metadata != updated.evaluation_metadata
+        )
+        if review_state_changed and not allow_review_state_change:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "Skill trust/evaluation state may only change through the explicit review lifecycle",
+            )
         if previous.trust_status != updated.trust_status:
             allowed = _TRUST_TRANSITIONS[previous.trust_status]
             if updated.trust_status not in allowed:
