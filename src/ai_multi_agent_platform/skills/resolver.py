@@ -15,6 +15,7 @@ from ai_multi_agent_platform.capabilities import (
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
+from ai_multi_agent_platform.models import ModelConfiguration, ModelLocation
 
 from .models import (
     SkillBundle,
@@ -50,6 +51,7 @@ class SkillResolutionRequest:
     available_capability_versions: Mapping[str, str] | None = None
     granted_permissions: frozenset[str] = frozenset()
     available_worker_capabilities: frozenset[str] = frozenset()
+    model_configuration: ModelConfiguration | None = None
     step_id: str | None = None
     project_id: str | None = None
     workspace_id: str | None = None
@@ -113,6 +115,7 @@ class SkillResolver:
             capability_ids=capability_ids,
             capability_versions=capability_versions,
         )
+        model = request.model_configuration
         bundle = SkillBundle(
             skill_bundle_id=new_skill_bundle_id(),
             digest=digest,
@@ -135,7 +138,10 @@ class SkillResolver:
                     "planner",
                     "agent_default",
                 ],
+                "dependency_expansion": "depth_first_before_dependent",
                 "minimal_resolution": True,
+                "model_config_id": model.config_id if model is not None else None,
+                "model_revision": model.revision if model is not None else None,
             },
         )
         self.repository.save_bundle(bundle)
@@ -166,12 +172,13 @@ class SkillResolver:
         )
         selected: list[SkillRevision] = []
         selected_by_id: dict[str, SkillRevisionRef] = {}
-        seen: set[tuple[str, int]] = set()
+        resolved: set[tuple[str, int]] = set()
+        visiting: list[tuple[str, int]] = []
 
-        for ref in ordered_refs:
+        def visit(ref: SkillRevisionRef) -> None:
             key = (ref.skill_id, ref.revision)
-            if key in seen:
-                continue
+            if key in resolved:
+                return
             previous = selected_by_id.get(ref.skill_id)
             if previous is not None and previous.revision != ref.revision:
                 raise ContractError(
@@ -183,6 +190,18 @@ class SkillResolver:
                         "second_revision": ref.revision,
                     },
                 )
+            if key in visiting:
+                cycle = [*visiting[visiting.index(key) :], key]
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "Skill dependency cycle detected",
+                    details={
+                        "cycle": cast(
+                            JsonValue,
+                            [f"{skill_id}@{revision}" for skill_id, revision in cycle],
+                        )
+                    },
+                )
             try:
                 revision = self.repository.get_skill_revision(ref.skill_id, ref.revision)
             except ContractError as exc:
@@ -192,10 +211,18 @@ class SkillResolver:
                         f"mandatory Skill revision is unavailable: {ref.skill_id}@{ref.revision}",
                     ) from exc
                 raise
+
             self._validate_revision(revision, request)
-            selected.append(revision)
             selected_by_id[ref.skill_id] = ref
-            seen.add(key)
+            visiting.append(key)
+            for dependency in revision.profile.dependencies:
+                visit(dependency)
+            visiting.pop()
+            selected.append(revision)
+            resolved.add(key)
+
+        for ref in ordered_refs:
+            visit(ref)
 
         self._validate_conflicts(selected)
         return tuple(selected)
@@ -222,10 +249,7 @@ class SkillResolver:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Skill is incompatible with the selected Agent role",
-                details={
-                    "skill_id": revision.skill_id,
-                    "agent_role": request.agent_role,
-                },
+                details={"skill_id": revision.skill_id, "agent_role": request.agent_role},
             )
         if revision.project_id is not None and revision.project_id != request.project_id:
             raise ContractError(
@@ -239,6 +263,69 @@ class SkillResolver:
                 "Skill is outside the Run workspace scope",
                 details={"skill_id": revision.skill_id},
             )
+        SkillResolver._validate_model_requirements(revision, request.model_configuration)
+
+    @staticmethod
+    def _validate_model_requirements(
+        revision: SkillRevision,
+        model: ModelConfiguration | None,
+    ) -> None:
+        requirements = revision.profile.routing_requirements
+        constrained = any(
+            (
+                requirements.explicit_model_id is not None,
+                requirements.min_context_window is not None,
+                requirements.tool_calling,
+                requirements.structured_output,
+                requirements.streaming,
+                bool(requirements.modalities),
+                bool(requirements.reasoning),
+                requirements.local_only,
+                requirements.self_hosted_only,
+            )
+        )
+        if not constrained:
+            return
+        if model is None:
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "Skill declares model prerequisites but no canonical model context was resolved",
+                details={"skill_id": revision.skill_id},
+            )
+        capabilities = model.capabilities
+        mismatches: list[str] = []
+        if requirements.explicit_model_id not in {None, model.config_id}:
+            mismatches.append("explicit_model_id")
+        if requirements.min_context_window is not None:
+            if (
+                capabilities.context_window is None
+                or capabilities.context_window < requirements.min_context_window
+            ):
+                mismatches.append("min_context_window")
+        if requirements.tool_calling and not capabilities.tool_calling:
+            mismatches.append("tool_calling")
+        if requirements.structured_output and not capabilities.structured_output:
+            mismatches.append("structured_output")
+        if requirements.streaming and not capabilities.streaming:
+            mismatches.append("streaming")
+        if not set(requirements.modalities).issubset(capabilities.modalities):
+            mismatches.append("modalities")
+        if not set(requirements.reasoning).issubset(capabilities.reasoning):
+            mismatches.append("reasoning")
+        if requirements.local_only and model.location is not ModelLocation.LOCAL:
+            mismatches.append("local_only")
+        if requirements.self_hosted_only and model.location is not ModelLocation.SELF_HOSTED:
+            mismatches.append("self_hosted_only")
+        if mismatches:
+            raise ContractError(
+                ErrorCode.NO_COMPATIBLE_ROUTE,
+                "resolved model does not satisfy Skill prerequisites",
+                details={
+                    "skill_id": revision.skill_id,
+                    "model_config_id": model.config_id,
+                    "mismatches": cast(JsonValue, mismatches),
+                },
+            )
 
     @staticmethod
     def _validate_conflicts(revisions: list[SkillRevision]) -> None:
@@ -247,13 +334,15 @@ class SkillResolver:
         for revision in revisions:
             for conflicting_id in revision.profile.conflicts_with_skill_ids:
                 if conflicting_id in selected_ids:
-                    pair = tuple(sorted((revision.skill_id, conflicting_id)))
-                    conflicts.add(cast(tuple[str, str], pair))
+                    first, second = sorted((revision.skill_id, conflicting_id))
+                    conflicts.add((first, second))
         if conflicts:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "resolved Skills have an explicit composition conflict",
-                details={"conflicts": cast(JsonValue, [list(pair) for pair in sorted(conflicts)])},
+                details={
+                    "conflicts": cast(JsonValue, [list(pair) for pair in sorted(conflicts)])
+                },
             )
 
     def _validate_capabilities(
@@ -357,6 +446,7 @@ class SkillResolver:
         capability_ids: tuple[str, ...],
         capability_versions: Mapping[str, str],
     ) -> str:
+        model = request.model_configuration
         payload: dict[str, object] = {
             "resolver_version": self.resolver_version,
             "policy_version": self.policy_version,
@@ -369,6 +459,8 @@ class SkillResolver:
                 "step_id": request.step_id,
                 "project_id": request.project_id,
                 "workspace_id": request.workspace_id,
+                "model_config_id": model.config_id if model is not None else None,
+                "model_revision": model.revision if model is not None else None,
             },
             "entries": [
                 {
@@ -407,6 +499,10 @@ def _revision_payload(revision: SkillRevision) -> dict[str, object]:
                 "ref": profile.content.ref,
                 "version": profile.content.version,
             },
+            "dependencies": [
+                {"skill_id": item.skill_id, "revision": item.revision}
+                for item in profile.dependencies
+            ],
             "capability_requirements": [
                 {
                     "capability_id": item.capability_id,
@@ -429,10 +525,15 @@ def _revision_payload(revision: SkillRevision) -> dict[str, object]:
                 "local_only": routing.local_only,
                 "self_hosted_only": routing.self_hosted_only,
             },
+            "expected_inputs": list(profile.expected_inputs),
+            "expected_outputs": list(profile.expected_outputs),
+            "workspace_assumptions": list(profile.workspace_assumptions),
+            "side_effects": list(profile.side_effects),
             "conflicts_with_skill_ids": list(profile.conflicts_with_skill_ids),
             "risk_level": profile.risk_level.value,
             "trust_status": profile.trust_status.value,
             "evaluation_status": profile.evaluation_status.value,
+            "evaluation_metadata": dict(profile.evaluation_metadata),
             "source": None
             if source is None
             else {
