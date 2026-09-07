@@ -42,11 +42,19 @@ class JsonSkillRepository(InMemorySkillRepository):
         super().update_skill(definition, revision)
         self._flush()
 
+    def delete_skill(self, skill_id: str) -> None:
+        super().delete_skill(skill_id)
+        self._flush()
+
     def save_bundle(self, bundle: SkillBundle) -> None:
         before = len(self.list_bundles())
         super().save_bundle(bundle)
         if len(self.list_bundles()) != before:
             self._flush()
+
+    def delete_bundle(self, skill_bundle_id: str) -> None:
+        super().delete_bundle(skill_bundle_id)
+        self._flush()
 
     def create_binding(self, binding: SkillRunBinding) -> None:
         super().create_binding(binding)
