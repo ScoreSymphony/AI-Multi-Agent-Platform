@@ -11,6 +11,9 @@ platform-owned execution model, and callers may continue creating a Task directl
   superseded, specified or converted.
 - A clarification request is a dedicated lifecycle operation that creates a new Proposal
   revision in `needs_spec`; it is not a terminal state and does not create a Task.
+- Proposal supersession preserves owner, Project and Workspace scope across the lineage.
+  The replacement is authorized as a new Proposal as well as through the supersede command,
+  so supersession cannot be used to create a cross-scope Proposal.
 - A **Specification** is an immutable, explicitly revisioned review contract. A material
   change creates a new revision and content digest.
 - A Specification never executes. Conversion creates exactly one canonical `Task`, and
@@ -101,10 +104,10 @@ concurrency; clarification therefore cannot silently overwrite a newer Proposal 
 
 The web governance surface uses the same registered Control Plane collections and command
 boundary as every other client. It provides the Proposal inbox, Proposal and Specification
-detail views, Specification revision comparison, Approval links, Task conversion and
-resulting Task links. `Request clarification` invokes the canonical
-`proposal.request-clarification` command and moves the Proposal to `needs_spec` rather
-than maintaining browser-private lifecycle state.
+detail views, clarification and supersession actions, Specification revision comparison,
+Approval links, Task conversion and resulting Task links. `Request clarification` invokes
+the canonical `proposal.request-clarification` command and moves the Proposal to
+`needs_spec` rather than maintaining browser-private lifecycle state.
 
 The CLI discovers registered extension collections and commands from canonical OpenAPI.
 `extension execute` sends mutations to `/api/v1/commands/{command}` with the caller's
