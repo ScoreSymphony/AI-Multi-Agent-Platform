@@ -32,7 +32,9 @@ from ai_multi_agent_platform.distributed import (
     WorkerRecord,
     register_distributed_control_plane,
 )
-from ai_multi_agent_platform.distributed.pressure_control_plane import register_pressure_control_plane
+from ai_multi_agent_platform.distributed.pressure_control_plane import (
+    register_pressure_control_plane,
+)
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
