@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.decisions import (
+    DecisionRepository,
+    DecisionService,
+    SqliteDecisionRepository,
+    decision_record_command_handlers,
+    decision_record_resource_services,
+)
 from ai_multi_agent_platform.governance.control_plane import register_governance_control_plane
 from ai_multi_agent_platform.governance.repository import (
     GovernanceRepository,
@@ -27,32 +34,46 @@ from .portability_api import ControlPlane as _PortabilityControlPlane
 
 
 class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
-    """Approval-aware Control Plane with portability and optional durable governance."""
+    """Approval-aware Control Plane with portability and durable governance/decisions."""
 
     def __init__(
         self,
         *args: Any,
         governance_repository: GovernanceRepository | None = None,
         governance_state_path: str | Path | None = None,
+        decision_repository: DecisionRepository | None = None,
+        decision_state_path: str | Path | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self.governance: GovernanceService | None = None
+        self.decisions: DecisionService | None = None
         gate = getattr(self, "approval_gate", None)
         if not isinstance(gate, AuthorizationGate):
             return
 
-        repository = governance_repository
-        if repository is None:
+        governance_repo = governance_repository
+        if governance_repo is None:
             state_path = governance_state_path or _default_governance_state_path(gate)
             if state_path is not None:
-                repository = SqliteGovernanceRepository(state_path)
-        if repository is None:
-            return
+                governance_repo = SqliteGovernanceRepository(state_path)
+        if governance_repo is not None:
+            governance = GovernanceService(governance_repo, self._kernel, gate)
+            register_governance_control_plane(self, governance)
+            self.governance = governance
 
-        governance = GovernanceService(repository, self._kernel, gate)
-        register_governance_control_plane(self, governance)
-        self.governance = governance
+        decision_repo = decision_repository
+        if decision_repo is None:
+            state_path = decision_state_path or _default_decision_state_path(gate)
+            if state_path is not None:
+                decision_repo = SqliteDecisionRepository(state_path)
+        if decision_repo is not None:
+            decisions = DecisionService(decision_repo)
+            for collection, service in decision_record_resource_services(decisions).items():
+                self.register_resource_service(collection, service)
+            for command, handler in decision_record_command_handlers(decisions).items():
+                self.register_command(command, handler)
+            self.decisions = decisions
 
     async def list_extension_resources(
         self,
@@ -84,6 +105,15 @@ def _default_governance_state_path(gate: AuthorizationGate) -> Path | None:
     if database_path is None:
         return None
     return Path(database_path).with_name("governance.sqlite3")
+
+
+def _default_decision_state_path(gate: AuthorizationGate) -> Path | None:
+    """Co-locate canonical Decision Records with durable #15 Approval state."""
+
+    database_path = getattr(gate.approvals, "database_path", None)
+    if database_path is None:
+        return None
+    return Path(database_path).with_name("decisions.sqlite3")
 
 
 __all__ = ["ControlPlane"]
