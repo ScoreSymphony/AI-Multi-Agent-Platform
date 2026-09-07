@@ -310,6 +310,7 @@ def canonical_control_plane_vocabulary(action: str) -> tuple[AuthorizationAction
         "agent-team": ResourceType.AGENT_TEAM,
         "worker": ResourceType.WORKER,
         "node": ResourceType.NODE,
+        "node-pressure": ResourceType.NODE,
         "automation": ResourceType.AUTOMATION,
         "automation-delivery": ResourceType.AUTOMATION,
         "notification": ResourceType.NOTIFICATION,
