@@ -24,7 +24,7 @@ export interface PlanCoordinationProjection {
   steps: PlanCoordinationStep[];
 }
 
-const PLAN_COORDINATION_COLLECTION = "plan-coordination" as ReferenceCollection;
+const PLAN_COORDINATION_COLLECTION = "plan-coordination" as unknown as ReferenceCollection;
 
 /**
  * Read the backend-neutral coordinator projection through the versioned Control Plane.
