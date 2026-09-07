@@ -29,6 +29,7 @@ from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
 from ai_multi_agent_platform.planning import (
     DeterministicReferencePlanner,
     JsonPlanningRepository,
+    PlanningEnvironmentResolver,
     PlanningOrchestratorAdapter,
     PlanningService,
     planning_command_handlers,
@@ -84,6 +85,7 @@ def build_single_node_deployment(
     distributed_runtime: DistributedRuntime | None = None,
     enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
+    planning_environment_resolver: PlanningEnvironmentResolver | None = None,
 ) -> SingleNodeDeployment:
     """Build the normal single-node profile with durable Connector and Planning source state.
 
@@ -142,6 +144,7 @@ def build_single_node_deployment(
         authorization=base.approval_gate,
         coordinator=planning_coordinator,
         event_sink=_planning_event_sink(base.telemetry),
+        environment_resolver=planning_environment_resolver,
     )
     for collection, service in planning_resource_services(planning).items():
         base.control_plane.register_resource_service(collection, service)
