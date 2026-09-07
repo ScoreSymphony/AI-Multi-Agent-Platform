@@ -66,11 +66,9 @@ GitHub Actions starts from a fresh checkout on a clean runner, creates and activ
 
 ## Repository boundaries
 
-- `src/ai_multi_agent_platform/` contains platform-owned Python runtime code.
+- `src/ai_multi_agent_platform/` contains platform-owned Python runtime and domain code, including adapter and Worker implementations.
 - `tests/` contains automated tests.
 - `docs/` contains product and architecture documentation.
-- `adapters/` is reserved for integration-specific packaging or supporting assets that should not redefine core contracts.
-- `workers/` is reserved for worker-facing packages or deployment assets.
-- `frontend/` is reserved for the web/control-plane client.
+- `frontend/` contains the web/control-plane client.
 
-The exact internal domain and interface layout will be defined by the numbered architecture issues rather than guessed during bootstrap.
+New top-level directories should be added only when they host distinct packaging, deployment, tooling or client assets that do not belong in the platform Python package. Runtime integrations continue to implement platform-owned contracts under `src/ai_multi_agent_platform/` rather than creating parallel domain ownership.
