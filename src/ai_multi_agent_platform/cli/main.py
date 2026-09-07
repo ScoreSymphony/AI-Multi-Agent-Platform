@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -336,6 +337,14 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     extension_show.add_argument("collection")
     extension_show.add_argument("resource_id")
+    extension_execute = extension_commands.add_parser(
+        "execute",
+        help="execute one explicitly registered canonical extension command",
+    )
+    extension_execute.add_argument("canonical_command")
+    extension_execute.add_argument("resource_ref")
+    extension_execute.add_argument("--payload", default="{}", help="JSON object command payload")
+    extension_execute.add_argument("--idempotency-key", required=True)
 
     return parser
 
@@ -822,6 +831,18 @@ def _extension_command(args: argparse.Namespace, client: ControlPlaneClient) -> 
         return CommandResult(_name_page(specification, collections))
     if args.command == "commands":
         return CommandResult(_name_page(specification, commands))
+    if args.command == "execute":
+        command = str(args.canonical_command)
+        if command not in commands:
+            raise ProfileError(f"canonical extension command is not registered: {command}")
+        body = {"resource_ref": str(args.resource_ref), **_json_object(str(args.payload))}
+        return CommandResult(
+            client.post(
+                f"/commands/{_segment(command)}",
+                body=body,
+                idempotency_key=str(args.idempotency_key),
+            )
+        )
 
     collection = str(args.collection)
     if collection not in collections:
@@ -831,6 +852,16 @@ def _extension_command(args: argparse.Namespace, client: ControlPlaneClient) -> 
     if args.command == "show":
         return CommandResult(client.get(f"/{_segment(collection)}/{_segment(args.resource_id)}"))
     raise ProfileError(f"unsupported extension command: {args.command}")
+
+
+def _json_object(raw: str) -> dict[str, JsonValue]:
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ProfileError("--payload must be valid JSON") from exc
+    if not isinstance(decoded, dict):
+        raise ProfileError("--payload must decode to a JSON object")
+    return cast(dict[str, JsonValue], decoded)
 
 
 def _extension_names(response: ClientResponse, field: str) -> tuple[str, ...]:
