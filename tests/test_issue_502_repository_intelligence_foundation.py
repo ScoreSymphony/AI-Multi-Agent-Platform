@@ -50,9 +50,7 @@ def _invocation(tool_ref: str, arguments: dict[str, JsonValue]) -> ToolInvocatio
 
 
 def test_baseline_capabilities_are_read_only_and_provider_neutral() -> None:
-    specs = {
-        spec.capability_id: spec for spec in repository_intelligence_capability_specs()
-    }
+    specs = {spec.capability_id: spec for spec in repository_intelligence_capability_specs()}
 
     assert set(specs) == {operation.value for operation in RepositoryIntelligenceOperation}
     for spec in specs.values():
