@@ -1,0 +1,102 @@
+{
+  "suite_id": "suite.planning-deterministic",
+  "name": "Deterministic autonomous planning contract suite",
+  "version": "1",
+  "description": "No-paid-service #19 evaluation cases for the platform-owned #439 planning and bounded-replanning contract. These are deterministic contract/regression cases, not a model-quality benchmark.",
+  "tags": ["planning", "deterministic", "issue-439", "no-paid-service"],
+  "cases": [
+    {
+      "case_id": "case.planning-dependency-parallelism",
+      "name": "Dependency decomposition preserves safe parallelism",
+      "version": "1",
+      "input_template": {"scenario": "dependency_parallelism"},
+      "assertions": [
+        {"assertion_id": "proposal-valid", "path": "validation_valid", "operator": "eq", "expected": true},
+        {"assertion_id": "proposal-status", "path": "status", "operator": "eq", "expected": "validated"},
+        {"assertion_id": "parallel-layer-left", "path": "parallel_layers.1", "operator": "contains", "expected": "left"},
+        {"assertion_id": "parallel-layer-right", "path": "parallel_layers.1", "operator": "contains", "expected": "right"},
+        {"assertion_id": "peak-parallelism", "path": "peak_parallelism", "operator": "eq", "expected": 2},
+        {"assertion_id": "join-left-dependency", "path": "steps.3.depends_on", "operator": "contains", "expected": "left"},
+        {"assertion_id": "join-right-dependency", "path": "steps.3.depends_on", "operator": "contains", "expected": "right"}
+      ],
+      "tags": ["planning", "dependencies", "parallelism", "critical"],
+      "category": "planning-graph",
+      "difficulty": "reference"
+    },
+    {
+      "case_id": "case.planning-unavailable-requirement",
+      "name": "Unavailable required capability becomes an explicit blocker",
+      "version": "1",
+      "input_template": {"scenario": "unavailable_requirement"},
+      "assertions": [
+        {"assertion_id": "proposal-invalid", "path": "validation_valid", "operator": "eq", "expected": false},
+        {"assertion_id": "unavailable-reported", "path": "unavailable_requirement_reported", "operator": "eq", "expected": true},
+        {"assertion_id": "has-validation-error", "path": "errors.0", "operator": "exists"}
+      ],
+      "tags": ["planning", "capabilities", "availability", "critical"],
+      "category": "planning-feasibility",
+      "difficulty": "reference"
+    },
+    {
+      "case_id": "case.planning-provider-replacement",
+      "name": "Planner provider replacement preserves canonical contract",
+      "version": "1",
+      "input_template": {"scenario": "provider_replacement"},
+      "assertions": [
+        {"assertion_id": "first-valid", "path": "first_status", "operator": "eq", "expected": "validated"},
+        {"assertion_id": "second-valid", "path": "second_status", "operator": "eq", "expected": "validated"},
+        {"assertion_id": "planner-provenance-differs", "path": "planner_ids_distinct", "operator": "eq", "expected": true},
+        {"assertion_id": "canonical-contract-stable", "path": "same_canonical_contract", "operator": "eq", "expected": true}
+      ],
+      "tags": ["planning", "provider-replacement", "portability", "critical"],
+      "category": "planning-portability",
+      "difficulty": "reference"
+    },
+    {
+      "case_id": "case.planning-duplicate-evidence",
+      "name": "Duplicate canonical evidence is idempotent",
+      "version": "1",
+      "input_template": {"scenario": "duplicate_evidence"},
+      "assertions": [
+        {"assertion_id": "same-proposal", "path": "same_proposal", "operator": "eq", "expected": true},
+        {"assertion_id": "same-digest", "path": "same_digest", "operator": "eq", "expected": true},
+        {"assertion_id": "single-replan-record", "path": "proposal_count", "operator": "eq", "expected": 2},
+        {"assertion_id": "replan-valid", "path": "replan_status", "operator": "eq", "expected": "validated"}
+      ],
+      "tags": ["planning", "replanning", "idempotency", "evidence", "critical"],
+      "category": "planning-replanning",
+      "difficulty": "reference"
+    },
+    {
+      "case_id": "case.planning-bounded-replanning",
+      "name": "Replanning stops at the configured budget",
+      "version": "1",
+      "input_template": {"scenario": "bounded_replanning"},
+      "assertions": [
+        {"assertion_id": "first-replan-valid", "path": "first_replan_valid", "operator": "eq", "expected": true},
+        {"assertion_id": "first-replan-status", "path": "first_replan_status", "operator": "eq", "expected": "validated"},
+        {"assertion_id": "budget-exhausted", "path": "budget_exhausted", "operator": "eq", "expected": true},
+        {"assertion_id": "resource-exhausted-code", "path": "budget_error_code", "operator": "eq", "expected": "resource_exhausted"}
+      ],
+      "tags": ["planning", "replanning", "budget", "critical"],
+      "category": "planning-replanning",
+      "difficulty": "reference"
+    },
+    {
+      "case_id": "case.planning-no-privilege-escalation",
+      "name": "Planner cannot bypass approval-gated capability authority",
+      "version": "1",
+      "input_template": {"scenario": "no_privilege_escalation"},
+      "assertions": [
+        {"assertion_id": "proposal-structurally-valid", "path": "validation_valid", "operator": "eq", "expected": true},
+        {"assertion_id": "approval-required", "path": "approval_required", "operator": "eq", "expected": true},
+        {"assertion_id": "activation-forbidden", "path": "activation_error_code", "operator": "eq", "expected": "forbidden"},
+        {"assertion_id": "no-plan-created", "path": "plan_created", "operator": "eq", "expected": false},
+        {"assertion_id": "no-run-created", "path": "run_count", "operator": "eq", "expected": 0}
+      ],
+      "tags": ["planning", "authorization", "approval", "no-privilege-escalation", "critical"],
+      "category": "planning-security",
+      "difficulty": "reference"
+    }
+  ]
+}
