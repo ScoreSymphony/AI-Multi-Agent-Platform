@@ -56,6 +56,20 @@ from .persistence import (
     DistributedStateStore,
     JsonDistributedStateStore,
 )
+from .pressure import (
+    AdmissionAction,
+    AdmissionDecision,
+    AdmissionReason,
+    AdmissionReasonCode,
+    HostPressureSnapshot,
+    InMemoryPressureSnapshotProvider,
+    PressureAdmissionPolicy,
+    PressureKind,
+    PressureSignal,
+    PressureSnapshotProvider,
+    PressureState,
+    ProtectedHeadroom,
+)
 from .providers import DistributedNodeProvider, DistributedWorkerProvider
 from .registry import DistributedRegistry, RegistryError, RegistrySnapshot
 from .runtime import DispatchRecord, DispatchState, DistributedRuntime
@@ -109,6 +123,10 @@ __all__ = [
     "WORKER_REPLY_TOPIC_PREFIX",
     "WORKER_TRANSPORT_SCHEMA_VERSION",
     "AcceleratorResource",
+    "AdmissionAction",
+    "AdmissionDecision",
+    "AdmissionReason",
+    "AdmissionReasonCode",
     "CandidateEvaluation",
     "DeterministicScheduler",
     "DispatchRecord",
@@ -128,6 +146,8 @@ __all__ = [
     "FailoverFenceReceipt",
     "FailoverRejectionCode",
     "Heartbeat",
+    "HostPressureSnapshot",
+    "InMemoryPressureSnapshotProvider",
     "JobRequirements",
     "JobResultStatus",
     "JsonDistributedStateStore",
@@ -137,6 +157,12 @@ __all__ = [
     "NodeRecord",
     "NodeResourceService",
     "NodeStatus",
+    "PressureAdmissionPolicy",
+    "PressureKind",
+    "PressureSignal",
+    "PressureSnapshotProvider",
+    "PressureState",
+    "ProtectedHeadroom",
     "RegistrationRequest",
     "RegistryError",
     "RegistrySnapshot",
