@@ -13,6 +13,7 @@ from ai_multi_agent_platform.agents import (
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     decode_agent_execution_binding,
+    decode_agent_step_execution_binding,
 )
 from ai_multi_agent_platform.capabilities import (
     CapabilityInvoker,
@@ -87,12 +88,14 @@ def preflight_first_run_agent(
 
 
 class FirstRunAgentLifecycleBackend(LifecycleBackend):
-    """Route first-run and explicitly bound Agent Tasks through canonical runtime seams.
+    """Route first-run and explicitly bound Agent Runs through canonical runtime seams.
 
     The first-run onboarding profile keeps its stricter local/self-hosted requirements.
-    The generic Agent execution binding is platform-owned and lets features such as
-    Evaluation select an exact Agent/model/capability configuration without introducing a
-    second lifecycle implementation. Unmarked Runs are delegated unchanged.
+    Generic Task and Step-specific Agent execution bindings are platform-owned and let
+    features such as Evaluation and Planning select exact Agent/model/capability
+    configurations without introducing a second lifecycle implementation. A Step binding
+    takes precedence over a Task-wide binding for that exact canonical Step. Unmarked Runs
+    are delegated unchanged.
 
     When an AgentRun pins capabilities, ``AgentCapabilityTurn`` composes the existing rich
     Model protocol with the canonical CapabilityInvoker. The standard deployment needs no
@@ -132,7 +135,12 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
 
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
         task = await self._tasks.get_task(request.context.correlation_id)
-        generic_binding = self._generic_binding(task.task.metadata)
+        step_binding = (
+            self._step_binding(task.task.metadata, request.subject_id)
+            if request.subject_type == "step"
+            else None
+        )
+        generic_binding = step_binding or self._generic_binding(task.task.metadata)
         first_run = (
             task.task.metadata.get(FIRST_RUN_EXECUTION_PROFILE_KEY)
             == FIRST_RUN_AGENT_EXECUTION_PROFILE
@@ -372,4 +380,17 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
                 f"invalid canonical Agent execution binding: {exc}",
+            ) from exc
+
+    @staticmethod
+    def _step_binding(
+        metadata: Mapping[str, JsonValue],
+        step_id: str,
+    ) -> AgentExecutionBinding | None:
+        try:
+            return decode_agent_step_execution_binding(metadata, step_id)
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION,
+                f"invalid canonical Step Agent execution binding: {exc}",
             ) from exc
