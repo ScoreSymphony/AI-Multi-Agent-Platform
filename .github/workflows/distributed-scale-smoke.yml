@@ -85,7 +85,7 @@ jobs:
           PY
       - name: Upload distributed scale evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-distributed-scale-benchmark
           path: artifacts/benchmarks/pr-distributed-scale
