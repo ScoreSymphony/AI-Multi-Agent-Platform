@@ -8,7 +8,6 @@ import tracemalloc
 from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any, cast
 
 from ai_multi_agent_platform import __version__
@@ -633,8 +632,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             and len(post_rejoin_workers) == spec.worker_count
         )
         stable_worker_ids = len(
-            {worker.worker_id for worker in runtime.registry.list_workers()}
-            & set(initial_worker_ids)
+            {worker.worker_id for worker in runtime.registry.list_workers()} & set(initial_worker_ids)
         )
         correctness = DistributedFaultCorrectnessSummary(
             expected_workers=spec.worker_count,
