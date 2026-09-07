@@ -71,6 +71,24 @@ class RepositoryProvider(ProviderContract):
         context: OperationContext,
     ) -> RepositoryTree: ...
 
+    async def read_tree_bounded(
+        self,
+        repository: RepositoryReference,
+        revision: str,
+        context: OperationContext,
+        *,
+        max_entries: int,
+        max_total_bytes: int,
+    ) -> RepositoryTree:
+        """Read a tree with provider-enforced pre-materialization resource bounds.
+
+        Providers must opt in explicitly. Falling back to an unbounded ``read_tree`` would defeat
+        the safety guarantee required by repository-intelligence production composition.
+        """
+
+        del repository, revision, context, max_entries, max_total_bytes
+        raise self._unsupported("bounded tree reads")
+
     @abstractmethod
     async def branches(
         self,
