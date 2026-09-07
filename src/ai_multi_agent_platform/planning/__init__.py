@@ -7,6 +7,13 @@ from .control_plane import (
     planning_command_handlers,
     planning_resource_services,
 )
+from .environment import (
+    PlanningEnvironment,
+    PlanningEnvironmentResolver,
+    PlanningPermissionResolver,
+    PlanningWorkerCapabilityResolver,
+    PolicyAwarePlanningEnvironmentResolver,
+)
 from .evidence import (
     CoordinationEvidenceRepository,
     ReplanningEventSink,
@@ -70,11 +77,14 @@ __all__ = [
     "PlanningAgentCandidate",
     "PlanningCapabilityCandidate",
     "PlanningCommandHandlers",
+    "PlanningEnvironment",
+    "PlanningEnvironmentResolver",
     "PlanningInventory",
     "PlanningKernel",
     "PlanningModelCandidate",
     "PlanningOnlyLifecycleBackend",
     "PlanningOrchestratorAdapter",
+    "PlanningPermissionResolver",
     "PlanningProposalResourceService",
     "PlanningRepository",
     "PlanningRequest",
@@ -82,6 +92,8 @@ __all__ = [
     "PlanningStepDraft",
     "PlanningTeamCandidate",
     "PlanningTrigger",
+    "PlanningWorkerCapabilityResolver",
+    "PolicyAwarePlanningEnvironmentResolver",
     "PriorPlanSnapshot",
     "ProposalRecord",
     "ProposalStatus",
