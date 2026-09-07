@@ -35,6 +35,7 @@ from .profiles import CLIProfile, OwnerType, ProfileError, ProfileStore, default
 from .render import Renderer
 from .search import add_search_parser, execute_search
 from .task_management import parse_changes, parse_updates
+from .workflow import add_task_workflow_parser, execute_task_workflow
 from .workspace import parse_json_array
 
 
@@ -230,6 +231,7 @@ def _build_parser() -> argparse.ArgumentParser:
     task_timeline = task_commands.add_parser("timeline", help="inspect canonical task timeline")
     task_timeline.add_argument("task_id")
     _add_pagination_arguments(task_timeline)
+    add_task_workflow_parser(task_commands)
     task_management_update = task_commands.add_parser(
         "update-management",
         help="update canonical Task planning metadata",
@@ -394,7 +396,7 @@ def _profile_command(args: argparse.Namespace, store: ProfileStore, renderer: Re
             endpoint=args.endpoint,
             principal_ref=args.principal_ref,
             owner_type=owner_type,
-            owner_id=args.owner_id,
+            owner_id=owner_id,
         )
         store.set_profile(args.name, profile)
         store.save()
@@ -706,6 +708,8 @@ def _task_command(
         )
     if args.command == "show":
         return CommandResult(client.get(f"/tasks/{_segment(args.task_id)}"))
+    if args.command == "workflow":
+        return CommandResult(execute_task_workflow(args, client))
     if args.command == "update-management":
         _require_confirmation(args, "update task management", args.task_id)
         changes = parse_changes(args.changes_json)
