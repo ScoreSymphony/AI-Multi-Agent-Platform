@@ -36,6 +36,8 @@ from ai_multi_agent_platform.plugins import (
     PluginRegistry,
 )
 from ai_multi_agent_platform.repositories import RepositoryCapabilityProvider
+from ai_multi_agent_platform.repository_intelligence import BaselineRepositoryIntelligenceProvider
+from ai_multi_agent_platform.repository_intelligence.wiring import AuthorizedRepositorySnapshotLoader
 
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
 
@@ -75,6 +77,17 @@ def build_default_single_node_deployment(
             RepositoryCapabilityProvider(
                 deployment.repositories,
                 actor_resolver=_repository_actor_ref,
+            )
+        )
+    )
+    asyncio.run(
+        deployment.capabilities.register_provider(
+            BaselineRepositoryIntelligenceProvider(
+                AuthorizedRepositorySnapshotLoader(
+                    deployment.repositories,
+                    deployment.repository_registry,
+                    actor_resolver=_repository_actor_ref,
+                )
             )
         )
     )
