@@ -112,7 +112,7 @@ No source from `ScoreSymphony/AI-Agent-VPS` is copied into this adapter. The cur
 ## Concrete runtime coverage
 
 `tests/test_forge_http.py` validates protocol and identity translation for the concrete HTTP
-client. `tests/test_forge_sidecar_integration.py`, run by the `forge-sidecar-integration` CI job,
+client. `tests/integration/forge/test_sidecar.py`, run by the `forge-sidecar-integration` CI job,
 builds the exact pinned Rust sidecar and verifies real health, execution and cancellation behavior.
 The sidecar is loopback-only and optional; removing it does not affect core startup or reference
 execution.
