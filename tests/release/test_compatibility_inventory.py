@@ -11,7 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 COMPATIBILITY_PATH = ROOT / "release" / "compatibility.json"
 CI_PATH = ROOT / ".github" / "workflows" / "ci.yml"
 PYPROJECT_PATH = ROOT / "pyproject.toml"
-LITELLM_INTEGRATION_TEST_PATH = ROOT / "tests" / "integration" / "upstreams" / "test_litellm_pinned.py"
+LITELLM_INTEGRATION_TEST_PATH = (
+    ROOT / "tests" / "integration" / "upstreams" / "test_litellm_pinned.py"
+)
 TRACKED_UPSTREAMS = (
     ROOT / "upstream" / "hermes-agent.yaml",
     ROOT / "upstream" / "forge-ai-agent-vps.yaml",
