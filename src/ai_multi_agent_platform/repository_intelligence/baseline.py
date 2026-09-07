@@ -83,10 +83,7 @@ class BaselineRepositoryIntelligenceProvider(CapabilityToolProvider):
         )
 
     async def capability_registrations(self) -> tuple[CapabilityRegistration, ...]:
-        specs = {
-            spec.capability_id: spec
-            for spec in repository_intelligence_capability_specs()
-        }
+        specs = {spec.capability_id: spec for spec in repository_intelligence_capability_specs()}
         return tuple(
             CapabilityRegistration(
                 capability=specs[operation.value],
