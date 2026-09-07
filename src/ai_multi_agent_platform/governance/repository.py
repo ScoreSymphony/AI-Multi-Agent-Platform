@@ -446,7 +446,10 @@ def _proposal_from_json(raw: Mapping[str, object]) -> Proposal:
         title=_string(raw, "title"),
         summary=_string(raw, "summary"),
         reason=_string(raw, "reason"),
-        owner_ref=OwnerRef(type=cast(object, owner["type"]), id=str(owner["id"])),  # type: ignore[arg-type]
+        owner_ref=OwnerRef(
+            type=cast(Literal["user", "organization", "team", "service"], owner["type"]),
+            id=str(owner["id"]),
+        ),
         requester_ref=_string(raw, "requester_ref"),
         source=_string(raw, "source"),
         status=ProposalStatus(_string(raw, "status")),
@@ -535,7 +538,10 @@ def _specification_from_json(raw: Mapping[str, object]) -> SpecificationRevision
         decomposition_hints=_strings(raw, "decomposition_hints"),
         assumptions=_strings(raw, "assumptions"),
         open_questions=_strings(raw, "open_questions"),
-        owner_ref=OwnerRef(type=cast(object, owner["type"]), id=str(owner["id"])),  # type: ignore[arg-type]
+        owner_ref=OwnerRef(
+            type=cast(Literal["user", "organization", "team", "service"], owner["type"]),
+            id=str(owner["id"]),
+        ),
         requester_ref=_string(raw, "requester_ref"),
         provenance=cast(Mapping[str, JsonValue], _mapping(raw, "provenance")),
         content_digest=_string(raw, "content_digest"),

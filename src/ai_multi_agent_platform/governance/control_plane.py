@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import cast
+from typing import Literal, cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -584,58 +584,90 @@ def _specification_from_payload(
 def _specification_revision_from_payload(
     current: SpecificationRevision, payload: dict[str, JsonValue], expected_revision: int
 ) -> SpecificationRevision:
-    mutable = {
-        "problem": _optional_string(payload, "problem") or current.problem,
-        "goal": _optional_string(payload, "goal") or current.goal,
-        "scope": _string_tuple(payload, "scope") if "scope" in payload else current.scope,
-        "out_of_scope": _string_tuple(payload, "out_of_scope")
-        if "out_of_scope" in payload
-        else current.out_of_scope,
-        "acceptance_criteria": _string_tuple(payload, "acceptance_criteria")
-        if "acceptance_criteria" in payload
-        else current.acceptance_criteria,
-        "dependencies": _string_tuple(payload, "dependencies")
-        if "dependencies" in payload
-        else current.dependencies,
-        "constraints": _string_tuple(payload, "constraints")
-        if "constraints" in payload
-        else current.constraints,
-        "risk": RiskClassification(_optional_string(payload, "risk") or current.risk.value),
-        "required_capabilities": _string_tuple(payload, "required_capabilities")
-        if "required_capabilities" in payload
-        else current.required_capabilities,
-        "model_requirements": _json_mapping(payload, "model_requirements")
-        if "model_requirements" in payload
-        else current.model_requirements,
-        "agent_requirements": _json_mapping(payload, "agent_requirements")
-        if "agent_requirements" in payload
-        else current.agent_requirements,
-        "data_security_constraints": _string_tuple(payload, "data_security_constraints")
-        if "data_security_constraints" in payload
-        else current.data_security_constraints,
-        "validation_strategy": _string_tuple(payload, "validation_strategy")
-        if "validation_strategy" in payload
-        else current.validation_strategy,
-        "required_tests": _string_tuple(payload, "required_tests")
-        if "required_tests" in payload
-        else current.required_tests,
-        "verification_requirements": _string_tuple(payload, "verification_requirements")
-        if "verification_requirements" in payload
-        else current.verification_requirements,
-        "required_human_gates": _string_tuple(payload, "required_human_gates")
-        if "required_human_gates" in payload
-        else current.required_human_gates,
-        "decomposition_hints": _string_tuple(payload, "decomposition_hints")
-        if "decomposition_hints" in payload
-        else current.decomposition_hints,
-        "assumptions": _string_tuple(payload, "assumptions")
-        if "assumptions" in payload
-        else current.assumptions,
-        "open_questions": _string_tuple(payload, "open_questions")
-        if "open_questions" in payload
-        else current.open_questions,
-    }
-    return replace(current, revision=expected_revision + 1, content_digest="", **mutable)
+    return replace(
+        current,
+        revision=expected_revision + 1,
+        content_digest="",
+        problem=_optional_string(payload, "problem") or current.problem,
+        goal=_optional_string(payload, "goal") or current.goal,
+        scope=_string_tuple(payload, "scope") if "scope" in payload else current.scope,
+        out_of_scope=(
+            _string_tuple(payload, "out_of_scope")
+            if "out_of_scope" in payload
+            else current.out_of_scope
+        ),
+        acceptance_criteria=(
+            _string_tuple(payload, "acceptance_criteria")
+            if "acceptance_criteria" in payload
+            else current.acceptance_criteria
+        ),
+        dependencies=(
+            _string_tuple(payload, "dependencies")
+            if "dependencies" in payload
+            else current.dependencies
+        ),
+        constraints=(
+            _string_tuple(payload, "constraints")
+            if "constraints" in payload
+            else current.constraints
+        ),
+        risk=RiskClassification(_optional_string(payload, "risk") or current.risk.value),
+        required_capabilities=(
+            _string_tuple(payload, "required_capabilities")
+            if "required_capabilities" in payload
+            else current.required_capabilities
+        ),
+        model_requirements=(
+            _json_mapping(payload, "model_requirements")
+            if "model_requirements" in payload
+            else current.model_requirements
+        ),
+        agent_requirements=(
+            _json_mapping(payload, "agent_requirements")
+            if "agent_requirements" in payload
+            else current.agent_requirements
+        ),
+        data_security_constraints=(
+            _string_tuple(payload, "data_security_constraints")
+            if "data_security_constraints" in payload
+            else current.data_security_constraints
+        ),
+        validation_strategy=(
+            _string_tuple(payload, "validation_strategy")
+            if "validation_strategy" in payload
+            else current.validation_strategy
+        ),
+        required_tests=(
+            _string_tuple(payload, "required_tests")
+            if "required_tests" in payload
+            else current.required_tests
+        ),
+        verification_requirements=(
+            _string_tuple(payload, "verification_requirements")
+            if "verification_requirements" in payload
+            else current.verification_requirements
+        ),
+        required_human_gates=(
+            _string_tuple(payload, "required_human_gates")
+            if "required_human_gates" in payload
+            else current.required_human_gates
+        ),
+        decomposition_hints=(
+            _string_tuple(payload, "decomposition_hints")
+            if "decomposition_hints" in payload
+            else current.decomposition_hints
+        ),
+        assumptions=(
+            _string_tuple(payload, "assumptions")
+            if "assumptions" in payload
+            else current.assumptions
+        ),
+        open_questions=(
+            _string_tuple(payload, "open_questions")
+            if "open_questions" in payload
+            else current.open_questions
+        ),
+    )
 
 
 def _owner_from_payload(payload: Mapping[str, JsonValue], context: RequestContext) -> OwnerRef:
@@ -644,7 +676,10 @@ def _owner_from_payload(payload: Mapping[str, JsonValue], context: RequestContex
         owner_type = raw.get("type")
         owner_id = raw.get("id")
         if owner_type in {"user", "organization", "team", "service"} and isinstance(owner_id, str):
-            return OwnerRef(type=cast("object", owner_type), id=owner_id)  # type: ignore[arg-type]
+            return OwnerRef(
+                type=cast(Literal["user", "organization", "team", "service"], owner_type),
+                id=owner_id,
+            )
     if context.actor.owner_type is None or context.actor.owner_id is None:
         raise ContractError(ErrorCode.INVALID_REQUEST, "owner_ref is required")
     return OwnerRef(type=context.actor.owner_type, id=context.actor.owner_id)
