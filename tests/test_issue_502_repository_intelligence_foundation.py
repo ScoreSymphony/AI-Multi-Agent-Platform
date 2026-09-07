@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from jsonschema import Draft202012Validator
+import pytest
 
 from ai_multi_agent_platform.capabilities import CapabilityRegistry
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
