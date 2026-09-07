@@ -139,12 +139,13 @@ class CapabilityRegistry:
         *,
         include_unavailable: bool = True,
     ) -> tuple[CapabilitySpec, ...]:
-        """Return complete canonical capability inventory without usability filtering.
+        """Return canonical capability inventory with provider state aggregated per version.
 
         This administrative/read surface deliberately differs from ``list_capabilities``:
         permissions and worker placement describe whether one caller may use a capability,
-        not whether the registered capability exists. Invocation and policy discovery remain
-        authoritative for actual use.
+        not whether the registered capability exists. Volatile availability/health is aggregated
+        across equivalent providers so one unavailable registration cannot hide a usable provider.
+        Invocation and policy discovery remain authoritative for actual use.
         """
 
         inventory: list[CapabilitySpec] = []
@@ -155,7 +156,7 @@ class CapabilityRegistry:
             registrations = self._registrations[key]
             if not registrations:
                 continue
-            capability = registrations[0].capability
+            capability = _aggregate_capability_spec(registrations)
             if not include_unavailable and (
                 not capability.available or capability.health is HealthStatus.UNAVAILABLE
             ):
@@ -422,6 +423,33 @@ class CapabilityRegistry:
                 compatibility,
             )
         return max(matches, key=lambda candidate: normalized[candidate])
+
+
+def _aggregate_capability_spec(
+    registrations: list[CapabilityRegistration],
+) -> CapabilitySpec:
+    """Aggregate volatile provider state while preserving one canonical contract definition."""
+
+    base = registrations[0].capability
+    usable = [
+        registration.capability
+        for registration in registrations
+        if registration.capability.available
+        and registration.capability.health is not HealthStatus.UNAVAILABLE
+    ]
+    candidates = usable or [registration.capability for registration in registrations]
+    health_rank = {
+        HealthStatus.HEALTHY: 3,
+        HealthStatus.DEGRADED: 2,
+        HealthStatus.UNKNOWN: 1,
+        HealthStatus.UNAVAILABLE: 0,
+    }
+    representative = max(candidates, key=lambda capability: health_rank[capability.health])
+    return replace(
+        base,
+        health=representative.health,
+        available=bool(usable),
+    )
 
 
 def _no_compatible_version_error(
