@@ -128,9 +128,7 @@ def _draft(agent_id: str, revision: int) -> PlanDraft:
                 key="secure-work",
                 title="Use secure capability",
                 assignment=AgentAssignment(agent_id=agent_id, agent_revision=revision),
-                capability_requirements=(
-                    CapabilityRequirement(capability_id="capability.secure"),
-                ),
+                capability_requirements=(CapabilityRequirement(capability_id="capability.secure"),),
             ),
         ),
     )
@@ -240,7 +238,9 @@ def test_server_allowsets_remove_unauthorized_agent_from_planner_inventory() -> 
         )
 
         assert proposal.status is ProposalStatus.INVALID
-        assert any("references missing Agent revision" in error for error in proposal.validation.errors)
+        assert any(
+            "references missing Agent revision" in error for error in proposal.validation.errors
+        )
 
     asyncio.run(scenario())
 
@@ -264,7 +264,10 @@ def test_missing_server_resolver_does_not_grant_protected_capability() -> None:
         )
 
         assert proposal.status is ProposalStatus.INVALID
-        assert any("requires missing capability capability.secure" in error for error in proposal.validation.errors)
+        assert any(
+            "requires missing capability capability.secure" in error
+            for error in proposal.validation.errors
+        )
 
     asyncio.run(scenario())
 
