@@ -198,7 +198,9 @@ class DistributedScaleReport:
     errors: tuple[str, ...]
 
     def to_dict(self) -> dict[str, Any]:
-        return cast(dict[str, Any], _json_compatible(asdict(self)))
+        document = asdict(self)
+        document["benchmark"] = self.benchmark.to_dict()
+        return cast(dict[str, Any], _json_compatible(document))
 
 
 @dataclass(frozen=True, slots=True)
