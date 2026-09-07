@@ -144,6 +144,9 @@ export function ProposalGovernanceDetailPage({
   const [error, setError] = useState<unknown>(null);
   const [summary, setSummary] = useState("");
   const [reason, setReason] = useState("");
+  const [replacementTitle, setReplacementTitle] = useState("");
+  const [replacementSummary, setReplacementSummary] = useState("");
+  const [replacementReason, setReplacementReason] = useState("");
   const [problem, setProblem] = useState("");
   const [goal, setGoal] = useState("");
   const [scope, setScope] = useState("");

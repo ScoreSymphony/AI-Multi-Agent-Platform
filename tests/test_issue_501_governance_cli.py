@@ -36,11 +36,7 @@ class GovernanceExtensionTransport:
             assert method == "POST"
             self.command_body = json.loads(body or b"{}")
             self.idempotency_key = next(
-                (
-                    value
-                    for key, value in headers.items()
-                    if key.casefold() == "idempotency-key"
-                ),
+                (value for key, value in headers.items() if key.casefold() == "idempotency-key"),
                 None,
             )
             payload = {"id": "task_test", "type": "task", "status": "draft"}
