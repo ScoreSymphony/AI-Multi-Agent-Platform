@@ -41,7 +41,7 @@ def _profile() -> AgentProfile:
     )
 
 
-def _register_local_model(deployment: object) -> str:
+def _register_local_model(deployment: object) -> tuple[str, FakeModelProvider]:
     models = deployment.models  # type: ignore[attr-defined]
     provider = FakeModelProvider()
     models.register_provider(provider)
@@ -59,7 +59,7 @@ def _register_local_model(deployment: object) -> str:
             health=HealthStatus.HEALTHY,
         )
     )
-    return config_id
+    return config_id, provider
 
 
 def test_planning_only_lifecycle_rejects_every_execution_operation() -> None:
@@ -96,7 +96,7 @@ def test_public_single_node_composes_planning_and_hands_activation_to_coordinato
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "single-node", secure_cookie=False)
         )
-        model_config_id = _register_local_model(deployment)
+        model_config_id, model_provider = _register_local_model(deployment)
         admin = deployment.bootstrap_admin(
             "planning-admin",
             "correct horse battery staple for planning",
@@ -156,7 +156,8 @@ def test_public_single_node_composes_planning_and_hands_activation_to_coordinato
         assert agent_runs[0].agent.agent_id == agent.agent_id
         assert agent_runs[0].agent.revision == 1
         assert agent_runs[0].selected_model_config_id == model_config_id
-        assert agent_runs[0].task_context["objective"] == planned_step.objective
+        assert model_provider.calls
+        assert model_provider.calls[-1].messages[-1] == planned_step.objective
 
         assert "planning-proposals" in deployment.control_plane.registered_collections
         assert "planning.propose" in deployment.control_plane.registered_commands
