@@ -83,9 +83,7 @@ def test_distributed_fault_profile_covers_worker_loss_rejoin_and_workspace_recov
 
     document = report.to_dict()
     schema = json.loads(
-        Path("docs/schemas/benchmark-distributed-faults.v1.schema.json").read_text(
-            encoding="utf-8"
-        )
+        Path("docs/schemas/benchmark-distributed-faults.v1.schema.json").read_text(encoding="utf-8")
     )
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(document)
@@ -132,6 +130,4 @@ def test_distributed_fault_profile_requires_fresh_data_root(tmp_path: Path) -> N
     data_root.mkdir()
     (data_root / "existing.txt").write_text("occupied", encoding="utf-8")
     with pytest.raises(ValueError, match="fresh"):
-        asyncio.run(
-            DistributedWorkerWorkspaceFaultHarness(data_root).run(DistributedFaultSpec())
-        )
+        asyncio.run(DistributedWorkerWorkspaceFaultHarness(data_root).run(DistributedFaultSpec()))
