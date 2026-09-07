@@ -9,7 +9,7 @@ from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_no
 _PASSWORD = "issue-598-test-password-with-sufficient-length"
 
 
-def test_single_node_decision_records_are_authorized_registered_and_restart_durable(
+def test_single_node_decision_records_are_authorized_registered_searchable_and_durable(
     tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
@@ -82,13 +82,29 @@ def test_single_node_decision_records_are_authorized_registered_and_restart_dura
         listed = await first.http.handle(
             HTTPRequest(
                 method="GET",
-                path="/api/v1/decision-records?filter[status]=current&q=runtime",
+                path="/api/v1/decision-records",
+                query={"filter[status]": "current", "q": "runtime"},
                 headers=headers,
             )
         )
         assert listed.status == 200, listed.body
         assert isinstance(listed.body, dict)
         assert [item["id"] for item in listed.body["items"]] == [decision_id]
+
+        searched = await first.http.handle(
+            HTTPRequest(
+                method="GET",
+                path="/api/v1/search",
+                query={"q": "runtime"},
+                headers=headers,
+            )
+        )
+        assert searched.status == 200, searched.body
+        assert isinstance(searched.body, dict)
+        assert any(
+            item["resource_type"] == "decision-record" and item["resource_id"] == decision_id
+            for item in searched.body["items"]
+        )
 
         restarted = build_single_node_deployment(config)
         assert restarted.control_plane.decisions is not None
