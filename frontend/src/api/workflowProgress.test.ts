@@ -159,4 +159,38 @@ describe("workflow progress client", () => {
     expect(onMissing).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();
   });
+
+  it("keeps canonical authorization failures distinct from a missing projection", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "forbidden",
+          category: "authorization",
+          message: "workflow scope is not authorized",
+          retryable: false,
+          request_id: "req_forbidden_560",
+          correlation_id: "corr_forbidden_560",
+        }),
+        { status: 403 },
+      ),
+    );
+    const onMissing = vi.fn();
+    const onError = vi.fn();
+    const poller = new WorkflowProgressPoller({
+      client: clientWith(fetchSpy as unknown as typeof fetch),
+      taskId: "task_421",
+      planId: "plan_421",
+      onProjection: vi.fn(),
+      onMissing,
+      onError,
+    });
+
+    await poller.refresh();
+    poller.stop();
+
+    expect(onMissing).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(onError.mock.calls)).not.toContain("approval_421");
+    expect(JSON.stringify(onError.mock.calls)).not.toContain("adapter-job-421");
+  });
 });
