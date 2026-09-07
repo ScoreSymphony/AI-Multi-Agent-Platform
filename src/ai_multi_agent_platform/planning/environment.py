@@ -127,50 +127,50 @@ class PolicyAwarePlanningEnvironmentResolver:
         authorized_capabilities: set[tuple[str, str]] = set()
 
         if self.agents is not None:
-            for definition in self.agents.list_agents():
-                revision = self.agents.get_agent_revision(
-                    definition.agent_id,
-                    definition.current_revision,
+            for agent_definition in self.agents.list_agents():
+                agent_revision = self.agents.get_agent_revision(
+                    agent_definition.agent_id,
+                    agent_definition.current_revision,
                 )
-                if not revision.profile.enabled:
+                if not agent_revision.profile.enabled:
                     continue
                 action = ProposedAction(
                     AuthorizationContext(
                         actor=actor,
                         action=AuthorizationAction.EXECUTE,
                         resource_type=ResourceType.AGENT,
-                        resource_id=definition.agent_id,
+                        resource_id=agent_definition.agent_id,
                         operation=context,
                         task_id=task.task_id,
-                        agent_id=definition.agent_id,
+                        agent_id=agent_definition.agent_id,
                         side_effect="planning_candidate_discovery",
                     ),
-                    payload={"agent_revision": revision.revision},
+                    payload={"agent_revision": agent_revision.revision},
                 )
                 if await self._allowed(action, allow_approval=False):
-                    authorized_agents.add((definition.agent_id, revision.revision))
+                    authorized_agents.add((agent_definition.agent_id, agent_revision.revision))
 
-            for definition in self.agents.list_teams():
-                revision = self.agents.get_team_revision(
-                    definition.team_id,
-                    definition.current_revision,
+            for team_definition in self.agents.list_teams():
+                team_revision = self.agents.get_team_revision(
+                    team_definition.team_id,
+                    team_definition.current_revision,
                 )
-                if not revision.profile.enabled:
+                if not team_revision.profile.enabled:
                     continue
                 action = ProposedAction(
                     AuthorizationContext(
                         actor=actor,
                         action=AuthorizationAction.EXECUTE,
                         resource_type=ResourceType.AGENT_TEAM,
-                        resource_id=definition.team_id,
+                        resource_id=team_definition.team_id,
                         operation=context,
                         task_id=task.task_id,
                         side_effect="planning_candidate_discovery",
                     ),
-                    payload={"team_revision": revision.revision},
+                    payload={"team_revision": team_revision.revision},
                 )
                 if await self._allowed(action, allow_approval=False):
-                    authorized_teams.add((definition.team_id, revision.revision))
+                    authorized_teams.add((team_definition.team_id, team_revision.revision))
 
         if self.capabilities is not None:
             for capability in self.capabilities.inventory_capabilities(include_unavailable=False):
