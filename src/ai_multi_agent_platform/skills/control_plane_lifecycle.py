@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.models import RequestContext
 
 from .codec import revision_ref_from_json, skill_profile_from_json
 from .control_plane_helpers import (
     control_plane_provenance,
+    mapping,
     optional_positive_int,
     optional_string,
     owner_ref,
@@ -149,6 +152,12 @@ class SkillLifecycleCommands:
     ) -> dict[str, JsonValue]:
         target = SkillTrustStatus(required_string(payload, "target"))
         evaluation_raw = optional_string(payload, "evaluation_status")
+        metadata_raw = payload.get("evaluation_metadata")
+        evaluation_metadata = (
+            None
+            if metadata_raw is None
+            else cast(dict[str, JsonValue], dict(mapping(metadata_raw, "evaluation_metadata")))
+        )
         revision = self.service.transition_trust(
             resource_ref,
             target,
@@ -156,6 +165,7 @@ class SkillLifecycleCommands:
             evaluation_status=(
                 SkillEvaluationStatus(evaluation_raw) if evaluation_raw is not None else None
             ),
+            evaluation_metadata=evaluation_metadata,
             provenance=control_plane_provenance(context, "skill.trust"),
         )
         return skill_resource(self.service, revision.skill_id)
