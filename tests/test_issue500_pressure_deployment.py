@@ -5,6 +5,8 @@ from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+import pytest
+
 from ai_multi_agent_platform.cli.client import ClientResponse, ControlPlaneClient
 from ai_multi_agent_platform.cli.compute import _doctor_host_pressure
 from ai_multi_agent_platform.contracts.types import AdapterMetadata, JsonValue
@@ -31,6 +33,10 @@ from ai_multi_agent_platform.distributed.pressure_control_plane import (
 )
 from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.observability import InMemoryExporter, Telemetry
+from ai_multi_agent_platform.security import AuthorizationAction, ResourceType
+from ai_multi_agent_platform.security.control_plane_bridge import (
+    canonical_control_plane_vocabulary,
+)
 
 NOW = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
 
@@ -101,6 +107,25 @@ def test_host_pressure_config_is_opt_in_and_environment_driven() -> None:
     assert policy.protected_headroom.storage_bytes == 2048
 
 
+@pytest.mark.parametrize(
+    ("name", "value"),
+    (
+        ("PLATFORM_HOST_PRESSURE_MAX_AGE_SECONDS", "nan"),
+        ("PLATFORM_HOST_PRESSURE_MAX_AGE_SECONDS", "inf"),
+        ("PLATFORM_HOST_PRESSURE_HEADROOM_CPU_CORES", "-inf"),
+    ),
+)
+def test_host_pressure_config_rejects_non_finite_environment_values(
+    name: str,
+    value: str,
+) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        HostPressureDeploymentConfig.from_environment({name: value})
+
+    with pytest.raises(ValueError, match="finite"):
+        HostPressureDeploymentConfig(protected_cpu_cores=float("nan"))
+
+
 def test_distributed_pressure_composition_is_optional() -> None:
     runtime = DistributedRuntime(DistributedRegistry())
     telemetry = Telemetry(InMemoryExporter())
@@ -127,6 +152,7 @@ def test_distributed_pressure_composition_is_optional() -> None:
     assert isinstance(runtime.telemetry, DistributedTelemetry)
     assert runtime.scheduler.pressure_provider is provider
     assert runtime.scheduler.pressure_policy is not None
+    assert runtime.scheduler.pressure_telemetry is not None
 
 
 def test_pressure_control_plane_projects_only_portable_evidence() -> None:
@@ -154,6 +180,17 @@ def test_pressure_control_plane_projects_only_portable_evidence() -> None:
     ]
     assert "source_ref" not in resource
     assert "provider_metadata" not in resource
+
+
+def test_pressure_control_plane_uses_node_authorization_vocabulary() -> None:
+    assert canonical_control_plane_vocabulary("node-pressure:list") == (
+        AuthorizationAction.VIEW,
+        ResourceType.NODE,
+    )
+    assert canonical_control_plane_vocabulary("node-pressure:read") == (
+        AuthorizationAction.READ,
+        ResourceType.NODE,
+    )
 
 
 def test_doctor_pressure_is_optional_and_marks_critical_pressure_degraded() -> None:
@@ -193,6 +230,55 @@ def test_doctor_pressure_is_optional_and_marks_critical_pressure_degraded() -> N
     ]
 
 
+def test_doctor_pressure_follows_pagination_before_deciding_health() -> None:
+    first = _response(
+        200,
+        {
+            "items": [
+                {
+                    "id": "node-a",
+                    "node_id": "node-a",
+                    "state": "healthy",
+                    "observed_at": NOW.isoformat(),
+                    "trusted": True,
+                    "signals": [],
+                }
+            ],
+            "next_cursor": "cursor-2",
+        },
+    )
+    second = _response(
+        200,
+        {
+            "items": [
+                {
+                    "id": "node-b",
+                    "node_id": "node-b",
+                    "state": "critical",
+                    "observed_at": NOW.isoformat(),
+                    "trusted": True,
+                    "signals": [],
+                }
+            ],
+            "next_cursor": None,
+        },
+    )
+    paged = _PagedPressureClient([first, second])
+
+    status, checks = _doctor_host_pressure(cast(ControlPlaneClient, paged))
+
+    assert status == "degraded"
+    assert paged.queries == [
+        {"limit": "200"},
+        {"limit": "200", "cursor": "cursor-2"},
+    ]
+    assert any(
+        item.get("resource_id") == "node-b" and item.get("status") == "degraded"
+        for item in checks
+        if isinstance(item, dict)
+    )
+
+
 def _response(status: int, body: JsonValue) -> ClientResponse:
     return ClientResponse(
         status=status,
@@ -217,3 +303,23 @@ class _StubPressureClient:
         del query, raise_for_status
         assert path == "/node-pressure"
         return self.response
+
+
+class _PagedPressureClient:
+    def __init__(self, responses: list[ClientResponse]) -> None:
+        self.responses = list(responses)
+        self.queries: list[dict[str, str]] = []
+
+    def get(
+        self,
+        path: str,
+        *,
+        query: Mapping[str, str] | None = None,
+        raise_for_status: bool = True,
+    ) -> ClientResponse:
+        del raise_for_status
+        assert path == "/node-pressure"
+        self.queries.append(dict(query or {}))
+        if not self.responses:
+            raise AssertionError("unexpected pressure page request")
+        return self.responses.pop(0)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
@@ -14,6 +15,7 @@ from ai_multi_agent_platform.distributed import (
     ProtectedHeadroom,
     RegistryPressureSnapshotProvider,
 )
+from ai_multi_agent_platform.distributed.pressure_telemetry import PressureTelemetry
 from ai_multi_agent_platform.observability import Telemetry
 
 
@@ -29,10 +31,10 @@ class HostPressureDeploymentConfig:
     protected_storage_bytes: int = 0
 
     def __post_init__(self) -> None:
-        if self.max_snapshot_age_seconds <= 0:
-            raise ValueError("host-pressure max snapshot age must be greater than zero")
-        if self.protected_cpu_cores < 0:
-            raise ValueError("host-pressure protected CPU cores must be non-negative")
+        if not math.isfinite(self.max_snapshot_age_seconds) or self.max_snapshot_age_seconds <= 0:
+            raise ValueError("host-pressure max snapshot age must be finite and greater than zero")
+        if not math.isfinite(self.protected_cpu_cores) or self.protected_cpu_cores < 0:
+            raise ValueError("host-pressure protected CPU cores must be finite and non-negative")
         if self.protected_ram_bytes < 0 or self.protected_storage_bytes < 0:
             raise ValueError("host-pressure protected byte headroom must be non-negative")
 
@@ -96,6 +98,7 @@ def configure_distributed_host_pressure(
     distributed_telemetry = DistributedTelemetry(telemetry)
     runtime.telemetry = distributed_telemetry
     runtime.scheduler.telemetry = distributed_telemetry
+    runtime.scheduler.pressure_telemetry = PressureTelemetry(telemetry)
     runtime.scheduler.pressure_provider = effective_provider
     runtime.scheduler.pressure_policy = config.policy()
     return effective_provider
@@ -119,6 +122,8 @@ def _float(value: str | None, *, default: float, name: str) -> float:
         parsed = float(value)
     except ValueError as exc:
         raise ValueError(f"{name} must be a number") from exc
+    if not math.isfinite(parsed):
+        raise ValueError(f"{name} must be finite")
     if parsed < 0:
         raise ValueError(f"{name} must be non-negative")
     return parsed
