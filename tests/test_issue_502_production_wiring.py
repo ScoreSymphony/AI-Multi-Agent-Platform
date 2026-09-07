@@ -20,6 +20,7 @@ from ai_multi_agent_platform.domain import new_id
 from ai_multi_agent_platform.repositories import (
     LocalGitRepositoryProvider,
     RepositoryBinding,
+    RepositoryCallContext,
     RepositoryConnection,
     RepositoryRegistry,
     RepositoryService,
@@ -36,6 +37,7 @@ from ai_multi_agent_platform.security import (
     LocalPrincipalPolicy,
     ResourceType,
 )
+from ai_multi_agent_platform.testing import FakeAuthorizationProvider
 
 
 def _actor_ref(context: OperationContext) -> str:
@@ -182,5 +184,80 @@ def test_authorized_loader_reads_exact_tree_through_repository_policy(tmp_path: 
                 )
             )
         assert denied.value.code is ErrorCode.FORBIDDEN
+
+    asyncio.run(scenario())
+
+
+def test_tree_read_uses_materialize_policy_and_pre_materialization_bounds(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        project_id = new_id("project")
+        actor_ref = new_id("user")
+        operation = OperationContext(
+            correlation_id="issue-502-materialize-policy",
+            owner_type="user",
+            owner_id=actor_ref,
+            project_id=project_id,
+        )
+        connection = RepositoryConnection(
+            connection=Connection(
+                id=new_id("connection"),
+                connector_type_id="local-git",
+                connector_version="1.0",
+                owner_type="user",
+                owner_id=actor_ref,
+                display_name="Repository intelligence bounded fixture",
+                project_id=project_id,
+            ),
+            provider_id="local-git",
+            local=True,
+        )
+        root = tmp_path / "bounded-repo"
+        provider = LocalGitRepositoryProvider(root, connection)
+        repository = await provider.initialize(operation)
+        (root / "one.txt").write_text("one", encoding="utf-8")
+        (root / "two.txt").write_text("two", encoding="utf-8")
+        commit = await provider.commit(
+            repository,
+            "bounded fixture",
+            operation,
+            author_name="Repository Intelligence Test",
+            author_email="repository-intelligence@example.invalid",
+        )
+        repository = await provider.read(repository, operation)
+        registry = RepositoryRegistry()
+        registry.register(RepositoryBinding(connection, repository, provider))
+        authorization = FakeAuthorizationProvider()
+        service = RepositoryService(registry, AuthorizationGate(authorization))
+        context = RepositoryCallContext(operation=operation, actor_ref=actor_ref)
+
+        tree = await service.read_tree(
+            repository.id,
+            commit.revision,
+            context,
+            max_entries=2,
+            max_total_bytes=6,
+        )
+        assert len(tree.entries) == 2
+        assert authorization.calls[-1].capability_ref == "repository.materialize"
+
+        with pytest.raises(ContractError) as entry_limit:
+            await service.read_tree(
+                repository.id,
+                commit.revision,
+                context,
+                max_entries=1,
+                max_total_bytes=6,
+            )
+        assert entry_limit.value.code is ErrorCode.RESOURCE_EXHAUSTED
+
+        with pytest.raises(ContractError) as byte_limit:
+            await service.read_tree(
+                repository.id,
+                commit.revision,
+                context,
+                max_entries=2,
+                max_total_bytes=5,
+            )
+        assert byte_limit.value.code is ErrorCode.RESOURCE_EXHAUSTED
 
     asyncio.run(scenario())
