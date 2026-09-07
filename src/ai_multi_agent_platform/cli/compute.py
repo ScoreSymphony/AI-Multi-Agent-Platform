@@ -172,7 +172,101 @@ def doctor_compute(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
                     "maintenance": item.get("maintenance", False) if kind == "node" else False,
                 }
             )
+
+    pressure_status, pressure_checks = _doctor_host_pressure(client)
+    if pressure_status == "degraded":
+        overall = "degraded"
+    checks.extend(pressure_checks)
     return overall, checks
+
+
+def _doctor_host_pressure(client: ControlPlaneClient) -> tuple[str, list[JsonValue]]:
+    """Inspect every page of the optional #500 pressure projection when enabled."""
+
+    overall = "healthy"
+    checks: list[JsonValue] = []
+    cursor: str | None = None
+    seen_cursors: set[str] = set()
+    first_page = True
+
+    while True:
+        query = {"limit": "200"}
+        if cursor is not None:
+            query["cursor"] = cursor
+        try:
+            response = client.get(
+                "/node-pressure",
+                query=query,
+                raise_for_status=False,
+            )
+        except TransportError as exc:
+            return "degraded", checks + [
+                {
+                    "name": "host_pressure",
+                    "status": "degraded",
+                    "message": str(exc),
+                }
+            ]
+
+        # #500 is opt-in. Only a missing first page means the feature is disabled.
+        if response.status == 404 and first_page:
+            return "healthy", []
+        if response.status >= 400:
+            return "degraded", checks + [
+                {
+                    "name": "host_pressure",
+                    "status": "degraded",
+                    "http_status": response.status,
+                }
+            ]
+
+        items = _page_items(response.body)
+        if items is None:
+            return "degraded", checks + [
+                {
+                    "name": "host_pressure",
+                    "status": "degraded",
+                    "message": "host-pressure collection returned an invalid page",
+                }
+            ]
+
+        for item in items:
+            state = item.get("state")
+            trusted = item.get("trusted") is True
+            if state in {"elevated", "critical"}:
+                item_status = "degraded"
+                overall = "degraded"
+            elif state in {"healthy", "unknown"}:
+                item_status = "healthy"
+            else:
+                item_status = "degraded"
+                overall = "degraded"
+            checks.append(
+                {
+                    "name": "host_pressure",
+                    "status": item_status,
+                    "resource_id": item.get("node_id") or item.get("id"),
+                    "pressure_state": state,
+                    "trusted": trusted,
+                    "observed_at": item.get("observed_at"),
+                }
+            )
+
+        body = response.body
+        raw_cursor = body.get("next_cursor") if isinstance(body, dict) else None
+        if raw_cursor is None:
+            return overall, checks
+        if not isinstance(raw_cursor, str) or not raw_cursor.strip() or raw_cursor in seen_cursors:
+            return "degraded", checks + [
+                {
+                    "name": "host_pressure",
+                    "status": "degraded",
+                    "message": "host-pressure collection returned an invalid pagination cursor",
+                }
+            ]
+        seen_cursors.add(raw_cursor)
+        cursor = raw_cursor
+        first_page = False
 
 
 def _execute_node(
