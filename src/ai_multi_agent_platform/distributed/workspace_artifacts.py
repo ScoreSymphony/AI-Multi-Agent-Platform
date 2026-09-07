@@ -46,6 +46,12 @@ class CanonicalWorkspaceArtifactPublisher:
     This integration deliberately creates a distinct deterministic ``artifact_*`` identity for
     every non-deleted change, links it through ``FileProvider`` and attaches it to the parent
     canonical Run. File IDs are never reinterpreted as Artifact IDs.
+
+    Publication is deliberately Task-scoped because ``PlatformKernel.attach_artifact`` requires
+    the parent Task identity. Step-scoped Worker Jobs remain valid canonical execution and are
+    passed through by ``ArtifactPublishingWorkerDispatcher`` until an explicit Step -> Task
+    artifact-attachment contract exists; the decorator must never turn a successful Step result
+    into a failure merely because Task-level publication is not applicable.
     """
 
     def __init__(
@@ -116,7 +122,13 @@ class CanonicalWorkspaceArtifactPublisher:
 
 
 class ArtifactPublishingWorkerDispatcher:
-    """Decorate a materializing Worker so canonical Workspace artifacts reach Worker results."""
+    """Decorate materialized Task work so canonical Workspace artifacts reach Worker results.
+
+    The wrapper is intentionally transparent for non-Task subjects. Step-scoped execution is a
+    valid canonical Worker path, but Task-level Artifact attachment does not yet have enough
+    information to resolve a parent Task safely. Such results therefore retain the exact wrapped
+    Worker result rather than failing during optional publication.
+    """
 
     def __init__(
         self,
@@ -154,8 +166,9 @@ class ArtifactPublishingWorkerDispatcher:
             evidence = self._dispatcher.evidence(worker_job_id)
             if evidence.result is not None:
                 job = self._job(worker_job_id)
-                artifact_ids = await self._publisher.publish(job, evidence.result)
-                self._artifact_ids[worker_job_id] = artifact_ids
+                if job.execution.subject_type == "task":
+                    artifact_ids = await self._publisher.publish(job, evidence.result)
+                    self._artifact_ids[worker_job_id] = artifact_ids
         return replace(
             result,
             artifact_refs=tuple(dict.fromkeys((*result.artifact_refs, *artifact_ids))),
