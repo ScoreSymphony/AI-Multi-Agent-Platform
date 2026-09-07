@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchmark-heterogeneous-placement.v1.schema.json",
+  "title": "Heterogeneous Placement Benchmark Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "benchmark",
+    "platform_version",
+    "platform_commit",
+    "started_at",
+    "duration_seconds",
+    "environment",
+    "throughput_operations_per_second",
+    "placement_latency",
+    "profile_latency",
+    "role_placement_counts",
+    "rejection_code_counts",
+    "worker_roles",
+    "resources",
+    "correctness",
+    "node_ids",
+    "worker_ids",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "iterations_per_profile",
+        "safety_max_operations",
+        "benchmark_id",
+        "benchmark_version",
+        "deployment_profile",
+        "operation_count",
+        "workload_profiles",
+        "expected_invariants",
+        "captured_metrics"
+      ],
+      "properties": {
+        "iterations_per_profile": {"type": "integer", "minimum": 1},
+        "safety_max_operations": {"type": "integer", "minimum": 1},
+        "benchmark_id": {"const": "distributed.heterogeneous-placement"},
+        "benchmark_version": {"const": "1.0"},
+        "deployment_profile": {"const": "distributed-reference-scheduler"},
+        "operation_count": {"type": "integer", "minimum": 4},
+        "workload_profiles": {
+          "const": ["cpu-only", "gpu-inference", "browser-network", "unschedulable-vram"]
+        },
+        "expected_invariants": {"type": "array", "items": {"type": "string"}},
+        "captured_metrics": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "platform_version": {"type": "string", "minLength": 1},
+    "platform_commit": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "minLength": 1},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "environment": {"type": "object"},
+    "throughput_operations_per_second": {"type": "number", "minimum": 0},
+    "placement_latency": {"$ref": "#/$defs/latency"},
+    "profile_latency": {
+      "type": "object",
+      "required": ["cpu-only", "gpu-inference", "browser-network", "unschedulable-vram"],
+      "additionalProperties": {"$ref": "#/$defs/latency"}
+    },
+    "role_placement_counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "rejection_code_counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "worker_roles": {
+      "type": "object",
+      "minProperties": 3,
+      "additionalProperties": {"enum": ["cpu", "gpu", "browser"]}
+    },
+    "resources": {"$ref": "#/$defs/resources"},
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_operations",
+        "attempted_operations",
+        "successful_placements",
+        "expected_successful_placements",
+        "rejected_operations",
+        "expected_rejected_operations",
+        "misplaced_operations",
+        "reservation_leaks",
+        "passed"
+      ],
+      "properties": {
+        "expected_operations": {"type": "integer", "minimum": 4},
+        "attempted_operations": {"type": "integer", "minimum": 0},
+        "successful_placements": {"type": "integer", "minimum": 0},
+        "expected_successful_placements": {"type": "integer", "minimum": 0},
+        "rejected_operations": {"type": "integer", "minimum": 0},
+        "expected_rejected_operations": {"type": "integer", "minimum": 0},
+        "misplaced_operations": {"type": "integer", "minimum": 0},
+        "reservation_leaks": {"type": "integer", "minimum": 0},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "node_ids": {"type": "array", "minItems": 3, "items": {"type": "string"}, "uniqueItems": true},
+    "worker_ids": {"type": "array", "minItems": 3, "items": {"type": "string"}, "uniqueItems": true},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "min_ms", "mean_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "min_ms": {"type": "number", "minimum": 0},
+        "mean_ms": {"type": "number", "minimum": 0},
+        "p50_ms": {"type": "number", "minimum": 0},
+        "p95_ms": {"type": "number", "minimum": 0},
+        "p99_ms": {"type": "number", "minimum": 0},
+        "max_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "process_cpu_seconds",
+        "traced_memory_current_bytes",
+        "traced_memory_peak_bytes",
+        "peak_rss_bytes",
+        "storage_bytes_before",
+        "storage_bytes_after",
+        "storage_growth_bytes",
+        "open_file_descriptors"
+      ],
+      "properties": {
+        "process_cpu_seconds": {"type": "number", "minimum": 0},
+        "traced_memory_current_bytes": {"type": "integer", "minimum": 0},
+        "traced_memory_peak_bytes": {"type": "integer", "minimum": 0},
+        "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "storage_bytes_before": {"type": "integer", "minimum": 0},
+        "storage_bytes_after": {"type": "integer", "minimum": 0},
+        "storage_growth_bytes": {"type": "integer"},
+        "open_file_descriptors": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  }
+}
