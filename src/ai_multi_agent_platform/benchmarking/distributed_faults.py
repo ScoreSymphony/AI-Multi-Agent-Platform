@@ -17,6 +17,7 @@ from ai_multi_agent_platform.contracts import (
     ErrorCode,
     ExecutionRequest,
     OperationContext,
+    OperationControl,
 )
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
 from ai_multi_agent_platform.deployment.distributed_control_plane import (
@@ -38,8 +39,13 @@ from ai_multi_agent_platform.distributed import (
     WorkerRequestCredentials,
     WorkerStatus,
 )
+from ai_multi_agent_platform.distributed.workspace_transport import WORKSPACE_COMMAND_TOPIC_PREFIX
 from ai_multi_agent_platform.domain import new_id
-from ai_multi_agent_platform.messaging import InProcessMessageTransport
+from ai_multi_agent_platform.messaging import (
+    InProcessMessageTransport,
+    PublishReceipt,
+    TransportEnvelope,
+)
 
 from .distributed_scale import DistributedScaleSpec, DistributedWorkerWorkspaceScaleHarness
 from .models import LatencyDistribution, ResourceMetrics
@@ -52,6 +58,35 @@ from .single_node import (
 )
 
 DISTRIBUTED_FAULT_REPORT_SCHEMA_VERSION = "1.0"
+
+
+class _WorkspaceCommandFaultTransport(InProcessMessageTransport):
+    """Reference transport with one deterministic control-side Workspace publish fault."""
+
+    def __init__(self, *, provider_id: str) -> None:
+        super().__init__(provider_id=provider_id)
+        self._fail_next_workspace_publish = False
+
+    def fail_next_workspace_publish(self) -> None:
+        self._fail_next_workspace_publish = True
+
+    async def publish(
+        self,
+        topic: str,
+        envelope: TransportEnvelope,
+        *,
+        control: OperationControl | None = None,
+    ) -> PublishReceipt:
+        if self._fail_next_workspace_publish and topic.startswith(WORKSPACE_COMMAND_TOPIC_PREFIX):
+            self._fail_next_workspace_publish = False
+            raise ContractError(
+                ErrorCode.UNAVAILABLE,
+                "injected remote Workspace transport publish failure",
+                retryable=True,
+                provider_id=self.descriptor.provider_id,
+                details={"topic": topic},
+            )
+        return await super().publish(topic, envelope, control=control)
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +169,7 @@ class DistributedFaultSpec:
                 "degraded load never dispatches to the offline Worker",
                 "Worker rejoin preserves the canonical Node and Worker identities",
                 "post-rejoin full-width load uses the rejoined Worker again",
-                "Workspace transport outage surfaces retryable canonical UNAVAILABLE",
+                "Workspace transport failure surfaces retryable canonical UNAVAILABLE",
                 "the failed Workspace dispatch never reaches Worker execution",
                 "capacity recovers after the failed reservation expires",
                 "the recovery Workspace job terminates and leaves no materialization behind",
@@ -237,7 +272,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             reservation_ttl=timedelta(seconds=spec.reservation_ttl_seconds),
         )
         runtime = DistributedRuntime(registry)
-        transport = InProcessMessageTransport(provider_id="benchmark-distributed-faults")
+        transport = _WorkspaceCommandFaultTransport(provider_id="benchmark-distributed-faults")
         service = DeploymentWorkerProtocolService(
             runtime,
             authentication=deployment.authentication,
@@ -253,16 +288,14 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             rounds=1,
             payload_sizes_bytes=(spec.payload_bytes,),
             timeout_seconds=spec.timeout_seconds,
-            safety_max_operations=max(spec.worker_count, 1),
+            safety_max_operations=spec.worker_count,
             safety_max_payload_bytes=spec.safety_max_payload_bytes,
             safety_max_fixture_bytes=spec.safety_max_payload_bytes,
         )
         worker_fixtures = self._build_workers(fixture_spec, deployment, transport)
         workspace = (await self._build_workspaces(fixture_spec, deployment))[0]
 
-        processes: dict[str, DistributedWorkerProcess] = {
-            item.worker.worker_id: item.process for item in worker_fixtures
-        }
+        processes = {item.worker.worker_id: item.process for item in worker_fixtures}
         process_tasks: dict[str, asyncio.Task[None]] = {
             worker_id: asyncio.create_task(process.run())
             for worker_id, process in processes.items()
@@ -483,10 +516,15 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                     post_rejoin_workers.update(record.worker_id for record in result.records)
 
                 outage_time = rejoin_time + timedelta(milliseconds=10)
-                failure_job = _job(workspace, phase="workspace-outage", round_index=0, ordinal=0)
+                failure_job = _job(
+                    workspace,
+                    phase="workspace-outage",
+                    round_index=0,
+                    ordinal=0,
+                )
                 worker_job_ids.append(failure_job.worker_job_id)
                 run_ids.append(failure_job.execution.run_id)
-                await transport.set_available(False)
+                transport.fail_next_workspace_publish()
                 failure_started = time.perf_counter()
                 try:
                     await runtime.dispatch(failure_job, now=outage_time)
@@ -498,14 +536,12 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                 except Exception as exc:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
                     errors.append(
-                        "Workspace outage raised non-canonical error: "
+                        "Workspace fault raised non-canonical error: "
                         f"{type(exc).__name__}: {exc}"
                     )
                 else:
                     workspace_failure_samples.append(time.perf_counter() - failure_started)
-                    errors.append("Workspace outage unexpectedly accepted dispatch")
-                finally:
-                    await transport.set_available(True)
+                    errors.append("Workspace fault unexpectedly accepted dispatch")
 
                 try:
                     failed_record = runtime.get_record(failure_job.worker_job_id)
@@ -541,20 +577,21 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                     )
                 await runtime.reconcile(now=recovery_time)
 
-                recovery_job = _job(workspace, phase="workspace-recovery", round_index=0, ordinal=0)
+                recovery_job = _job(
+                    workspace,
+                    phase="workspace-recovery",
+                    round_index=0,
+                    ordinal=0,
+                )
                 worker_job_ids.append(recovery_job.worker_job_id)
                 run_ids.append(recovery_job.execution.run_id)
                 recovery_started = time.perf_counter()
                 recovery_record = await runtime.dispatch(recovery_job, now=recovery_time)
                 workspace_recovery_samples.append(time.perf_counter() - recovery_started)
                 placement_counts[recovery_record.worker_id] += 1
-                reconciled = await runtime.reconcile(now=recovery_time)
-                recovery_record = next(
-                    record
-                    for record in reconciled
-                    if record.job.worker_job_id == recovery_job.worker_job_id
-                )
+                await runtime.reconcile(now=recovery_time)
                 result = await runtime.result(recovery_job.worker_job_id)
+                recovery_record = runtime.get_record(recovery_job.worker_job_id)
                 workspace_recovery_terminal = (
                     recovery_record.state is DispatchState.TERMINAL and result is not None
                 )
@@ -594,8 +631,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             and len(post_rejoin_workers) == spec.worker_count
         )
         stable_worker_ids = len(
-            set(worker.worker_id for worker in runtime.registry.list_workers())
-            & set(initial_worker_ids)
+            {worker.worker_id for worker in runtime.registry.list_workers()} & set(initial_worker_ids)
         )
         correctness = DistributedFaultCorrectnessSummary(
             expected_workers=spec.worker_count,
