@@ -618,7 +618,9 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
                     headers=_headers(token),
                 )
             )
-            assert task_view.status == run_view.status == result_view.status == timeline.status == 200
+            assert (
+                task_view.status == run_view.status == result_view.status == timeline.status == 200
+            )
             assert isinstance(task_view.body, dict)
             assert isinstance(run_view.body, dict)
             assert isinstance(result_view.body, dict)
