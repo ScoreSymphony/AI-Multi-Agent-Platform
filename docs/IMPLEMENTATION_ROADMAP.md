@@ -1,10 +1,10 @@
 # Dependency-Driven Implementation Roadmap
 
-> Status baseline: 2026-09-07, after closure of #500, #567 and #568
+> Point-in-time baseline: 2026-09-07, after closure of #500, #567 and #568 and creation of #579
 
-This roadmap describes the remaining work from current `main` toward the operational v1 baseline and the wider ideal end state. The project is no longer in foundational platform construction. Most canonical domains, runtime boundaries, client surfaces, distributed execution building blocks and operational foundations are implemented; the remaining work is concentrated in final planning/client convergence, performance and real-host evidence, platform conformance, and optional end-state extensions.
+This roadmap describes the remaining work from current `main` toward the operational v1 baseline and the wider ideal end state. The project is no longer in foundational platform construction. Most canonical domains, runtime boundaries, client surfaces, distributed execution building blocks and operational foundations are implemented; remaining work is concentrated in final planning/client convergence, performance and real-host evidence, platform conformance, optional end-state extensions and narrowly scoped repository maintenance.
 
-GitHub issue state, current issue comments, current pull-request checks/reviews and merged code remain the point-in-time source of truth. The normative product and architecture baseline remains:
+GitHub issue state, explicit issue dependencies, current issue comments, pull-request reviews/checks and merged code remain the point-in-time source of truth. The normative product and architecture baseline remains:
 
 - [`PRODUCT_VISION.md`](PRODUCT_VISION.md)
 - [`ARCHITECTURE_PRINCIPLES.md`](ARCHITECTURE_PRINCIPLES.md)
@@ -14,27 +14,17 @@ Issue numbers are identifiers, not an implementation sequence. Explicit hard dep
 
 ## Current snapshot
 
-There are **9 open issues out of 113 repository issues**:
+At this snapshot there are **10 open issues out of 114 repository issues**:
 
-`#46, #388, #439, #440, #501, #502, #560, #562, #566`
+`#46, #388, #439, #440, #501, #502, #560, #562, #566, #579`
 
-That is **104 closed / 113 total = about 92.0% closed by issue count**.
+That is **104 closed / 114 total = about 91.2% closed by issue count**.
 
-The raw percentage is bookkeeping only. Issue scope is highly uneven, and several remaining issues are optional profile owners or acceptance/evidence owners rather than missing foundational capability.
+The raw percentage is bookkeeping only. It moved slightly downward because #579 was created as a focused behavior-neutral follow-up after #568 closed; no merged product capability was lost. Issue scope is highly uneven, and several remaining issues are optional profile owners, evidence owners or maintenance work rather than missing foundational capability.
 
-Current open pull requests include:
-
-- #569 — this documentation/status refresh;
-- #573 — #439 replanning evidence bridge;
-- #575 — #501 governance recovery/idempotency closure work;
-- #576 — #440 real-host pressure observer;
-- #577 — #560 workflow-progress semantic/conformance completion.
-
-PR state can change faster than this snapshot. Before merge, always re-check current `main`, issue dependency state, mergeability, reviews and required protected-branch checks.
+Pull-request state changes faster than issue/dependency state and is therefore not used as the primary roadmap structure. Relevant active PRs are referenced only where they materially affect a lane. Before any merge, re-check current `main`, dependency state, mergeability, reviews and every required protected-branch check on the exact final head.
 
 ## Recently completed convergence work
-
-Three lanes that were open in the previous snapshot are now complete:
 
 ### #500 — host-pressure/admission runtime contract
 
@@ -47,21 +37,21 @@ Three lanes that were open in the previous snapshot are now complete:
 - #16 observability integration;
 - authenticated/freshness-aware remote Worker pressure reporting;
 - distributed deployment and `platform doctor` integration;
-- a bounded semantic benchmark fixture.
+- bounded semantic benchmark coverage.
 
-Further real-host pressure, OOM-containment, soak and measured operating-envelope work belongs to #440. PR #576 continues that evidence path without reopening #500.
+Further real-host pressure, OOM-containment, soak, stress and measured operating-envelope evidence belongs to #440. Current #440 follow-ups such as the read-only pressure observer do not reopen #500.
 
 ### #567 — supported canonical Task mutation boundary
 
-#567 is closed via PR #574. The platform now exposes a narrow supported Task mutation boundary for the legitimate #88/#157 use cases while keeping lifecycle authority and arbitrary low-level command/event construction private to the kernel.
+#567 is closed via PR #574. Canonical Task-management and Task-reassignment services now use a narrow supported mutation boundary instead of reaching into private `PlatformKernel._commit_task_command()` internals.
 
-This removes the earlier direct external coupling to `PlatformKernel._commit_task_command()` and adds regression/architecture coverage against reintroduction.
+The accepted boundary preserves #88/#157 behavior, terminal lifecycle invariants, idempotency, provenance, event ordering and audit while keeping arbitrary low-level command/event construction private to the kernel. Regression/architecture coverage protects against reintroducing the private coupling.
 
 ### #568 — stable test-suite layout
 
-#568 is closed via PR #570. The repository now has stable suite categories and pytest markers while preserving path-sensitive historical tests where required. CI, integration paths and benchmark locations were updated without changing production semantics.
+#568 is closed via PR #570. The repository now has stable suite categories and pytest markers while preserving path-sensitive historical tests where required. CI, adapter integration paths and benchmark locations were updated without changing production semantics.
 
-Future tests should follow the established taxonomy rather than reopening a repository-wide test-layout lane.
+This does not mean every safe historical root test must remain at root forever. Small behavior-neutral follow-ups may continue the migration when their path/import/conformance constraints are explicitly verified. #579 is the current example.
 
 ## Remaining work by ownership lane
 
@@ -124,7 +114,7 @@ Merged evidence already includes:
 - heterogeneous capability/resource/GPU/label/network placement benchmarks;
 - #500 semantic pressure/admission benchmark coverage.
 
-PR #576 adds a bounded read-only real-host pressure observer and explicitly keeps destructive host-load generation outside ordinary PR CI.
+Current #440 work includes additional real-host pressure observation and deterministic HA-failover benchmark evidence. These extend the evidence program without changing ownership: #440 measures behavior and operating envelopes, while #500 remains the completed pressure runtime contract and #566 remains the owner of production-shaped multi-instance HA.
 
 High-value remaining #440 work is mainly:
 
@@ -160,12 +150,12 @@ Web / CLI
 
 No client shadow state or direct coordinator persistence access is allowed.
 
-**Dependency status:** #560 currently declares #439 as a hard dependency. PR #577 exists and proposes to close #560, but that does not erase the declared dependency. Under repository dependency discipline, #577 must not be considered dependency-clean for merge until either:
+**Dependency status:** #560 currently declares #439 as a hard dependency. PR #577 proposes to close #560, but an implementation PR does not erase an issue dependency. Under repository dependency discipline, #577 must not be considered dependency-clean for merge until either:
 
 1. #439 closes first; or
 2. #560's hard dependency is explicitly revised with a justified issue update.
 
-This is a dependency/merge-order constraint, not a statement that preparatory implementation work cannot exist on a branch.
+Preparatory implementation may exist on a branch before the dependency is satisfied; merge/closure is the constraint that must remain dependency-clean.
 
 ### Lane D — #46 final platform conformance
 
@@ -246,7 +236,7 @@ PR #541 already delivered the main governance foundation:
 
 PR #575 targets remaining verified recovery/idempotency gaps and declares `Closes #501`.
 
-Until it is actually merged and #501 is closed, #501 remains an open optional lane. The direct Task path must remain first-class regardless of whether #501 closes.
+Until that work is actually merged and #501 is closed, #501 remains an open optional lane. The direct Task path must remain first-class regardless of whether #501 closes.
 
 ### Lane G — #502 optional repository intelligence
 
@@ -294,7 +284,22 @@ It requires:
 
 #566 is architecturally important for the full ideal end state but **optional for ordinary single-node operational v1**.
 
-Once stable it can feed optional HA fault-under-load profiles in #440 and optional real-HA conformance evidence in #46.
+Deterministic process-local HA benchmark evidence under #440 remains useful but must not be misrepresented as satisfying #566's independent-process/host productionization requirements.
+
+### Lane I — #579 focused test-layout continuation
+
+#579 is a narrow behavior-neutral continuation of the stable suite taxonomy established by #568/#570. It moves a verified-safe Accounting/Usage integration cohort into `tests/integration/accounting/` with responsibility-based filenames while preserving path-bound conformance tests at their stable root locations.
+
+Constraints:
+
+- no production behavior changes;
+- moved tests should remain behavior-identical where possible;
+- exact-path references must be updated deliberately;
+- path-sensitive/conformance-bound tests remain unmoved unless their consumers are explicitly migrated;
+- full pytest discovery and protected-branch checks remain green;
+- Platform Conformance remains green.
+
+PR #580 currently implements this cohort. #579 is maintenance work, not a new operational-v1 feature dependency.
 
 ## What can run in parallel now
 
@@ -302,28 +307,30 @@ Maximum branch count is not the goal. The useful split is based on ownership, de
 
 | Track | Owner | Current state | Character | Primary collision zone |
 |---|---|---|---|---|
-| 1 | #439 | Active via #573 | Core convergence | planning, AgentRuntime, #384 handoff, Control Plane |
-| 2 | #440 | Active via #576 | Evidence/performance | benchmarks, runtime/distributed fixtures |
-| 3 | #501 | Active via #575 | Optional completion | governance, Approval, persistence, Search |
+| 1 | #439 | Active | Core convergence | planning, AgentRuntime, #384 handoff, Control Plane |
+| 2 | #440 | Active | Evidence/performance | benchmarks, runtime/distributed fixtures |
+| 3 | #501 | Active | Optional completion | governance, Approval, persistence, Search |
 | 4 | #502 | Ready | Optional capability expansion | Repository, Capability/Plugin, Search |
 | 5 | #388 | Ready when two-host environment exists | Real-host acceptance | deployment/network/security evidence |
-| 6 | #560 | Branch active via #577, but merge blocked by current #439 hard dependency | Client semantics | coordination projection/Web/CLI |
+| 6 | #560 | Implementation active, but merge blocked by current #439 hard dependency | Client semantics | coordination projection/Web/CLI |
 | 7 | #46 | Evidence accumulation now; final close later | Final convergence | conformance/CI/release evidence |
 | 8 | #566 | Ready, optional | Large HA productionization | Control Plane, persistence, deployment/security |
 | 9 | #562 | Blocked by current #46 hard dependency | Real-host acceptance | deployment/network/security evidence |
+| 10 | #579 | Active maintenance | Behavior-neutral test migration | Accounting test paths/conformance selectors |
 
 ## Recommended active concurrency
 
-The current open PR set already exercises a sensible parallel split, with one important dependency caveat:
+A practical split is:
 
-1. **#573 / #439** — continue planning/replanning closure.
-2. **#576 / #440** — continue non-destructive real-host pressure evidence.
-3. **#575 / #501** — finish optional governance recovery hardening.
-4. **#577 / #560** — implementation may continue, but merge must wait for #439 closure or explicit dependency revision.
-5. **#502** — can proceed in parallel when desired because it is comparatively isolated from the active core branches.
-6. **#388** — can proceed once the hardened two-host environment is available.
-7. **#46** — continuously accumulate evidence without turning it into another broad implementation rewrite.
-8. **#566** — may proceed as a dedicated optional architecture stream if capacity exists.
+1. **#439** — continue planning/replanning closure.
+2. **#440** — continue non-destructive and deterministic benchmark evidence that does not depend on unfinished planner/HA profiles.
+3. **#501** — finish optional governance recovery hardening.
+4. **#560** — implementation may continue, but merge must wait for #439 closure or explicit dependency revision.
+5. **#579** — small behavior-neutral test migration can proceed if it avoids active test-file collisions.
+6. **#502** — can proceed in parallel because it is comparatively isolated from the active core branches.
+7. **#388** — can proceed once the hardened two-host environment is available.
+8. **#46** — continuously accumulate evidence without turning it into another broad implementation rewrite.
+9. **#566** — may proceed as a dedicated optional architecture stream if capacity exists.
 
 #562 remains blocked under its current dependency declaration.
 
@@ -335,7 +342,8 @@ The current open PR set already exercises a sensible parallel split, with one im
 - #501 with #440;
 - #502 with #440;
 - #502 with #388 operational acceptance;
-- #566 with repository-only #502 work.
+- #566 with repository-only #502 work;
+- #579 with branches that do not touch Accounting/Usage tests or exact conformance selectors.
 
 ### Higher-collision / sequence carefully
 
@@ -344,32 +352,35 @@ The current open PR set already exercises a sensible parallel split, with one im
 - #566 with broad Control Plane/persistence/deployment changes: avoid simultaneous rewrites of the same composition/security seams.
 - #46 with unfinished core owners: accumulate evidence continuously, but reserve final issue-wide closure for a stable candidate.
 - #388 and #562 may share infrastructure, but #562's hard dependency still governs issue execution/merge order.
+- #579 with any branch editing the same Accounting/Usage test cohort or path-bound conformance selectors.
 
 ## Recommended sequence from here
 
-### Wave 1 — finish active core/optional PRs
+### Wave 1 — finish current non-blocked work
 
 ```text
-#573 -> advance #439 replanning evidence bridge
-#576 -> advance #440 real-host pressure evidence
-#575 -> close #501 if all checks/reviews pass
-#577 -> finish #560 implementation branch, but do not merge while #439 dependency is unresolved
+#439  replanning/integration closure work
+#440  independent benchmark evidence
+#501  optional governance completion
+#579  focused behavior-neutral test migration
+#502  optional repository-intelligence work as capacity allows
+#388  real-host transport acceptance when infrastructure is ready
 ```
 
-In parallel, #502 and #388 may proceed in their own ownership zones.
+#560 implementation can be prepared in parallel, but its current #439 dependency must be satisfied or explicitly revised before merge/closure.
 
 ### Wave 2 — close #439, then consume the stable planner contract
 
 Once #439 is actually closed/stable:
 
 ```text
-#560  merge/close if #577 remains valid and green
+#560  merge/close if its implementation remains valid and green
 #440  planner/replanning performance profiles
 #46   Goal/Task -> generated Plan -> execution -> evidence -> bounded-replan conformance
 #502  planner repository-intelligence context funnel, if justified
 ```
 
-If #560's dependency is intentionally changed instead, update the issue first and re-evaluate #577 against the revised contract before merge.
+If #560's dependency is intentionally changed instead, update the issue first and re-evaluate the implementation against the revised contract before merge.
 
 ### Wave 3 — real-host distributed evidence
 
@@ -411,7 +422,7 @@ real CoordinationProvider
    + HA-capable durable-state composition
    + active/passive deployment profile
    + real process failover/fencing/recovery
-      -> #440 optional HA load profile
+      -> #440 optional real-HA load profile
       -> #46 optional real-HA conformance
 ```
 
@@ -426,8 +437,8 @@ Do not make this a prerequisite for ordinary single-node release readiness unles
                  |              |              |
                #439           #440          #501/#502*
                  |              |              |
-                 v              |              |
-               #560             |           optional
+                 v              |           optional
+               #560             |              |
                  |              |              |
                  +--------------+--------------+
                                 |
@@ -438,9 +449,11 @@ Do not make this a prerequisite for ordinary single-node release readiness unles
 
 #46 closed OR dependency revised ---> #562 full VPS acceptance
 
-#566* real Control Plane HA --------------------> #440/#46 optional HA evidence
+#566* real Control Plane HA --------------------> #440/#46 optional real-HA evidence
 
-#500, #567, #568 = completed convergence/maintenance lanes
+#579 test-layout continuation ----> small behavior-neutral maintenance lane
+
+#500, #567, #568 = completed convergence/maintenance owners
 
 * optional ideal-end-state/profile work; not a hidden single-node baseline prerequisite.
 ```
@@ -451,9 +464,9 @@ Use separate progress views rather than one misleading percentage.
 
 ### 1. Objective issue-count progress
 
-**104 / 113 issues closed = about 92.0%.**
+**104 / 114 issues closed = about 91.2%.**
 
-This is the only objective percentage. It is sensitive to issue creation/closure and says nothing about issue size.
+This is the only objective percentage. It is sensitive to issue creation/closure and says nothing about issue size. The addition of #579 reduces the percentage without reducing implemented capability.
 
 ### 2. Core operational-v1 maturity
 
@@ -467,10 +480,12 @@ Why this is high:
 - #421 is closed;
 - #500 pressure/admission runtime work is closed;
 - #567 kernel mutation-boundary hardening is closed;
-- #568 test-layout maintenance is closed;
-- #439 has both planning foundation and runtime-binding work merged plus an active replanning-evidence PR;
+- #568 stable test-layout foundation is closed;
+- #439 has both planning foundation and runtime-binding work merged plus active replanning-evidence work;
 - #440 already has substantial benchmark coverage;
 - remaining core work is concentrated in #439, #560, selected #440 evidence and final #46 convergence.
+
+#579 is behavior-neutral maintenance and does not lower product-capability maturity.
 
 This is a planning heuristic, not a release claim.
 
@@ -478,7 +493,7 @@ This is a planning heuristic, not a release claim.
 
 Planning estimate: **roughly 86–90%** when optional Proposal/Specification completion, repository-intelligence provider ecosystem work, real two-VPS acceptance and production-shaped HA are counted as part of the target.
 
-The range remains lower mainly because #566 is a large optional productionization lane, #502 still includes genuine provider-evaluation/packaging work, and real-host acceptance remains unfinished.
+The range remains lower mainly because #566 is a large optional productionization lane, #502 still includes genuine provider-evaluation/packaging work, and real-host acceptance remains unfinished. #579 adds maintenance effort but no new end-user capability.
 
 ## Relative remaining effort
 
@@ -491,8 +506,9 @@ A rough remaining-effort ordering is:
 #562 real two-VPS deployment acceptance      = operational/infrastructure-heavy, currently blocked
 #560 workflow semantic/live-refresh followup = focused medium block, currently dependent on #439
 #502 optional provider ecosystem work        = medium, scope depends on candidate quality
-#501 optional final governance closure       = likely small if #575 lands cleanly
+#501 optional final governance closure       = likely small if its closure PR lands cleanly
 #388 transport-specific two-host acceptance  = narrow if shared with the later #562 topology
+#579 accounting test migration               = small behavior-neutral maintenance cohort
 #46 final audit                              = convergence/evidence rather than greenfield code
 ```
 
@@ -500,7 +516,7 @@ This ordering estimates likely remaining work, not priority. Optional #566 may b
 
 ## Release interpretation
 
-A first operational release does **not** need every optional ideal-end-state feature to be finished.
+A first operational release does **not** need every optional ideal-end-state feature or maintenance follow-up to be finished.
 
 The release candidate should be judged by the exact supported profile:
 
@@ -511,6 +527,7 @@ The release candidate should be judged by the exact supported profile:
 - real multi-Control-Plane HA compatibility is claimed only when #566 evidence exists;
 - completed #500 pressure support is claimed only for profiles that actually enable and exercise it;
 - completed #567/#568 hardening/maintenance should remain protected by regression and architecture checks;
+- #579 remains behavior-neutral and should not silently become a product-release blocker beyond keeping required tests/conformance green;
 - #46 records explicit evidence for every capability the release actually claims.
 
-The project should therefore optimize for **clean convergence of the claimed baseline** while allowing optional #501/#502/#566 work and real-host validation to proceed without silently extending the release critical path.
+The project should therefore optimize for **clean convergence of the claimed baseline** while allowing optional #501/#502/#566 work, focused maintenance such as #579 and real-host validation to proceed without silently extending the release critical path.
