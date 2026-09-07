@@ -8,12 +8,14 @@ fixed domain commands and never arbitrary event specifications or repository acc
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, PlatformEvent
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import validate_id
 
 from .kernel import PlatformKernel
+from .models import TaskState
 from .repository import CommandRecord
 
 _TASK_MANAGEMENT_METADATA_KEY = "task_management"
@@ -59,7 +61,7 @@ class TaskMutationBoundary:
         idempotency_key: str,
         actor_ref: str | None,
         source: str = "task-management",
-    ) -> object:
+    ) -> TaskState:
         """Commit schema-owned planning metadata, including on lifecycle-terminal Tasks.
 
         The command can only emit ``task.updated`` with the canonical
@@ -112,7 +114,7 @@ class TaskMutationBoundary:
         task_id: str,
         destination_project_id: str | None,
         idempotency_key: str,
-    ) -> object | None:
+    ) -> TaskState | None:
         """Return the canonical Task when an identical Project move already committed."""
 
         validate_id(task_id, "task")
@@ -139,7 +141,7 @@ class TaskMutationBoundary:
         idempotency_key: str,
         actor_ref: str | None,
         source: str = "task-project-reassignment",
-    ) -> object:
+    ) -> TaskState:
         """Commit one preflighted canonical Project reassignment.
 
         Authorization, ownership, relationship and Workspace compatibility stay in the
@@ -251,7 +253,9 @@ class TaskMutationBoundary:
 
         validate_id(anchor_task_id, "task")
         normalized = self._validate_bulk_moves(moves)
-        if normalized[0]["task_id"] != anchor_task_id:
+        first_task_id = normalized[0]["task_id"]
+        assert isinstance(first_task_id, str)
+        if first_task_id != anchor_task_id:
             raise ContractError(
                 ErrorCode.INVALID_REQUEST,
                 "bulk move anchor must match the first canonical move entry",
@@ -275,7 +279,7 @@ class TaskMutationBoundary:
                     anchor_task_id,
                     {
                         "batch_digest": batch_digest,
-                        "moves": normalized,
+                        "moves": cast(JsonValue, normalized),
                         "atomic": False,
                     },
                     (),
@@ -348,10 +352,10 @@ class TaskMutationBoundary:
     @staticmethod
     def _validate_bulk_moves(
         moves: Sequence[Mapping[str, JsonValue]],
-    ) -> list[JsonValue]:
+    ) -> list[dict[str, JsonValue]]:
         if not moves:
             raise ContractError(ErrorCode.INVALID_REQUEST, "Task Project move batch is empty")
-        normalized: list[JsonValue] = []
+        normalized: list[dict[str, JsonValue]] = []
         for move in moves:
             if set(move) != {"task_id", "destination_project_id"}:
                 raise ContractError(
@@ -361,7 +365,10 @@ class TaskMutationBoundary:
             task_id = move["task_id"]
             destination = move["destination_project_id"]
             if not isinstance(task_id, str):
-                raise ContractError(ErrorCode.INVALID_REQUEST, "bulk Project move task_id must be a string")
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    "bulk Project move task_id must be a string",
+                )
             validate_id(task_id, "task")
             if destination is not None:
                 if not isinstance(destination, str):
