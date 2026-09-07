@@ -47,6 +47,27 @@ _BULK_OPERATION = "move_task_project_bulk"
 _BULK_EVENT = "task.project_bulk_move_reserved"
 
 
+def _json_equivalent(left: object, right: object) -> bool:
+    """Compare mutable JSON with the kernel's recursively frozen event representation."""
+
+    if isinstance(left, Mapping):
+        if not isinstance(right, Mapping):
+            return False
+        left_mapping = cast(Mapping[object, object], left)
+        right_mapping = cast(Mapping[object, object], right)
+        if len(left_mapping) != len(right_mapping):
+            return False
+        return all(
+            key in right_mapping and _json_equivalent(value, right_mapping[key])
+            for key, value in left_mapping.items()
+        )
+    if isinstance(left, (list, tuple)):
+        if not isinstance(right, (list, tuple)) or len(left) != len(right):
+            return False
+        return all(_json_equivalent(a, b) for a, b in zip(left, right, strict=True))
+    return left == right
+
+
 class TaskMutationBoundary:
     """Expose supported canonical Task mutations without arbitrary event access."""
 
@@ -334,7 +355,7 @@ class TaskMutationBoundary:
             return None
         event = await self._command_event(record, _UPDATE_TASK_EVENT)
         if (
-            event.payload.get("metadata") != metadata
+            not _json_equivalent(event.payload.get("metadata"), metadata)
             or "title" in event.payload
             or "objective" in event.payload
         ):
