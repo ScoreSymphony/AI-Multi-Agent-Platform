@@ -3,6 +3,7 @@ import { ControlPlaneClient } from "./client";
 import {
   getPlanCoordination,
   isMissingPlanCoordinationError,
+  WorkflowProgressPoller,
   type PlanCoordinationProjection,
 } from "./workflowProgress";
 
@@ -13,15 +14,27 @@ const projection: PlanCoordinationProjection = {
   steps: [],
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
+function clientWith(fetchImpl: typeof fetch): ControlPlaneClient {
+  return new ControlPlaneClient({
+    baseUrl: "https://control.example.test",
+    fetchImpl,
+  });
+}
+
 describe("workflow progress client", () => {
   it("reads the registered coordinator projection through /api/v1 only", async () => {
     const fetchSpy = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(projection), { status: 200 }),
     );
-    const client = new ControlPlaneClient({
-      baseUrl: "https://control.example.test",
-      fetchImpl: fetchSpy as unknown as typeof fetch,
-    });
+    const client = clientWith(fetchSpy as unknown as typeof fetch);
 
     const result = await getPlanCoordination(client, "plan_421");
 
@@ -47,10 +60,7 @@ describe("workflow progress client", () => {
         { status: 404 },
       ),
     );
-    const client = new ControlPlaneClient({
-      baseUrl: "https://control.example.test",
-      fetchImpl: fetchSpy as unknown as typeof fetch,
-    });
+    const client = clientWith(fetchSpy as unknown as typeof fetch);
 
     let error: unknown;
     try {
@@ -61,5 +71,92 @@ describe("workflow progress client", () => {
 
     expect(isMissingPlanCoordinationError(error)).toBe(true);
     expect(isMissingPlanCoordinationError(new Error("not found"))).toBe(false);
+  });
+
+  it("starts with an immediate canonical refresh rather than waiting for the first interval", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(projection), { status: 200 }),
+    );
+    const seen: PlanCoordinationProjection[] = [];
+    const poller = new WorkflowProgressPoller({
+      client: clientWith(fetchSpy as unknown as typeof fetch),
+      taskId: "task_421",
+      planId: "plan_421",
+      intervalMs: 60_000,
+      onProjection: (value) => seen.push(value),
+      onMissing: vi.fn(),
+      onError: vi.fn(),
+    });
+
+    poller.start();
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    poller.stop();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(seen[0]?.plan_revision).toBe(7);
+  });
+
+  it("discards an older overlapping response so polling cannot regress workflow state", async () => {
+    const first = deferred<Response>();
+    const second = deferred<Response>();
+    const fetchSpy = vi
+      .fn()
+      .mockImplementationOnce(() => first.promise)
+      .mockImplementationOnce(() => second.promise);
+    const seen: number[] = [];
+    const errors: unknown[] = [];
+    const poller = new WorkflowProgressPoller({
+      client: clientWith(fetchSpy as unknown as typeof fetch),
+      taskId: "task_421",
+      planId: "plan_421",
+      onProjection: (value) => seen.push(value.plan_revision),
+      onMissing: vi.fn(),
+      onError: (error) => errors.push(error),
+    });
+
+    const older = poller.refresh();
+    const newer = poller.refresh();
+    second.resolve(
+      new Response(JSON.stringify({ ...projection, plan_revision: 9 }), { status: 200 }),
+    );
+    await newer;
+    first.resolve(
+      new Response(JSON.stringify({ ...projection, plan_revision: 8 }), { status: 200 }),
+    );
+    await older;
+    poller.stop();
+
+    expect(seen).toEqual([9]);
+    expect(errors).toEqual([]);
+  });
+
+  it("routes canonical 404 polling results to the missing-state callback", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "not_found",
+          category: "resource",
+          message: "plan coordination projection not found",
+          retryable: false,
+        }),
+        { status: 404 },
+      ),
+    );
+    const onMissing = vi.fn();
+    const onError = vi.fn();
+    const poller = new WorkflowProgressPoller({
+      client: clientWith(fetchSpy as unknown as typeof fetch),
+      taskId: "task_421",
+      planId: "plan_421",
+      onProjection: vi.fn(),
+      onMissing,
+      onError,
+    });
+
+    await poller.refresh();
+    poller.stop();
+
+    expect(onMissing).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
   });
 });
