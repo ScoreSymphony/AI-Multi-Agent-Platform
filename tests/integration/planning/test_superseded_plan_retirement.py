@@ -135,7 +135,9 @@ def _superseded_state() -> tuple[
     )
 
 
-def test_reconciliation_retires_superseded_not_started_work_without_rewriting_completed_work() -> None:
+def test_reconciliation_retires_superseded_not_started_work_without_rewriting_completed_work() -> (
+    None
+):
     async def scenario() -> None:
         (
             repository,
