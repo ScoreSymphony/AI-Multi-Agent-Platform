@@ -77,9 +77,7 @@ Always re-check the roadmap, the target milestone and the target issue immediate
 
 ## Source layout direction
 
-- `src/ai_multi_agent_platform/` — platform-owned runtime and domain code
-- `adapters/` — replaceable integrations
-- `workers/` — reference and production worker implementations
+- `src/ai_multi_agent_platform/` — platform-owned runtime, domain, adapter and Worker code
 - `frontend/` — web frontend
 - `docs/` — authoritative architecture/product documentation
 - `tests/` — unit, contract, integration and end-to-end tests
