@@ -135,7 +135,11 @@ def test_pressure_control_plane_projects_only_portable_evidence() -> None:
     provider.put(node.node_id, _snapshot(PressureState.CRITICAL))
     service = NodePressureResourceService(runtime, provider)
 
-    resource = asyncio.run(service.get_resource(RequestContext(), node.node_id))
+    context = RequestContext(
+        request_id="request-500-pressure",
+        correlation_id="correlation-500-pressure",
+    )
+    resource = asyncio.run(service.get_resource(context, node.node_id))
 
     assert resource["id"] == node.node_id
     assert resource["state"] == "critical"
