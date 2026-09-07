@@ -17,11 +17,11 @@ from ai_multi_agent_platform.models import RoutingRequirements
 from .models import (
     AgentAssignment,
     CapabilityRequirement,
-    PlanProposal,
     PlannerDescriptor,
     PlannerKind,
     PlanningStepDraft,
     PlanningTrigger,
+    PlanProposal,
     ProposalRecord,
     ProposalStatus,
     ProposalValidation,
