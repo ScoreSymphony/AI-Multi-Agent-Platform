@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from jsonschema import Draft202012Validator
 import pytest
+from jsonschema import Draft202012Validator
 
 from ai_multi_agent_platform.benchmarking.operating_envelope import OperatingEnvelopeAnalyzer
 from ai_multi_agent_platform.benchmarking.operating_envelope_cli import main
