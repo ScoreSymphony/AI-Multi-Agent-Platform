@@ -14,7 +14,7 @@ import pytest
 from ai_multi_agent_platform.adapters.distributed_control_plane_app import _host_pressure_enabled
 from ai_multi_agent_platform.cli.client import RawResponse
 from ai_multi_agent_platform.cli.main import run_cli
-from ai_multi_agent_platform.contracts import AdapterMetadata, OperationContext
+from ai_multi_agent_platform.contracts import AdapterMetadata
 from ai_multi_agent_platform.control_plane import ControlPlane, ControlPlaneHTTP, HTTPRequest
 from ai_multi_agent_platform.distributed import (
     DeterministicScheduler,
