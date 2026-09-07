@@ -11,12 +11,17 @@ import hashlib
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol, cast
+from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import OwnerRef, Project, TaskStatus, validate_id
-from ai_multi_agent_platform.kernel import TERMINAL_RUN_STATUSES, PlatformKernel, TaskState
+from ai_multi_agent_platform.kernel import (
+    TERMINAL_RUN_STATUSES,
+    PlatformKernel,
+    TaskMutationBoundary,
+    TaskState,
+)
 from ai_multi_agent_platform.organizations import (
     MembershipStatus,
     OrganizationService,
@@ -29,12 +34,6 @@ from ai_multi_agent_platform.task_management import TaskManagementService
 ProjectResolver = Callable[[str], Project | Awaitable[Project]]
 WorkspaceProjectResolver = Callable[[str], str | Awaitable[str]]
 TaskIdProvider = Callable[[], tuple[str, ...] | Awaitable[tuple[str, ...]]]
-
-_MOVE_OPERATION = "move_task_project"
-_MOVE_EVENT = "task.project_reassigned"
-_BULK_SCOPE = "task-project-reassignment:bulk"
-_BULK_OPERATION = "move_task_project_bulk"
-_BULK_EVENT = "task.project_bulk_move_reserved"
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,6 +195,7 @@ class TaskProjectReassignmentService:
         compatibility: TaskProjectCompatibilityPolicy | None = None,
     ) -> None:
         self._kernel = kernel
+        self._mutations = TaskMutationBoundary(kernel)
         self._task_management = task_management
         self._project_resolver = project_resolver
         self._workspace_project_resolver = workspace_project_resolver
@@ -264,36 +264,10 @@ class TaskProjectReassignmentService:
         idempotency_key: str,
     ) -> bool:
         digest, _ = self._batch_contract(requests)
-        record = await self._kernel._existing_command(
-            _BULK_SCOPE,
-            idempotency_key,
-            _BULK_OPERATION,
+        return await self._mutations.bulk_project_reassignment_reserved(
+            batch_digest=digest,
+            idempotency_key=idempotency_key,
         )
-        if record is None:
-            return False
-        if record.result_id != digest:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "Idempotency-Key is already bound to a different Task Project bulk move set",
-            )
-        event = next(
-            (
-                item
-                for item in await self._kernel.history(record.stream_id)
-                if item.id == record.event_id
-            ),
-            None,
-        )
-        if (
-            event is None
-            or event.event_type != _BULK_EVENT
-            or event.payload.get("batch_digest") != digest
-        ):
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "Task Project bulk idempotency record has no matching reservation event",
-            )
-        return True
 
     async def reserve_batch(
         self,
@@ -304,49 +278,22 @@ class TaskProjectReassignmentService:
         source: str = "task-project-reassignment",
     ) -> None:
         digest, moves = self._batch_contract(requests)
-        if await self.batch_reserved(requests, idempotency_key=idempotency_key):
+        if await self._mutations.bulk_project_reassignment_reserved(
+            batch_digest=digest,
+            idempotency_key=idempotency_key,
+        ):
             return
 
         anchor_id = moves[0]["task_id"]
         assert isinstance(anchor_id, str)
-        anchor = await self._kernel.get_task(anchor_id)
-        events = self._kernel._build_events(
-            task=anchor,
-            causation_id=idempotency_key,
+        await self._mutations.reserve_bulk_project_reassignment(
+            anchor_task_id=anchor_id,
+            batch_digest=digest,
+            moves=moves,
+            idempotency_key=idempotency_key,
             actor_ref=actor_ref,
             source=source,
-            event_specs=(
-                (
-                    _BULK_EVENT,
-                    "task",
-                    anchor_id,
-                    {
-                        "batch_digest": digest,
-                        "moves": cast(JsonValue, moves),
-                        "atomic": False,
-                    },
-                    (),
-                ),
-            ),
         )
-        command = self._kernel._command(
-            scope=_BULK_SCOPE,
-            key=idempotency_key,
-            operation=_BULK_OPERATION,
-            stream_id=anchor_id,
-            result_id=digest,
-            event=events[0],
-        )
-        result = await self._kernel._repository.commit(
-            stream_id=anchor_id,
-            expected_revision=anchor.revision,
-            events=events,
-            command=command,
-        )
-        if not result.applied:
-            await self.batch_reserved(requests, idempotency_key=idempotency_key)
-            return
-        await self._kernel._mirror(events)
 
     async def replayed_move(
         self,
@@ -354,13 +301,11 @@ class TaskProjectReassignmentService:
         *,
         idempotency_key: str,
     ) -> TaskState | None:
-        if not await self._existing_move(
-            request.task_id,
-            idempotency_key,
-            request.destination_project_id,
-        ):
-            return None
-        return await self._kernel.get_task(request.task_id)
+        return await self._mutations.replayed_project_reassignment(
+            task_id=request.task_id,
+            destination_project_id=request.destination_project_id,
+            idempotency_key=idempotency_key,
+        )
 
     async def commit(
         self,
@@ -370,47 +315,15 @@ class TaskProjectReassignmentService:
         actor_ref: str | None,
         source: str = "task-project-reassignment",
     ) -> TaskState:
-        destination_id = prepared.destination_project_id
-        if await self._existing_move(prepared.task.task_id, idempotency_key, destination_id):
-            return await self._kernel.get_task(prepared.task.task_id)
-
-        retained_history: dict[str, JsonValue] = {
-            "plan_ref": prepared.task.plan_ref,
-            "step_ids": list(prepared.task.step_ids),
-            "run_ids": list(prepared.task.run_ids),
-            "artifact_ids": list(prepared.task.artifact_ids),
-            "result_ids": list(prepared.task.result_ids),
-        }
-        await self._kernel._commit_task_command(
-            task=prepared.task,
-            key=idempotency_key,
-            operation=_MOVE_OPERATION,
-            event_specs=(
-                (
-                    _MOVE_EVENT,
-                    "task",
-                    prepared.task.task_id,
-                    {
-                        "source_project_id": prepared.task.task.project_id,
-                        "destination_project_id": destination_id,
-                        "historical_scope_policy": "retain_original_event_and_run_scope",
-                        "future_execution_scope": destination_id,
-                        "retained_history": retained_history,
-                    },
-                    (),
-                ),
-            ),
-            result_id=prepared.task.task_id,
+        return await self._mutations.reassign_project(
+            task_id=prepared.task.task_id,
+            source_project_id=prepared.task.task.project_id,
+            destination_project_id=prepared.destination_project_id,
+            expected_revision=prepared.task.revision,
+            idempotency_key=idempotency_key,
             actor_ref=actor_ref,
             source=source,
         )
-        moved = await self._kernel.get_task(prepared.task.task_id)
-        if moved.task.project_id != destination_id:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "canonical Task Project move did not project the requested destination",
-            )
-        return moved
 
     async def move(
         self,
@@ -420,41 +333,15 @@ class TaskProjectReassignmentService:
         actor_ref: str | None,
         source: str = "task-project-reassignment",
     ) -> TaskState:
-        if await self._existing_move(
-            request.task_id, idempotency_key, request.destination_project_id
-        ):
-            return await self._kernel.get_task(request.task_id)
+        replayed = await self.replayed_move(request, idempotency_key=idempotency_key)
+        if replayed is not None:
+            return replayed
         return await self.commit(
             await self.prepare(request),
             idempotency_key=idempotency_key,
             actor_ref=actor_ref,
             source=source,
         )
-
-    async def _existing_move(
-        self,
-        task_id: str,
-        idempotency_key: str,
-        destination_project_id: str | None,
-    ) -> bool:
-        record = await self._kernel._task_command(task_id, idempotency_key, _MOVE_OPERATION)
-        if record is None:
-            return False
-        event = next(
-            (item for item in await self._kernel.history(task_id) if item.id == record.event_id),
-            None,
-        )
-        if event is None or event.event_type != _MOVE_EVENT:
-            raise ContractError(
-                ErrorCode.BACKEND_ERROR,
-                "Task Project move idempotency record has no canonical move event",
-            )
-        if event.payload.get("destination_project_id") != destination_project_id:
-            raise ContractError(
-                ErrorCode.CONFLICT,
-                "Idempotency-Key is already bound to a different Task Project destination",
-            )
-        return True
 
     def _batch_contract(
         self,
