@@ -32,10 +32,10 @@ These are progressive measurement producers or consumers, not reasons to keep th
 ## Acceptance / required-test mapping
 
 - Task/Run/duration/retry, quality, missing metrics, thresholds, restart persistence and budget history: `tests/test_issue76_accounting.py`.
-- Current storage and latest-gauge semantics: `tests/test_issue76_storage_accounting.py`.
-- Real Control Plane HTTP/OpenAPI resources: `tests/test_issue76_control_plane_http.py`.
-- Bounded historical trends without synthetic zero/carry-forward: `tests/test_issue76_trends.py`.
-- Canonical model configuration attribution under automatic routing: `tests/test_issue76_model_attribution.py`.
-- Worker/Node resource ingestion, Worker dispatch, provider replacement semantics, external cost, model-config budgets, rolling/lifetime windows, gauge scope isolation, organization isolation and #15 authorization composition: `tests/test_issue76_completion.py`.
+- Current storage and latest-gauge semantics: `tests/integration/accounting/test_storage_accounting.py`.
+- Real Control Plane HTTP/OpenAPI resources: `tests/integration/accounting/test_control_plane_http.py`.
+- Bounded historical trends without synthetic zero/carry-forward: `tests/integration/accounting/test_usage_trends.py`.
+- Canonical model configuration attribution under automatic routing: `tests/integration/accounting/test_model_usage_attribution.py`.
+- Worker/Node resource ingestion, Worker dispatch, provider replacement semantics, external cost, model-config budgets, rolling/lifetime windows, gauge scope isolation, organization isolation and #15 authorization composition: `tests/integration/accounting/test_accounting_composition.py`.
 
 Provider replacement changes provider/provenance attribution, not the canonical Task/Run/ModelConfiguration/Worker/Node scope semantics. Unknown or unavailable measurements remain absent/unavailable and are never guessed.

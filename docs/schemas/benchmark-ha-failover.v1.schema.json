@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchmark-ha-failover.v1.schema.json",
+  "title": "Control Plane HA Failover Benchmark Report v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "benchmark",
+    "platform_version",
+    "platform_commit",
+    "started_at",
+    "duration_seconds",
+    "environment",
+    "throughput_recovered_tasks_per_second",
+    "promotion_latency",
+    "stale_leader_rejection_latency",
+    "replay_task_latency",
+    "coordination_outage_rejection_latency",
+    "coordination_recovery_promotion_latency",
+    "resources",
+    "correctness",
+    "epoch_evidence",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "active_task_count",
+        "repetitions",
+        "lease_ttl_seconds",
+        "timeout_seconds",
+        "safety_max_tasks",
+        "benchmark_id",
+        "benchmark_version",
+        "deployment_profile",
+        "coordination_profile",
+        "total_active_tasks",
+        "expected_invariants",
+        "captured_metrics",
+        "scope_limitations"
+      ],
+      "properties": {
+        "active_task_count": {"type": "integer", "minimum": 1},
+        "repetitions": {"type": "integer", "minimum": 1},
+        "lease_ttl_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "safety_max_tasks": {"type": "integer", "minimum": 1},
+        "benchmark_id": {"const": "ha.control-plane-failover"},
+        "benchmark_version": {"const": "1.0"},
+        "deployment_profile": {"const": "ha-active-passive-reference"},
+        "coordination_profile": {"const": "in-memory-process-local"},
+        "total_active_tasks": {"type": "integer", "minimum": 1},
+        "expected_invariants": {"type": "array", "items": {"type": "string"}},
+        "captured_metrics": {"type": "array", "items": {"type": "string"}},
+        "scope_limitations": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "platform_version": {"type": "string", "minLength": 1},
+    "platform_commit": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "minLength": 1},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "environment": {"type": "object"},
+    "throughput_recovered_tasks_per_second": {"type": "number", "minimum": 0},
+    "promotion_latency": {"$ref": "#/$defs/latency"},
+    "stale_leader_rejection_latency": {"$ref": "#/$defs/latency"},
+    "replay_task_latency": {"$ref": "#/$defs/latency"},
+    "coordination_outage_rejection_latency": {"$ref": "#/$defs/latency"},
+    "coordination_recovery_promotion_latency": {"$ref": "#/$defs/latency"},
+    "resources": {"$ref": "#/$defs/resources"},
+    "correctness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expected_repetitions",
+        "completed_repetitions",
+        "expected_tasks",
+        "prepared_tasks",
+        "recovered_tasks",
+        "task_identity_failures",
+        "run_identity_failures",
+        "duplicate_lifecycle_dispatches",
+        "history_failures",
+        "reconciled_stale_reservations",
+        "reconciliation_failures",
+        "stale_leader_rejections",
+        "expected_stale_leader_rejections",
+        "outage_fail_closed_rejections",
+        "expected_outage_fail_closed_rejections",
+        "recovery_promotions",
+        "expected_recovery_promotions",
+        "epoch_monotonicity_failures",
+        "passed"
+      ],
+      "properties": {
+        "expected_repetitions": {"type": "integer", "minimum": 1},
+        "completed_repetitions": {"type": "integer", "minimum": 0},
+        "expected_tasks": {"type": "integer", "minimum": 1},
+        "prepared_tasks": {"type": "integer", "minimum": 0},
+        "recovered_tasks": {"type": "integer", "minimum": 0},
+        "task_identity_failures": {"type": "integer", "minimum": 0},
+        "run_identity_failures": {"type": "integer", "minimum": 0},
+        "duplicate_lifecycle_dispatches": {"type": "integer", "minimum": 0},
+        "history_failures": {"type": "integer", "minimum": 0},
+        "reconciled_stale_reservations": {"type": "integer", "minimum": 0},
+        "reconciliation_failures": {"type": "integer", "minimum": 0},
+        "stale_leader_rejections": {"type": "integer", "minimum": 0},
+        "expected_stale_leader_rejections": {"type": "integer", "minimum": 1},
+        "outage_fail_closed_rejections": {"type": "integer", "minimum": 0},
+        "expected_outage_fail_closed_rejections": {"type": "integer", "minimum": 1},
+        "recovery_promotions": {"type": "integer", "minimum": 0},
+        "expected_recovery_promotions": {"type": "integer", "minimum": 1},
+        "epoch_monotonicity_failures": {"type": "integer", "minimum": 0},
+        "passed": {"type": "boolean"}
+      }
+    },
+    "epoch_evidence": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["repetition", "initial_epoch", "promoted_epoch", "recovery_epoch"],
+        "properties": {
+          "repetition": {"type": "integer", "minimum": 0},
+          "initial_epoch": {"type": "integer", "minimum": 1},
+          "promoted_epoch": {"type": "integer", "minimum": 1},
+          "recovery_epoch": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "min_ms", "mean_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "min_ms": {"type": "number", "minimum": 0},
+        "mean_ms": {"type": "number", "minimum": 0},
+        "p50_ms": {"type": "number", "minimum": 0},
+        "p95_ms": {"type": "number", "minimum": 0},
+        "p99_ms": {"type": "number", "minimum": 0},
+        "max_ms": {"type": "number", "minimum": 0}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "process_cpu_seconds",
+        "traced_memory_current_bytes",
+        "traced_memory_peak_bytes",
+        "peak_rss_bytes",
+        "storage_bytes_before",
+        "storage_bytes_after",
+        "storage_growth_bytes",
+        "open_file_descriptors"
+      ],
+      "properties": {
+        "process_cpu_seconds": {"type": "number", "minimum": 0},
+        "traced_memory_current_bytes": {"type": "integer", "minimum": 0},
+        "traced_memory_peak_bytes": {"type": "integer", "minimum": 0},
+        "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "storage_bytes_before": {"type": "integer", "minimum": 0},
+        "storage_bytes_after": {"type": "integer", "minimum": 0},
+        "storage_growth_bytes": {"type": "integer"},
+        "open_file_descriptors": {"type": ["integer", "null"], "minimum": 0}
+      }
+    }
+  }
+}
