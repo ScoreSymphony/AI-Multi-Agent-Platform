@@ -55,7 +55,26 @@ When enabled, the scheduler:
 4. rejects non-admitted candidates before any reservation is created;
 5. continues to use the existing deterministic scoring/tie-break and reservation path for admitted candidates.
 
-`pressure_admission()` exposes the structured decision for diagnostics/tests without reserving or dispatching work. The scheduler currently maps a non-admitted result conservatively onto the existing #14 rejection vocabulary while the precise action/reason remains available through `AdmissionDecision`. A later #500 slice can add richer Control Plane/telemetry projections without changing scheduling ownership.
+One pressure snapshot is sampled per Node for one scheduler evaluation and shared by otherwise-eligible Workers on that Node. This keeps delta-based providers such as paging/throttling collectors deterministic across candidates without turning the cache into durable scheduler state. A later evaluation samples again.
+
+`pressure_admission()` exposes the structured decision for diagnostics/tests without reserving or dispatching work. Diagnostic calls do not count as scheduler admission telemetry. The scheduler maps a non-admitted result conservatively onto the existing #14 rejection vocabulary while the precise action/reason remains available through `AdmissionDecision`.
+
+## #16 observability integration
+
+Pressure telemetry is emitted through the existing #16 `Telemetry` facade; issue #500 does not create a second metrics, timeline or exporter system.
+
+For actual pressure-aware scheduler candidate evaluations the integration exposes:
+
+- normalized Node pressure observations and portable pressure-signal dimensions;
+- portable signal values/units where present;
+- pressure-aware scheduler admission actions and structured reason codes;
+- pressure snapshot age used by admission;
+- correlated scheduler pressure-admission timeline entries;
+- Node pressure transitions and explicit recovery from `elevated`/`critical` to `healthy`.
+
+The integration deliberately excludes `HostPressureSnapshot.source_ref` and `provider_metadata` from canonical telemetry. Linux proc/sys/cgroup paths, zRAM device names and other provider-private evidence therefore remain behind their adapter namespace instead of leaking into ordinary #16 records.
+
+Repeated use of the same Node observation is de-duplicated for Node-level observation/signal telemetry while admission decisions remain per candidate. This preserves explainability for multi-Worker Nodes without multiplying identical host measurements.
 
 ## Freshness and trust
 
@@ -90,10 +109,9 @@ Provider thresholds are deployment-overridable normalization inputs, not canonic
 
 ## Follow-up #500 slices
 
-The portable core and optional Linux collector intentionally precede wider operational integration. Remaining issue-owned work includes:
+The portable core, Linux collector and #16 projection intentionally precede wider operational integration. Remaining issue-owned work includes:
 
 - authenticated remote pressure report plumbing and provenance;
-- #16 metrics/timeline integration and recovery transitions;
 - Control Plane/doctor visibility;
 - #39/#240 deployment hooks and operator guidance;
 - #440 dedicated host-pressure benchmark profiles with hard safety bounds.
