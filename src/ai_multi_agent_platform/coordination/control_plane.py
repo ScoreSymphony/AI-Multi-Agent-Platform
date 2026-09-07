@@ -8,7 +8,6 @@ from ai_multi_agent_platform.control_plane.extensions import CommandHandler
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
 from .models import (
-    CoordinationPhase,
     PlanCoordinationProjection,
     StepCoordinationProjection,
     StepCoordinationRecord,
@@ -184,7 +183,7 @@ def _step_resource(
         "latest_run_id": step.latest_run_id,
         "current_attempt": step.current_attempt,
         "retry_due_at": step.retry_due_at.isoformat() if step.retry_due_at is not None else None,
-        "retry_state": _retry_state(step, record),
+        "retry_state": None if record is None else record.retry_state.value,
         "retry_max_attempts": None if record is None else record.retry_policy.max_attempts,
         "wait_key": None if wait is None else wait.wait_key,
         "wait_type": step.wait_type.value if step.wait_type is not None else None,
@@ -211,29 +210,3 @@ def _step_resource(
         "reconciliation": step.reconciliation.value,
         "reconciliation_detail": None if record is None else record.reconciliation_detail,
     }
-
-
-def _retry_state(
-    step: StepCoordinationProjection,
-    record: StepCoordinationRecord | None,
-) -> str | None:
-    """Project retry intent without making clients infer policy state from timestamps."""
-
-    if record is None:
-        return None
-    if record.phase is CoordinationPhase.RETRY_SCHEDULED:
-        return "scheduled"
-    if record.current_attempt > 0 and record.phase is CoordinationPhase.READY:
-        return "active" if record.current_attempt > 0 else "none"
-    if record.current_attempt > 1 and record.phase in {
-        CoordinationPhase.ATTEMPT_ACTIVE,
-        CoordinationPhase.WAITING,
-    }:
-        return "active"
-    if record.phase is CoordinationPhase.TERMINAL and step.status.value == "failed":
-        if record.current_attempt >= record.retry_policy.max_attempts:
-            return "exhausted"
-        return "not_retryable"
-    if record.current_attempt > 1 and record.phase is CoordinationPhase.TERMINAL:
-        return "cancelled" if step.status.value == "cancelled" else "completed"
-    return "none"
