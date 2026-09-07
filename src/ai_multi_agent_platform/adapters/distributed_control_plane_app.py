@@ -8,6 +8,7 @@ then exposes the authenticated Worker protocol and #35 network transport at the 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import ssl
 import sys
@@ -23,7 +24,10 @@ from ai_multi_agent_platform.deployment.distributed_admin import register_distri
 from ai_multi_agent_platform.deployment.distributed_control_plane import build_worker_protocol_app
 from ai_multi_agent_platform.deployment.server import main as run_server
 from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment
-from ai_multi_agent_platform.distributed import register_distributed_control_plane
+from ai_multi_agent_platform.distributed import (
+    DistributedExecutorArtifactProvider,
+    register_distributed_control_plane,
+)
 from ai_multi_agent_platform.messaging import TcpMessageTransport
 
 from .single_node_app import build_default_single_node_deployment
@@ -81,6 +85,18 @@ def build_distributed_control_plane_deployment(
         authorization=deployment.authorization,
     )
 
+    # Capability discovery exposes one provider for the distributed artifact operation. Worker
+    # placement is intentionally deferred to the canonical scheduler on each invocation so current
+    # drain/maintenance/liveness state remains authoritative without a mirrored provider registry.
+    asyncio.run(
+        deployment.capabilities.register_provider(
+            DistributedExecutorArtifactProvider(
+                runtime,
+                workspace_bindings=deployment.run_workspace_bindings,
+            )
+        )
+    )
+
     app, _service = build_worker_protocol_app(
         downstream=deployment.app,
         runtime=runtime,
@@ -90,8 +106,6 @@ def build_distributed_control_plane_deployment(
         workspaces=deployment.workspaces,
         files=deployment.files,
         kernel=deployment.kernel,
-        capabilities=deployment.capabilities,
-        workspace_bindings=deployment.run_workspace_bindings,
     )
     # ``SingleNodeDeployment`` intentionally types its Stage-1 app as ControlPlaneASGI. The
     # advanced adapter wraps that same ASGI app without changing the Stage-1 contract.
