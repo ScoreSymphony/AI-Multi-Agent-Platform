@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import validate_id
+from ai_multi_agent_platform.verification import CanonicalVerificationAccess
 from ai_multi_agent_platform.verification.models import (
     ProducerIdentity,
     VerificationOutcome,
@@ -13,11 +14,7 @@ from ai_multi_agent_platform.verification.models import (
     VerificationResult,
     VerificationSubject,
 )
-from ai_multi_agent_platform.verification.service import (
-    VerificationService,
-    _CANONICAL_RESULT_TOKEN,
-    _CANONICAL_SUBJECT_TOKEN,
-)
+from ai_multi_agent_platform.verification.service import VerificationService
 
 from .models import ResearchVerificationBinding, ResearchVerificationSubjectType
 from .service import ResearchService
@@ -42,14 +39,15 @@ class ResearchVerificationSubject(VerificationSubject):
 class ResearchVerificationBridge:
     """Use #86 without implicitly making Research review a Task-completion gate.
 
-    #86 remains the authority for policy, reviewer independence and result acceptance.  This
-    bridge only resolves exact Research subjects and records PASS bindings for downstream
-    provenance.  Task completion remains owned by VerificationCompletionAuthority separately.
+    #86 remains the authority for policy, reviewer independence and result acceptance. This bridge
+    resolves exact Research subjects and records PASS bindings for downstream provenance. Task
+    completion remains owned by VerificationCompletionAuthority separately.
     """
 
     def __init__(self, research: ResearchService, verification: VerificationService) -> None:
         self.research = research
         self.verification = verification
+        self._canonical = CanonicalVerificationAccess(verification)
 
     def resolve_subject(
         self,
@@ -106,7 +104,7 @@ class ResearchVerificationBridge:
                 ErrorCode.CONTRACT_VIOLATION,
                 "Research verification Task differs from Research Item provenance",
             )
-        return self.verification.request_verification(
+        return self._canonical.request_verification(
             task_id=resolved_task_id,
             policy_id=policy_id,
             policy_version=policy_version,
@@ -117,7 +115,6 @@ class ResearchVerificationBridge:
             project_id=item.project_id,
             producer=producer,
             causation_id=causation_id,
-            _canonical_subject_token=_CANONICAL_SUBJECT_TOKEN,
         )
 
     def submit_result(self, result: VerificationResult) -> VerificationResult:
@@ -129,10 +126,7 @@ class ResearchVerificationBridge:
                 ErrorCode.CONTRACT_VIOLATION,
                 "Research subject changed after Verification was requested",
             )
-        stored = self.verification.submit_result(
-            result,
-            _canonical_result_token=_CANONICAL_RESULT_TOKEN,
-        )
+        stored = self._canonical.submit_result(result)
         if stored.outcome is VerificationOutcome.PASS:
             self._record_pass_binding(request, current)
         return stored
