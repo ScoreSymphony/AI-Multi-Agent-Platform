@@ -170,6 +170,69 @@ class ConnectorRepositoryProvider(RepositoryProvider):
             entries.append(RepositoryTreeEntry(path, data))
         return RepositoryTree(repository.id, revision, resolved, tuple(entries))
 
+    async def read_tree_bounded(
+        self,
+        repository: RepositoryReference,
+        revision: str,
+        context: OperationContext,
+        *,
+        max_entries: int,
+        max_total_bytes: int,
+    ) -> RepositoryTree:
+        if max_entries < 1 or max_total_bytes < 1:
+            raise ValueError("bounded tree limits must be positive")
+        action = "repository.read_tree"
+        result = await self._action(
+            repository,
+            RepositoryOperation.MATERIALIZE,
+            action,
+            {"revision": _nonblank(revision, "revision")},
+            context,
+        )
+        output = _mapping(result.output, action)
+        resolved = _revision(output.get("resolved_revision"), action, "resolved_revision")
+        resource_map = {resource.id: resource for resource in result.resource_refs}
+        raw_entries = output.get("entries")
+        if not isinstance(raw_entries, list):
+            raise _invalid(action, "entries must be an array")
+        if len(raw_entries) > max_entries:
+            raise ContractError(
+                ErrorCode.RESOURCE_EXHAUSTED,
+                "repository tree exceeds the bounded entry budget",
+                provider_id=self.provider_id,
+                details={"max_entries": max_entries, "entries": len(raw_entries)},
+            )
+        entries: list[RepositoryTreeEntry] = []
+        total_bytes = 0
+        for index, raw in enumerate(raw_entries):
+            if not isinstance(raw, dict):
+                raise _invalid(action, f"entries[{index}] must be an object")
+            path = _path(_string(raw, "relative_path", action), action)
+            resource_id = _string(raw, "resource_id", action)
+            resource = resource_map.get(resource_id)
+            if resource is None:
+                raise _invalid(action, f"missing file resource: {resource_id}")
+            if resource.connection_id != self._connection.id:
+                raise _invalid(action, "file resource belongs to another connection")
+            data = await self._connector.import_file_content(
+                self._connection.connection,
+                resource,
+                context,
+            )
+            total_bytes += len(data)
+            if total_bytes > max_total_bytes:
+                raise ContractError(
+                    ErrorCode.RESOURCE_EXHAUSTED,
+                    "repository tree exceeds the bounded byte budget",
+                    provider_id=self.provider_id,
+                    details={
+                        "max_total_bytes": max_total_bytes,
+                        "observed_bytes": total_bytes,
+                    },
+                )
+            entries.append(RepositoryTreeEntry(path, data))
+        return RepositoryTree(repository.id, revision, resolved, tuple(entries))
+
     async def branches(
         self,
         repository: RepositoryReference,
