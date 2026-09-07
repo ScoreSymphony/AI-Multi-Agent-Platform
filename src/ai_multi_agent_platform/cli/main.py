@@ -334,7 +334,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_pagination_arguments(extension_list)
     extension_show = extension_commands.add_parser(
         "show",
-        help="show one resource from a registered extension collection",
+        help="show one resource from one registered extension collection",
     )
     extension_show.add_argument("collection")
     extension_show.add_argument("resource_id")
@@ -396,7 +396,7 @@ def _profile_command(args: argparse.Namespace, store: ProfileStore, renderer: Re
             endpoint=args.endpoint,
             principal_ref=args.principal_ref,
             owner_type=owner_type,
-            owner_id=owner_id,
+            owner_id=args.owner_id,
         )
         store.set_profile(args.name, profile)
         store.save()
