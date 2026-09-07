@@ -16,6 +16,8 @@ from ai_multi_agent_platform.contracts.types import (
 )
 from ai_multi_agent_platform.domain import validate_id
 
+ISOLATED_WORKSPACE_WRITE_FEATURE = "isolated_workspace_write"
+
 
 def _utc_now() -> datetime:
     """Return an aware UTC timestamp without expanding the public domain API."""

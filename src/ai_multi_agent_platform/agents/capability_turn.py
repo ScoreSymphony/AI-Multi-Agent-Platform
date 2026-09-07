@@ -3,9 +3,10 @@
 This module intentionally composes existing platform seams instead of teaching the Agent
 runtime about provider-native tool APIs. The model receives canonical capability definitions,
 may request one or more tool calls, and those requests are executed through ``CapabilityInvoker``.
-The reference turn is deliberately conservative: only standard, side-effect-free,
-credential-free capabilities without approval requirements execute here. Governed/sensitive
-actions stay fail-closed until the canonical approval binding is composed into this path.
+The reference turn is deliberately conservative: standard side-effect-free capabilities are
+allowed, plus explicitly classified isolated Workspace-local writes. Credentialed, approval-bound,
+external, destructive or otherwise governed capabilities stay fail-closed until their canonical
+governance path is composed into this runtime.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from dataclasses import dataclass, replace
 from hashlib import sha256
 
 from ai_multi_agent_platform.capabilities import (
+    ISOLATED_WORKSPACE_WRITE_FEATURE,
     CapabilityInvocation,
     CapabilityInvoker,
     CapabilityRegistry,
@@ -201,17 +203,25 @@ class AgentCapabilityTurn:
 
 
 def _ensure_reference_safe(capability: CapabilitySpec) -> None:
+    isolated_workspace_write = (
+        capability.side_effects is SideEffectClassification.LOCAL_WRITE
+        and ISOLATED_WORKSPACE_WRITE_FEATURE in capability.features
+    )
+    side_effect_allowed = (
+        capability.side_effects is SideEffectClassification.NONE or isolated_workspace_write
+    )
     if (
         capability.safety is not SafetyClassification.STANDARD
-        or capability.side_effects is not SideEffectClassification.NONE
+        or not side_effect_allowed
         or capability.credential_requirement is not CredentialRequirement.NONE
         or bool(capability.required_approvals)
     ):
         raise ContractError(
             ErrorCode.FORBIDDEN,
             (
-                f"reference Agent capability execution is limited to standard, side-effect-free "
-                f"capabilities without credentials/approvals: {capability.capability_id!r}"
+                "reference Agent capability execution is limited to standard, side-effect-free "
+                "capabilities or explicitly isolated Workspace-local writes without credentials/"
+                f"approvals: {capability.capability_id!r}"
             ),
             details={"governed_capability_requires_composed_approval_path": True},
         )
