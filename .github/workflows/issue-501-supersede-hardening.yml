@@ -1,0 +1,107 @@
+name: Issue 501 supersede hardening
+
+on:
+  push:
+    branches:
+      - feature/501-proposal-specification-governance
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/501-proposal-specification-governance
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Harden supersession and wire web client
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          service = Path("src/ai_multi_agent_platform/governance/service.py")
+          text = service.read_text()
+          needle = '''        if replacement.supersedes_id != proposal_id:\n            raise ContractError(\n                ErrorCode.INVALID_REQUEST,\n                "replacement proposal must reference supersedes_id",\n            )\n        created = self.repository.create_proposal(replacement)\n'''
+          replacement = '''        if replacement.supersedes_id != proposal_id:\n            raise ContractError(\n                ErrorCode.INVALID_REQUEST,\n                "replacement proposal must reference supersedes_id",\n            )\n        if (\n            replacement.owner_ref != current.owner_ref\n            or replacement.project_id != current.project_id\n            or replacement.workspace_id != current.workspace_id\n        ):\n            raise ContractError(\n                ErrorCode.INVALID_REQUEST,\n                "replacement proposal must preserve owner/project/workspace scope",\n            )\n        created = self.repository.create_proposal(replacement)\n'''
+          if needle not in text:
+              raise SystemExit("service supersede anchor missing")
+          text = text.replace(needle, replacement, 1)
+          service.write_text(text)
+
+          control = Path("src/ai_multi_agent_platform/governance/control_plane.py")
+          text = control.read_text()
+          needle = '''        replacement = _proposal_from_payload(\n            cast(dict[str, JsonValue], dict(replacement_payload)),\n            context,\n            supersedes_id=resource_ref,\n        )\n        superseded, created = governance.supersede_proposal(\n'''
+          replacement = '''        replacement = _proposal_from_payload(\n            cast(dict[str, JsonValue], dict(replacement_payload)),\n            context,\n            supersedes_id=resource_ref,\n        )\n        await _require_allowed(control_plane, context, "proposal.create", replacement)\n        superseded, created = governance.supersede_proposal(\n'''
+          if needle not in text:
+              raise SystemExit("control-plane supersede auth anchor missing")
+          text = text.replace(needle, replacement, 1)
+          control.write_text(text)
+
+          client = Path("frontend/src/api/governance.ts")
+          text = client.read_text()
+          interface_anchor = '''export interface TaskConversionResult {\n'''
+          if "export interface ProposalSupersedeResult" not in text:
+              interface = '''export interface ProposalSupersedeResult {\n  proposal: GovernanceProposal;\n  replacement: GovernanceProposal;\n}\n\n'''
+              text = text.replace(interface_anchor, interface + interface_anchor, 1)
+          method_anchor = '''  dismissProposal(proposalId: string, expectedRevision: number): Promise<GovernanceProposal> {\n'''
+          if "  supersedeProposal(\n" not in text:
+              method = '''  supersedeProposal(\n    proposalId: string,\n    expectedRevision: number,\n    replacement: Record<string, unknown>,\n  ): Promise<ProposalSupersedeResult> {\n    return this.command<ProposalSupersedeResult>("proposal.supersede", proposalId, {\n      expected_revision: expectedRevision,\n      replacement,\n    });\n  }\n\n'''
+              text = text.replace(method_anchor, method + method_anchor, 1)
+          client.write_text(text)
+
+          page = Path("frontend/src/pages/GovernancePage.tsx")
+          text = page.read_text()
+          state_anchor = '''  const [reason, setReason] = useState("");\n'''
+          if "replacementTitle" not in text:
+              states = '''  const [replacementTitle, setReplacementTitle] = useState("");\n  const [replacementSummary, setReplacementSummary] = useState("");\n  const [replacementReason, setReplacementReason] = useState("");\n'''
+              text = text.replace(state_anchor, state_anchor + states, 1)
+          load_anchor = '''      setReason(loaded.reason);\n      setError(null);\n'''
+          if "setReplacementTitle(loaded.title)" not in text:
+              load = '''      setReason(loaded.reason);\n      setReplacementTitle(loaded.title);\n      setReplacementSummary(loaded.summary);\n      setReplacementReason(loaded.reason);\n      setError(null);\n'''
+              text = text.replace(load_anchor, load, 1)
+          handler_anchor = '''  const dismiss = async () => {\n'''
+          if "  const supersede = async () => {\n" not in text:
+              handler = '''  const supersede = async () => {\n    if (!replacementTitle.trim() || !replacementSummary.trim() || !replacementReason.trim()) return;\n    setBusy(true);\n    try {\n      const result = await client.supersedeProposal(proposal.id, proposal.revision, {\n        title: replacementTitle.trim(),\n        summary: replacementSummary.trim(),\n        reason: replacementReason.trim(),\n        source: "web-governance-supersede",\n        ...(proposal.project_id ? { project_id: proposal.project_id } : {}),\n        ...(proposal.workspace_id ? { workspace_id: proposal.workspace_id } : {}),\n        evidence_refs: proposal.evidence_refs,\n        confidence: proposal.confidence,\n        expected_value: proposal.expected_value,\n        risk: proposal.risk,\n        ...(proposal.fingerprint ? { fingerprint: proposal.fingerprint } : {}),\n      });\n      window.history.pushState(\n        {},\n        "",\n        `/governance/proposals/${encodeURIComponent(result.replacement.id)}`,\n      );\n      window.dispatchEvent(new PopStateEvent("popstate"));\n    } catch (nextError) {\n      setError(nextError);\n      setBusy(false);\n    }\n  };\n\n'''
+              text = text.replace(handler_anchor, handler + handler_anchor, 1)
+          spec_card_anchor = '''      {!terminal ? (\n        <Card title="Create Specification">\n'''
+          if '<Card title="Supersede Proposal">' not in text:
+              card = '''      {!terminal ? (\n        <Card title="Supersede Proposal">\n          <div className="stack">\n            <p>Create a replacement Proposal while preserving owner, Project and Workspace lineage.</p>\n            <label>Replacement title<input value={replacementTitle} onChange={(event) => setReplacementTitle(event.target.value)} /></label>\n            <label>Replacement summary<textarea value={replacementSummary} onChange={(event) => setReplacementSummary(event.target.value)} /></label>\n            <label>Replacement reason<textarea value={replacementReason} onChange={(event) => setReplacementReason(event.target.value)} /></label>\n            <button\n              disabled={\n                busy\n                || !replacementTitle.trim()\n                || !replacementSummary.trim()\n                || !replacementReason.trim()\n              }\n              onClick={() => void supersede()}\n            >\n              Supersede Proposal\n            </button>\n          </div>\n        </Card>\n      ) : null}\n\n'''
+              text = text.replace(spec_card_anchor, card + spec_card_anchor, 1)
+          page.write_text(text)
+
+          hardening = Path("tests/test_issue_501_governance_hardening.py")
+          text = hardening.read_text()
+          if "def test_supersession_cannot_cross_governance_scope(" not in text:
+              text += '''\n\ndef test_supersession_cannot_cross_governance_scope(tmp_path: Path) -> None:\n    project_a = new_id("project")\n    project_b = new_id("project")\n    service = _service(tmp_path)\n    original = service.create_proposal(\n        _proposal(project_a, title="Scoped original"), actor_ref=PRINCIPAL\n    )\n    replacement = replace(\n        _proposal(project_b, title="Cross-project replacement"),\n        supersedes_id=original.id,\n    )\n\n    with pytest.raises(ContractError) as error:\n        service.supersede_proposal(\n            original.id,\n            replacement,\n            expected_revision=original.revision,\n            actor_ref=PRINCIPAL,\n        )\n\n    assert error.value.code is ErrorCode.INVALID_REQUEST\n    assert service.repository.get_proposal(original.id).status is ProposalStatus.PROPOSED\n    assert {value.id for value in service.repository.list_proposals()} == {original.id}\n'''
+              hardening.write_text(text)
+
+          frontend_test = Path("frontend/src/api/governance.test.ts")
+          text = frontend_test.read_text()
+          if 'it("supersedes proposals through the canonical command with explicit lineage"' not in text:
+              insert = '''\n  it("supersedes proposals through the canonical command with explicit lineage", async () => {\n    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {\n      expect(String(input)).toBe("/api/v1/commands/proposal.supersede");\n      expect(init?.method).toBe("POST");\n      expect(JSON.parse(String(init?.body))).toEqual({\n        resource_ref: "proposal_original",\n        expected_revision: 3,\n        replacement: {\n          title: "Replacement",\n          summary: "Replacement summary",\n          reason: "Clarified scope",\n          project_id: "project_test",\n        },\n      });\n      return jsonResponse({\n        proposal: { id: "proposal_original", status: "superseded", revision: 4 },\n        replacement: { id: "proposal_replacement", status: "draft", revision: 1 },\n      });\n    });\n    const client = new GovernanceClient({ fetchImpl });\n\n    const result = await client.supersedeProposal("proposal_original", 3, {\n      title: "Replacement",\n      summary: "Replacement summary",\n      reason: "Clarified scope",\n      project_id: "project_test",\n    });\n\n    expect(result.replacement.id).toBe("proposal_replacement");\n    expect(fetchImpl).toHaveBeenCalledOnce();\n  });\n'''
+              marker = "\n});\n"
+              if not text.endswith(marker):
+                  raise SystemExit("frontend governance test closing marker missing")
+              text = text[:-len(marker)] + insert + marker
+              frontend_test.write_text(text)
+          PY
+      - name: Validate formatting
+        shell: bash
+        run: |
+          python -m pip install 'ruff==0.16.6'
+          ruff format src/ai_multi_agent_platform/governance tests/test_issue_501_governance_hardening.py
+          ruff check src/ai_multi_agent_platform/governance tests/test_issue_501_governance_hardening.py
+      - name: Commit hardening and remove helper
+        shell: bash
+        run: |
+          git config user.name "Score Symphony CI"
+          git config user.email "actions@users.noreply.github.com"
+          git rm .github/workflows/issue-501-supersede-hardening.yml
+          git add src/ai_multi_agent_platform/governance frontend/src/api/governance.ts frontend/src/pages/GovernancePage.tsx frontend/src/api/governance.test.ts tests/test_issue_501_governance_hardening.py
+          git commit -m "feat: harden proposal supersession lineage"
+          git push origin HEAD:feature/501-proposal-specification-governance
