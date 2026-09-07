@@ -33,8 +33,19 @@ class CoordinationEvidenceRepository(Protocol):
     def get_step_record(self, step_id: str) -> StepCoordinationRecord: ...
 
 
+class VerificationEvidenceRepository(Protocol):
+    """Minimum #86 audit history needed to prove Verification evidence server-side."""
+
+    def audit_history(
+        self,
+        *,
+        task_id: str | None = None,
+        verification_id: str | None = None,
+    ) -> tuple[VerificationAuditEvent, ...]: ...
+
+
 class ReplanningEvidenceBridge:
-    """Translate canonical Run/Verification/coordinator evidence into one bounded replan request.
+    """Translate canonical runtime evidence into one bounded replan request.
 
     Trigger identity is derived from canonical evidence, so retries after process failure are
     idempotent. The underlying PlanningService remains authoritative for proposal persistence,
@@ -46,10 +57,12 @@ class ReplanningEvidenceBridge:
         planning: PlanningService,
         *,
         coordination_repository: CoordinationEvidenceRepository | None = None,
+        verification_repository: VerificationEvidenceRepository | None = None,
         event_sink: ReplanningEventSink | None = None,
     ) -> None:
         self._planning = planning
         self._coordination_repository = coordination_repository
+        self._verification_repository = verification_repository
         self._event_sink = event_sink
 
     async def from_terminal_run(
@@ -133,46 +146,78 @@ class ReplanningEvidenceBridge:
         *,
         workspace_id: str | None = None,
     ) -> ProposalRecord:
-        """Request replanning from one canonical recorded Verification outcome."""
+        """Request replanning from one server-resolved canonical Verification audit event.
 
-        if event.event_type is not VerificationAuditEventType.RESULT_RECORDED:
+        The supplied object is used only as a lookup reference. Outcome, Task identity and all
+        evidence references are taken from #86's canonical append-only audit history.
+        """
+
+        if self._verification_repository is None:
             raise ContractError(
-                ErrorCode.CONFLICT,
-                "replanning requires a canonical Verification result event",
-                details={"verification_audit_event_id": event.event_id},
+                ErrorCode.INVALID_CONFIGURATION,
+                "Verification replanning requires canonical #86 audit history",
             )
         if event.task_id is None:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
-                "canonical Verification result is missing Task identity",
+                "Verification evidence reference is missing Task identity",
                 details={"verification_audit_event_id": event.event_id},
+            )
+        canonical = next(
+            (
+                candidate
+                for candidate in self._verification_repository.audit_history(
+                    task_id=event.task_id,
+                    verification_id=event.verification_id,
+                )
+                if candidate.event_id == event.event_id
+            ),
+            None,
+        )
+        if canonical is None:
+            raise ContractError(
+                ErrorCode.NOT_FOUND,
+                "Verification audit event was not found in canonical #86 history",
+                details={"verification_audit_event_id": event.event_id},
+            )
+        if canonical.event_type is not VerificationAuditEventType.RESULT_RECORDED:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "replanning requires a canonical Verification result event",
+                details={"verification_audit_event_id": canonical.event_id},
+            )
+        if canonical.task_id is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "canonical Verification result is missing Task identity",
+                details={"verification_audit_event_id": canonical.event_id},
             )
         trigger = {
             VerificationOutcome.NEEDS_CHANGES: PlanningTrigger.VERIFICATION_CHANGES_REQUIRED,
             VerificationOutcome.FAIL: PlanningTrigger.VERIFICATION_FAILED,
             VerificationOutcome.INCONCLUSIVE: PlanningTrigger.VERIFICATION_INCONCLUSIVE,
-        }.get(event.outcome)
+        }.get(canonical.outcome)
         if trigger is None:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Verification outcome does not justify replanning",
                 details={
-                    "verification_audit_event_id": event.event_id,
-                    "outcome": None if event.outcome is None else event.outcome.value,
+                    "verification_audit_event_id": canonical.event_id,
+                    "outcome": None if canonical.outcome is None else canonical.outcome.value,
                 },
             )
-        outcome = event.outcome
+        outcome = canonical.outcome
         assert outcome is not None
         reason = f"canonical Verification outcome {outcome.value}"
         evidence_refs = tuple(
             dict.fromkeys(
                 value
-                for value in (event.event_id, event.verification_id, event.run_id)
+                for value in (canonical.event_id, canonical.verification_id, canonical.run_id)
                 if value is not None
             )
         )
         return await self._request(
-            task_id=event.task_id,
+            task_id=canonical.task_id,
             trigger=trigger,
             reason=reason,
             evidence_refs=evidence_refs,
@@ -317,4 +362,9 @@ def _evidence_fingerprint(
     ).hexdigest()
 
 
-__all__ = ["CoordinationEvidenceRepository", "ReplanningEvidenceBridge", "ReplanningEventSink"]
+__all__ = [
+    "CoordinationEvidenceRepository",
+    "ReplanningEvidenceBridge",
+    "ReplanningEventSink",
+    "VerificationEvidenceRepository",
+]
