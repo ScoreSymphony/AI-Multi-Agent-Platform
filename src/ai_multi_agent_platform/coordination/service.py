@@ -283,6 +283,12 @@ class DurablePlanStepCoordinator:
                 if step.status in {StepStatus.RUNNING, StepStatus.WAITING}:
                     next_step = step.transition_to(StepStatus.FAILED)
                 next_attempt = max(current.current_attempt, run.attempt) + 1
+                closed_wait = self._close_wait(
+                    current.wait,
+                    resolution=WaitResolution.CANCELLED,
+                    resolution_key=key,
+                    now=current_time,
+                )
                 if current.retry_policy.permits(category=category, next_attempt=next_attempt):
                     next_record = replace(
                         next_record,
@@ -291,7 +297,7 @@ class DurablePlanStepCoordinator:
                         retry_due_at=(
                             current_time + current.retry_policy.delay_for_attempt(next_attempt)
                         ),
-                        wait=None,
+                        wait=closed_wait,
                     )
                     self._emit(
                         "coordination.retry.scheduled",
@@ -307,7 +313,7 @@ class DurablePlanStepCoordinator:
                         phase=CoordinationPhase.TERMINAL,
                         current_attempt=max(current.current_attempt, run.attempt),
                         retry_due_at=None,
-                        wait=None,
+                        wait=closed_wait,
                     )
                     self._emit(
                         "coordination.retry.exhausted",
@@ -325,7 +331,12 @@ class DurablePlanStepCoordinator:
                     next_record,
                     phase=CoordinationPhase.TERMINAL,
                     retry_due_at=None,
-                    wait=None,
+                    wait=self._close_wait(
+                        current.wait,
+                        resolution=WaitResolution.CANCELLED,
+                        resolution_key=key,
+                        now=current_time,
+                    ),
                 )
 
             self.repository.save_step(
@@ -364,7 +375,8 @@ class DurablePlanStepCoordinator:
         if record.wait is not None:
             if record.wait.wait_key == wait.wait_key:
                 return self.projection(wait.plan_id)
-            raise ContractError(ErrorCode.CONFLICT, "Step already has a different durable wait")
+            if not record.wait.resolved:
+                raise ContractError(ErrorCode.CONFLICT, "Step already has a different durable wait")
         if (
             step.status is not StepStatus.RUNNING
             or record.phase is not CoordinationPhase.ATTEMPT_ACTIVE
@@ -557,7 +569,12 @@ class DurablePlanStepCoordinator:
                     current,
                     phase=CoordinationPhase.TERMINAL,
                     retry_due_at=None,
-                    wait=None,
+                    wait=self._close_wait(
+                        current.wait,
+                        resolution=WaitResolution.CANCELLED,
+                        resolution_key=f"{idempotency_key}:wait:{step.id}",
+                        now=current_time,
+                    ),
                     reconciliation=ReconciliationDisposition.CANONICAL_TERMINAL,
                 )
                 self.repository.save_step(
@@ -969,7 +986,7 @@ class DurablePlanStepCoordinator:
         if resolution_key in record.processed_keys:
             return self.projection(record.plan_id)
         wait = record.wait
-        if wait is None or record.phase is not CoordinationPhase.WAITING:
+        if wait is None or wait.resolved or record.phase is not CoordinationPhase.WAITING:
             raise ContractError(ErrorCode.CONFLICT, "Step has no active durable wait")
         claim = self._required_claim(step_id, now)
         try:
@@ -979,6 +996,12 @@ class DurablePlanStepCoordinator:
             state = self.repository.get_plan(current.plan_id)
             step = state.step(step_id)
             processed = (*current.processed_keys, resolution_key)
+            resolved_wait = self._close_wait(
+                wait,
+                resolution=resolution,
+                resolution_key=resolution_key,
+                now=now,
+            )
             if resolution is WaitResolution.SATISFIED:
                 next_step = step.transition_to(StepStatus.RUNNING)
                 phase = CoordinationPhase.ATTEMPT_ACTIVE
@@ -996,7 +1019,7 @@ class DurablePlanStepCoordinator:
                 updated = replace(
                     current,
                     phase=phase,
-                    wait=None,
+                    wait=resolved_wait,
                     processed_keys=processed,
                 )
             elif resolution is WaitResolution.CANCELLED:
@@ -1005,7 +1028,7 @@ class DurablePlanStepCoordinator:
                 updated = replace(
                     current,
                     phase=CoordinationPhase.TERMINAL,
-                    wait=None,
+                    wait=resolved_wait,
                     retry_due_at=None,
                     processed_keys=processed,
                 )
@@ -1015,7 +1038,7 @@ class DurablePlanStepCoordinator:
                 updated = replace(
                     current,
                     phase=CoordinationPhase.TERMINAL,
-                    wait=None,
+                    wait=resolved_wait,
                     retry_due_at=None,
                     processed_keys=processed,
                 )
@@ -1238,6 +1261,23 @@ class DurablePlanStepCoordinator:
                 ErrorCode.FORBIDDEN,
                 "foreign-scope signal cannot resolve a durable Step wait",
             )
+
+    @staticmethod
+    def _close_wait(
+        wait: StepWait | None,
+        *,
+        resolution: WaitResolution,
+        resolution_key: str,
+        now: datetime,
+    ) -> StepWait | None:
+        if wait is None or wait.resolved:
+            return wait
+        return replace(
+            wait,
+            resolved_at=now,
+            resolution=resolution,
+            resolution_key=resolution_key,
+        )
 
     @staticmethod
     def _attempt_key(record: StepCoordinationRecord, attempt: int) -> str:
