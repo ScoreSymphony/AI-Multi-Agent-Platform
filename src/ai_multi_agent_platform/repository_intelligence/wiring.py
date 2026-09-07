@@ -5,7 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ai_multi_agent_platform.contracts.types import OperationContext
-from ai_multi_agent_platform.repositories import RepositoryCallContext, RepositoryService, RepositoryTree
+from ai_multi_agent_platform.repositories import (
+    RepositoryCallContext,
+    RepositoryService,
+    RepositoryTree,
+)
 
 RepositoryIntelligenceActorResolver = Callable[[OperationContext], str]
 
