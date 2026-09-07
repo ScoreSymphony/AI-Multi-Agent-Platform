@@ -228,7 +228,7 @@ Optional features must report `supported`, `disabled`, `unsupported` or `not-run
 
 ### Lane G — shared real-host campaign: #388 + #562
 
-These two issues should not be treated as two unrelated VPS projects.
+These two issues should not be treated as two unrelated VPS projects, but their current dependency states are not identical.
 
 #### #388 transport-specific acceptance
 
@@ -238,6 +238,8 @@ The transport implementation is present. Remaining acceptance requires:
 - dispatch and result retrieval across the real network boundary;
 - restart/reconnect without changing canonical Worker identity;
 - explicit proof that canonical Artifact/evidence references survive the return path.
+
+#388 is ready to execute when the hardened two-host test environment is available.
 
 #### #562 full two-VPS private-tunnel acceptance
 
@@ -263,9 +265,9 @@ It adds:
 - independent Worker restart;
 - sanitized acceptance evidence.
 
-**Recommended execution:** build one hardened two-VPS test topology and use it first for #388's narrow transport assertions, then for #562's broader deployment/failure/security matrix. Reuse the same sanitized evidence in #46/#440 where appropriate.
+**Current dependency status:** #562 explicitly lists #46 as a hard dependency. Under repository dependency discipline, #562 therefore remains blocked until #46 closes or that dependency is explicitly revised. Preparing the private topology or reusable operator material is fine when it does not amount to starting blocked issue-owned implementation/acceptance work.
 
-#562 currently has wording that lists #46 as a hard dependency while also requiring its result to feed #46 conformance evidence. That dependency should be interpreted/reconciled explicitly before normal issue execution rather than creating a circular close-order rule.
+If the #46 dependency is revised, reuse the same hardened topology first for #388's narrow transport assertions and then for #562's broader deployment/failure/security matrix. If the dependency is not revised, do not claim pre-#46 #562 evidence in the final #46 audit; the currently declared close-order and the desired evidence flow are incompatible and must not be silently assumed away.
 
 ### Lane H — #501 optional Proposal/Specification governance
 
@@ -364,7 +366,7 @@ Technically many issues are open, but maximum branch count is not the goal. The 
 | 4 | #440 | Yes | Evidence/performance | benchmarks, runtime/distributed fixtures |
 | 5 | #501 | Yes | Optional completion audit | governance, Approval, Search, Web/CLI |
 | 6 | #502 | Yes | Optional capability expansion | Repository, Capability/Plugin, Search |
-| 7 | #388 + #562 | Yes operationally, after safe two-VPS setup / dependency reconciliation | Real-host acceptance | deployment/network/security evidence |
+| 7 | #388 + #562 | #388: Yes; #562: Blocked by #46 unless dependency is revised | Real-host acceptance | deployment/network/security evidence |
 | 8 | #46 | Yes as evidence accumulation; final close later | Final convergence | conformance/CI/release evidence |
 | 9 | #560 | Full lane waits on current #439 dependency | Client semantics | coordination projection/Web/CLI |
 | 10 | #566 | Yes, optional | Large HA productionization | Control Plane, persistence, deployment/security |
@@ -381,7 +383,7 @@ A practical current split is **five to six focused workstreams**:
 3. **#500 final host-pressure acceptance/integration**.
 4. **#440 remaining non-blocked benchmark evidence**.
 5. **one optional feature lane: #502 or #501**, selected by highest current value.
-6. **one operational lane: combined #388/#562 two-VPS campaign**, when the secure environment is prepared.
+6. **one operational lane: #388 transport acceptance**, with only safe shared-topology preparation for #562 until its #46 dependency is closed or explicitly revised.
 
 #46 can accumulate conformance evidence alongside these without necessarily becoming a separate broad implementation branch.
 
@@ -397,7 +399,7 @@ A practical current split is **five to six focused workstreams**:
 - #567 with most #440 benchmark work;
 - #439 with #500 when ownership boundaries are respected;
 - #501 with #440;
-- #388/#562 operational acceptance with repository-only #502 work.
+- #388 operational acceptance with repository-only #502 work; #562 joins this pairing only after its current #46 dependency is satisfied or revised.
 
 ### Higher collision / sequence carefully
 
@@ -422,7 +424,7 @@ Run in parallel:
 #501/#502 selected optional work
 ```
 
-At the same time, prepare the secure two-VPS acceptance topology without exposing internal Worker services publicly.
+At the same time, prepare the secure two-VPS topology for #388 without exposing internal Worker services publicly. Shared preparation may be reusable by #562, but #562 itself remains blocked by its current #46 hard dependency.
 
 #568 can be handled in small non-conflicting cohorts, but a repository-wide test move is better placed at a synchronization point after the active Wave-1 code branches have converged.
 
@@ -469,18 +471,20 @@ Do not use #568 to mix production refactors into the same change set.
 
 ### Wave 4 — real-host distributed acceptance
 
-Use the same secure private topology:
+Under the current dependency graph, execute #388 and keep #562 blocked:
 
 ```text
 private two-VPS topology
    -> #388 transport-specific acceptance
+   -> sanitized transport evidence
+      -> #440 real-network evidence where applicable
+
+#46 closed OR #562 dependency explicitly revised
    -> #562 full distributed deployment/failure/security acceptance
-   -> sanitized evidence
-      -> #46 optional distributed conformance
-      -> #440 real-network operating-envelope evidence
+   -> sanitized deployment evidence
 ```
 
-This avoids maintaining two separate real-host test environments.
+If #562 is intended to feed the final pre-closure #46 conformance audit, its #46 hard dependency must be explicitly revised first. Do not encode a circular close order as an implicit exception.
 
 ### Wave 5 — final core convergence
 
@@ -496,7 +500,7 @@ exact release candidate
    -> operational v1 release candidate
 ```
 
-#46 should be the last core convergence issue, not the first umbrella issue closed.
+#46 should be the last core convergence issue, not the first umbrella issue closed. Under the current issue dependency declaration, #562 is not a prerequisite to closing a single-node #46 profile; a release must not claim #562's broader cross-host profile without its later acceptance evidence.
 
 ### Optional HA wave — #566
 
@@ -530,9 +534,9 @@ Do not make this a prerequisite for ordinary single-node release readiness unles
                                       v
                                #46 core convergence
 
-#388 transport acceptance ----+
-                              +--> shared real two-VPS campaign --> optional distributed evidence
-#562 full VPS acceptance ------+
+#388 transport acceptance ---> shared private topology/evidence
+
+#46 closed OR dependency revised ---> #562 full VPS acceptance
 
 #566* real Control Plane HA --------------------> #440/#46 optional HA evidence
 
