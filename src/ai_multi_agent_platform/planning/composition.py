@@ -30,9 +30,9 @@ from ai_multi_agent_platform.domain import Plan, Step
 from ai_multi_agent_platform.models import RoutingRequirements
 from ai_multi_agent_platform.security import ActorIdentity
 
+from .environment import PlanningService
 from .models import PlanProposal, ProposalRecord, ProposalStatus
 from .repository import PlanningRepository
-from .service import PlanningService
 
 
 class PlanningOnlyLifecycleBackend(LifecycleBackend):

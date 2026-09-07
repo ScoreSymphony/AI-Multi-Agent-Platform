@@ -7,6 +7,7 @@ from .control_plane import (
     planning_command_handlers,
     planning_resource_services,
 )
+from .environment import PlanningEnvironment, PlanningEnvironmentResolver, PlanningService
 from .evidence import (
     CoordinationEvidenceRepository,
     ReplanningEventSink,
@@ -49,7 +50,7 @@ from .repository import (
     JsonPlanningRepository,
     PlanningRepository,
 )
-from .service import ActivatedPlanCoordinator, PlanningKernel, PlanningService
+from .service import ActivatedPlanCoordinator, PlanningKernel
 
 __all__ = [
     "PLANNING_STORE_SCHEMA_VERSION",
@@ -70,6 +71,8 @@ __all__ = [
     "PlanningAgentCandidate",
     "PlanningCapabilityCandidate",
     "PlanningCommandHandlers",
+    "PlanningEnvironment",
+    "PlanningEnvironmentResolver",
     "PlanningInventory",
     "PlanningKernel",
     "PlanningModelCandidate",
