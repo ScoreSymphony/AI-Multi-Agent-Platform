@@ -372,11 +372,7 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
             if superseded_by_plan_id is None
             else f"coordination Plan superseded by {superseded_by_plan_id}"
         )
-        retry_state = (
-            RetryState.CANCELLED
-            if record.retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}
-            else record.retry_state
-        )
+        retry_state = record.retry_state
         wait = record.wait
         if wait is not None and not wait.resolved:
             wait = self._close_wait(
@@ -415,11 +411,14 @@ class DurablePlanStepCoordinator(_BaseDurablePlanStepCoordinator):
         elif record.phase is CoordinationPhase.RETRY_SCHEDULED:
             # Preserve the already-observed FAILED attempt while cancelling only the future retry.
             retry_state = RetryState.CANCELLED
-        elif step.status in {StepStatus.PENDING, StepStatus.READY, StepStatus.WAITING}:
-            step = step.transition_to(StepStatus.CANCELLED)
-        elif step.status is StepStatus.RUNNING:
-            # Missing Run identity is an inconsistency, but supersession still forbids future work.
-            step = step.transition_to(StepStatus.CANCELLED)
+        else:
+            if step.status in {StepStatus.PENDING, StepStatus.READY, StepStatus.WAITING}:
+                step = step.transition_to(StepStatus.CANCELLED)
+            elif step.status is StepStatus.RUNNING:
+                # Missing Run identity is inconsistent, but supersession still forbids future work.
+                step = step.transition_to(StepStatus.CANCELLED)
+            if retry_state in {RetryState.SCHEDULED, RetryState.ACTIVE}:
+                retry_state = RetryState.CANCELLED
 
         return (
             step,
