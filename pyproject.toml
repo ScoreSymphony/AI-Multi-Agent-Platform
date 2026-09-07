@@ -37,6 +37,7 @@ platform-heterogeneous-placement = "ai_multi_agent_platform.benchmarking.heterog
 platform-ha-failover = "ai_multi_agent_platform.benchmarking.ha_failover_cli:main"
 platform-host-pressure-observe = "ai_multi_agent_platform.benchmarking.host_pressure_observer_cli:main"
 platform-persistence-fault = "ai_multi_agent_platform.benchmarking.persistence_fault_cli:main"
+platform-operating-envelope = "ai_multi_agent_platform.benchmarking.operating_envelope_cli:main"
 platform-release = "ai_multi_agent_platform.release.cli:main"
 
 [project.optional-dependencies]
