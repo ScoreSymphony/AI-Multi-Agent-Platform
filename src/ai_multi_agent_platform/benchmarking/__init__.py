@@ -50,6 +50,14 @@ from .faults import (
     FaultUnderLoadSpec,
     SingleNodeFaultUnderLoadHarness,
 )
+from .ha_failover import (
+    HA_FAILOVER_REPORT_SCHEMA_VERSION,
+    HAFailoverBenchmarkHarness,
+    HAFailoverBenchmarkReport,
+    HAFailoverBenchmarkSpec,
+    HAFailoverCorrectnessSummary,
+    HAFailoverEpochEvidence,
+)
 from .heterogeneous_placement import (
     HETEROGENEOUS_PLACEMENT_REPORT_SCHEMA_VERSION,
     HETEROGENEOUS_WORKLOAD_PROFILES,
@@ -132,6 +140,7 @@ __all__ = [
     "DISTRIBUTED_SCALE_REPORT_SCHEMA_VERSION",
     "ENDURANCE_REPORT_SCHEMA_VERSION",
     "FAULT_REPORT_SCHEMA_VERSION",
+    "HA_FAILOVER_REPORT_SCHEMA_VERSION",
     "HETEROGENEOUS_PLACEMENT_REPORT_SCHEMA_VERSION",
     "HETEROGENEOUS_WORKLOAD_PROFILES",
     "PERSISTENCE_SWEEP_REPORT_SCHEMA_VERSION",
@@ -170,6 +179,11 @@ __all__ = [
     "FaultCorrectnessSummary",
     "FaultUnderLoadReport",
     "FaultUnderLoadSpec",
+    "HAFailoverBenchmarkHarness",
+    "HAFailoverBenchmarkReport",
+    "HAFailoverBenchmarkSpec",
+    "HAFailoverCorrectnessSummary",
+    "HAFailoverEpochEvidence",
     "HeterogeneousPlacementBenchmarkHarness",
     "HeterogeneousPlacementCorrectnessSummary",
     "HeterogeneousPlacementReport",
