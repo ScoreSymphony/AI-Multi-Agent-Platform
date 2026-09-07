@@ -34,6 +34,7 @@ from ai_multi_agent_platform.distributed import (
     DistributedRegistry,
     DistributedRuntime,
     Heartbeat,
+    JobResultStatus,
     WorkerHeartbeatRequest,
     WorkerJobRequest,
     WorkerRequestCredentials,
@@ -251,6 +252,7 @@ class _RoundResult:
     dispatch_samples: tuple[float, ...]
     worker_job_ids: tuple[str, ...]
     run_ids: tuple[str, ...]
+    successful_jobs: int
 
 
 class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarness):
@@ -313,6 +315,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
         worker_job_ids: list[str] = []
         run_ids: list[str] = []
         errors: list[str] = []
+        successful_jobs = 0
 
         base_time = datetime.now(UTC)
         sequences = {item.worker.worker_id: 0 for item in worker_fixtures}
@@ -383,6 +386,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                     )
                     pre_fault_samples.extend(result.dispatch_samples)
                     self._record_round(result, placement_counts, worker_job_ids, run_ids)
+                    successful_jobs += result.successful_jobs
                     if any(record.state is not DispatchState.TERMINAL for record in result.records):
                         errors.append("pre-fault round did not terminate every Worker Job")
 
@@ -432,6 +436,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                     )
                     degraded_samples.extend(result.dispatch_samples)
                     self._record_round(result, placement_counts, worker_job_ids, run_ids)
+                    successful_jobs += result.successful_jobs
                     degraded_terminal_jobs += sum(
                         record.state is DispatchState.TERMINAL for record in result.records
                     )
@@ -507,6 +512,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                     )
                     post_rejoin_samples.extend(result.dispatch_samples)
                     self._record_round(result, placement_counts, worker_job_ids, run_ids)
+                    successful_jobs += result.successful_jobs
                     post_rejoin_terminal_jobs += sum(
                         record.state is DispatchState.TERMINAL for record in result.records
                     )
@@ -587,9 +593,13 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                 result = await runtime.result(recovery_job.worker_job_id)
                 recovery_record = runtime.get_record(recovery_job.worker_job_id)
                 workspace_recovery_terminal = (
-                    recovery_record.state is DispatchState.TERMINAL and result is not None
+                    recovery_record.state is DispatchState.TERMINAL
+                    and result is not None
+                    and result.status is JobResultStatus.SUCCEEDED
                 )
-                if not workspace_recovery_terminal:
+                if workspace_recovery_terminal:
+                    successful_jobs += 1
+                else:
                     errors.append("Workspace recovery job did not terminate successfully")
         except TimeoutError:
             errors.append("distributed fault benchmark exceeded timeout")
@@ -609,9 +619,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             not (fixture.workspace_root / workspace.workspace_id / workspace.snapshot_id).exists()
             for fixture in worker_fixtures
         )
-        terminal_successful_jobs = sum(
-            record.state is DispatchState.TERMINAL for record in runtime.records()
-        )
+        terminal_successful_jobs = successful_jobs
         duplicate_worker_job_ids = len(worker_job_ids) - len(set(worker_job_ids))
         duplicate_run_ids = len(run_ids) - len(set(run_ids))
         degraded_avoided_lost_worker = (
@@ -684,7 +692,7 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             storage_growth_bytes=storage_after - storage_before,
             open_file_descriptors=_open_file_descriptor_count(),
         )
-        throughput = spec.expected_successful_jobs / duration if duration > 0 else 0.0
+        throughput = terminal_successful_jobs / duration if duration > 0 else 0.0
         return DistributedFaultReport(
             schema_version=DISTRIBUTED_FAULT_REPORT_SCHEMA_VERSION,
             benchmark=spec,
@@ -736,14 +744,18 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             record for record in reconciled if record.job.worker_job_id in current_ids
         )
         final_records: list[DispatchRecord] = []
+        successful_jobs = 0
         for record in current_records:
-            await runtime.result(record.job.worker_job_id)
+            result = await runtime.result(record.job.worker_job_id)
+            if result is not None and result.status is JobResultStatus.SUCCEEDED:
+                successful_jobs += 1
             final_records.append(runtime.get_record(record.job.worker_job_id))
         return _RoundResult(
             records=tuple(final_records),
             dispatch_samples=tuple(elapsed for _record, elapsed in dispatched),
             worker_job_ids=tuple(job.worker_job_id for job in jobs),
             run_ids=tuple(job.execution.run_id for job in jobs),
+            successful_jobs=successful_jobs,
         )
 
     @staticmethod
