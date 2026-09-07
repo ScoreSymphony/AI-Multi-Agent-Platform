@@ -1,5 +1,10 @@
 """Canonical distributed node, worker and scheduling primitives."""
 
+from .artifact_capability_provider import (
+    DISTRIBUTED_WORKSPACE_ARTIFACT_TOOL_REF,
+    WORKSPACE_ARTIFACT_CAPABILITY_ID,
+    DistributedExecutorArtifactProvider,
+)
 from .capability_provider import (
     DISTRIBUTED_ECHO_TOOL_REF,
     DistributedExecutorEchoProvider,
@@ -122,11 +127,18 @@ from .workspace import (
     WorkspaceDispatchEvidence,
     WorkspaceJobMaterializationResolver,
 )
+from .workspace_artifacts import (
+    ArtifactPublishingWorkerDispatcher,
+    CanonicalWorkspaceArtifactPublisher,
+    WorkspaceArtifactContextResolver,
+    WorkspaceArtifactPublisher,
+)
 
 __all__ = [
     "DISTRIBUTED_ADMIN_COMMANDS",
     "DISTRIBUTED_ECHO_TOOL_REF",
     "DISTRIBUTED_STATE_SCHEMA_VERSION",
+    "DISTRIBUTED_WORKSPACE_ARTIFACT_TOOL_REF",
     "EXECUTOR_WORKER_INPUT_KEY",
     "EXECUTOR_WORKER_INPUT_SCHEMA",
     "NODE_COLLECTION",
@@ -136,16 +148,20 @@ __all__ = [
     "WORKER_PROTOCOL_VERSION",
     "WORKER_REPLY_TOPIC_PREFIX",
     "WORKER_TRANSPORT_SCHEMA_VERSION",
+    "WORKSPACE_ARTIFACT_CAPABILITY_ID",
     "AcceleratorResource",
     "AdmissionAction",
     "AdmissionDecision",
     "AdmissionReason",
     "AdmissionReasonCode",
+    "ArtifactPublishingWorkerDispatcher",
     "CandidateEvaluation",
+    "CanonicalWorkspaceArtifactPublisher",
     "DeterministicScheduler",
     "DispatchRecord",
     "DispatchState",
     "DistributedAdminCommandHandlers",
+    "DistributedExecutorArtifactProvider",
     "DistributedExecutorEchoProvider",
     "DistributedLifecycleBackend",
     "DistributedNodeProvider",
@@ -216,6 +232,8 @@ __all__ = [
     "WorkerTransportCodec",
     "WorkerTransportEndpoint",
     "WorkerWorkspaceResolver",
+    "WorkspaceArtifactContextResolver",
+    "WorkspaceArtifactPublisher",
     "WorkspaceDispatchEvidence",
     "WorkspaceJobMaterializationResolver",
     "bind_worker_job_to_tool_invocation",
