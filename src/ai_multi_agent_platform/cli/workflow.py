@@ -170,7 +170,7 @@ def _steps(projection: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
     for item in raw:
         if not isinstance(item, dict):
             raise TransportError("Control Plane Plan coordination step must be a JSON object")
-        steps.append(cast(dict[str, JsonValue], item))
+        steps.append(item)
     return steps
 
 
@@ -184,7 +184,7 @@ def _attempt(step: dict[str, JsonValue]) -> int:
 def _require_object(value: JsonValue, label: str) -> dict[str, JsonValue]:
     if not isinstance(value, dict):
         raise TransportError(f"Control Plane {label} response must be a JSON object")
-    return cast(dict[str, JsonValue], value)
+    return value
 
 
 def _segment(value: str) -> str:
