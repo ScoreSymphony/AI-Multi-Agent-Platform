@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ControlPlaneClient } from "../api/client";
 import {
   describeLiveStreamError,
@@ -60,12 +60,16 @@ export function TaskDetailPage({
   const [busy, setBusy] = useState(false);
   const [liveState, setLiveState] = useState<LiveConnectionState>("connecting");
   const [liveError, setLiveError] = useState<string | null>(null);
+  const loadGeneration = useRef(0);
   const permission = usePermissionHint("task:command", taskId);
   const movePermission = usePermissionHint("task:move-project", taskId);
 
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     if (!isCanonicalId(taskId)) {
-      setError(new Error("This route does not contain a valid canonical Task ID."));
+      if (generation === loadGeneration.current) {
+        setError(new Error("This route does not contain a valid canonical Task ID."));
+      }
       return;
     }
     try {
@@ -74,6 +78,7 @@ export function TaskDetailPage({
         client.listTaskRuns(taskId, { limit: 100, sort: "created_at", direction: "desc" }),
         client.timeline(taskId, { limit: 100, direction: "asc" }),
       ]);
+      if (generation !== loadGeneration.current) return;
       setTask(nextTask);
       setRuns(nextRuns.items);
       setEvents(timeline.items);
@@ -82,12 +87,14 @@ export function TaskDetailPage({
       if (nextTask.plan_ref) {
         try {
           const nextWorkflow = await getPlanCoordination(client, nextTask.plan_ref);
+          if (generation !== loadGeneration.current) return;
           if (nextWorkflow.task_id !== taskId || nextWorkflow.id !== nextTask.plan_ref) {
             throw new Error("Control Plane returned a workflow projection for a different Task or Plan.");
           }
           setWorkflow(nextWorkflow);
           setWorkflowError(null);
         } catch (nextWorkflowError) {
+          if (generation !== loadGeneration.current) return;
           setWorkflow(null);
           setWorkflowError(nextWorkflowError);
         }
@@ -96,7 +103,7 @@ export function TaskDetailPage({
         setWorkflowError(null);
       }
     } catch (nextError) {
-      setError(nextError);
+      if (generation === loadGeneration.current) setError(nextError);
     }
   }, [client, taskId]);
 
@@ -135,7 +142,10 @@ export function TaskDetailPage({
       },
     });
     stream.open();
-    return () => stream.close();
+    return () => {
+      loadGeneration.current += 1;
+      stream.close();
+    };
   }, [client, load, taskId]);
 
   const command = async (action: "queue" | "start" | "cancel" | "retry") => {
