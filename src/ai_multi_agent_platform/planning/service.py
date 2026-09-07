@@ -80,6 +80,15 @@ class PlanningKernel(Protocol):
 
     async def history(self, task_id: str) -> tuple[PlatformEvent, ...]: ...
 
+    async def ready_task(
+        self,
+        *,
+        idempotency_key: str,
+        task_id: str,
+        actor_ref: str | None = None,
+        source: str = "platform-kernel",
+    ) -> TaskState: ...
+
     async def plan_task(
         self,
         *,
@@ -459,10 +468,20 @@ class PlanningService:
         proposal = record.proposal
         activated_event = await self._activated_plan_event(proposal)
         if activated_event is not None:
+            if record.status not in {ProposalStatus.ACTIVATING, ProposalStatus.ACTIVATED}:
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "canonical Plan exists for proposal that never entered authorized activation",
+                    details={
+                        "proposal_id": proposal_id,
+                        "proposal_status": record.status.value,
+                    },
+                )
             plan_id = self._plan_ref(activated_event)
-            await self._handoff_to_coordinator(proposal, activated_event)
             if record.status is ProposalStatus.ACTIVATED and record.activation_plan_id == plan_id:
                 return record
+            await self._ensure_handoff_ready(proposal, activated_event)
+            await self._handoff_to_coordinator(proposal, activated_event)
             saved = advance_record(
                 record,
                 status=ProposalStatus.ACTIVATED,
@@ -494,13 +513,19 @@ class PlanningService:
                     "current_plan_id": task.plan_ref,
                 },
             )
-        if self.coordinator is not None and task.status not in {
-            TaskStatus.READY,
-            TaskStatus.RUNNING,
-        }:
+        if (
+            self.coordinator is not None
+            and task.status
+            not in {
+                TaskStatus.READY,
+                TaskStatus.RUNNING,
+            }
+            and not self._failed_replan_can_activate(proposal, task)
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "Plan activation with durable execution handoff requires Task ready/running state",
+                "Plan activation with durable execution handoff requires Task ready/running state "
+                "or an eligible failed replacement replan",
                 details={"task_id": proposal.task_id, "task_status": task.status.value},
             )
         if proposal.base_plan_id is not None:
@@ -604,6 +629,7 @@ class PlanningService:
                 ErrorCode.CONTRACT_VIOLATION,
                 "activated proposal is missing its canonical plan.created provenance event",
             )
+        await self._ensure_handoff_ready(proposal, activated_event)
         await self._handoff_to_coordinator(proposal, activated_event)
         activated = advance_record(
             record,
@@ -850,6 +876,69 @@ class PlanningService:
                 "planning plan.created event is missing canonical plan_ref",
             )
         return value
+
+    @staticmethod
+    def _failed_replan_can_activate(proposal: PlanProposal, task: TaskState) -> bool:
+        return (
+            task.status is TaskStatus.FAILED
+            and proposal.trigger is not PlanningTrigger.INITIAL
+            and proposal.base_plan_id is not None
+            and task.plan_ref == proposal.base_plan_id
+        )
+
+    async def _ensure_handoff_ready(
+        self,
+        proposal: PlanProposal,
+        event: PlatformEvent,
+    ) -> None:
+        if self.coordinator is None:
+            return
+        task = await self.kernel.get_task(proposal.task_id)
+        if task.status in {TaskStatus.READY, TaskStatus.RUNNING}:
+            return
+        plan_id = self._plan_ref(event)
+        if (
+            task.status is TaskStatus.FAILED
+            and proposal.trigger is not PlanningTrigger.INITIAL
+            and proposal.base_plan_id is not None
+            and task.plan_ref == plan_id
+        ):
+            actor_ref = None if event.provenance is None else event.provenance.actor_ref
+            ready = await self.kernel.ready_task(
+                idempotency_key=f"planning:{proposal.proposal_id}:ready-for-handoff",
+                task_id=proposal.task_id,
+                actor_ref=actor_ref,
+                source="platform-planning",
+            )
+            if ready.status is not TaskStatus.READY:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "failed replacement replan did not restore Task ready state",
+                    details={
+                        "task_id": proposal.task_id,
+                        "task_status": ready.status.value,
+                        "proposal_id": proposal.proposal_id,
+                    },
+                )
+            await self._emit(
+                "planning.replan.task_reactivated",
+                task_id=proposal.task_id,
+                proposal_id=proposal.proposal_id,
+                plan_id=plan_id,
+                plan_revision=proposal.plan_revision,
+                prior_plan_id=proposal.base_plan_id,
+            )
+            return
+        raise ContractError(
+            ErrorCode.CONFLICT,
+            "canonical Plan cannot hand off to durable execution from current Task state",
+            details={
+                "task_id": proposal.task_id,
+                "task_status": task.status.value,
+                "proposal_id": proposal.proposal_id,
+                "plan_id": plan_id,
+            },
+        )
 
     async def _handoff_to_coordinator(
         self,
