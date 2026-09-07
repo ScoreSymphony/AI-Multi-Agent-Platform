@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -18,6 +19,12 @@ from .models import (
     WorkerJobRequest,
     WorkerRecord,
     WorkerStatus,
+)
+from .pressure import (
+    AdmissionAction,
+    AdmissionDecision,
+    PressureAdmissionPolicy,
+    PressureSnapshotProvider,
 )
 from .registry import DistributedRegistry, RegistryError
 
@@ -36,20 +43,41 @@ class ScheduledPlacement:
 
 
 class DeterministicScheduler:
-    """Reference scheduler with explainable filtering and stable tie-breaking."""
+    """Reference scheduler with explainable filtering and stable tie-breaking.
+
+    Optional issue-#500 pressure admission augments the existing #14 scheduler.  The scheduler
+    remains the sole placement/reservation authority: pressure code can only admit or reject a
+    candidate before reservation and never creates a second dispatch/lifecycle path.
+    """
 
     def __init__(
         self,
         registry: DistributedRegistry,
         *,
         telemetry: DistributedTelemetry | None = None,
+        pressure_provider: PressureSnapshotProvider | None = None,
+        pressure_policy: PressureAdmissionPolicy | None = None,
+        workload_class_resolver: Callable[[WorkerJobRequest], str | None] | None = None,
     ) -> None:
         self.registry = registry
         self.telemetry = telemetry
+        self.pressure_provider = pressure_provider
+        self.pressure_policy = pressure_policy
+        self.workload_class_resolver = workload_class_resolver
 
-    def evaluate(self, job: WorkerJobRequest) -> SchedulingDecision:
+    def evaluate(
+        self,
+        job: WorkerJobRequest,
+        *,
+        now: datetime | None = None,
+    ) -> SchedulingDecision:
         evaluations = tuple(
-            self._evaluate_worker(worker, self.registry.get_node(worker.node_id), job.requirements)
+            self._evaluate_worker(
+                worker,
+                self.registry.get_node(worker.node_id),
+                job,
+                now=now,
+            )
             for worker in self.registry.list_workers()
         )
         accepted = [evaluation for evaluation in evaluations if evaluation.accepted]
@@ -65,12 +93,50 @@ class DeterministicScheduler:
             evaluations=evaluations,
         )
 
-    def evaluate_worker(self, job: WorkerJobRequest, worker_id: str) -> CandidateEvaluation:
+    def evaluate_worker(
+        self,
+        job: WorkerJobRequest,
+        worker_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> CandidateEvaluation:
         """Evaluate one explicitly requested Worker against the same hard filters."""
 
         worker = self.registry.get_worker(worker_id)
         node = self.registry.get_node(worker.node_id)
-        return self._evaluate_worker(worker, node, job.requirements)
+        return self._evaluate_worker(worker, node, job, now=now)
+
+    def pressure_admission(
+        self,
+        job: WorkerJobRequest,
+        worker_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> AdmissionDecision | None:
+        """Return the structured pressure decision without reserving or dispatching work."""
+
+        if self.pressure_policy is None:
+            return None
+        worker = self.registry.get_worker(worker_id)
+        node = self.registry.get_node(worker.node_id)
+        available = self.registry.available_node_resources(node.node_id)
+        snapshot = (
+            None
+            if self.pressure_provider is None
+            else self.pressure_provider.snapshot_for_node(node.node_id)
+        )
+        workload_class = (
+            None if self.workload_class_resolver is None else self.workload_class_resolver(job)
+        )
+        return self.pressure_policy.decide(
+            node=node,
+            worker=worker,
+            requirements=job.requirements,
+            available=available,
+            snapshot=snapshot,
+            now=now,
+            workload_class=workload_class,
+        )
 
     def schedule(
         self,
@@ -82,7 +148,7 @@ class DeterministicScheduler:
 
         self.registry.expire_heartbeats(now=now)
         self.registry.expire_reservations(now=now)
-        decision = self.evaluate(job)
+        decision = self.evaluate(job, now=now)
         if self.telemetry is not None:
             self.telemetry.scheduling_decision(job, decision)
         if decision.selected_worker_id is None:
@@ -108,7 +174,7 @@ class DeterministicScheduler:
 
         self.registry.expire_heartbeats(now=now)
         self.registry.expire_reservations(now=now)
-        evaluation = self.evaluate_worker(job, worker_id)
+        evaluation = self.evaluate_worker(job, worker_id, now=now)
         decision = SchedulingDecision(
             worker_job_id=job.worker_job_id,
             selected_worker_id=worker_id if evaluation.accepted else None,
@@ -135,8 +201,11 @@ class DeterministicScheduler:
         self,
         worker: WorkerRecord,
         node: NodeRecord,
-        requirements: JobRequirements,
+        job: WorkerJobRequest,
+        *,
+        now: datetime | None,
     ) -> CandidateEvaluation:
+        requirements = job.requirements
         reasons: list[RejectionReason] = []
 
         if node.status is NodeStatus.OFFLINE:
@@ -225,6 +294,14 @@ class DeterministicScheduler:
                 self._reason(RejectionCode.CONCURRENCY_EXHAUSTED, "worker concurrency exhausted")
             )
 
+        # Pressure admission is deliberately last: ordinary #14 capability/resource eligibility
+        # is authoritative, and no pressure decision may reserve or dispatch work itself.
+        if not reasons and self.pressure_policy is not None:
+            admission = self.pressure_admission(job, worker.worker_id, now=now)
+            assert admission is not None
+            if not admission.admits:
+                reasons.append(self._pressure_rejection(admission))
+
         score = self._score(worker, node, requirements) if not reasons else 0
         return CandidateEvaluation(
             worker_id=worker.worker_id,
@@ -251,6 +328,23 @@ class DeterministicScheduler:
         if requirements.runtime is not None and requirements.runtime in worker.supported_runtimes:
             score += 10
         return score
+
+    @staticmethod
+    def _pressure_rejection(admission: AdmissionDecision) -> RejectionReason:
+        # Existing #14 reason codes remain stable in this first contract slice.  The structured
+        # AdmissionDecision carries the precise pressure action/reasons; the scheduler maps the
+        # result conservatively onto the existing unhealthy/draining vocabulary for callers that
+        # only understand #14 CandidateEvaluation today.
+        code = (
+            RejectionCode.NODE_DRAINING
+            if admission.action is AdmissionAction.BLOCK_FOR_MAINTENANCE
+            else RejectionCode.NODE_UNHEALTHY
+        )
+        reason_codes = ",".join(reason.code.value for reason in admission.reasons) or "pressure"
+        return RejectionReason(
+            code=code,
+            message=f"pressure admission {admission.action.value}: {reason_codes}",
+        )
 
     @staticmethod
     def _reason(code: RejectionCode, message: str) -> RejectionReason:
