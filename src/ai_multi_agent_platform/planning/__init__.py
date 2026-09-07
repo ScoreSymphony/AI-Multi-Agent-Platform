@@ -56,7 +56,8 @@ from .repository import (
     JsonPlanningRepository,
     PlanningRepository,
 )
-from .service import ActivatedPlanCoordinator, PlanningKernel, PlanningService
+from .service import ActivatedPlanCoordinator, PlanningKernel
+from .supersession import PlanningService
 
 __all__ = [
     "PLANNING_STORE_SCHEMA_VERSION",
