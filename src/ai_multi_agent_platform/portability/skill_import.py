@@ -109,8 +109,11 @@ class SkillBundleImportMutationHandler:
         del resource, context
         bundle = _require_bundle(value)
         _require_missing_bundle(self._repository, bundle.skill_bundle_id)
-        for entry in bundle.entries:
-            self._repository.get_skill_revision(entry.ref.skill_id, entry.ref.revision)
+        # Do not require member Skill revisions in preflight. #79 preflights every
+        # package resource before applying any of them, so same-package Skill
+        # dependencies are not present in the destination yet. The import preview
+        # owns dependency completeness/order; apply re-validates exact revisions
+        # after preceding Skill resources have been materialized.
 
     async def apply(
         self,
@@ -120,6 +123,8 @@ class SkillBundleImportMutationHandler:
     ) -> object:
         del resource, context
         bundle = _require_bundle(value)
+        for entry in bundle.entries:
+            self._repository.get_skill_revision(entry.ref.skill_id, entry.ref.revision)
         self._repository.save_bundle(bundle)
         return bundle.skill_bundle_id
 
