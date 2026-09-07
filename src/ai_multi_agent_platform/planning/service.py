@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from typing import Protocol
 
 from ai_multi_agent_platform.agents.repository import AgentRepository
@@ -611,6 +611,12 @@ class PlanningService:
             activation_plan_id=result.plan_ref,
         )
         saved = self.repository.save(activated, expected_revision=record.revision)
+        reused_step_ids: list[JsonValue] = [
+            step_id
+            for step_id in sorted(
+                {step_id for step in proposal.steps for step_id in step.reuse_step_ids}
+            )
+        ]
         await self._emit(
             "planning.revision.activated",
             task_id=proposal.task_id,
@@ -618,9 +624,7 @@ class PlanningService:
             plan_id=result.plan_ref,
             plan_revision=proposal.plan_revision,
             base_plan_id=proposal.base_plan_id,
-            reused_step_ids=sorted(
-                {step_id for step in proposal.steps for step_id in step.reuse_step_ids}
-            ),
+            reused_step_ids=reused_step_ids,
         )
         return saved
 
@@ -689,47 +693,47 @@ class PlanningService:
         model_candidates: list[PlanningModelCandidate] = []
 
         if self.agents is not None:
-            for definition in self.agents.list_agents():
-                revision = self.agents.get_agent_revision(
-                    definition.agent_id,
-                    definition.current_revision,
+            for agent_definition in self.agents.list_agents():
+                agent_revision = self.agents.get_agent_revision(
+                    agent_definition.agent_id,
+                    agent_definition.current_revision,
                 )
                 if not self._scope_compatible(
-                    definition.project_id,
-                    definition.workspace_id,
+                    agent_definition.project_id,
+                    agent_definition.workspace_id,
                     task.task.project_id,
                     workspace_id,
                 ):
                     continue
-                profile = revision.profile
+                agent_profile = agent_revision.profile
                 agent_candidates.append(
                     PlanningAgentCandidate(
-                        agent_id=definition.agent_id,
-                        revision=revision.revision,
-                        role=profile.role,
-                        enabled=profile.enabled,
-                        project_id=definition.project_id,
-                        workspace_id=definition.workspace_id,
-                        allowed_capability_ids=profile.capabilities.allowed,
-                        denied_capability_ids=profile.capabilities.denied,
-                        required_capability_ids=profile.capabilities.required_ids,
-                        model_requirements=profile.model.requirements,
+                        agent_id=agent_definition.agent_id,
+                        revision=agent_revision.revision,
+                        role=agent_profile.role,
+                        enabled=agent_profile.enabled,
+                        project_id=agent_definition.project_id,
+                        workspace_id=agent_definition.workspace_id,
+                        allowed_capability_ids=agent_profile.capabilities.allowed,
+                        denied_capability_ids=agent_profile.capabilities.denied,
+                        required_capability_ids=agent_profile.capabilities.required_ids,
+                        model_requirements=agent_profile.model.requirements,
                     )
                 )
-            for definition in self.agents.list_teams():
-                team = self.agents.get_team_revision(
-                    definition.team_id, definition.current_revision
+            for team_definition in self.agents.list_teams():
+                team_revision = self.agents.get_team_revision(
+                    team_definition.team_id, team_definition.current_revision
                 )
                 if not self._scope_compatible(
-                    definition.project_id,
-                    definition.workspace_id,
+                    team_definition.project_id,
+                    team_definition.workspace_id,
                     task.task.project_id,
                     workspace_id,
                 ):
                     continue
-                profile = team.profile
+                team_profile = team_revision.profile
                 member_enabled = True
-                for member in profile.members:
+                for member in team_profile.members:
                     try:
                         member_revision = self.agents.get_agent_revision(
                             member.agent.agent_id,
@@ -743,15 +747,17 @@ class PlanningService:
                         break
                 team_candidates.append(
                     PlanningTeamCandidate(
-                        team_id=definition.team_id,
-                        revision=team.revision,
-                        enabled=profile.enabled and member_enabled,
-                        member_agent_ids=tuple(member.agent.agent_id for member in profile.members),
-                        project_id=definition.project_id,
-                        workspace_id=definition.workspace_id,
-                        shared_capability_ids=profile.shared_capability_ids,
-                        max_parallel_agents=profile.max_parallel_agents,
-                        max_steps=profile.max_steps,
+                        team_id=team_definition.team_id,
+                        revision=team_revision.revision,
+                        enabled=team_profile.enabled and member_enabled,
+                        member_agent_ids=tuple(
+                            member.agent.agent_id for member in team_profile.members
+                        ),
+                        project_id=team_definition.project_id,
+                        workspace_id=team_definition.workspace_id,
+                        shared_capability_ids=team_profile.shared_capability_ids,
+                        max_parallel_agents=team_profile.max_parallel_agents,
+                        max_steps=team_profile.max_steps,
                     )
                 )
 
@@ -825,11 +831,14 @@ class PlanningService:
         for event in reversed(history):
             if event.event_type != "plan.created":
                 continue
-            for metadata in event.adapter_metadata:
-                if metadata.namespace != "platform-planning":
-                    continue
-                if metadata.values.get("proposal_id") == proposal.proposal_id:
-                    return event
+            raw_metadata = event.payload.get("adapter_metadata")
+            if not isinstance(raw_metadata, Mapping):
+                continue
+            planning_metadata = raw_metadata.get("platform-planning")
+            if not isinstance(planning_metadata, Mapping):
+                continue
+            if planning_metadata.get("proposal_id") == proposal.proposal_id:
+                return event
         return None
 
     @staticmethod
@@ -1095,15 +1104,12 @@ class PlanningService:
 
     @staticmethod
     def _contains_provider_private_metadata(metadata: object) -> bool:
-        if not isinstance(metadata, dict):
-            try:
-                metadata = dict(metadata)  # type: ignore[arg-type]
-            except (TypeError, ValueError):
-                return True
+        if not isinstance(metadata, Mapping):
+            return True
         stack: list[object] = [metadata]
         while stack:
             value = stack.pop()
-            if isinstance(value, dict):
+            if isinstance(value, Mapping):
                 for key, item in value.items():
                     if str(key).lower() in _FORBIDDEN_PROVIDER_METADATA_KEYS:
                         return True

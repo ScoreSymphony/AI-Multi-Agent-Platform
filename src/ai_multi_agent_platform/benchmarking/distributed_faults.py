@@ -255,8 +255,16 @@ class _RoundResult:
     successful_jobs: int
 
 
-class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarness):
+class DistributedWorkerWorkspaceFaultHarness:
     """Exercise real distributed liveness and Workspace transport failure/recovery paths."""
+
+    def __init__(self, data_dir: Path, *, platform_commit: str = "unknown") -> None:
+        self._data_dir = data_dir
+        self._platform_commit = platform_commit
+        self._fixture_harness = DistributedWorkerWorkspaceScaleHarness(
+            data_dir,
+            platform_commit=platform_commit,
+        )
 
     async def run(self, spec: DistributedFaultSpec) -> DistributedFaultReport:
         _require_fresh_data_root(self._data_dir)
@@ -293,8 +301,12 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
             safety_max_payload_bytes=spec.safety_max_payload_bytes,
             safety_max_fixture_bytes=spec.safety_max_payload_bytes,
         )
-        worker_fixtures = self._build_workers(fixture_spec, deployment, transport)
-        workspace = (await self._build_workspaces(fixture_spec, deployment))[0]
+        worker_fixtures = self._fixture_harness._build_workers(
+            fixture_spec,
+            deployment,
+            transport,
+        )
+        workspace = (await self._fixture_harness._build_workspaces(fixture_spec, deployment))[0]
 
         processes = {item.worker.worker_id: item.process for item in worker_fixtures}
         process_tasks: dict[str, asyncio.Task[None]] = {
@@ -590,12 +602,12 @@ class DistributedWorkerWorkspaceFaultHarness(DistributedWorkerWorkspaceScaleHarn
                 workspace_recovery_samples.append(time.perf_counter() - recovery_started)
                 placement_counts[recovery_record.worker_id] += 1
                 await runtime.reconcile(now=recovery_time)
-                result = await runtime.result(recovery_job.worker_job_id)
+                worker_result = await runtime.result(recovery_job.worker_job_id)
                 recovery_record = runtime.get_record(recovery_job.worker_job_id)
                 workspace_recovery_terminal = (
                     recovery_record.state is DispatchState.TERMINAL
-                    and result is not None
-                    and result.status is JobResultStatus.SUCCEEDED
+                    and worker_result is not None
+                    and worker_result.status is JobResultStatus.SUCCEEDED
                 )
                 if workspace_recovery_terminal:
                     successful_jobs += 1
