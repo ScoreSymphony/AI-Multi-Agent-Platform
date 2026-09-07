@@ -20,6 +20,7 @@ from .models import (
     PlanRuntimeState,
     PredecessorFailurePolicy,
     ReconciliationDisposition,
+    RetryState,
     StepCoordinationRecord,
     StepRetryPolicy,
     StepWait,
@@ -226,6 +227,7 @@ def _record_to_dict(record: StepCoordinationRecord) -> dict[str, Any]:
             "version": retry.version,
         },
         "retry_due_at": record.retry_due_at.isoformat() if record.retry_due_at else None,
+        "retry_state": record.retry_state.value,
         "wait": _wait_to_dict(record.wait),
         "predecessor_failure_policy": record.predecessor_failure_policy.value,
         "processed_keys": list(record.processed_keys),
@@ -261,6 +263,7 @@ def _record_from_dict(value: dict[str, Any]) -> StepCoordinationRecord:
             version=int(retry["version"]),
         ),
         retry_due_at=_dt(cast(str | None, value.get("retry_due_at"))),
+        retry_state=RetryState(str(value.get("retry_state", RetryState.NONE.value))),
         wait=_wait_from_dict(cast(dict[str, Any] | None, value.get("wait"))),
         predecessor_failure_policy=PredecessorFailurePolicy(
             str(value["predecessor_failure_policy"])
