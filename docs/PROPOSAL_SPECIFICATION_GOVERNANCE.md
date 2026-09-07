@@ -7,7 +7,10 @@ platform-owned execution model, and callers may continue creating a Task directl
 ## Ownership and invariants
 
 - A **Proposal** is a versioned intake artifact for ideas, problems, opportunities and
-  machine-generated signals. It may be dismissed, superseded, specified or converted.
+  machine-generated signals. It may be revised, request clarification, be dismissed,
+  superseded, specified or converted.
+- A clarification request is a dedicated lifecycle operation that creates a new Proposal
+  revision in `needs_spec`; it is not a terminal state and does not create a Task.
 - A **Specification** is an immutable, explicitly revisioned review contract. A material
   change creates a new revision and content digest.
 - A Specification never executes. Conversion creates exactly one canonical `Task`, and
@@ -58,6 +61,11 @@ criteria, constraints, risk, required capabilities/tests/verification and human 
 This metadata is provenance/context only; the Task owns execution state from that point
 forward.
 
+`db/governance.sqlite3` is an optional platform-owned single-node durable store. The
+existing backup inventory includes it whenever present and permits it to be materialized
+after restore, so enabling optional governance does not invalidate an older backup that
+predates the store.
+
 ## Control Plane and Search
 
 The domain registers these current resources:
@@ -77,6 +85,7 @@ Mutation commands are:
 
 - `proposal.create`
 - `proposal.revise`
+- `proposal.request-clarification`
 - `proposal.dismiss`
 - `proposal.supersede`
 - `specification.create`
@@ -85,7 +94,22 @@ Mutation commands are:
 - `specification.convert-to-task`
 
 As with other mutating Control Plane commands, `Idempotency-Key` is required by the
-canonical command boundary.
+canonical command boundary. Proposal writes use expected revisions for optimistic
+concurrency; clarification therefore cannot silently overwrite a newer Proposal revision.
+
+## Web and CLI clients
+
+The web governance surface uses the same registered Control Plane collections and command
+boundary as every other client. It provides the Proposal inbox, Proposal and Specification
+detail views, Specification revision comparison, Approval links, Task conversion and
+resulting Task links. `Request clarification` invokes the canonical
+`proposal.request-clarification` command and moves the Proposal to `needs_spec` rather
+than maintaining browser-private lifecycle state.
+
+The CLI discovers registered extension collections and commands from canonical OpenAPI.
+`extension execute` sends mutations to `/api/v1/commands/{command}` with the caller's
+idempotency key; it does not contain a separate Proposal/Specification state machine.
+Approval decisions continue through the existing canonical Approval surface.
 
 ## Planning integration (#439)
 
