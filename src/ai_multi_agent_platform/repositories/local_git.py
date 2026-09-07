@@ -173,6 +173,83 @@ class LocalGitRepositoryProvider(RepositoryProvider):
             entries=tuple(entries),
         )
 
+    async def read_tree_bounded(
+        self,
+        repository: RepositoryReference,
+        revision: str,
+        context: OperationContext,
+        *,
+        max_entries: int,
+        max_total_bytes: int,
+    ) -> RepositoryTree:
+        if max_entries < 1 or max_total_bytes < 1:
+            raise ValueError("bounded tree limits must be positive")
+        resolved = await self.resolve_revision(repository, revision, context)
+        raw = self._run("ls-tree", "-r", "-l", "-z", resolved.commit_sha).stdout
+        paths: list[str] = []
+        total_bytes = 0
+        for record in raw.split(b"\0"):
+            if not record:
+                continue
+            try:
+                header, raw_path = record.split(b"\t", 1)
+                fields = header.decode("ascii").split()
+                if len(fields) != 4:
+                    raise ValueError("invalid ls-tree metadata")
+                mode, object_type, _object_sha, size_text = fields
+                path = raw_path.decode("utf-8")
+                size_bytes = int(size_text)
+            except (ValueError, UnicodeDecodeError) as exc:
+                raise ContractError(
+                    ErrorCode.INVALID_PROVIDER_RESPONSE,
+                    "Git tree contains invalid bounded materialization metadata",
+                    provider_id=self.provider_id,
+                ) from exc
+            if mode == "120000":
+                raise ContractError(
+                    ErrorCode.UNSUPPORTED_CAPABILITY,
+                    f"symbolic links are not materialized into canonical workspaces: {path}",
+                    provider_id=self.provider_id,
+                )
+            if object_type != "blob":
+                raise ContractError(
+                    ErrorCode.UNSUPPORTED_CAPABILITY,
+                    f"non-file Git tree entry is not supported: {path}",
+                    provider_id=self.provider_id,
+                )
+            paths.append(path)
+            total_bytes += size_bytes
+            if len(paths) > max_entries:
+                raise ContractError(
+                    ErrorCode.RESOURCE_EXHAUSTED,
+                    "repository tree exceeds the bounded entry budget",
+                    provider_id=self.provider_id,
+                    details={"max_entries": max_entries, "entries": len(paths)},
+                )
+            if total_bytes > max_total_bytes:
+                raise ContractError(
+                    ErrorCode.RESOURCE_EXHAUSTED,
+                    "repository tree exceeds the bounded byte budget",
+                    provider_id=self.provider_id,
+                    details={
+                        "max_total_bytes": max_total_bytes,
+                        "observed_bytes": total_bytes,
+                    },
+                )
+        entries = tuple(
+            RepositoryTreeEntry(
+                path,
+                self._run("show", f"{resolved.commit_sha}:{path}").stdout,
+            )
+            for path in paths
+        )
+        return RepositoryTree(
+            repository_id=repository.id,
+            requested_ref=revision,
+            resolved_revision=resolved.commit_sha,
+            entries=entries,
+        )
+
     async def branches(
         self,
         repository: RepositoryReference,

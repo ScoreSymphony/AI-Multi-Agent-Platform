@@ -124,12 +124,32 @@ Linux-specific paths, counters and device details remain under the `linux.host_p
 
 Provider thresholds are deployment-overridable normalization inputs, not canonical hardware requirements. Counter-based signals use deltas between observations; the first observation therefore has no fabricated rate.
 
+## Deployment composition and doctor visibility
+
+`HostPressureDeploymentConfig` is the deployment-owned opt-in boundary. The advanced #240 distributed Control Plane composes pressure admission only when `PLATFORM_HOST_PRESSURE_ENABLED=true`. Disabled deployments retain the existing #14 scheduler and do not register the optional diagnostic collection.
+
+The deployment settings are intentionally machine-neutral:
+
+- `PLATFORM_HOST_PRESSURE_ENABLED` enables pressure-aware admission;
+- `PLATFORM_HOST_PRESSURE_REQUIRE_REPORT` makes missing/stale/untrusted evidence fail closed according to the portable policy;
+- `PLATFORM_HOST_PRESSURE_MAX_AGE_SECONDS` configures freshness;
+- `PLATFORM_HOST_PRESSURE_HEADROOM_CPU_CORES` protects CPU headroom;
+- `PLATFORM_HOST_PRESSURE_HEADROOM_RAM_BYTES` protects physical-RAM headroom;
+- `PLATFORM_HOST_PRESSURE_HEADROOM_STORAGE_BYTES` protects storage headroom.
+
+No setting configures swap, zRAM, cgroups, sysctls or kernel limits. The composition is read-only apart from scheduler admission decisions and the existing telemetry path.
+
+When enabled, the Control Plane registers the read-only `node-pressure` collection. `GET /api/v1/node-pressure` and `GET /api/v1/node-pressure/{node_id}` expose only portable state, observation time, trust and normalized signals. Provider-private `source_ref`, proc/sys/cgroup paths and `provider_metadata` remain excluded.
+
+`platform doctor` consults this collection after ordinary Node/Worker health checks. The collection is optional: a `404` is treated as a valid pressure-disabled profile. `elevated` or `critical` pressure degrades the doctor result; `healthy` and explicit `unknown` remain valid diagnostic states. This preserves #500's rule that unsupported pressure telemetry must not make otherwise valid workers unusable unless deployment policy explicitly requires reports.
+
+A #39 composition that creates a `DistributedRuntime` may use the same `HostPressureDeploymentConfig` and `configure_distributed_host_pressure()` helper. The ordinary non-distributed single-node profile has no #14 remote Worker placement to pressure-admit and therefore does not silently manufacture a pressure scheduler.
+
 ## Follow-up #500 slices
 
-The portable core, Linux collector, #16 projection and authenticated remote reporting intentionally precede wider operational integration. Remaining issue-owned work includes:
+The portable core, Linux collector, #16 projection, authenticated remote reporting, deployment composition and Control Plane/doctor projection now precede the remaining dedicated operational evidence. Remaining issue-owned work includes:
 
-- Control Plane/doctor visibility;
-- additional #39/#240 operator configuration and guidance;
+- additional #39/#240 operator guidance where concrete deployment packaging needs it;
 - #440 dedicated host-pressure benchmark profiles with hard safety bounds.
 
 None of those follow-ups may silently tune kernel, swap, zRAM or cgroup settings; collection remains read-only by default.

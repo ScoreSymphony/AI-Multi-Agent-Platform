@@ -22,11 +22,18 @@ from ai_multi_agent_platform.deployment.advanced_profiles import (
 from ai_multi_agent_platform.deployment.config import SingleNodeConfig
 from ai_multi_agent_platform.deployment.distributed_admin import register_distributed_worker_admin
 from ai_multi_agent_platform.deployment.distributed_control_plane import build_worker_protocol_app
+from ai_multi_agent_platform.deployment.host_pressure import (
+    HostPressureDeploymentConfig,
+    configure_distributed_host_pressure,
+)
 from ai_multi_agent_platform.deployment.server import main as run_server
 from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment
 from ai_multi_agent_platform.distributed import (
     DistributedExecutorArtifactProvider,
     register_distributed_control_plane,
+)
+from ai_multi_agent_platform.distributed.pressure_control_plane import (
+    register_pressure_control_plane,
 )
 from ai_multi_agent_platform.messaging import TcpMessageTransport
 
@@ -78,6 +85,18 @@ def build_distributed_control_plane_deployment(
     # and admin commands. Runtime inspection/drain/maintenance therefore use the same northbound
     # Control Plane as the rest of the platform rather than a deployment-private shortcut.
     register_distributed_control_plane(deployment.control_plane, runtime)
+    pressure_config = HostPressureDeploymentConfig.from_environment(os.environ)
+    pressure_provider = configure_distributed_host_pressure(
+        runtime,
+        deployment.telemetry,
+        pressure_config,
+    )
+    if pressure_provider is not None:
+        register_pressure_control_plane(
+            deployment.control_plane,
+            runtime,
+            pressure_provider,
+        )
     register_distributed_worker_admin(
         deployment.control_plane,
         profile=profile,
