@@ -11,6 +11,22 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from .client import ClientResponse, ControlPlaneClient, TransportError
 from .profiles import ProfileError
 
+_STEP_FIELDS = (
+    "id",
+    "status",
+    "coordination_phase",
+    "coordination_revision",
+    "dependency_ids",
+    "satisfied_dependency_ids",
+    "latest_run_id",
+    "current_attempt",
+    "retry_due_at",
+    "wait_type",
+    "wait_deadline_at",
+    "reconciliation",
+    "reconciliation_detail",
+)
+
 
 def add_task_workflow_parser(
     task_commands: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -170,7 +186,7 @@ def _steps(projection: dict[str, JsonValue]) -> list[dict[str, JsonValue]]:
     for item in raw:
         if not isinstance(item, dict):
             raise TransportError("Control Plane Plan coordination step must be a JSON object")
-        steps.append(item)
+        steps.append({field: item[field] for field in _STEP_FIELDS if field in item})
     return steps
 
 
