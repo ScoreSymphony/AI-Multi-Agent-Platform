@@ -478,10 +478,10 @@ class PlanningService:
                     },
                 )
             plan_id = self._plan_ref(activated_event)
-            await self._ensure_handoff_ready(proposal, activated_event)
-            await self._handoff_to_coordinator(proposal, activated_event)
             if record.status is ProposalStatus.ACTIVATED and record.activation_plan_id == plan_id:
                 return record
+            await self._ensure_handoff_ready(proposal, activated_event)
+            await self._handoff_to_coordinator(proposal, activated_event)
             saved = advance_record(
                 record,
                 status=ProposalStatus.ACTIVATED,
