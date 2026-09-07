@@ -1,17 +1,19 @@
-"""Current durable SQLite coordinator repository schema.
+"""Historical durable SQLite coordinator repository schema v2.
 
-The v1 implementation remains importable only as the historical migration fixture. Public platform
-composition uses this class and therefore refuses to mutate an older store implicitly at startup.
+The v1 implementation remains importable only as the historical migration fixture. This class is
+kept as the exact v2 fixture now that the public coordinator store has advanced beyond v2.
 """
 
 from __future__ import annotations
 
-from .migrations import COORDINATOR_MIGRATION_REVISION, COORDINATOR_SCHEMA_VERSION
 from .sqlite_repository import SQLiteCoordinatorRepository as _V1SQLiteCoordinatorRepository
+
+_V2_SCHEMA_VERSION = 2
+_V2_MIGRATION_REVISION = "coordination-0002"
 
 
 class SQLiteCoordinatorRepository(_V1SQLiteCoordinatorRepository):
-    """Coordinator repository using the current explicit store migration contract."""
+    """Historical coordinator repository using the v2 explicit migration contract."""
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -27,15 +29,15 @@ class SQLiteCoordinatorRepository(_V1SQLiteCoordinatorRepository):
                 ).fetchone()
                 if (
                     schema_row is None
-                    or int(schema_row[0]) != COORDINATOR_SCHEMA_VERSION
+                    or int(schema_row[0]) != _V2_SCHEMA_VERSION
                     or revision_row is None
-                    or str(revision_row[0]) != COORDINATOR_MIGRATION_REVISION
+                    or str(revision_row[0]) != _V2_MIGRATION_REVISION
                 ):
                     found = "missing" if schema_row is None else str(schema_row[0])
                     raise RuntimeError(
                         "coordinator persistence requires an explicit platform upgrade: "
-                        f"found schema {found}, expected {COORDINATOR_SCHEMA_VERSION} "
-                        f"at {COORDINATOR_MIGRATION_REVISION}"
+                        f"found schema {found}, expected {_V2_SCHEMA_VERSION} "
+                        f"at {_V2_MIGRATION_REVISION}"
                     )
                 return
 
@@ -76,7 +78,7 @@ class SQLiteCoordinatorRepository(_V1SQLiteCoordinatorRepository):
             connection.executemany(
                 "INSERT INTO coordinator_meta(key, value) VALUES(?, ?)",
                 (
-                    ("schema_version", str(COORDINATOR_SCHEMA_VERSION)),
-                    ("migration_revision", COORDINATOR_MIGRATION_REVISION),
+                    ("schema_version", str(_V2_SCHEMA_VERSION)),
+                    ("migration_revision", _V2_MIGRATION_REVISION),
                 ),
             )

@@ -50,8 +50,8 @@ from .service import (
     ActivatedPlanCoordinator,
     PlanningEventSink,
     PlanningKernel,
-    PlanningService,
 )
+from .supersession import PlanningService
 
 
 class PlanningOnlyLifecycleBackend(LifecycleBackend):
