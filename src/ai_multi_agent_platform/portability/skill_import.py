@@ -8,7 +8,9 @@ from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
 from ai_multi_agent_platform.domain import Provenance
 from ai_multi_agent_platform.skills import (
     SkillBundle,
+    SkillDefinition,
     SkillEvaluationStatus,
+    SkillProfile,
     SkillRepository,
     SkillTrustStatus,
 )
@@ -161,18 +163,14 @@ def _destination_safe_snapshot(snapshot: SkillPortableSnapshot) -> SkillPortable
     return SkillPortableSnapshot(snapshot.definition, tuple(revisions))
 
 
-def _import_provenance(value: Provenance | None, profile: object) -> Provenance:
-    source_profile = profile
-    trust_status = getattr(source_profile, "trust_status")
-    evaluation_status = getattr(source_profile, "evaluation_status")
-    enabled = getattr(source_profile, "enabled")
+def _import_provenance(value: Provenance | None, profile: SkillProfile) -> Provenance:
     details = {} if value is None else dict(value.details)
     details.update(
         {
             "portable_import_requires_revalidation": True,
-            "imported_source_trust_status": trust_status.value,
-            "imported_source_evaluation_status": evaluation_status.value,
-            "imported_source_enabled": enabled,
+            "imported_source_trust_status": profile.trust_status.value,
+            "imported_source_evaluation_status": profile.evaluation_status.value,
+            "imported_source_enabled": profile.enabled,
         }
     )
     if value is None:
@@ -185,7 +183,7 @@ def _definition_at(
     revision: int,
     *,
     is_final: bool,
-):
+) -> SkillDefinition:
     if is_final:
         return snapshot.definition
     return replace(
