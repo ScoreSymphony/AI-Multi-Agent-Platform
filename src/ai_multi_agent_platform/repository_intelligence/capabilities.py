@@ -9,7 +9,7 @@ from ai_multi_agent_platform.capabilities import (
     SafetyClassification,
     SideEffectClassification,
 )
-from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.contracts.types import HealthStatus, JsonValue
 
 _IMMUTABLE_GIT_REVISION_PATTERN = r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
 
@@ -216,7 +216,7 @@ def _output_schema(operation: RepositoryIntelligenceOperation) -> dict[str, Json
         return _object_schema(
             {
                 "provider_id": {"type": "string", "minLength": 1},
-                "health": {"type": "string", "minLength": 1},
+                "health": {"type": "string", "enum": [status.value for status in HealthStatus]},
                 "available": {"type": "boolean"},
             },
             ("provider_id", "health", "available"),
