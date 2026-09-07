@@ -362,8 +362,7 @@ class ReferencePlanningService(PlanningService):
             teams=tuple(
                 candidate
                 for candidate in inventory.teams
-                if (candidate.team_id, candidate.revision)
-                in environment.authorized_team_revisions
+                if (candidate.team_id, candidate.revision) in environment.authorized_team_revisions
             ),
             capabilities=tuple(
                 candidate
