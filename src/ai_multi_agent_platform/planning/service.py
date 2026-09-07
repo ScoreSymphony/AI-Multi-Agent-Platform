@@ -19,7 +19,7 @@ from ai_multi_agent_platform.contracts import (
     PlatformEvent,
     RetryMode,
 )
-from ai_multi_agent_platform.domain import RunStatus
+from ai_multi_agent_platform.domain import Plan, Provenance, RunStatus, Step, TaskStatus
 from ai_multi_agent_platform.kernel.models import RunState, TaskState
 from ai_multi_agent_platform.models import ModelLocation, ModelRegistry, RoutingRequirements
 from ai_multi_agent_platform.security import (
@@ -90,8 +90,16 @@ class PlanningKernel(Protocol):
     ) -> TaskState: ...
 
 
+class ActivatedPlanCoordinator(Protocol):
+    async def register_plan(self, plan: Plan, steps: tuple[Step, ...]) -> object: ...
+
+
 class PlanningService:
-    """Create, validate and activate immutable Plan proposals without executing Steps."""
+    """Create, validate and activate immutable Plan proposals without executing Steps.
+
+    When a coordinator is configured, activation hands the exact canonical Plan/Step graph to
+    #384. The planning layer never creates Runs, invokes capabilities or dispatches Workers.
+    """
 
     def __init__(
         self,
@@ -103,6 +111,7 @@ class PlanningService:
         capabilities: CapabilityRegistry | None = None,
         models: ModelRegistry | None = None,
         authorization: AuthorizationGate | None = None,
+        coordinator: ActivatedPlanCoordinator | None = None,
         replan_policy: ReplanPolicy = ReplanPolicy(),
         event_sink: PlanningEventSink | None = None,
     ) -> None:
@@ -113,6 +122,7 @@ class PlanningService:
         self.capabilities = capabilities
         self.models = models
         self.authorization = authorization
+        self.coordinator = coordinator
         self.replan_policy = replan_policy
         self._event_sink = event_sink
 
@@ -203,7 +213,9 @@ class PlanningService:
             validation=validation,
             trigger_fingerprint=fingerprint,
         )
-        self.repository.create(record)
+        stored = self.repository.create(record)
+        if stored.proposal.proposal_id != proposal.proposal_id:
+            return stored
         await self._emit(
             "planning.proposal.created",
             task_id=task_id,
@@ -223,7 +235,7 @@ class PlanningService:
             error_count=len(validation.errors),
             warning_count=len(validation.warnings),
         )
-        return record
+        return stored
 
     def validate(self, proposal: PlanProposal, request: PlanningRequest) -> ProposalValidation:
         """Validate one proposal structurally and against sanitized canonical inventory."""
@@ -434,20 +446,22 @@ class PlanningService:
         actor: ActorIdentity | None = None,
         approval_id: str | None = None,
     ) -> ProposalRecord:
-        """Activate exactly one validated proposal through the canonical Kernel boundary."""
+        """Activate exactly one validated proposal and hand it to #384 when configured."""
 
         if not idempotency_key.strip():
             raise ContractError(ErrorCode.INVALID_REQUEST, "activation idempotency key is required")
         record = self.repository.get(proposal_id)
         proposal = record.proposal
-        already_plan_id = await self._activated_plan_id(proposal)
-        if already_plan_id is not None:
-            if record.status is ProposalStatus.ACTIVATED and record.activation_plan_id == already_plan_id:
+        activated_event = await self._activated_plan_event(proposal)
+        if activated_event is not None:
+            plan_id = self._plan_ref(activated_event)
+            await self._handoff_to_coordinator(proposal, activated_event)
+            if record.status is ProposalStatus.ACTIVATED and record.activation_plan_id == plan_id:
                 return record
             saved = advance_record(
                 record,
                 status=ProposalStatus.ACTIVATED,
-                activation_plan_id=already_plan_id,
+                activation_plan_id=plan_id,
             )
             return self.repository.save(saved, expected_revision=record.revision)
 
@@ -474,6 +488,12 @@ class PlanningService:
                     "proposal_base_plan_id": proposal.base_plan_id,
                     "current_plan_id": task.plan_ref,
                 },
+            )
+        if self.coordinator is not None and task.status not in {TaskStatus.READY, TaskStatus.RUNNING}:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Plan activation with durable execution handoff requires Task ready/running state",
+                details={"task_id": proposal.task_id, "task_status": task.status.value},
             )
         if proposal.base_plan_id is not None:
             prior = await self._prior_plan(task)
@@ -568,6 +588,13 @@ class PlanningService:
                 ErrorCode.CONTRACT_VIOLATION,
                 "kernel activated planning proposal without a canonical Plan reference",
             )
+        activated_event = await self._activated_plan_event(proposal)
+        if activated_event is None:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "activated proposal is missing its canonical plan.created provenance event",
+            )
+        await self._handoff_to_coordinator(proposal, activated_event)
         activated = advance_record(
             record,
             status=ProposalStatus.ACTIVATED,
@@ -779,7 +806,7 @@ class PlanningService:
             model_config_id=output.model_config_id,
         )
 
-    async def _activated_plan_id(self, proposal: PlanProposal) -> str | None:
+    async def _activated_plan_event(self, proposal: PlanProposal) -> PlatformEvent | None:
         history = await self.kernel.history(proposal.task_id)
         for event in reversed(history):
             if event.event_type != "plan.created":
@@ -787,12 +814,88 @@ class PlanningService:
             for metadata in event.adapter_metadata:
                 if metadata.namespace != "platform-planning":
                     continue
-                if metadata.values.get("proposal_id") != proposal.proposal_id:
-                    continue
-                plan_ref = event.payload.get("plan_ref")
-                if isinstance(plan_ref, str):
-                    return plan_ref
+                if metadata.values.get("proposal_id") == proposal.proposal_id:
+                    return event
         return None
+
+    @staticmethod
+    def _plan_ref(event: PlatformEvent) -> str:
+        value = event.payload.get("plan_ref")
+        if not isinstance(value, str) or not value.strip():
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "planning plan.created event is missing canonical plan_ref",
+            )
+        return value
+
+    async def _handoff_to_coordinator(
+        self,
+        proposal: PlanProposal,
+        event: PlatformEvent,
+    ) -> None:
+        if self.coordinator is None:
+            return
+        plan_id = self._plan_ref(event)
+        raw_steps = event.payload.get("steps")
+        if not isinstance(raw_steps, list):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "planning plan.created event is missing canonical Step payloads",
+            )
+        provenance = event.provenance or Provenance(source="platform-planning")
+        task = await self.kernel.get_task(proposal.task_id)
+        plan = Plan(
+            id=plan_id,
+            task_id=proposal.task_id,
+            owner_ref=task.task.owner_ref,
+            revision=proposal.plan_revision,
+            active=True,
+            project_id=task.task.project_id,
+            created_at=event.occurred_at,
+            provenance=provenance,
+        )
+        steps: list[Step] = []
+        for raw in raw_steps:
+            if not isinstance(raw, dict):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "planning plan.created Step payload must be an object",
+                )
+            step_id = raw.get("id")
+            title = raw.get("title")
+            depends_on = raw.get("depends_on", [])
+            if (
+                not isinstance(step_id, str)
+                or not isinstance(title, str)
+                or not isinstance(depends_on, list)
+                or any(not isinstance(item, str) for item in depends_on)
+            ):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "planning plan.created contains malformed canonical Step payload",
+                )
+            steps.append(
+                Step(
+                    id=step_id,
+                    plan_id=plan_id,
+                    title=title,
+                    owner_ref=task.task.owner_ref,
+                    depends_on=tuple(depends_on),
+                    project_id=task.task.project_id,
+                    created_at=event.occurred_at,
+                    updated_at=event.occurred_at,
+                    provenance=provenance,
+                )
+            )
+        await self.coordinator.register_plan(plan, tuple(steps))
+        await self._emit(
+            "planning.coordination.handoff",
+            task_id=proposal.task_id,
+            proposal_id=proposal.proposal_id,
+            plan_id=plan_id,
+            plan_revision=proposal.plan_revision,
+            step_count=len(steps),
+        )
 
     def _enforce_replan_budget(self, task_id: str, trigger: PlanningTrigger) -> None:
         if trigger is PlanningTrigger.INITIAL:

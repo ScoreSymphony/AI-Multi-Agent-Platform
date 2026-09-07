@@ -246,10 +246,10 @@ class ModelBackedPlanner:
 
 
 class PlanningOrchestratorAdapter(Orchestrator):
-    """Bridge a validated #439 proposal into the existing Kernel Orchestrator seam.
+    """Bridge an activation proposal into the existing Kernel Orchestrator seam.
 
-    The adapter does not plan by itself and cannot execute Steps. It exposes only proposals
-    already moved to ``ACTIVATING`` by :class:`PlanningService`.
+    A fallback keeps ordinary pre-#439 ``kernel.plan_task`` behavior intact. Only while one
+    proposal is in ``ACTIVATING`` state does this adapter substitute the validated #439 graph.
     """
 
     descriptor = ProviderDescriptor(
@@ -267,12 +267,20 @@ class PlanningOrchestratorAdapter(Orchestrator):
         available=True,
     )
 
-    def __init__(self, repository: PlanningRepository) -> None:
+    def __init__(
+        self,
+        repository: PlanningRepository,
+        *,
+        fallback: Orchestrator | None = None,
+    ) -> None:
         self._repository = repository
+        self._fallback = fallback
 
     async def plan(self, request: PlanRequest) -> PlanResponse:
         record = self._repository.pending_activation(request.task_id)
         if record is None:
+            if self._fallback is not None:
+                return await self._fallback.plan(request)
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "kernel planning was invoked without a validated activation proposal",

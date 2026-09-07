@@ -1,5 +1,11 @@
 """Platform-owned autonomous planning and bounded replanning."""
 
+from .control_plane import (
+    PlanningCommandHandlers,
+    PlanningProposalResourceService,
+    planning_command_handlers,
+    planning_resource_services,
+)
 from .models import (
     AgentAssignment,
     CapabilityRequirement,
@@ -30,14 +36,22 @@ from .providers import (
     PlanningOrchestratorAdapter,
     draft_from_mapping,
 )
-from .repository import InMemoryPlanningRepository, PlanningRepository
-from .service import PlanningService
+from .repository import (
+    PLANNING_STORE_SCHEMA_VERSION,
+    InMemoryPlanningRepository,
+    JsonPlanningRepository,
+    PlanningRepository,
+)
+from .service import ActivatedPlanCoordinator, PlanningKernel, PlanningService
 
 __all__ = [
+    "PLANNING_STORE_SCHEMA_VERSION",
+    "ActivatedPlanCoordinator",
     "AgentAssignment",
     "CapabilityRequirement",
     "DeterministicReferencePlanner",
     "InMemoryPlanningRepository",
+    "JsonPlanningRepository",
     "ModelBackedPlanner",
     "PlanDraft",
     "PlanProposal",
@@ -47,9 +61,12 @@ __all__ = [
     "PlannerOutput",
     "PlanningAgentCandidate",
     "PlanningCapabilityCandidate",
+    "PlanningCommandHandlers",
     "PlanningInventory",
+    "PlanningKernel",
     "PlanningModelCandidate",
     "PlanningOrchestratorAdapter",
+    "PlanningProposalResourceService",
     "PlanningRepository",
     "PlanningRequest",
     "PlanningService",
@@ -63,4 +80,6 @@ __all__ = [
     "ReplanPolicy",
     "draft_from_mapping",
     "new_plan_proposal_id",
+    "planning_command_handlers",
+    "planning_resource_services",
 ]
