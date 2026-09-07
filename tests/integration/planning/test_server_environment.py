@@ -23,6 +23,7 @@ from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
     HealthStatus,
+    OperationContext,
     ProviderDescriptor,
     ToolInvocation,
     ToolResult,
@@ -30,6 +31,7 @@ from ai_multi_agent_platform.contracts import (
 from ai_multi_agent_platform.control_plane.models import ActorContext, RequestContext
 from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
+from ai_multi_agent_platform.kernel.models import TaskState
 from ai_multi_agent_platform.planning import (
     AgentAssignment,
     CapabilityRequirement,
@@ -92,8 +94,8 @@ class _Resolver:
     async def resolve(
         self,
         *,
-        task,
-        context,
+        task: TaskState,
+        context: OperationContext,
         actor: ActorIdentity,
         workspace_id: str | None,
         trigger: PlanningTrigger,
