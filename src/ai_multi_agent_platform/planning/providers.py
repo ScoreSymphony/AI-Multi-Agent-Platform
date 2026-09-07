@@ -292,6 +292,12 @@ class PlanningOrchestratorAdapter(Orchestrator):
                 "kernel planning was invoked without a validated activation proposal",
             )
         proposal = record.proposal
+        reused_step_ids: list[JsonValue] = [
+            step_id
+            for step_id in sorted(
+                {step_id for step in proposal.steps for step_id in step.reuse_step_ids}
+            )
+        ]
         return PlanResponse(
             summary=proposal.summary,
             steps=tuple(
@@ -321,9 +327,7 @@ class PlanningOrchestratorAdapter(Orchestrator):
                         "assumptions": list(proposal.assumptions),
                         "constraints": list(proposal.constraints),
                         "evidence_refs": list(proposal.evidence_refs),
-                        "reused_step_ids": sorted(
-                            {step_id for step in proposal.steps for step_id in step.reuse_step_ids}
-                        ),
+                        "reused_step_ids": reused_step_ids,
                         "superseded_plan_id": proposal.base_plan_id,
                     },
                 ),
