@@ -22,15 +22,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement.py \
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement_cli.py \
-            tests/test_issue_440_heterogeneous_placement.py
+            tests/performance/test_issue_440_heterogeneous_placement.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement.py \
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement_cli.py \
-            tests/test_issue_440_heterogeneous_placement.py
+            tests/performance/test_issue_440_heterogeneous_placement.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement.py \
             src/ai_multi_agent_platform/benchmarking/heterogeneous_placement_cli.py
-          pytest tests/test_issue_440_heterogeneous_placement.py
+          pytest tests/performance/test_issue_440_heterogeneous_placement.py
       - name: Run tiny heterogeneous placement profile
         run: |
           mkdir -p artifacts/benchmarks/pr-heterogeneous-placement

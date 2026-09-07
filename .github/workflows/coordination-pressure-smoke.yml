@@ -22,15 +22,15 @@ jobs:
           ruff format --check \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py \
-            tests/test_issue_440_coordination_pressure.py
+            tests/performance/test_issue_440_coordination_pressure.py
           ruff check \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py \
-            tests/test_issue_440_coordination_pressure.py
+            tests/performance/test_issue_440_coordination_pressure.py
           mypy \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure.py \
             src/ai_multi_agent_platform/benchmarking/coordination_pressure_cli.py
-          pytest tests/test_issue_440_coordination_pressure.py
+          pytest tests/performance/test_issue_440_coordination_pressure.py
       - name: Run tiny coordination pressure profiles
         run: |
           mkdir -p artifacts/benchmarks/pr-coordination-pressure
