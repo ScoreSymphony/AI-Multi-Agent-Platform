@@ -135,9 +135,7 @@ def _superseded_state() -> tuple[
     )
 
 
-def test_reconciliation_retires_superseded_not_started_work_without_rewriting_completed_work() -> (
-    None
-):
+def test_reconciliation_retires_superseded_not_started_work_without_rewriting_completed_work() -> None:
     async def scenario() -> None:
         (
             repository,
@@ -154,9 +152,7 @@ def test_reconciliation_retires_superseded_not_started_work_without_rewriting_co
             coordinator_id="issue-439-retirement",
         )
 
-        projections = await coordinator.reconcile_all(
-            now=datetime(2026, 9, 7, 22, 1, tzinfo=UTC)
-        )
+        projections = await coordinator.reconcile_all(now=datetime(2026, 9, 7, 22, 1, tzinfo=UTC))
         assert len(projections) == 1
         retirement = repository.plan_retirement(old_plan.id)
         assert retirement is not None
