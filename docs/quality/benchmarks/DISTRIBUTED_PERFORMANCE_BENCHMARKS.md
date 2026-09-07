@@ -87,22 +87,36 @@ in-process transport profile to TCP/cross-host results as if they were the same 
 ## Heterogeneous placement profile
 
 Capability/resource/GPU placement pressure is measured separately by
-`platform-heterogeneous-placement`; see `docs/HETEROGENEOUS_PLACEMENT_BENCHMARKS.md`. Keeping this
-profile separate prevents scheduler-only latency from being mixed with Workspace-transfer and
-transport variance. The heterogeneous profile intentionally overlaps logical Worker capabilities and
-records the canonical rejection reason that makes each resource/label/network constraint decisive.
+`platform-heterogeneous-placement`; see
+`docs/quality/benchmarks/HETEROGENEOUS_PLACEMENT_BENCHMARKS.md`. Keeping this profile separate
+prevents scheduler-only latency from being mixed with Workspace-transfer and transport variance. The
+heterogeneous profile intentionally overlaps logical Worker capabilities and records the canonical
+rejection reason that makes each resource/label/network constraint decisive.
+
+## Fault and HA profiles
+
+Worker loss/rejoin plus remote Workspace transport failure/recovery are measured separately by
+`platform-distributed-faults`; see `docs/quality/benchmarks/DISTRIBUTED_FAULT_BENCHMARKS.md`.
+Keeping that profile separate preserves steady-state comparability while making degraded-capacity
+and recovery semantics explicit.
+
+Optional Control Plane promotion/fencing/idempotent recovery is measured by
+`platform-ha-failover`; see `docs/quality/benchmarks/HA_FAILOVER_PERFORMANCE_BENCHMARKS.md`. That
+profile uses the process-local deterministic #89 coordination provider and therefore is **not**
+evidence for real multi-process or cross-host HA. Production-shaped multi-instance HA remains owned
+by #566.
 
 ## Deliberately separate follow-up profiles
 
-This v1 scale block does **not** claim evidence for:
+The current distributed/HA benchmark family does **not** claim evidence for:
 
-- Worker loss/rejoin or cross-Worker fenced failover under load;
-- transient registration/heartbeat/network outages;
-- Workspace materialization interruption/failure and recovery under load;
 - real multi-process or cross-host network throughput limits;
-- HA promotion/failover;
-- host PSI/zRAM/swap/cgroup pressure;
+- production-shaped cross-process/cross-host HA capacity or failover latency;
+- broader registration/heartbeat/network-partition pressure beyond the current deterministic
+  Worker-loss fixture;
+- host-specific PSI/zRAM/swap/cgroup operating envelopes beyond the bounded deterministic #500
+  pressure/admission evidence;
 - release-sized universal operating envelopes.
 
-Those require their own fault or deployment-specific profiles so failure semantics and environment
-variance remain visible instead of being mixed into the base scale measurement.
+Those require their own deployment- or host-specific profiles so failure semantics and environment
+variance remain visible instead of being mixed into the comparable reference measurements.
