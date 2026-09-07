@@ -11,6 +11,10 @@ import type {
   CanonicalTask,
   TimelineItem,
 } from "../api/types";
+import {
+  getPlanCoordination,
+  type PlanCoordinationProjection,
+} from "../api/workflowProgress";
 import { AppLink } from "../app/router";
 import {
   CanonicalId,
@@ -21,6 +25,7 @@ import {
   LoadingState,
   StatusBadge,
 } from "../components/States";
+import { WorkflowProgress } from "../components/WorkflowProgress";
 import { isCanonicalId } from "../platform/id";
 import { usePermissionHint } from "../security/permissions";
 
@@ -47,6 +52,8 @@ export function TaskDetailPage({
   const [task, setTask] = useState<CanonicalTask | null>(null);
   const [runs, setRuns] = useState<CanonicalRun[]>([]);
   const [events, setEvents] = useState<TimelineItem[]>([]);
+  const [workflow, setWorkflow] = useState<PlanCoordinationProjection | null>(null);
+  const [workflowError, setWorkflowError] = useState<unknown>(null);
   const [projects, setProjects] = useState<CanonicalProject[]>([]);
   const [destinationProjectId, setDestinationProjectId] = useState("");
   const [error, setError] = useState<unknown>(null);
@@ -71,6 +78,23 @@ export function TaskDetailPage({
       setRuns(nextRuns.items);
       setEvents(timeline.items);
       setError(null);
+
+      if (nextTask.plan_ref) {
+        try {
+          const nextWorkflow = await getPlanCoordination(client, nextTask.plan_ref);
+          if (nextWorkflow.task_id !== taskId || nextWorkflow.id !== nextTask.plan_ref) {
+            throw new Error("Control Plane returned a workflow projection for a different Task or Plan.");
+          }
+          setWorkflow(nextWorkflow);
+          setWorkflowError(null);
+        } catch (nextWorkflowError) {
+          setWorkflow(null);
+          setWorkflowError(nextWorkflowError);
+        }
+      } else {
+        setWorkflow(null);
+        setWorkflowError(null);
+      }
     } catch (nextError) {
       setError(nextError);
     }
@@ -245,6 +269,17 @@ export function TaskDetailPage({
           <ReferenceList label="Results" values={task.result_ids} />
         </Card>
       </div>
+      <Card title="Durable workflow progress">
+        {workflowError != null ? (
+          <ErrorState error={workflowError} onRetry={() => void load()} />
+        ) : task.plan_ref === null ? (
+          <EmptyState title="No active Plan workflow" />
+        ) : workflow ? (
+          <WorkflowProgress projection={workflow} />
+        ) : (
+          <LoadingState />
+        )}
+      </Card>
       <Card title="Runs"><RunTable runs={runs} /></Card>
       <Card title="Timeline">
         {events.length === 0 ? (
