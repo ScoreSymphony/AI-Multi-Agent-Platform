@@ -860,7 +860,7 @@ class PlanningService:
             return
         plan_id = self._plan_ref(event)
         raw_steps = event.payload.get("steps")
-        if not isinstance(raw_steps, list):
+        if not isinstance(raw_steps, (list, tuple)):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "planning plan.created event is missing canonical Step payloads",
@@ -879,24 +879,31 @@ class PlanningService:
         )
         steps: list[Step] = []
         for raw in raw_steps:
-            if not isinstance(raw, dict):
+            if not isinstance(raw, Mapping):
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
                     "planning plan.created Step payload must be an object",
                 )
             step_id = raw.get("id")
             title = raw.get("title")
-            depends_on = raw.get("depends_on", [])
+            raw_depends_on = raw.get("depends_on", ())
             if (
                 not isinstance(step_id, str)
                 or not isinstance(title, str)
-                or not isinstance(depends_on, list)
-                or any(not isinstance(item, str) for item in depends_on)
+                or not isinstance(raw_depends_on, (list, tuple))
             ):
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
                     "planning plan.created contains malformed canonical Step payload",
                 )
+            depends_on: list[str] = []
+            for dependency in raw_depends_on:
+                if not isinstance(dependency, str):
+                    raise ContractError(
+                        ErrorCode.CONTRACT_VIOLATION,
+                        "planning plan.created contains malformed canonical Step payload",
+                    )
+                depends_on.append(dependency)
             steps.append(
                 Step(
                     id=step_id,
