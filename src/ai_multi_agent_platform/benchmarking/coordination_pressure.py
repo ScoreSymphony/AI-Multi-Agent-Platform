@@ -551,7 +551,13 @@ class CoordinationPressureHarness:
         resumed_runs = _running_run_ids(projection)
         for step in steps:
             item = _projection_step(projection, step.id)
-            if item.status is StepStatus.RUNNING and item.wait_type is None:
+            record = coordinator.repository.get_step_record(step.id)
+            if (
+                item.status is StepStatus.RUNNING
+                and record.wait is not None
+                and record.wait.wait_type is WaitType.DEADLINE
+                and record.wait.resolved
+            ):
                 wait_resolved.add(step.id)
         if resumed_runs != initial_runs:
             raise RuntimeError("deadline wait wakeup changed canonical Run identities")

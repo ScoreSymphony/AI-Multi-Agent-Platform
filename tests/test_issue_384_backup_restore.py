@@ -9,6 +9,7 @@ from ai_multi_agent_platform.backup import create_single_node_backup, restore_si
 from ai_multi_agent_platform.backup.inventory import required_single_node_store_paths
 from ai_multi_agent_platform.coordination import (
     CoordinationPhase,
+    RetryState,
     SQLiteCoordinatorRepository,
     StepCoordinationRecord,
     StepRetryPolicy,
@@ -122,6 +123,7 @@ def test_backup_restore_preserves_wait_partial_fan_in_and_pending_retry_once(
                 retryable_categories=("transient",),
             ),
             retry_due_at=now + timedelta(seconds=30),
+            retry_state=RetryState.SCHEDULED,
         ),
     )
     repository = SQLiteCoordinatorRepository(source / "db" / "coordination.sqlite3")
@@ -160,6 +162,7 @@ def test_backup_restore_preserves_wait_partial_fan_in_and_pending_retry_once(
     restored_retry = restored_records[retry_step.id]
     assert restored_retry.phase is CoordinationPhase.RETRY_SCHEDULED
     assert restored_retry.current_attempt == 1
+    assert restored_retry.retry_state is RetryState.SCHEDULED
     assert restored_retry.retry_due_at == now + timedelta(seconds=30)
 
     restored_steps = {step.id: step for step in restored.get_plan(plan.id).steps}

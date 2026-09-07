@@ -39,6 +39,18 @@ class WaitResolution(StrEnum):
     CANCELLED = "cancelled"
 
 
+class RetryState(StrEnum):
+    """Persisted Step-level retry decision exposed by workflow-progress projections."""
+
+    NONE = "none"
+    SCHEDULED = "scheduled"
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    EXHAUSTED = "exhausted"
+    NOT_RETRYABLE = "not_retryable"
+    CANCELLED = "cancelled"
+
+
 class PredecessorFailurePolicy(StrEnum):
     FAIL_FAST = "fail_fast"
     CANCEL_DEPENDENT = "cancel_dependent"
@@ -169,6 +181,7 @@ class StepCoordinationRecord:
     current_attempt: int = 0
     retry_policy: StepRetryPolicy = field(default_factory=StepRetryPolicy)
     retry_due_at: datetime | None = None
+    retry_state: RetryState = RetryState.NONE
     wait: StepWait | None = None
     predecessor_failure_policy: PredecessorFailurePolicy = PredecessorFailurePolicy.FAIL_FAST
     processed_keys: tuple[str, ...] = ()
@@ -197,6 +210,10 @@ class StepCoordinationRecord:
             raise ValueError("current_attempt must be >= 0")
         if self.retry_due_at is not None and self.retry_due_at.tzinfo is None:
             raise ValueError("retry_due_at must be timezone-aware")
+        if self.retry_state is RetryState.SCHEDULED and self.retry_due_at is None:
+            raise ValueError("scheduled retry requires retry_due_at")
+        if self.retry_state is not RetryState.SCHEDULED and self.retry_due_at is not None:
+            raise ValueError("retry_due_at is valid only for a scheduled retry")
         if len(self.dependency_ids) != len(set(self.dependency_ids)):
             raise ValueError("dependency IDs must be unique")
         if len(self.satisfied_dependency_ids) != len(set(self.satisfied_dependency_ids)):

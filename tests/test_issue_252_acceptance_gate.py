@@ -6,6 +6,7 @@ import threading
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ from ai_multi_agent_platform.cli.client import (
     ControlPlaneClient,
     RawResponse,
 )
+from ai_multi_agent_platform.cli.main import run_cli
 from ai_multi_agent_platform.contracts import (
     ContractError,
     ErrorCode,
@@ -102,6 +104,37 @@ class _FixtureTransport:
         )
 
 
+class _WorkflowParityTransport:
+    def __init__(self, workflow: dict[str, object]) -> None:
+        self.workflow = workflow
+        self.calls: list[tuple[str, str]] = []
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        body: bytes | None,
+        timeout: float,
+    ) -> RawResponse:
+        del headers, body, timeout
+        self.calls.append((method, url))
+        task_id = str(self.workflow["task_id"])
+        plan_id = str(self.workflow["id"])
+        if url.endswith(f"/api/v1/tasks/{task_id}"):
+            payload: object = {"id": task_id, "plan_ref": plan_id}
+        elif url.endswith(f"/api/v1/plan-coordination/{plan_id}"):
+            payload = self.workflow
+        else:
+            raise AssertionError(f"unexpected workflow parity URL: {url}")
+        return RawResponse(
+            status=200,
+            body=json.dumps(payload).encode("utf-8"),
+            headers={"x-api-version": "v1"},
+        )
+
+
 def test_local_ai_profile_uses_real_loopback_openai_compatible_endpoint() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", 0), _LocalModelHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -171,7 +204,7 @@ def test_memory_acceptance_create_retrieve_provenance_delete_not_found(tmp_path:
     assert exc_info.value.code is ErrorCode.NOT_FOUND
 
 
-def test_cli_and_web_share_canonical_task_fixture_and_route() -> None:
+def test_cli_and_web_share_canonical_task_fixture_and_route(tmp_path: Path) -> None:
     fixture_path = Path("frontend/src/api/__fixtures__/canonical-task.json")
     canonical_task = json.loads(fixture_path.read_text(encoding="utf-8"))
     assert isinstance(canonical_task, dict)
@@ -190,6 +223,87 @@ def test_cli_and_web_share_canonical_task_fixture_and_route() -> None:
     assert transport.calls == [
         ("GET", f"http://control-plane.invalid/api/v1/tasks/{task_id}"),
     ]
+
+    workflow_path = Path("frontend/src/api/__fixtures__/workflow-progress.json")
+    workflow = json.loads(workflow_path.read_text(encoding="utf-8"))
+    assert isinstance(workflow, dict)
+    workflow_task_id = workflow.get("task_id")
+    workflow_plan_id = workflow.get("id")
+    assert isinstance(workflow_task_id, str)
+    assert isinstance(workflow_plan_id, str)
+
+    config = tmp_path / "cli.json"
+    config.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "current_profile": "reference",
+                "profiles": {
+                    "reference": {
+                        "endpoint": "http://control-plane.invalid",
+                        "principal_ref": "user:issue-560",
+                        "owner_type": "user",
+                        "owner_id": "issue-560",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    waits_transport = _WorkflowParityTransport(workflow)
+    stdout = StringIO()
+    stderr = StringIO()
+    code = run_cli(
+        [
+            "--config",
+            str(config),
+            "--json",
+            "task",
+            "workflow",
+            "waits",
+            workflow_task_id,
+        ],
+        transport=waits_transport,
+        stdout=stdout,
+        stderr=stderr,
+    )
+    assert code == 0
+    assert stderr.getvalue() == ""
+    waits = json.loads(stdout.getvalue())["data"]
+    assert waits["task_id"] == workflow_task_id
+    assert waits["plan_id"] == workflow_plan_id
+    assert waits["plan_revision"] == workflow["plan_revision"]
+    assert [item["wait_state"] for item in waits["items"]] == ["active", "expired"]
+    assert waits["items"][0]["wait_external_job_ref"] == "adapter-job-560-parity"
+    assert waits["items"][1]["wait_approval_id"] == "approval_560_parity"
+
+    retries_transport = _WorkflowParityTransport(workflow)
+    stdout = StringIO()
+    stderr = StringIO()
+    code = run_cli(
+        [
+            "--config",
+            str(config),
+            "--json",
+            "task",
+            "workflow",
+            "retries",
+            workflow_task_id,
+        ],
+        transport=retries_transport,
+        stdout=stdout,
+        stderr=stderr,
+    )
+    assert code == 0
+    assert stderr.getvalue() == ""
+    retries = json.loads(stdout.getvalue())["data"]
+    assert [item["retry_state"] for item in retries["items"]] == [
+        "exhausted",
+        "not_retryable",
+    ]
+    assert retries["items"][0]["retry_max_attempts"] == 3
+    assert retries["items"][1]["current_attempt"] == 1
 
 
 def test_acceptance_profiles_are_explicit_and_owner_attributed() -> None:
