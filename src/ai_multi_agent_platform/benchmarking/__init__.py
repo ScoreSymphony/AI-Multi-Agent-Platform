@@ -21,6 +21,13 @@ from .coordination_pressure import (
     CoordinationPressureReport,
     CoordinationPressureSpec,
 )
+from .distributed_faults import (
+    DISTRIBUTED_FAULT_REPORT_SCHEMA_VERSION,
+    DistributedFaultCorrectnessSummary,
+    DistributedFaultReport,
+    DistributedFaultSpec,
+    DistributedWorkerWorkspaceFaultHarness,
+)
 from .distributed_scale import (
     DISTRIBUTED_SCALE_REPORT_SCHEMA_VERSION,
     DistributedScaleCorrectnessSummary,
@@ -113,6 +120,7 @@ __all__ = [
     "BENCHMARK_REPORT_SCHEMA_VERSION",
     "COORDINATION_CONTENTION_REPORT_SCHEMA_VERSION",
     "COORDINATION_PRESSURE_REPORT_SCHEMA_VERSION",
+    "DISTRIBUTED_FAULT_REPORT_SCHEMA_VERSION",
     "DISTRIBUTED_SCALE_REPORT_SCHEMA_VERSION",
     "ENDURANCE_REPORT_SCHEMA_VERSION",
     "FAULT_REPORT_SCHEMA_VERSION",
@@ -138,9 +146,13 @@ __all__ = [
     "CoordinationPressureReport",
     "CoordinationPressureSpec",
     "CorrectnessSummary",
+    "DistributedFaultCorrectnessSummary",
+    "DistributedFaultReport",
+    "DistributedFaultSpec",
     "DistributedScaleCorrectnessSummary",
     "DistributedScaleReport",
     "DistributedScaleSpec",
+    "DistributedWorkerWorkspaceFaultHarness",
     "DistributedWorkerWorkspaceScaleHarness",
     "EnduranceBenchmarkReport",
     "EnduranceBenchmarkSpec",

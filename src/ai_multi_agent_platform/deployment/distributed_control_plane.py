@@ -13,9 +13,15 @@ from datetime import datetime
 
 from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext
 from ai_multi_agent_platform.data import DataAccessContext, FileProvider
-from ai_multi_agent_platform.distributed import DistributedRuntime, WorkerStatus
+from ai_multi_agent_platform.distributed import (
+    ArtifactPublishingWorkerDispatcher,
+    CanonicalWorkspaceArtifactPublisher,
+    DistributedRuntime,
+    WorkerStatus,
+)
 from ai_multi_agent_platform.distributed.models import RegistrationRequest, WorkerRecord
 from ai_multi_agent_platform.distributed.transport import TransportWorkerDispatcher
+from ai_multi_agent_platform.distributed.worker import WorkerDispatcher
 from ai_multi_agent_platform.distributed.worker_protocol import (
     WorkerHeartbeatRequest,
     WorkerProtocolReceipt,
@@ -36,6 +42,7 @@ from ai_multi_agent_platform.distributed.workspace_transport import (
     TransportRemoteWorkspaceMaterializer,
     WorkspaceDataContextResolver,
 )
+from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.messaging import MessageTransport
 from ai_multi_agent_platform.workspaces import Workspace, WorkspaceProvider
 
@@ -51,6 +58,11 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
     consequences only: each canonical Worker receives the standard transport dispatcher. Shipped
     multi-process composition additionally enables #35 presence enforcement so a live Node
     reporter cannot keep a dead sibling schedulable by repeating a static profile snapshot.
+
+    Capability discovery is deliberately not mirrored per Worker here. The shipped distributed
+    Artifact capability is one placement-neutral provider; its invocation asks the canonical
+    scheduler to choose from the current registry state, so drain, maintenance, liveness expiry
+    and reconciliation need no second provider-synchronization state machine.
     """
 
     def __init__(
@@ -63,6 +75,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         workspaces: WorkspaceProvider,
         files: FileProvider,
         context_resolver: WorkspaceContextResolver,
+        kernel: PlatformKernel | None = None,
         initial_trust_level: str = "untrusted",
         presence_timeout_seconds: float | None = None,
     ) -> None:
@@ -76,6 +89,7 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
         self._workspaces = workspaces
         self._files = files
         self._context_resolver = context_resolver
+        self._kernel = kernel
         self._attached: set[str] = set()
         self._presence = (
             None
@@ -158,11 +172,22 @@ class DeploymentWorkerProtocolService(WorkerProtocolService):
             self._files,
             self._context_resolver,
         )
-        dispatcher = MaterializingWorkerDispatcher(
+        materializing = MaterializingWorkerDispatcher(
             transport_dispatcher,
             materializer,
             WorkspaceJobMaterializationResolver(self._workspaces),
         )
+        dispatcher: WorkerDispatcher = materializing
+        if self._kernel is not None:
+            dispatcher = ArtifactPublishingWorkerDispatcher(
+                materializing,
+                CanonicalWorkspaceArtifactPublisher(
+                    self._workspaces,
+                    self._files,
+                    self._kernel,
+                    self._context_resolver,
+                ),
+            )
         self.runtime.attach_worker(dispatcher)
         self._attached.add(worker_id)
 
@@ -189,6 +214,7 @@ def build_worker_protocol_app(
     workspaces: WorkspaceProvider,
     files: FileProvider,
     context_resolver: WorkspaceContextResolver = platform_workspace_context,
+    kernel: PlatformKernel | None = None,
 ) -> tuple[WorkerProtocolASGI, DeploymentWorkerProtocolService]:
     """Wrap the real Control-Plane ASGI app with the authenticated Worker protocol surface."""
 
@@ -200,6 +226,7 @@ def build_worker_protocol_app(
         workspaces=workspaces,
         files=files,
         context_resolver=context_resolver,
+        kernel=kernel,
         presence_timeout_seconds=1.0,
     )
     app = WorkerProtocolASGI(

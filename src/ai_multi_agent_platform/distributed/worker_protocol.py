@@ -18,6 +18,7 @@ from ai_multi_agent_platform.security import (
 )
 
 from .models import Heartbeat, NodeRecord, RegistrationRequest, WorkerRecord, utc_now
+from .pressure_reporting import authenticate_pressure_report
 from .registry import RegistryError
 from .runtime import DistributedRuntime
 
@@ -162,7 +163,12 @@ class WorkerProtocolService:
 
         safe_node = self._safe_registered_node(request.node, existing_node)
         safe_workers = tuple(
-            self._safe_registered_worker(worker, existing_workers[worker.worker_id])
+            authenticate_pressure_report(
+                self._safe_registered_worker(worker, existing_workers[worker.worker_id]),
+                node_id=request.node.node_id,
+                reporter_worker_id=reporter_id,
+                accepted_at=timestamp,
+            )
             for worker in request.workers
         )
         safe_request = replace(
@@ -225,10 +231,15 @@ class WorkerProtocolService:
                 credentials=credentials,
             )
             safe_workers.append(
-                replace(
-                    reported,
-                    registered_at=existing.registered_at,
-                    draining=existing.draining,
+                authenticate_pressure_report(
+                    replace(
+                        reported,
+                        registered_at=existing.registered_at,
+                        draining=existing.draining,
+                    ),
+                    node_id=node.node_id,
+                    reporter_worker_id=reporter_id,
+                    accepted_at=timestamp,
                 )
             )
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, fields
 from typing import Any
 
@@ -15,10 +15,26 @@ from ai_multi_agent_platform.connectors import (
     SqliteConnectorRepository,
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
+from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
+from ai_multi_agent_platform.kernel import PlatformKernel
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
-from ai_multi_agent_platform.observability import InMemoryExporter
+from ai_multi_agent_platform.observability import (
+    FailureComponent,
+    InMemoryExporter,
+    Telemetry,
+    TelemetryContext,
+)
 from ai_multi_agent_platform.onboarding import OnboardingModelAdapter
+from ai_multi_agent_platform.planning import (
+    DeterministicReferencePlanner,
+    JsonPlanningRepository,
+    PlanningOrchestratorAdapter,
+    PlanningService,
+    planning_command_handlers,
+    planning_resource_services,
+)
+from ai_multi_agent_platform.planning.composition import PlanningOnlyLifecycleBackend
 from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
 from ai_multi_agent_platform.repositories.connector_bootstrap import (
     connector_repository_discovery_resolver,
@@ -44,11 +60,14 @@ from .single_node import (
 
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
-    """Normal single-node deployment with restart-durable canonical Connector state."""
+    """Normal single-node deployment with durable Connector and Planning state."""
 
     connector_repository: SqliteConnectorRepository
     connector_registry: ConnectorRegistry
     connectors: ConnectorService
+    planning_repository: JsonPlanningRepository
+    planning_kernel: PlatformKernel
+    planning: PlanningService
 
 
 def build_single_node_deployment(
@@ -62,12 +81,13 @@ def build_single_node_deployment(
     enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
 ) -> SingleNodeDeployment:
-    """Build the normal single-node profile with durable Connector source state.
+    """Build the normal single-node profile with durable Connector and Planning source state.
 
     The lower-level ``deployment.single_node`` composition remains usable by focused tests and
     explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
     wrapper so Connector Definitions, Connections, external-resource identities and sync
-    checkpoints live in ``db/connectors.sqlite3``.
+    checkpoints live in ``db/connectors.sqlite3`` and #439 planning proposals live durably in
+    ``db/planning.json``.
     """
 
     # Preserve the base deployment's canonical configuration error boundary before the Connector
@@ -96,6 +116,28 @@ def build_single_node_deployment(
         authorization_gate=base.approval_gate,
     )
     register_connector_control_plane(base.control_plane, connectors)
+
+    planning_repository = JsonPlanningRepository(config.database_dir / "planning.json")
+    planning_kernel = PlatformKernel(
+        orchestrator=PlanningOrchestratorAdapter(planning_repository),
+        lifecycle=PlanningOnlyLifecycleBackend(),
+        repository=base.kernel_repository,
+    )
+    planning = PlanningService(
+        planner=DeterministicReferencePlanner(),
+        repository=planning_repository,
+        kernel=planning_kernel,
+        agents=base.agents.repository,
+        capabilities=base.capabilities,
+        models=base.models,
+        authorization=base.approval_gate,
+        coordinator=base.coordination,
+        event_sink=_planning_event_sink(base.telemetry),
+    )
+    for collection, service in planning_resource_services(planning).items():
+        base.control_plane.register_resource_service(collection, service)
+    for command, handler in planning_command_handlers(planning).items():
+        base.control_plane.register_command(command, handler)
 
     # The public deployment now has an authoritative canonical Connector inventory. Rebind the
     # Template surface to a resolver that includes exactly those ConnectorDefinition IDs instead
@@ -145,7 +187,31 @@ def build_single_node_deployment(
         connector_repository=connector_repository,
         connector_registry=connector_registry,
         connectors=connectors,
+        planning_repository=planning_repository,
+        planning_kernel=planning_kernel,
+        planning=planning,
     )
+
+
+def _planning_event_sink(
+    telemetry: Telemetry,
+) -> Callable[[str, dict[str, JsonValue]], None]:
+    """Project safe #439 transition evidence into the canonical observability timeline."""
+
+    def emit(event_type: str, attributes: dict[str, JsonValue]) -> None:
+        raw_task_id = attributes.get("task_id")
+        task_id = raw_task_id if isinstance(raw_task_id, str) else None
+        telemetry.timeline(
+            event_name=event_type,
+            component=FailureComponent.ORCHESTRATION,
+            context=TelemetryContext(
+                task_id=task_id,
+                correlation_id=task_id,
+            ),
+            attributes=attributes,
+        )
+
+    return emit
 
 
 __all__ = [

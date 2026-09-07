@@ -14,16 +14,19 @@ import signal
 import ssl
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from ai_multi_agent_platform.distributed import (
     Heartbeat,
+    LinuxHostPressureProvider,
     LocalWorker,
     NodeStatus,
+    PressureSnapshotProvider,
     RegistrationRequest,
     WorkerRecord,
 )
+from ai_multi_agent_platform.distributed.pressure_reporting import attach_pressure_report
 from ai_multi_agent_platform.distributed.transport import WorkerTransportEndpoint
 from ai_multi_agent_platform.distributed.worker_protocol import WorkerHeartbeatRequest
 from ai_multi_agent_platform.distributed.worker_protocol_http import (
@@ -87,12 +90,14 @@ class DistributedWorkerProcess:
         protocol: WorkerProtocolHTTPClient | None,
         transport: MessageTransport,
         lifecycle_factory: WorkspaceLifecycleFactory | None = None,
+        pressure_provider: PressureSnapshotProvider | None = None,
     ) -> None:
         if config.reporting and protocol is None:
             raise ValueError("a reporting Worker process requires a Worker protocol client")
         self.config = config
         self.protocol = protocol
         self.transport = transport
+        self.pressure_provider = pressure_provider
         self._stop = asyncio.Event()
         self._sequence = 0
 
@@ -155,22 +160,46 @@ class DistributedWorkerProcess:
 
     async def _register(self) -> None:
         protocol = self._required_protocol()
-        await protocol.register(self.config.registration)
+        await protocol.register(self._registration_request())
+
+    def _registration_request(self) -> RegistrationRequest:
+        return replace(
+            self.config.registration,
+            workers=self._workers_with_pressure_report(),
+        )
+
+    def _heartbeat_request(self) -> WorkerHeartbeatRequest:
+        self._sequence += 1
+        return WorkerHeartbeatRequest(
+            heartbeat=Heartbeat(
+                node_id=self.config.registration.node.node_id,
+                sequence=self._sequence,
+                resources=self.config.registration.node.resources,
+                node_status=NodeStatus.ONLINE,
+                workers=self._workers_with_pressure_report(),
+            ),
+            service_identity_ref=self.config.worker_id,
+        )
+
+    def _workers_with_pressure_report(self) -> tuple[WorkerRecord, ...]:
+        provider = self.pressure_provider
+        if not self.config.reporting or provider is None:
+            return self.config.registration.workers
+        node_id = self.config.registration.node.node_id
+        snapshot = provider.snapshot_for_node(node_id)
+        if snapshot is None:
+            return self.config.registration.workers
+        return tuple(
+            attach_pressure_report(worker, snapshot)
+            if worker.worker_id == self.config.worker_id
+            else worker
+            for worker in self.config.registration.workers
+        )
 
     async def _heartbeat_loop(self) -> None:
         protocol = self._required_protocol()
         while not self._stop.is_set():
-            self._sequence += 1
-            heartbeat = WorkerHeartbeatRequest(
-                heartbeat=Heartbeat(
-                    node_id=self.config.registration.node.node_id,
-                    sequence=self._sequence,
-                    resources=self.config.registration.node.resources,
-                    node_status=NodeStatus.ONLINE,
-                    workers=self.config.registration.workers,
-                ),
-                service_identity_ref=self.config.worker_id,
-            )
+            heartbeat = self._heartbeat_request()
             try:
                 await protocol.heartbeat(heartbeat)
             except WorkerProtocolHTTPClientError as exc:
@@ -222,6 +251,7 @@ def build_worker_process_from_deployment_node(
     protocol: WorkerProtocolHTTPClient | None,
     transport: MessageTransport,
     heartbeat_interval_seconds: float = _DEFAULT_HEARTBEAT_SECONDS,
+    pressure_provider: PressureSnapshotProvider | None = None,
 ) -> DistributedWorkerProcess:
     """Compose one process from a validated #240 deployment node.
 
@@ -254,6 +284,7 @@ def build_worker_process_from_deployment_node(
         ),
         protocol=protocol,
         transport=transport,
+        pressure_provider=pressure_provider if reporting else None,
     )
 
 
@@ -283,6 +314,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--client-key", default=None)
     parser.add_argument("--server-hostname", default=None)
     parser.add_argument("--heartbeat-seconds", type=float, default=_DEFAULT_HEARTBEAT_SECONDS)
+    parser.add_argument(
+        "--host-pressure",
+        action="store_true",
+        help="enable read-only Linux host-pressure reporting for the authenticated reporter",
+    )
     return parser
 
 
@@ -331,12 +367,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             authentication_key=transport_key,
             provider_id=f"worker:{args.worker_id}",
         )
+        pressure_provider = (
+            LinuxHostPressureProvider()
+            if bool(args.host_pressure) and reporting and sys.platform.startswith("linux")
+            else None
+        )
         worker = build_worker_process_from_deployment_node(
             node,
             worker_id=str(args.worker_id),
             protocol=protocol,
             transport=transport,
             heartbeat_interval_seconds=float(args.heartbeat_seconds),
+            pressure_provider=pressure_provider,
         )
     except (OSError, ValueError) as exc:
         print(f"cannot compose distributed Worker: {exc}", file=sys.stderr)
