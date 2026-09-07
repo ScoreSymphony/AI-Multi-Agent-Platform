@@ -32,9 +32,15 @@ from .models import (
     WaitType,
 )
 from .repair import CoordinatorRepairAction, CoordinatorRepairService
-from .repository import CoordinatorRepository, InMemoryCoordinatorRepository
-from .service import CanonicalRunKernel, DurablePlanStepCoordinator
-from .sqlite_repository_v2 import SQLiteCoordinatorRepository
+from .repository import CoordinatorRepository
+from .retirement import (
+    DurablePlanStepCoordinator,
+    InMemoryCoordinatorRepository,
+    PlanRetirement,
+    PlanRetirementRepository,
+)
+from .service import CanonicalRunKernel
+from .sqlite_repository_v3 import SQLiteCoordinatorRepository
 
 __all__ = [
     "ApprovalOutcome",
@@ -53,6 +59,8 @@ __all__ = [
     "DurablePlanStepCoordinator",
     "InMemoryCoordinatorRepository",
     "PlanCoordinationProjection",
+    "PlanRetirement",
+    "PlanRetirementRepository",
     "PlanRuntimeState",
     "PredecessorFailurePolicy",
     "ReconciliationDisposition",
