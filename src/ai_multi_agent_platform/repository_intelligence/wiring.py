@@ -30,6 +30,7 @@ from ai_multi_agent_platform.security import (
 )
 from ai_multi_agent_platform.workspaces import (
     RunWorkspaceBindingRepository,
+    WorkspaceFile,
     WorkspaceProvider,
     WorkspaceSourceKind,
 )
@@ -292,15 +293,13 @@ class AuthorizedRunWorkspaceSnapshotLoader:
 
     async def _read_snapshot_tree(
         self,
-        files: tuple[object, ...],
+        files: tuple[WorkspaceFile, ...],
         *,
         repository_id: str,
         requested_revision: str,
         resolved_revision: str,
         context: DataAccessContext,
     ) -> RepositoryTree:
-        # WorkspaceSnapshot.files are intentionally consumed through their stable public fields;
-        # importing provider-private storage types is unnecessary here.
         if len(files) > self._max_entries:
             raise ContractError(
                 ErrorCode.RESOURCE_EXHAUSTED,
@@ -309,20 +308,12 @@ class AuthorizedRunWorkspaceSnapshotLoader:
             )
         entries: list[RepositoryTreeEntry] = []
         total_bytes = 0
-        for raw in sorted(files, key=lambda item: getattr(item, "relative_path")):
-            relative_path = getattr(raw, "relative_path")
-            file_id = getattr(raw, "file_id")
-            expected_sha256 = getattr(raw, "sha256")
-            if not all(isinstance(value, str) for value in (relative_path, file_id, expected_sha256)):
+        for entry in sorted(files, key=lambda item: item.relative_path):
+            record = await self._files.get_file(entry.file_id, context)
+            if record.sha256 != entry.sha256:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    "Workspace snapshot contains an invalid file manifest entry",
-                )
-            record = await self._files.get_file(file_id, context)
-            if record.sha256 != expected_sha256:
-                raise ContractError(
-                    ErrorCode.CONTRACT_VIOLATION,
-                    f"Workspace snapshot file checksum mismatch: {relative_path}",
+                    f"Workspace snapshot file checksum mismatch: {entry.relative_path}",
                 )
             if total_bytes + record.size_bytes > self._max_total_bytes:
                 raise ContractError(
@@ -331,16 +322,16 @@ class AuthorizedRunWorkspaceSnapshotLoader:
                     details={"max_total_bytes": self._max_total_bytes},
                 )
             chunks: list[bytes] = []
-            async for chunk in self._files.stream_file(file_id, context):
+            async for chunk in self._files.stream_file(entry.file_id, context):
                 chunks.append(chunk)
             data = b"".join(chunks)
-            if len(data) != record.size_bytes or hashlib.sha256(data).hexdigest() != expected_sha256:
+            if len(data) != record.size_bytes or hashlib.sha256(data).hexdigest() != entry.sha256:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    f"Workspace snapshot file content disagrees with manifest: {relative_path}",
+                    f"Workspace snapshot file content disagrees with manifest: {entry.relative_path}",
                 )
             total_bytes += len(data)
-            entries.append(RepositoryTreeEntry(relative_path, data))
+            entries.append(RepositoryTreeEntry(entry.relative_path, data))
         return RepositoryTree(
             repository_id=repository_id,
             requested_ref=requested_revision,
@@ -419,19 +410,12 @@ class AuthorizedRunWorkspaceSnapshotLoader:
         )
 
 
-def _manifest_content_checksum(files: tuple[object, ...]) -> str:
+def _manifest_content_checksum(files: tuple[WorkspaceFile, ...]) -> str:
     digest = hashlib.sha256()
-    for raw in sorted(files, key=lambda item: getattr(item, "relative_path")):
-        relative_path = getattr(raw, "relative_path")
-        sha256 = getattr(raw, "sha256")
-        if not isinstance(relative_path, str) or not isinstance(sha256, str):
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "Workspace snapshot contains invalid content-checksum metadata",
-            )
-        digest.update(relative_path.encode("utf-8"))
+    for entry in sorted(files, key=lambda item: item.relative_path):
+        digest.update(entry.relative_path.encode("utf-8"))
         digest.update(b"\0")
-        digest.update(sha256.encode("ascii"))
+        digest.update(entry.sha256.encode("ascii"))
         digest.update(b"\n")
     return digest.hexdigest()
 
