@@ -58,12 +58,7 @@ def preflight_first_run_agent(
     project_id: str | None,
     workspace_id: str | None,
 ) -> AgentRevision:
-    """Validate one General Assistant against the exact first-run execution requirements.
-
-    This method is deliberately side-effect-free. It uses ``AgentRuntime.prepare_agent`` so
-    readiness and execution share model/capability/task-override policy, then adds the one
-    reference-profile requirement that lives at the lifecycle seam: inline role instructions.
-    """
+    """Validate one General Assistant against the exact first-run execution requirements."""
 
     revision = agents.service.get_agent_revision(agent_id)
     if revision.profile.instructions.role.content is None:
@@ -90,19 +85,9 @@ def preflight_first_run_agent(
 class FirstRunAgentLifecycleBackend(LifecycleBackend):
     """Route first-run and explicitly bound Agent Runs through canonical runtime seams.
 
-    The first-run onboarding profile keeps its stricter local/self-hosted requirements.
-    Generic Task and Step-specific Agent execution bindings are platform-owned and let
-    features such as Evaluation and Planning select exact Agent/model/capability
-    configurations without introducing a second lifecycle implementation. A Step binding
-    takes precedence over a Task-wide binding for that exact canonical Step. Unmarked Runs
-    are delegated unchanged.
-
-    When an AgentRun pins capabilities, ``AgentCapabilityTurn`` composes the existing rich
-    Model protocol with the canonical CapabilityInvoker. The standard deployment needs no
-    second registry: the turn is lazily composed from the CapabilityRegistry already attached
-    to AgentRuntime. The reference composition also installs the platform-owned canonical
-    ToolInvocation binder so provider/model call handles never become AgentRun identity.
-    Runs without capability bindings retain the established direct ModelRuntime path.
+    A Step binding takes precedence over a Task-wide binding for that exact canonical Step.
+    The binding may carry model requirements, capability IDs, Workspace scope and safe Step
+    execution context. Unmarked Runs are delegated unchanged.
     """
 
     def __init__(
@@ -177,25 +162,40 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
             requested_capability_ids: tuple[str, ...] = ()
             task_model_override: RoutingRequirements | None = FIRST_RUN_MODEL_REQUIREMENTS
             available_capability_ids: frozenset[str] = frozenset()
+            objective = task.task.description
+            task_context: dict[str, JsonValue] = {"objective": objective}
+            verification_context: dict[str, JsonValue] = {}
             self_hosted_only = True
         else:
             agent_id = generic_binding.agent_id
             workspace_id = generic_binding.workspace_id
             agent_revision = generic_binding.agent_revision
             requested_capability_ids = generic_binding.capability_ids
-            task_model_override = (
-                None
-                if generic_binding.model_config_id is None
-                else RoutingRequirements(
+            if generic_binding.model_requirements is not None:
+                task_model_override = generic_binding.model_requirements
+            elif generic_binding.model_config_id is not None:
+                task_model_override = RoutingRequirements(
                     explicit_model_id=generic_binding.model_config_id,
                     modalities=("text",),
                 )
-            )
+            else:
+                task_model_override = None
             available_capability_ids = (
                 frozenset(requested_capability_ids)
                 if self._agents.capability_registry is None
                 else frozenset()
             )
+            objective = generic_binding.objective or task.task.description
+            task_context = {
+                "objective": objective,
+                "input_refs": list(generic_binding.input_refs),
+                "output_refs": list(generic_binding.output_refs),
+                "expected_evidence": list(generic_binding.expected_evidence),
+            }
+            verification_context = {
+                "policy_refs": list(generic_binding.verification_policy_refs),
+                "expected_evidence": list(generic_binding.expected_evidence),
+            }
             self_hosted_only = False
 
         agent_run = await self._agents.start_agent(
@@ -206,11 +206,12 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
             task_model_override=task_model_override,
             requested_capability_ids=requested_capability_ids,
             available_capability_ids=available_capability_ids,
-            task_context={"objective": task.task.description},
+            task_context=task_context,
             project_context={
                 "project_id": task.task.project_id,
                 "workspace_id": workspace_id,
             },
+            verification_context=verification_context,
         )
         backend_ref = f"agent-run:{agent_run.agent_run_id}"
         self._backend_refs[request.run_id] = backend_ref
@@ -242,7 +243,7 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                     agent_id=agent_run.agent.agent_id,
                     model_config_id=agent_run.selected_model_config_id,
                     instruction=instruction,
-                    objective=task.task.description,
+                    objective=objective,
                     capability_ids=agent_run.capability_ids,
                     capability_versions=dict(agent_run.capability_versions),
                     context=request.context,
@@ -264,7 +265,7 @@ class FirstRunAgentLifecycleBackend(LifecycleBackend):
                 response = await self._models.generate(
                     ModelRequest(
                         request_id=f"{request.run_id}:model",
-                        messages=(instruction, task.task.description),
+                        messages=(instruction, objective),
                         context=request.context,
                         requirements=requirements,
                     )
