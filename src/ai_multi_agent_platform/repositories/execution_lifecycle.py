@@ -5,6 +5,7 @@ from __future__ import annotations
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts import ExecutionRequest as KernelExecutionRequest
 from ai_multi_agent_platform.data import DataAccessContext
+from ai_multi_agent_platform.domain import validate_id
 from ai_multi_agent_platform.execution.contracts import ExecutionResult, ExecutionStatus
 from ai_multi_agent_platform.workspaces import (
     MaterializationOutcome,
@@ -49,6 +50,18 @@ class RepositoryWorkspaceExecutionCoordinator:
         """Late-bind the artifact/provenance service after the kernel has been composed."""
 
         self._run_integration = integration
+
+    def active_materialization(self, run_id: str) -> WorkspaceMaterialization | None:
+        """Return the current opaque #37 materialization metadata for one Run, if local.
+
+        The immutable ``RunWorkspaceBinding`` remains the canonical source identity. This
+        read-only seam exists so derived consumers such as repository intelligence can decide
+        whether the active execution view is dirty without reaching into coordinator-private
+        maps or taking ownership of Workspace lifecycle.
+        """
+
+        validate_id(run_id, "run")
+        return self._materializations.get(run_id)
 
     async def resolve_execution_workspace(self, request: KernelExecutionRequest) -> str:
         """Return the opaque executor token for the exact WorkspaceSnapshot bound to a Run."""
