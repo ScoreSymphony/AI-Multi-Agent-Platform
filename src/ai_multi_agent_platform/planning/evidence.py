@@ -181,22 +181,30 @@ class ReplanningEvidenceBridge:
                 "canonical Verification result is missing Task identity",
                 details={"verification_audit_event_id": canonical.event_id},
             )
+        outcome = canonical.outcome
+        if outcome is None:
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "Verification result is missing an outcome",
+                details={
+                    "verification_audit_event_id": canonical.event_id,
+                    "outcome": None,
+                },
+            )
         trigger = {
             VerificationOutcome.NEEDS_CHANGES: PlanningTrigger.VERIFICATION_CHANGES_REQUIRED,
             VerificationOutcome.FAIL: PlanningTrigger.VERIFICATION_FAILED,
             VerificationOutcome.INCONCLUSIVE: PlanningTrigger.VERIFICATION_INCONCLUSIVE,
-        }.get(canonical.outcome)
+        }.get(outcome)
         if trigger is None:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "Verification outcome does not justify replanning",
                 details={
                     "verification_audit_event_id": canonical.event_id,
-                    "outcome": None if canonical.outcome is None else canonical.outcome.value,
+                    "outcome": outcome.value,
                 },
             )
-        outcome = canonical.outcome
-        assert outcome is not None
         reason = f"canonical Verification outcome {outcome.value}"
         evidence_refs = tuple(
             dict.fromkeys(
