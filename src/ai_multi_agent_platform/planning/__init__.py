@@ -1,5 +1,6 @@
 """Platform-owned autonomous planning and bounded replanning."""
 
+from .composition import PlanningOnlyLifecycleBackend
 from .control_plane import (
     PlanningCommandHandlers,
     PlanningProposalResourceService,
@@ -65,6 +66,7 @@ __all__ = [
     "PlanningInventory",
     "PlanningKernel",
     "PlanningModelCandidate",
+    "PlanningOnlyLifecycleBackend",
     "PlanningOrchestratorAdapter",
     "PlanningProposalResourceService",
     "PlanningRepository",
