@@ -143,7 +143,9 @@ class SpecificationRevision:
             if value is not None
         )
         if len(intake_refs) != 1:
-            raise ValueError("specification requires exactly one proposal/goal/task intake reference")
+            raise ValueError(
+                "specification requires exactly one proposal/goal/task intake reference"
+            )
         if self.proposal_id is not None:
             validate_id(self.proposal_id, "proposal")
         if self.goal_id is not None:
@@ -163,8 +165,12 @@ class SpecificationRevision:
             if any(not value.strip() for value in values):
                 raise ValueError(f"specification {name} must not contain blank values")
             object.__setattr__(self, name, values)
-        object.__setattr__(self, "model_requirements", MappingProxyType(dict(self.model_requirements)))
-        object.__setattr__(self, "agent_requirements", MappingProxyType(dict(self.agent_requirements)))
+        object.__setattr__(
+            self, "model_requirements", MappingProxyType(dict(self.model_requirements))
+        )
+        object.__setattr__(
+            self, "agent_requirements", MappingProxyType(dict(self.agent_requirements))
+        )
         object.__setattr__(self, "provenance", MappingProxyType(dict(self.provenance)))
         _require_aware(self.created_at, "specification created_at")
         computed = specification_content_digest(self)
