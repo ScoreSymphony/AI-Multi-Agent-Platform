@@ -18,6 +18,7 @@ from ai_multi_agent_platform.evaluation.models import (
     SnapshotValue,
     VersionReference,
 )
+from ai_multi_agent_platform.evaluation.repository import InMemoryEvaluationRepository
 from ai_multi_agent_platform.evaluation.reproducibility import (
     Comparability,
     EvalManifestBuilder,
@@ -76,7 +77,11 @@ def _suite() -> EvaluationSuite:
     )
 
 
-def _snapshot(*, commit: str = "abc123", extra: tuple[VersionReference, ...] = ()) -> ConfigurationSnapshot:
+def _snapshot(
+    *,
+    commit: str = "abc123",
+    extra: tuple[VersionReference, ...] = (),
+) -> ConfigurationSnapshot:
     return ConfigurationSnapshot(
         platform_version="1.0.0",
         platform_commit=commit,
@@ -161,7 +166,7 @@ def test_context_and_source_drift_are_independently_blocking() -> None:
     )
 
 
-def test_comparison_lens_refs_warn_but_do_not_invalidate_execution_comparability() -> None:
+def test_comparison_lens_refs_do_not_invalidate_execution_comparability() -> None:
     builder = EvalManifestBuilder()
     seed_policy = SeedPolicy(RandomnessMode.DETERMINISTIC)
     baseline = builder.build(
@@ -186,7 +191,7 @@ def test_comparison_lens_refs_warn_but_do_not_invalidate_execution_comparability
     assert comparison.blocking_differences == ()
 
 
-def test_explicit_platform_candidate_dimension_allows_platform_commit_change() -> None:
+def test_explicit_platform_candidate_allows_platform_commit_change() -> None:
     builder = EvalManifestBuilder()
     seed_policy = SeedPolicy(RandomnessMode.DETERMINISTIC)
     baseline = builder.build(
@@ -214,7 +219,7 @@ def test_explicit_platform_candidate_dimension_allows_platform_commit_change() -
 def test_stability_repeat_policy_stops_early_and_reports_statistics() -> None:
     async def scenario() -> None:
         runner = EvaluationRunner(
-            repository=SqliteEvaluationRepository(":memory:"),
+            repository=InMemoryEvaluationRepository(),
             executor=StaticExecutor(),
             evaluators=(DeterministicAssertionEvaluator(),),
         )
@@ -246,7 +251,7 @@ def test_stability_repeat_policy_stops_early_and_reports_statistics() -> None:
     asyncio.run(scenario())
 
 
-def test_paired_ab_manifests_with_same_seed_set_allow_only_declared_candidate_dimension() -> None:
+def test_paired_ab_allows_only_declared_candidate_dimension() -> None:
     builder = EvalManifestBuilder()
     repeat_policy = RepeatPolicy(RepeatStrategy.PAIRED_AB, 3)
     seed_policy = SeedPolicy(
@@ -260,7 +265,9 @@ def test_paired_ab_manifests_with_same_seed_set_allow_only_declared_candidate_di
         repeat_policy=repeat_policy,
         seed_policy=seed_policy,
         context=EvalManifestContext(
-            skill_bundles=(ManifestReference("skill_bundle", "candidate", digest="skill-a"),),
+            skill_bundles=(
+                ManifestReference("skill_bundle", "candidate", digest="skill-a"),
+            ),
         ),
     )
     candidate = builder.build(
@@ -269,7 +276,9 @@ def test_paired_ab_manifests_with_same_seed_set_allow_only_declared_candidate_di
         repeat_policy=repeat_policy,
         seed_policy=seed_policy,
         context=EvalManifestContext(
-            skill_bundles=(ManifestReference("skill_bundle", "candidate", digest="skill-b"),),
+            skill_bundles=(
+                ManifestReference("skill_bundle", "candidate", digest="skill-b"),
+            ),
         ),
     )
 
