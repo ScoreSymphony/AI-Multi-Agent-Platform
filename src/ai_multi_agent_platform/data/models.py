@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from ai_multi_agent_platform.contracts.classification import DataClassification
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 from ai_multi_agent_platform.domain import new_id, validate_id
 
@@ -97,7 +98,7 @@ class DataAccessContext:
     task_id: str | None = None
     run_id: str | None = None
     agent_id: str | None = None
-    classification: str | None = None
+    classification: DataClassification | str | None = None
     audit_metadata: dict[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -108,8 +109,7 @@ class DataAccessContext:
             validate_id(self.run_id, "run")
         if self.agent_id is not None:
             validate_id(self.agent_id, "agent")
-        if self.classification is not None:
-            _require_nonblank(self.classification, "classification")
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
     @property
     def project_id(self) -> str | None:
@@ -150,6 +150,7 @@ class FileRecord:
     content_type: str | None = None
     artifact_ids: tuple[str, ...] = ()
     metadata: dict[str, JsonValue] = field(default_factory=dict)
+    classification: DataClassification | str | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.file_id, "file")
@@ -165,6 +166,7 @@ class FileRecord:
             _require_nonblank(self.content_type, "content_type")
         for artifact_id in self.artifact_ids:
             validate_id(artifact_id, "artifact")
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,7 +196,7 @@ class MemoryEntry:
     provenance: tuple[SourceRef, ...] = ()
     supersedes_memory_id: str | None = None
     superseded_by_memory_id: str | None = None
-    classification: str | None = None
+    classification: DataClassification | str | None = None
     metadata: dict[str, JsonValue] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -226,8 +228,7 @@ class MemoryEntry:
             validate_id(self.supersedes_memory_id, "memory")
         if self.superseded_by_memory_id is not None:
             validate_id(self.superseded_by_memory_id, "memory")
-        if self.classification is not None:
-            _require_nonblank(self.classification, "classification")
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
     @property
     def expired(self) -> bool:
@@ -278,6 +279,7 @@ class KnowledgeSource:
     updated_at: datetime
     content_checksum: str | None = None
     metadata: dict[str, JsonValue] = field(default_factory=dict)
+    classification: DataClassification | str | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.source_id, "knowledge_source")
@@ -293,6 +295,7 @@ class KnowledgeSource:
             raise ValueError("updated_at cannot precede created_at")
         if self.content_checksum is not None:
             _validate_sha256(self.content_checksum)
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,6 +307,7 @@ class KnowledgeDocument:
     location: str
     checksum: str
     created_at: datetime
+    classification: DataClassification | str | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.document_id, "knowledge_document")
@@ -312,6 +316,7 @@ class KnowledgeDocument:
         _require_nonblank(self.location, "location")
         _validate_sha256(self.checksum)
         _require_aware(self.created_at, "created_at")
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,12 +359,14 @@ class KnowledgeSearchResult:
     location: str
     score: float | None
     citation: SourceRef
+    classification: DataClassification | str | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.source_id, "knowledge_source")
         validate_id(self.document_id, "knowledge_document")
         _require_nonblank(self.revision, "revision")
         _require_nonblank(self.location, "location")
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
 
 def memory_access_policy_for_scope(scope: MemoryScope, owner_ref: str) -> MemoryAccessPolicy:
@@ -465,6 +472,19 @@ def _validate_memory_scope_id(scope: MemoryScope, scope_id: str) -> None:
         validate_id(scope_id, "project")
         return
     _require_nonblank(scope_id, "scope_id")
+
+
+def _normalize_classification(
+    value: DataClassification | str | None,
+) -> DataClassification | None:
+    if value is None:
+        return None
+    if isinstance(value, DataClassification):
+        return value
+    try:
+        return DataClassification(value)
+    except ValueError as exc:
+        raise ValueError(f"unknown data classification {value!r}") from exc
 
 
 def _validate_sha256(value: str) -> None:
