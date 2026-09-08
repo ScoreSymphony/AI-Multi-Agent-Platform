@@ -52,7 +52,7 @@ Large content remains in Files/Artifacts or another owning source domain.
 
 ## Production composition (#651)
 
-The public `deployment.build_single_node_deployment(...)` path now exposes one durable
+The public `deployment.build_single_node_deployment(...)` path exposes one durable
 `deployment.handoffs` composition. It wires existing platform authorities together rather than
 creating a parallel runtime:
 
@@ -170,9 +170,10 @@ canonical context source:
 - `ContextSourceType.AGENT_HANDOFF` gives #590 a stable source vocabulary without introducing a
   Handoff-specific resolver or permission system.
 - `ConsumedHandoffContextAdapter` remains useful for already-materialized runtime contexts.
-- `DurableConsumedHandoffContextAdapter` is the production/recovery adapter. It reconstructs
-  eligible Handoff context from the canonical Handoff repository and exact consuming Run after a
-  restart; no orchestrator session memory is needed.
+- `DurableConsumedHandoffContextAdapter` is the production/recovery adapter. It queries exact
+  durable consumptions by `consuming_run_id`, resolves their immutable Handoff revisions, and
+  applies Task/Plan/consumer-Step plus exact Agent/Team-member scoping. No orchestrator session
+  memory or task-wide Handoff scan is required after restart.
 - The adapter snapshots the compact structured Handoff itself as deterministic inline context,
   so `ReferenceContextRenderer` and context-bound Agent execution can consume it without a
   special content provider.
@@ -202,14 +203,18 @@ revision was bound to that Run.
 - `InMemoryHandoffRepository` for deterministic unit/contract tests;
 - `SQLiteHandoffRepository` for durable local/single-node operation.
 
+Both repositories implement `list_consumptions_for_run(run_id)`. The SQLite implementation has
+an index on `consuming_run_id`, so recovery can discover the exact consumption evidence for one
+Run directly rather than walking all Handoffs in a Task.
+
 SQLite persistence stores immutable Handoff revisions, idempotency records and exact consuming
 Run bindings. Re-opening the repository reconstructs the canonical Handoff through the
 versioned codec and preserves consumption evidence.
 
 The #651 recovery path deliberately does not require an in-memory `HandoffRuntimeContext`.
-`DurableConsumedHandoffContextAdapter` reads durable Handoff + consumption state for the exact
-Run, reconstructs the canonical `HandoffRuntimeContext`, and contributes the same Handoff source
-to normal Context assembly. Context Bundles and ContextRunBindings are durable independently, so
+`DurableConsumedHandoffContextAdapter` starts from the consuming Run's durable bindings,
+reconstructs each exact `HandoffRuntimeContext`, and contributes the same Handoff source to
+normal Context assembly. Context Bundles and ContextRunBindings are durable independently, so
 recovery does not depend on which orchestrator adapter was active before the process stopped.
 
 ## Authorization and source dereferencing
@@ -221,13 +226,15 @@ prepared-read scope:
 
 1. resolve the exact source in its owning domain;
 2. compare requested revision/digest when supplied;
-3. issue the canonical #15 read decision for the actual Agent actor;
-4. only after an `ALLOW` decision expose that exact reference to synchronous `HandoffService`;
-5. clear the prepared-read scope when the operation ends.
+3. preserve the canonical source Project/Workspace scope in the authorization request and reject
+   a conflicting caller Project scope;
+4. issue the canonical #15 read decision for the actual Agent actor;
+5. only after an `ALLOW` decision expose that exact reference to synchronous `HandoffService`;
+6. clear the prepared-read scope when the operation ends.
 
 Therefore discovery is never treated as permission and a source cannot remain implicitly
-readable across unrelated operations. Consumption repeats the source checks. Missing, stale or
-unauthorized references fail explicitly.
+readable across unrelated operations. Consumption repeats the source checks. Missing, stale,
+cross-project or unauthorized references fail explicitly.
 
 Artifact/Result identity is resolved through the canonical Verification evidence resolver;
 Research Claim/Evidence, SkillBundle and ContextBundle references resolve through their owning
@@ -266,7 +273,13 @@ The canonical Control Plane registers read-only collections:
 - `context-bundles` for effective ContextBundle evidence;
 - `context-run-bindings` for AgentRun -> ContextBundle evidence.
 
-No Handoff mutation command is registered. The Handoff projection includes:
+No Handoff mutation command is registered. Handoff listing intentionally requires a Task or Step
+filter. The extension boundary first applies its normal collection-level #15 decision, and the
+registered Handoff services then apply the same canonical Task owner/Project-aware authorization
+used by other task-scoped domains before exposing each Handoff or consumption. This prevents a
+collection permission from becoming cross-Task metadata discovery authority.
+
+The Handoff projection includes:
 
 - producer and intended-consumer revisions or late-bound requirements;
 - actual consuming Agent/Team revision for each consumption;
@@ -277,9 +290,8 @@ No Handoff mutation command is registered. The Handoff projection includes:
 - consuming Run IDs;
 - canonical creation provenance.
 
-Control Plane authorization remains the canonical #15 boundary; the standalone
-`HandoffControlPlaneProjection` remains available when a caller needs a narrower
-`HandoffViewAuthorizer` projection.
+The standalone `HandoffControlPlaneProjection` remains available when a caller needs a narrower
+`HandoffViewAuthorizer` projection outside the registered Control Plane path.
 
 ## Orchestrator replacement
 
@@ -300,7 +312,9 @@ canonical Handoff-bearing bundle. Neither adapter owns recovery state.
 
 - Handoffs do not grant permissions or capabilities.
 - Referenced data must pass normal source-resource authorization.
+- Source Project/Workspace scope is preserved at dereference authorization boundaries.
 - ContextBundle inclusion is separately authorization-gated and fail-closed when mandatory.
+- Handoff Control Plane reads remain Task owner/Project scoped after collection-level #15 checks.
 - Producer Handoff statements remain untrusted context rather than verification authority.
 - Missing/stale references fail explicitly.
 - Historical Handoff revisions are immutable.
