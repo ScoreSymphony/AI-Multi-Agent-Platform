@@ -1,5 +1,15 @@
 """Governed feedback, learning-candidate and owner-domain promotion workflow (#595)."""
 
+from .control_plane import (
+    LEARNING_CANDIDATE_COLLECTION,
+    LEARNING_COLLECTIONS,
+    LEARNING_COMMANDS,
+    LEARNING_FEEDBACK_COLLECTION,
+    LearningCandidateResourceService,
+    LearningFeedbackResourceService,
+    register_learning_control_plane,
+)
+from .governance import GovernedObservedLearningService, LearningPlatformPolicy
 from .models import (
     LEARNING_SCHEMA_VERSION,
     FeedbackRecord,
@@ -19,6 +29,7 @@ from .models import (
     new_feedback_id,
     new_learning_candidate_id,
 )
+from .post_promotion_repository import SQLitePostPromotionEvaluationRecorder
 from .promotion import (
     AgentPromotionAdapter,
     OwnerPromotionAdapter,
@@ -27,34 +38,73 @@ from .promotion import (
     SkillPromotionAdapter,
 )
 from .repository import InMemoryLearningRepository, LearningRepository, SQLiteLearningRepository
+from .runtime import (
+    EvaluationPostPromotionEvaluator,
+    InMemoryPostPromotionEvaluationRecorder,
+    ObservedLearningService,
+    PostPromotionEvaluationOutcome,
+    PostPromotionEvaluationRecord,
+    PostPromotionEvaluationRecorder,
+    PostPromotionEvaluator,
+)
+from .runtime_control_plane import (
+    LEARNING_POST_PROMOTION_COLLECTION,
+    LearningPostPromotionResourceService,
+    register_learning_runtime_control_plane,
+)
 from .service import LearningQualityGate, LearningService
+from .single_node import SingleNodeLearningComposition, build_single_node_learning
+from .sources import LearningSourceBridge
 
 __all__ = [
+    "LEARNING_CANDIDATE_COLLECTION",
+    "LEARNING_COLLECTIONS",
+    "LEARNING_COMMANDS",
+    "LEARNING_FEEDBACK_COLLECTION",
+    "LEARNING_POST_PROMOTION_COLLECTION",
     "LEARNING_SCHEMA_VERSION",
     "AgentPromotionAdapter",
+    "EvaluationPostPromotionEvaluator",
     "FeedbackRecord",
     "FeedbackType",
+    "GovernedObservedLearningService",
     "InMemoryLearningRepository",
+    "InMemoryPostPromotionEvaluationRecorder",
     "LearningCandidate",
+    "LearningCandidateResourceService",
     "LearningCandidateStatus",
+    "LearningFeedbackResourceService",
     "LearningGatePlan",
+    "LearningPlatformPolicy",
+    "LearningPostPromotionResourceService",
     "LearningQualityGate",
     "LearningReference",
     "LearningRepository",
     "LearningService",
+    "LearningSourceBridge",
     "LearningSourceType",
     "LearningTarget",
     "LearningTargetType",
+    "ObservedLearningService",
     "OwnerPromotionAdapter",
+    "PostPromotionEvaluationOutcome",
+    "PostPromotionEvaluationRecord",
+    "PostPromotionEvaluationRecorder",
+    "PostPromotionEvaluator",
     "PromotionReceipt",
     "PromotionRegistry",
     "RoutingProfilePromotionAdapter",
     "SQLiteLearningRepository",
+    "SQLitePostPromotionEvaluationRecorder",
+    "SingleNodeLearningComposition",
     "SkillPromotionAdapter",
+    "build_single_node_learning",
     "candidate_from_dict",
     "candidate_to_dict",
     "feedback_from_dict",
     "feedback_to_dict",
     "new_feedback_id",
     "new_learning_candidate_id",
+    "register_learning_control_plane",
+    "register_learning_runtime_control_plane",
 ]
