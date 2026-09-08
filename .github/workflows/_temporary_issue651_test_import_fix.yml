@@ -48,13 +48,40 @@ jobs:
               if config.count(anchor) != 1:
                   raise SystemExit('pytest dependency anchor not found exactly once')
               pyproject.write_text(config.replace(anchor, addition))
+
+          funnel = Path('src/ai_multi_agent_platform/repository_intelligence/context_funnel.py')
+          funnel_text = funnel.read_text()
+          package_import = '''from ai_multi_agent_platform.context import (
+              ContextCandidate,
+              ContextDataClassification,
+              ContextEntryRole,
+              ContextFreshness,
+              ContextSourceRef,
+              ContextSourceRequest,
+              ContextSourceType,
+              ContextTrust,
+          )'''.replace('          ', '')
+          direct_import = '''from ai_multi_agent_platform.context.models import (
+              ContextCandidate,
+              ContextDataClassification,
+              ContextEntryRole,
+              ContextFreshness,
+              ContextSourceRef,
+              ContextSourceType,
+              ContextTrust,
+          )
+          from ai_multi_agent_platform.context.resolver import ContextSourceRequest'''.replace('          ', '')
+          if funnel_text.count(package_import) != 1:
+              raise SystemExit('context_funnel package import block not found exactly once')
+          funnel.write_text(funnel_text.replace(package_import, direct_import))
           PY
           python -m pip install -e '.[dev]'
-          ruff format pyproject.toml tests/test_issue_651_production_handoff_runtime.py
-          ruff check tests/test_issue_651_production_handoff_runtime.py
+          ruff format src/ai_multi_agent_platform/repository_intelligence/context_funnel.py tests/test_issue_651_production_handoff_runtime.py
+          ruff check src/ai_multi_agent_platform/repository_intelligence/context_funnel.py tests/test_issue_651_production_handoff_runtime.py
+          mypy
           pytest tests/test_issue_651_*.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add pyproject.toml tests/test_issue_651_production_handoff_runtime.py
-          git commit -m 'test: fix issue 651 async test integration'
+          git add pyproject.toml tests/test_issue_651_production_handoff_runtime.py src/ai_multi_agent_platform/repository_intelligence/context_funnel.py
+          git commit -m 'test: fix issue 651 integration dependencies and imports'
           git push origin HEAD:integration/active-branches-2026-09-08
