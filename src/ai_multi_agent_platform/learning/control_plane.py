@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import StrEnum
+from enum import StrEnum
 from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
@@ -19,6 +20,7 @@ from ai_multi_agent_platform.security.approvals import ApprovalRecord
 from ai_multi_agent_platform.security.redaction import redact_sensitive
 
 from .models import (
+    FeedbackRecord,
     FeedbackRecord,
     FeedbackType,
     LearningCandidate,
