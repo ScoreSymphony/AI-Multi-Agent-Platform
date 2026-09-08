@@ -1,12 +1,14 @@
 """Canonical structured work-transfer contracts for Agents and Agent Teams."""
 
+from .composition import build_production_handoff_runtime
 from .context import ConsumedHandoffContextAdapter, handoff_context_candidate
-from .control_plane import HandoffControlPlaneProjection, HandoffViewAuthorizer
-from .control_plane_resources import (
+from .control_plane import (
     HANDOFF_COLLECTION,
     HANDOFF_CONSUMPTION_COLLECTION,
     HandoffConsumptionResourceService,
+    HandoffControlPlaneProjection,
     HandoffResourceService,
+    HandoffViewAuthorizer,
     register_handoff_control_plane,
 )
 from .coordination import CoordinatedHandoffService
@@ -39,7 +41,6 @@ from .production import (
     HandoffConsumerExecution,
     ProductionHandoffRuntime,
     TelemetryHandoffAuditSink,
-    build_production_handoff_runtime,
 )
 from .repository import HandoffRepository, InMemoryHandoffRepository, SQLiteHandoffRepository
 from .service import (
