@@ -1,7 +1,17 @@
 """Canonical structured work-transfer contracts for Agents and Agent Teams."""
 
 from .context import ConsumedHandoffContextAdapter, handoff_context_candidate
-from .control_plane import HandoffControlPlaneProjection, HandoffViewAuthorizer
+from .control_plane import (
+    HANDOFF_COLLECTION,
+    HANDOFF_CONSUMPTION_COLLECTION,
+    HandoffConsumptionResourceService,
+    HandoffControlPlaneProjection,
+    HandoffResourceService,
+    HandoffViewAuthorizer,
+    consumption_projection,
+    handoff_projection,
+    register_handoff_control_plane,
+)
 from .coordination import CoordinatedHandoffService
 from .models import (
     HANDOFF_SCHEMA_VERSION,
@@ -25,6 +35,14 @@ from .models import (
     new_handoff_id,
     participant_key,
 )
+from .production import (
+    CanonicalConsumerRequirementEvaluator,
+    CanonicalHandoffReferenceGateway,
+    DurableConsumedHandoffContextAdapter,
+    HandoffConsumerExecution,
+    ProductionHandoffRuntime,
+    TelemetryHandoffAuditSink,
+)
 from .repository import HandoffRepository, InMemoryHandoffRepository, SQLiteHandoffRepository
 from .service import (
     ConsumerRequirementEvaluator,
@@ -37,20 +55,28 @@ from .service import (
 )
 
 __all__ = [
+    "HANDOFF_COLLECTION",
+    "HANDOFF_CONSUMPTION_COLLECTION",
     "HANDOFF_SCHEMA_VERSION",
     "AgentHandoff",
+    "CanonicalConsumerRequirementEvaluator",
+    "CanonicalHandoffReferenceGateway",
     "ConsumedHandoffContextAdapter",
     "ConsumerRequirementEvaluator",
     "CoordinatedHandoffService",
+    "DurableConsumedHandoffContextAdapter",
     "HandoffAgentRevisionRepository",
     "HandoffAuditEvent",
     "HandoffAuditSink",
+    "HandoffConsumerExecution",
     "HandoffConsumption",
+    "HandoffConsumptionResourceService",
     "HandoffContent",
     "HandoffContextSource",
     "HandoffControlPlaneProjection",
     "HandoffReferenceGateway",
     "HandoffRepository",
+    "HandoffResourceService",
     "HandoffRuntimeContext",
     "HandoffService",
     "HandoffSourceKind",
@@ -60,16 +86,21 @@ __all__ = [
     "InMemoryHandoffRepository",
     "NullHandoffAuditSink",
     "ParticipantRef",
+    "ProductionHandoffRuntime",
     "SQLiteHandoffRepository",
+    "TelemetryHandoffAuditSink",
     "build_handoff",
     "compute_creation_request_digest",
     "compute_handoff_digest",
     "consumption_from_dict",
+    "consumption_projection",
     "consumption_to_dict",
     "handoff_context_candidate",
     "handoff_context_source",
     "handoff_from_dict",
+    "handoff_projection",
     "handoff_to_dict",
     "new_handoff_id",
     "participant_key",
+    "register_handoff_control_plane",
 ]
