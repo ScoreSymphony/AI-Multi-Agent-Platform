@@ -4,9 +4,10 @@ import asyncio
 from typing import Any
 
 from ai_multi_agent_platform.automation import (
-    NO_TASK_REQUIRED,
+    Automation,
     DeliveryStatus,
     IdentityContext,
+    NO_TASK_REQUIRED,
     TaskTemplate,
     TriggerDefinition,
     TriggerType,
@@ -20,7 +21,7 @@ def _run(coro: Any) -> Any:
     return asyncio.run(coro)
 
 
-async def _automation(service: AutomationService):
+async def _automation(service: AutomationService) -> Automation:
     return await service.create_automation(
         name="Task creator contract",
         description="Exercise the canonical Automation TaskCreator boundary",
