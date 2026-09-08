@@ -47,6 +47,7 @@ class RegistryItem:
     changelog: str | None = None
     deprecated: bool = False
     yanked: bool = False
+    distribution_route: DistributionRoute | None = None
 
     def __post_init__(self) -> None:
         _require_id(self.item_id, "item_id")
@@ -69,6 +70,11 @@ class RegistryItem:
             (self.categories, "categories"),
         ):
             _require_nonblank_values(values, field_name)
+        if (
+            self.distribution_route is not None
+            and self.distribution_route is not DistributionRoute.MANUAL
+        ):
+            raise ValueError("distribution_route override may only select the manual route")
         for optional_value, optional_field_name in (
             (self.review_reference, "review_reference"),
             (self.released_at, "released_at"),
@@ -79,6 +85,8 @@ class RegistryItem:
 
     @property
     def route(self) -> DistributionRoute:
+        if self.distribution_route is not None:
+            return self.distribution_route
         if self.item_type is RegistryItemType.PLUGIN:
             return DistributionRoute.PLUGIN
         if self.item_type is RegistryItemType.DOCUMENTATION:
