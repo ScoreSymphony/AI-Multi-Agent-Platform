@@ -9,6 +9,7 @@ from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 from .items import RegistryItem
 from .models import (
     ArtifactIntegrity,
+    DistributionRoute,
     RegistryDependency,
     RegistryItemType,
     RegistrySource,
@@ -106,6 +107,7 @@ REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
         "required_models": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
         "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
         "categories": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
+        "distribution_route": {"const": "manual"},
         "integrity": {
             "type": "object",
             "properties": {
@@ -183,6 +185,11 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
         required_models=tuple(document.get("required_models", [])),
         tags=frozenset(document.get("tags", [])),
         categories=frozenset(document.get("categories", [])),
+        distribution_route=(
+            DistributionRoute(document["distribution_route"])
+            if "distribution_route" in document
+            else None
+        ),
         integrity=ArtifactIntegrity(
             sha256=integrity.get("sha256"),
             signature=integrity.get("signature"),
