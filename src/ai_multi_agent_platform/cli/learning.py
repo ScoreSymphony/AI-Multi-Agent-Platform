@@ -47,9 +47,21 @@ def add_learning_parser(
     feedback_create.add_argument(
         "--feedback-type",
         required=True,
-        choices=["correction", "accepted_outcome", "rejected_outcome", "preference", "finding", "comment"],
+        choices=[
+            "correction",
+            "outcome_accepted",
+            "outcome_rejected",
+            "preference",
+            "rating",
+            "finding",
+            "comment",
+        ],
     )
-    feedback_create.add_argument("--subject-json", required=True, help="LearningReference JSON object")
+    feedback_create.add_argument(
+        "--subject-json",
+        required=True,
+        help="LearningReference JSON object",
+    )
     feedback_create.add_argument("--target-json", help="optional LearningTarget JSON object")
     feedback_create.add_argument("--comment")
     feedback_create.add_argument("--project-id")
@@ -60,11 +72,18 @@ def add_learning_parser(
     propose.add_argument("--target-json", required=True, help="LearningTarget JSON object")
     propose.add_argument("--improvement-type", required=True)
     propose.add_argument("--expected-benefit", required=True)
-    propose.add_argument("--risk", required=True, choices=["standard", "high", "critical"])
+    propose.add_argument(
+        "--risk",
+        required=True,
+        choices=["standard", "elevated", "high", "critical"],
+    )
     propose.add_argument("--gate-plan-json", required=True, help="LearningGatePlan JSON object")
     propose.add_argument("--source-refs-json", help="JSON array of LearningReference objects")
     propose.add_argument("--evidence-refs-json", help="JSON array of LearningReference objects")
-    propose.add_argument("--proposed-change-json", help="JSON object passed to the canonical owner adapter")
+    propose.add_argument(
+        "--proposed-change-json",
+        help="JSON object passed to the canonical owner adapter",
+    )
     propose.add_argument("--project-id")
     propose.add_argument("--idempotency-key")
 
@@ -77,7 +96,11 @@ def add_learning_parser(
     from_feedback.add_argument("--target-json", required=True)
     from_feedback.add_argument("--improvement-type", required=True)
     from_feedback.add_argument("--expected-benefit", required=True)
-    from_feedback.add_argument("--risk", required=True, choices=["standard", "high", "critical"])
+    from_feedback.add_argument(
+        "--risk",
+        required=True,
+        choices=["standard", "elevated", "high", "critical"],
+    )
     from_feedback.add_argument("--gate-plan-json", required=True)
     from_feedback.add_argument("--evidence-refs-json")
     from_feedback.add_argument("--proposed-change-json")
@@ -104,12 +127,31 @@ def add_learning_parser(
 
     promote = commands.add_parser(
         "promote",
-        help="promote an accepted candidate through Evaluation, authorization and owner-domain gates",
+        help=(
+            "promote an accepted candidate through Evaluation, authorization and "
+            "owner-domain gates"
+        ),
     )
     promote.add_argument("candidate_id")
     promote.add_argument("--expected-revision", type=int, required=True)
     promote.add_argument("--approval-id")
     promote.add_argument("--idempotency-key")
+
+    post_eval = commands.add_parser(
+        "post-eval",
+        help="inspect derived post-promotion Evaluation evidence",
+    )
+    post_eval_commands = post_eval.add_subparsers(dest="post_eval_command", required=True)
+    post_eval_list = post_eval_commands.add_parser(
+        "list",
+        help="list post-promotion Evaluation records",
+    )
+    _add_pagination_arguments(post_eval_list)
+    post_eval_show = post_eval_commands.add_parser(
+        "show",
+        help="show one post-promotion Evaluation record",
+    )
+    post_eval_show.add_argument("record_id")
 
 
 def execute_learning(
@@ -173,7 +215,11 @@ def execute_learning(
             )
         if args.command == "propose" and args.project_id is not None:
             body["project_id"] = str(args.project_id)
-        command = "learning.propose" if args.command == "propose" else "learning.propose-from-feedback"
+        command = (
+            "learning.propose"
+            if args.command == "propose"
+            else "learning.propose-from-feedback"
+        )
         return client.post(
             f"/commands/{command}",
             body=body,
@@ -219,7 +265,7 @@ def execute_learning(
     if args.command == "promote":
         _require_positive_revision(args.expected_revision)
         confirm(args, "promote Learning Candidate", str(args.candidate_id))
-        body = {
+        body: dict[str, JsonValue] = {
             "resource_ref": str(args.candidate_id),
             "expected_revision": args.expected_revision,
         }
@@ -229,6 +275,20 @@ def execute_learning(
             "/commands/learning.promote",
             body=body,
             idempotency_key=args.idempotency_key,
+        )
+
+    if args.command == "post-eval":
+        if args.post_eval_command == "list":
+            return client.get(
+                "/learning-post-promotion-evaluations",
+                query=_page_query(args),
+            )
+        if args.post_eval_command == "show":
+            return client.get(
+                f"/learning-post-promotion-evaluations/{_segment(args.record_id)}"
+            )
+        raise ProfileError(
+            f"unsupported Learning post-eval command: {args.post_eval_command}"
         )
 
     raise ProfileError(f"unsupported Learning command: {args.command}")
@@ -271,7 +331,11 @@ def _add_pagination_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def _page_query(args: argparse.Namespace) -> dict[str, str]:
-    query = {"limit": str(args.limit), "sort": str(args.sort), "direction": str(args.direction)}
+    query = {
+        "limit": str(args.limit),
+        "sort": str(args.sort),
+        "direction": str(args.direction),
+    }
     if args.cursor:
         query["cursor"] = str(args.cursor)
     if args.q:
