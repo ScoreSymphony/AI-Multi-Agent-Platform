@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ai_multi_agent_platform.automation import Automation, TriggerDelivery
+from ai_multi_agent_platform.automation import NO_TASK_REQUIRED, Automation, TriggerDelivery
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.decisions import (
     DecisionRepository,
@@ -102,7 +102,7 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
         delivery: TriggerDelivery,
         payload: dict[str, JsonValue],
         idempotency_key: str,
-    ) -> str | None:
+    ) -> str:
         dispatch = await dispatch_goal_automation_delivery(
             self.goals,
             automation,
@@ -117,6 +117,8 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
                 payload,
                 idempotency_key,
             )
+        if dispatch.generated_task_id is None:
+            return NO_TASK_REQUIRED
         return dispatch.generated_task_id
 
     async def list_extension_resources(
