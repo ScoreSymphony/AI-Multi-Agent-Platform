@@ -77,6 +77,12 @@ class CapabilityAuthorizationBridge:
             return None
         return self._gate.approvals.pending_for(action)
 
+    def pending_approval_id(self, invocation_id: str) -> str | None:
+        """Return the canonical #15 approval ID for a blocked capability invocation."""
+
+        record = self.pending_approval(invocation_id)
+        return None if record is None else record.approval_id
+
     @staticmethod
     def _proposed_action(
         request: CapabilityInvocation,
