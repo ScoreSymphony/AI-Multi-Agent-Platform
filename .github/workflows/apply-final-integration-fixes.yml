@@ -140,3 +140,5 @@ jobs:
           git diff --cached --check
           git commit -m "fix: close final integration validation gaps"
           git push origin HEAD:integration/active-branches-2026-09-08
+
+# helper rerun
