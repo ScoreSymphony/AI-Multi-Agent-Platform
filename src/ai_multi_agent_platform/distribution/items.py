@@ -40,7 +40,6 @@ class RegistryItem:
     required_models: tuple[str, ...] = ()
     tags: frozenset[str] = frozenset()
     categories: frozenset[str] = frozenset()
-    distribution_route: DistributionRoute | None = None
     integrity: ArtifactIntegrity = field(default_factory=ArtifactIntegrity)
     trust_status: TrustStatus = TrustStatus.UNTRUSTED
     review_reference: str | None = None
@@ -48,6 +47,7 @@ class RegistryItem:
     changelog: str | None = None
     deprecated: bool = False
     yanked: bool = False
+    distribution_route: DistributionRoute | None = None
 
     def __post_init__(self) -> None:
         _require_id(self.item_id, "item_id")
@@ -70,7 +70,10 @@ class RegistryItem:
             (self.categories, "categories"),
         ):
             _require_nonblank_values(values, field_name)
-        if self.distribution_route is not None and self.distribution_route is not DistributionRoute.MANUAL:
+        if (
+            self.distribution_route is not None
+            and self.distribution_route is not DistributionRoute.MANUAL
+        ):
             raise ValueError("distribution_route override may only select the manual route")
         for optional_value, optional_field_name in (
             (self.review_reference, "review_reference"),
