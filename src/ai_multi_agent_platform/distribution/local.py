@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from .items import RegistryItem, RegistryQuery
 from .models import version_key
 from .provider import RegistryItemNotFoundError
+from .technical_catalog import TECHNICAL_CATEGORIES
 
 
 class LocalRegistryProvider:
@@ -64,6 +65,8 @@ class LocalRegistryProvider:
         if item.deprecated and not query.include_deprecated:
             return False
         if item.yanked and not query.include_yanked:
+            return False
+        if query.technical_only and not set(item.categories).intersection(TECHNICAL_CATEGORIES):
             return False
         if query.item_types and item.item_type not in query.item_types:
             return False
