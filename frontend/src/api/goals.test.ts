@@ -67,6 +67,7 @@ describe("GoalClient", () => {
     await client.pause("goal_1");
     await client.resume("goal_1");
     await client.cancel("goal_1", "operator decision");
+    await client.fail("goal_1", "objective is no longer achievable");
     await client.revise("goal_1", {
       expected_revision: 3,
       objective: "Revised objective",
@@ -85,18 +86,23 @@ describe("GoalClient", () => {
       "/api/v1/commands/goal.pause",
       "/api/v1/commands/goal.resume",
       "/api/v1/commands/goal.cancel",
+      "/api/v1/commands/goal.fail",
       "/api/v1/commands/goal.revise",
       "/api/v1/commands/goal.review",
       "/api/v1/commands/goal.attach-task",
       "/api/v1/commands/goal.record-task-outcome",
     ]);
     expect(calls[3]?.body).toEqual({ resource_ref: "goal_1", reason: "operator decision" });
-    expect(calls[4]?.body).toMatchObject({
+    expect(calls[4]?.body).toEqual({
+      resource_ref: "goal_1",
+      reason: "objective is no longer achievable",
+    });
+    expect(calls[5]?.body).toMatchObject({
       resource_ref: "goal_1",
       expected_revision: 3,
       active_task_policy: "supersede",
     });
-    expect(calls[6]?.body).toEqual({
+    expect(calls[7]?.body).toEqual({
       resource_ref: "goal_1",
       task_id: "task_1",
       expected_revision: 4,
