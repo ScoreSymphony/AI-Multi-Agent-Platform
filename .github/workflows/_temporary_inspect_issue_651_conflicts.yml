@@ -1,4 +1,4 @@
-name: Temporary inspect issue 651 conflicts
+name: Temporary resolve issue 651 conflicts
 
 on:
   push:
@@ -6,10 +6,10 @@ on:
       - integration/active-branches-2026-09-08
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inspect:
+  resolve:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -17,28 +17,106 @@ jobs:
         with:
           fetch-depth: 0
           ref: integration/active-branches-2026-09-08
-      - name: Show exact merge conflicts
+      - name: Merge issue 651 with Context-aware deployment composition
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin feat/651-handoff-production-integration
-          git config merge.conflictstyle diff3
+
           set +e
           git merge --no-ff --no-commit origin/feat/651-handoff-production-integration
-          rc=$?
+          merge_rc=$?
           set -e
-          echo "MERGE_RC=$rc"
-          conflicts="$(git diff --name-only --diff-filter=U)"
-          echo "CONFLICT_FILES_BEGIN"
-          printf '%s\n' "$conflicts"
-          echo "CONFLICT_FILES_END"
-          while IFS= read -r file; do
-            [ -z "$file" ] && continue
-            echo "===== CONFLICT: $file ====="
-            cat "$file"
-            echo "===== END CONFLICT: $file ====="
-          done <<< "$conflicts"
-          git merge --abort >/dev/null 2>&1 || true
-          exit 0
+
+          conflicts="$(git diff --name-only --diff-filter=U | sort)"
+          expected=$'src/ai_multi_agent_platform/deployment/__init__.py\nsrc/ai_multi_agent_platform/deployment/durable_connectors.py'
+          if [ "$conflicts" != "$expected" ]; then
+            echo "Unexpected #651 conflicts:" >&2
+            printf '%s\n' "$conflicts" >&2
+            exit 1
+          fi
+
+          git checkout --theirs -- src/ai_multi_agent_platform/deployment/__init__.py
+          git checkout --theirs -- src/ai_multi_agent_platform/deployment/durable_connectors.py
+
+          python - <<'PY'
+          from pathlib import Path
+
+          init_path = Path('src/ai_multi_agent_platform/deployment/__init__.py')
+          text = init_path.read_text()
+          if 'from .egress_bindings import EgressDeploymentBindings\n' not in text:
+              marker = 'from .handoff_composition import (\n'
+              if marker not in text:
+                  raise SystemExit('Expected #651 handoff import block not found')
+              text = text.replace(marker, 'from .egress_bindings import EgressDeploymentBindings\n' + marker, 1)
+          if '    "EgressDeploymentBindings",\n' not in text:
+              marker = '    "HandoffDeploymentComposition",\n'
+              if marker not in text:
+                  raise SystemExit('Expected #651 handoff export not found')
+              text = text.replace(marker, '    "EgressDeploymentBindings",\n' + marker, 1)
+          init_path.write_text(text)
+
+          path = Path('src/ai_multi_agent_platform/deployment/durable_connectors.py')
+          text = path.read_text()
+
+          context_import = '''from .context_operationalization import (\n    SingleNodeContextComposition,\n    install_single_node_context,\n)\n'''
+          handoff_import = 'from .handoff_composition import (\n'
+          if context_import not in text:
+              if handoff_import not in text:
+                  raise SystemExit('Expected #651 handoff import block not found in durable_connectors')
+              text = text.replace(handoff_import, context_import + handoff_import, 1)
+
+          text = text.replace(
+              '    """Normal single-node deployment with durable Connector, Planning and Handoff state."""\n',
+              '    """Normal single-node deployment with durable Connector, Planning, canonical Context and Handoff state."""\n',
+              1,
+          )
+          field_marker = '    planning: PlanningService\n    handoffs: HandoffDeploymentComposition\n'
+          if field_marker not in text:
+              raise SystemExit('Expected #651 deployment fields not found')
+          text = text.replace(
+              field_marker,
+              '    planning: PlanningService\n    context: SingleNodeContextComposition\n    handoffs: HandoffDeploymentComposition\n',
+              1,
+          )
+
+          old_doc = '''    """Build the normal single-node profile with durable source and Handoff state.\n\n    The lower-level ``deployment.single_node`` composition remains usable by focused tests and\n    explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this\n    wrapper so Connector Definitions, Connections, planning proposals, canonical ContextBundle\n    evidence and Agent Handoffs are durable across process restarts.\n    """\n'''
+          new_doc = '''    """Build the normal durable single-node profile.\n\n    The lower-level ``deployment.single_node`` composition remains usable by focused tests and\n    explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this\n    wrapper so Connector Definitions, Connections, planning proposals, canonical Context Bundle/\n    Run-binding evidence and Agent Handoffs are durable across process restarts. Context execution\n    remains fully local by default and introduces no hosted RAG/model dependency.\n    """\n'''
+          if old_doc not in text:
+              raise SystemExit('Expected #651 build docstring not found')
+          text = text.replace(old_doc, new_doc, 1)
+
+          handoff_build = '''    handoffs = build_single_node_handoff_composition(\n        database_dir=config.database_dir,\n'''
+          if handoff_build not in text:
+              raise SystemExit('Expected #651 handoff composition call not found')
+          context_install = '''    # Install canonical Context only after the authoritative Task/Run, Coordination, Repository,\n    # Agent and model components are available. The installer replaces the Agent-bound lifecycle\n    # seam on the same kernel object, so existing services use the canonical Context path.\n    context = install_single_node_context(base)\n\n'''
+          text = text.replace(handoff_build, context_install + handoff_build, 1)
+
+          return_marker = '        planning=planning,\n        handoffs=handoffs,\n'
+          if return_marker not in text:
+              raise SystemExit('Expected #651 deployment return fields not found')
+          text = text.replace(
+              return_marker,
+              '        planning=planning,\n        context=context,\n        handoffs=handoffs,\n',
+              1,
+          )
+          path.write_text(text)
+          PY
+
+          git add src/ai_multi_agent_platform/deployment/__init__.py src/ai_multi_agent_platform/deployment/durable_connectors.py
+          remaining="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$remaining" ]; then
+            echo "Unresolved conflicts remain:" >&2
+            printf '%s\n' "$remaining" >&2
+            exit 1
+          fi
+
+          if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            git commit -m "integration: merge issue 651 with Context-aware deployment composition"
+          elif [ "$merge_rc" -ne 0 ]; then
+            echo "Merge failed without a resolvable merge state" >&2
+            exit "$merge_rc"
+          fi
+          git push origin HEAD:integration/active-branches-2026-09-08
