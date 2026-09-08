@@ -45,6 +45,8 @@ class HandoffRepository(Protocol):
         self, handoff_id: str, revision: int
     ) -> tuple[HandoffConsumption, ...]: ...
 
+    def list_consumptions_for_run(self, run_id: str) -> tuple[HandoffConsumption, ...]: ...
+
 
 class InMemoryHandoffRepository:
     """Deterministic reference repository preserving all immutable revisions."""
@@ -155,6 +157,22 @@ class InMemoryHandoffRepository:
             )
         )
 
+    def list_consumptions_for_run(self, run_id: str) -> tuple[HandoffConsumption, ...]:
+        return tuple(
+            sorted(
+                (
+                    item
+                    for (_, _, consuming_run_id), item in self._consumptions.items()
+                    if consuming_run_id == run_id
+                ),
+                key=lambda item: (
+                    item.consumed_at,
+                    item.handoff_id,
+                    item.handoff_revision,
+                ),
+            )
+        )
+
 
 class SQLiteHandoffRepository:
     """Durable single-node repository with revision and idempotency protection."""
@@ -210,6 +228,8 @@ class SQLiteHandoffRepository:
                     FOREIGN KEY (handoff_id, revision)
                         REFERENCES agent_handoffs(handoff_id, revision)
                 );
+                CREATE INDEX IF NOT EXISTS idx_agent_handoff_consumptions_run
+                    ON agent_handoff_consumptions(consuming_run_id);
                 """
             )
 
@@ -381,6 +401,18 @@ class SQLiteHandoffRepository:
                 "SELECT payload_json FROM agent_handoff_consumptions "
                 "WHERE handoff_id = ? AND revision = ? ORDER BY consuming_run_id",
                 (handoff_id, revision),
+            ).fetchall()
+        return tuple(
+            consumption_from_dict(cast(Mapping[str, Any], json.loads(str(row["payload_json"]))))
+            for row in rows
+        )
+
+    def list_consumptions_for_run(self, run_id: str) -> tuple[HandoffConsumption, ...]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT payload_json FROM agent_handoff_consumptions "
+                "WHERE consuming_run_id = ? ORDER BY handoff_id, revision",
+                (run_id,),
             ).fetchall()
         return tuple(
             consumption_from_dict(cast(Mapping[str, Any], json.loads(str(row["payload_json"]))))

@@ -57,6 +57,10 @@ from .context_operationalization import (
     SingleNodeContextComposition,
     install_single_node_context,
 )
+from .handoff_composition import (
+    HandoffDeploymentComposition,
+    build_single_node_handoff_composition,
+)
 from .single_node import (
     SingleNodeDeployment as BaseSingleNodeDeployment,
 )
@@ -70,7 +74,7 @@ from .single_node import (
 
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
-    """Normal single-node deployment with Connector, Planning and canonical Context state."""
+    """Normal single-node deployment with durable Connector, Planning, canonical Context and Handoff state."""
 
     connector_repository: SqliteConnectorRepository
     connector_registry: ConnectorRegistry
@@ -79,6 +83,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     planning_kernel: PlatformKernel
     planning: PlanningService
     context: SingleNodeContextComposition
+    handoffs: HandoffDeploymentComposition
 
 
 def build_single_node_deployment(
@@ -96,9 +101,9 @@ def build_single_node_deployment(
 
     The lower-level ``deployment.single_node`` composition remains usable by focused tests and
     explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
-    wrapper so Connector Definitions, planning proposals and canonical Context Bundle/Run-binding
-    evidence are durable under the deployment data root.  Context execution remains fully local by
-    default and introduces no hosted RAG/model dependency.
+    wrapper so Connector Definitions, Connections, planning proposals, canonical Context Bundle/
+    Run-binding evidence and Agent Handoffs are durable across process restarts. Context execution
+    remains fully local by default and introduces no hosted RAG/model dependency.
     """
 
     # Preserve the base deployment's canonical configuration error boundary before the Connector
@@ -161,11 +166,21 @@ def build_single_node_deployment(
     for command, handler in planning_command_handlers(planning).items():
         base.control_plane.register_command(command, handler)
 
-    # Install #590 only after the authoritative Task/Run, Coordination, Repository, Agent and
-    # model components are available.  The installer replaces the Agent-bound lifecycle seam on
-    # the same kernel object, so FirstRunTaskService and PlanningBindingCoordinator automatically
-    # use the canonical Context path without a second runtime.
+    # Install canonical Context only after the authoritative Task/Run, Coordination, Repository,
+    # Agent and model components are available. The installer replaces the Agent-bound lifecycle
+    # seam on the same kernel object, so existing services use the canonical Context path.
     context = install_single_node_context(base)
+
+    handoffs = build_single_node_handoff_composition(
+        database_dir=config.database_dir,
+        control_plane=base.control_plane,
+        agents=base.agents.repository,
+        agent_runtime=base.agent_runtime,
+        coordinator=base.coordination_repository,
+        authorization=base.approval_gate.provider,
+        verification=base.verification_runtime.evidence,
+        telemetry=base.telemetry,
+    )
 
     # The public deployment now has an authoritative canonical Connector inventory. Rebind the
     # Template surface to a resolver that includes exactly those ConnectorDefinition IDs instead
@@ -219,6 +234,7 @@ def build_single_node_deployment(
         planning_kernel=planning_kernel,
         planning=planning,
         context=context,
+        handoffs=handoffs,
     )
 
 
