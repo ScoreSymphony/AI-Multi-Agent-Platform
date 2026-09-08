@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import mimetypes
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -445,11 +445,13 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
         files: FileProvider,
         project_id: str,
         owner_ref: OwnerRef,
+        project_resolver: Callable[[EvaluationCase], str] | None = None,
     ) -> None:
         self._root = Path(fixture_root)
         self._files = files
         self._project_id = project_id
         self._owner_ref = owner_ref
+        self._project_resolver = project_resolver
 
     def fixture_exists(self, fixture_id: str) -> bool:
         """Return whether a fixture is a real directory confined beneath the configured root."""
@@ -466,6 +468,7 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
         case: EvaluationCase,
         attempt: EvaluationAttempt,
     ) -> ResolvedEvaluationFixtures:
+        project_id = self._project_for(case)
         workspace_files: list[WorkspaceFile] = []
         source_refs: list[WorkspaceSourceRef] = []
         for fixture_id in case.fixtures:
@@ -502,6 +505,7 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
                     sha256=file_digest,
                     data=data,
                     attempt=attempt,
+                    project_id=project_id,
                     content_type=mimetypes.guess_type(relative_path)[0],
                 )
                 workspace_files.append(
@@ -527,6 +531,14 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
             source_refs=tuple(source_refs),
         )
 
+    def _project_for(self, case: EvaluationCase) -> str:
+        project_id = (
+            self._project_resolver(case) if self._project_resolver is not None else self._project_id
+        )
+        if not project_id.strip():
+            raise ValueError("evaluation fixture project_id must not be blank")
+        return project_id
+
     def _fixture_directory(self, fixture_id: str) -> Path:
         try:
             fixture_dir = resolve_within(self._root, fixture_id, must_exist=True)
@@ -546,6 +558,7 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
         sha256: str,
         data: bytes,
         attempt: EvaluationAttempt,
+        project_id: str,
         content_type: str | None,
     ) -> FileRecord:
         context = DataAccessContext(
@@ -554,7 +567,7 @@ class DirectoryEvaluationFixtureResolver(EvaluationFixtureResolver):
                 causation_id=attempt.evaluation_run_id,
                 owner_type=self._owner_ref.type,
                 owner_id=self._owner_ref.id,
-                project_id=self._project_id,
+                project_id=project_id,
             ),
             actor_ref=f"{self._owner_ref.type}:{self._owner_ref.id}",
         )

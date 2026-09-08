@@ -51,6 +51,7 @@ from .product import (
     TargetAwareEvaluationService,
     evaluation_task_metadata,
     load_evaluation_assets,
+    parse_agent_evaluation_target,
 )
 from .reference import KernelEvaluationCaseExecutor
 from .rubric import ObservationRubricEvaluator
@@ -182,6 +183,19 @@ def build_single_node_evaluation(
     suites = (_reference_suite(), *assets.suites)
     policies = (_reference_policy(), *assets.regression_policies)
     owner_ref = OwnerRef(type="service", id=_SINGLE_NODE_EVALUATION_OWNER)
+
+    def evaluation_project_for_case(case: EvaluationCase) -> str:
+        target = parse_agent_evaluation_target(case)
+        if target is None:
+            return project_id
+        revision = agents.get_agent_revision(target.agent_id, target.agent_revision)
+        if revision.workspace_id is not None:
+            raise ValueError(
+                "workspace-scoped Agent evaluation targets cannot be rebound to a fresh "
+                "isolated evaluation Workspace"
+            )
+        return revision.project_id or project_id
+
     repository = SqliteEvaluationRepository(database_path)
     suite_assets = SqliteEvaluationSuiteAssetRepository(database_path)
     fixture_resolver = DirectoryEvaluationFixtureResolver(
@@ -189,6 +203,7 @@ def build_single_node_evaluation(
         files=files,
         project_id=project_id,
         owner_ref=owner_ref,
+        project_resolver=evaluation_project_for_case,
     )
     isolation = WorkspaceEvaluationIsolation(
         workspace_provider=workspaces,
@@ -196,12 +211,13 @@ def build_single_node_evaluation(
         owner_ref=owner_ref,
         actor_ref=f"service:{_SINGLE_NODE_EVALUATION_OWNER}",
         fixture_resolver=fixture_resolver,
+        project_resolver=evaluation_project_for_case,
     )
     kernel_executor = KernelEvaluationCaseExecutor(
         kernel=kernel,
         owner_type="service",
         owner_id=_SINGLE_NODE_EVALUATION_OWNER,
-        project_id=project_id,
+        project_id=None,
         source="single-node-evaluation",
         poll_interval_seconds=0.001,
         run_workspace_bindings=run_workspace_bindings,
