@@ -122,7 +122,7 @@ export interface EvaluationManifestComparisonProjection {
   differences: EvaluationManifestDifferenceProjection[];
 }
 
-export interface EvaluationRepeatPolicyProjection {
+export interface EvaluationRepeatPolicyProjection extends Record<string, JsonValue> {
   strategy: string;
   repeat_count: number;
   min_repeats: number;
@@ -131,7 +131,7 @@ export interface EvaluationRepeatPolicyProjection {
   version: string;
 }
 
-export interface EvaluationSeedPolicyProjection {
+export interface EvaluationSeedPolicyProjection extends Record<string, JsonValue> {
   mode: string;
   ordered_seeds: number[];
   provider_seed_control: boolean | null;
