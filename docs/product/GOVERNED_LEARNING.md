@@ -171,7 +171,7 @@ All mutation commands still pass through the normal Control Plane authorization 
 
 ## CLI
 
-The generic extension CLI already exposes registered collections and commands, so no separate private CLI transport is required:
+The generic extension CLI remains deliberately read-only. It can inspect registered Learning collections and discover advertised commands:
 
 ```bash
 platform extension list learning-candidates
@@ -181,7 +181,7 @@ platform extension list learning-post-promotion-evaluations
 platform extension commands
 ```
 
-Mutation uses the canonical extension command executor with an Idempotency-Key. See `docs/cli/CLI_LEARNING.md` for concrete payload examples.
+Mutations use the prepared first-class `platform learning` adapter in `src/ai_multi_agent_platform/cli/learning.py`, not a generic extension executor. The adapter exposes explicit feedback, proposal, evidence, accept/reject/supersede and promotion commands and preserves the CLI's normal confirmation semantics for promotion. The unified integration branch must register and dispatch that module in the final CLI composition. See `docs/cli/CLI_LEARNING.md` for concrete command examples.
 
 ## Web preparation
 
@@ -242,8 +242,9 @@ The future branch that combines all active work should:
 1. reuse the canonical Skill/Research services if another branch already composes them;
 2. call `build_single_node_learning(...)` after Evaluation, Verification, routing and Approval are available;
 3. register the Learning composition on the final composed Control Plane;
-4. mount the prepared `/learning` routes in the final Shell/navigation;
-5. supply a target-aware `ConfigurationSnapshot` factory only if post-promotion Evaluation is enabled;
-6. then run the repository-wide formatter, typecheck, tests and required CI once on the unified branch.
+4. register `add_learning_parser(...)` / `execute_learning(...)` in the final CLI dispatcher;
+5. mount the prepared `/learning` routes in the final Shell/navigation;
+6. supply a target-aware `ConfigurationSnapshot` factory only if post-promotion Evaluation is enabled;
+7. then run the repository-wide formatter, typecheck, tests and required CI once on the unified branch.
 
 This issue branch intentionally does not treat CI/test execution as completion evidence because validation is being deferred to that unified integration branch.
