@@ -1,7 +1,7 @@
 """Minimal-source context funnel over canonical repository-intelligence capabilities.
 
 The funnel is consumer-neutral: coding agents, planners, reviewers and research workers can all use
-it through the normal #12 CapabilityInvoker. It never reads a repository path directly and never
+it through the normal #12 invocation boundary. It never reads a repository path directly and never
 turns provider summaries into instruction authority. Selection uses bounded text-search evidence;
 only bounded exact source slices become Context candidates for #590 assembly.
 """
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from ai_multi_agent_platform.capabilities import (
     CapabilityInvocation,
-    CapabilityInvoker,
+    CapabilityInvocationResult,
     InvocationTrace,
 )
 from ai_multi_agent_platform.context import (
@@ -31,6 +31,7 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 
 from .capabilities import RepositoryIntelligenceOperation
+from .fallback import CapabilityInvocationPort
 
 _CURRENT_FRESHNESS = frozenset(
     {"live_revision", "workspace_snapshot", "live_workspace", "fresh_index"}
@@ -90,9 +91,9 @@ class RepositoryContextFunnelReport:
 
 
 class RepositoryContextFunnel:
-    """Narrow repository search -> exact source slices through the canonical invoker."""
+    """Narrow repository search -> exact source slices through a canonical invocation port."""
 
-    def __init__(self, invoker: CapabilityInvoker) -> None:
+    def __init__(self, invoker: CapabilityInvocationPort) -> None:
         self._invoker = invoker
 
     async def collect(
@@ -188,9 +189,12 @@ class RepositoryContextFunnel:
             freshness = provenance.get("freshness")
             candidates.append(
                 ContextCandidate(
+                    # Repository paths are not canonical #30 File identities. Keep this as generic
+                    # result evidence so #590 authorization does not mistake a provider path for a
+                    # platform File lifecycle ID. Exact source identity remains in provenance below.
                     source=ContextSourceRef(
-                        source_type=ContextSourceType.FILE,
-                        source_id=f"{request.repository_id}:{path}",
+                        source_type=ContextSourceType.RESULT,
+                        source_id=f"repository-source:{request.repository_id}:{path}",
                         revision=resolved_revision if isinstance(resolved_revision, str) else None,
                         locator=path,
                     ),
@@ -243,7 +247,7 @@ class RepositoryContextFunnel:
         ordinal: int,
         operation: RepositoryIntelligenceOperation,
         arguments: dict[str, JsonValue],
-    ):
+    ) -> CapabilityInvocationResult:
         return await self._invoker.invoke(
             CapabilityInvocation(
                 invocation_id=(
