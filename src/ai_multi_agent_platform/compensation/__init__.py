@@ -1,5 +1,10 @@
 """Canonical compensation and reversibility subsystem."""
 
+from .control_plane import (
+    CompensationActionView,
+    CompensationControlPlaneProjection,
+    CompensationGroupView,
+)
 from .integration import PlanCompensationHooks
 from .models import (
     CompensationActionProjection,
@@ -33,12 +38,15 @@ from .service import (
 
 __all__ = [
     "CompensationActionProjection",
+    "CompensationActionView",
     "CompensationAutomation",
+    "CompensationControlPlaneProjection",
     "CompensationCoordinator",
     "CompensationExecutionContext",
     "CompensationFailureMode",
     "CompensationGroup",
     "CompensationGroupProjection",
+    "CompensationGroupView",
     "CompensationPolicy",
     "CompensationReconciler",
     "CompensationReconciliation",
