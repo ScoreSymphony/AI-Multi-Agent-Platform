@@ -3,7 +3,7 @@
 CapabilityRegistry already falls back when an optional provider is unavailable at resolution time.
 Repository indexes can become stale only after a repository-specific request is inspected, though.
 This coordinator handles that second case without bypassing #12: both the preferred attempt and the
-baseline fallback are ordinary CapabilityInvoker calls with the same policy/governance context.
+baseline fallback are ordinary capability-invocation calls with the same policy/governance context.
 """
 
 from __future__ import annotations
@@ -27,6 +27,8 @@ _DEFAULT_FALLBACK_ERRORS = frozenset({ErrorCode.UNAVAILABLE, ErrorCode.TIMEOUT})
 
 
 class CapabilityInvocationPort(Protocol):
+    """Small structural seam shared by canonical and repository-specific invokers."""
+
     async def invoke(self, request: CapabilityInvocation) -> CapabilityInvocationResult: ...
 
 
@@ -81,8 +83,34 @@ class RepositoryIntelligenceFallbackInvoker:
             )
 
 
+class RepositoryIntelligenceFallbackResultPort:
+    """Plain invocation port for consumers that only need the selected/fallback result.
+
+    Higher-level evaluation or telemetry code can keep using ``RepositoryIntelligenceFallbackInvoker``
+    directly when it needs explicit fallback evidence. Context/Search consumers can depend on this
+    narrower port and remain unaware of provider selection details.
+    """
+
+    def __init__(
+        self,
+        coordinator: RepositoryIntelligenceFallbackInvoker,
+        *,
+        provider_specific_required: bool = False,
+    ) -> None:
+        self._coordinator = coordinator
+        self._provider_specific_required = provider_specific_required
+
+    async def invoke(self, request: CapabilityInvocation) -> CapabilityInvocationResult:
+        outcome = await self._coordinator.invoke(
+            request,
+            provider_specific_required=self._provider_specific_required,
+        )
+        return outcome.result
+
+
 __all__ = [
     "CapabilityInvocationPort",
     "RepositoryIntelligenceFallbackInvoker",
+    "RepositoryIntelligenceFallbackResultPort",
     "RepositoryIntelligenceInvocationOutcome",
 ]
