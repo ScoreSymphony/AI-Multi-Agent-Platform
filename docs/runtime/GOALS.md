@@ -144,14 +144,16 @@ The existing Control Plane extension boundary provides northbound idempotency an
 
 The canonical Goal resource projection contains the complete Goal state together with stable `id`, resource `type`, current version, active Task IDs and stream revision. This is the only state source for CLI/Web clients; frontend or CLI code must not maintain a second Goal lifecycle model.
 
-Read-only generic CLI inspection remains available through:
+CLI inspection uses the registered extension collection:
 
 ```text
 platform extension list goals
 platform extension show goals <goal_id>
 ```
 
-Mutating Goal operations require the dedicated Goal command surface because the generic extension CLI deliberately does not execute arbitrary registered commands. The dedicated CLI/Web implementations call only the canonical `/api/v1/goals` resources and `/api/v1/commands/goal.*` commands.
+The current API-first CLI can also invoke **registered** canonical extension commands through `platform extension execute`. It first discovers the command from `x-registered-extension-commands`, requires an explicit resource reference and uses an idempotency key for mutation. Goal lifecycle operations therefore use the same canonical `/api/v1/commands/goal.*` handlers as Web and other Control Plane clients; there is no direct Goal repository/service bypass. `docs/cli/CLI_GOALS.md` documents the Goal-specific payloads and safe invocation examples.
+
+The Web surface uses a typed Goal client for `/api/v1/goals` and `/api/v1/commands/goal.*`. `/goals` exposes inventory and draft creation; `/goals/:goalId` exposes lifecycle/progress, criteria, constraints, linked Tasks, evidence/review history, revision provenance and the supported lifecycle/review/revision/attach operations. Canonical Task creation remains owned by the Task surface and can then be linked to the exact Goal revision.
 
 ## Events and recovery
 
