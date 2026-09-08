@@ -21,10 +21,14 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin issue-650-context-operationalization
           git config merge.conflictstyle diff3
+          set +e
           git merge --no-ff --no-commit origin/issue-650-context-operationalization
           rc=$?
+          set -e
           echo "MERGE_RC=$rc"
           conflicts="$(git diff --name-only --diff-filter=U)"
           echo "CONFLICT_FILES_BEGIN"
