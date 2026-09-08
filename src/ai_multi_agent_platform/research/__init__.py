@@ -42,6 +42,15 @@ from .repository import (
     ResearchRepository,
     SqliteResearchRepository,
 )
+from .search import (
+    ResearchClaimSearchResourceService,
+    ResearchEvidenceSearchResourceService,
+    ResearchItemSearchResourceService,
+    ResearchObservationSearchResourceService,
+    ResearchSourceSearchResourceService,
+    register_searchable_research_control_plane,
+    research_search_resource_services,
+)
 from .service import ResearchService
 from .verification import ResearchVerificationBridge, ResearchVerificationSubject
 
@@ -64,16 +73,21 @@ __all__ = [
     "InMemoryResearchRepository",
     "ResearchActionContext",
     "ResearchClaimResourceService",
+    "ResearchClaimSearchResourceService",
     "ResearchClass",
     "ResearchEvidenceResourceService",
+    "ResearchEvidenceSearchResourceService",
     "ResearchItem",
     "ResearchItemResourceService",
+    "ResearchItemSearchResourceService",
     "ResearchObservationResourceService",
+    "ResearchObservationSearchResourceService",
     "ResearchPlanningBridge",
     "ResearchPromotionBridge",
     "ResearchRepository",
     "ResearchService",
     "ResearchSourceResourceService",
+    "ResearchSourceSearchResourceService",
     "ResearchSourceType",
     "ResearchStatus",
     "ResearchVerificationBinding",
@@ -86,4 +100,6 @@ __all__ = [
     "SqliteResearchRepository",
     "UntrustedResearchExecutionProfile",
     "register_research_control_plane",
+    "register_searchable_research_control_plane",
+    "research_search_resource_services",
 ]
