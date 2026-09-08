@@ -1,0 +1,58 @@
+name: Diagnose issue 19 resource type
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+    paths:
+      - .github/workflows/diagnose-issue19-resource.yml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: integration/active-branches-2026-09-08
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Expose denied resource type and rerun issue 19
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          lifecycle = Path('src/ai_multi_agent_platform/context/lifecycle.py')
+          text = lifecycle.read_text()
+          old = '    return ActorIdentity(context.owner_id, actor_type)\n'
+          new = '    return ActorIdentity(f"{context.owner_type}:{context.owner_id}", actor_type)\n'
+          if old not in text:
+              raise SystemExit('actor normalization anchor missing')
+          lifecycle.write_text(text.replace(old, new, 1))
+
+          deployment = Path('src/ai_multi_agent_platform/deployment/single_node.py')
+          text = deployment.read_text()
+          old = '                resource_types=frozenset({ResourceType.RUN}),\n'
+          new = '''                resource_types=frozenset(\n                    {ResourceType.RUN, ResourceType.TASK, ResourceType.AGENT}\n                ),\n'''
+          if old not in text:
+              raise SystemExit('evaluation policy anchor missing')
+          deployment.write_text(text.replace(old, new, 1))
+
+          authorization = Path('src/ai_multi_agent_platform/security/authorization.py')
+          text = authorization.read_text()
+          old = 'reason="resource type is outside principal policy",'
+          new = 'reason=f"resource type is outside principal policy: {request.resource_type}",'
+          if old not in text:
+              raise SystemExit('authorization diagnostic anchor missing')
+          authorization.write_text(text.replace(old, new, 1))
+          PY
+          ruff format src/ai_multi_agent_platform/context/lifecycle.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/security/authorization.py
+          ruff check src/ai_multi_agent_platform/context/lifecycle.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/security/authorization.py
+          pytest -vv -s tests/test_issue_19_product_completion.py::test_agent_model_target_runs_through_product_evaluation_and_server_snapshot
