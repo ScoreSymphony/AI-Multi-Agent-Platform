@@ -64,6 +64,19 @@ from .data_enforcement_lifecycle import (
     AuthorizedDataMemoryProvider,
 )
 from .enforcement import AuthorizationAuditSink, AuthorizationGate
+from .egress import (
+    CanonicalEgressPolicy,
+    EgressActorResolver,
+    EgressApprovalResolver,
+    EgressGate,
+    InMemoryEgressAuditSink,
+    NullEgressAuditSink,
+)
+from .egress_approvals import (
+    EgressApprovalBridge,
+    EgressApprovalExceptionPolicy,
+    egress_proposed_action,
+)
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
 from .policy_profile_persistence import (
@@ -149,15 +162,22 @@ __all__ = [
     "AuthorizedSecretProvider",
     "AuthorizedToolProvider",
     "BrowserSession",
+    "CanonicalEgressPolicy",
     "ControlPlaneAuthorizationBridge",
     "CredentialKind",
     "CredentialRotation",
     "CredentialScope",
+    "EgressActorResolver",
+    "EgressApprovalBridge",
+    "EgressApprovalExceptionPolicy",
+    "EgressApprovalResolver",
+    "EgressGate",
     "ExternalIdentityMapping",
     "ExternalSideEffect",
     "IdentityProviderAdapter",
     "InMemoryAuthenticationStore",
     "InMemoryAuthorizationPolicyProfileRepository",
+    "InMemoryEgressAuditSink",
     "InMemoryFailureRateLimiter",
     "InMemoryReplayProtector",
     "InMemoryRequestRateLimiter",
@@ -168,6 +188,7 @@ __all__ = [
     "LocalPrincipalPolicy",
     "LocalUserAccount",
     "LoginResult",
+    "NullEgressAuditSink",
     "PathSecurityError",
     "ProposedAction",
     "ReplayProtector",
@@ -187,6 +208,7 @@ __all__ = [
     "baseline_decision",
     "canonical_control_plane_vocabulary",
     "compile_local_principal_policy",
+    "egress_proposed_action",
     "infer_actor_identity",
     "policy_profile_revision_from_json",
     "policy_profile_revision_to_json",
