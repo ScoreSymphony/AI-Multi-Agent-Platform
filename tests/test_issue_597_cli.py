@@ -113,7 +113,11 @@ def test_goal_lifecycle_revision_and_task_link_commands_use_registered_control_p
         (
             "goal.revise",
             "goal_cli",
-            {"expected_revision": 3, "objective": "Revised objective", "active_task_policy": "retain"},
+            {
+                "expected_revision": 3,
+                "objective": "Revised objective",
+                "active_task_policy": "retain",
+            },
         ),
         (
             "goal.attach-task",
