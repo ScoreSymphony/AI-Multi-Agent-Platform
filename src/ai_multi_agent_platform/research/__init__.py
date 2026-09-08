@@ -15,6 +15,7 @@ from .control_plane import (
     ResearchSourceResourceService,
     register_research_control_plane,
 )
+from .decision import ResearchDecisionBridge, ResearchDecisionReferences
 from .integrations import ResearchPlanningBridge, ResearchPromotionBridge
 from .models import (
     Claim,
@@ -36,6 +37,14 @@ from .models import (
     SourceRecord,
     UntrustedResearchExecutionProfile,
 )
+from .portability import (
+    RESEARCH_BUNDLE_KIND,
+    RESEARCH_BUNDLE_SCHEMA_VERSION,
+    VerificationBindingValidator,
+    export_research_bundle,
+    import_research_bundle,
+)
+from .portability_verification import canonical_verification_binding_validator
 from .repository import (
     RESEARCH_PERSISTENCE_SCHEMA_VERSION,
     InMemoryResearchRepository,
@@ -55,6 +64,8 @@ from .service import ResearchService
 from .verification import ResearchVerificationBridge, ResearchVerificationSubject
 
 __all__ = [
+    "RESEARCH_BUNDLE_KIND",
+    "RESEARCH_BUNDLE_SCHEMA_VERSION",
     "RESEARCH_CLAIM_COLLECTION",
     "RESEARCH_COLLECTIONS",
     "RESEARCH_COMMANDS",
@@ -75,6 +86,8 @@ __all__ = [
     "ResearchClaimResourceService",
     "ResearchClaimSearchResourceService",
     "ResearchClass",
+    "ResearchDecisionBridge",
+    "ResearchDecisionReferences",
     "ResearchEvidenceResourceService",
     "ResearchEvidenceSearchResourceService",
     "ResearchItem",
@@ -99,6 +112,10 @@ __all__ = [
     "SourceRecord",
     "SqliteResearchRepository",
     "UntrustedResearchExecutionProfile",
+    "VerificationBindingValidator",
+    "canonical_verification_binding_validator",
+    "export_research_bundle",
+    "import_research_bundle",
     "register_research_control_plane",
     "register_searchable_research_control_plane",
     "research_search_resource_services",
