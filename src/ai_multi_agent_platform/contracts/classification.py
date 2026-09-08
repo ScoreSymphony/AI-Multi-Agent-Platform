@@ -8,7 +8,7 @@ from enum import StrEnum
 class DataClassification(StrEnum):
     """Portable platform-owned data sensitivity classification.
 
-    ``RESTRICTED`` and ``SECRET_REFERENCE`` preserve the persisted context vocabulary
+    ``PRIVATE``, ``RESTRICTED`` and ``SECRET_REFERENCE`` preserve persisted vocabulary
     introduced before issue #591. New code should prefer the five canonical categories
     ``PUBLIC``, ``INTERNAL``, ``CONFIDENTIAL``, ``SECRET`` and ``REGULATED``.
     """
@@ -16,6 +16,7 @@ class DataClassification(StrEnum):
     PUBLIC = "public"
     INTERNAL = "internal"
     CONFIDENTIAL = "confidential"
+    PRIVATE = "private"
     RESTRICTED = "restricted"
     SECRET = "secret"
     SECRET_REFERENCE = "secret_reference"
@@ -30,6 +31,7 @@ _STRENGTH: dict[DataClassification, int] = {
     DataClassification.PUBLIC: 0,
     DataClassification.INTERNAL: 1,
     DataClassification.CONFIDENTIAL: 2,
+    DataClassification.PRIVATE: 2,
     DataClassification.RESTRICTED: 3,
     DataClassification.SECRET: 4,
     DataClassification.SECRET_REFERENCE: 4,
@@ -40,7 +42,8 @@ _STRENGTH: dict[DataClassification, int] = {
 _PREFERENCE: dict[DataClassification, int] = {
     DataClassification.PUBLIC: 0,
     DataClassification.INTERNAL: 0,
-    DataClassification.CONFIDENTIAL: 0,
+    DataClassification.PRIVATE: 0,
+    DataClassification.CONFIDENTIAL: 1,
     DataClassification.RESTRICTED: 0,
     DataClassification.SECRET_REFERENCE: 0,
     DataClassification.SECRET: 1,
