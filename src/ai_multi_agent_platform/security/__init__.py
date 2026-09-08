@@ -77,6 +77,23 @@ from .egress_approvals import (
     EgressApprovalExceptionPolicy,
     egress_proposed_action,
 )
+from .egress_control_plane import (
+    EGRESS_PROFILE_COLLECTION,
+    EGRESS_PROFILE_COMMANDS,
+    EgressProfileCommandHandlers,
+    EgressProfileResourceService,
+    register_egress_profile_control_plane,
+)
+from .egress_profiles import (
+    EGRESS_PROFILE_STORE_SCHEMA_VERSION,
+    EgressProfileDefinition,
+    EgressProfileRepository,
+    EgressProfileService,
+    JsonEgressProfileRepository,
+    egress_profile_from_json,
+    egress_profile_to_json,
+    new_egress_profile_id,
+)
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
 from .policy_profile_persistence import (
@@ -121,6 +138,9 @@ from .enforced_providers import (
 from .validation import UntrustedInputError, validate_untrusted_json
 
 __all__ = [
+    "EGRESS_PROFILE_COLLECTION",
+    "EGRESS_PROFILE_COMMANDS",
+    "EGRESS_PROFILE_STORE_SCHEMA_VERSION",
     "POLICY_PROFILE_REPOSITORY_SCHEMA_VERSION",
     "POLICY_PROFILE_SCHEMA_VERSION",
     "REDACTED",
@@ -172,6 +192,11 @@ __all__ = [
     "EgressApprovalExceptionPolicy",
     "EgressApprovalResolver",
     "EgressGate",
+    "EgressProfileCommandHandlers",
+    "EgressProfileDefinition",
+    "EgressProfileRepository",
+    "EgressProfileResourceService",
+    "EgressProfileService",
     "ExternalIdentityMapping",
     "ExternalSideEffect",
     "IdentityProviderAdapter",
@@ -183,6 +208,7 @@ __all__ = [
     "InMemoryRequestRateLimiter",
     "IssuedCredential",
     "JsonAuthorizationPolicyProfileRepository",
+    "JsonEgressProfileRepository",
     "LocalAuthenticationService",
     "LocalAuthorizationProvider",
     "LocalPrincipalPolicy",
@@ -208,13 +234,17 @@ __all__ = [
     "baseline_decision",
     "canonical_control_plane_vocabulary",
     "compile_local_principal_policy",
+    "egress_profile_from_json",
+    "egress_profile_to_json",
     "egress_proposed_action",
     "infer_actor_identity",
+    "new_egress_profile_id",
     "policy_profile_revision_from_json",
     "policy_profile_revision_to_json",
     "redact_exception",
     "redact_sensitive",
     "redact_text",
+    "register_egress_profile_control_plane",
     "resolve_within",
     "safe_actor",
     "safe_credential",
