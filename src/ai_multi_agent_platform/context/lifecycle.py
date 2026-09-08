@@ -77,6 +77,12 @@ ContextBindingFactory = Callable[
 SkillBundleResolver = Callable[[ContextLifecycleSourceRequest], tuple[str, str] | None]
 ActorResolver = Callable[[OperationContext], ActorIdentity]
 
+_DEFAULT_CONTEXT_BUDGET = ContextBudget(
+    max_tokens=64_000,
+    max_bytes=256 * 1024,
+    max_items=128,
+)
+
 
 class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
     """Execute Agent-bound Runs through exactly one canonical Context Bundle.
@@ -99,11 +105,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         binding_factory: ContextBindingFactory,
         skill_bundle_resolver: SkillBundleResolver | None = None,
         actor_resolver: ActorResolver | None = None,
-        budget: ContextBudget = ContextBudget(
-            max_tokens=64_000,
-            max_bytes=256 * 1024,
-            max_items=128,
-        ),
+        budget: ContextBudget = _DEFAULT_CONTEXT_BUDGET,
         capability_turn: AgentCapabilityTurn | None = None,
     ) -> None:
         self._delegate = delegate

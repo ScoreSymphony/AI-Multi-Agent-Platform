@@ -60,6 +60,9 @@ class ContextRoutingPolicy:
             raise ValueError("context output reserve tokens must be >= 0")
 
 
+_DEFAULT_CONTEXT_ROUTING_POLICY = ContextRoutingPolicy()
+
+
 @dataclass(frozen=True, slots=True)
 class ContextModelInput:
     """Role-preserving model input derived from one already-rendered Context Bundle."""
@@ -146,7 +149,7 @@ def merge_context_routing_requirements(
     base: RoutingRequirements | None,
     bundle: ContextBundle,
     *,
-    policy: ContextRoutingPolicy = ContextRoutingPolicy(),
+    policy: ContextRoutingPolicy = _DEFAULT_CONTEXT_ROUTING_POLICY,
 ) -> RoutingRequirements:
     """Monotonically add the effective Bundle size to an existing routing requirement set."""
 
@@ -278,7 +281,7 @@ class OperationalContextBoundAgentRuntime:
         renderer: ContextRenderer | None = None,
         egress_gate: EgressGate | None = None,
         target_resolver: ContextEgressTargetResolver | None = None,
-        routing_policy: ContextRoutingPolicy = ContextRoutingPolicy(),
+        routing_policy: ContextRoutingPolicy = _DEFAULT_CONTEXT_ROUTING_POLICY,
     ) -> None:
         self.runtime = runtime
         self.bundle_repository = bundle_repository or InMemoryContextBundleRepository()

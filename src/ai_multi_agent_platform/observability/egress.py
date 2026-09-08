@@ -6,7 +6,6 @@ from ai_multi_agent_platform.contracts import (
     EgressAuditEvent,
     EgressAuditEventType,
     EgressAuditSink,
-    EgressOutcome,
     EgressTargetKind,
     JsonValue,
 )

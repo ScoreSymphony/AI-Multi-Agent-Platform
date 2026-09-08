@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import StrEnum
-from enum import StrEnum
 from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
@@ -20,7 +19,6 @@ from ai_multi_agent_platform.security.approvals import ApprovalRecord
 from ai_multi_agent_platform.security.redaction import redact_sensitive
 
 from .models import (
-    FeedbackRecord,
     FeedbackRecord,
     FeedbackType,
     LearningCandidate,
@@ -323,25 +321,25 @@ def _candidate_history_entry(candidate: LearningCandidate) -> dict[str, JsonValu
 
 
 def _approval_resource(record: ApprovalRecord) -> dict[str, JsonValue]:
-    approval_id = getattr(record, "approval_id")
-    status = getattr(record, "status")
-    decision_at = getattr(record, "decision_at")
+    approval_id = record.approval_id
+    status = record.status
+    decision_at = record.decision_at
     return {
         "approval_id": str(approval_id),
         "status": str(status.value),
-        "requested_action_digest": str(getattr(record, "requested_action_digest")),
-        "risk": str(getattr(record, "risk").value),
-        "policy_id": str(getattr(record, "policy_id")),
-        "payload_ref": cast(str | None, getattr(record, "payload_ref")),
-        "created_at": getattr(record, "created_at").isoformat(),
-        "expires_at": getattr(record, "expires_at").isoformat(),
+        "requested_action_digest": str(record.requested_action_digest),
+        "risk": str(record.risk.value),
+        "policy_id": str(record.policy_id),
+        "payload_ref": cast(str | None, record.payload_ref),
+        "created_at": record.created_at.isoformat(),
+        "expires_at": record.expires_at.isoformat(),
         "decision_at": None if decision_at is None else decision_at.isoformat(),
     }
 
 
 def _feedback_resource(feedback: FeedbackRecord) -> dict[str, JsonValue]:
     payload = feedback_to_dict(feedback)
-    payload["id"] = str(getattr(feedback, "feedback_id"))
+    payload["id"] = str(feedback.feedback_id)
     payload["type"] = "learning-feedback"
     redacted = redact_sensitive(payload)
     if not isinstance(redacted, dict):

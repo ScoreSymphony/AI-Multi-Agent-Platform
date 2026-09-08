@@ -9,7 +9,6 @@ from urllib.parse import urlsplit
 from ai_multi_agent_platform.cli.client import RawResponse
 from ai_multi_agent_platform.cli.main import run_cli
 
-
 _GOAL_COMMANDS = [
     "goal.create",
     "goal.activate",

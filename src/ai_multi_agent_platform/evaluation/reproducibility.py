@@ -88,7 +88,7 @@ class RepeatPolicy:
             raise ValueError("stability fields are only valid with strategy=stability")
 
     @classmethod
-    def for_run(cls, run: EvaluationRun) -> "RepeatPolicy":
+    def for_run(cls, run: EvaluationRun) -> RepeatPolicy:
         strategy = RepeatStrategy.SINGLE if run.repetitions == 1 else RepeatStrategy.FIXED_N
         return cls(strategy=strategy, repeat_count=run.repetitions)
 
@@ -120,7 +120,7 @@ class SeedPolicy:
             raise ValueError("seed policy limitations must be unique")
 
     @classmethod
-    def conservative_for_run(cls, run: EvaluationRun) -> "SeedPolicy":
+    def conservative_for_run(cls, run: EvaluationRun) -> SeedPolicy:
         if run.seed is None:
             return cls(
                 mode=RandomnessMode.UNKNOWN,
@@ -154,7 +154,7 @@ class ManifestReference:
             _reject_private_identity(value)
 
     @classmethod
-    def from_version_reference(cls, value: VersionReference) -> "ManifestReference":
+    def from_version_reference(cls, value: VersionReference) -> ManifestReference:
         return cls(
             kind=value.kind,
             ref_id=value.ref_id,

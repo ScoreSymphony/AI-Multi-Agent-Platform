@@ -13,8 +13,8 @@ from ai_multi_agent_platform.observability import Telemetry
 from ai_multi_agent_platform.research import ResearchService
 from ai_multi_agent_platform.security import AuthorizationGate
 from ai_multi_agent_platform.skills import (
-    JsonSkillRepository,
     SKILL_COLLECTION,
+    JsonSkillRepository,
     SkillService,
     register_skill_control_plane,
 )

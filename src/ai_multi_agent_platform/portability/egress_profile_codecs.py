@@ -9,7 +9,6 @@ from typing import Literal, cast
 
 from ai_multi_agent_platform.contracts import (
     ContractError,
-    EGRESS_PROFILE_SCHEMA_VERSION,
     EgressProfile,
     EgressProfileTrust,
     EgressTargetKind,

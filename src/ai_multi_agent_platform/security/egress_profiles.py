@@ -16,10 +16,10 @@ from typing import Protocol, cast
 from uuid import uuid4
 
 from ai_multi_agent_platform.contracts import (
+    EGRESS_PROFILE_SCHEMA_VERSION,
     AuthorizationProvider,
     ContractError,
     DataClassification,
-    EGRESS_PROFILE_SCHEMA_VERSION,
     EgressCostClass,
     EgressProfile,
     EgressProfileTrust,

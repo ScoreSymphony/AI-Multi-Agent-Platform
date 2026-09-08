@@ -99,7 +99,10 @@ def import_research_bundle(
     if bindings and verification_binding_validator is None:
         raise ContractError(
             ErrorCode.CONFLICT,
-            "Research bundle contains #86 bindings but no local Verification validator was supplied",
+            (
+                "Research bundle contains #86 bindings but no local "
+                "Verification validator was supplied"
+            ),
         )
     for binding in bindings:
         assert verification_binding_validator is not None

@@ -58,7 +58,10 @@ def projectatlas_resource_profile() -> RepositoryIntelligenceResourceProfile:
                 evidence_status=ResourceEvidenceStatus.UNKNOWN,
                 notes=(
                     "no representative dirty-workspace incremental campaign has been measured",
-                    "scheduler admission must remain fail-closed until deployment bounds are supplied",
+                    (
+                        "scheduler admission must remain fail-closed until "
+                        "deployment bounds are supplied"
+                    ),
                 ),
                 **common,
             ),
@@ -68,7 +71,10 @@ def projectatlas_resource_profile() -> RepositoryIntelligenceResourceProfile:
                 notes=(
                     "initial tiny-fixture scan produced the recorded state/RSS evidence",
                     "tiny-fixture scan is not a valid production rebuild capacity requirement",
-                    "scheduler admission must remain fail-closed until deployment bounds are supplied",
+                    (
+                        "scheduler admission must remain fail-closed until "
+                        "deployment bounds are supplied"
+                    ),
                 ),
                 **common,
             ),

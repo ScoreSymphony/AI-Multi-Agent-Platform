@@ -57,7 +57,9 @@ def register_egress_profile_portability(
     target_owner_ref: OwnerRef,
     id_policy: IdPolicy = IdPolicy.PRESERVE,
 ) -> None:
-    """Register codec, export source and sanitized mutation handler as one atomic composition step."""
+    """Register codec, export source and sanitized mutation handler
+    as one atomic composition step.
+    """
 
     EgressProfilePortabilityBinding(
         repository=repository,

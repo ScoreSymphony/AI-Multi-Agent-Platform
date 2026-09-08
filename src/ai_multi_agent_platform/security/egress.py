@@ -28,7 +28,6 @@ from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 
 from .authorization import ActorIdentity
 
-
 type EgressActorResolver = Callable[[OperationContext], ActorIdentity]
 
 

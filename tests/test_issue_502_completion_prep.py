@@ -28,6 +28,9 @@ from ai_multi_agent_platform.repository_intelligence.evaluation_matrix import (
 from ai_multi_agent_platform.repository_intelligence.fallback import (
     RepositoryIntelligenceFallbackInvoker,
 )
+from ai_multi_agent_platform.repository_intelligence.models import (
+    RepositoryIntelligenceFreshness,
+)
 from ai_multi_agent_platform.repository_intelligence.projectatlas import (
     PROJECTATLAS_ARCHIVE_SHA256,
     PROJECTATLAS_RUNTIME_VERSION,
@@ -49,9 +52,6 @@ from ai_multi_agent_platform.repository_intelligence.search_bridge import (
     RepositoryIntelligenceSearchFederator,
     RepositorySearchCaller,
     RepositorySearchScope,
-)
-from ai_multi_agent_platform.repository_intelligence.models import (
-    RepositoryIntelligenceFreshness,
 )
 from ai_multi_agent_platform.search import SearchMode, SearchQuery
 

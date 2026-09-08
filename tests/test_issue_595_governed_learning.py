@@ -30,8 +30,8 @@ from ai_multi_agent_platform.learning import (
     LearningTargetType,
     PromotionRegistry,
     RoutingProfilePromotionAdapter,
-    SQLiteLearningRepository,
     SkillPromotionAdapter,
+    SQLiteLearningRepository,
 )
 from ai_multi_agent_platform.models import (
     JsonModelRoutingProfileRepository,

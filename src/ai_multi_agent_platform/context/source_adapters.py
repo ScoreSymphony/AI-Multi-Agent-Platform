@@ -833,7 +833,9 @@ class FileArtifactResultContextSourceAdapter:
                         digest=file.sha256,
                     ),
                     role=ContextEntryRole.CONTEXT,
-                    selection_reason="Run/Task-referenced canonical File content or bounded metadata",
+                    selection_reason=(
+                        "Run/Task-referenced canonical File content or bounded metadata"
+                    ),
                     inline_content=body,
                     content_digest=digest,
                     trust=ContextTrust.UNTRUSTED,

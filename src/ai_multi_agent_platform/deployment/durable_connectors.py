@@ -74,7 +74,9 @@ from .single_node import (
 
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
-    """Normal single-node deployment with durable Connector, Planning, canonical Context and Handoff state."""
+    """Normal single-node deployment with durable Connector, Planning,
+    canonical Context and Handoff state.
+    """
 
     connector_repository: SqliteConnectorRepository
     connector_registry: ConnectorRegistry

@@ -86,8 +86,9 @@ class RepositoryIntelligenceFallbackInvoker:
 class RepositoryIntelligenceFallbackResultPort:
     """Plain invocation port for consumers that only need the selected/fallback result.
 
-    Higher-level evaluation or telemetry code can keep using ``RepositoryIntelligenceFallbackInvoker``
-    directly when it needs explicit fallback evidence. Context/Search consumers can depend on this
+    Higher-level evaluation or telemetry code can keep using
+    ``RepositoryIntelligenceFallbackInvoker`` directly when it needs explicit fallback evidence.
+    Context/Search consumers can depend on this
     narrower port and remain unaware of provider selection details.
     """
 
