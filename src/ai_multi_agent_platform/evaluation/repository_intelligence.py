@@ -54,9 +54,7 @@ class RepositoryIntelligenceEvaluationCaseExecutor:
     def __init__(self, provider: CapabilityToolProvider) -> None:
         descriptor = provider.descriptor
         if descriptor.provider_type != "repository_intelligence":
-            raise ValueError(
-                "repository-intelligence evaluation requires provider_type='repository_intelligence'"
-            )
+            raise ValueError("repository-intelligence evaluation requires matching provider type")
         self._provider = provider
         self._provider_id = descriptor.provider_id
 
