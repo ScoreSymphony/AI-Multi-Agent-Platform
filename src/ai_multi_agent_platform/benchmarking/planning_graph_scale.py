@@ -382,7 +382,7 @@ def _build_stack(data_dir: Path, step_count: int) -> _PlanningStack:
     )
     planning = PlanningService(
         planner=DeterministicReferencePlanner(
-            _linear_draft(revision.agent_id, revision.revision, step_count)
+            _scale_draft(revision.agent_id, revision.revision, step_count)
         ),
         repository=repository,
         kernel=kernel,
@@ -480,11 +480,14 @@ async def _exercise_repetition(
     return result
 
 
-def _linear_draft(agent_id: str, revision: int, count: int) -> PlanDraft:
+def _scale_draft(agent_id: str, revision: int, count: int) -> PlanDraft:
+    """Create a shallow fanout DAG so graph volume, not Python recursion depth, is the variable."""
+
     steps: list[PlanningStepDraft] = []
+    root_key = "step-1"
     for index in range(count):
         key = f"step-{index + 1}"
-        depends_on = () if index == 0 else (f"step-{index}",)
+        depends_on = () if index == 0 else (root_key,)
         steps.append(
             PlanningStepDraft(
                 key=key,
