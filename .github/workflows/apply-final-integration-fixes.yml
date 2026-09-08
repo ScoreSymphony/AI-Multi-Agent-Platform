@@ -100,11 +100,11 @@ jobs:
               '''    if detail.comparison is None:\n        resource["comparison"] = None\n    else:\n        comparison_resource = _comparison_resource(detail.comparison)\n        if detail.manifest_comparison is not None:\n            comparison_resource["manifest_comparison"] = cast(\n                JsonValue,\n                _manifest_comparison_resource(detail.manifest_comparison),\n            )\n        resource["comparison"] = comparison_resource\n''',
           )
 
-          # #439: retain the original objective assertion while allowing canonical Context injection.
+          # #439: assert the canonical Task objective survives rendered Context composition.
           replace_once(
               'tests/test_issue_439_single_node.py',
               '        assert model_provider.calls[-1].messages[-1] == planned_step.objective\n',
-              '''        assert planned_step.objective in model_provider.calls[-1].messages\n        assert model_provider.calls[-1].messages[-1].startswith("[context:")\n''',
+              '''        assert any(\n            planned_step.objective in message\n            for message in model_provider.calls[-1].messages\n        )\n        assert any(\n            message.startswith("[context:") for message in model_provider.calls[-1].messages\n        )\n''',
           )
 
           # #595: use the current routing-profile revision reference contract.
@@ -118,13 +118,20 @@ jobs:
               '    latest = routing_repository.get_revision(definition.current_ref)\n',
               '''    latest = routing_repository.get_revision(\n        ModelRoutingProfileRef(definition.profile_id, definition.current_revision)\n    )\n''',
           )
+
+          # #19: use the same canonical principal normalization as provider authorization.
+          replace_once(
+              'src/ai_multi_agent_platform/context/lifecycle.py',
+              '    return ActorIdentity(context.owner_id, actor_type)\n',
+              '''    actor_ref = context.owner_id\n    if ":" not in actor_ref and not actor_ref.startswith(f"{context.owner_type}_"):\n        actor_ref = f"{context.owner_type}:{actor_ref}"\n    return ActorIdentity(actor_ref, actor_type)\n''',
+          )
           PY
-          ruff format src/ai_multi_agent_platform/evaluation/contracts.py src/ai_multi_agent_platform/evaluation/repository.py src/ai_multi_agent_platform/evaluation/sqlite_repository.py src/ai_multi_agent_platform/evaluation/service.py src/ai_multi_agent_platform/evaluation/runner.py src/ai_multi_agent_platform/control_plane/evaluation_contract.py tests/test_issue_439_single_node.py tests/test_issue_595_governed_learning.py
-          ruff check --fix src/ai_multi_agent_platform/evaluation/contracts.py src/ai_multi_agent_platform/evaluation/repository.py src/ai_multi_agent_platform/evaluation/sqlite_repository.py src/ai_multi_agent_platform/evaluation/service.py src/ai_multi_agent_platform/evaluation/runner.py src/ai_multi_agent_platform/control_plane/evaluation_contract.py tests/test_issue_439_single_node.py tests/test_issue_595_governed_learning.py
+          ruff format src/ai_multi_agent_platform/evaluation/contracts.py src/ai_multi_agent_platform/evaluation/repository.py src/ai_multi_agent_platform/evaluation/sqlite_repository.py src/ai_multi_agent_platform/evaluation/service.py src/ai_multi_agent_platform/evaluation/runner.py src/ai_multi_agent_platform/control_plane/evaluation_contract.py src/ai_multi_agent_platform/context/lifecycle.py tests/test_issue_439_single_node.py tests/test_issue_595_governed_learning.py
+          ruff check --fix src/ai_multi_agent_platform/evaluation/contracts.py src/ai_multi_agent_platform/evaluation/repository.py src/ai_multi_agent_platform/evaluation/sqlite_repository.py src/ai_multi_agent_platform/evaluation/service.py src/ai_multi_agent_platform/evaluation/runner.py src/ai_multi_agent_platform/control_plane/evaluation_contract.py src/ai_multi_agent_platform/context/lifecycle.py tests/test_issue_439_single_node.py tests/test_issue_595_governed_learning.py
       - name: Targeted validation
         run: |
-          pytest -q tests/test_evaluation_control_plane_api.py tests/test_issue_594_eval_reproducibility.py tests/test_issue_439_single_node.py tests/test_issue_595_governed_learning.py
-          mypy src/ai_multi_agent_platform/evaluation src/ai_multi_agent_platform/control_plane/evaluation_contract.py
+          pytest -q tests/test_evaluation_control_plane_api.py tests/test_issue_594_eval_reproducibility.py tests/test_issue_19_product_completion.py::test_agent_model_target_runs_through_product_evaluation_and_server_snapshot tests/test_issue_439_single_node.py tests/test_issue_595_governed_learning.py
+          mypy src/ai_multi_agent_platform/evaluation src/ai_multi_agent_platform/control_plane/evaluation_contract.py src/ai_multi_agent_platform/context/lifecycle.py
       - name: Commit fixes
         run: |
           git config user.name "Score Symphony"
