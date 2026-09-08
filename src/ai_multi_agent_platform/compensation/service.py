@@ -19,12 +19,12 @@ from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import OperationControl, RetryMode
 
 from .models import (
+    CompensationActionProjection,
     CompensationAutomation,
     CompensationExecutionContext,
     CompensationFailureMode,
     CompensationGroup,
     CompensationGroupProjection,
-    CompensationActionProjection,
     CompensationReconciliation,
     CompensationRequest,
     CompensationResult,
@@ -40,6 +40,7 @@ ExecutionContextFactory = Callable[
     [CompensationRequest, CompletedSideEffect],
     Awaitable[CompensationExecutionContext],
 ]
+ApprovalReferenceLookup = Callable[[str], str | None]
 
 
 class CompensationReconciler(Protocol):
@@ -79,11 +80,13 @@ class CompensationCoordinator:
         *,
         reconciler: CompensationReconciler | None = None,
         verification_hook: CompensationVerificationHook | None = None,
+        approval_reference_lookup: ApprovalReferenceLookup | None = None,
     ) -> None:
         self.repository = repository
         self.invoker = invoker
         self.reconciler = reconciler
         self.verification_hook = verification_hook
+        self.approval_reference_lookup = approval_reference_lookup
 
     def register_group(self, group: CompensationGroup) -> CompensationGroup:
         return self.repository.create_group(group)
@@ -111,7 +114,9 @@ class CompensationCoordinator:
 
     def projection(self, group_id: str) -> CompensationGroupProjection:
         group = self.repository.get_group(group_id)
-        requests = {request.action_id: request for request in self.repository.list_requests(group_id)}
+        requests = {
+            request.action_id: request for request in self.repository.list_requests(group_id)
+        }
         actions = tuple(
             CompensationActionProjection(
                 action=action,
@@ -217,6 +222,7 @@ class CompensationCoordinator:
             execution_run_id=context.run_id,
             execution_agent_id=context.agent_id,
             invocation_id=context.invocation_id,
+            approval_id=None if current is None else current.approval_id,
             started_at=started,
         )
         self.repository.save_result(running)
@@ -224,7 +230,7 @@ class CompensationCoordinator:
         try:
             outcome = await self.invoker.invoke(invocation)
         except ContractError as exc:
-            return self._record_invocation_failure(request, running, exc)
+            return self._record_invocation_failure(running, exc)
 
         if outcome.status is not InvocationStatus.SUCCEEDED:
             return self.repository.save_result(
@@ -411,14 +417,16 @@ class CompensationCoordinator:
 
     def _record_invocation_failure(
         self,
-        request: CompensationRequest,
         running: CompensationResult,
         error: ContractError,
     ) -> CompensationResult:
         approval_required = bool(error.details.get("approval_required", False))
+        approval_id = running.approval_id
         if approval_required:
             status = CompensationStatus.APPROVAL_REQUIRED
             manual = False
+            if self.approval_reference_lookup is not None and running.invocation_id is not None:
+                approval_id = self.approval_reference_lookup(running.invocation_id)
         elif error.code in {ErrorCode.FORBIDDEN, ErrorCode.UNAUTHORIZED}:
             status = CompensationStatus.DENIED
             manual = True
@@ -434,6 +442,7 @@ class CompensationCoordinator:
                 status=status,
                 provider_id=error.provider_id,
                 canonical_tool_invocation_id=canonical_id,
+                approval_id=approval_id,
                 error_code=error.code.value,
                 error_message=error.message,
                 manual_intervention_required=manual,
