@@ -1,0 +1,70 @@
+name: Apply issue 596 mypy fix
+
+on:
+  push:
+    branches:
+      - fix/596-compensation-idempotency-hardening
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/596-compensation-idempotency-hardening
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply typing-only rename
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/ai_multi_agent_platform/compensation/repository.py')
+          text = path.read_text()
+          old = '''        if existing_id is not None:
+              existing = self._requests[existing_id]
+              if _same_idempotency_target(existing, request):
+                  return existing
+              raise ContractError(
+                  ErrorCode.CONFLICT,
+                  "compensation idempotency key already belongs to another target",
+              )
+          existing = self._requests.get(request.compensation_id)
+          if existing is not None:
+              if existing == request:
+                  return existing
+'''
+          new = '''        if existing_id is not None:
+              existing_by_key = self._requests[existing_id]
+              if _same_idempotency_target(existing_by_key, request):
+                  return existing_by_key
+              raise ContractError(
+                  ErrorCode.CONFLICT,
+                  "compensation idempotency key already belongs to another target",
+              )
+          existing_by_id = self._requests.get(request.compensation_id)
+          if existing_by_id is not None:
+              if existing_by_id == request:
+                  return existing_by_id
+'''
+          if old not in text:
+              raise SystemExit('expected target not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Validate repository typing
+        run: |
+          python -m pip install -e '.[dev]'
+          ruff format --check src/ai_multi_agent_platform/compensation/repository.py
+          ruff check src/ai_multi_agent_platform/compensation/repository.py
+          mypy src/ai_multi_agent_platform/compensation/repository.py
+      - name: Commit fix
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ai_multi_agent_platform/compensation/repository.py
+          git commit -m 'fix(compensation): satisfy strict repository typing (#596)'
+          git push
