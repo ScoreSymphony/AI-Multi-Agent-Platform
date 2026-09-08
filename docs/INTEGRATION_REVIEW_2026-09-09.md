@@ -33,6 +33,14 @@ The final fix preserves the ordinary Automation invariant and makes the Goal exc
 
 Regression coverage now proves both sides of the contract: an ordinary creator returning `None` fails, while the explicit no-task signal succeeds without fabricating a Task. The existing Goal integration test continues to prove the composed monitoring-only Goal behavior.
 
+### Provider-neutral Technical Marketplace validation
+
+The Technical Marketplace taxonomy was already strict in `LocalRegistryProvider`, and the shipped filesystem catalog reaches that validation path. The provider-neutral `DistributionService`, however, trusted arbitrary `RegistryProvider.search()` / `get()` results and exposed them northbound without revalidating the structured technical tag vocabulary. A future replaceable provider could therefore return conflicting or unsupported technical metadata that the TypeScript helper would interpret more permissively than the Python taxonomy.
+
+The final integration boundary now validates technical metadata for every provider result before it can be returned from `DistributionService.search()` or `get()`, used by preview, or re-read during activation. Generic non-technical Registry tags remain unaffected. Regression coverage supplies a deliberately unvalidated replacement provider and proves that conflicting technical metadata is rejected by the provider-neutral service boundary.
+
+This keeps Python as the fail-closed authority even while the frontend taxonomy remains duplicated for presentation.
+
 ## Verified contract alignment
 
 ### Goals
@@ -66,7 +74,7 @@ The Marketplace frontend and distribution Control Plane agree on:
 
 The shipped single-node adapter registers the Registry only when `registry_catalog` is configured. The frontend correctly gates Marketplace rendering on the manifest resource `registry-items`, so an unconfigured Registry is represented as unavailable rather than assumed to exist.
 
-Backend technical metadata is fail-closed for structured technical tags. The local/filesystem Registry path validates unsupported or conflicting structured values before exposing them as technical catalog data.
+Structured Technical Marketplace metadata is now fail-closed at the provider-neutral `DistributionService` boundary, not only in the local/filesystem provider implementation. Unsupported or conflicting technical tags therefore cannot be exposed northbound by a replacement Registry provider without failing validation first.
 
 ## Remaining integration risks
 
@@ -82,19 +90,11 @@ Recommended follow-up: expose one reusable Control Plane transport/command primi
 
 `distribution/technical_catalog.py` is the strict backend authority for technical categories and structured tag vocabularies. `frontend/src/marketplace/technical.ts` repeats the category list and tag parsing logic.
 
-The backend currently protects the shipped catalog from malformed technical metadata, so this is not an immediate data-integrity bug. It is still a contract-drift risk: a new category/status added to one side can produce different UI interpretation until the second copy is updated.
+The provider-neutral backend now fails closed before malformed technical metadata can reach the frontend, so the TypeScript parser's more permissive behavior is no longer an independent data-integrity boundary. Duplication still creates a presentation/compatibility drift risk: a new category/status added to Python can remain unknown or be rendered differently until the frontend copy is updated.
 
 Recommended follow-up: expose a canonical technical metadata projection in the Registry resource or generate/share the taxonomy from a schema rather than maintaining two hand-written vocabularies.
 
-### 3. Frontend technical parsing is more permissive than backend parsing — medium
-
-The backend rejects conflicting or unsupported structured technical tags. The frontend helper currently sorts multiple single-value tags and picks one, and it does not validate all structured values against the backend vocabulary.
-
-With the validated local/filesystem provider this mismatch is masked. It becomes material if another Registry provider, import path or future API surface can supply Registry items without the same validation boundary.
-
-Recommended follow-up: either consume server-derived technical metadata or make the frontend parser fail closed with the same vocabulary rules.
-
-### 4. Control Plane composition relies on a deep inheritance/registration chain — medium
+### 3. Control Plane composition relies on a deep inheritance/registration chain — medium
 
 Goals are registered implicitly by `approval_portability_composition.ControlPlane`; Registry is registered later by the outer single-node adapter when configured; other domains register collections and commands at different composition layers.
 
@@ -102,16 +102,16 @@ The manifest correctly reflects the final registered state, but MRO/order change
 
 Recommended follow-up: add one composition-level manifest/OpenAPI contract test for the shipped `build_default_single_node_deployment`, including a configured Registry catalog and Goals.
 
-### 5. Domain-specific frontend clients do not share compile-time contracts with backend models — medium
+### 4. Domain-specific frontend clients do not share compile-time contracts with backend models — medium
 
 Goal and Registry TypeScript interfaces currently match the reviewed Python projections, but they are manually mirrored. The integration branch adds many domain surfaces, making manual synchronization increasingly fragile.
 
 Recommended follow-up: generate stable frontend DTO types from the canonical OpenAPI/schema surface, while keeping UI view models separate from transport DTOs.
 
-### 6. Full branch test execution remains a merge gate — high until green
+### 5. Full branch test execution remains a merge gate — high until green
 
-The previous PR head completed all repository workflows successfully. Because the review follow-up changed the Automation contract implementation and added regression coverage, the final head must complete the same required CI/type/frontend checks again before merge.
+The previous PR head completed all repository workflows successfully. Because the review follow-up changed Automation and Registry contract boundaries and added regression coverage, the final head must complete the required CI/type/frontend checks again before merge.
 
 ## Review conclusion
 
-No blocking endpoint or enum mismatch was found in the reviewed Goals or Marketplace UI paths. The concrete contradiction found between Automation and Goal observation semantics has been corrected without weakening the ordinary Automation Task-creation contract. The highest remaining architectural risks are contract duplication rather than a currently demonstrated runtime break: frontend transport duplication, duplicated Marketplace taxonomy/parsing, and implicit Control Plane composition order.
+No blocking endpoint or enum mismatch was found in the reviewed Goals or Marketplace UI paths. Two concrete integration contradictions have been corrected: Goal observation no-task semantics no longer weaken the ordinary Automation Task contract, and Technical Marketplace metadata is now validated at the provider-neutral Registry boundary. The highest remaining architectural risks are contract duplication and implicit composition order rather than demonstrated runtime breaks.
