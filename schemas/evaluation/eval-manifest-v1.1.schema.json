@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "eval-manifest-v1.1.schema.json",
+  "title": "Canonical Evaluation Reproducibility Manifest v1.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evaluation_run_id",
+    "suite",
+    "cases",
+    "platform",
+    "configuration_references",
+    "repeat_policy",
+    "seed_policy",
+    "environment",
+    "skill_bundles",
+    "context_bundles",
+    "research_evidence",
+    "fixture_sources",
+    "verification_policies",
+    "dependencies",
+    "contract_versions",
+    "workspace",
+    "limitations",
+    "manifest_id",
+    "manifest_digest"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.1" },
+    "evaluation_run_id": { "$ref": "#/$defs/nonBlank" },
+    "suite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": { "$ref": "#/$defs/nonBlank" },
+        "version": { "$ref": "#/$defs/nonBlank" }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/case" }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "commit"],
+      "properties": {
+        "version": { "$ref": "#/$defs/nonBlank" },
+        "commit": { "$ref": "#/$defs/nullableNonBlank" }
+      }
+    },
+    "configuration_references": { "$ref": "#/$defs/referenceArray" },
+    "repeat_policy": { "$ref": "#/$defs/repeatPolicy" },
+    "seed_policy": { "$ref": "#/$defs/seedPolicy" },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "values"],
+      "properties": {
+        "digest": { "$ref": "#/$defs/sha256" },
+        "values": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/snapshotValue" }
+        }
+      }
+    },
+    "skill_bundles": { "$ref": "#/$defs/referenceArray" },
+    "context_bundles": { "$ref": "#/$defs/referenceArray" },
+    "research_evidence": { "$ref": "#/$defs/referenceArray" },
+    "fixture_sources": { "$ref": "#/$defs/referenceArray" },
+    "verification_policies": { "$ref": "#/$defs/referenceArray" },
+    "dependencies": { "$ref": "#/$defs/referenceArray" },
+    "contract_versions": { "$ref": "#/$defs/referenceArray" },
+    "workspace": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/reference" }
+      ]
+    },
+    "limitations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/nonBlank" }
+    },
+    "manifest_id": {
+      "type": "string",
+      "pattern": "^eval_manifest_[0-9a-f]{12}_[0-9a-f]{12}$"
+    },
+    "manifest_digest": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "nonBlank": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "nullableNonBlank": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/nonBlank" }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "snapshotValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "value"],
+      "properties": {
+        "key": { "$ref": "#/$defs/nonBlank" },
+        "value": { "$ref": "#/$defs/nonBlank" }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref_id", "version", "revision", "digest"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/nonBlank" },
+        "ref_id": { "$ref": "#/$defs/nonBlank" },
+        "version": { "$ref": "#/$defs/nullableNonBlank" },
+        "revision": { "$ref": "#/$defs/nullableNonBlank" },
+        "digest": { "$ref": "#/$defs/nullableNonBlank" }
+      },
+      "anyOf": [
+        { "properties": { "version": { "$ref": "#/$defs/nonBlank" } } },
+        { "properties": { "revision": { "$ref": "#/$defs/nonBlank" } } },
+        { "properties": { "digest": { "$ref": "#/$defs/nonBlank" } } }
+      ]
+    },
+    "referenceArray": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/reference" }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "case_version",
+        "fixtures",
+        "timeout_seconds",
+        "resource_limits"
+      ],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/nonBlank" },
+        "case_version": { "$ref": "#/$defs/nonBlank" },
+        "fixtures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonBlank" }
+        },
+        "timeout_seconds": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "number", "exclusiveMinimum": 0 }
+          ]
+        },
+        "resource_limits": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/snapshotValue" }
+        }
+      }
+    },
+    "repeatPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "repeat_count",
+        "min_repeats",
+        "stability_window",
+        "variance_threshold",
+        "version"
+      ],
+      "properties": {
+        "strategy": {
+          "enum": ["single", "fixed_n", "stability", "paired_ab"]
+        },
+        "repeat_count": { "type": "integer", "minimum": 1 },
+        "min_repeats": { "type": "integer", "minimum": 1 },
+        "stability_window": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "integer", "minimum": 1 }
+          ]
+        },
+        "variance_threshold": {
+          "oneOf": [
+            { "type": "null" },
+            { "type": "number", "minimum": 0 }
+          ]
+        },
+        "version": { "$ref": "#/$defs/nonBlank" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "strategy": { "const": "single" } } },
+          "then": { "properties": { "repeat_count": { "const": 1 } } }
+        },
+        {
+          "if": { "properties": { "strategy": { "const": "stability" } } },
+          "then": {
+            "properties": {
+              "stability_window": { "type": "integer", "minimum": 1 },
+              "variance_threshold": { "type": "number", "minimum": 0 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "strategy": { "enum": ["single", "fixed_n", "paired_ab"] }
+            }
+          },
+          "then": {
+            "properties": {
+              "stability_window": { "type": "null" },
+              "variance_threshold": { "type": "null" }
+            }
+          }
+        }
+      ]
+    },
+    "seedPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "ordered_seeds",
+        "provider_seed_control",
+        "limitations",
+        "version"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "deterministic_no_randomness",
+            "fixed_seed_supported",
+            "fixed_seed_requested_provider_unsupported",
+            "provider_managed_stochastic",
+            "external_nondeterminism_present",
+            "seed_support_unknown"
+          ]
+        },
+        "ordered_seeds": {
+          "type": "array",
+          "items": { "type": "integer" }
+        },
+        "provider_seed_control": {
+          "type": ["boolean", "null"]
+        },
+        "limitations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/nonBlank" }
+        },
+        "version": { "$ref": "#/$defs/nonBlank" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "deterministic_no_randomness" } } },
+          "then": { "properties": { "ordered_seeds": { "maxItems": 0 } } }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "fixed_seed_supported" } } },
+          "then": {
+            "properties": {
+              "ordered_seeds": { "minItems": 1 },
+              "provider_seed_control": { "const": true }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": { "const": "fixed_seed_requested_provider_unsupported" }
+            }
+          },
+          "then": {
+            "properties": {
+              "ordered_seeds": { "minItems": 1 },
+              "provider_seed_control": { "const": false }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
