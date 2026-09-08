@@ -15,6 +15,7 @@ from .control_plane import (
     ResearchSourceResourceService,
     register_research_control_plane,
 )
+from .decision import ResearchDecisionBridge, ResearchDecisionReferences
 from .integrations import ResearchPlanningBridge, ResearchPromotionBridge
 from .models import (
     Claim,
@@ -65,6 +66,8 @@ __all__ = [
     "ResearchActionContext",
     "ResearchClaimResourceService",
     "ResearchClass",
+    "ResearchDecisionBridge",
+    "ResearchDecisionReferences",
     "ResearchEvidenceResourceService",
     "ResearchItem",
     "ResearchItemResourceService",
