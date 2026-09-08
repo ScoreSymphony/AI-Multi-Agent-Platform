@@ -47,13 +47,13 @@ from .models import (
 from .product import (
     AgentTargetValidatingCaseExecutor,
     DirectoryEvaluationFixtureResolver,
-    EvaluationTargetSnapshotEnricher,
     TargetAwareEvaluationService,
     evaluation_task_metadata,
     load_evaluation_assets,
     parse_agent_evaluation_target,
 )
 from .reference import KernelEvaluationCaseExecutor
+from .routing_profile_snapshot import RoutingProfileAwareEvaluationTargetSnapshotEnricher
 from .rubric import ObservationRubricEvaluator
 from .runner import EvaluationRunner
 from .service import EvaluationService
@@ -281,7 +281,7 @@ def build_single_node_evaluation(
         suites=suites,
         policies=policies,
         aggregation_policies=assets.aggregation_policies,
-        target_enricher=EvaluationTargetSnapshotEnricher(
+        target_enricher=RoutingProfileAwareEvaluationTargetSnapshotEnricher(
             agents=agent_runtime,
             models=models,
         ),
