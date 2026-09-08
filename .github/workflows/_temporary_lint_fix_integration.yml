@@ -1,0 +1,103 @@
+name: Temporary integration lint fixes
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+
+permissions:
+  contents: write
+
+jobs:
+  lint-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: integration/active-branches-2026-09-08
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply and validate integration lint fixes
+        shell: bash
+        run: |
+          python -m pip install -e '.[dev]'
+          ruff check . --fix || true
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old!r}")
+              p.write_text(text.replace(old, new))
+
+          replace(
+              "src/ai_multi_agent_platform/context/lifecycle.py",
+              "ActorResolver = Callable[[OperationContext], ActorIdentity]\n\n\nclass CanonicalContextAgentLifecycleBackend",
+              "ActorResolver = Callable[[OperationContext], ActorIdentity]\n\n_DEFAULT_CONTEXT_BUDGET = ContextBudget(\n    max_tokens=64_000,\n    max_bytes=256 * 1024,\n    max_items=128,\n)\n\n\nclass CanonicalContextAgentLifecycleBackend",
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/lifecycle.py",
+              "        budget: ContextBudget = ContextBudget(\n            max_tokens=64_000,\n            max_bytes=256 * 1024,\n            max_items=128,\n        ),",
+              "        budget: ContextBudget = _DEFAULT_CONTEXT_BUDGET,",
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/context/operational.py",
+              "        if self.output_reserve_tokens < 0:\n            raise ValueError(\"context output reserve tokens must be >= 0\")\n\n\n@dataclass(frozen=True, slots=True)\nclass ContextModelInput",
+              "        if self.output_reserve_tokens < 0:\n            raise ValueError(\"context output reserve tokens must be >= 0\")\n\n\n_DEFAULT_CONTEXT_ROUTING_POLICY = ContextRoutingPolicy()\n\n\n@dataclass(frozen=True, slots=True)\nclass ContextModelInput",
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/operational.py",
+              "    policy: ContextRoutingPolicy = ContextRoutingPolicy(),",
+              "    policy: ContextRoutingPolicy = _DEFAULT_CONTEXT_ROUTING_POLICY,",
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/operational.py",
+              "        routing_policy: ContextRoutingPolicy = ContextRoutingPolicy(),",
+              "        routing_policy: ContextRoutingPolicy = _DEFAULT_CONTEXT_ROUTING_POLICY,",
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/context/source_adapters.py",
+              '                    selection_reason="Run/Task-referenced canonical File content or bounded metadata",',
+              '                    selection_reason=(\n                        "Run/Task-referenced canonical File content "\n                        "or bounded metadata"\n                    ),',
+          )
+          replace(
+              "src/ai_multi_agent_platform/deployment/durable_connectors.py",
+              '    """Normal single-node deployment with durable Connector, Planning, canonical Context and Handoff state."""',
+              '    """Normal single-node deployment with durable Connector, Planning,\n    canonical Context and Handoff state.\n    """',
+          )
+          replace(
+              "src/ai_multi_agent_platform/portability/egress_profile_composition.py",
+              '    """Register codec, export source and sanitized mutation handler as one atomic composition step."""',
+              '    """Register codec, export source and sanitized mutation handler\n    as one atomic composition step.\n    """',
+          )
+          replace(
+              "src/ai_multi_agent_platform/repository_intelligence/fallback.py",
+              '    Higher-level evaluation or telemetry code can keep using ``RepositoryIntelligenceFallbackInvoker``\n    directly when it needs explicit fallback evidence. Context/Search consumers can depend on this',
+              '    Higher-level evaluation or telemetry code can keep using\n    ``RepositoryIntelligenceFallbackInvoker`` directly when it needs explicit fallback evidence.\n    Context/Search consumers can depend on this',
+          )
+          replace(
+              "src/ai_multi_agent_platform/repository_intelligence/projectatlas_resources.py",
+              '                    "scheduler admission must remain fail-closed until deployment bounds are supplied",',
+              '                    (\n                        "scheduler admission must remain fail-closed until "\n                        "deployment bounds are supplied"\n                    ),',
+          )
+          replace(
+              "src/ai_multi_agent_platform/research/portability.py",
+              '            "Research bundle contains #86 bindings but no local Verification validator was supplied",',
+              '            (\n                "Research bundle contains #86 bindings but no local "\n                "Verification validator was supplied"\n            ),',
+          )
+          PY
+          ruff format .
+          ruff format --check .
+          ruff check .
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: resolve integration lint regressions'
+            git push origin HEAD:integration/active-branches-2026-09-08
+          fi
