@@ -36,7 +36,22 @@ from .promotion import (
     SkillPromotionAdapter,
 )
 from .repository import InMemoryLearningRepository, LearningRepository, SQLiteLearningRepository
+from .runtime import (
+    EvaluationPostPromotionEvaluator,
+    InMemoryPostPromotionEvaluationRecorder,
+    ObservedLearningService,
+    PostPromotionEvaluationOutcome,
+    PostPromotionEvaluationRecord,
+    PostPromotionEvaluationRecorder,
+    PostPromotionEvaluator,
+)
+from .runtime_control_plane import (
+    LEARNING_POST_PROMOTION_COLLECTION,
+    LearningPostPromotionResourceService,
+    register_learning_runtime_control_plane,
+)
 from .service import LearningQualityGate, LearningService
+from .single_node import SingleNodeLearningComposition, build_single_node_learning
 from .sources import LearningSourceBridge
 
 __all__ = [
@@ -44,16 +59,20 @@ __all__ = [
     "LEARNING_COLLECTIONS",
     "LEARNING_COMMANDS",
     "LEARNING_FEEDBACK_COLLECTION",
+    "LEARNING_POST_PROMOTION_COLLECTION",
     "LEARNING_SCHEMA_VERSION",
     "AgentPromotionAdapter",
+    "EvaluationPostPromotionEvaluator",
     "FeedbackRecord",
     "FeedbackType",
     "InMemoryLearningRepository",
+    "InMemoryPostPromotionEvaluationRecorder",
     "LearningCandidate",
     "LearningCandidateResourceService",
     "LearningCandidateStatus",
     "LearningFeedbackResourceService",
     "LearningGatePlan",
+    "LearningPostPromotionResourceService",
     "LearningQualityGate",
     "LearningReference",
     "LearningRepository",
@@ -62,12 +81,19 @@ __all__ = [
     "LearningSourceType",
     "LearningTarget",
     "LearningTargetType",
+    "ObservedLearningService",
     "OwnerPromotionAdapter",
+    "PostPromotionEvaluationOutcome",
+    "PostPromotionEvaluationRecord",
+    "PostPromotionEvaluationRecorder",
+    "PostPromotionEvaluator",
     "PromotionReceipt",
     "PromotionRegistry",
     "RoutingProfilePromotionAdapter",
     "SQLiteLearningRepository",
+    "SingleNodeLearningComposition",
     "SkillPromotionAdapter",
+    "build_single_node_learning",
     "candidate_from_dict",
     "candidate_to_dict",
     "feedback_from_dict",
@@ -75,4 +101,5 @@ __all__ = [
     "new_feedback_id",
     "new_learning_candidate_id",
     "register_learning_control_plane",
+    "register_learning_runtime_control_plane",
 ]
