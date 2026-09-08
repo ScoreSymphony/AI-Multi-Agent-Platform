@@ -45,7 +45,7 @@ jobs:
               raise SystemExit('evaluation action policy anchor missing')
           text = text.replace(old_actions, new_actions, 1)
           old_resources = '                resource_types=frozenset({ResourceType.RUN}),\n'
-          new_resources = '''                resource_types=frozenset(\n                    {\n                        ResourceType.RUN,\n                        ResourceType.TASK,\n                        ResourceType.AGENT,\n                        ResourceType.FILE,\n                    }\n                ),\n'''
+          new_resources = '''                resource_types=frozenset(\n                    {\n                        ResourceType.RUN,\n                        ResourceType.TASK,\n                        ResourceType.AGENT,\n                        ResourceType.FILE,\n                        ResourceType.MEMORY,\n                    }\n                ),\n'''
           if old_resources not in text:
               raise SystemExit('evaluation resource policy anchor missing')
           deployment.write_text(text.replace(old_resources, new_resources, 1))
