@@ -138,16 +138,29 @@ branch:
 
 - `tests/test_issue_650_context_operationalization.py`
   - optional vs mandatory source unavailability;
-  - server-owned Context-window routing;
+  - server-owned Context-window requirement merging;
   - external secret-reference egress denial;
   - Control Plane source redaction;
   - idempotent crash/restart binding repair;
+- `tests/test_issue_650_source_adapters.py`
+  - exact Task and Agent revision/instruction projection;
+  - Skill Bundle identity/digest projection;
+  - Research Claim/Evidence provenance and untrusted authority;
+  - Repository Run provenance and bounded immutable source slices;
+  - File/Artifact/Result reference-oriented projection;
+  - scoped Memory and Agent-allowlisted Knowledge retrieval;
+- `tests/test_issue_650_routing_rendering.py`
+  - Context-derived `min_context_window` causes #10 routing to reject an undersized model;
+  - local/reference rendering preserves Bundle identity without an egress dependency;
 - `tests/test_issue_650_single_node_context_e2e.py`
   - public durable single-node composition;
   - real first Agent task through Context assembly/rendering/model input;
   - persisted AgentRun → Bundle binding;
   - Control Plane inspection;
   - restart restoration/reconciliation;
+- `tests/unit/cli/test_cli_context_inspection.py`
+  - generic API-first CLI Run → binding → Bundle tracing;
+  - ordinary CLI inspection never exposes inline Context values;
 - `frontend/src/api/context.test.ts`
   - Run → binding → Bundle frontend reads through the canonical extension collections.
 
