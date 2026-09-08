@@ -80,6 +80,8 @@ high
 critical
 ```
 
+The Candidate `gate_plan` is not the platform authority. The deployment-owned `LearningPlatformPolicy` is enforced separately and can require stricter Evaluation/Verification bindings or Approval. In the prepared default configuration, Evaluation/Verification references must use exact `<id>@<version>` form when their gate is enabled, HIGH/CRITICAL promotions require Approval, global/unscoped promotions require Approval, and automatic promotion is disabled platform-wide.
+
 ### Proposal from exact feedback
 
 ```bash
@@ -118,7 +120,7 @@ platform learning reject learning_candidate_... \
   --idempotency-key learning-reject-1
 ```
 
-Acceptance reruns the candidate's versioned quality gate. A failed or missing required Evaluation/Verification result blocks acceptance.
+Acceptance reruns the candidate's versioned quality gate and the deployment-owned governance floor. A failed/missing Evaluation or Verification result, or an invalid non-versioned required suite/policy binding, blocks acceptance.
 
 ### Supersede
 
@@ -137,7 +139,7 @@ platform learning promote learning_candidate_... \
   --idempotency-key learning-promote-1
 ```
 
-For a risk class that requires explicit Approval, the first attempt returns the canonical pending Approval reference. After that exact action has been approved through the normal Approval surface, retry with the bound Approval ID:
+When either the Candidate policy or the platform governance floor requires explicit Approval, the first attempt returns the canonical pending Approval reference. With the prepared default platform policy this includes HIGH/CRITICAL candidates and global/unscoped targets. After that exact action has been approved through the normal Approval surface, retry with the bound Approval ID:
 
 ```bash
 platform learning promote learning_candidate_... \
@@ -146,7 +148,7 @@ platform learning promote learning_candidate_... \
   --idempotency-key learning-promote-approved-1
 ```
 
-The CLI invokes its normal explicit confirmation hook before promotion. The server still owns stale-revision checking, exact-action Approval binding, authorization, quality validation and canonical owner revision creation.
+The CLI invokes its normal explicit confirmation hook before promotion. The server still owns stale-revision checking, exact-action Approval binding, authorization, quality validation, platform-policy validation and canonical owner revision creation.
 
 ### Post-promotion Evaluation
 
@@ -157,7 +159,7 @@ platform learning post-eval list
 platform learning post-eval show learning_post_evaluation_...
 ```
 
-These records are derived Evaluation evidence only. They do not rewrite the promoted resource or historical Learning Candidate revisions.
+These records are derived Evaluation evidence only. They do not rewrite the promoted resource or historical Learning Candidate revisions. In the prepared Single-Node composition they are persisted in SQLite and the runtime suppresses duplicate evaluation for the same promoted Candidate revision/target revision pair.
 
 ## Unified-branch integration
 
@@ -167,4 +169,5 @@ This issue branch intentionally leaves the top-level CLI dispatcher untouched to
 2. register `add_learning_parser(areas)` once;
 3. dispatch the `learning` area to `execute_learning(args, client, confirm)` using the existing authenticated Control Plane client and confirmation helper;
 4. retain the generic extension CLI as read-only;
-5. run the unified branch's formatting/type/test/CI pass only after all active branches are reconciled.
+5. preserve the deployment-owned `LearningPlatformPolicy` floor;
+6. run the unified branch's formatting/type/test/CI pass only after all active branches are reconciled.
