@@ -10,6 +10,7 @@ from .bindings import (
     ReferenceContextOrchestratorAdapter,
     context_binding_from_agent_run_metadata,
 )
+from .classification import effective_context_bundle_classification
 from .control_plane import (
     CONTEXT_BUNDLE_COLLECTION,
     CONTEXT_RUN_BINDING_COLLECTION,
@@ -125,6 +126,7 @@ __all__ = [
     "context_bundle_projection",
     "context_run_binding_projection",
     "context_window_requirement",
+    "effective_context_bundle_classification",
     "new_context_bundle_id",
     "register_context_control_plane",
 ]
