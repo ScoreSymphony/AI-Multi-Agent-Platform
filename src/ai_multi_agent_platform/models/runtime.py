@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import replace
 
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,
     DataClassification,
+    EgressCostClass,
+    EgressProfile,
+    EgressProfileTrust,
     EgressRequest,
     EgressTarget,
     EgressTargetKind,
     EgressTargetPosture,
     ErrorCode,
+    JsonValue,
     ModelProvider,
     ModelRequest,
     ModelResponse,
@@ -41,9 +45,12 @@ class ModelRuntime:
         egress_gate: EgressGate | None = None,
     ) -> None:
         self.registry = registry
-        self.router = router or DeterministicModelRouter(registry)
         # A missing caller override must never disable enforcement.
         self.egress_gate = egress_gate or EgressGate()
+        self.router = router or DeterministicModelRouter(
+            registry,
+            candidate_policy_hook=self._candidate_egress_policy,
+        )
 
     async def select(self, request: ModelRequest) -> ModelSelection:
         return await self.router.select_provider(request)
@@ -112,6 +119,22 @@ class ModelRuntime:
 
         return self.stream(request.to_contract_request())
 
+    async def _candidate_egress_policy(
+        self,
+        request: ModelRequest,
+        config: ModelConfiguration,
+    ) -> tuple[bool, str | None]:
+        """Exclude disclosure-incompatible candidates before deterministic selection."""
+
+        try:
+            egress_request = _model_egress_request(request, config)
+        except ContractError as exc:
+            if exc.code is ErrorCode.INVALID_CONFIGURATION:
+                return False, "invalid_egress_profile"
+            raise
+        decision = await self.egress_gate.evaluate(egress_request)
+        return decision.allowed, None if decision.allowed else decision.reason_code.value
+
     async def _resolve_target(
         self,
         request: ModelRequest,
@@ -137,32 +160,8 @@ class ModelRuntime:
             )
 
         provider = self.registry.get_provider(selection.provider_id)
-        classification = _request_classification(request)
-        await self.egress_gate.enforce(
-            EgressRequest(
-                request_id=f"model:{request.request_id}:{config.config_id}",
-                target=EgressTarget(
-                    kind=EgressTargetKind.MODEL_PROVIDER,
-                    target_id=config.config_id,
-                    posture=_posture_for_model(config.location),
-                    allowed_classifications=_allowed_classifications(config),
-                    policy_metadata={
-                        "allow_sensitive_external": _allow_sensitive_external(config),
-                        "provider_id": config.provider_id,
-                    },
-                ),
-                context=request.context,
-                classification=classification,
-                resource_type="model_request",
-                payload_digest=digest_egress_payload({"messages": list(request.messages)}),
-                task_id=_optional_request_ref(request, "task_id"),
-                run_id=_optional_request_ref(request, "run_id"),
-                policy_descriptors={
-                    "model_config_id": config.config_id,
-                    "model_location": config.location.value,
-                },
-            )
-        )
+        # Defense in depth for custom routers and any future route implementation.
+        await self.egress_gate.enforce(_model_egress_request(request, config))
 
         requirements = dict(request.requirements)
         requirements["model_config_id"] = config.config_id
@@ -228,6 +227,133 @@ class ModelRuntime:
         )
 
 
+def _model_egress_request(request: ModelRequest, config: ModelConfiguration) -> EgressRequest:
+    classification = _request_classification(request)
+    return EgressRequest(
+        request_id=f"model:{request.request_id}:{config.config_id}",
+        target=_model_egress_target(config),
+        context=request.context,
+        classification=classification,
+        resource_type="model_request",
+        payload_digest=digest_egress_payload({"messages": list(request.messages)}),
+        task_id=_optional_request_ref(request, "task_id"),
+        run_id=_optional_request_ref(request, "run_id"),
+        policy_descriptors={
+            "model_config_id": config.config_id,
+            "model_location": config.location.value,
+        },
+    )
+
+
+def _model_egress_target(config: ModelConfiguration) -> EgressTarget:
+    profile = _model_egress_profile(config)
+    if profile is not None:
+        return EgressTarget(
+            kind=EgressTargetKind.MODEL_PROVIDER,
+            target_id=config.config_id,
+            profile=profile,
+            policy_metadata={"provider_id": config.provider_id},
+        )
+    return EgressTarget(
+        kind=EgressTargetKind.MODEL_PROVIDER,
+        target_id=config.config_id,
+        posture=_posture_for_model(config.location),
+        allowed_classifications=_allowed_classifications(config),
+        policy_metadata={
+            "allow_sensitive_external": _allow_sensitive_external(config),
+            "provider_id": config.provider_id,
+        },
+    )
+
+
+def _model_egress_profile(config: ModelConfiguration) -> EgressProfile | None:
+    raw = config.resource_hints.get("egress_profile")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise _profile_error(config, "egress_profile must be an object")
+
+    profile_id = _profile_string(
+        raw,
+        "profile_id",
+        config,
+        default=f"egress-profile:model:{config.config_id}",
+    )
+    revision = _profile_positive_int(raw, "revision", config, default=config.revision)
+    posture = _profile_enum(
+        raw,
+        "posture",
+        EgressTargetPosture,
+        config,
+        default=_posture_for_model(config.location),
+    )
+    cost_class = _profile_enum(
+        raw,
+        "cost_class",
+        EgressCostClass,
+        config,
+        default=EgressCostClass.UNKNOWN,
+    )
+    trust = _profile_enum(
+        raw,
+        "trust",
+        EgressProfileTrust,
+        config,
+        default=EgressProfileTrust.UNVERIFIED,
+    )
+    allowed = _profile_classifications(
+        raw,
+        "allowed_classifications",
+        config,
+        default=_allowed_classifications(config),
+    )
+    denied = _profile_classifications(raw, "denied_classifications", config, default=())
+    metadata = _profile_mapping(raw, "metadata", config)
+    if "allow_sensitive_external" not in metadata:
+        metadata["allow_sensitive_external"] = _allow_sensitive_external(config)
+
+    return EgressProfile(
+        profile_id=profile_id,
+        revision=revision,
+        target_kind=EgressTargetKind.MODEL_PROVIDER,
+        target_id=config.config_id,
+        posture=posture,
+        allowed_classifications=allowed,
+        denied_classifications=denied,
+        network_egress_required=_profile_optional_bool(
+            raw,
+            "network_egress_required",
+            config,
+            default=(posture is EgressTargetPosture.EXTERNAL),
+        ),
+        data_retention_policy=_profile_optional_string(raw, "data_retention_policy", config),
+        training_policy=_profile_optional_string(raw, "training_policy", config),
+        logging_policy=_profile_optional_string(raw, "logging_policy", config),
+        jurisdiction=_profile_optional_string(raw, "jurisdiction", config),
+        cost_class=cost_class,
+        credential_required=_profile_optional_bool(
+            raw,
+            "credential_required",
+            config,
+            default=None,
+        ),
+        policy_source=_profile_string(
+            raw,
+            "policy_source",
+            config,
+            default="model-resource-hints",
+        ),
+        source_revision=_profile_string(
+            raw,
+            "source_revision",
+            config,
+            default=str(config.revision),
+        ),
+        trust=trust,
+        metadata=metadata,
+    )
+
+
 def _request_classification(request: ModelRequest) -> DataClassification:
     """Read platform-owned routing metadata; model/prompt text is never classification authority."""
 
@@ -255,20 +381,7 @@ def _allowed_classifications(config: ModelConfiguration) -> tuple[DataClassifica
     raw = config.resource_hints.get("allowed_data_classifications")
     if raw is None:
         return ()
-    if not isinstance(raw, list) or any(not isinstance(item, str) for item in raw):
-        raise ContractError(
-            ErrorCode.INVALID_CONFIGURATION,
-            "allowed_data_classifications must be a list of classification strings",
-            provider_id=config.provider_id,
-        )
-    try:
-        return tuple(DataClassification(item) for item in raw if isinstance(item, str))
-    except ValueError as exc:
-        raise ContractError(
-            ErrorCode.INVALID_CONFIGURATION,
-            "allowed_data_classifications contains an unknown classification",
-            provider_id=config.provider_id,
-        ) from exc
+    return _parse_classification_list(raw, "allowed_data_classifications", config)
 
 
 def _allow_sensitive_external(config: ModelConfiguration) -> bool:
@@ -287,3 +400,122 @@ def _optional_request_ref(request: ModelRequest, key: str) -> str | None:
     if raw is None:
         return None
     return raw if isinstance(raw, str) and raw.strip() else None
+
+
+def _profile_string(
+    raw: Mapping[str, JsonValue],
+    key: str,
+    config: ModelConfiguration,
+    *,
+    default: str,
+) -> str:
+    value = raw.get(key, default)
+    if not isinstance(value, str) or not value.strip():
+        raise _profile_error(config, f"egress_profile.{key} must be a non-blank string")
+    return value
+
+
+def _profile_optional_string(
+    raw: Mapping[str, JsonValue],
+    key: str,
+    config: ModelConfiguration,
+) -> str | None:
+    value = raw.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise _profile_error(config, f"egress_profile.{key} must be a non-blank string")
+    return value
+
+
+def _profile_positive_int(
+    raw: Mapping[str, JsonValue],
+    key: str,
+    config: ModelConfiguration,
+    *,
+    default: int,
+) -> int:
+    value = raw.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise _profile_error(config, f"egress_profile.{key} must be a positive integer")
+    return value
+
+
+def _profile_optional_bool(
+    raw: Mapping[str, JsonValue],
+    key: str,
+    config: ModelConfiguration,
+    *,
+    default: bool | None,
+) -> bool | None:
+    value = raw.get(key, default)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise _profile_error(config, f"egress_profile.{key} must be a boolean")
+    return value
+
+
+def _profile_enum[T: str](
+    raw: Mapping[str, JsonValue],
+    key: str,
+    enum_type: type[T],
+    config: ModelConfiguration,
+    *,
+    default: T,
+) -> T:
+    value = raw.get(key, default)
+    if isinstance(value, enum_type):
+        return value
+    if not isinstance(value, str):
+        raise _profile_error(config, f"egress_profile.{key} must be a string")
+    try:
+        return enum_type(value)
+    except ValueError as exc:
+        raise _profile_error(config, f"egress_profile.{key} contains an unknown value") from exc
+
+
+def _profile_classifications(
+    raw: Mapping[str, JsonValue],
+    key: str,
+    config: ModelConfiguration,
+    *,
+    default: tuple[DataClassification, ...],
+) -> tuple[DataClassification, ...]:
+    value = raw.get(key)
+    if value is None:
+        return default
+    return _parse_classification_list(value, f"egress_profile.{key}", config)
+
+
+def _parse_classification_list(
+    value: JsonValue,
+    field_name: str,
+    config: ModelConfiguration,
+) -> tuple[DataClassification, ...]:
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise _profile_error(config, f"{field_name} must be a list of classification strings")
+    try:
+        return tuple(DataClassification(item) for item in value if isinstance(item, str))
+    except ValueError as exc:
+        raise _profile_error(config, f"{field_name} contains an unknown classification") from exc
+
+
+def _profile_mapping(
+    raw: Mapping[str, JsonValue],
+    key: str,
+    config: ModelConfiguration,
+) -> dict[str, JsonValue]:
+    value = raw.get(key, {})
+    if not isinstance(value, dict):
+        raise _profile_error(config, f"egress_profile.{key} must be an object")
+    return dict(value)
+
+
+def _profile_error(config: ModelConfiguration, message: str) -> ContractError:
+    return ContractError(
+        ErrorCode.INVALID_CONFIGURATION,
+        message,
+        provider_id=config.provider_id,
+        details={"model_config_id": config.config_id},
+    )
