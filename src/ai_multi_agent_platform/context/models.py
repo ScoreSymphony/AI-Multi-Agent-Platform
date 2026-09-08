@@ -89,6 +89,7 @@ class ContextSourceType(StrEnum):
     PRIOR_RUN = "prior_run"
     VERIFICATION = "verification"
     HUMAN = "human"
+    AGENT_HANDOFF = "agent_handoff"
 
 
 class ContextEntryRole(StrEnum):
