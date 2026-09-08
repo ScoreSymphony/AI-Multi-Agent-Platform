@@ -247,9 +247,7 @@ class PlanningGraphScaleBenchmarkHarness:
         storage_after = _directory_size(self._data_dir)
 
         errors = tuple(
-            f"steps={point.step_count}: {error}"
-            for point in points
-            for error in point.errors
+            f"steps={point.step_count}: {error}" for point in points for error in point.errors
         )
         completed_points = sum(point.passed for point in points)
         requested_repetitions = spec.repetitions * len(points)
