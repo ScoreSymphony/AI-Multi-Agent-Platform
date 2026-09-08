@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from ai_multi_agent_platform.agents import AgentCapabilityTurn
+from ai_multi_agent_platform.capabilities import bind_canonical_capability_invocation
 from ai_multi_agent_platform.context.bindings import JsonContextRunBindingRepository
 from ai_multi_agent_platform.context.control_plane import register_context_control_plane
 from ai_multi_agent_platform.context.lifecycle import (
@@ -62,6 +64,8 @@ from ai_multi_agent_platform.skills import (
     register_skill_control_plane,
 )
 
+from .egress_bindings import EgressDeploymentBindings
+
 if TYPE_CHECKING:
     from ai_multi_agent_platform.deployment.single_node import (
         SingleNodeDeployment as BaseDeployment,
@@ -92,12 +96,20 @@ class SingleNodeContextComposition:
     reconciliation: ContextBindingReconciliationReport
 
 
-def install_single_node_context(base: BaseDeployment) -> SingleNodeContextComposition:
+def install_single_node_context(
+    base: BaseDeployment,
+    *,
+    egress: EgressDeploymentBindings | None = None,
+) -> SingleNodeContextComposition:
     """Install the canonical Context Bundle path into one already-built single-node deployment.
 
     The installer replaces only the kernel lifecycle participant. Every other canonical owner
     remains unchanged and one #15 authorization wrapper stays the outer execution boundary. This
     keeps Task/Run/Agent ownership intact while making #590 the effective context authority.
+
+    When the public deployment supplies #591 bindings, Context rendering and capability execution
+    share that exact durable egress gate. Focused lower-level embeddings may omit the bindings and
+    retain the conservative local default gate.
     """
 
     database_dir = base.config.database_dir
@@ -112,6 +124,7 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         base.agent_runtime,
         bundle_repository=bundles,
         binding_repository=run_bindings,
+        egress_gate=None if egress is None else egress.runtime.gate,
         target_resolver=ModelRegistryContextEgressTargetResolver(base.models),
         routing_policy=ContextRoutingPolicy(
             output_reserve_tokens=CONTEXT_OUTPUT_RESERVE_TOKENS,
@@ -258,6 +271,19 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         bundle = matches[0]
         return bundle.skill_bundle_id, bundle.digest
 
+    capability_turn = (
+        None
+        if egress is None
+        else AgentCapabilityTurn(
+            base.model_runtime,
+            base.capabilities,
+            egress.capability_invoker(
+                base.capabilities,
+                canonical_binding_hook=bind_canonical_capability_invocation,
+            ),
+        )
+    )
+
     previous_lifecycle = base.kernel._lifecycle  # noqa: SLF001 - composition boundary replacement
     # The base profile intentionally already wraps its inner lifecycle with #15. Reuse that inner
     # participant as the fallback and make one fresh #15 wrapper the outermost boundary, avoiding
@@ -272,6 +298,7 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         context_runtime=context_runtime,
         binding_factory=binding_factory,
         skill_bundle_resolver=skill_bundle_resolver,
+        capability_turn=capability_turn,
     )
     base.kernel._lifecycle = AuthorizedLifecycleBackend(  # noqa: SLF001
         lifecycle,
