@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from enum import StrEnum
+from statistics import mean, pvariance
 from typing import Any, cast
 
 from .aggregation import ComparableEvaluationResult
@@ -20,7 +21,9 @@ from .models import (
 )
 from .regression import RegressionEngine
 
-EVAL_MANIFEST_SCHEMA_VERSION = "1.0"
+EVAL_MANIFEST_SCHEMA_VERSION = "1.1"
+_LEGACY_EVAL_MANIFEST_SCHEMA_VERSION = "1.0"
+_COMPARISON_LENS_REFERENCE_KINDS = frozenset({"aggregation_policy", "regression_policy"})
 _PRIVATE_ID_TOKENS = (
     "session_id",
     "session-id",
@@ -80,12 +83,14 @@ class RepeatPolicy:
             if self.stability_window > self.repeat_count:
                 raise ValueError("stability_window cannot exceed repeat_count")
             if self.variance_threshold is None or self.variance_threshold < 0:
-                raise ValueError("stability strategy requires a non-negative variance_threshold")
+                raise ValueError(
+                    "stability strategy requires a non-negative variance_threshold"
+                )
         elif self.stability_window is not None or self.variance_threshold is not None:
             raise ValueError("stability fields are only valid with strategy=stability")
 
     @classmethod
-    def for_run(cls, run: EvaluationRun) -> RepeatPolicy:
+    def for_run(cls, run: EvaluationRun) -> "RepeatPolicy":
         strategy = RepeatStrategy.SINGLE if run.repetitions == 1 else RepeatStrategy.FIXED_N
         return cls(strategy=strategy, repeat_count=run.repetitions)
 
@@ -117,7 +122,7 @@ class SeedPolicy:
             raise ValueError("seed policy limitations must be unique")
 
     @classmethod
-    def conservative_for_run(cls, run: EvaluationRun) -> SeedPolicy:
+    def conservative_for_run(cls, run: EvaluationRun) -> "SeedPolicy":
         if run.seed is None:
             return cls(
                 mode=RandomnessMode.UNKNOWN,
@@ -143,14 +148,15 @@ class ManifestReference:
             raise ValueError("manifest reference identity must not be blank")
         if self.version is None and self.revision is None and self.digest is None:
             raise ValueError("manifest reference requires version, revision or digest")
-        for value in (self.version, self.revision, self.digest):
-            if value is not None and not value.strip():
+        for value in (self.kind, self.ref_id, self.version, self.revision, self.digest):
+            if value is None:
+                continue
+            if not value.strip():
                 raise ValueError("manifest reference values must not be blank")
-        _reject_private_identity(self.kind)
-        _reject_private_identity(self.ref_id)
+            _reject_private_identity(value)
 
     @classmethod
-    def from_version_reference(cls, value: VersionReference) -> ManifestReference:
+    def from_version_reference(cls, value: VersionReference) -> "ManifestReference":
         return cls(
             kind=value.kind,
             ref_id=value.ref_id,
@@ -176,14 +182,12 @@ class EnvironmentFingerprint:
         keys = [item.key for item in self.values]
         if len(keys) != len(set(keys)):
             raise ValueError("environment fingerprint keys must be unique")
-        for key in keys:
-            _reject_private_identity(key)
+        for item in self.values:
+            _reject_private_identity(item.key)
 
     @property
     def digest(self) -> str:
-        return _sha256(
-            [{"key": item.key, "value": item.value} for item in _sorted_snapshot(self.values)]
-        )
+        return _sha256(_snapshot_payload(self.values))
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,19 +235,26 @@ class EvalManifest:
             raise ValueError("manifest suite identity/version must not be blank")
         if not self.platform_version.strip() or not self.schema_version.strip():
             raise ValueError("manifest platform/schema version must not be blank")
-        digest = _sha256(self.canonical_payload())
+        if self.schema_version == _LEGACY_EVAL_MANIFEST_SCHEMA_VERSION:
+            digest = _sha256(self.canonical_payload())
+            manifest_id = f"eval_manifest_{digest[:24]}"
+        elif self.schema_version == EVAL_MANIFEST_SCHEMA_VERSION:
+            digest = _sha256(self.reproducibility_payload())
+            run_hash = hashlib.sha256(self.evaluation_run_id.encode()).hexdigest()[:12]
+            manifest_id = f"eval_manifest_{run_hash}_{digest[:12]}"
+        else:
+            raise ValueError(f"unsupported EvalManifest schema version: {self.schema_version}")
         if self.manifest_digest and self.manifest_digest != digest:
-            raise ValueError("manifest_digest does not match canonical manifest payload")
-        manifest_id = f"eval_manifest_{digest[:24]}"
+            raise ValueError("manifest_digest does not match manifest schema payload")
         if self.manifest_id and self.manifest_id != manifest_id:
-            raise ValueError("manifest_id does not match canonical manifest digest")
+            raise ValueError("manifest_id does not match manifest schema identity")
         object.__setattr__(self, "manifest_digest", digest)
         object.__setattr__(self, "manifest_id", manifest_id)
 
-    def canonical_payload(self) -> dict[str, object]:
+    def reproducibility_payload(self) -> dict[str, object]:
+        """Run-independent effective configuration used by schema 1.1 digests."""
         return {
             "schema_version": self.schema_version,
-            "evaluation_run_id": self.evaluation_run_id,
             "suite": {"id": self.suite_id, "version": self.suite_version},
             "cases": [_case_payload(case) for case in self.cases],
             "platform": {"version": self.platform_version, "commit": self.platform_commit},
@@ -252,10 +263,7 @@ class EvalManifest:
             "seed_policy": _seed_payload(self.seed_policy),
             "environment": {
                 "digest": self.environment.digest,
-                "values": [
-                    {"key": item.key, "value": item.value}
-                    for item in _sorted_snapshot(self.environment.values)
-                ],
+                "values": _snapshot_payload(self.environment.values),
             },
             "skill_bundles": _refs_payload(self.skill_bundles),
             "context_bundles": _refs_payload(self.context_bundles),
@@ -267,6 +275,11 @@ class EvalManifest:
             "workspace": None if self.workspace is None else _ref_payload(self.workspace),
             "limitations": list(self.limitations),
         }
+
+    def canonical_payload(self) -> dict[str, object]:
+        payload = self.reproducibility_payload()
+        payload["evaluation_run_id"] = self.evaluation_run_id
+        return payload
 
     def to_payload(self) -> dict[str, object]:
         payload = self.canonical_payload()
@@ -293,7 +306,9 @@ class EvalManifestBuilder:
         randomness = seed_policy or SeedPolicy.conservative_for_run(run)
         if randomness.mode is RandomnessMode.FIXED_SEED_SUPPORTED:
             if len(randomness.ordered_seeds) != run.repetitions:
-                raise ValueError("fixed supported seed set must contain one seed per repetition")
+                raise ValueError(
+                    "fixed supported seed set must contain one seed per repetition"
+                )
         extras = context or EvalManifestContext()
         return EvalManifest(
             evaluation_run_id=run.run_id,
@@ -369,28 +384,23 @@ class ManifestComparator:
             (baseline.suite_id, baseline.suite_version),
             (candidate.suite_id, candidate.suite_version),
         )
+        self._value(differences, "cases", baseline.cases, candidate.cases)
+        platform_candidate = "platform" in candidate_reference_kinds
         self._value(
-            differences,
-            "cases",
-            tuple(_case_payload(item) for item in baseline.cases),
-            tuple(_case_payload(item) for item in candidate.cases),
-        )
-        platform_is_candidate = "platform" in candidate_reference_kinds
-        self._candidate_value(
             differences,
             "platform.version",
             baseline.platform_version,
             candidate.platform_version,
-            intentional=platform_is_candidate,
+            intentional=platform_candidate,
         )
-        self._candidate_value(
+        self._value(
             differences,
             "platform.commit",
             baseline.platform_commit,
             candidate.platform_commit,
-            intentional=platform_is_candidate,
+            intentional=platform_candidate,
         )
-        for path, left, right in (
+        ref_groups = (
             (
                 "configuration_references",
                 baseline.configuration_references,
@@ -407,7 +417,8 @@ class ManifestComparator:
             ),
             ("dependencies", baseline.dependencies, candidate.dependencies),
             ("contract_versions", baseline.contract_versions, candidate.contract_versions),
-        ):
+        )
+        for path, left, right in ref_groups:
             self._refs(
                 differences,
                 path,
@@ -415,12 +426,7 @@ class ManifestComparator:
                 right,
                 candidate_reference_kinds=candidate_reference_kinds,
             )
-        self._value(
-            differences,
-            "workspace",
-            None if baseline.workspace is None else _ref_payload(baseline.workspace),
-            None if candidate.workspace is None else _ref_payload(candidate.workspace),
-        )
+        self._value(differences, "workspace", baseline.workspace, candidate.workspace)
         self._value(
             differences,
             "repeat_policy",
@@ -434,16 +440,16 @@ class ManifestComparator:
             )
             differences.append(
                 ManifestDifference(
-                    path="seed_policy",
-                    baseline=_seed_payload(baseline.seed_policy),
-                    candidate=_seed_payload(candidate.seed_policy),
-                    blocking=not provider_managed,
+                    "seed_policy",
+                    _seed_payload(baseline.seed_policy),
+                    _seed_payload(candidate.seed_policy),
+                    not provider_managed,
                 )
             )
-        left_environment = {item.key: item.value for item in baseline.environment.values}
-        right_environment = {item.key: item.value for item in candidate.environment.values}
-        for key in sorted(left_environment.keys() | right_environment.keys()):
-            if left_environment.get(key) == right_environment.get(key):
+        left_env = {item.key: item.value for item in baseline.environment.values}
+        right_env = {item.key: item.value for item in candidate.environment.values}
+        for key in sorted(left_env.keys() | right_env.keys()):
+            if left_env.get(key) == right_env.get(key):
                 continue
             resource_key = any(
                 token in key.lower()
@@ -452,32 +458,36 @@ class ManifestComparator:
             differences.append(
                 ManifestDifference(
                     path=f"environment.{key}",
-                    baseline=left_environment.get(key),
-                    candidate=right_environment.get(key),
+                    baseline=left_env.get(key),
+                    candidate=right_env.get(key),
                     blocking=performance_sensitive and resource_key,
                 )
             )
-        blocking = any(item.blocking for item in differences)
-        warnings = any(
-            not item.blocking and not item.intentional_candidate_dimension for item in differences
-        )
-        status = (
-            Comparability.INCOMPARABLE
-            if blocking
-            else Comparability.WARNING
-            if warnings
-            else Comparability.DIRECT
-        )
+        if baseline.limitations != candidate.limitations:
+            differences.append(
+                ManifestDifference(
+                    path="limitations",
+                    baseline=baseline.limitations,
+                    candidate=candidate.limitations,
+                    blocking=False,
+                )
+            )
+        if any(item.blocking for item in differences):
+            status = Comparability.INCOMPARABLE
+        elif any(not item.intentional_candidate_dimension for item in differences):
+            status = Comparability.WARNING
+        else:
+            status = Comparability.DIRECT
         return ManifestComparison(status, tuple(differences))
 
     @staticmethod
-    def _candidate_value(
+    def _value(
         differences: list[ManifestDifference],
         path: str,
         baseline: object,
         candidate: object,
         *,
-        intentional: bool,
+        intentional: bool = False,
     ) -> None:
         if baseline != candidate:
             differences.append(
@@ -489,16 +499,6 @@ class ManifestComparator:
                     intentional_candidate_dimension=intentional,
                 )
             )
-
-    @staticmethod
-    def _value(
-        differences: list[ManifestDifference],
-        path: str,
-        baseline: object,
-        candidate: object,
-    ) -> None:
-        if baseline != candidate:
-            differences.append(ManifestDifference(path, baseline, candidate, True))
 
     @staticmethod
     def _refs(
@@ -516,21 +516,19 @@ class ManifestComparator:
                 continue
             kind, ref_id = identity
             intentional = kind in candidate_reference_kinds
-            comparison_only = kind in {"regression_policy", "aggregation_policy"}
+            comparison_lens = kind in _COMPARISON_LENS_REFERENCE_KINDS
             differences.append(
                 ManifestDifference(
                     path=f"{path}.{kind}:{ref_id}",
                     baseline=left.get(identity),
                     candidate=right.get(identity),
-                    blocking=not intentional and not comparison_only,
+                    blocking=not intentional and not comparison_lens,
                     intentional_candidate_dimension=intentional,
                 )
             )
 
 
 class ReproducibleRegressionGate:
-    """Allow #19 regression claims only after reproducibility compatibility is known."""
-
     def __init__(
         self,
         *,
@@ -561,16 +559,14 @@ class ReproducibleRegressionGate:
             return manifest_comparison, None
         assert baseline_manifest is not None
         assert candidate_manifest is not None
-        return (
-            manifest_comparison,
-            self._regression_engine.compare(
-                baseline_run_id=baseline_manifest.evaluation_run_id,
-                current_run_id=candidate_manifest.evaluation_run_id,
-                baseline_results=baseline_results,
-                current_results=candidate_results,
-                policy=policy,
-            ),
+        report = self._regression_engine.compare(
+            baseline_run_id=baseline_manifest.evaluation_run_id,
+            current_run_id=candidate_manifest.evaluation_run_id,
+            baseline_results=baseline_results,
+            current_results=candidate_results,
+            policy=policy,
         )
+        return manifest_comparison, report
 
 
 @dataclass(frozen=True, slots=True)
@@ -602,18 +598,34 @@ def per_repeat_outcomes(results: tuple[EvaluationResult, ...]) -> tuple[RepeatOu
     return tuple(outcomes)
 
 
+def actual_repetition_count(results: tuple[EvaluationResult, ...]) -> int:
+    if not results:
+        return 0
+    return max(item.repetition_index for item in results) + 1
+
+
 def manifest_projection(
     manifest: EvalManifest,
     *,
     comparison: ManifestComparison | None = None,
     results: tuple[EvaluationResult, ...] = (),
 ) -> dict[str, object]:
+    actual_repeats = actual_repetition_count(results)
+    repeat_completion = "configured_repeats_completed"
+    if (
+        manifest.repeat_policy.strategy is RepeatStrategy.STABILITY
+        and 0 < actual_repeats < manifest.repeat_policy.repeat_count
+    ):
+        repeat_completion = "stability_reached"
     return {
         "manifest_id": manifest.manifest_id,
         "manifest_digest": manifest.manifest_digest,
         "evaluation_run_id": manifest.evaluation_run_id,
         "schema_version": manifest.schema_version,
         "repeat_policy": _repeat_payload(manifest.repeat_policy),
+        "actual_repeat_count": actual_repeats,
+        "repeat_completion": repeat_completion,
+        "repeat_statistics": _repeat_statistics(results),
         "seed_policy": _seed_payload(manifest.seed_policy),
         "environment": {
             "digest": manifest.environment.digest,
@@ -680,7 +692,8 @@ def decode_manifest(raw: str) -> EvalManifest:
             tuple(
                 SnapshotValue(key=_string(item, "key"), value=_string(item, "value"))
                 for item in (
-                    _object(value, "environment.values[]") for value in _list(environment, "values")
+                    _object(value, "environment.values[]")
+                    for value in _list(environment, "values")
                 )
             )
         ),
@@ -692,7 +705,9 @@ def decode_manifest(raw: str) -> EvalManifest:
         dependencies=_decode_refs(obj, "dependencies"),
         contract_versions=_decode_refs(obj, "contract_versions"),
         workspace=(
-            None if workspace_raw is None else _decode_ref(_object(workspace_raw, "workspace"))
+            None
+            if workspace_raw is None
+            else _decode_ref(_object(workspace_raw, "workspace"))
         ),
         limitations=tuple(_strings(obj, "limitations")),
         schema_version=_string(obj, "schema_version"),
@@ -702,6 +717,37 @@ def decode_manifest(raw: str) -> EvalManifest:
     if manifest.environment.digest != _string(environment, "digest"):
         raise ValueError("stored environment fingerprint digest is invalid")
     return manifest
+
+
+def _repeat_statistics(results: tuple[EvaluationResult, ...]) -> list[dict[str, object]]:
+    grouped: dict[tuple[str, str, str], list[EvaluationResult]] = {}
+    for result in results:
+        identity = (result.case_id, result.case_version, result.evaluator.evaluator_id)
+        grouped.setdefault(identity, []).append(result)
+    statistics: list[dict[str, object]] = []
+    for case_id, case_version, evaluator_id in sorted(grouped):
+        samples = grouped[(case_id, case_version, evaluator_id)]
+        scores = [item.score for item in samples]
+        numeric_scores = [float(value) for value in scores if value is not None]
+        pass_count = sum(item.outcome.value == "passed" for item in samples)
+        statistics.append(
+            {
+                "case_id": case_id,
+                "case_version": case_version,
+                "evaluator_id": evaluator_id,
+                "sample_count": len(samples),
+                "pass_rate": pass_count / len(samples),
+                "score_mean": (
+                    None if len(numeric_scores) != len(samples) else float(mean(numeric_scores))
+                ),
+                "score_variance": (
+                    None
+                    if len(numeric_scores) != len(samples)
+                    else float(pvariance(numeric_scores))
+                ),
+            }
+        )
+    return statistics
 
 
 def _sha256(value: object) -> str:
@@ -723,6 +769,10 @@ def _reject_private_identity(value: str) -> None:
 
 def _sorted_snapshot(values: tuple[SnapshotValue, ...]) -> tuple[SnapshotValue, ...]:
     return tuple(sorted(values, key=lambda item: item.key))
+
+
+def _snapshot_payload(values: tuple[SnapshotValue, ...]) -> list[dict[str, str]]:
+    return [{"key": item.key, "value": item.value} for item in _sorted_snapshot(values)]
 
 
 def _ref_key(value: ManifestReference) -> tuple[str, str, str, str, str]:
@@ -759,10 +809,7 @@ def _case_payload(value: CaseReproducibilitySpec) -> dict[str, object]:
         "case_version": value.case_version,
         "fixtures": list(value.fixtures),
         "timeout_seconds": value.timeout_seconds,
-        "resource_limits": [
-            {"key": item.key, "value": item.value}
-            for item in _sorted_snapshot(value.resource_limits)
-        ],
+        "resource_limits": _snapshot_payload(value.resource_limits),
     }
 
 
@@ -831,10 +878,7 @@ def _int(obj: dict[str, Any], key: str) -> int:
 
 
 def _optional_int(obj: dict[str, Any], key: str) -> int | None:
-    value = obj.get(key)
-    if value is None:
-        return None
-    return _int({key: value}, key)
+    return None if obj.get(key) is None else _int(obj, key)
 
 
 def _optional_float(obj: dict[str, Any], key: str) -> float | None:
@@ -878,7 +922,8 @@ def _decode_case(obj: dict[str, Any]) -> CaseReproducibilitySpec:
         resource_limits=tuple(
             SnapshotValue(key=_string(item, "key"), value=_string(item, "value"))
             for item in (
-                _object(value, "resource_limits[]") for value in _list(obj, "resource_limits")
+                _object(value, "resource_limits[]")
+                for value in _list(obj, "resource_limits")
             )
         ),
     )

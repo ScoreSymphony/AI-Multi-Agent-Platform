@@ -109,6 +109,73 @@ export interface EvaluationComparisonFinding {
   current_result_id: string;
 }
 
+export interface EvaluationManifestDifferenceProjection {
+  path: string;
+  baseline: JsonValue;
+  candidate: JsonValue;
+  blocking: boolean;
+  intentional_candidate_dimension: boolean;
+}
+
+export interface EvaluationManifestComparisonProjection {
+  status: string;
+  differences: EvaluationManifestDifferenceProjection[];
+}
+
+export interface EvaluationRepeatPolicyProjection {
+  strategy: string;
+  repeat_count: number;
+  min_repeats: number;
+  stability_window: number | null;
+  variance_threshold: number | null;
+  version: string;
+}
+
+export interface EvaluationSeedPolicyProjection {
+  mode: string;
+  ordered_seeds: number[];
+  provider_seed_control: boolean | null;
+  limitations: string[];
+  version: string;
+}
+
+export interface EvaluationRepeatOutcomeProjection {
+  repetition_index: number;
+  seed: number | null;
+  result_ids: string[];
+  outcomes: string[];
+  scores: Array<number | null>;
+}
+
+export interface EvaluationRepeatStatisticProjection {
+  case_id: string;
+  case_version: string;
+  evaluator_id: string;
+  sample_count: number;
+  pass_rate: number;
+  score_mean: number | null;
+  score_variance: number | null;
+}
+
+export interface EvaluationManifestProjection {
+  manifest_id: string;
+  manifest_digest: string;
+  evaluation_run_id: string;
+  schema_version: string;
+  repeat_policy: EvaluationRepeatPolicyProjection;
+  actual_repeat_count: number;
+  repeat_completion: string;
+  repeat_statistics: EvaluationRepeatStatisticProjection[];
+  seed_policy: EvaluationSeedPolicyProjection;
+  environment: {
+    digest: string;
+    comparability: string | null;
+  };
+  per_repeat_outcomes: EvaluationRepeatOutcomeProjection[];
+  reproducibility_limitations: string[];
+  manifest_diff: EvaluationManifestDifferenceProjection[];
+}
+
 export interface CanonicalEvaluationComparison {
   id: string;
   type: "evaluation-comparison";
@@ -119,6 +186,7 @@ export interface CanonicalEvaluationComparison {
   findings: EvaluationComparisonFinding[];
   regression_count: number;
   improvement_count: number;
+  manifest_comparison?: EvaluationManifestComparisonProjection;
 }
 
 export interface CanonicalEvaluationRun {
@@ -136,6 +204,7 @@ export interface CanonicalEvaluationRun {
   snapshot: EvaluationConfigurationSnapshot;
   results?: CanonicalEvaluationResult[];
   comparison?: CanonicalEvaluationComparison | null;
+  manifest?: EvaluationManifestProjection | null;
 }
 
 export interface RunEvaluationInput {
@@ -149,6 +218,17 @@ export interface RunEvaluationInput {
   seed?: number | null;
   baseline_run_id?: string | null;
   regression_policy_ref?: string | null;
+  aggregation_policy_ref?: string | null;
+  repeat_policy?: EvaluationRepeatPolicyProjection;
+  seed_policy?: EvaluationSeedPolicyProjection;
+  candidate_reference_kinds?: string[];
+  performance_sensitive?: boolean;
+}
+
+export interface CompareEvaluationOptions {
+  aggregation_policy_ref?: string | null;
+  candidate_reference_kinds?: string[];
+  performance_sensitive?: boolean;
 }
 
 export interface EvaluationClientOptions {
@@ -194,20 +274,27 @@ export class EvaluationClient {
     if (!input.snapshot.platform_version.trim()) {
       throw new Error("evaluation snapshot platform_version is required");
     }
-    if (input.repetitions !== undefined && (!Number.isInteger(input.repetitions) || input.repetitions <= 0)) {
+    if (
+      input.repetitions !== undefined
+      && (!Number.isInteger(input.repetitions) || input.repetitions <= 0)
+    ) {
       throw new Error("evaluation repetitions must be a positive integer");
+    }
+    if (input.seed !== undefined && input.seed !== null && input.seed_policy !== undefined) {
+      throw new Error("evaluation seed and seed_policy are alternative inputs");
     }
 
     const baselineRunId = optionalNonBlank(input.baseline_run_id);
     const regressionPolicyRef = optionalNonBlank(input.regression_policy_ref);
+    const aggregationPolicyRef = optionalNonBlank(input.aggregation_policy_ref);
     if ((baselineRunId === null) !== (regressionPolicyRef === null)) {
       throw new Error(
         "evaluation baseline_run_id and regression_policy_ref must both be set or both be omitted",
       );
     }
     const repetitions = input.repetitions ?? 1;
-    if (baselineRunId !== null && repetitions !== 1) {
-      throw new Error("evaluation baseline comparison requires repetitions=1");
+    if (baselineRunId !== null && repetitions !== 1 && aggregationPolicyRef === null) {
+      throw new Error("repeated baseline comparison requires an aggregation policy");
     }
 
     return this.command<CanonicalEvaluationRun>(
@@ -219,6 +306,15 @@ export class EvaluationClient {
         ...(input.seed === undefined || input.seed === null ? {} : { seed: input.seed }),
         ...(baselineRunId === null ? {} : { baseline_run_id: baselineRunId }),
         ...(regressionPolicyRef === null ? {} : { regression_policy_ref: regressionPolicyRef }),
+        ...(aggregationPolicyRef === null ? {} : { aggregation_policy_ref: aggregationPolicyRef }),
+        ...(input.repeat_policy === undefined ? {} : { repeat_policy: input.repeat_policy }),
+        ...(input.seed_policy === undefined ? {} : { seed_policy: input.seed_policy }),
+        ...(input.candidate_reference_kinds === undefined
+          ? {}
+          : { candidate_reference_kinds: input.candidate_reference_kinds }),
+        ...(input.performance_sensitive === undefined
+          ? {}
+          : { performance_sensitive: input.performance_sensitive }),
       },
       idempotencyKey,
     );
@@ -229,15 +325,24 @@ export class EvaluationClient {
     baselineRunId: string,
     regressionPolicyRef: string,
     idempotencyKey: string = crypto.randomUUID(),
+    options: CompareEvaluationOptions = {},
   ): Promise<CanonicalEvaluationComparison> {
     if (!baselineRunId.trim()) throw new Error("baseline evaluation run id is required");
     if (!regressionPolicyRef.trim()) throw new Error("regression policy ref is required");
+    const aggregationPolicyRef = optionalNonBlank(options.aggregation_policy_ref);
     return this.command<CanonicalEvaluationComparison>(
       "evaluation.compare",
       currentRunId,
       {
         baseline_run_id: baselineRunId,
         regression_policy_ref: regressionPolicyRef,
+        ...(aggregationPolicyRef === null ? {} : { aggregation_policy_ref: aggregationPolicyRef }),
+        ...(options.candidate_reference_kinds === undefined
+          ? {}
+          : { candidate_reference_kinds: options.candidate_reference_kinds }),
+        ...(options.performance_sensitive === undefined
+          ? {}
+          : { performance_sensitive: options.performance_sensitive }),
       },
       idempotencyKey,
     );
