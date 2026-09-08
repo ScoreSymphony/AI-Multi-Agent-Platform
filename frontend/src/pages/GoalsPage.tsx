@@ -172,6 +172,7 @@ export function GoalDetailPage({ client, goalId }: { client: GoalClient; goalId:
   const [actionError, setActionError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState("Cancelled by operator");
+  const [failureReason, setFailureReason] = useState("Goal can no longer be achieved under the current objective and constraints");
   const [taskId, setTaskId] = useState("");
   const [revisionTitle, setRevisionTitle] = useState("");
   const [revisionObjective, setRevisionObjective] = useState("");
@@ -254,6 +255,7 @@ export function GoalDetailPage({ client, goalId }: { client: GoalClient; goalId:
   const canResume = goal.status === "paused";
   const canActivate = goal.status === "draft";
   const canCancel = !TERMINAL_GOAL_STATES.has(goal.status);
+  const canFail = goal.status === "active" || goal.status === "waiting";
 
   return (
     <div className="stack">
@@ -296,9 +298,25 @@ export function GoalDetailPage({ client, goalId }: { client: GoalClient; goalId:
             </div>
           </div>
         ) : null}
+        {canFail ? (
+          <div className="form-grid">
+            <label>
+              Failure reason
+              <input value={failureReason} onChange={(event) => setFailureReason(event.target.value)} />
+            </label>
+            <div className="actions">
+              <button
+                disabled={busy || !failureReason.trim()}
+                onClick={() => void runAction(() => client.fail(goal.id, failureReason.trim()))}
+              >
+                Mark Goal failed
+              </button>
+            </div>
+          </div>
+        ) : null}
         <p>
-          Human pause, resume, cancellation and revision go through canonical Goal commands. The
-          browser does not mutate Goal state locally or bypass server-side authorization.
+          Human pause, resume, cancellation, reasoned failure and revision go through canonical Goal
+          commands. The browser does not mutate Goal state locally or bypass server-side authorization.
         </p>
       </Card>
 
