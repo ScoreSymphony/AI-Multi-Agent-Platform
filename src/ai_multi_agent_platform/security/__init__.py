@@ -64,6 +64,31 @@ from .data_enforcement_lifecycle import (
     AuthorizedDataMemoryProvider,
 )
 from .enforcement import AuthorizationAuditSink, AuthorizationGate
+from .egress import (
+    CanonicalEgressPolicy,
+    EgressActorResolver,
+    EgressApprovalResolver,
+    EgressGate,
+    InMemoryEgressAuditSink,
+    NullEgressAuditSink,
+)
+from .egress_approvals import (
+    EgressApprovalBridge,
+    EgressApprovalExceptionPolicy,
+    egress_proposed_action,
+)
+from .egress_composition import DurableEgressRuntime, build_durable_egress_runtime
+from .egress_profiles import (
+    EGRESS_PROFILE_STORE_SCHEMA_VERSION,
+    EgressProfileDefinition,
+    EgressProfileRepository,
+    EgressProfileService,
+    JsonEgressProfileRepository,
+    egress_profile_from_json,
+    egress_profile_to_json,
+    new_egress_profile_id,
+)
+from .egress_resolution import RepositoryBackedEgressPolicy
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
 from .policy_profile_persistence import (
@@ -108,6 +133,7 @@ from .enforced_providers import (
 from .validation import UntrustedInputError, validate_untrusted_json
 
 __all__ = [
+    "EGRESS_PROFILE_STORE_SCHEMA_VERSION",
     "POLICY_PROFILE_REPOSITORY_SCHEMA_VERSION",
     "POLICY_PROFILE_SCHEMA_VERSION",
     "REDACTED",
@@ -149,28 +175,42 @@ __all__ = [
     "AuthorizedSecretProvider",
     "AuthorizedToolProvider",
     "BrowserSession",
+    "CanonicalEgressPolicy",
     "ControlPlaneAuthorizationBridge",
     "CredentialKind",
     "CredentialRotation",
     "CredentialScope",
+    "DurableEgressRuntime",
+    "EgressActorResolver",
+    "EgressApprovalBridge",
+    "EgressApprovalExceptionPolicy",
+    "EgressApprovalResolver",
+    "EgressGate",
+    "EgressProfileDefinition",
+    "EgressProfileRepository",
+    "EgressProfileService",
     "ExternalIdentityMapping",
     "ExternalSideEffect",
     "IdentityProviderAdapter",
     "InMemoryAuthenticationStore",
     "InMemoryAuthorizationPolicyProfileRepository",
+    "InMemoryEgressAuditSink",
     "InMemoryFailureRateLimiter",
     "InMemoryReplayProtector",
     "InMemoryRequestRateLimiter",
     "IssuedCredential",
     "JsonAuthorizationPolicyProfileRepository",
+    "JsonEgressProfileRepository",
     "LocalAuthenticationService",
     "LocalAuthorizationProvider",
     "LocalPrincipalPolicy",
     "LocalUserAccount",
     "LoginResult",
+    "NullEgressAuditSink",
     "PathSecurityError",
     "ProposedAction",
     "ReplayProtector",
+    "RepositoryBackedEgressPolicy",
     "ResourceType",
     "RiskClassification",
     "ScryptPasswordHasher",
@@ -185,9 +225,14 @@ __all__ = [
     "UntrustedInputError",
     "VerifiedExternalIdentity",
     "baseline_decision",
+    "build_durable_egress_runtime",
     "canonical_control_plane_vocabulary",
     "compile_local_principal_policy",
+    "egress_profile_from_json",
+    "egress_profile_to_json",
+    "egress_proposed_action",
     "infer_actor_identity",
+    "new_egress_profile_id",
     "policy_profile_revision_from_json",
     "policy_profile_revision_to_json",
     "redact_exception",

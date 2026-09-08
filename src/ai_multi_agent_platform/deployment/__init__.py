@@ -20,6 +20,7 @@ from .durable_connectors import (
     SingleNodeSmokeResult,
     build_single_node_deployment,
 )
+from .egress_bindings import EgressDeploymentBindings
 
 __all__ = [
     "AdvancedDeploymentProfile",
@@ -27,6 +28,7 @@ __all__ = [
     "ControlPlaneBinding",
     "DeploymentNode",
     "DeploymentWorkerProtocolService",
+    "EgressDeploymentBindings",
     "OptionalServiceBinding",
     "SingleNodeConfig",
     "SingleNodeDeployment",

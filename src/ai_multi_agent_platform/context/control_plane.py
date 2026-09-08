@@ -8,7 +8,8 @@ from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
-from .bindings import ContextRunBindingRepository
+from .bindings import ContextRunBinding, ContextRunBindingRepository
+from .classification import effective_context_bundle_classification
 from .models import ContextBundle, ContextEntry
 from .persistence import InMemoryContextBundleRepository
 from .projection import context_bundle_projection, context_run_binding_projection
@@ -78,6 +79,7 @@ class ContextBundleResourceService:
             "run_id": bundle.run_id,
             "agent_id": bundle.agent_id,
             "agent_revision": bundle.agent_revision,
+            "effective_data_classification": effective_context_bundle_classification(bundle).value,
             "source_categories": source_categories,
             "entry_count": len(bundle.entries),
             "omission_count": len(bundle.omissions),
@@ -90,8 +92,15 @@ class ContextBundleResourceService:
 
 
 class ContextRunBindingResourceService:
-    def __init__(self, repository: ContextRunBindingRepository) -> None:
+    """Project immutable Run bindings with a content-free effective classification summary."""
+
+    def __init__(
+        self,
+        repository: ContextRunBindingRepository,
+        bundles: InMemoryContextBundleRepository,
+    ) -> None:
         self.repository = repository
+        self.bundles = bundles
 
     async def list_resources(
         self,
@@ -99,10 +108,7 @@ class ContextRunBindingResourceService:
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del context, query
-        return tuple(
-            {"id": item.agent_run_id, **context_run_binding_projection(item)}
-            for item in self.repository.list_all()
-        )
+        return tuple(self._projection(item) for item in self.repository.list_all())
 
     async def get_resource(
         self,
@@ -110,8 +116,15 @@ class ContextRunBindingResourceService:
         resource_id: str,
     ) -> dict[str, JsonValue]:
         del context
-        binding = self.repository.get(resource_id)
-        return {"id": binding.agent_run_id, **context_run_binding_projection(binding)}
+        return self._projection(self.repository.get(resource_id))
+
+    def _projection(self, binding: ContextRunBinding) -> dict[str, JsonValue]:
+        bundle = self.bundles.get(binding.context_bundle_id)
+        return {
+            "id": binding.agent_run_id,
+            **context_run_binding_projection(binding),
+            "effective_data_classification": effective_context_bundle_classification(bundle).value,
+        }
 
 
 def register_context_control_plane(
@@ -127,5 +140,5 @@ def register_context_control_plane(
     )
     control_plane.register_resource_service(
         CONTEXT_RUN_BINDING_COLLECTION,
-        ContextRunBindingResourceService(bindings),
+        ContextRunBindingResourceService(bindings, bundles),
     )

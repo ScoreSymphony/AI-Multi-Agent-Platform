@@ -9,8 +9,11 @@ from ai_multi_agent_platform.contracts import (
     ClassificationDowngradeError,
     ContractError,
     DataClassification,
+    EgressCostClass,
     EgressDecision,
     EgressOutcome,
+    EgressProfile,
+    EgressProfileTrust,
     EgressReasonCode,
     EgressRequest,
     EgressTarget,
@@ -28,6 +31,34 @@ from ai_multi_agent_platform.security.egress import (
 )
 
 
+def _profile(
+    *,
+    target_id: str = "provider:test",
+    posture: EgressTargetPosture = EgressTargetPosture.EXTERNAL,
+    cost_class: EgressCostClass = EgressCostClass.FREE_EXTERNAL,
+    trust: EgressProfileTrust = EgressProfileTrust.CONFIGURED,
+    allowed: tuple[DataClassification, ...] = (),
+    denied: tuple[DataClassification, ...] = (),
+    metadata: dict[str, object] | None = None,
+) -> EgressProfile:
+    return EgressProfile(
+        profile_id=f"egress-profile:{target_id}",
+        revision=1,
+        target_kind=EgressTargetKind.MODEL_PROVIDER,
+        target_id=target_id,
+        posture=posture,
+        allowed_classifications=allowed,
+        denied_classifications=denied,
+        network_egress_required=posture is EgressTargetPosture.EXTERNAL,
+        cost_class=cost_class,
+        credential_required=False,
+        policy_source="operator-config",
+        source_revision="test-v1",
+        trust=trust,
+        metadata=metadata or {},
+    )
+
+
 def _request(
     classification: DataClassification | None,
     *,
@@ -35,15 +66,17 @@ def _request(
     target_id: str = "provider:test",
     allowed: tuple[DataClassification, ...] = (),
     policy_metadata: dict[str, object] | None = None,
+    profile: EgressProfile | None = None,
 ) -> EgressRequest:
     return EgressRequest(
         request_id="egress-test-1",
         target=EgressTarget(
             kind=EgressTargetKind.MODEL_PROVIDER,
             target_id=target_id,
-            posture=posture,
-            allowed_classifications=allowed,
+            posture=(EgressTargetPosture.UNKNOWN if profile is not None else posture),
+            allowed_classifications=(() if profile is not None else allowed),
             policy_metadata=policy_metadata or {},
+            profile=profile,
         ),
         context=OperationContext(correlation_id="corr-591"),
         classification=classification,
@@ -96,7 +129,7 @@ def test_unknown_target_posture_fails_closed() -> None:
             _request(DataClassification.PUBLIC, posture=EgressTargetPosture.UNKNOWN)
         )
     )
-    assert decision.outcome is EgressOutcome.DENY
+    assert decision.outcome is EgressOutcome.UNKNOWN_BLOCKED
     assert decision.reason_code is EgressReasonCode.UNKNOWN_TARGET_POSTURE
 
 
@@ -141,6 +174,89 @@ def test_sensitive_external_egress_requires_exact_trusted_target_opt_in() -> Non
     assert decision.outcome is EgressOutcome.ALLOW
 
 
+def test_versioned_profile_preserves_target_identity_and_provenance() -> None:
+    profile = _profile()
+    target = EgressTarget(
+        kind=EgressTargetKind.MODEL_PROVIDER,
+        target_id="provider:test",
+        profile=profile,
+    )
+
+    assert target.effective_posture is EgressTargetPosture.EXTERNAL
+    assert target.profile_ref == "egress-profile:provider:test@1"
+    assert profile.policy_source == "operator-config"
+    assert profile.source_revision == "test-v1"
+
+
+def test_unverified_external_profile_fails_closed() -> None:
+    decision = asyncio.run(
+        CanonicalEgressPolicy().evaluate(
+            _request(
+                DataClassification.PUBLIC,
+                profile=_profile(trust=EgressProfileTrust.UNVERIFIED),
+            )
+        )
+    )
+
+    assert decision.outcome is EgressOutcome.UNKNOWN_BLOCKED
+    assert decision.reason_code is EgressReasonCode.UNVERIFIED_PROFILE
+
+
+def test_paid_external_profile_is_denied_by_baseline() -> None:
+    decision = asyncio.run(
+        CanonicalEgressPolicy().evaluate(
+            _request(
+                DataClassification.PUBLIC,
+                profile=_profile(cost_class=EgressCostClass.PAID_EXTERNAL),
+            )
+        )
+    )
+
+    assert decision.outcome is EgressOutcome.DENY
+    assert decision.reason_code is EgressReasonCode.PAID_EXTERNAL_DENIED
+
+
+def test_paid_external_profile_can_be_enabled_by_deployment_policy() -> None:
+    decision = asyncio.run(
+        CanonicalEgressPolicy(allow_paid_external=True).evaluate(
+            _request(
+                DataClassification.PUBLIC,
+                profile=_profile(cost_class=EgressCostClass.PAID_EXTERNAL),
+            )
+        )
+    )
+
+    assert decision.outcome is EgressOutcome.ALLOW
+
+
+def test_unknown_external_cost_is_explicitly_blocked() -> None:
+    decision = asyncio.run(
+        CanonicalEgressPolicy().evaluate(
+            _request(
+                DataClassification.PUBLIC,
+                profile=_profile(cost_class=EgressCostClass.UNKNOWN),
+            )
+        )
+    )
+
+    assert decision.outcome is EgressOutcome.UNKNOWN_BLOCKED
+    assert decision.reason_code is EgressReasonCode.UNKNOWN_COST_BLOCKED
+
+
+def test_profile_denied_classification_takes_precedence() -> None:
+    decision = asyncio.run(
+        CanonicalEgressPolicy().evaluate(
+            _request(
+                DataClassification.CONFIDENTIAL,
+                profile=_profile(denied=(DataClassification.CONFIDENTIAL,)),
+            )
+        )
+    )
+
+    assert decision.outcome is EgressOutcome.DENY
+    assert decision.reason_code is EgressReasonCode.TARGET_POLICY_DENIED
+
+
 def test_gate_emits_stable_value_free_audit_events() -> None:
     sink = InMemoryEgressAuditSink()
     gate = EgressGate(CanonicalEgressPolicy(), audit_sink=sink)
@@ -153,6 +269,18 @@ def test_gate_emits_stable_value_free_audit_events() -> None:
         "EgressAllowed",
     ]
     assert all(event.payload_digest == request.payload_digest for event in sink.events)
+    assert "sensitive-value" not in repr(sink.events)
+
+
+def test_profile_audit_retains_safe_revision_and_cost_only() -> None:
+    sink = InMemoryEgressAuditSink()
+    gate = EgressGate(CanonicalEgressPolicy(), audit_sink=sink)
+    request = _request(DataClassification.PUBLIC, profile=_profile())
+
+    asyncio.run(gate.enforce(request))
+
+    assert sink.events[-1].profile_ref == "egress-profile:provider:test@1"
+    assert sink.events[-1].cost_class is EgressCostClass.FREE_EXTERNAL
     assert "sensitive-value" not in repr(sink.events)
 
 

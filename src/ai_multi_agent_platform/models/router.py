@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from typing import cast
 
@@ -22,6 +23,10 @@ from .registry import ModelRegistry
 from .routing_profiles import ModelRoutingProfileRevision, RoutingProfileFallbackPolicy
 from .types import ModelConfiguration, ModelLocation, ModelRoute, RoutingRequirements
 
+type CandidatePolicyHook = Callable[
+    [ModelRequest, ModelConfiguration], Awaitable[tuple[bool, str | None]]
+]
+
 
 class DeterministicModelRouter(ModelRouter):
     """Explainable routing policy over canonical model inventory and profile revisions."""
@@ -40,6 +45,7 @@ class DeterministicModelRouter(ModelRouter):
                     "local-policy",
                     "explicit-assignment",
                     "versioned-routing-profile",
+                    "candidate-policy-filtering",
                 ),
             ),
         ),
@@ -47,8 +53,14 @@ class DeterministicModelRouter(ModelRouter):
         available=True,
     )
 
-    def __init__(self, registry: ModelRegistry) -> None:
+    def __init__(
+        self,
+        registry: ModelRegistry,
+        *,
+        candidate_policy_hook: CandidatePolicyHook | None = None,
+    ) -> None:
         self.registry = registry
+        self._candidate_policy_hook = candidate_policy_hook
 
     async def select_provider(self, request: ModelRequest) -> ModelSelection:
         try:
@@ -59,20 +71,91 @@ class DeterministicModelRouter(ModelRouter):
                 f"invalid model routing requirements: {exc}",
             ) from exc
 
-        route = self.route(requirements)
+        exclusions: tuple[dict[str, str], ...] = ()
+        if self._candidate_policy_hook is None:
+            route = self.route(requirements)
+        else:
+            route, exclusions = await self._route_with_candidate_policy(request, requirements)
+        metadata: dict[str, JsonValue] = {
+            "reason": route.reason,
+            "candidate_ids": list(route.candidate_ids),
+            "correlation_id": request.context.correlation_id,
+        }
+        if exclusions:
+            metadata["policy_exclusions"] = [dict(item) for item in exclusions]
         return ModelSelection(
             provider_id=route.provider_id,
             model_ref=route.model_config_id,
             adapter_metadata=(
                 AdapterMetadata(
                     namespace="platform-model-router",
-                    values={
-                        "reason": route.reason,
-                        "candidate_ids": list(route.candidate_ids),
-                        "correlation_id": request.context.correlation_id,
-                    },
+                    values=metadata,
                 ),
             ),
+        )
+
+    async def _route_with_candidate_policy(
+        self,
+        request: ModelRequest,
+        requirements: RoutingRequirements,
+    ) -> tuple[ModelRoute, tuple[dict[str, str], ...]]:
+        hook = self._candidate_policy_hook
+        if hook is None:
+            return self.route(requirements), ()
+
+        if requirements.explicit_model_id is not None:
+            route = self.route(requirements)
+            config = self.registry.get_model(route.model_config_id)
+            allowed, reason = await hook(request, config)
+            if not allowed:
+                exclusion = {
+                    "model_config_id": config.config_id,
+                    "provider_id": config.provider_id,
+                    "reason": reason or "candidate_policy_denied",
+                }
+                raise ContractError(
+                    ErrorCode.NO_COMPATIBLE_ROUTE,
+                    "explicit model assignment is prohibited by candidate policy",
+                    provider_id=config.provider_id,
+                    details={
+                        "explicit_model_id": config.config_id,
+                        "policy_exclusions": cast(JsonValue, [exclusion]),
+                    },
+                )
+            return route, ()
+
+        candidates = self._candidate_configs(requirements)
+        exclusions: list[dict[str, str]] = []
+        for candidate in candidates:
+            allowed, reason = await hook(request, candidate)
+            if allowed:
+                return (
+                    ModelRoute(
+                        model_config_id=candidate.config_id,
+                        provider_id=candidate.provider_id,
+                        reason=(
+                            "highest deterministic priority among capability- and "
+                            "policy-compatible registered models"
+                        ),
+                        candidate_ids=tuple(item.config_id for item in candidates),
+                    ),
+                    tuple(exclusions),
+                )
+            exclusions.append(
+                {
+                    "model_config_id": candidate.config_id,
+                    "provider_id": candidate.provider_id,
+                    "reason": reason or "candidate_policy_denied",
+                }
+            )
+
+        raise ContractError(
+            ErrorCode.NO_COMPATIBLE_ROUTE,
+            "no registered model satisfies both routing and candidate policy",
+            details={
+                **self._no_route_details(requirements),
+                "policy_exclusions": cast(JsonValue, exclusions),
+            },
         )
 
     def route_profile(self, profile: ModelRoutingProfileRevision) -> ModelRoute:
@@ -160,6 +243,23 @@ class DeterministicModelRouter(ModelRouter):
                 candidate_ids=(explicit.config_id,),
             )
 
+        candidates = self._candidate_configs(requirements)
+        if not candidates:
+            raise ContractError(
+                ErrorCode.NO_COMPATIBLE_ROUTE,
+                "no registered model satisfies the requested capabilities and policy",
+                details=self._no_route_details(requirements),
+            )
+
+        selected = candidates[0]
+        return ModelRoute(
+            model_config_id=selected.config_id,
+            provider_id=selected.provider_id,
+            reason="highest deterministic priority among compatible registered models",
+            candidate_ids=tuple(item.config_id for item in candidates),
+        )
+
+    def _candidate_configs(self, requirements: RoutingRequirements) -> list[ModelConfiguration]:
         candidates = [
             config
             for config in self.registry.query_models(
@@ -174,30 +274,20 @@ class DeterministicModelRouter(ModelRouter):
             if self._eligible(config, requirements)
         ]
         candidates.sort(key=lambda item: (-item.priority, item.config_id))
+        return candidates
 
-        if not candidates:
-            raise ContractError(
-                ErrorCode.NO_COMPATIBLE_ROUTE,
-                "no registered model satisfies the requested capabilities and policy",
-                details={
-                    "local_only": requirements.local_only,
-                    "self_hosted_only": requirements.self_hosted_only,
-                    "tool_calling": requirements.tool_calling,
-                    "structured_output": requirements.structured_output,
-                    "streaming": requirements.streaming,
-                    "modalities": list(requirements.modalities),
-                    "reasoning": list(requirements.reasoning),
-                    "min_context_window": requirements.min_context_window,
-                },
-            )
-
-        selected = candidates[0]
-        return ModelRoute(
-            model_config_id=selected.config_id,
-            provider_id=selected.provider_id,
-            reason="highest deterministic priority among compatible registered models",
-            candidate_ids=tuple(item.config_id for item in candidates),
-        )
+    @staticmethod
+    def _no_route_details(requirements: RoutingRequirements) -> dict[str, JsonValue]:
+        return {
+            "local_only": requirements.local_only,
+            "self_hosted_only": requirements.self_hosted_only,
+            "tool_calling": requirements.tool_calling,
+            "structured_output": requirements.structured_output,
+            "streaming": requirements.streaming,
+            "modalities": list(requirements.modalities),
+            "reasoning": list(requirements.reasoning),
+            "min_context_window": requirements.min_context_window,
+        }
 
     def _eligible(
         self,

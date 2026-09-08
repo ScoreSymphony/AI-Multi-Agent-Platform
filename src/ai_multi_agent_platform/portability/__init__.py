@@ -36,6 +36,19 @@ from .connector_codecs import (
 )
 from .connector_import import ConnectionImportMutationHandler, ConnectionImportPolicy
 from .dependencies import ResourceDependencyRef, parse_resource_dependency, resource_dependency
+from .egress_profile_codecs import (
+    EGRESS_PROFILE_PORTABLE_SCHEMA_VERSION,
+    EGRESS_PROFILE_RESOURCE_TYPE,
+    EgressProfilePortableCodec,
+    EgressProfilePortableSnapshot,
+    register_egress_profile_portability_codec,
+    snapshot_egress_profile,
+)
+from .egress_profile_composition import (
+    EgressProfilePortabilityBinding,
+    register_egress_profile_portability,
+)
+from .egress_profile_import import EgressProfileImportMutationHandler
 from .evaluation_codecs import (
     EVALUATION_FIXTURE_RESOURCE_TYPE,
     EVALUATION_SUITE_PORTABLE_SCHEMA_VERSION,
@@ -200,6 +213,8 @@ __all__ = [
     "AUTOMATION_RESOURCE_TYPE",
     "CONNECTION_PORTABLE_SCHEMA_VERSION",
     "CONNECTION_RESOURCE_TYPE",
+    "EGRESS_PROFILE_PORTABLE_SCHEMA_VERSION",
+    "EGRESS_PROFILE_RESOURCE_TYPE",
     "EVALUATION_FIXTURE_RESOURCE_TYPE",
     "EVALUATION_SUITE_PORTABLE_SCHEMA_VERSION",
     "EVALUATION_SUITE_RESOURCE_TYPE",
@@ -243,6 +258,10 @@ __all__ = [
     "ConnectorRequirementMetadata",
     "DependencyKind",
     "DependencyRequirement",
+    "EgressProfileImportMutationHandler",
+    "EgressProfilePortabilityBinding",
+    "EgressProfilePortableCodec",
+    "EgressProfilePortableSnapshot",
     "EvaluationSuiteImportMutationHandler",
     "EvaluationSuiteImportToken",
     "EvaluationSuitePortableCodec",
@@ -323,6 +342,8 @@ __all__ = [
     "register_authorization_policy_profile_serializer",
     "register_automation_portability_codec",
     "register_connector_portability_codec",
+    "register_egress_profile_portability",
+    "register_egress_profile_portability_codec",
     "register_evaluation_suite_portability_codec",
     "register_file_portability_codecs",
     "register_knowledge_portability_codec",
@@ -339,6 +360,7 @@ __all__ = [
     "snapshot_authorization_policy_profile",
     "snapshot_automation",
     "snapshot_connection",
+    "snapshot_egress_profile",
     "snapshot_file",
     "snapshot_memory",
     "snapshot_model_routing_profile",
