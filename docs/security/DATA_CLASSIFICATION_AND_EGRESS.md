@@ -24,8 +24,7 @@ inherit at least the originating classification and preserve a stronger provider
 creates a second provider registry. A model target therefore uses the existing
 `ModelConfiguration.config_id`; connector/capability/runtime targets follow the same rule.
 
-`EgressProfile` (`egress-profile/v1`) is an optional, versioned policy view attached to that target.
-It records:
+`EgressProfile` (`egress-profile/v1`) is a versioned policy view for that target. It records:
 
 - target posture (`local`, `internal`, `external`, `unknown`);
 - explicitly allowed and denied data classifications;
@@ -42,10 +41,40 @@ posture is blocked. For profile-aware external destinations, unknown cost is blo
 `CanonicalEgressPolicy(allow_paid_external=True)` when it deliberately permits paid external
 routes. This is a policy decision, not a router heuristic.
 
-Legacy targets without a profile retain the original v1 posture/classification behavior so existing
+Legacy targets without a profile retain the original posture/classification behavior so existing
 configurations do not change meaning merely because the profile contract was introduced. New
-external integrations should define a versioned profile rather than rely on that compatibility
+external integrations should use the durable profile path rather than rely on that compatibility
 path.
+
+## Durable profile history and scope
+
+`JsonEgressProfileRepository` is the dependency-free reference persistence implementation. It stores
+a stable `EgressProfileDefinition` plus complete contiguous immutable revision history and writes
+atomically. Provider/model/capability/connector identity remains outside this store.
+
+A target may have one global deployment profile and one profile per Project. Resolution is
+deterministic: an enabled profile for the exact Project wins; otherwise the enabled global profile
+is used. Duplicate profiles for the same target/scope are rejected rather than resolved by order.
+Disabling a Project-specific profile exposes the applicable global default rather than inventing a
+new policy.
+
+`EgressProfileService` owns the authorized lifecycle. Ordinary create/version operations may produce
+`configured` or `unverified` policy assertions, but they may not self-assert `verified`. Verification
+is a separate revision-producing transition with an explicit verification reference and authorized
+principal. Exact historical refs use `profile_id@revision` and are retained for audit and stale
+Approval detection.
+
+## Runtime composition
+
+`RepositoryBackedEgressPolicy` resolves the current durable profile from the canonical target ID and
+Project context immediately at the policy boundary, then delegates to `CanonicalEgressPolicy`.
+This keeps policy resolution independent of the provider registries and means the same resolver can
+be shared by model, capability, Connector, Context Bundle and file/artifact egress gates.
+
+`build_durable_egress_runtime()` composes the repository, authorized profile service and one reusable
+`EgressGate`. It defaults to no paid-external access, no optimistic unknown-cost access and no
+Approval exceptions. Deployments can pass that same gate to provider-facing runtimes so policy
+configuration and execution observe the same revision history.
 
 ## Model routing
 
@@ -91,22 +120,62 @@ evaluation and transfer.
 Secrets remain references governed by the existing secret subsystem. Egress policy does not move
 secret material into provider metadata, audit events or configuration values.
 
+## Approval exceptions
+
+Optional exceptions reuse the existing #15 `AuthorizationGate`/`ApprovalService`; #591 does not add
+a second approval engine. `EgressApprovalExceptionPolicy` is deny-by-default and requires a
+deployment to enumerate the exact egress reason codes and data classes that may be approved.
+`secret` and `secret_reference` are non-overridable by default.
+
+`EgressApprovalBridge` binds the Approval to the exact destination, target posture, effective data
+classification, outbound payload SHA-256, resource type, capability, Project/Task/Run context,
+egress-policy version, exact EgressProfile revision/source revision and cost class. The existing #15
+expiry applies. A changed payload, destination, scope or policy/profile revision produces a different
+`ProposedAction.digest`, so the old Approval is stale automatically. Approval decisions themselves
+still go through `AuthorizationGate.decide_approval`.
+
+The documented reuse semantic is `exact_digest_until_expiry`; deployments that need one-shot
+semantics should add that as a stricter #15 policy rather than weakening the egress binding.
+
 ## Decisions and audit evidence
 
-`EgressGate` is the single enforcement seam. The policy returns an `EgressDecision`; only
-`ALLOW` is executable. `DENY`, `REQUIRE_APPROVAL`, `LOCAL_ONLY` and `UNKNOWN_BLOCKED` are all
-non-executable until a higher-level governance flow resolves them into a new valid decision.
+`EgressGate` is the single enforcement seam. The policy returns an `EgressDecision`; only `ALLOW`
+is executable. `DENY`, `REQUIRE_APPROVAL`, `LOCAL_ONLY` and `UNKNOWN_BLOCKED` remain non-executable
+unless the configured higher-level mechanism returns a new exact valid decision.
 
 The gate emits value-free `EgressEvaluated` followed by `EgressAllowed` or `EgressDenied`. Audit
 records can contain canonical target identity, effective classification, payload digest, policy
-version, profile revision, cost class, correlation/task/run/capability references and safe policy
-metadata. Raw prompt text, connector arguments, file bytes, secret material and protected payload
-values must never be copied into egress audit events.
+version, profile revision, cost class, correlation/task/run/capability references, Approval reference
+and safe policy metadata. Raw prompt text, connector arguments, file bytes, secret material and
+protected payload values must never be copied into egress audit events.
 
-## Current approval boundary
+## Control Plane
 
-The egress contracts reserve `REQUIRE_APPROVAL` and `approval_ref`, but the baseline policy does not
-convert a denial into approval on its own. Exact-action approval lifecycle and expiry are owned by
-the existing Authorization/Approval subsystem. Until a dedicated #591 approval bridge binds an
-approved action digest to the exact egress request/profile revision, an approval-required egress
-decision remains fail-closed.
+`egress-profiles` exposes safe stable/current and exact-revision views. Lifecycle commands are:
+
+- `egress-profile.create`;
+- `egress-profile.version`;
+- `egress-profile.verify`;
+- `egress-profile.enable`;
+- `egress-profile.disable`.
+
+Create/version cannot set `verified`; the explicit verify transition is required. Arbitrary profile
+metadata values are not projected into operator-facing resources. The projection exposes known safe
+fields, the explicit sensitive-egress boolean and metadata keys only.
+
+`egress-policy.evaluate` is a digest-only inspection command for explaining compatibility. It accepts
+canonical target identity, Project scope, data classification, resource/action references and an
+already-computed payload digest; it never accepts the protected outbound body merely to explain the
+decision.
+
+## Portability
+
+The standalone `EgressProfilePortableCodec` exports the stable definition and full exact revision
+history with canonical target dependencies. Import is intentionally asymmetric and fail-closed:
+source-system `verified` trust is downgraded to `unverified`, verification metadata is stripped and
+`allow_sensitive_external` is removed. The target deployment must explicitly re-verify the imported
+profile before external trust assertions can become authoritative.
+
+`EgressProfileImportMutationHandler` rebinds ownership to an explicitly supplied target owner and
+supports compensation of a partially applied history. Imported policy therefore cannot carry source
+identity or trust authority into the destination deployment.
