@@ -42,7 +42,13 @@
           "functional-pilot-passed",
           "checksum-verified",
           "egress-unverified",
-          "health-index-status-only"
+          "health-index-status-only",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown",
+          "architecture-ref:docs/extensions/REPOSITORY_INTELLIGENCE.md"
         ],
         "categories": [
           "code-intelligence"
@@ -90,7 +96,12 @@
           "knowledge-graph",
           "architecture",
           "tree-sitter",
-          "free-local"
+          "free-local",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown"
         ],
         "categories": [
           "code-intelligence"
@@ -138,7 +149,12 @@
           "structural-analysis",
           "semantic-graph",
           "mcp",
-          "free-local"
+          "free-local",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown"
         ],
         "categories": [
           "code-intelligence"
@@ -186,7 +202,12 @@
           "semantic-analysis",
           "domain-view",
           "impact-analysis",
-          "model-assisted"
+          "model-assisted",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:unknown",
+          "cost:unknown",
+          "network:unknown"
         ],
         "categories": [
           "code-intelligence"
@@ -201,6 +222,903 @@
         "yanked": false
       },
       "artifact": "artifacts/understand-anything.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "openhands",
+        "item_type": "agent",
+        "name": "OpenHands",
+        "description": "Open-source software-development agent platform candidate for delegated coding work and worker comparison.",
+        "version": "1.0.0",
+        "publisher": "OpenHands",
+        "source": {
+          "repository": "https://github.com/OpenHands/OpenHands",
+          "package_reference": "github:OpenHands/OpenHands",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:self-hosted",
+          "deployment:service",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:aider"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "aider",
+        "item_type": "agent",
+        "name": "Aider",
+        "description": "Terminal-oriented AI pair-programming and coding-agent candidate for worker and repository-editing comparisons.",
+        "version": "1.0.0",
+        "publisher": "Aider-AI",
+        "source": {
+          "repository": "https://github.com/Aider-AI/aider",
+          "package_reference": "github:Aider-AI/aider",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:cli",
+          "deployment:local",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:openhands"
+        ],
+        "categories": [
+          "coding-agent"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "pydantic-ai",
+        "item_type": "tool",
+        "name": "Pydantic AI",
+        "description": "Python agent-framework candidate emphasizing typed models, tools, structured outputs and provider-neutral application code.",
+        "version": "1.0.0",
+        "publisher": "Pydantic",
+        "source": {
+          "repository": "https://github.com/pydantic/pydantic-ai",
+          "package_reference": "github:pydantic/pydantic-ai",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "deployment:local",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:langgraph",
+          "alternative:smolagents"
+        ],
+        "categories": [
+          "agent-framework"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "langgraph",
+        "item_type": "tool",
+        "name": "LangGraph",
+        "description": "Graph-oriented agent orchestration framework candidate for stateful agent workflows and framework comparison.",
+        "version": "1.0.0",
+        "publisher": "LangChain",
+        "source": {
+          "repository": "https://github.com/langchain-ai/langgraph",
+          "package_reference": "github:langchain-ai/langgraph",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:pydantic-ai"
+        ],
+        "categories": [
+          "agent-framework"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "smolagents",
+        "item_type": "tool",
+        "name": "smolagents",
+        "description": "Lightweight Hugging Face agent-framework candidate for compact tool-using agent implementations and comparison.",
+        "version": "1.0.0",
+        "publisher": "Hugging Face",
+        "source": {
+          "repository": "https://github.com/huggingface/smolagents",
+          "package_reference": "github:huggingface/smolagents",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "deployment:local",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:pydantic-ai"
+        ],
+        "categories": [
+          "agent-framework"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "google-adk",
+        "item_type": "tool",
+        "name": "Google ADK",
+        "description": "Google Agent Development Kit Python framework candidate for agent and multi-agent application comparison.",
+        "version": "1.0.0",
+        "publisher": "Google",
+        "source": {
+          "repository": "https://github.com/google/adk-python",
+          "package_reference": "github:google/adk-python",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:pydantic-ai"
+        ],
+        "categories": [
+          "agent-framework"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "spec-kit",
+        "item_type": "tool",
+        "name": "Spec Kit",
+        "description": "Specification-driven development toolkit candidate for structured specification and implementation workflows.",
+        "version": "1.0.0",
+        "publisher": "GitHub",
+        "source": {
+          "repository": "https://github.com/github/spec-kit",
+          "package_reference": "github:github/spec-kit",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:cli",
+          "deployment:local",
+          "cost:compatible",
+          "network:optional"
+        ],
+        "categories": [
+          "specification-and-skills"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "mem0",
+        "item_type": "tool",
+        "name": "Mem0",
+        "description": "Agent memory-system candidate for persistent user, session and agent memory patterns.",
+        "version": "1.0.0",
+        "publisher": "Mem0",
+        "source": {
+          "repository": "https://github.com/mem0ai/mem0",
+          "package_reference": "github:mem0ai/mem0",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "deployment:self-hosted",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:graphiti"
+        ],
+        "categories": [
+          "memory-and-context"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "graphiti",
+        "item_type": "tool",
+        "name": "Graphiti",
+        "description": "Temporal knowledge-graph memory candidate for agent context, entity relationships and evolving knowledge.",
+        "version": "1.0.0",
+        "publisher": "Zep",
+        "source": {
+          "repository": "https://github.com/getzep/graphiti",
+          "package_reference": "github:getzep/graphiti",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "deployment:self-hosted",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:mem0"
+        ],
+        "categories": [
+          "memory-and-context",
+          "retrieval"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "qdrant",
+        "item_type": "tool",
+        "name": "Qdrant",
+        "description": "Self-hostable vector-search and retrieval infrastructure candidate for memory and knowledge workloads.",
+        "version": "1.0.0",
+        "publisher": "Qdrant",
+        "source": {
+          "repository": "https://github.com/qdrant/qdrant",
+          "package_reference": "github:qdrant/qdrant",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:self-hosted",
+          "deployment:service",
+          "cost:compatible",
+          "network:optional"
+        ],
+        "categories": [
+          "memory-and-context",
+          "retrieval"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "promptfoo",
+        "item_type": "evaluation",
+        "name": "Promptfoo",
+        "description": "LLM evaluation and red-team tooling candidate for prompt, model and agent regression/security workflows.",
+        "version": "1.0.0",
+        "publisher": "Promptfoo",
+        "source": {
+          "repository": "https://github.com/promptfoo/promptfoo",
+          "package_reference": "github:promptfoo/promptfoo",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license text and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:cli",
+          "deployment:local",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:lighteval"
+        ],
+        "categories": [
+          "evaluation",
+          "security"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "lighteval",
+        "item_type": "evaluation",
+        "name": "Lighteval",
+        "description": "Hugging Face evaluation framework candidate for reproducible model and benchmark evaluation workflows.",
+        "version": "1.0.0",
+        "publisher": "Hugging Face",
+        "source": {
+          "repository": "https://github.com/huggingface/lighteval",
+          "package_reference": "github:huggingface/lighteval",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "deployment:cli",
+          "cost:conditional",
+          "network:optional",
+          "provider:model",
+          "alternative:promptfoo"
+        ],
+        "categories": [
+          "evaluation"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "browser-use",
+        "item_type": "tool",
+        "name": "Browser Use",
+        "description": "Browser-control framework candidate for LLM-driven browser interaction and web-execution comparisons.",
+        "version": "1.0.0",
+        "publisher": "browser-use",
+        "source": {
+          "repository": "https://github.com/browser-use/browser-use",
+          "package_reference": "github:browser-use/browser-use",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "deployment:local",
+          "cost:conditional",
+          "network:optional",
+          "provider:llm",
+          "alternative:playwright"
+        ],
+        "categories": [
+          "browser-and-execution"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "playwright",
+        "item_type": "tool",
+        "name": "Playwright",
+        "description": "Cross-browser automation and execution infrastructure candidate for deterministic browser tooling.",
+        "version": "1.0.0",
+        "publisher": "Microsoft",
+        "source": {
+          "repository": "https://github.com/microsoft/playwright",
+          "package_reference": "github:microsoft/playwright",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "deployment:local",
+          "cost:compatible",
+          "network:optional",
+          "alternative:browser-use"
+        ],
+        "categories": [
+          "browser-and-execution"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "llama-cpp",
+        "item_type": "tool",
+        "name": "llama.cpp",
+        "description": "Local LLM inference runtime candidate optimized for portable CPU/GPU execution and quantized models.",
+        "version": "1.0.0",
+        "publisher": "ggml-org",
+        "source": {
+          "repository": "https://github.com/ggml-org/llama.cpp",
+          "package_reference": "github:ggml-org/llama.cpp",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:local",
+          "deployment:cli",
+          "deployment:library",
+          "cost:compatible",
+          "network:none",
+          "alternative:ollama",
+          "alternative:vllm"
+        ],
+        "categories": [
+          "inference-runtime"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "ollama",
+        "item_type": "tool",
+        "name": "Ollama",
+        "description": "Local model runtime and service candidate for self-hosted model execution and developer workflows.",
+        "version": "1.0.0",
+        "publisher": "Ollama",
+        "source": {
+          "repository": "https://github.com/ollama/ollama",
+          "package_reference": "github:ollama/ollama",
+          "revision": null
+        },
+        "license": "MIT",
+        "provenance": "Official repository identity, MIT license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:local",
+          "deployment:service",
+          "cost:compatible",
+          "network:optional",
+          "alternative:llama-cpp",
+          "alternative:vllm"
+        ],
+        "categories": [
+          "inference-runtime"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "vllm",
+        "item_type": "tool",
+        "name": "vLLM",
+        "description": "High-throughput self-hosted LLM serving and inference runtime candidate for GPU-oriented deployments.",
+        "version": "1.0.0",
+        "publisher": "vLLM Project",
+        "source": {
+          "repository": "https://github.com/vllm-project/vllm",
+          "package_reference": "github:vllm-project/vllm",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:self-hosted",
+          "deployment:service",
+          "cost:compatible",
+          "network:optional",
+          "alternative:llama-cpp",
+          "alternative:ollama"
+        ],
+        "categories": [
+          "inference-runtime"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "sentence-transformers",
+        "item_type": "tool",
+        "name": "Sentence Transformers",
+        "description": "Embedding and reranker model tooling candidate for local semantic retrieval, similarity and representation workflows.",
+        "version": "1.0.0",
+        "publisher": "Hugging Face",
+        "source": {
+          "repository": "https://github.com/huggingface/sentence-transformers",
+          "package_reference": "github:huggingface/sentence-transformers",
+          "revision": null
+        },
+        "license": "Apache-2.0",
+        "provenance": "Official repository identity, Apache-2.0 license and non-archived GitHub status verified on 2026-09-08; upstream revision intentionally remains unpinned until pilot selection.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "project-status:not-archived",
+          "lifecycle:candidate",
+          "evaluation:required",
+          "deployment:library",
+          "deployment:local",
+          "cost:compatible",
+          "network:optional"
+        ],
+        "categories": [
+          "retrieval",
+          "model-and-dataset-tooling"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Catalog record v1; upstream version is not pinned by this discovery listing.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/curated-external-component.md"
     }
   ]
 }

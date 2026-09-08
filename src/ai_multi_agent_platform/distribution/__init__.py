@@ -17,6 +17,12 @@ from .control_plane import (
     RegistryValidationContextResolver,
     register_distribution_control_plane,
 )
+from .discovery import (
+    CuratedCandidateReview,
+    DiscoveryCandidate,
+    RegistryDiscoverySource,
+    curate_discovered_candidate,
+)
 from .filesystem import FilesystemRegistryProvider
 from .items import InstalledRegistryItem, RegistryItem, RegistryQuery
 from .local import LocalRegistryProvider
@@ -49,6 +55,17 @@ from .state import (
     RegistryInstallationSnapshot,
     RegistryInstallationStore,
 )
+from .technical_catalog import (
+    TECHNICAL_CATEGORIES,
+    TECHNICAL_COST_STATUSES,
+    TECHNICAL_DEPLOYMENT_MODES,
+    TECHNICAL_EVALUATION_STATUSES,
+    TECHNICAL_LIFECYCLE_STATUSES,
+    TECHNICAL_NETWORK_STATUSES,
+    TechnicalMarketplaceMetadata,
+    derive_technical_metadata,
+    is_technical_component,
+)
 from .validation import (
     FindingSeverity,
     ValidationContext,
@@ -60,6 +77,8 @@ from .validation import (
 __all__ = [
     "ArtifactIntegrity",
     "CanonicalDistributionRouter",
+    "CuratedCandidateReview",
+    "DiscoveryCandidate",
     "DistributionPreview",
     "DistributionRoute",
     "DistributionRouter",
@@ -82,6 +101,7 @@ __all__ = [
     "REGISTRY_UNPIN_COMMAND",
     "RegistryCommandHandlers",
     "RegistryDependency",
+    "RegistryDiscoverySource",
     "RegistryInstallation",
     "RegistryInstallationSnapshot",
     "RegistryInstallationStore",
@@ -96,11 +116,21 @@ __all__ = [
     "RegistrySource",
     "RegistryUnavailableError",
     "RegistryValidationContextResolver",
+    "TECHNICAL_CATEGORIES",
+    "TECHNICAL_COST_STATUSES",
+    "TECHNICAL_DEPLOYMENT_MODES",
+    "TECHNICAL_EVALUATION_STATUSES",
+    "TECHNICAL_LIFECYCLE_STATUSES",
+    "TECHNICAL_NETWORK_STATUSES",
+    "TechnicalMarketplaceMetadata",
     "TrustStatus",
     "ValidationContext",
     "ValidationFinding",
     "VersionRange",
+    "curate_discovered_candidate",
+    "derive_technical_metadata",
     "has_errors",
+    "is_technical_component",
     "load_hmac_signature_keys",
     "reconcile_registry_plugins",
     "register_distribution_control_plane",

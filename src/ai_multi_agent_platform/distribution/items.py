@@ -108,6 +108,7 @@ class RegistryQuery:
     include_deprecated: bool = False
     include_yanked: bool = False
     update_for_item_id: str | None = None
+    technical_only: bool = False
 
     def __post_init__(self) -> None:
         if self.text is not None:
