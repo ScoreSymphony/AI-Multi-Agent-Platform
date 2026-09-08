@@ -18,6 +18,7 @@ from ai_multi_agent_platform.capabilities import (
 from ai_multi_agent_platform.capabilities.provider import CapabilityToolProvider
 from ai_multi_agent_platform.compensation import (
     CompensationAutomation,
+    CompensationControlPlaneProjection,
     CompensationCoordinator,
     CompensationExecutionContext,
     CompensationFailureMode,
@@ -29,6 +30,7 @@ from ai_multi_agent_platform.compensation import (
     CompensationTrigger,
     CompletedSideEffect,
     InMemoryCompensationRepository,
+    PlanCompensationHooks,
     SQLiteCompensationRepository,
     new_compensation_action_id,
     new_compensation_group_id,
@@ -48,9 +50,18 @@ from ai_multi_agent_platform.domain import ToolInvocation as DomainToolInvocatio
 
 
 class UndoProvider(CapabilityToolProvider):
-    def __init__(self, *, required_approval: bool = False, fail: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        required_approval: bool = False,
+        fail: bool = False,
+        fail_resources: frozenset[str] = frozenset(),
+        available: bool = True,
+    ) -> None:
         self.calls: list[ToolInvocation] = []
         self.fail = fail
+        self.fail_resources = fail_resources
+        self.available = available
         self.spec = CapabilitySpec(
             capability_id="external.reference.undo",
             name="Reference undo",
@@ -63,6 +74,8 @@ class UndoProvider(CapabilityToolProvider):
             },
             side_effects=SideEffectClassification.DESTRUCTIVE,
             required_approvals=("external.undo",) if required_approval else (),
+            available=available,
+            health=HealthStatus.HEALTHY if available else HealthStatus.UNAVAILABLE,
         )
 
     @property
@@ -77,7 +90,8 @@ class UndoProvider(CapabilityToolProvider):
                     supported_operations=("invoke",),
                 ),
             ),
-            health=HealthStatus.HEALTHY,
+            health=HealthStatus.HEALTHY if self.available else HealthStatus.UNAVAILABLE,
+            available=self.available,
         )
 
     async def capability_registrations(self) -> tuple[CapabilityRegistration, ...]:
@@ -91,13 +105,14 @@ class UndoProvider(CapabilityToolProvider):
 
     async def invoke(self, invocation: ToolInvocation) -> ToolResult:
         self.calls.append(invocation)
-        if self.fail:
+        resource = str(invocation.arguments["resource"])
+        if self.fail or resource in self.fail_resources:
             raise RuntimeError("reference compensation failed")
         return ToolResult(
             invocation_id=invocation.invocation_id,
-            output={"removed": invocation.arguments["resource"]},
-            result_ref=f"undo:{invocation.arguments['resource']}",
-            evidence_refs=(f"evidence:{invocation.arguments['resource']}",),
+            output={"removed": resource},
+            result_ref=f"undo:{resource}",
+            evidence_refs=(f"evidence:{resource}",),
         )
 
 
@@ -106,6 +121,7 @@ async def _canonical_binding(
     registration: CapabilityRegistration,
     provider_invocation: ToolInvocation,
 ) -> DomainToolInvocation:
+    del registration
     return map_tool_invocation_to_domain(
         provider_invocation,
         canonical_tool_id=new_id("tool"),
@@ -192,6 +208,8 @@ async def _coordinator(
     policy_hook=None,
     approval_hook=None,
     reconciler=None,
+    verification_hook=None,
+    approval_reference_lookup=None,
 ) -> CompensationCoordinator:
     registry = CapabilityRegistry()
     await registry.register_provider(provider)
@@ -205,7 +223,13 @@ async def _coordinator(
         InMemoryCompensationRepository(),
         invoker,
         reconciler=reconciler,
+        verification_hook=verification_hook,
+        approval_reference_lookup=approval_reference_lookup,
     )
+
+
+async def _async_context(group: CompensationGroup) -> CompensationExecutionContext:
+    return _execution_context(group)
 
 
 def test_reversible_action_uses_ordinary_capability_invocation_and_is_idempotent() -> None:
@@ -242,7 +266,9 @@ def test_reversible_action_uses_ordinary_capability_invocation_and_is_idempotent
         assert provider.calls[0].context.control.idempotency_key == first.idempotency_key
         assert result.result_ref == "undo:record-1"
         assert result.evidence_refs == ("evidence:record-1",)
-        assert coordinator.repository.get_action(action.action_id).original_result_ref == "create:record-1"
+        original = coordinator.repository.get_action(action.action_id)
+        assert original.original_result_ref == "create:record-1"
+        assert original.evidence_refs == ("original:record-1",)
 
     asyncio.run(scenario())
 
@@ -312,6 +338,7 @@ def test_group_compensation_runs_in_reverse_dependency_order() -> None:
         ordinal = 0
 
         async def context_factory(request, action) -> CompensationExecutionContext:
+            del request, action
             nonlocal ordinal
             ordinal += 1
             return _execution_context(group, ordinal)
@@ -335,16 +362,98 @@ def test_group_compensation_runs_in_reverse_dependency_order() -> None:
     asyncio.run(scenario())
 
 
+def test_partial_sequence_continue_and_stop_modes_are_explicit() -> None:
+    async def run_mode(
+        failure_mode: CompensationFailureMode,
+    ) -> tuple[list[str], tuple[CompensationStatus | None, ...]]:
+        provider = UndoProvider(fail_resources=frozenset({"second"}))
+        coordinator = await _coordinator(provider)
+        group = coordinator.register_group(
+            _group(
+                automation=CompensationAutomation.DOWNSTREAM_FAILURE,
+                failure_mode=failure_mode,
+            )
+        )
+        first = coordinator.record_completed_side_effect(
+            _action(group, resource="first", execution_order=1)
+        )
+        second = coordinator.record_completed_side_effect(
+            _action(
+                group,
+                resource="second",
+                execution_order=2,
+                depends_on=(first.action_id,),
+            )
+        )
+        coordinator.record_completed_side_effect(
+            _action(
+                group,
+                resource="third",
+                execution_order=3,
+                depends_on=(second.action_id,),
+            )
+        )
+        ordinal = 0
+
+        async def context_factory(request, action) -> CompensationExecutionContext:
+            del request, action
+            nonlocal ordinal
+            ordinal += 1
+            return _execution_context(group, ordinal)
+
+        projection = await coordinator.compensate_group(
+            group.group_id,
+            trigger=CompensationTrigger.DOWNSTREAM_FAILURE,
+            reason="partial sequence",
+            actor_ref="service:coordination",
+            correlation_id=f"corr-{failure_mode.value}",
+            context_factory=context_factory,
+        )
+        statuses = tuple(
+            None if item.result is None else item.result.status for item in projection.actions
+        )
+        resources = [str(call.arguments["resource"]) for call in provider.calls]
+        return resources, statuses
+
+    continue_resources, continue_statuses = asyncio.run(
+        run_mode(CompensationFailureMode.CONTINUE_AND_ESCALATE)
+    )
+    assert continue_resources == ["third", "second", "first"]
+    assert continue_statuses == (
+        CompensationStatus.SUCCEEDED,
+        CompensationStatus.FAILED,
+        CompensationStatus.SUCCEEDED,
+    )
+
+    stop_resources, stop_statuses = asyncio.run(
+        run_mode(CompensationFailureMode.STOP_AND_ESCALATE)
+    )
+    assert stop_resources == ["third", "second"]
+    assert stop_statuses == (
+        None,
+        CompensationStatus.FAILED,
+        CompensationStatus.SUCCEEDED,
+    )
+
+
 def test_compensation_approval_required_and_policy_denial_remain_auditable() -> None:
     async def scenario() -> None:
         approval_provider = UndoProvider(required_approval=True)
+        approval_id = new_id("approval")
+        lookup_invocations: list[str] = []
 
         async def not_approved(request, capability, invocation) -> bool:
+            del request, capability, invocation
             return False
+
+        def approval_lookup(invocation_id: str) -> str:
+            lookup_invocations.append(invocation_id)
+            return approval_id
 
         approval_coordinator = await _coordinator(
             approval_provider,
             approval_hook=not_approved,
+            approval_reference_lookup=approval_lookup,
         )
         approval_group = approval_coordinator.register_group(_group())
         approval_action = approval_coordinator.record_completed_side_effect(
@@ -357,18 +466,22 @@ def test_compensation_approval_required_and_policy_denial_remain_auditable() -> 
             actor_ref="user:user-1",
             correlation_id="corr-approval",
         )
+        context = _execution_context(approval_group)
         approval_result = await approval_coordinator.execute(
             approval_request.compensation_id,
-            _execution_context(approval_group),
+            context,
         )
         assert approval_result.status is CompensationStatus.APPROVAL_REQUIRED
         assert not approval_result.manual_intervention_required
         assert approval_result.canonical_tool_invocation_id is not None
+        assert approval_result.approval_id == approval_id
+        assert lookup_invocations == [context.invocation_id]
         assert approval_provider.calls == []
 
         denied_provider = UndoProvider()
 
         async def deny(request, capability) -> PolicyDecision:
+            del request, capability
             return PolicyDecision.DENY
 
         denied_coordinator = await _coordinator(denied_provider, policy_hook=deny)
@@ -390,6 +503,41 @@ def test_compensation_approval_required_and_policy_denial_remain_auditable() -> 
         assert denied_result.status is CompensationStatus.DENIED
         assert denied_result.manual_intervention_required
         assert denied_provider.calls == []
+
+    asyncio.run(scenario())
+
+
+def test_restart_before_compensation_starts_executes_once(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        provider = UndoProvider()
+        registry = CapabilityRegistry()
+        await registry.register_provider(provider)
+        invoker = CapabilityInvoker(registry, canonical_binding_hook=_canonical_binding)
+        database = tmp_path / "compensation-before-start.sqlite3"
+        repository = SQLiteCompensationRepository(database)
+        coordinator = CompensationCoordinator(repository, invoker)
+        group = coordinator.register_group(_group())
+        action = coordinator.record_completed_side_effect(
+            _action(group, resource="before-start", execution_order=1)
+        )
+        coordinator.request_compensation(
+            action.action_id,
+            trigger=CompensationTrigger.MANUAL,
+            reason="restart before start",
+            actor_ref="service:recovery",
+            correlation_id="corr-before-start",
+        )
+
+        restarted = CompensationCoordinator(SQLiteCompensationRepository(database), invoker)
+        projection = await restarted.recover_group(
+            group.group_id,
+            context_factory=lambda request, action: _async_context(group),
+        )
+
+        result = projection.actions[0].result
+        assert result is not None
+        assert result.status is CompensationStatus.SUCCEEDED
+        assert [call.arguments["resource"] for call in provider.calls] == ["before-start"]
 
     asyncio.run(scenario())
 
@@ -442,13 +590,10 @@ def test_restart_after_possible_external_effect_refuses_blind_repeat(tmp_path: P
     asyncio.run(scenario())
 
 
-async def _async_context(group: CompensationGroup) -> CompensationExecutionContext:
-    return _execution_context(group)
-
-
 def test_reconciliation_evidence_can_acknowledge_success_without_reexecution() -> None:
     class KnownSuccessReconciler:
         async def reconcile(self, request, action, result) -> CompensationReconciliation:
+            del request, action, result
             return CompensationReconciliation(
                 outcome_known=True,
                 succeeded=True,
@@ -491,6 +636,31 @@ def test_reconciliation_evidence_can_acknowledge_success_without_reexecution() -
     asyncio.run(scenario())
 
 
+def test_provider_unavailable_is_visible_without_external_call() -> None:
+    async def scenario() -> None:
+        provider = UndoProvider(available=False)
+        coordinator = await _coordinator(provider)
+        group = coordinator.register_group(_group())
+        action = coordinator.record_completed_side_effect(
+            _action(group, resource="unavailable", execution_order=1)
+        )
+        request = coordinator.request_compensation(
+            action.action_id,
+            trigger=CompensationTrigger.MANUAL,
+            reason="provider unavailable",
+            actor_ref="service:recovery",
+            correlation_id="corr-unavailable",
+        )
+        result = await coordinator.execute(request.compensation_id, _execution_context(group))
+
+        assert result.status is CompensationStatus.FAILED
+        assert result.error_code == "unavailable"
+        assert result.manual_intervention_required
+        assert provider.calls == []
+
+    asyncio.run(scenario())
+
+
 def test_provider_failure_is_visible_and_requires_manual_intervention() -> None:
     async def scenario() -> None:
         provider = UndoProvider(fail=True)
@@ -516,12 +686,104 @@ def test_provider_failure_is_visible_and_requires_manual_intervention() -> None:
     asyncio.run(scenario())
 
 
+def test_verification_hook_attaches_evidence_after_success() -> None:
+    class VerificationHook:
+        async def verify(self, request, action, result) -> str:
+            del request, action
+            assert result.status is CompensationStatus.SUCCEEDED
+            return "verification:compensation-ok"
+
+    async def scenario() -> None:
+        provider = UndoProvider()
+        coordinator = await _coordinator(provider, verification_hook=VerificationHook())
+        group = coordinator.register_group(_group())
+        action = coordinator.record_completed_side_effect(
+            _action(group, resource="verify", execution_order=1)
+        )
+        request = coordinator.request_compensation(
+            action.action_id,
+            trigger=CompensationTrigger.MANUAL,
+            reason="verify compensation",
+            actor_ref="service:verification",
+            correlation_id="corr-verification",
+        )
+        result = await coordinator.execute(request.compensation_id, _execution_context(group))
+        assert result.verification_ref == "verification:compensation-ok"
+
+    asyncio.run(scenario())
+
+
+def test_plan_failure_hook_reacts_without_owning_plan_lifecycle() -> None:
+    async def scenario() -> None:
+        provider = UndoProvider()
+        coordinator = await _coordinator(provider)
+        group = coordinator.register_group(
+            _group(automation=CompensationAutomation.DOWNSTREAM_FAILURE)
+        )
+        coordinator.record_completed_side_effect(
+            _action(group, resource="hook", execution_order=1)
+        )
+        hooks = PlanCompensationHooks(coordinator.repository, coordinator)
+
+        projections = await hooks.after_downstream_failure(
+            group.plan_id,
+            group.plan_revision,
+            reason="canonical plan failure already committed",
+            actor_ref="service:coordination",
+            correlation_id="corr-hook",
+            context_factory=lambda request, action: _async_context(group),
+        )
+
+        assert len(projections) == 1
+        result = projections[0].actions[0].result
+        assert result is not None
+        assert result.status is CompensationStatus.SUCCEEDED
+        assert [call.arguments["resource"] for call in provider.calls] == ["hook"]
+
+    asyncio.run(scenario())
+
+
+def test_control_plane_projection_links_attempts_without_exposing_arguments() -> None:
+    async def scenario() -> None:
+        provider = UndoProvider()
+        coordinator = await _coordinator(provider)
+        group = coordinator.register_group(_group())
+        action = _action(group, resource="safe-view", execution_order=1)
+        action = replace(
+            action,
+            original_arguments={"resource": "safe-view", "secret": "do-not-leak"},
+            compensation_arguments={"resource": "safe-view", "token": "do-not-leak"},
+        )
+        action = coordinator.record_completed_side_effect(action)
+        request = coordinator.request_compensation(
+            action.action_id,
+            trigger=CompensationTrigger.MANUAL,
+            reason="operator projection",
+            actor_ref="user:user-1",
+            correlation_id="corr-view",
+        )
+        result = await coordinator.execute(request.compensation_id, _execution_context(group))
+
+        view = CompensationControlPlaneProjection(coordinator.repository).get_group(group.group_id)
+        assert view.actions[0].original_tool_invocation_id == action.tool_invocation_id
+        assert view.actions[0].compensation_tool_invocation_id == result.canonical_tool_invocation_id
+        assert "do-not-leak" not in repr(view)
+        assert not hasattr(view.actions[0], "original_arguments")
+        assert not hasattr(view.actions[0], "compensation_arguments")
+
+    asyncio.run(scenario())
+
+
 def test_newer_plan_revision_is_not_compensated_without_explicit_policy() -> None:
     async def scenario() -> None:
         provider = UndoProvider()
         coordinator = await _coordinator(provider)
-        group = coordinator.register_group(_group(automation=CompensationAutomation.DOWNSTREAM_FAILURE))
-        coordinator.record_completed_side_effect(_action(group, resource="old", execution_order=1))
+        group = coordinator.register_group(
+            _group(automation=CompensationAutomation.DOWNSTREAM_FAILURE)
+        )
+        coordinator.record_completed_side_effect(
+            _action(group, resource="old", execution_order=1)
+        )
 
         try:
             await coordinator.compensate_group(
