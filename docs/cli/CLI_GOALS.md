@@ -37,7 +37,7 @@ platform extension execute goal.activate GOAL_ID \
   --idempotency-key activate-maintain-docs
 ```
 
-## Pause, resume and cancel
+## Pause, resume, cancel and fail
 
 ```bash
 platform extension execute goal.pause GOAL_ID \
@@ -49,9 +49,13 @@ platform extension execute goal.resume GOAL_ID \
 platform extension execute goal.cancel GOAL_ID \
   --idempotency-key cancel-maintain-docs \
   --payload '{"reason":"operator decision"}'
+
+platform extension execute goal.fail GOAL_ID \
+  --idempotency-key fail-maintain-docs \
+  --payload '{"reason":"required source can no longer be recovered"}'
 ```
 
-These commands remain subject to the canonical authorization/approval boundary. Pausing a Goal prevents new Goal-generated work while preserving durable Goal and Task provenance.
+These commands remain subject to the canonical authorization/approval boundary. Pausing a Goal prevents new Goal-generated work while preserving durable Goal and Task provenance. `goal.fail` is a reasoned terminal decision for an active/waiting Goal; the reason is preserved as `terminal_reason` and emitted through `goal.failed`. A failed Goal cannot resume directly and requires an explicit versioned revision with `reopen_terminal=true` to pursue a changed objective again.
 
 ## Revise a Goal
 
@@ -68,6 +72,19 @@ platform extension execute goal.revise GOAL_ID \
 ```
 
 Use `"active_task_policy":"supersede"` when linked work should no longer be treated as valid for the new Goal revision. This changes Goal linkage semantics; it does not silently cancel the canonical Task.
+
+To reopen a `satisfied` or `failed` Goal, the revision must be explicit:
+
+```bash
+platform extension execute goal.revise GOAL_ID \
+  --idempotency-key reopen-maintain-docs-r5 \
+  --payload '{
+    "expected_revision": 4,
+    "objective": "Pursue the revised recoverable documentation target",
+    "reopen_terminal": true,
+    "active_task_policy": "supersede"
+  }'
+```
 
 ## Attach an existing Task
 
@@ -94,6 +111,8 @@ platform extension execute goal.review GOAL_ID \
 Evidence-backed criteria require canonical evidence marked as verified according to the Goal contract. Free-form Agent self-report does not become Goal truth merely because it is supplied in a review payload.
 
 Scheduled/event reviews should normally arrive through the #18 Automation delivery integration rather than from a shell loop. #18 owns delivery timing/deduplication; the Goal subsystem owns the review semantics and durable progress state.
+
+A successful review commits canonical review observability atomically with Goal state. Depending on the decision, the Goal stream can include `goal.review_started`, `goal.progress_criterion_changed`, `goal.work_not_needed`, `goal.blocked`, `goal.escalated`, `goal.task_generated` or `goal.satisfied`, followed by the state-bearing `goal.review_completed` event. Replaying the same idempotency key does not duplicate these events.
 
 ## Task outcome reconciliation
 
