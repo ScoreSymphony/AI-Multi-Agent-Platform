@@ -123,6 +123,12 @@ from .reproducibility import (
     manifest_projection,
     per_repeat_outcomes,
 )
+from .research import (
+    RESEARCH_QUALITY_SUITE_ID,
+    RESEARCH_QUALITY_SUITE_VERSION,
+    ResearchEvaluationCaseExecutor,
+    canonical_research_quality_suite,
+)
 from .rubric import ObservationRubricEvaluator
 from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolation
 from .service import (
@@ -160,6 +166,8 @@ def __getattr__(name: str) -> object:
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",
     "EVAL_MANIFEST_SCHEMA_VERSION",
+    "RESEARCH_QUALITY_SUITE_ID",
+    "RESEARCH_QUALITY_SUITE_VERSION",
     "AccountingEvaluationEvidenceProvider",
     "AgentRunEvidenceCaseExecutor",
     "AggregatedEvaluationResult",
@@ -244,6 +252,7 @@ __all__ = [
     "RepeatStrategy",
     "ReproducibleRegressionGate",
     "RepositoryIntelligenceEvaluationCaseExecutor",
+    "ResearchEvaluationCaseExecutor",
     "ResolvedEvaluationFixtures",
     "ResourceLimitEvaluator",
     "ResultAggregator",
@@ -258,6 +267,7 @@ __all__ = [
     "VersionReference",
     "WorkspaceEvaluationIsolation",
     "aggregation_policy_ref",
+    "canonical_research_quality_suite",
     "decode_manifest",
     "encode_manifest",
     "evaluate_safely",
