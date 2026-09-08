@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from types import SimpleNamespace
 
 import pytest
 
 from ai_multi_agent_platform.context import (
     ContextBudget,
+    ContextBundleEgressExporter,
     ContextCandidate,
     ContextEntryRole,
     ContextResolver,
@@ -14,9 +16,11 @@ from ai_multi_agent_platform.context import (
     ContextSourceRef,
     ContextSourceType,
     ContextTrust,
+    ReferenceContextOrchestratorAdapter,
     ReferenceContextRenderer,
     merge_context_routing_requirements,
 )
+from ai_multi_agent_platform.context.operational import _OperationalContextMapper
 from ai_multi_agent_platform.context.resolver import ContextAssemblyRequest
 from ai_multi_agent_platform.contracts import (
     Capability,
@@ -132,3 +136,34 @@ def test_local_reference_rendering_keeps_bundle_identity_and_requires_no_egress(
     assert rendered.context_bundle_digest == bundle.digest
     assert len(rendered.parts) == len(bundle.entries) == 1
     assert rendered.parts[0].content == "local context remains local"
+
+
+def test_context_bound_mapping_rejects_legacy_task_or_project_context_mixing() -> None:
+    bundle = _bundle()
+    operation = OperationContext(
+        correlation_id=bundle.task_id,
+        owner_type="user",
+        owner_id="issue-650",
+    )
+    mapper = _OperationalContextMapper(
+        bundle=bundle,
+        adapter=ReferenceContextOrchestratorAdapter(),
+        renderer=ReferenceContextRenderer(),
+        exporter=ContextBundleEgressExporter(),
+        operation=operation,
+        target_resolver=None,
+        content_provider=None,
+    )
+    legacy_spec = SimpleNamespace(
+        task_id=bundle.task_id,
+        run_id=bundle.run_id,
+        agent_revision=SimpleNamespace(
+            agent_id=bundle.agent_id,
+            revision=bundle.agent_revision,
+        ),
+        task_context={"legacy": "must-not-be-mixed"},
+        project_context={},
+    )
+
+    with pytest.raises(ValueError, match="cannot mix canonical Context Bundle"):
+        asyncio.run(mapper.map_agent(legacy_spec))  # type: ignore[arg-type]
