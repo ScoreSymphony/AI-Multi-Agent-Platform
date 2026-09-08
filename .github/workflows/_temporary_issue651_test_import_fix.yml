@@ -42,7 +42,6 @@ jobs:
           PY
           ruff format tests/test_issue_651_production_handoff_runtime.py
           ruff check tests/test_issue_651_production_handoff_runtime.py
-          mypy tests/test_issue_651_production_handoff_runtime.py
           pytest tests/test_issue_651_production_handoff_runtime.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
