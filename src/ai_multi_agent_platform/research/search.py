@@ -27,9 +27,7 @@ class ResearchItemSearchResourceService(ResearchItemResourceService):
     """Actor-independent, privacy-minimized Research Item Search enumeration."""
 
     async def list_search_resources(self) -> tuple[dict[str, JsonValue], ...]:
-        return tuple(
-            _item_search_resource(item) for item in self._research.repository.list_items()
-        )
+        return tuple(_item_search_resource(item) for item in self._research.repository.list_items())
 
     async def search_result_allowed(
         self,
