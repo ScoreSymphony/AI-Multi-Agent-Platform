@@ -26,14 +26,16 @@ jobs:
           from pathlib import Path
           path = Path('tests/test_issue_651_production_handoff_runtime.py')
           text = path.read_text()
-          old = '''from ai_multi_agent_platform.coordination.repository import (
-    InMemoryCoordinatorRepository,
-    SQLiteCoordinatorRepository,
-)
-'''
-          new = '''from ai_multi_agent_platform.coordination.repository import InMemoryCoordinatorRepository
-from ai_multi_agent_platform.coordination.sqlite_repository import SQLiteCoordinatorRepository
-'''
+          old = chr(10).join([
+              'from ai_multi_agent_platform.coordination.repository import (',
+              '    InMemoryCoordinatorRepository,',
+              '    SQLiteCoordinatorRepository,',
+              ')',
+          ]) + chr(10)
+          new = chr(10).join([
+              'from ai_multi_agent_platform.coordination.repository import InMemoryCoordinatorRepository',
+              'from ai_multi_agent_platform.coordination.sqlite_repository import SQLiteCoordinatorRepository',
+          ]) + chr(10)
           if text.count(old) != 1:
               raise SystemExit(f'expected exactly one coordinator import block, found {text.count(old)}')
           path.write_text(text.replace(old, new))
