@@ -1,6 +1,7 @@
 """Canonical runtime verification, review and completion-policy subsystem."""
 
 from .audit import VerificationAuditEvent, VerificationAuditEventType
+from .canonical_access import CanonicalVerificationAccess
 from .deterministic import (
     DeterministicCheck,
     DeterministicVerifier,
@@ -46,6 +47,7 @@ from .persistence import (
 from .service import VerificationService
 
 __all__ = [
+    "CanonicalVerificationAccess",
     "CompletionAssessment",
     "CompletionAuthority",
     "CompletionGateDecision",

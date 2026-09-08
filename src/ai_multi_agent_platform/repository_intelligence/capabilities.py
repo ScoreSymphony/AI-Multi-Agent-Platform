@@ -231,7 +231,14 @@ def _output_schema(operation: RepositoryIntelligenceOperation) -> dict[str, Json
             },
             "freshness": {
                 "type": "string",
-                "enum": ["live_revision", "fresh_index", "stale_index", "unknown"],
+                "enum": [
+                    "live_revision",
+                    "workspace_snapshot",
+                    "live_workspace",
+                    "fresh_index",
+                    "stale_index",
+                    "unknown",
+                ],
             },
             "rebuild_required": {"type": "boolean"},
             "notes": {"type": "string"},
@@ -252,7 +259,14 @@ def _provenance_schema() -> dict[str, JsonValue]:
             "intelligence_provider_id": {"type": "string", "minLength": 1},
             "freshness": {
                 "type": "string",
-                "enum": ["live_revision", "fresh_index", "stale_index", "unknown"],
+                "enum": [
+                    "live_revision",
+                    "workspace_snapshot",
+                    "live_workspace",
+                    "fresh_index",
+                    "stale_index",
+                    "unknown",
+                ],
             },
         },
         (

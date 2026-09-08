@@ -36,9 +36,12 @@ from ai_multi_agent_platform.plugins import (
     PluginRegistry,
 )
 from ai_multi_agent_platform.repositories import RepositoryCapabilityProvider
-from ai_multi_agent_platform.repository_intelligence import BaselineRepositoryIntelligenceProvider
+from ai_multi_agent_platform.repository_intelligence import (
+    WorkspaceAwareRepositoryIntelligenceProvider,
+)
 from ai_multi_agent_platform.repository_intelligence.wiring import (
     AuthorizedRepositorySnapshotLoader,
+    AuthorizedRunWorkspaceSnapshotLoader,
 )
 
 from .onboarding_openai_compatible import OpenAICompatibleOnboardingAdapter
@@ -84,11 +87,19 @@ def build_default_single_node_deployment(
     )
     asyncio.run(
         deployment.capabilities.register_provider(
-            BaselineRepositoryIntelligenceProvider(
+            WorkspaceAwareRepositoryIntelligenceProvider(
                 AuthorizedRepositorySnapshotLoader(
                     deployment.repositories,
                     actor_resolver=_repository_actor_ref,
-                )
+                ),
+                AuthorizedRunWorkspaceSnapshotLoader(
+                    deployment.run_workspace_bindings,
+                    deployment.workspaces,
+                    deployment.files,
+                    deployment.repository_workspace_execution,
+                    deployment.approval_gate,
+                    actor_resolver=_repository_actor_ref,
+                ),
             )
         )
     )
