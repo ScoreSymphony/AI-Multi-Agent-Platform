@@ -134,7 +134,7 @@ Owner adapters reject stale target revisions. If a process stops after the owner
 - gate-evidence binding;
 - accept/reject/supersede decisions;
 - owner promotion;
-- optional post-promotion Evaluation completion/failure.
+- optional post-promotion Evaluation completion/failure/reuse.
 
 Telemetry carries IDs, revisions, digests, target identity, risk and gate-policy references. It does not store private chain-of-thought or proposed secret values.
 
@@ -144,9 +144,11 @@ Telemetry carries IDs, revisions, digests, target identity, risk and gate-policy
 
 Post-promotion results are derived evidence. They do not rewrite the PromotionReceipt or the owner revision. `learning-post-promotion-evaluations` exposes the recorded outcome and canonical Evaluation run IDs. A regression can therefore be surfaced and acted upon by a new Learning Candidate or rollback workflow without rewriting history.
 
-The runtime checks whether the same Candidate revision/promotion target revision already has a post-promotion record before scheduling another evaluation. `SQLitePostPromotionEvaluationRecorder` persists these derived records across restart and is the prepared Single-Node default.
+The runtime checks whether the same Candidate/target revision already has a post-promotion record before scheduling another evaluation. `SQLitePostPromotionEvaluationRecorder` persists these derived records across restart and is the prepared Single-Node default.
 
-The integration must provide the `ConfigurationSnapshot` factory because target-specific snapshot construction belongs to the owning deployment/evaluation composition. If no post-promotion evaluator is configured, no synthetic PASS result is created.
+When runtime registration is enabled, `RuntimeAwareLearningCandidateResourceService` replaces only the Candidate read projection and derives `post_promotion_regression_status` from that recorder. Possible runtime statuses include `passed`, `regression`, `failed`, `not_configured`, `not_recorded` and `not_applicable`. Mutation authority remains in the canonical Learning service.
+
+The integration must provide the `ConfigurationSnapshot` factory because target-specific snapshot construction belongs to the owning deployment/evaluation composition. If no post-promotion evaluator or suite is configured, no synthetic PASS result is created.
 
 ## Persistence and recovery
 
@@ -156,7 +158,7 @@ The integration must provide the `ConfigurationSnapshot` factory because target-
 - append-only Learning Candidate revisions;
 - stable dedupe bindings.
 
-`SQLitePostPromotionEvaluationRecorder` separately persists derived post-promotion evaluation records and enforces stable record identity plus one record for the same candidate revision/target revision pair.
+`SQLitePostPromotionEvaluationRecorder` separately persists derived post-promotion evaluation records and enforces stable record identity plus one record for the same candidate/target revision pair.
 
 The owner-domain provenance stored by Agent/Skill/Routing adapters makes promotion restart-safe even if the Learning process stops between owner mutation and candidate receipt persistence.
 
@@ -167,7 +169,7 @@ The owner-domain provenance stored by Agent/Skill/Routing adapters makes promoti
 - `learning-candidates`;
 - `learning-feedback`.
 
-Candidate projections include source/evidence references, exact target binding, proposed change, Evaluation/Verification IDs, candidate revision history, related Approval metadata, PromotionReceipt and the actual post-promotion status when the runtime recorder is available.
+Candidate projections include source/evidence references, exact target binding, proposed change, Evaluation/Verification IDs, candidate revision history, related Approval metadata and PromotionReceipt.
 
 Commands:
 
@@ -188,7 +190,7 @@ learning.promote
 learning-post-promotion-evaluations
 ```
 
-All mutation commands still pass through the normal Control Plane authorization bridge. `learning.promote` then performs the second, exact owner-target authorization/Approval check inside Learning itself.
+and replaces the Candidate **read projection** with the runtime-aware version described above. All mutation commands still pass through the normal Control Plane authorization bridge. `learning.promote` then performs the second, exact owner-target authorization/Approval check inside Learning itself.
 
 ## CLI
 
@@ -211,6 +213,8 @@ The branch prepares these additive frontend modules:
 - `frontend/src/api/learning.ts` — typed read/write Control Plane client;
 - `frontend/src/pages/LearningPage.tsx` — queue, detail, evidence/history and decision surfaces;
 - `frontend/src/app/learningManifest.ts` — manifest-aware capability detection.
+
+The frontend post-promotion contract includes `passed`, `regression`, `failed` and `not_configured` outcomes.
 
 The later integration branch should mount:
 
