@@ -237,7 +237,7 @@ def test_control_plane_create_never_accepts_self_asserted_verified_trust(tmp_pat
     assert denied.value.code is ErrorCode.FORBIDDEN
 
 
-def test_portability_import_strips_source_authority_and_sensitive_opt_in(tmp_path) -> None:
+def test_portability_import_strips_source_authority_and_arbitrary_metadata(tmp_path) -> None:
     source = JsonEgressProfileRepository(tmp_path / "source.json")
     profile = _profile(
         "egress_profile_portable_591",
@@ -277,7 +277,7 @@ def test_portability_import_strips_source_authority_and_sensitive_opt_in(tmp_pat
     assert "allow_sensitive_external" not in imported_revision.metadata
     assert "verification_ref" not in imported_revision.metadata
     assert "verified_by" not in imported_revision.metadata
-    assert imported_revision.metadata["safe_note"] == "portable"
+    assert "safe_note" not in imported_revision.metadata
     assert imported_revision.metadata["imported_unverified"] is True
 
     target = JsonEgressProfileRepository(tmp_path / "target.json")
