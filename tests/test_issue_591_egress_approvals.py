@@ -37,7 +37,11 @@ def _actor() -> ActorIdentity:
     return ActorIdentity(new_id("user"), ActorType.HUMAN)
 
 
-def _profile(*, revision: int = 1, cost: EgressCostClass = EgressCostClass.PAID_EXTERNAL) -> EgressProfile:
+def _profile(
+    *,
+    revision: int = 1,
+    cost: EgressCostClass = EgressCostClass.PAID_EXTERNAL,
+) -> EgressProfile:
     return EgressProfile(
         profile_id="profile:model:paid-591",
         revision=revision,
@@ -57,13 +61,14 @@ def _request(
     classification: DataClassification = DataClassification.CONFIDENTIAL,
     payload: str = "protected-a",
     profile_revision: int = 1,
+    cost: EgressCostClass = EgressCostClass.PAID_EXTERNAL,
 ) -> EgressRequest:
     return EgressRequest(
         request_id="egress-approval-591",
         target=EgressTarget(
             kind=EgressTargetKind.MODEL_PROVIDER,
             target_id="model-paid-591",
-            profile=_profile(revision=profile_revision),
+            profile=_profile(revision=profile_revision, cost=cost),
         ),
         context=OperationContext(
             correlation_id="corr-egress-approval-591",
@@ -192,12 +197,15 @@ def test_secret_egress_remains_non_overridable_even_if_reason_is_declared_approv
         authorization,
         reasons=frozenset({EgressReasonCode.SENSITIVE_EXTERNAL_DENIED}),
     )
-    request = _request(classification=DataClassification.SECRET)
+    request = _request(
+        classification=DataClassification.SECRET,
+        cost=EgressCostClass.FREE_EXTERNAL,
+    )
 
     with pytest.raises(ContractError) as denied:
         asyncio.run(gate.enforce(request, actor=actor))
 
     assert denied.value.details["outcome"] == EgressOutcome.DENY.value
-    assert denied.value.details["reason_code"] == "paid_external_denied"
+    assert denied.value.details["reason_code"] == EgressReasonCode.SENSITIVE_EXTERNAL_DENIED.value
     assert "approval_ref" not in denied.value.details
     assert authorization.approvals.all() == ()
