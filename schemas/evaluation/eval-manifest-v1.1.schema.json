@@ -112,7 +112,7 @@
       "required": ["key", "value"],
       "properties": {
         "key": { "$ref": "#/$defs/nonBlank" },
-        "value": { "$ref": "#/$defs/nonBlank" }
+        "value": { "type": "string" }
       }
     },
     "reference": {
