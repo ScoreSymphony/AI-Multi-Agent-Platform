@@ -1,0 +1,324 @@
+name: Temporary integration mypy fixes
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+
+permissions:
+  contents: write
+
+jobs:
+  mypy-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: integration/active-branches-2026-09-08
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply and validate integration typing fixes
+        shell: bash
+        run: |
+          python -m pip install -e '.[dev]'
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str, *, count: int | None = None) -> None:
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old!r}")
+              if count is not None and text.count(old) != count:
+                  raise SystemExit(
+                      f"unexpected match count in {path}: {text.count(old)} != {count} for {old!r}"
+                  )
+              p.write_text(text.replace(old, new))
+
+          replace(
+              "src/ai_multi_agent_platform/contracts/egress.py",
+              "        for value, name in (\n            (self.data_retention_policy, \"data_retention_policy\"),\n            (self.training_policy, \"training_policy\"),\n            (self.logging_policy, \"logging_policy\"),\n            (self.jurisdiction, \"jurisdiction\"),\n        ):\n            if value is not None and not value.strip():",
+              "        for optional_value, name in (\n            (self.data_retention_policy, \"data_retention_policy\"),\n            (self.training_policy, \"training_policy\"),\n            (self.logging_policy, \"logging_policy\"),\n            (self.jurisdiction, \"jurisdiction\"),\n        ):\n            if optional_value is not None and not optional_value.strip():",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/cli/learning.py",
+              "from urllib.parse import quote\n",
+              "from typing import cast\nfrom urllib.parse import quote\n",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/cli/learning.py",
+              "        body: dict[str, JsonValue] = {\n            \"resource_ref\": str(args.candidate_id),\n            \"expected_revision\": args.expected_revision,\n        }\n        if args.approval_id is not None:\n            body[\"approval_id\"] = str(args.approval_id)\n        return client.post(\n            \"/commands/learning.promote\",\n            body=body,",
+              "        promote_body: dict[str, JsonValue] = {\n            \"resource_ref\": str(args.candidate_id),\n            \"expected_revision\": args.expected_revision,\n        }\n        if args.approval_id is not None:\n            promote_body[\"approval_id\"] = str(args.approval_id)\n        return client.post(\n            \"/commands/learning.promote\",\n            body=promote_body,",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/cli/learning.py",
+              "        return json.loads(raw)",
+              "        return cast(JsonValue, json.loads(raw))",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/security/egress_composition.py",
+              "from ai_multi_agent_platform.contracts import AuthorizationProvider\n",
+              "from ai_multi_agent_platform.contracts import AuthorizationProvider\nfrom ai_multi_agent_platform.contracts.egress import EgressAuditSink\n",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/security/egress_composition.py",
+              "    EgressActorResolver,\n    EgressAuditSink,\n    EgressGate,",
+              "    EgressActorResolver,\n    EgressGate,",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/security/egress_policy_control_plane.py",
+              "from collections.abc import Mapping",
+              "from collections.abc import Callable, Mapping",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/security/egress_policy_control_plane.py",
+              "def _enum[T](value: Mapping[str, object], field: str, enum_type: type[T]) -> T:",
+              "def _enum[T](value: Mapping[str, object], field: str, enum_type: Callable[[str], T]) -> T:",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/security/egress_control_plane.py",
+              "from collections.abc import Mapping",
+              "from collections.abc import Callable, Mapping",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/security/egress_control_plane.py",
+              "            requested_project = cast(str | None, raw_project)",
+              "            requested_project = raw_project",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/security/egress_control_plane.py",
+              '        "metadata_keys": sorted(profile.metadata),',
+              '        "metadata_keys": cast(list[JsonValue], sorted(profile.metadata)),',
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/security/egress_control_plane.py",
+              "def _enum[T](value: Mapping[str, object], field: str, enum_type: type[T]) -> T:",
+              "def _enum[T](value: Mapping[str, object], field: str, enum_type: Callable[[str], T]) -> T:",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/security/egress_control_plane.py",
+              "    enum_type: type[T],",
+              "    enum_type: Callable[[str], T],",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/context/projection.py",
+              "    for item in bundle.omissions:\n        omission: dict[str, JsonValue] = {\n            \"source_type\": item.source.source_type.value,\n            \"reason\": item.reason.value,\n            \"mandatory\": item.mandatory,\n        }\n        if include_omission_details:\n            omission[\"detail\"] = item.detail",
+              "    for omitted in bundle.omissions:\n        omission: dict[str, JsonValue] = {\n            \"source_type\": omitted.source.source_type.value,\n            \"reason\": omitted.reason.value,\n            \"mandatory\": omitted.mandatory,\n        }\n        if include_omission_details:\n            omission[\"detail\"] = omitted.detail",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/research/portability.py",
+              "from collections.abc import Callable\nfrom typing import cast",
+              "from collections.abc import Callable\nfrom functools import partial\nfrom typing import cast",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/research/portability.py",
+              "    for observation in observations:\n        source = source_by_id.get(observation.source_id)\n        if source is None or observation.research_item_id != item.research_item_id:",
+              "    for observation in observations:\n        resolved_source = source_by_id.get(observation.source_id)\n        if resolved_source is None or observation.research_item_id != item.research_item_id:",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/research/portability.py",
+              "    for value in evidence:\n        claim = claim_by_id.get(value.claim_id)\n        observation = observation_by_id.get(value.source_observation_id)\n        if claim is None or observation is None or value.source_id not in source_by_id:",
+              "    for value in evidence:\n        resolved_claim = claim_by_id.get(value.claim_id)\n        resolved_observation = observation_by_id.get(value.source_observation_id)\n        if (\n            resolved_claim is None\n            or resolved_observation is None\n            or value.source_id not in source_by_id\n        ):",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/research/portability.py",
+              "        if observation.source_id != value.source_id:",
+              "        if resolved_observation.source_id != value.source_id:",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/research/portability.py",
+              "        if expected_binding != observation.binding[:6]:",
+              "        if expected_binding != resolved_observation.binding[:6]:",
+              count=1,
+          )
+          for old, new in (
+              ("lambda source=source: repository.get_source(source.source_id)", "partial(repository.get_source, source.source_id)"),
+              ("lambda observation=observation: repository.get_observation(observation.observation_id)", "partial(repository.get_observation, observation.observation_id)"),
+              ("lambda claim=claim: repository.get_claim(claim.claim_id)", "partial(repository.get_claim, claim.claim_id)"),
+              ("lambda value=value: repository.get_evidence(value.evidence_id)", "partial(repository.get_evidence, value.evidence_id)"),
+          ):
+              replace("src/ai_multi_agent_platform/research/portability.py", old, new, count=2)
+
+          replace(
+              "src/ai_multi_agent_platform/repository_intelligence/projectatlas_resources.py",
+              "from dataclasses import replace\n",
+              "from dataclasses import replace\nfrom typing import TypedDict\n",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/repository_intelligence/projectatlas_resources.py",
+              "PROJECTATLAS_PILOT_STATE_BYTES = 820_744\n\n\ndef projectatlas_resource_profile",
+              "PROJECTATLAS_PILOT_STATE_BYTES = 820_744\n\n\nclass _ProjectAtlasResourceCommon(TypedDict):\n    runtime: str\n    os_name: str\n    network_required: bool\n    host_pressure_sensitive: bool\n    evidence_ref: str\n    observed_peak_rss_bytes: int\n    observed_state_bytes: int\n\n\ndef projectatlas_resource_profile",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/repository_intelligence/projectatlas_resources.py",
+              "    common = {",
+              "    common: _ProjectAtlasResourceCommon = {",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/portability/research_codecs.py",
+              "        bundle = cast(dict[str, JsonValue], raw_bundle)",
+              "        bundle = raw_bundle",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/context/source_adapters.py",
+              "from ai_multi_agent_platform.skills import ReferenceSkillRenderer, SkillRepository",
+              "from ai_multi_agent_platform.skills import ReferenceSkillRenderer, SkillBundle, SkillRepository",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/source_adapters.py",
+              "    ContextCandidate,\n    ContextDataClassification,",
+              "    ContextBundle,\n    ContextCandidate,\n    ContextDataClassification,",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/source_adapters.py",
+              "        bindings: Sequence[ContextSourceAdapterBinding],\n    ):\n        source_request",
+              "        bindings: Sequence[ContextSourceAdapterBinding],\n    ) -> ContextBundle:\n        source_request",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/source_adapters.py",
+              "    def bundle_for(self, request: ContextSourceRequest):",
+              "    def bundle_for(self, request: ContextSourceRequest) -> SkillBundle | None:",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/source_adapters.py",
+              "            revision = cast(str | None, explicit_revision) or (",
+              "            revision = explicit_revision or (",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/source_adapters.py",
+              '            body = _canonical_json({"artifact_id": artifact_id, "file_ids": linked_files})',
+              '            body = _canonical_json(\n                {\n                    "artifact_id": artifact_id,\n                    "file_ids": cast(JsonValue, linked_files),\n                }\n            )',
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/context/source_adapters.py",
+              "                body = _canonical_json(cast(JsonValue, entry.value))",
+              "                body = _canonical_json(entry.value)",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/context/lifecycle.py",
+              "            agent_revision = revision.revision\n            requested_capability_ids: tuple[str, ...] = ()",
+              "            agent_revision: int | None = revision.revision\n            requested_capability_ids: tuple[str, ...] = ()",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/learning/control_plane.py",
+              "    return cast(dict[str, JsonValue], redacted)",
+              "    return redacted",
+              count=2,
+          )
+          replace(
+              "src/ai_multi_agent_platform/learning/control_plane.py",
+              '        "payload_ref": cast(str | None, record.payload_ref),',
+              '        "payload_ref": record.payload_ref,',
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/learning/governance.py",
+              "    invalid = []",
+              "    invalid: list[JsonValue] = []",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/learning/runtime_control_plane.py",
+              "    return cast(dict[str, JsonValue], safe)",
+              "    return safe",
+              count=1,
+          )
+
+          replace(
+              "src/ai_multi_agent_platform/handoffs/production.py",
+              "            bundle = self.skills.get_bundle(reference.resource_id)\n            if bundle.task_id != task_id:",
+              "            skill_bundle = self.skills.get_bundle(reference.resource_id)\n            if skill_bundle.task_id != task_id:",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/handoffs/production.py",
+              "                digest=_digest_value(bundle.digest),\n                project_id=bundle.project_id,\n                workspace_id=bundle.workspace_id,",
+              "                digest=_digest_value(skill_bundle.digest),\n                project_id=skill_bundle.project_id,\n                workspace_id=skill_bundle.workspace_id,",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/handoffs/production.py",
+              "                bundle = self.contexts.get(reference.resource_id)",
+              "                context_bundle = self.contexts.get(reference.resource_id)",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/handoffs/production.py",
+              "            if bundle.task_id != task_id:\n                raise ContractError(\n                    ErrorCode.NOT_FOUND,\n                    \"ContextBundle belongs to a different Task\",\n                )\n            return _ResolvedReference(\n                revision=\"1\",\n                digest=_digest_value(bundle.digest),",
+              "            if context_bundle.task_id != task_id:\n                raise ContractError(\n                    ErrorCode.NOT_FOUND,\n                    \"ContextBundle belongs to a different Task\",\n                )\n            return _ResolvedReference(\n                revision=\"1\",\n                digest=_digest_value(context_bundle.digest),",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/handoffs/production.py",
+              "            policies = set(profile.policy_hooks.verification_policy_refs)\n            if profile.policy_hooks.authorization_profile_ref is not None:\n                policies.add(profile.policy_hooks.authorization_profile_ref)\n            return roles, capabilities, policies",
+              "            agent_policies = set(profile.policy_hooks.verification_policy_refs)\n            if profile.policy_hooks.authorization_profile_ref is not None:\n                agent_policies.add(profile.policy_hooks.authorization_profile_ref)\n            return roles, capabilities, agent_policies",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/handoffs/production.py",
+              "        policies: set[str] = set()\n        if team.profile.coordination_policy_ref is not None:\n            policies.add(team.profile.coordination_policy_ref)",
+              "        team_policies: set[str] = set()\n        if team.profile.coordination_policy_ref is not None:\n            team_policies.add(team.profile.coordination_policy_ref)",
+              count=1,
+          )
+          replace(
+              "src/ai_multi_agent_platform/handoffs/production.py",
+              "        return roles, capabilities, policies\n\n\nclass TelemetryHandoffAuditSink",
+              "        return roles, capabilities, team_policies\n\n\nclass TelemetryHandoffAuditSink",
+              count=1,
+          )
+          PY
+          ruff check . --fix
+          ruff format .
+          ruff format --check .
+          ruff check .
+          mypy
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'fix: resolve integration typing regressions'
+            git push origin HEAD:integration/active-branches-2026-09-08
+          fi
