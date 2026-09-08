@@ -1,5 +1,20 @@
 """Canonical Research Evidence layer."""
 
+from .control_plane import (
+    RESEARCH_CLAIM_COLLECTION,
+    RESEARCH_COLLECTIONS,
+    RESEARCH_COMMANDS,
+    RESEARCH_EVIDENCE_COLLECTION,
+    RESEARCH_ITEM_COLLECTION,
+    RESEARCH_OBSERVATION_COLLECTION,
+    RESEARCH_SOURCE_COLLECTION,
+    ResearchClaimResourceService,
+    ResearchEvidenceResourceService,
+    ResearchItemResourceService,
+    ResearchObservationResourceService,
+    ResearchSourceResourceService,
+    register_research_control_plane,
+)
 from .integrations import ResearchPlanningBridge, ResearchPromotionBridge
 from .models import (
     Claim,
@@ -31,7 +46,14 @@ from .service import ResearchService
 from .verification import ResearchVerificationBridge, ResearchVerificationSubject
 
 __all__ = [
+    "RESEARCH_CLAIM_COLLECTION",
+    "RESEARCH_COLLECTIONS",
+    "RESEARCH_COMMANDS",
+    "RESEARCH_EVIDENCE_COLLECTION",
+    "RESEARCH_ITEM_COLLECTION",
+    "RESEARCH_OBSERVATION_COLLECTION",
     "RESEARCH_PERSISTENCE_SCHEMA_VERSION",
+    "RESEARCH_SOURCE_COLLECTION",
     "Claim",
     "ClaimConfidence",
     "ClaimStatus",
@@ -41,12 +63,17 @@ __all__ = [
     "FreshnessPolicy",
     "InMemoryResearchRepository",
     "ResearchActionContext",
+    "ResearchClaimResourceService",
     "ResearchClass",
+    "ResearchEvidenceResourceService",
     "ResearchItem",
+    "ResearchItemResourceService",
+    "ResearchObservationResourceService",
     "ResearchPlanningBridge",
     "ResearchPromotionBridge",
     "ResearchRepository",
     "ResearchService",
+    "ResearchSourceResourceService",
     "ResearchSourceType",
     "ResearchStatus",
     "ResearchVerificationBinding",
@@ -58,4 +85,5 @@ __all__ = [
     "SourceRecord",
     "SqliteResearchRepository",
     "UntrustedResearchExecutionProfile",
+    "register_research_control_plane",
 ]
