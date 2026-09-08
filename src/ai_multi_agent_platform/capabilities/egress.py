@@ -111,9 +111,24 @@ def _capability_posture(
     node_id: str | None,
     worker_id: str | None,
 ) -> EgressTargetPosture:
+    """Classify transport independently from mutation side-effect semantics.
+
+    A read-only capability can still send protected data across a network boundary. Browser
+    navigation/download therefore remain ``SideEffectClassification.NONE``/``LOCAL_WRITE`` while
+    their explicit network permission correctly makes the transport external. MCP/connectors keep
+    using their existing ``EXTERNAL`` side-effect/tag declaration.
+    """
+
+    requires_network_egress = any(
+        permission in {"browser.network.read", "network.egress"}
+        or permission.startswith("network.egress.")
+        for permission in capability.required_permissions
+    )
     if (
         capability.side_effects is SideEffectClassification.EXTERNAL
         or "external" in capability.tags
+        or "network-egress" in capability.tags
+        or requires_network_egress
     ):
         return EgressTargetPosture.EXTERNAL
     if node_id is not None or worker_id is not None:
