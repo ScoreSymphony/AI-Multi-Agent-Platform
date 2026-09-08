@@ -20,7 +20,6 @@ from ai_multi_agent_platform.skills import (
 )
 from ai_multi_agent_platform.verification import VerificationService
 
-from .control_plane import LEARNING_COLLECTIONS, register_learning_control_plane
 from .governance import GovernedObservedLearningService, LearningPlatformPolicy
 from .post_promotion_repository import SQLitePostPromotionEvaluationRecorder
 from .promotion import (
@@ -31,10 +30,7 @@ from .promotion import (
 )
 from .repository import SQLiteLearningRepository
 from .runtime import PostPromotionEvaluator
-from .runtime_control_plane import (
-    LEARNING_POST_PROMOTION_COLLECTION,
-    register_learning_runtime_control_plane,
-)
+from .scoped_control_plane import register_scoped_learning_control_plane
 from .service import LearningQualityGate
 from .sources import LearningSourceBridge
 
@@ -55,17 +51,12 @@ class SingleNodeLearningComposition:
         *,
         register_skills: bool = True,
     ) -> None:
-        """Register only missing additive surfaces on the shared canonical Control Plane."""
+        """Register only additive surfaces on the shared canonical Control Plane."""
 
         registered = set(control_plane.registered_collections)
         if register_skills and SKILL_COLLECTION not in registered:
             register_skill_control_plane(control_plane, self.skills)
-            registered = set(control_plane.registered_collections)
-        if not set(LEARNING_COLLECTIONS).issubset(registered):
-            register_learning_control_plane(control_plane, self.service)
-            registered = set(control_plane.registered_collections)
-        if LEARNING_POST_PROMOTION_COLLECTION not in registered:
-            register_learning_runtime_control_plane(control_plane, self.service)
+        register_scoped_learning_control_plane(control_plane, self.service)
 
 
 def build_single_node_learning(
