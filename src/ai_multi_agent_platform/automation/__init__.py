@@ -32,7 +32,7 @@ from .runtime import (
     SqliteAutomationRuntimeState,
 )
 from .runtime_service import AutomationService
-from .service import NO_TASK_REQUIRED, AutomationEventSink, ReferenceScheduler, TaskCreator
+from .service import AutomationEventSink, NO_TASK_REQUIRED, ReferenceScheduler, TaskCreator
 from .workspace_event_scope import (
     CanonicalWorkspaceEventScopeResolver,
     WorkspaceEventScopeResolver,
