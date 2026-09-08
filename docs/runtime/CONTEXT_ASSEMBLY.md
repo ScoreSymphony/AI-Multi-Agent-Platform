@@ -44,7 +44,7 @@ The orchestrator or model provider is not allowed to become the hidden context a
 - data classification;
 - priority/relevance;
 - Project/Workspace scope;
-- optional conflict and security metadata.
+- optional conflict and security metadata for non-secret-reference entries.
 
 `ContextBundle` is the immutable effective context record. Its canonical digest is computed from the execution identity, ordered entries, omissions, budget/usage evidence, resolver/policy versions, Skill Bundle reference and reproducibility state. Creation time and generated `context_bundle_id` are not part of the digest, so resolving identical canonical inputs remains digest-equivalent.
 
@@ -78,7 +78,7 @@ Skill integration preserves the resolved `skill_bundle_id` and digest on the bun
 
 ## Secret and untrusted-content boundary
 
-`SECRET_REFERENCE` context is reference-only. `ContextCandidate` and `ContextEntry` reject inline secret content, so ordinary `ContextBundle` serialization contains the secret reference/digest evidence rather than the resolved secret value. A renderer may resolve that reference only at an explicitly authorized consuming boundary.
+`SECRET_REFERENCE` context is reference-only. `ContextCandidate` and `ContextEntry` reject inline secret content and reject free-form metadata for secret references, so adapters cannot smuggle a resolved credential into ordinary `ContextBundle` persistence through either field. Canonical serialization therefore contains only the reference/digest evidence. A renderer may resolve that reference only at an explicitly authorized consuming boundary.
 
 Untrusted retrieved content cannot be promoted to `SECURITY` or `INSTRUCTION` authority merely by appearing in context. Construction rejects that combination before resolution.
 
@@ -114,6 +114,10 @@ The reference persistence path supports the critical restart case: a bundle can 
 
 The context Control Plane resources expose safe projections of bundles and Run bindings. Inspection surfaces are expected to show bundle identity, source references, revisions/freshness, selection/omission reasons, budget usage and resolver/policy versions while respecting entry visibility rules. Secret values are never made visible merely because a bundle contains a SecretReference.
 
+## Evaluation integration
+
+The #19 evaluation framework remains the canonical evaluation owner. Context assembly contributes deterministic cases through the existing `EvaluationRunner`/evaluator contracts rather than creating a parallel context-specific evaluation store. The #590 integration fixtures cover stable bundle identity, policy filtering/budget behavior, renderer replacement, no privilege escalation and paired `context_quality`/`task_success` metrics for full versus degraded optional context.
+
 ## Required regression evidence
 
 `tests/test_issue_590_context_bundles.py` is the focused #590 regression/acceptance suite. It proves:
@@ -132,4 +136,6 @@ The context Control Plane resources expose safe projections of bundles and Run b
 - absence of secret values from canonical serialization;
 - rejection of untrusted retrieved content as instruction authority.
 
-These tests use only local fakes/reference implementations and therefore preserve the self-hosted/no-paid-service requirement.
+`tests/test_issue_590_secret_reference_metadata.py` proves the reference-only secret metadata boundary. `tests/test_issue_590_agent_run_integration.py` proves that an actual `ContextBoundAgentRuntime` AgentRun carries and persists the exact canonical Bundle ID/digest. `tests/test_issue_590_evaluation_integration.py` runs the context scenarios through the canonical #19 evaluation framework.
+
+All #590 tests use local fakes/reference implementations and therefore preserve the self-hosted/no-paid-service requirement.
