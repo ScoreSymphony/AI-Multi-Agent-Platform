@@ -35,9 +35,14 @@ from .retry_policy import (
     retry_exhausted,
 )
 
-TaskCreator = Callable[
-    [Automation, TriggerDelivery, dict[str, JsonValue], str], Awaitable[str | None]
-]
+
+class _NoTaskRequired(str):
+    """Explicit TaskCreator result for a handled delivery that requires no canonical Task."""
+
+
+NO_TASK_REQUIRED: str = _NoTaskRequired("automation:no-task-required")
+
+TaskCreator = Callable[[Automation, TriggerDelivery, dict[str, JsonValue], str], Awaitable[str]]
 AutomationEventSink = Callable[[dict[str, JsonValue]], Awaitable[None]]
 AutomationClock = Callable[[], datetime]
 
@@ -570,7 +575,17 @@ class AutomationService:
         )
         idempotency_key = f"automation:{automation.id}:{processing.dedupe_key}"
         try:
-            task_id = await self._task_creator(automation, processing, rendered, idempotency_key)
+            task_result = await self._task_creator(automation, processing, rendered, idempotency_key)
+            if task_result is NO_TASK_REQUIRED:
+                task_id: str | None = None
+            elif not isinstance(task_result, str) or not task_result.strip():
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "automation TaskCreator must return a non-blank canonical task id",
+                    retryable=False,
+                )
+            else:
+                task_id = task_result
         except ContractError as exc:
             failed = await self._persist_failure(
                 automation,
