@@ -24,21 +24,54 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          test_path = Path('tests/test_issue_651_production_handoff_runtime.py')
-          text = test_path.read_text()
-          old = chr(10).join([
-              'from ai_multi_agent_platform.coordination.repository import (',
-              '    InMemoryCoordinatorRepository,',
-              '    SQLiteCoordinatorRepository,',
-              ')',
-          ]) + chr(10)
-          new = chr(10).join([
-              'from ai_multi_agent_platform.coordination.repository import InMemoryCoordinatorRepository',
-              'from ai_multi_agent_platform.coordination.sqlite_repository import SQLiteCoordinatorRepository',
-          ]) + chr(10)
-          if text.count(old) != 1:
-              raise SystemExit(f'expected exactly one coordinator import block, found {text.count(old)}')
-          test_path.write_text(text.replace(old, new))
+          def replace(path: str, old: str, new: str, *, count: int = 1) -> None:
+              target = Path(path)
+              text = target.read_text()
+              if text.count(old) != count:
+                  raise SystemExit(
+                      f'expected {count} match(es) in {path}, found {text.count(old)} for {old!r}'
+                  )
+              target.write_text(text.replace(old, new))
+
+          replace(
+              'tests/test_issue_651_production_handoff_runtime.py',
+              chr(10).join([
+                  'from ai_multi_agent_platform.coordination.repository import (',
+                  '    InMemoryCoordinatorRepository,',
+                  '    SQLiteCoordinatorRepository,',
+                  ')',
+              ]) + chr(10),
+              chr(10).join([
+                  'from ai_multi_agent_platform.coordination.repository import InMemoryCoordinatorRepository',
+                  'from ai_multi_agent_platform.coordination.sqlite_repository import SQLiteCoordinatorRepository',
+              ]) + chr(10),
+          )
+          replace(
+              'tests/test_issue_651_production_handoff_runtime.py',
+              '    assert execution.runtime_context.consumption == consumed',
+              '    assert execution.runtime_context == consumed',
+          )
+
+          source_gateway = Path('tests/test_issue_651_source_gateway.py')
+          source_text = source_gateway.read_text()
+          evidence_anchor = '''    evidence = await research.add_evidence(
+              claim.claim_id,
+              observation.observation_id,
+              relation=EvidenceRelation.SUPPORTS,
+              location_ref="section:handoff",
+          )
+          gateway = _gateway(research=repository)'''.replace('          ', '')
+          evidence_replacement = '''    evidence = await research.add_evidence(
+              claim.claim_id,
+              observation.observation_id,
+              relation=EvidenceRelation.SUPPORTS,
+              location_ref="section:handoff",
+          )
+          claim = repository.get_claim(claim.claim_id)
+          gateway = _gateway(research=repository)'''.replace('          ', '')
+          if source_text.count(evidence_anchor) != 1:
+              raise SystemExit('research evidence test anchor not found exactly once')
+          source_gateway.write_text(source_text.replace(evidence_anchor, evidence_replacement))
 
           pyproject = Path('pyproject.toml')
           config = pyproject.read_text()
@@ -76,12 +109,12 @@ jobs:
           funnel.write_text(funnel_text.replace(package_import, direct_import))
           PY
           python -m pip install -e '.[dev]'
-          ruff format src/ai_multi_agent_platform/repository_intelligence/context_funnel.py tests/test_issue_651_production_handoff_runtime.py
-          ruff check src/ai_multi_agent_platform/repository_intelligence/context_funnel.py tests/test_issue_651_production_handoff_runtime.py
+          ruff format src/ai_multi_agent_platform/repository_intelligence/context_funnel.py tests/test_issue_651_production_handoff_runtime.py tests/test_issue_651_source_gateway.py
+          ruff check src/ai_multi_agent_platform/repository_intelligence/context_funnel.py tests/test_issue_651_production_handoff_runtime.py tests/test_issue_651_source_gateway.py
           mypy
           pytest tests/test_issue_651_*.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add pyproject.toml tests/test_issue_651_production_handoff_runtime.py src/ai_multi_agent_platform/repository_intelligence/context_funnel.py
-          git commit -m 'test: fix issue 651 integration dependencies and imports'
+          git add pyproject.toml tests/test_issue_651_production_handoff_runtime.py tests/test_issue_651_source_gateway.py src/ai_multi_agent_platform/repository_intelligence/context_funnel.py
+          git commit -m 'test: fix issue 651 integration dependencies and exact-reference tests'
           git push origin HEAD:integration/active-branches-2026-09-08
