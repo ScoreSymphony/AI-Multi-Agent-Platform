@@ -67,7 +67,8 @@ class HandoffResourceService:
 
     The extension ControlPlane first applies collection-level #15 authorization. This service
     then applies the same owner/project-aware Task authorization used by other task-scoped
-    domains before returning each Handoff. Unscoped enumeration is deliberately rejected.
+    domains before returning each Handoff. Unscoped enumeration remains safe because every
+    candidate is individually filtered through the owning Task authorization boundary.
     """
 
     def __init__(self, control_plane: ControlPlane, service: HandoffService) -> None:
@@ -108,10 +109,7 @@ class HandoffResourceService:
             return self.service.list_handoffs_for_task(task_id)
         if step_id is not None:
             return self.service.list_handoffs_for_step(step_id)
-        raise ContractError(
-            ErrorCode.INVALID_REQUEST,
-            "handoff history listing requires task_id or step_id filter",
-        )
+        return self.service.list_handoffs()
 
     async def _can_view(
         self,

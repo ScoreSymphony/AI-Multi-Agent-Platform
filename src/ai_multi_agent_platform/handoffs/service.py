@@ -203,6 +203,9 @@ class HandoffService:
     def get_handoff(self, handoff_id: str, revision: int | None = None) -> AgentHandoff:
         return self._repository.get_handoff(handoff_id, revision)
 
+    def list_handoffs(self) -> tuple[AgentHandoff, ...]:
+        return self._repository.list_handoffs()
+
     def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
         validate_id(task_id, "task")
         return self._repository.list_handoffs_for_task(task_id)

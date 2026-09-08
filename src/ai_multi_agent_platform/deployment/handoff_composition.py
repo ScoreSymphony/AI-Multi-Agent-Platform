@@ -64,14 +64,31 @@ def build_single_node_handoff_composition(
     authorization: AuthorizationProvider,
     verification: VerificationEvidenceResolver,
     telemetry: Telemetry,
+    research_repository: SqliteResearchRepository | None = None,
+    skill_repository: JsonSkillRepository | None = None,
+    context_bundle_repository: JsonContextBundleRepository | None = None,
+    context_binding_repository: JsonContextRunBindingRepository | None = None,
 ) -> HandoffDeploymentComposition:
     """Build the restart-safe #651 composition over existing platform authorities."""
 
     repository = SQLiteHandoffRepository(database_dir / "handoffs.sqlite3")
-    research_repository = SqliteResearchRepository(database_dir / "research.sqlite3")
-    skill_repository = JsonSkillRepository(database_dir / "skills.json")
-    context_bundle_repository = JsonContextBundleRepository(database_dir / "context-bundles.json")
-    context_binding_repository = JsonContextRunBindingRepository(
+    research_repository = research_repository or SqliteResearchRepository(
+        database_dir / "research.sqlite3"
+    )
+    skill_repository = skill_repository or JsonSkillRepository(database_dir / "skills.json")
+    supplied_context = (
+        context_bundle_repository is not None,
+        context_binding_repository is not None,
+    )
+    if supplied_context[0] != supplied_context[1]:
+        raise ValueError(
+            "Handoff composition requires both canonical Context repositories or neither"
+        )
+    reuse_context_registration = all(supplied_context)
+    context_bundle_repository = context_bundle_repository or JsonContextBundleRepository(
+        database_dir / "context-bundles.json"
+    )
+    context_binding_repository = context_binding_repository or JsonContextRunBindingRepository(
         database_dir / "context-run-bindings.json"
     )
 
@@ -103,12 +120,15 @@ def build_single_node_handoff_composition(
         consumer_requirements=consumer_requirements,
     )
 
-    # Handoff and Context surfaces remain evidence-only Control Plane resources.
-    register_context_control_plane(
-        control_plane,
-        context_bundle_repository,
-        context_binding_repository,
-    )
+    # Standalone Handoff composition owns Context registration only when no canonical
+    # deployment Context composition was supplied. Re-registering supplied repositories would
+    # overwrite the authorization-aware Context services installed by #650.
+    if not reuse_context_registration:
+        register_context_control_plane(
+            control_plane,
+            context_bundle_repository,
+            context_binding_repository,
+        )
     register_handoff_control_plane(control_plane, runtime.service)
 
     return HandoffDeploymentComposition(

@@ -182,6 +182,10 @@ def build_single_node_deployment(
         authorization=base.approval_gate.provider,
         verification=base.verification_runtime.evidence,
         telemetry=base.telemetry,
+        research_repository=context.research_repository,
+        skill_repository=context.skills_repository,
+        context_bundle_repository=context.bundles,
+        context_binding_repository=context.run_bindings,
     )
 
     # The public deployment now has an authoritative canonical Connector inventory. Rebind the

@@ -119,6 +119,11 @@ class AgentRuntime:
                 f"agent is disabled: {agent.agent_id}@{agent.revision}",
             )
 
+        self._validate_capability_policy(
+            agent,
+            requested_capability_ids=requested_capability_ids,
+            shared_capability_ids=shared_capability_ids,
+        )
         requirements = self._effective_model_requirements(
             agent,
             task_model_override,
@@ -384,21 +389,17 @@ class AgentRuntime:
             route = router.route(replace(requirements, explicit_model_id=None))
         return route.model_config_id, route.provider_id
 
-    def _resolve_capabilities(
-        self,
+    @staticmethod
+    def _validate_capability_policy(
         agent: AgentRevision,
         *,
         requested_capability_ids: tuple[str, ...],
         shared_capability_ids: tuple[str, ...],
-        available_capability_ids: frozenset[str],
-        granted_permissions: frozenset[str],
-        available_worker_capabilities: frozenset[str],
-    ) -> tuple[tuple[str, ...], Mapping[str, str]]:
+    ) -> set[str]:
         policy = agent.profile.capabilities
         effective = set(policy.required_ids)
         effective.update(requested_capability_ids)
         effective.update(shared_capability_ids)
-
         denied = effective.intersection(policy.denied)
         if denied:
             raise ContractError(
@@ -414,6 +415,24 @@ class AgentRuntime:
                     "Agent capability request exceeds its allowlist",
                     details={"capability_ids": cast(JsonValue, sorted(outside_allowlist))},
                 )
+        return effective
+
+    def _resolve_capabilities(
+        self,
+        agent: AgentRevision,
+        *,
+        requested_capability_ids: tuple[str, ...],
+        shared_capability_ids: tuple[str, ...],
+        available_capability_ids: frozenset[str],
+        granted_permissions: frozenset[str],
+        available_worker_capabilities: frozenset[str],
+    ) -> tuple[tuple[str, ...], Mapping[str, str]]:
+        policy = agent.profile.capabilities
+        effective = self._validate_capability_policy(
+            agent,
+            requested_capability_ids=requested_capability_ids,
+            shared_capability_ids=shared_capability_ids,
+        )
 
         constraints = {item.capability_id: item for item in policy.constraints}
         if self.capability_registry is None:

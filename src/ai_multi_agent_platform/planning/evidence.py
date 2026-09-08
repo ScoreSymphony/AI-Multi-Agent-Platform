@@ -13,7 +13,7 @@ from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
-from ai_multi_agent_platform.coordination import CoordinationPhase, StepCoordinationRecord
+from ai_multi_agent_platform.coordination.models import CoordinationPhase, StepCoordinationRecord
 from ai_multi_agent_platform.domain import RunStatus
 from ai_multi_agent_platform.kernel.models import RunState
 from ai_multi_agent_platform.verification import VerificationOutcome

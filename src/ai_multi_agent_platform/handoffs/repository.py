@@ -33,6 +33,8 @@ class HandoffRepository(Protocol):
 
     def get_handoff(self, handoff_id: str, revision: int | None = None) -> AgentHandoff: ...
 
+    def list_handoffs(self) -> tuple[AgentHandoff, ...]: ...
+
     def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]: ...
 
     def list_handoffs_for_step(self, step_id: str) -> tuple[AgentHandoff, ...]: ...
@@ -107,6 +109,14 @@ class InMemoryHandoffRepository:
                 ErrorCode.NOT_FOUND,
                 f"handoff revision not found: {handoff_id}@{revision}",
             ) from exc
+
+    def list_handoffs(self) -> tuple[AgentHandoff, ...]:
+        return tuple(
+            sorted(
+                self._handoffs.values(),
+                key=lambda item: (item.created_at, item.handoff_id, item.revision),
+            )
+        )
 
     def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
         return tuple(
@@ -326,6 +336,12 @@ class SQLiteHandoffRepository:
             raise ContractError(ErrorCode.NOT_FOUND, f"handoff not found: {suffix}")
         payload = cast(Mapping[str, Any], json.loads(str(row["payload_json"])))
         return handoff_from_dict(payload)
+
+    def list_handoffs(self) -> tuple[AgentHandoff, ...]:
+        return self._list_handoffs(
+            "SELECT payload_json FROM agent_handoffs ORDER BY handoff_id, revision",
+            (),
+        )
 
     def list_handoffs_for_task(self, task_id: str) -> tuple[AgentHandoff, ...]:
         return self._list_handoffs(

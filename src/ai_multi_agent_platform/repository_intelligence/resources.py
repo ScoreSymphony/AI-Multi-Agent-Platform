@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.distributed import JobRequirements
+from ai_multi_agent_platform.distributed.models import JobRequirements
 
 
 class RepositoryIntelligenceWorkload(StrEnum):

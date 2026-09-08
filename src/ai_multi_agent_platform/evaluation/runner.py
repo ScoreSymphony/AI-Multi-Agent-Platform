@@ -212,6 +212,16 @@ class EvaluationRunner:
             regression_policy=regression_policy,
             aggregation_policy=aggregation_policy,
         )
+        if (
+            baseline is not None
+            and aggregation_policy is not None
+            and aggregation_policy.require_equal_sample_count
+            and baseline.repetitions != repetitions
+        ):
+            raise ValueError(
+                "aggregation policy requires baseline and current runs "
+                "to use the same repetition count"
+            )
 
         run = EvaluationRun(
             suite_id=suite.suite_id,
@@ -299,7 +309,7 @@ class EvaluationRunner:
             ):
                 raise ValueError(
                     "aggregation policy requires baseline and current runs to use the same "
-                    "actual repetition count"
+                    "repetition count after execution"
                 )
             baseline_comparable: tuple[ComparableEvaluationResult, ...]
             current_comparable: tuple[ComparableEvaluationResult, ...]

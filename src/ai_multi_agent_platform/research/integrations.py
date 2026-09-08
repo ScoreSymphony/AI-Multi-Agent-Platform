@@ -18,7 +18,8 @@ from ai_multi_agent_platform.data.models import (
     new_knowledge_source_id,
     new_memory_id,
 )
-from ai_multi_agent_platform.planning import PlanningService, PlanningTrigger, ProposalRecord
+from ai_multi_agent_platform.planning.models import PlanningTrigger, ProposalRecord
+from ai_multi_agent_platform.planning.supersession import PlanningService
 
 from .models import ResearchActionContext
 from .service import ResearchService
