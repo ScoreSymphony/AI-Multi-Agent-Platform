@@ -1,5 +1,6 @@
 import type { ControlPlaneClient } from "../api/client";
 import type { VerificationClient } from "../api/verification";
+import { ContextSummary } from "../components/ContextSummary";
 import { VerificationSummary } from "../components/VerificationSummary";
 import { RunDetailPage } from "./Pages";
 import { ReferenceDetailPage } from "./ReferencePages";
@@ -35,6 +36,7 @@ export function VerificationBoundRunDetailPage({
   return (
     <>
       <RunDetailPage client={client} runId={runId} />
+      <ContextSummary baseUrl={client.baseUrl} runId={runId} />
       <VerificationSummary client={verificationClient} scope={{ kind: "run", id: runId }} />
     </>
   );
