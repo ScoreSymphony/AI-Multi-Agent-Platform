@@ -94,6 +94,7 @@ from .models import (
 from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
+from .repository_intelligence import RepositoryIntelligenceEvaluationCaseExecutor
 from .rubric import ObservationRubricEvaluator
 from .runner import EvaluationRunner, EvaluationRunSummary, NoopEvaluationIsolation
 from .service import (
@@ -196,6 +197,7 @@ __all__ = [
     "RegressionPolicy",
     "RegressionRule",
     "RegressionRuleKind",
+    "RepositoryIntelligenceEvaluationCaseExecutor",
     "ResolvedEvaluationFixtures",
     "ResourceLimitEvaluator",
     "ResultAggregator",
