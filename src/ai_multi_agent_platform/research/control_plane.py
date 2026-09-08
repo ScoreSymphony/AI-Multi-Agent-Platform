@@ -2,22 +2,37 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
+from enum import StrEnum
 from typing import cast
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    ErrorCode,
+    JsonValue,
+    OperationContext,
+)
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 from ai_multi_agent_platform.domain import OwnerRef
-from ai_multi_agent_platform.security import ActorIdentity, ActorType, infer_actor_identity, redact_sensitive
+from ai_multi_agent_platform.security import (
+    ActorIdentity,
+    ActorType,
+    infer_actor_identity,
+    redact_sensitive,
+)
 
 from .models import (
+    Claim,
     ClaimConfidence,
+    EvidenceRecord,
     EvidenceRelation,
     FreshnessPolicy,
     ResearchClass,
     ResearchItem,
     ResearchSourceType,
+    ResearchVerificationBinding,
     SourceObservation,
     SourceRecord,
 )
@@ -65,7 +80,9 @@ class ResearchItemResourceService(ResourceService):
         self._research = research
 
     async def list_resources(
-        self, context: RequestContext, query: PageQuery
+        self,
+        context: RequestContext,
+        query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         return tuple(
@@ -75,7 +92,9 @@ class ResearchItemResourceService(ResourceService):
         )
 
     async def get_resource(
-        self, context: RequestContext, resource_id: str
+        self,
+        context: RequestContext,
+        resource_id: str,
     ) -> dict[str, JsonValue]:
         item = self._research.repository.get_item(resource_id)
         _require_visible(item, context)
@@ -87,7 +106,9 @@ class ResearchSourceResourceService(ResourceService):
         self._research = research
 
     async def list_resources(
-        self, context: RequestContext, query: PageQuery
+        self,
+        context: RequestContext,
+        query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         values: list[dict[str, JsonValue]] = []
@@ -95,13 +116,18 @@ class ResearchSourceResourceService(ResourceService):
             if not _visible(item, context):
                 continue
             values.extend(
-                _source_resource(self._research, self._research.repository.get_source(source_id))
+                _source_resource(
+                    self._research,
+                    self._research.repository.get_source(source_id),
+                )
                 for source_id in item.source_ids
             )
         return tuple(values)
 
     async def get_resource(
-        self, context: RequestContext, resource_id: str
+        self,
+        context: RequestContext,
+        resource_id: str,
     ) -> dict[str, JsonValue]:
         source = self._research.repository.get_source(resource_id)
         _require_visible(self._research.repository.get_item(source.research_item_id), context)
@@ -113,7 +139,9 @@ class ResearchObservationResourceService(ResourceService):
         self._research = research
 
     async def list_resources(
-        self, context: RequestContext, query: PageQuery
+        self,
+        context: RequestContext,
+        query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         values: list[dict[str, JsonValue]] = []
@@ -128,10 +156,15 @@ class ResearchObservationResourceService(ResourceService):
         return tuple(values)
 
     async def get_resource(
-        self, context: RequestContext, resource_id: str
+        self,
+        context: RequestContext,
+        resource_id: str,
     ) -> dict[str, JsonValue]:
         observation = self._research.repository.get_observation(resource_id)
-        _require_visible(self._research.repository.get_item(observation.research_item_id), context)
+        _require_visible(
+            self._research.repository.get_item(observation.research_item_id),
+            context,
+        )
         return _observation_resource(observation)
 
 
@@ -140,7 +173,9 @@ class ResearchClaimResourceService(ResourceService):
         self._research = research
 
     async def list_resources(
-        self, context: RequestContext, query: PageQuery
+        self,
+        context: RequestContext,
+        query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         values: list[dict[str, JsonValue]] = []
@@ -153,7 +188,9 @@ class ResearchClaimResourceService(ResourceService):
         return tuple(values)
 
     async def get_resource(
-        self, context: RequestContext, resource_id: str
+        self,
+        context: RequestContext,
+        resource_id: str,
     ) -> dict[str, JsonValue]:
         claim = self._research.repository.get_claim(resource_id)
         _require_visible(self._research.repository.get_item(claim.research_item_id), context)
@@ -165,43 +202,55 @@ class ResearchEvidenceResourceService(ResourceService):
         self._research = research
 
     async def list_resources(
-        self, context: RequestContext, query: PageQuery
+        self,
+        context: RequestContext,
+        query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
         del query
         values: list[dict[str, JsonValue]] = []
         for item in self._research.repository.list_items():
             if _visible(item, context):
                 values.extend(
-                    _evidence_resource(self._research, evidence.evidence_id)
+                    _evidence_resource(self._research, evidence)
                     for evidence in self._research.repository.list_evidence(item.research_item_id)
                 )
         return tuple(values)
 
     async def get_resource(
-        self, context: RequestContext, resource_id: str
+        self,
+        context: RequestContext,
+        resource_id: str,
     ) -> dict[str, JsonValue]:
         evidence = self._research.repository.get_evidence(resource_id)
-        _require_visible(self._research.repository.get_item(evidence.research_item_id), context)
-        return _evidence_resource(self._research, resource_id)
+        _require_visible(
+            self._research.repository.get_item(evidence.research_item_id),
+            context,
+        )
+        return _evidence_resource(self._research, evidence)
 
 
 def register_research_control_plane(control_plane: ControlPlane, research: ResearchService) -> None:
     """Expose auditable Research resources without creating a second execution runtime."""
 
     control_plane.register_resource_service(
-        RESEARCH_ITEM_COLLECTION, ResearchItemResourceService(research)
+        RESEARCH_ITEM_COLLECTION,
+        ResearchItemResourceService(research),
     )
     control_plane.register_resource_service(
-        RESEARCH_SOURCE_COLLECTION, ResearchSourceResourceService(research)
+        RESEARCH_SOURCE_COLLECTION,
+        ResearchSourceResourceService(research),
     )
     control_plane.register_resource_service(
-        RESEARCH_OBSERVATION_COLLECTION, ResearchObservationResourceService(research)
+        RESEARCH_OBSERVATION_COLLECTION,
+        ResearchObservationResourceService(research),
     )
     control_plane.register_resource_service(
-        RESEARCH_CLAIM_COLLECTION, ResearchClaimResourceService(research)
+        RESEARCH_CLAIM_COLLECTION,
+        ResearchClaimResourceService(research),
     )
     control_plane.register_resource_service(
-        RESEARCH_EVIDENCE_COLLECTION, ResearchEvidenceResourceService(research)
+        RESEARCH_EVIDENCE_COLLECTION,
+        ResearchEvidenceResourceService(research),
     )
 
     async def create_item(
@@ -237,6 +286,7 @@ def register_research_control_plane(control_plane: ControlPlane, research: Resea
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         item = research.repository.get_item(resource_ref)
+        _require_visible(item, context)
         source = await research.add_source(
             resource_ref,
             source_type=_enum(ResearchSourceType, payload, "source_type"),
@@ -262,6 +312,7 @@ def register_research_control_plane(control_plane: ControlPlane, research: Resea
     ) -> dict[str, JsonValue]:
         source = research.repository.get_source(resource_ref)
         item = research.repository.get_item(source.research_item_id)
+        _require_visible(item, context)
         observation = await research.observe_source(
             resource_ref,
             retrieved_at=_datetime(payload, "retrieved_at"),
@@ -270,13 +321,21 @@ def register_research_control_plane(control_plane: ControlPlane, research: Resea
             version=_optional_string(payload.get("version"), "version"),
             commit=_optional_string(payload.get("commit"), "commit"),
             etag=_optional_string(payload.get("etag"), "etag"),
-            content_digest=_optional_string(payload.get("content_digest"), "content_digest"),
-            snapshot_digest=_optional_string(payload.get("snapshot_digest"), "snapshot_digest"),
-            snapshot_artifact_id=_optional_string(
-                payload.get("snapshot_artifact_id"), "snapshot_artifact_id"
+            content_digest=_optional_string(
+                payload.get("content_digest"),
+                "content_digest",
             ),
-            identity_proven=_optional_bool(payload.get("identity_proven"), "identity_proven")
-            or False,
+            snapshot_digest=_optional_string(
+                payload.get("snapshot_digest"),
+                "snapshot_digest",
+            ),
+            snapshot_artifact_id=_optional_string(
+                payload.get("snapshot_artifact_id"),
+                "snapshot_artifact_id",
+            ),
+            identity_proven=(
+                _optional_bool(payload.get("identity_proven"), "identity_proven") or False
+            ),
             metadata=_metadata(payload.get("metadata")),
             actor=default_actor_resolver(context),
             operation=_operation_context(context, item.project_id),
@@ -289,12 +348,16 @@ def register_research_control_plane(control_plane: ControlPlane, research: Resea
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         item = research.repository.get_item(resource_ref)
+        _require_visible(item, context)
         claim = await research.add_claim(
             resource_ref,
             text=_required_string(payload, "text"),
             category=_required_string(payload, "category"),
             confidence=_enum_optional(
-                ClaimConfidence, payload.get("confidence"), ClaimConfidence.UNKNOWN, "confidence"
+                ClaimConfidence,
+                payload.get("confidence"),
+                ClaimConfidence.UNKNOWN,
+                "confidence",
             ),
             author_ref=_optional_string(payload.get("author_ref"), "author_ref"),
             agent_id=_optional_string(payload.get("agent_id"), "agent_id"),
@@ -313,13 +376,17 @@ def register_research_control_plane(control_plane: ControlPlane, research: Resea
     ) -> dict[str, JsonValue]:
         claim = research.repository.get_claim(resource_ref)
         item = research.repository.get_item(claim.research_item_id)
+        _require_visible(item, context)
         evidence = await research.add_evidence(
             resource_ref,
             _required_string(payload, "source_observation_id"),
             relation=_enum(EvidenceRelation, payload, "relation"),
             location_ref=_optional_string(payload.get("location_ref"), "location_ref"),
             artifact_id=_optional_string(payload.get("artifact_id"), "artifact_id"),
-            excerpt_digest=_optional_string(payload.get("excerpt_digest"), "excerpt_digest"),
+            excerpt_digest=_optional_string(
+                payload.get("excerpt_digest"),
+                "excerpt_digest",
+            ),
             extraction_method=(
                 _optional_string(payload.get("extraction_method"), "extraction_method") or "manual"
             ),
@@ -330,7 +397,7 @@ def register_research_control_plane(control_plane: ControlPlane, research: Resea
             actor=default_actor_resolver(context),
             operation=_operation_context(context, item.project_id),
         )
-        return _evidence_resource(research, evidence.evidence_id)
+        return _evidence_resource(research, evidence)
 
     async def revalidate_evidence(
         context: RequestContext,
@@ -339,13 +406,14 @@ def register_research_control_plane(control_plane: ControlPlane, research: Resea
     ) -> dict[str, JsonValue]:
         evidence = research.repository.get_evidence(resource_ref)
         item = research.repository.get_item(evidence.research_item_id)
+        _require_visible(item, context)
         replacement = await research.revalidate_evidence(
             resource_ref,
             _required_string(payload, "source_observation_id"),
             actor=default_actor_resolver(context),
             operation=_operation_context(context, item.project_id),
         )
-        return _evidence_resource(research, replacement.evidence_id)
+        return _evidence_resource(research, replacement)
 
     for command, handler in (
         ("research.create", create_item),
@@ -449,10 +517,7 @@ def _observation_resource(observation: SourceObservation) -> dict[str, JsonValue
     }
 
 
-def _claim_resource(claim: object) -> dict[str, JsonValue]:
-    from .models import Claim
-
-    assert isinstance(claim, Claim)
+def _claim_resource(claim: Claim) -> dict[str, JsonValue]:
     return {
         "id": claim.claim_id,
         "type": "research-claim",
@@ -474,8 +539,10 @@ def _claim_resource(claim: object) -> dict[str, JsonValue]:
     }
 
 
-def _evidence_resource(research: ResearchService, evidence_id: str) -> dict[str, JsonValue]:
-    evidence = research.repository.get_evidence(evidence_id)
+def _evidence_resource(
+    research: ResearchService,
+    evidence: EvidenceRecord,
+) -> dict[str, JsonValue]:
     return {
         "id": evidence.evidence_id,
         "type": "research-evidence",
@@ -507,10 +574,7 @@ def _evidence_resource(research: ResearchService, evidence_id: str) -> dict[str,
     }
 
 
-def _binding_resource(binding: object) -> dict[str, JsonValue]:
-    from .models import ResearchVerificationBinding
-
-    assert isinstance(binding, ResearchVerificationBinding)
+def _binding_resource(binding: ResearchVerificationBinding) -> dict[str, JsonValue]:
     return {
         "binding_id": binding.binding_id,
         "verification_id": binding.verification_id,
@@ -537,7 +601,10 @@ def _observation_binding(observation: SourceObservation) -> dict[str, JsonValue]
 def _visible(item: ResearchItem, context: RequestContext) -> bool:
     if context.actor.owner_type is None or context.actor.owner_id is None:
         return False
-    return item.owner_ref.type == context.actor.owner_type and item.owner_ref.id == context.actor.owner_id
+    return (
+        item.owner_ref.type == context.actor.owner_type
+        and item.owner_ref.id == context.actor.owner_id
+    )
 
 
 def _require_visible(item: ResearchItem, context: RequestContext) -> None:
@@ -566,7 +633,10 @@ def _operation_context(context: RequestContext, project_id: str | None) -> Opera
 def _required_string(payload: dict[str, JsonValue], field_name: str) -> str:
     value = payload.get(field_name)
     if not isinstance(value, str) or not value.strip():
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be a non-blank string")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{field_name} must be a non-blank string",
+        )
     return value
 
 
@@ -574,7 +644,10 @@ def _optional_string(value: JsonValue, field_name: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be a non-blank string")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{field_name} must be a non-blank string",
+        )
     return value
 
 
@@ -582,7 +655,10 @@ def _optional_int(value: JsonValue, field_name: str) -> int | None:
     if value is None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be an integer")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{field_name} must be an integer",
+        )
     return value
 
 
@@ -590,15 +666,23 @@ def _optional_bool(value: JsonValue, field_name: str) -> bool | None:
     if value is None:
         return None
     if not isinstance(value, bool):
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be a boolean")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{field_name} must be a boolean",
+        )
     return value
 
 
 def _string_tuple(value: JsonValue, field_name: str) -> tuple[str, ...]:
     if value is None:
         return ()
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be a string array")
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{field_name} must be a string array",
+        )
     return tuple(cast(list[str], value))
 
 
@@ -610,10 +694,13 @@ def _metadata(value: JsonValue) -> dict[str, JsonValue]:
     return dict(value)
 
 
-def _safe_metadata(value: object) -> dict[str, JsonValue]:
-    sanitized = redact_sensitive(dict(cast(dict[str, JsonValue], value)))
+def _safe_metadata(value: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    sanitized = redact_sensitive(dict(value))
     if not isinstance(sanitized, dict):
-        raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research metadata could not be projected")
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Research metadata could not be projected",
+        )
     return cast(dict[str, JsonValue], sanitized)
 
 
@@ -621,14 +708,23 @@ def _freshness_policy(value: JsonValue) -> FreshnessPolicy:
     if value is None:
         return FreshnessPolicy()
     if not isinstance(value, dict):
-        raise ContractError(ErrorCode.INVALID_REQUEST, "freshness_policy must be an object")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "freshness_policy must be an object",
+        )
     raw_age = value.get("max_age_seconds")
-    if raw_age is not None and (isinstance(raw_age, bool) or not isinstance(raw_age, (int, float))):
-        raise ContractError(ErrorCode.INVALID_REQUEST, "max_age_seconds must be numeric or null")
+    if raw_age is not None and (
+        isinstance(raw_age, bool) or not isinstance(raw_age, (int, float))
+    ):
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "max_age_seconds must be numeric or null",
+        )
     raw_revalidate = value.get("revalidate_on_source_change", True)
     if not isinstance(raw_revalidate, bool):
         raise ContractError(
-            ErrorCode.INVALID_REQUEST, "revalidate_on_source_change must be a boolean"
+            ErrorCode.INVALID_REQUEST,
+            "revalidate_on_source_change must be a boolean",
         )
     return FreshnessPolicy(
         max_age_seconds=None if raw_age is None else float(raw_age),
@@ -641,31 +737,53 @@ def _datetime(payload: dict[str, JsonValue], field_name: str) -> datetime:
     try:
         value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be ISO-8601") from exc
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{field_name} must be ISO-8601",
+        ) from exc
     if value.tzinfo is None or value.utcoffset() is None:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must include a timezone")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{field_name} must include a timezone",
+        )
     return value
 
 
-def _enum(enum_type: type[object], payload: dict[str, JsonValue], field_name: str) -> object:
+def _enum[EnumT: StrEnum](
+    enum_type: type[EnumT],
+    payload: dict[str, JsonValue],
+    field_name: str,
+) -> EnumT:
     raw = _required_string(payload, field_name)
     try:
         return enum_type(raw)
-    except (TypeError, ValueError) as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"invalid {field_name}: {raw}") from exc
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"invalid {field_name}: {raw}",
+        ) from exc
 
 
-def _enum_optional(
-    enum_type: type[object], value: JsonValue, default: object, field_name: str
-) -> object:
+def _enum_optional[EnumT: StrEnum](
+    enum_type: type[EnumT],
+    value: JsonValue,
+    default: EnumT,
+    field_name: str,
+) -> EnumT:
     if value is None:
         return default
     if not isinstance(value, str) or not value.strip():
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be a string")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"{field_name} must be a string",
+        )
     try:
         return enum_type(value)
-    except (TypeError, ValueError) as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"invalid {field_name}: {value}") from exc
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"invalid {field_name}: {value}",
+        ) from exc
 
 
 def _require_collection(resource_ref: str, expected: str) -> None:
