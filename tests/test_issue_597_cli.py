@@ -155,4 +155,4 @@ def test_goal_lifecycle_revision_and_task_link_commands_use_registered_control_p
         "expected_revision": 4,
         "task_id": "task_cli",
     }
-    assert all("Idempotency-Key" in call[3] for call in posts)
+    assert all("idempotency-key" in call[3] for call in posts)
