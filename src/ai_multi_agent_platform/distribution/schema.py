@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
-from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
+from jsonschema import Draft202012Validator, ValidationError  # type: ignore[import-untyped]
 
 from .items import RegistryItem
 from .models import (
@@ -17,7 +18,7 @@ from .models import (
     VersionRange,
 )
 
-REGISTRY_ITEM_SCHEMA_VERSION = "1"
+REGISTRY_ITEM_SCHEMA_VERSION = "2"
 REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
@@ -42,7 +43,7 @@ REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
         "yanked",
     ],
     "properties": {
-        "schema_version": {"const": REGISTRY_ITEM_SCHEMA_VERSION},
+        "schema_version": {"const": "1"},
         "item_id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"},
         "item_type": {
             "enum": [
@@ -107,7 +108,6 @@ REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
         "required_models": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
         "tags": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
         "categories": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
-        "distribution_route": {"const": "manual"},
         "integrity": {
             "type": "object",
             "properties": {
@@ -137,9 +137,21 @@ REGISTRY_ITEM_SCHEMA_V1: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+REGISTRY_ITEM_SCHEMA_V2: dict[str, Any] = deepcopy(REGISTRY_ITEM_SCHEMA_V1)
+REGISTRY_ITEM_SCHEMA_V2["properties"]["schema_version"] = {"const": REGISTRY_ITEM_SCHEMA_VERSION}
+REGISTRY_ITEM_SCHEMA_V2["properties"]["distribution_route"] = {"const": "manual"}
+_REGISTRY_ITEM_SCHEMAS = {
+    "1": REGISTRY_ITEM_SCHEMA_V1,
+    REGISTRY_ITEM_SCHEMA_VERSION: REGISTRY_ITEM_SCHEMA_V2,
+}
+
 
 def validate_registry_item_document(document: dict[str, Any]) -> None:
-    Draft202012Validator(REGISTRY_ITEM_SCHEMA_V1).validate(document)
+    schema_version = document.get("schema_version")
+    schema = _REGISTRY_ITEM_SCHEMAS.get(schema_version)
+    if schema is None:
+        raise ValidationError("unsupported registry item schema_version")
+    Draft202012Validator(schema).validate(document)
 
 
 def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
@@ -185,11 +197,6 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
         required_models=tuple(document.get("required_models", [])),
         tags=frozenset(document.get("tags", [])),
         categories=frozenset(document.get("categories", [])),
-        distribution_route=(
-            DistributionRoute(document["distribution_route"])
-            if "distribution_route" in document
-            else None
-        ),
         integrity=ArtifactIntegrity(
             sha256=integrity.get("sha256"),
             signature=integrity.get("signature"),
@@ -201,4 +208,9 @@ def registry_item_from_document(document: dict[str, Any]) -> RegistryItem:
         changelog=document.get("changelog"),
         deprecated=document["deprecated"],
         yanked=document["yanked"],
+        distribution_route=(
+            DistributionRoute(document["distribution_route"])
+            if "distribution_route" in document
+            else None
+        ),
     )
