@@ -44,6 +44,7 @@ from .portability import (
     export_research_bundle,
     import_research_bundle,
 )
+from .portability_verification import canonical_verification_binding_validator
 from .repository import (
     RESEARCH_PERSISTENCE_SCHEMA_VERSION,
     InMemoryResearchRepository,
@@ -98,6 +99,7 @@ __all__ = [
     "SqliteResearchRepository",
     "UntrustedResearchExecutionProfile",
     "VerificationBindingValidator",
+    "canonical_verification_binding_validator",
     "export_research_bundle",
     "import_research_bundle",
     "register_research_control_plane",
