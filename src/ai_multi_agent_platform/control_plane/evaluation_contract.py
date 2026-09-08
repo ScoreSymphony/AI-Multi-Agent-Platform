@@ -1,4 +1,4 @@
-"""Control Plane resource and command surface for issue #19 evaluation."""
+"""Control Plane resource and command surface for canonical evaluation."""
 
 from __future__ import annotations
 
@@ -24,7 +24,14 @@ from ai_multi_agent_platform.evaluation.models import (
     SnapshotValue,
     VersionReference,
 )
-from ai_multi_agent_platform.evaluation.reproducibility import manifest_projection
+from ai_multi_agent_platform.evaluation.reproducibility import (
+    ManifestComparison,
+    RandomnessMode,
+    RepeatPolicy,
+    RepeatStrategy,
+    SeedPolicy,
+    manifest_projection,
+)
 from ai_multi_agent_platform.evaluation.service import (
     EvaluationRunDetail,
     EvaluationService,
@@ -106,6 +113,16 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         del context
+        repeat_policy = (
+            None
+            if payload.get("repeat_policy") is None
+            else _parse_repeat_policy(_required_object(payload, "repeat_policy"))
+        )
+        seed_policy = (
+            None
+            if payload.get("seed_policy") is None
+            else _parse_seed_policy(_required_object(payload, "seed_policy"))
+        )
         summary = await service.run_suite(
             suite_ref=resource_ref,
             snapshot=_parse_snapshot(_required_object(payload, "snapshot")),
@@ -114,9 +131,27 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
             baseline_run_id=_optional_string(payload, "baseline_run_id"),
             regression_policy_ref_value=_optional_string(payload, "regression_policy_ref"),
             aggregation_policy_ref_value=_optional_string(payload, "aggregation_policy_ref"),
-            candidate_reference_kinds=_optional_string_set(payload, "candidate_reference_kinds"),
+            repeat_policy=repeat_policy,
+            seed_policy=seed_policy,
+            candidate_reference_kinds=_optional_string_set(
+                payload,
+                "candidate_reference_kinds",
+            ),
+            performance_sensitive_comparison=(
+                _optional_bool(payload, "performance_sensitive") or False
+            ),
         )
-        return _run_detail_resource(service.get_run_detail(summary.run.run_id))
+        resource = _run_detail_resource(service.get_run_detail(summary.run.run_id))
+        if summary.manifest is not None:
+            resource["manifest"] = cast(
+                JsonValue,
+                manifest_projection(
+                    summary.manifest,
+                    comparison=summary.manifest_comparison,
+                    results=summary.results,
+                ),
+            )
+        return resource
 
     async def compare(
         context: RequestContext,
@@ -124,14 +159,32 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
         payload: dict[str, JsonValue],
     ) -> dict[str, JsonValue]:
         del context
+        baseline_run_id = _required_string(payload, "baseline_run_id")
+        candidate_reference_kinds = _optional_string_set(
+            payload,
+            "candidate_reference_kinds",
+        )
+        performance_sensitive = _optional_bool(payload, "performance_sensitive") or False
         comparison = service.compare_runs(
             current_run_id=resource_ref,
-            baseline_run_id=_required_string(payload, "baseline_run_id"),
+            baseline_run_id=baseline_run_id,
             regression_policy_ref_value=_required_string(payload, "regression_policy_ref"),
             aggregation_policy_ref_value=_optional_string(payload, "aggregation_policy_ref"),
-            candidate_reference_kinds=_optional_string_set(payload, "candidate_reference_kinds"),
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
         )
-        return _comparison_resource(comparison)
+        manifest_comparison = service.compare_manifests(
+            current_run_id=resource_ref,
+            baseline_run_id=baseline_run_id,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
+        )
+        resource = _comparison_resource(comparison)
+        resource["manifest_comparison"] = cast(
+            JsonValue,
+            _manifest_comparison_resource(manifest_comparison),
+        )
+        return resource
 
     return {
         "evaluation.run": run_suite,
@@ -220,6 +273,22 @@ def _comparison_resource(comparison: ComparisonReport) -> dict[str, JsonValue]:
     return resource
 
 
+def _manifest_comparison_resource(comparison: ManifestComparison) -> dict[str, JsonValue]:
+    return {
+        "status": comparison.status.value,
+        "differences": [
+            {
+                "path": item.path,
+                "baseline": cast(JsonValue, item.baseline),
+                "candidate": cast(JsonValue, item.candidate),
+                "blocking": item.blocking,
+                "intentional_candidate_dimension": item.intentional_candidate_dimension,
+            }
+            for item in comparison.differences
+        ],
+    }
+
+
 def _encoded_object(raw: str) -> dict[str, JsonValue]:
     parsed = json.loads(raw)
     if not isinstance(parsed, dict):
@@ -263,6 +332,43 @@ def _parse_snapshot(payload: dict[str, JsonValue]) -> ConfigurationSnapshot:
         platform_commit=_optional_string(payload, "platform_commit"),
         references=tuple(references),
         environment=tuple(environment),
+    )
+
+
+def _parse_repeat_policy(payload: dict[str, JsonValue]) -> RepeatPolicy:
+    return RepeatPolicy(
+        strategy=RepeatStrategy(_required_string(payload, "strategy")),
+        repeat_count=_required_positive_int(payload, "repeat_count"),
+        min_repeats=_optional_positive_int(payload, "min_repeats") or 1,
+        stability_window=_optional_positive_int(payload, "stability_window"),
+        variance_threshold=_optional_non_negative_float(payload, "variance_threshold"),
+        version=_optional_string(payload, "version") or "1.0",
+    )
+
+
+def _parse_seed_policy(payload: dict[str, JsonValue]) -> SeedPolicy:
+    raw_seeds = payload.get("ordered_seeds", [])
+    if not isinstance(raw_seeds, list):
+        raise ValueError("seed_policy.ordered_seeds must be an array")
+    seeds: list[int] = []
+    for value in raw_seeds:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("seed_policy.ordered_seeds entries must be integers")
+        seeds.append(value)
+    raw_limitations = payload.get("limitations", [])
+    if not isinstance(raw_limitations, list):
+        raise ValueError("seed_policy.limitations must be an array")
+    limitations: list[str] = []
+    for value in raw_limitations:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("seed_policy.limitations entries must be non-blank strings")
+        limitations.append(value)
+    return SeedPolicy(
+        mode=RandomnessMode(_required_string(payload, "mode")),
+        ordered_seeds=tuple(seeds),
+        provider_seed_control=_optional_bool(payload, "provider_seed_control"),
+        limitations=tuple(limitations),
+        version=_optional_string(payload, "version") or "1.0",
     )
 
 
@@ -317,10 +423,41 @@ def _optional_int(payload: dict[str, JsonValue], key: str) -> int | None:
     return value
 
 
+def _required_positive_int(payload: dict[str, JsonValue], key: str) -> int:
+    value = _optional_positive_int(payload, key)
+    if value is None:
+        raise ValueError(f"{key} is required")
+    return value
+
+
 def _optional_positive_int(payload: dict[str, JsonValue], key: str) -> int | None:
     value = _optional_int(payload, key)
     if value is not None and value <= 0:
         raise ValueError(f"{key} must be greater than zero")
+    return value
+
+
+def _optional_non_negative_float(
+    payload: dict[str, JsonValue],
+    key: str,
+) -> float | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"{key} must be numeric or null")
+    result = float(value)
+    if result < 0:
+        raise ValueError(f"{key} must be non-negative")
+    return result
+
+
+def _optional_bool(payload: dict[str, JsonValue], key: str) -> bool | None:
+    value = payload.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be boolean or null")
     return value
 
 
