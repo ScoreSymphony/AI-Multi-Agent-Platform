@@ -53,6 +53,7 @@ SINGLE_NODE_DURABLE_STORES: tuple[DurableStoreSpec, ...] = (
     DurableStoreSpec("authorization", "db/authorization.sqlite3", "sqlite", True, "security"),
     DurableStoreSpec("approvals", "db/approvals.sqlite3", "sqlite", False, "security"),
     DurableStoreSpec("governance", "db/governance.sqlite3", "sqlite", False, "governance"),
+    DurableStoreSpec("decisions", "db/decisions.sqlite3", "sqlite", False, "decisions"),
     DurableStoreSpec(
         "authorization-audit",
         "db/authorization-audit.sqlite3",

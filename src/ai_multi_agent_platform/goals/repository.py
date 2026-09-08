@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from typing import Any, Protocol, cast, runtime_checkable
@@ -204,9 +205,31 @@ def _snapshot_from_event(event: PlatformEvent, *, stream_revision: int) -> GoalS
     raw = event.payload.get("snapshot")
     if raw is None:
         return None
-    if not isinstance(raw, dict):
+    thawed = _thaw_event_json(raw)
+    if not isinstance(thawed, dict):
         raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Goal snapshot must be an object")
-    return goal_state_from_json(cast(dict[str, JsonValue], raw), stream_revision=stream_revision)
+    return goal_state_from_json(thawed, stream_revision=stream_revision)
+
+
+def _thaw_event_json(value: object) -> JsonValue:
+    if isinstance(value, Mapping):
+        result: dict[str, JsonValue] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Goal snapshot object keys must be strings",
+                )
+            result[key] = _thaw_event_json(item)
+        return result
+    if isinstance(value, list | tuple):
+        return [_thaw_event_json(item) for item in value]
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
+    raise ContractError(
+        ErrorCode.CONTRACT_VIOLATION,
+        f"Goal snapshot contains unsupported value type: {type(value).__name__}",
+    )
 
 
 def goal_state_to_json(state: GoalState) -> dict[str, JsonValue]:

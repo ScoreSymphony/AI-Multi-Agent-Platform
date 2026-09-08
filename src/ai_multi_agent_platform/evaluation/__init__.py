@@ -1,5 +1,11 @@
 """Canonical evaluation and regression framework."""
 
+from importlib import import_module
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .planning import ReferencePlanningEvaluationCaseExecutor
+
 from .agent_evidence import AgentRunEvidenceCaseExecutor
 from .aggregation import (
     AggregatedEvaluationResult,
@@ -85,7 +91,6 @@ from .models import (
     SnapshotValue,
     VersionReference,
 )
-from .planning import ReferencePlanningEvaluationCaseExecutor
 from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
@@ -113,6 +118,15 @@ from .workspace import (
     StaticEvaluationFixtureResolver,
     WorkspaceEvaluationIsolation,
 )
+
+
+def __getattr__(name: str) -> object:
+    """Resolve optional heavy exports without creating package import cycles."""
+    if name == "ReferencePlanningEvaluationCaseExecutor":
+        module = import_module(f"{__name__}.planning")
+        return module.ReferencePlanningEvaluationCaseExecutor
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "EVALUATION_SCHEMA_VERSION",

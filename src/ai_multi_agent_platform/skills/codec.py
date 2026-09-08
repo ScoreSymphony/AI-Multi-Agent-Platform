@@ -135,7 +135,7 @@ def skill_profile_from_json(value: object) -> SkillProfile:
     try:
         return SkillProfile(
             name=_required_string(data, "name"),
-            description=_optional_string(data, "description") or "",
+            description=_optional_string_allow_blank(data, "description") or "",
             purpose_categories=_string_tuple(data, "purpose_categories"),
             content=SkillContent(
                 content=_optional_string(content_data, "content"),
@@ -455,6 +455,15 @@ def _optional_string(value: Mapping[str, object], key: str) -> str | None:
         return None
     if not isinstance(item, str) or not item.strip():
         raise ValueError(f"{key} must be a non-blank string when provided")
+    return item
+
+
+def _optional_string_allow_blank(value: Mapping[str, object], key: str) -> str | None:
+    item = value.get(key)
+    if item is None:
+        return None
+    if not isinstance(item, str):
+        raise ValueError(f"{key} must be a string when provided")
     return item
 
 
