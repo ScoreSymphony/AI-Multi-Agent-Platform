@@ -21,7 +21,6 @@ from ai_multi_agent_platform.context import (
     ContextDataClassification,
     ContextEntryRole,
     ContextFreshness,
-    ContextSourceAdapter,
     ContextSourceRef,
     ContextSourceRequest,
     ContextSourceType,
@@ -268,8 +267,8 @@ RepositoryContextRequestResolver = Callable[
 ]
 
 
-class RepositoryIntelligenceContextSourceAdapter(ContextSourceAdapter):
-    """#590 source adapter usable by Agent, Planner, Reviewer and Research compositions."""
+class RepositoryIntelligenceContextSourceAdapter:
+    """Structural #590 source adapter for Agent, Planner, Reviewer and Research compositions."""
 
     adapter_id = "repository-intelligence-context/v1"
 
