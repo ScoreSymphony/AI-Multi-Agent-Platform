@@ -51,27 +51,11 @@ jobs:
               '    assert execution.runtime_context.consumption == consumed',
               '    assert execution.runtime_context == consumed',
           )
-
-          source_gateway = Path('tests/test_issue_651_source_gateway.py')
-          source_text = source_gateway.read_text()
-          evidence_anchor = '''    evidence = await research.add_evidence(
-              claim.claim_id,
-              observation.observation_id,
-              relation=EvidenceRelation.SUPPORTS,
-              location_ref="section:handoff",
+          replace(
+              'tests/test_issue_651_source_gateway.py',
+              '    gateway = _gateway(research=repository)\n    claim_ref = HandoffSourceRef(',
+              '    claim = repository.get_claim(claim.claim_id)\n    gateway = _gateway(research=repository)\n    claim_ref = HandoffSourceRef(',
           )
-          gateway = _gateway(research=repository)'''.replace('          ', '')
-          evidence_replacement = '''    evidence = await research.add_evidence(
-              claim.claim_id,
-              observation.observation_id,
-              relation=EvidenceRelation.SUPPORTS,
-              location_ref="section:handoff",
-          )
-          claim = repository.get_claim(claim.claim_id)
-          gateway = _gateway(research=repository)'''.replace('          ', '')
-          if source_text.count(evidence_anchor) != 1:
-              raise SystemExit('research evidence test anchor not found exactly once')
-          source_gateway.write_text(source_text.replace(evidence_anchor, evidence_replacement))
 
           pyproject = Path('pyproject.toml')
           config = pyproject.read_text()
