@@ -41,7 +41,14 @@ jobs:
           if old not in text:
               raise SystemExit('evaluation resource policy anchor missing')
           deployment.write_text(text.replace(old, new, 1))
+
+          test = Path('tests/test_issue_19_product_completion.py')
+          text = test.read_text()
+          anchor = '        assert all(result["outcome"] == "passed" for result in results), results\n'
+          if anchor not in text:
+              raise SystemExit('result assertion anchor missing')
+          test.write_text(text.replace(anchor, '        print("ISSUE19_RESULTS", repr(results))\n' + anchor, 1))
           PY
           ruff format src/ai_multi_agent_platform/context/lifecycle.py src/ai_multi_agent_platform/deployment/single_node.py
           ruff check src/ai_multi_agent_platform/context/lifecycle.py src/ai_multi_agent_platform/deployment/single_node.py
-          pytest -q tests/test_issue_19_product_completion.py::test_agent_model_target_runs_through_product_evaluation_and_server_snapshot
+          pytest -vv -s tests/test_issue_19_product_completion.py::test_agent_model_target_runs_through_product_evaluation_and_server_snapshot
