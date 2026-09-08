@@ -117,3 +117,7 @@ The loaded seed intentionally contains only reviewed entries. The names below re
 ## Intentionally absent from the default technical home surface
 
 Ordinary SaaS productivity connectors such as Gmail, Google Calendar or Slack may remain valid generic Registry items, but they are not the technical Marketplace product identity and are not promoted through this queue merely to increase catalog size.
+
+## Branch-preparation note
+
+The loaded seed, taxonomy, Marketplace presentation and discovery-source seam are prepared in `issue-638-technical-marketplace-complete`. The remaining names in this file are intentionally data-curation work rather than missing execution/install code. They must not be bulk-promoted merely to make issue #638 appear numerically complete.
