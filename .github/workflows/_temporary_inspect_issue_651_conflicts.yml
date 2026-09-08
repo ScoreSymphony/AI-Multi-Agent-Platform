@@ -1,0 +1,44 @@
+name: Temporary inspect issue 651 conflicts
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: integration/active-branches-2026-09-08
+      - name: Show exact merge conflicts
+        shell: bash
+        run: |
+          set -uo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin feat/651-handoff-production-integration
+          git config merge.conflictstyle diff3
+          set +e
+          git merge --no-ff --no-commit origin/feat/651-handoff-production-integration
+          rc=$?
+          set -e
+          echo "MERGE_RC=$rc"
+          conflicts="$(git diff --name-only --diff-filter=U)"
+          echo "CONFLICT_FILES_BEGIN"
+          printf '%s\n' "$conflicts"
+          echo "CONFLICT_FILES_END"
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            echo "===== CONFLICT: $file ====="
+            cat "$file"
+            echo "===== END CONFLICT: $file ====="
+          done <<< "$conflicts"
+          git merge --abort >/dev/null 2>&1 || true
+          exit 0
