@@ -10,6 +10,7 @@ from enum import StrEnum
 from types import MappingProxyType
 from uuid import NAMESPACE_URL, uuid5
 
+from ai_multi_agent_platform.contracts.classification import DataClassification
 from ai_multi_agent_platform.contracts.types import (
     AdapterMetadata,
     HealthStatus,
@@ -54,6 +55,19 @@ def _nonblank_tuple(values: tuple[str, ...], field_name: str) -> tuple[str, ...]
     if len(values) != len(set(values)):
         raise ValueError(f"{field_name} must not contain duplicates")
     return tuple(values)
+
+
+def _normalize_classification(
+    value: DataClassification | str | None,
+) -> DataClassification | None:
+    if value is None:
+        return None
+    if isinstance(value, DataClassification):
+        return value
+    try:
+        return DataClassification(value)
+    except ValueError as exc:
+        raise ValueError(f"unknown data classification {value!r}") from exc
 
 
 class ConnectionStatus(StrEnum):
@@ -222,6 +236,7 @@ class ExternalResourceReference:
     provenance: Mapping[str, JsonValue] = field(default_factory=dict)
     metadata: Mapping[str, JsonValue] = field(default_factory=dict)
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
+    classification: DataClassification | str | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.id, "external_resource")
@@ -234,6 +249,7 @@ class ExternalResourceReference:
                 raise ValueError(f"{name} must not be blank when provided")
         object.__setattr__(self, "provenance", _freeze_mapping(self.provenance))
         object.__setattr__(self, "metadata", _freeze_mapping(self.metadata))
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
     def to_dict(self) -> dict[str, JsonValue]:
         return {
@@ -249,6 +265,9 @@ class ExternalResourceReference:
             "revision": self.revision,
             "provenance": dict(self.provenance),
             "metadata": dict(self.metadata),
+            "classification": (
+                None if self.classification is None else self.classification.value
+            ),
         }
 
 
@@ -269,6 +288,7 @@ class ConnectorEvent:
     verified: bool = False
     provenance: Mapping[str, JsonValue] = field(default_factory=dict)
     payload: Mapping[str, JsonValue] = field(default_factory=dict)
+    classification: DataClassification | str | None = None
 
     def __post_init__(self) -> None:
         validate_id(self.id, "connector_event")
@@ -283,6 +303,7 @@ class ConnectorEvent:
         _require_aware(self.received_at, "received_at")
         object.__setattr__(self, "provenance", _freeze_mapping(self.provenance))
         object.__setattr__(self, "payload", _freeze_mapping(self.payload))
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,10 +375,12 @@ class ConnectorActionResult:
     output: JsonValue
     resource_refs: tuple[ExternalResourceReference, ...] = ()
     adapter_metadata: tuple[AdapterMetadata, ...] = ()
+    classification: DataClassification | str | None = None
 
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
             raise ValueError("invocation_id must not be blank")
+        object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
 
 @dataclass(frozen=True, slots=True)
