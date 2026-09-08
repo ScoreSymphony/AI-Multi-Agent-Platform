@@ -25,7 +25,14 @@ EGRESS_POLICY_EVALUATE_COMMAND = "egress-policy.evaluate"
 
 
 class EgressPolicyInspectionHandler:
-    """Explain one disclosure decision without accepting or storing protected payload content."""
+    """Explain one disclosure decision without execution-side effects.
+
+    Inspection deliberately invokes only the configured policy port. It does not call
+    ``EgressGate.evaluate``/``enforce`` and therefore cannot emit execution audit records,
+    create pending Approvals or consume/reuse an Approval. The request contains only
+    classification, canonical references and a caller-supplied payload digest; protected
+    payload content is never accepted by this endpoint.
+    """
 
     def __init__(
         self,
@@ -74,7 +81,23 @@ class EgressPolicyInspectionHandler:
             run_id=_optional_string(payload, "run_id"),
             capability_id=_optional_string(payload, "capability_id"),
         )
-        decision = await self.gate.evaluate(request)
+
+        # Read-only preview: policy evaluation only. The Gate's audit/Approval machinery
+        # is intentionally bypassed so an operator inspection cannot impersonate execution.
+        decision = await self.gate.policy.evaluate(request)
+        try:
+            decision.validate_against(request)
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "egress policy returned an invalid inspection decision",
+                details={
+                    "egress_request_id": request.request_id,
+                    "target_kind": target_kind.value,
+                    "target_id": target_id,
+                },
+            ) from exc
+
         return {
             "target_kind": target_kind.value,
             "target_id": target_id,
@@ -84,13 +107,19 @@ class EgressPolicyInspectionHandler:
             "reason_code": decision.reason_code.value,
             "policy_version": decision.policy_version,
             "profile_ref": (
-                profile.canonical_ref if profile is not None else decision.audit_metadata.get("profile_ref")
+                profile.canonical_ref
+                if profile is not None
+                else decision.audit_metadata.get("profile_ref")
             ),
             "profile_trust": (
-                profile.trust.value if profile is not None else decision.audit_metadata.get("profile_trust")
+                profile.trust.value
+                if profile is not None
+                else decision.audit_metadata.get("profile_trust")
             ),
             "cost_class": (
-                profile.cost_class.value if profile is not None else decision.audit_metadata.get("cost_class")
+                profile.cost_class.value
+                if profile is not None
+                else decision.audit_metadata.get("cost_class")
             ),
             "approval_ref": decision.approval_ref,
             "payload_digest": request.payload_digest,
