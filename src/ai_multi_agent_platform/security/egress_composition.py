@@ -6,11 +6,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ai_multi_agent_platform.contracts import AuthorizationProvider
+from ai_multi_agent_platform.contracts.egress import EgressAuditSink
 
 from .egress import (
     CanonicalEgressPolicy,
     EgressActorResolver,
-    EgressAuditSink,
     EgressGate,
 )
 from .egress_approvals import EgressApprovalBridge, EgressApprovalExceptionPolicy

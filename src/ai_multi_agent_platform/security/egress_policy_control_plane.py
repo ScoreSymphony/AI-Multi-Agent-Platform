@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from ai_multi_agent_platform.contracts import (
     ContractError,
@@ -154,7 +154,7 @@ def _optional_string(value: Mapping[str, object], field: str) -> str | None:
     return item
 
 
-def _enum[T](value: Mapping[str, object], field: str, enum_type: type[T]) -> T:
+def _enum[T](value: Mapping[str, object], field: str, enum_type: Callable[[str], T]) -> T:
     item = _required_string(value, field)
     try:
         return enum_type(item)

@@ -129,13 +129,13 @@ class EgressProfile:
         overlap = set(self.allowed_classifications) & set(self.denied_classifications)
         if overlap:
             raise ValueError("egress profile cannot both allow and deny a classification")
-        for value, name in (
+        for optional_value, name in (
             (self.data_retention_policy, "data_retention_policy"),
             (self.training_policy, "training_policy"),
             (self.logging_policy, "logging_policy"),
             (self.jurisdiction, "jurisdiction"),
         ):
-            if value is not None and not value.strip():
+            if optional_value is not None and not optional_value.strip():
                 raise ValueError(f"egress profile {name} must not be blank when provided")
         object.__setattr__(self, "metadata", dict(self.metadata))
 

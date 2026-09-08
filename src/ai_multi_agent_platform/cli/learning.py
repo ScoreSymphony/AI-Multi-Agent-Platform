@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Callable
+from typing import cast
 from urllib.parse import quote
 
 from ai_multi_agent_platform.contracts.types import JsonValue
@@ -262,15 +263,15 @@ def execute_learning(
     if args.command == "promote":
         _require_positive_revision(args.expected_revision)
         confirm(args, "promote Learning Candidate", str(args.candidate_id))
-        body: dict[str, JsonValue] = {
+        promote_body: dict[str, JsonValue] = {
             "resource_ref": str(args.candidate_id),
             "expected_revision": args.expected_revision,
         }
         if args.approval_id is not None:
-            body["approval_id"] = str(args.approval_id)
+            promote_body["approval_id"] = str(args.approval_id)
         return client.post(
             "/commands/learning.promote",
-            body=body,
+            body=promote_body,
             idempotency_key=args.idempotency_key,
         )
 
@@ -303,7 +304,7 @@ def _json_array(raw: str, option: str) -> list[JsonValue]:
 
 def _json_value(raw: str, option: str) -> JsonValue:
     try:
-        return json.loads(raw)
+        return cast(JsonValue, json.loads(raw))
     except (json.JSONDecodeError, TypeError) as exc:
         raise ProfileError(f"{option} must contain valid JSON") from exc
 

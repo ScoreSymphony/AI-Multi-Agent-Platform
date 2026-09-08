@@ -9,6 +9,7 @@ local validator supplied by the importing deployment.
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
@@ -185,8 +186,8 @@ def _validate_bundle_graph(
                 "Research Source current observation is missing from bundle",
             )
     for observation in observations:
-        source = source_by_id.get(observation.source_id)
-        if source is None or observation.research_item_id != item.research_item_id:
+        resolved_source = source_by_id.get(observation.source_id)
+        if resolved_source is None or observation.research_item_id != item.research_item_id:
             raise ContractError(ErrorCode.CONTRACT_VIOLATION, "orphan Research SourceObservation")
     for claim in claims:
         if claim.research_item_id != item.research_item_id:
@@ -200,16 +201,20 @@ def _validate_bundle_graph(
                 "Research Claim references missing Evidence",
             )
     for value in evidence:
-        claim = claim_by_id.get(value.claim_id)
-        observation = observation_by_id.get(value.source_observation_id)
-        if claim is None or observation is None or value.source_id not in source_by_id:
+        resolved_claim = claim_by_id.get(value.claim_id)
+        resolved_observation = observation_by_id.get(value.source_observation_id)
+        if (
+            resolved_claim is None
+            or resolved_observation is None
+            or value.source_id not in source_by_id
+        ):
             raise ContractError(ErrorCode.CONTRACT_VIOLATION, "orphan Research Evidence")
         if value.research_item_id != item.research_item_id:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "Research Evidence belongs to another item",
             )
-        if observation.source_id != value.source_id:
+        if resolved_observation.source_id != value.source_id:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "Research Evidence source binding is invalid",
@@ -222,7 +227,7 @@ def _validate_bundle_graph(
             value.source_content_digest,
             value.source_snapshot_digest,
         )
-        if expected_binding != observation.binding[:6]:
+        if expected_binding != resolved_observation.binding[:6]:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "Research Evidence does not match its exact SourceObservation binding",
@@ -247,21 +252,21 @@ def _preflight_destination(
     _same_or_missing(lambda: repository.get_item(item.research_item_id), item, "Research Item")
     for source in sources:
         _same_or_missing(
-            lambda source=source: repository.get_source(source.source_id),
+            partial(repository.get_source, source.source_id),
             source,
             "Source",
         )
     for observation in observations:
         _same_or_missing(
-            lambda observation=observation: repository.get_observation(observation.observation_id),
+            partial(repository.get_observation, observation.observation_id),
             observation,
             "SourceObservation",
         )
     for claim in claims:
-        _same_or_missing(lambda claim=claim: repository.get_claim(claim.claim_id), claim, "Claim")
+        _same_or_missing(partial(repository.get_claim, claim.claim_id), claim, "Claim")
     for value in evidence:
         _same_or_missing(
-            lambda value=value: repository.get_evidence(value.evidence_id),
+            partial(repository.get_evidence, value.evidence_id),
             value,
             "Evidence",
         )
@@ -287,18 +292,16 @@ def _apply_if_missing(
     if not _exists(lambda: repository.get_item(item.research_item_id)):
         repository.create_item(item)
     for source in sources:
-        if not _exists(lambda source=source: repository.get_source(source.source_id)):
+        if not _exists(partial(repository.get_source, source.source_id)):
             repository.create_source(source)
     for observation in observations:
-        if not _exists(
-            lambda observation=observation: repository.get_observation(observation.observation_id)
-        ):
+        if not _exists(partial(repository.get_observation, observation.observation_id)):
             repository.create_observation(observation)
     for claim in claims:
-        if not _exists(lambda claim=claim: repository.get_claim(claim.claim_id)):
+        if not _exists(partial(repository.get_claim, claim.claim_id)):
             repository.create_claim(claim)
     for value in evidence:
-        if not _exists(lambda value=value: repository.get_evidence(value.evidence_id)):
+        if not _exists(partial(repository.get_evidence, value.evidence_id)):
             repository.create_evidence(value)
     existing_binding_ids = {
         value.binding_id for value in repository.list_verification_bindings(item.research_item_id)

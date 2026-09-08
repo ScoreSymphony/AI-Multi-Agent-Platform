@@ -9,6 +9,7 @@ for representative repositories.
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import TypedDict
 
 from .projectatlas import PROJECTATLAS_PROVIDER_ID, PROJECTATLAS_RUNTIME_VERSION
 from .resources import (
@@ -23,10 +24,20 @@ PROJECTATLAS_PILOT_PEAK_RSS_BYTES = 19_032 * 1024
 PROJECTATLAS_PILOT_STATE_BYTES = 820_744
 
 
+class _ProjectAtlasResourceCommon(TypedDict):
+    runtime: str
+    os_name: str
+    network_required: bool
+    host_pressure_sensitive: bool
+    evidence_ref: str
+    observed_peak_rss_bytes: int
+    observed_state_bytes: int
+
+
 def projectatlas_resource_profile() -> RepositoryIntelligenceResourceProfile:
     """Return measured evidence without pretending tiny-fixture values are production minima."""
 
-    common = {
+    common: _ProjectAtlasResourceCommon = {
         "runtime": f"projectatlas-{PROJECTATLAS_RUNTIME_VERSION}",
         "os_name": "linux",
         "network_required": False,

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import cast
-
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
@@ -133,4 +131,4 @@ def _resource(record: PostPromotionEvaluationRecord) -> dict[str, JsonValue]:
             ErrorCode.BACKEND_ERROR,
             "post-promotion Learning projection redaction returned invalid data",
         )
-    return cast(dict[str, JsonValue], safe)
+    return safe

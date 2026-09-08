@@ -165,7 +165,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                 "first-run Agent task has an invalid Workspace ID",
             )
             revision = self._agents.service.get_agent_revision(agent_id)
-            agent_revision = revision.revision
+            agent_revision: int | None = revision.revision
             requested_capability_ids: tuple[str, ...] = ()
             task_model_override: RoutingRequirements | None = FIRST_RUN_MODEL_REQUIREMENTS
             available_capability_ids: frozenset[str] = frozenset()

@@ -253,35 +253,35 @@ class CanonicalHandoffReferenceGateway(HandoffReferenceGateway):
             )
 
         if kind is HandoffSourceKind.SKILL_BUNDLE:
-            bundle = self.skills.get_bundle(reference.resource_id)
-            if bundle.task_id != task_id:
+            skill_bundle = self.skills.get_bundle(reference.resource_id)
+            if skill_bundle.task_id != task_id:
                 raise ContractError(
                     ErrorCode.NOT_FOUND,
                     "SkillBundle belongs to a different Task",
                 )
             return _ResolvedReference(
                 revision="1",
-                digest=_digest_value(bundle.digest),
-                project_id=bundle.project_id,
-                workspace_id=bundle.workspace_id,
+                digest=_digest_value(skill_bundle.digest),
+                project_id=skill_bundle.project_id,
+                workspace_id=skill_bundle.workspace_id,
             )
 
         if kind is HandoffSourceKind.CONTEXT_BUNDLE:
             try:
-                bundle = self.contexts.get(reference.resource_id)
+                context_bundle = self.contexts.get(reference.resource_id)
             except KeyError as exc:
                 raise ContractError(
                     ErrorCode.NOT_FOUND,
                     "ContextBundle referenced by Handoff was not found",
                 ) from exc
-            if bundle.task_id != task_id:
+            if context_bundle.task_id != task_id:
                 raise ContractError(
                     ErrorCode.NOT_FOUND,
                     "ContextBundle belongs to a different Task",
                 )
             return _ResolvedReference(
                 revision="1",
-                digest=_digest_value(bundle.digest),
+                digest=_digest_value(context_bundle.digest),
             )
 
         raise ContractError(
@@ -353,17 +353,17 @@ class CanonicalConsumerRequirementEvaluator(ConsumerRequirementEvaluator):
             capabilities = set(profile.capabilities.allowed) | set(
                 profile.capabilities.required_ids
             )
-            policies = set(profile.policy_hooks.verification_policy_refs)
+            agent_policies = set(profile.policy_hooks.verification_policy_refs)
             if profile.policy_hooks.authorization_profile_ref is not None:
-                policies.add(profile.policy_hooks.authorization_profile_ref)
-            return roles, capabilities, policies
+                agent_policies.add(profile.policy_hooks.authorization_profile_ref)
+            return roles, capabilities, agent_policies
 
         team = self.agents.get_team_revision(consumer.team_id, consumer.revision)
         roles = {member.role for member in team.profile.members}
         capabilities = set(team.profile.shared_capability_ids)
-        policies: set[str] = set()
+        team_policies: set[str] = set()
         if team.profile.coordination_policy_ref is not None:
-            policies.add(team.profile.coordination_policy_ref)
+            team_policies.add(team.profile.coordination_policy_ref)
         for member in team.profile.members:
             revision = self.agents.get_agent_revision(
                 member.agent.agent_id,
@@ -371,7 +371,7 @@ class CanonicalConsumerRequirementEvaluator(ConsumerRequirementEvaluator):
             )
             capabilities.update(revision.profile.capabilities.allowed)
             capabilities.update(revision.profile.capabilities.required_ids)
-        return roles, capabilities, policies
+        return roles, capabilities, team_policies
 
 
 class TelemetryHandoffAuditSink(HandoffAuditSink):

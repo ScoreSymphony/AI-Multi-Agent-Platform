@@ -68,14 +68,14 @@ def context_bundle_projection(
         entries.append(item)
 
     omissions: list[JsonValue] = []
-    for item in bundle.omissions:
+    for omitted in bundle.omissions:
         omission: dict[str, JsonValue] = {
-            "source_type": item.source.source_type.value,
-            "reason": item.reason.value,
-            "mandatory": item.mandatory,
+            "source_type": omitted.source.source_type.value,
+            "reason": omitted.reason.value,
+            "mandatory": omitted.mandatory,
         }
         if include_omission_details:
-            omission["detail"] = item.detail
+            omission["detail"] = omitted.detail
         omissions.append(omission)
 
     return {

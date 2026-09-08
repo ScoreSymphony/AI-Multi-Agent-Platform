@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
 from ai_multi_agent_platform.research import (
@@ -97,7 +96,7 @@ class ResearchBundlePortableCodec:
                 ErrorCode.INVALID_CONFIGURATION,
                 "portable Research payload must contain a bundle object",
             )
-        bundle = cast(dict[str, JsonValue], raw_bundle)
+        bundle = raw_bundle
         item = _bundle_item(bundle)
         if item.research_item_id != resource.resource_id:
             raise ContractError(

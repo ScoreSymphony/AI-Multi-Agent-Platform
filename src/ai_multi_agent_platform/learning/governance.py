@@ -246,7 +246,7 @@ class GovernedObservedLearningService(ObservedLearningService):
 
 
 def _require_versioned_refs(refs: tuple[str, ...], kind: str, platform_policy: str) -> None:
-    invalid = []
+    invalid: list[JsonValue] = []
     for reference in refs:
         identifier, separator, version = reference.rpartition("@")
         if not separator or not identifier.strip() or not version.strip():

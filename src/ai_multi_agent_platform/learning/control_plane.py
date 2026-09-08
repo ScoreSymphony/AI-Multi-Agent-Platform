@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
@@ -304,7 +303,7 @@ def _candidate_resource(
             ErrorCode.BACKEND_ERROR,
             "Learning candidate redaction returned an invalid projection",
         )
-    return cast(dict[str, JsonValue], redacted)
+    return redacted
 
 
 def _candidate_history_entry(candidate: LearningCandidate) -> dict[str, JsonValue]:
@@ -330,7 +329,7 @@ def _approval_resource(record: ApprovalRecord) -> dict[str, JsonValue]:
         "requested_action_digest": str(record.requested_action_digest),
         "risk": str(record.risk.value),
         "policy_id": str(record.policy_id),
-        "payload_ref": cast(str | None, record.payload_ref),
+        "payload_ref": record.payload_ref,
         "created_at": record.created_at.isoformat(),
         "expires_at": record.expires_at.isoformat(),
         "decision_at": None if decision_at is None else decision_at.isoformat(),
@@ -347,7 +346,7 @@ def _feedback_resource(feedback: FeedbackRecord) -> dict[str, JsonValue]:
             ErrorCode.BACKEND_ERROR,
             "Learning feedback redaction returned an invalid projection",
         )
-    return cast(dict[str, JsonValue], redacted)
+    return redacted
 
 
 def _post_promotion_regression_status(candidate: LearningCandidate) -> str:

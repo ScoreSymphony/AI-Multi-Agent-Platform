@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Literal, cast
 
 from ai_multi_agent_platform.contracts import (
@@ -55,7 +55,7 @@ class EgressProfileResourceService:
             raw_project = query.filters.get("project_id")
             if raw_project is not None and not isinstance(raw_project, str):
                 raise ContractError(ErrorCode.INVALID_REQUEST, "project_id filter must be a string")
-            requested_project = cast(str | None, raw_project)
+            requested_project = raw_project
         operation = _operation_context(context, project_id=requested_project)
         definitions = await self.service.list_profiles(
             principal_ref=context.actor.principal_ref,
@@ -355,7 +355,7 @@ def _safe_revision_payload(profile: EgressProfile) -> dict[str, JsonValue]:
         "allow_sensitive_external": (
             allow_sensitive if isinstance(allow_sensitive, bool) else False
         ),
-        "metadata_keys": sorted(profile.metadata),
+        "metadata_keys": cast(list[JsonValue], sorted(profile.metadata)),
         "schema_version": profile.schema_version,
     }
 
@@ -476,7 +476,7 @@ def _classification_tuple(
         ) from exc
 
 
-def _enum[T](value: Mapping[str, object], field: str, enum_type: type[T]) -> T:
+def _enum[T](value: Mapping[str, object], field: str, enum_type: Callable[[str], T]) -> T:
     item = _required_string(value, field)
     try:
         return enum_type(item)
@@ -489,7 +489,7 @@ def _enum[T](value: Mapping[str, object], field: str, enum_type: type[T]) -> T:
 def _optional_enum[T](
     value: Mapping[str, object],
     field: str,
-    enum_type: type[T],
+    enum_type: Callable[[str], T],
     *,
     default: T,
 ) -> T:

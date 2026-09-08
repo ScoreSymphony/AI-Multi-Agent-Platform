@@ -40,9 +40,10 @@ from ai_multi_agent_platform.repositories.service import (
     RepositoryService,
 )
 from ai_multi_agent_platform.research import EvidenceFreshness, ResearchService
-from ai_multi_agent_platform.skills import ReferenceSkillRenderer, SkillRepository
+from ai_multi_agent_platform.skills import ReferenceSkillRenderer, SkillBundle, SkillRepository
 
 from .models import (
+    ContextBundle,
     ContextCandidate,
     ContextDataClassification,
     ContextEntryRole,
@@ -167,7 +168,7 @@ class OperationalContextAssemblyService:
         request: ContextAssemblyRequest,
         *,
         bindings: Sequence[ContextSourceAdapterBinding],
-    ):
+    ) -> ContextBundle:
         source_request = OperationalContextSourceRequest(
             task_id=request.task_id,
             run_id=request.run_id,
@@ -458,7 +459,7 @@ class SkillBundleContextSourceAdapter:
         self.repository = repository
         self.renderer = ReferenceSkillRenderer()
 
-    def bundle_for(self, request: ContextSourceRequest):
+    def bundle_for(self, request: ContextSourceRequest) -> SkillBundle | None:
         matches = tuple(
             bundle
             for bundle in self.repository.list_bundles(run_id=request.run_id)
@@ -683,9 +684,7 @@ class RepositoryContextSourceAdapter:
                     ErrorCode.INVALID_CONFIGURATION, "repository slice revision invalid"
                 )
             bound = by_repository.get(repository_id)
-            revision = cast(str | None, explicit_revision) or (
-                None if bound is None else bound.input_revision
-            )
+            revision = explicit_revision or (None if bound is None else bound.input_revision)
             if revision is None:
                 raise ContractError(
                     ErrorCode.UNAVAILABLE,
@@ -849,7 +848,12 @@ class FileArtifactResultContextSourceAdapter:
             linked_files = sorted(
                 file.file_id for file in files if artifact_id in file.artifact_ids
             )
-            body = _canonical_json({"artifact_id": artifact_id, "file_ids": linked_files})
+            body = _canonical_json(
+                {
+                    "artifact_id": artifact_id,
+                    "file_ids": cast(JsonValue, linked_files),
+                }
+            )
             digest = _digest(body)
             candidates.append(
                 ContextCandidate(
@@ -912,7 +916,7 @@ class MemoryContextSourceAdapter:
                 classification = _classification(entry.classification)
                 if classification is ContextDataClassification.SECRET_REFERENCE:
                     continue
-                body = _canonical_json(cast(JsonValue, entry.value))
+                body = _canonical_json(entry.value)
                 digest = _digest(body)
                 candidates.append(
                     ContextCandidate(
