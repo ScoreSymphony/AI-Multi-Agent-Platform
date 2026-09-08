@@ -6,6 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from enum import StrEnum
+from statistics import mean, pvariance
 from typing import Any, cast
 
 from .aggregation import ComparableEvaluationResult
@@ -20,7 +21,9 @@ from .models import (
 )
 from .regression import RegressionEngine
 
-EVAL_MANIFEST_SCHEMA_VERSION = "1.0"
+EVAL_MANIFEST_SCHEMA_VERSION = "1.1"
+_LEGACY_EVAL_MANIFEST_SCHEMA_VERSION = "1.0"
+_COMPARISON_LENS_REFERENCE_KINDS = frozenset({"aggregation_policy", "regression_policy"})
 _PRIVATE_ID_TOKENS = (
     "session_id",
     "session-id",
@@ -232,18 +235,24 @@ class EvalManifest:
             raise ValueError("manifest suite identity/version must not be blank")
         if not self.platform_version.strip() or not self.schema_version.strip():
             raise ValueError("manifest platform/schema version must not be blank")
-        digest = _sha256(self.reproducibility_payload())
+        if self.schema_version == _LEGACY_EVAL_MANIFEST_SCHEMA_VERSION:
+            digest = _sha256(self.canonical_payload())
+            manifest_id = f"eval_manifest_{digest[:24]}"
+        elif self.schema_version == EVAL_MANIFEST_SCHEMA_VERSION:
+            digest = _sha256(self.reproducibility_payload())
+            run_hash = hashlib.sha256(self.evaluation_run_id.encode()).hexdigest()[:12]
+            manifest_id = f"eval_manifest_{run_hash}_{digest[:12]}"
+        else:
+            raise ValueError(f"unsupported EvalManifest schema version: {self.schema_version}")
         if self.manifest_digest and self.manifest_digest != digest:
-            raise ValueError("manifest_digest does not match reproducibility payload")
-        run_hash = hashlib.sha256(self.evaluation_run_id.encode()).hexdigest()[:12]
-        manifest_id = f"eval_manifest_{run_hash}_{digest[:12]}"
+            raise ValueError("manifest_digest does not match manifest schema payload")
         if self.manifest_id and self.manifest_id != manifest_id:
-            raise ValueError("manifest_id does not match run and manifest digest")
+            raise ValueError("manifest_id does not match manifest schema identity")
         object.__setattr__(self, "manifest_digest", digest)
         object.__setattr__(self, "manifest_id", manifest_id)
 
     def reproducibility_payload(self) -> dict[str, object]:
-        """Payload whose digest is stable across equivalent EvaluationRuns."""
+        """Run-independent effective configuration used by schema 1.1 digests."""
         return {
             "schema_version": self.schema_version,
             "suite": {"id": self.suite_id, "version": self.suite_version},
@@ -376,17 +385,20 @@ class ManifestComparator:
             (candidate.suite_id, candidate.suite_version),
         )
         self._value(differences, "cases", baseline.cases, candidate.cases)
+        platform_candidate = "platform" in candidate_reference_kinds
         self._value(
             differences,
             "platform.version",
             baseline.platform_version,
             candidate.platform_version,
+            intentional=platform_candidate,
         )
         self._value(
             differences,
             "platform.commit",
             baseline.platform_commit,
             candidate.platform_commit,
+            intentional=platform_candidate,
         )
         ref_groups = (
             (
@@ -451,6 +463,15 @@ class ManifestComparator:
                     blocking=performance_sensitive and resource_key,
                 )
             )
+        if baseline.limitations != candidate.limitations:
+            differences.append(
+                ManifestDifference(
+                    path="limitations",
+                    baseline=baseline.limitations,
+                    candidate=candidate.limitations,
+                    blocking=False,
+                )
+            )
         if any(item.blocking for item in differences):
             status = Comparability.INCOMPARABLE
         elif any(not item.intentional_candidate_dimension for item in differences):
@@ -465,9 +486,19 @@ class ManifestComparator:
         path: str,
         baseline: object,
         candidate: object,
+        *,
+        intentional: bool = False,
     ) -> None:
         if baseline != candidate:
-            differences.append(ManifestDifference(path, baseline, candidate, True))
+            differences.append(
+                ManifestDifference(
+                    path,
+                    baseline,
+                    candidate,
+                    blocking=not intentional,
+                    intentional_candidate_dimension=intentional,
+                )
+            )
 
     @staticmethod
     def _refs(
@@ -485,12 +516,13 @@ class ManifestComparator:
                 continue
             kind, ref_id = identity
             intentional = kind in candidate_reference_kinds
+            comparison_lens = kind in _COMPARISON_LENS_REFERENCE_KINDS
             differences.append(
                 ManifestDifference(
                     path=f"{path}.{kind}:{ref_id}",
                     baseline=left.get(identity),
                     candidate=right.get(identity),
-                    blocking=not intentional,
+                    blocking=not intentional and not comparison_lens,
                     intentional_candidate_dimension=intentional,
                 )
             )
@@ -566,18 +598,34 @@ def per_repeat_outcomes(results: tuple[EvaluationResult, ...]) -> tuple[RepeatOu
     return tuple(outcomes)
 
 
+def actual_repetition_count(results: tuple[EvaluationResult, ...]) -> int:
+    if not results:
+        return 0
+    return max(item.repetition_index for item in results) + 1
+
+
 def manifest_projection(
     manifest: EvalManifest,
     *,
     comparison: ManifestComparison | None = None,
     results: tuple[EvaluationResult, ...] = (),
 ) -> dict[str, object]:
+    actual_repeats = actual_repetition_count(results)
+    repeat_completion = "configured_repeats_completed"
+    if (
+        manifest.repeat_policy.strategy is RepeatStrategy.STABILITY
+        and 0 < actual_repeats < manifest.repeat_policy.repeat_count
+    ):
+        repeat_completion = "stability_reached"
     return {
         "manifest_id": manifest.manifest_id,
         "manifest_digest": manifest.manifest_digest,
         "evaluation_run_id": manifest.evaluation_run_id,
         "schema_version": manifest.schema_version,
         "repeat_policy": _repeat_payload(manifest.repeat_policy),
+        "actual_repeat_count": actual_repeats,
+        "repeat_completion": repeat_completion,
+        "repeat_statistics": _repeat_statistics(results),
         "seed_policy": _seed_payload(manifest.seed_policy),
         "environment": {
             "digest": manifest.environment.digest,
@@ -671,6 +719,37 @@ def decode_manifest(raw: str) -> EvalManifest:
     return manifest
 
 
+def _repeat_statistics(results: tuple[EvaluationResult, ...]) -> list[dict[str, object]]:
+    grouped: dict[tuple[str, str, str], list[EvaluationResult]] = {}
+    for result in results:
+        identity = (result.case_id, result.case_version, result.evaluator.evaluator_id)
+        grouped.setdefault(identity, []).append(result)
+    statistics: list[dict[str, object]] = []
+    for case_id, case_version, evaluator_id in sorted(grouped):
+        samples = grouped[(case_id, case_version, evaluator_id)]
+        scores = [item.score for item in samples]
+        numeric_scores = [float(value) for value in scores if value is not None]
+        pass_count = sum(item.outcome.value == "passed" for item in samples)
+        statistics.append(
+            {
+                "case_id": case_id,
+                "case_version": case_version,
+                "evaluator_id": evaluator_id,
+                "sample_count": len(samples),
+                "pass_rate": pass_count / len(samples),
+                "score_mean": (
+                    None if len(numeric_scores) != len(samples) else float(mean(numeric_scores))
+                ),
+                "score_variance": (
+                    None
+                    if len(numeric_scores) != len(samples)
+                    else float(pvariance(numeric_scores))
+                ),
+            }
+        )
+    return statistics
+
+
 def _sha256(value: object) -> str:
     raw = json.dumps(
         value,
@@ -693,10 +772,7 @@ def _sorted_snapshot(values: tuple[SnapshotValue, ...]) -> tuple[SnapshotValue, 
 
 
 def _snapshot_payload(values: tuple[SnapshotValue, ...]) -> list[dict[str, str]]:
-    return [
-        {"key": item.key, "value": item.value}
-        for item in _sorted_snapshot(values)
-    ]
+    return [{"key": item.key, "value": item.value} for item in _sorted_snapshot(values)]
 
 
 def _ref_key(value: ManifestReference) -> tuple[str, str, str, str, str]:
