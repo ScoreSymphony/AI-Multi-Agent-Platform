@@ -76,6 +76,7 @@ class EgressConnectorService(ConnectorService):
         classification = self._classification(context, data_classification)
         await self._enforce_connector_egress(
             connection_id,
+            actor=actor,
             context=context,
             classification=classification,
             resource_type="connector_resource_query",
@@ -105,6 +106,7 @@ class EgressConnectorService(ConnectorService):
         )
         await self._enforce_connector_egress(
             connection_id,
+            actor=actor,
             context=context,
             classification=classification,
             resource_type="connector_resource_read",
@@ -136,6 +138,7 @@ class EgressConnectorService(ConnectorService):
         classification = self._classification(context, data_classification)
         await self._enforce_connector_egress(
             connection_id,
+            actor=actor,
             context=context,
             classification=classification,
             resource_type="connector_action",
@@ -146,6 +149,7 @@ class EgressConnectorService(ConnectorService):
                 "invocation_id": invocation_id,
             },
             capability_id=action,
+            approval_id=approval_id,
         )
         result = await super().invoke_action(
             connection_id,
@@ -178,10 +182,12 @@ class EgressConnectorService(ConnectorService):
     ) -> ExternalNativeReference:
         await self._enforce_connector_egress(
             connection_id,
+            actor=actor,
             context=context,
             classification=self._classification(context, data_classification),
             resource_type="connector_event_subscription",
             payload={"event_types": list(event_types), "configuration": configuration},
+            approval_id=approval_id,
         )
         return await super().subscribe_events(
             connection_id,
@@ -204,6 +210,7 @@ class EgressConnectorService(ConnectorService):
     ) -> None:
         await self._enforce_connector_egress(
             connection_id,
+            actor=actor,
             context=context,
             classification=self._classification(context, data_classification),
             resource_type="connector_event_unsubscription",
@@ -211,6 +218,7 @@ class EgressConnectorService(ConnectorService):
                 "subscription_namespace": subscription.namespace,
                 "subscription_native_id": subscription.native_id,
             },
+            approval_id=approval_id,
         )
         await super().unsubscribe_events(
             connection_id,
@@ -233,6 +241,7 @@ class EgressConnectorService(ConnectorService):
         classification = self._classification(context, data_classification)
         await self._enforce_connector_egress(
             connection_id,
+            actor=actor,
             context=context,
             classification=classification,
             resource_type="connector_sync",
@@ -268,11 +277,13 @@ class EgressConnectorService(ConnectorService):
         self,
         connection_id: str,
         *,
+        actor: ActorIdentity,
         context: OperationContext,
         classification: DataClassification,
         resource_type: str,
         payload: JsonValue,
         capability_id: str | None = None,
+        approval_id: str | None = None,
     ) -> None:
         posture = self._target_postures.get(connection_id, EgressTargetPosture.EXTERNAL)
         await self.egress_gate.enforce(
@@ -298,7 +309,9 @@ class EgressConnectorService(ConnectorService):
                 payload_digest=digest_egress_payload(payload),
                 capability_id=capability_id,
                 policy_descriptors={"connection_id": connection_id},
-            )
+            ),
+            actor=actor,
+            approval_id=approval_id,
         )
 
 
