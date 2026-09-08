@@ -7,7 +7,7 @@ from collections.abc import Iterable, Mapping
 from .items import RegistryItem, RegistryQuery
 from .models import version_key
 from .provider import RegistryItemNotFoundError
-from .technical_catalog import TECHNICAL_CATEGORIES
+from .technical_catalog import TECHNICAL_CATEGORIES, derive_technical_metadata
 
 
 class LocalRegistryProvider:
@@ -24,6 +24,9 @@ class LocalRegistryProvider:
         identities = [(item.item_id, item.version) for item in resolved_items]
         if len(identities) != len(set(identities)):
             raise ValueError("local registry contains duplicate item/version identities")
+        for item in resolved_items:
+            if set(item.categories).intersection(TECHNICAL_CATEGORIES):
+                derive_technical_metadata(item)
         self._provider_id = provider_id
         self._items = resolved_items
         self._artifacts = dict(artifacts or {})
