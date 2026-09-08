@@ -53,6 +53,10 @@ from ai_multi_agent_platform.templates import (
 )
 
 from .config import SingleNodeConfig
+from .context_operationalization import (
+    SingleNodeContextComposition,
+    install_single_node_context,
+)
 from .single_node import (
     SingleNodeDeployment as BaseSingleNodeDeployment,
 )
@@ -66,7 +70,7 @@ from .single_node import (
 
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
-    """Normal single-node deployment with durable Connector and Planning state."""
+    """Normal single-node deployment with Connector, Planning and canonical Context state."""
 
     connector_repository: SqliteConnectorRepository
     connector_registry: ConnectorRegistry
@@ -74,6 +78,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     planning_repository: JsonPlanningRepository
     planning_kernel: PlatformKernel
     planning: PlanningService
+    context: SingleNodeContextComposition
 
 
 def build_single_node_deployment(
@@ -87,13 +92,13 @@ def build_single_node_deployment(
     enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
 ) -> SingleNodeDeployment:
-    """Build the normal single-node profile with durable Connector and Planning source state.
+    """Build the normal durable single-node profile.
 
     The lower-level ``deployment.single_node`` composition remains usable by focused tests and
     explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
-    wrapper so Connector Definitions, Connections, external-resource identities and sync
-    checkpoints live in ``db/connectors.sqlite3`` and #439 planning proposals live durably in
-    ``db/planning.json``.
+    wrapper so Connector Definitions, planning proposals and canonical Context Bundle/Run-binding
+    evidence are durable under the deployment data root.  Context execution remains fully local by
+    default and introduces no hosted RAG/model dependency.
     """
 
     # Preserve the base deployment's canonical configuration error boundary before the Connector
@@ -156,6 +161,12 @@ def build_single_node_deployment(
     for command, handler in planning_command_handlers(planning).items():
         base.control_plane.register_command(command, handler)
 
+    # Install #590 only after the authoritative Task/Run, Coordination, Repository, Agent and
+    # model components are available.  The installer replaces the Agent-bound lifecycle seam on
+    # the same kernel object, so FirstRunTaskService and PlanningBindingCoordinator automatically
+    # use the canonical Context path without a second runtime.
+    context = install_single_node_context(base)
+
     # The public deployment now has an authoritative canonical Connector inventory. Rebind the
     # Template surface to a resolver that includes exactly those ConnectorDefinition IDs instead
     # of leaving connector requirements permanently fail-closed. The callback closes over the
@@ -207,6 +218,7 @@ def build_single_node_deployment(
         planning_repository=planning_repository,
         planning_kernel=planning_kernel,
         planning=planning,
+        context=context,
     )
 
 
