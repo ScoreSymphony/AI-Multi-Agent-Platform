@@ -25,11 +25,20 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+
+          lifecycle = Path('src/ai_multi_agent_platform/context/lifecycle.py')
+          text = lifecycle.read_text()
+          old = '    return ActorIdentity(context.owner_id, actor_type)\n'
+          new = '''    actor_ref = context.owner_id\n    if ":" not in actor_ref and not actor_ref.startswith(f"{context.owner_type}_"):\n        actor_ref = f"{context.owner_type}:{actor_ref}"\n    return ActorIdentity(actor_ref, actor_type)\n'''
+          if old not in text:
+              raise SystemExit('actor normalization anchor missing')
+          lifecycle.write_text(text.replace(old, new, 1))
+
           path = Path('tests/test_issue_19_product_completion.py')
           text = path.read_text()
           anchor = '        assert all(result["outcome"] == "passed" for result in results), results\n'
           if anchor not in text:
               raise SystemExit('result assertion anchor missing')
-          path.write_text(text.replace(anchor, '        print("ISSUE19_RESULTS", repr(results))\n' + anchor))
+          path.write_text(text.replace(anchor, '        print("ISSUE19_RESULTS", repr(results))\n' + anchor, 1))
           PY
           pytest -vv -s tests/test_issue_19_product_completion.py::test_agent_model_target_runs_through_product_evaluation_and_server_snapshot
