@@ -12,6 +12,7 @@ export const navigation: NavigationItem[] = [
   { label: "Projects & Workspaces", path: "/projects", group: "Work", apiResource: "projects" },
   { label: "Repositories", path: "/repositories", group: "Work", apiResource: "repositories" },
   { label: "Tasks", path: "/tasks", group: "Work", apiResource: "tasks" },
+  { label: "Goals", path: "/goals", group: "Work", apiResource: "goals" },
   { label: "Governance", path: "/governance", group: "Work", apiResource: "proposals" },
   { label: "Runs", path: "/runs", group: "Work", apiResource: "runs" },
   { label: "Templates", path: "/templates", group: "Work", apiResource: "templates" },

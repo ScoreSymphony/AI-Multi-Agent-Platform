@@ -14,7 +14,9 @@ from ai_multi_agent_platform.kernel import PlatformKernel
 from .criteria import evaluate_criteria, required_criteria_satisfied
 from .models import (
     AutonomyPolicy,
+    CriterionEvaluation,
     GoalConstraints,
+    GoalCriterionState,
     GoalEvidence,
     GoalProgress,
     GoalReview,
@@ -245,6 +247,28 @@ class GoalService:
             idempotency_key=idempotency_key,
             actor_ref=actor_ref,
             progress=GoalProgress.BLOCKED,
+            terminal_reason=reason,
+        )
+
+    async def fail_goal(
+        self,
+        *,
+        goal_id: str,
+        idempotency_key: str,
+        reason: str,
+        actor_ref: str | None = None,
+    ) -> GoalState:
+        """Mark active/waiting Goal pursuit as terminally failed with an explicit reason."""
+        if not reason.strip():
+            raise ContractError(ErrorCode.INVALID_REQUEST, "Goal failure requires a reason")
+        return await self._transition(
+            goal_id=goal_id,
+            target=GoalStatus.FAILED,
+            event_type="goal.failed",
+            operation="goal.fail",
+            idempotency_key=idempotency_key,
+            actor_ref=actor_ref,
+            progress=GoalProgress.DEGRADED,
             terminal_reason=reason,
         )
 
@@ -489,6 +513,7 @@ class GoalService:
             merged_evidence,
             current.linked_tasks,
         )
+        changed_criterion_ids = _changed_criterion_ids(current, evaluations)
         review_id = deterministic_review_id(goal_id, current.revision, idempotency_key)
         all_satisfied = required_criteria_satisfied(current.success_criteria, evaluations)
         generated_task_ids: tuple[str, ...] = ()
@@ -575,11 +600,23 @@ class GoalService:
             updated_actor_ref=actor_ref,
             goal=replace(current.goal, updated_at=utc_now()),
         )
-        event_type = _review_event_type(current, updated, generated_task_ids)
+        additional_event_types = ["goal.review_started"]
+        if changed_criterion_ids:
+            additional_event_types.append("goal.progress_criterion_changed")
+        if not review.work_required:
+            additional_event_types.append("goal.work_not_needed")
+        if status is GoalStatus.PAUSED and progress is GoalProgress.BLOCKED:
+            additional_event_types.append("goal.blocked")
+        if status is GoalStatus.PAUSED and progress is GoalProgress.DEGRADED:
+            additional_event_types.append("goal.escalated")
+        if generated_task_ids:
+            additional_event_types.append("goal.task_generated")
+        if status is GoalStatus.SATISFIED:
+            additional_event_types.append("goal.satisfied")
         return await self._repository.commit_snapshot(
             previous=current,
             current=updated,
-            event_type=event_type,
+            event_type="goal.review_completed",
             idempotency_key=idempotency_key,
             operation="goal.review",
             command_scope=f"goal:{goal_id}",
@@ -590,7 +627,12 @@ class GoalService:
                 "trigger_ref": trigger_ref,
                 "generated_task_ids": list(generated_task_ids),
                 "decision_reason": decision_reason,
+                "work_required": review.work_required,
+                "criterion_changes": list(changed_criterion_ids),
+                "status": status.value,
+                "progress": progress.value,
             },
+            additional_event_types=tuple(additional_event_types),
         )
 
     async def _transition(
@@ -664,16 +706,20 @@ def _merge_evidence(
     return tuple(sorted(by_id.values(), key=lambda item: (item.observed_at, item.evidence_id)))
 
 
-def _review_event_type(
-    before: GoalState, after: GoalState, generated_task_ids: tuple[str, ...]
-) -> str:
-    if after.status is GoalStatus.SATISFIED:
-        return "goal.satisfied"
-    if after.status is GoalStatus.PAUSED and before.status is not GoalStatus.PAUSED:
-        return "goal.escalated"
-    if generated_task_ids:
-        return "goal.task_generated"
-    return "goal.review_completed"
+def _changed_criterion_ids(
+    state: GoalState,
+    evaluations: tuple[CriterionEvaluation, ...],
+) -> tuple[str, ...]:
+    if not state.reviews:
+        return tuple(item.criterion_id for item in evaluations)
+    previous = {
+        item.criterion_id: item.state for item in state.reviews[-1].criterion_evaluations
+    }
+    return tuple(
+        item.criterion_id
+        for item in evaluations
+        if previous.get(item.criterion_id, GoalCriterionState.UNKNOWN) != item.state
+    )
 
 
 __all__ = ["GoalService", "GoalTaskCreator", "KernelGoalTaskCreator"]

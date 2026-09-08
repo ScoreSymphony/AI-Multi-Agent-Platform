@@ -56,6 +56,7 @@ class GoalRepository(Protocol):
         command_scope: str,
         actor_ref: str | None,
         details: dict[str, JsonValue] | None = None,
+        additional_event_types: tuple[str, ...] = (),
     ) -> GoalState: ...
 
 
@@ -127,9 +128,15 @@ class EventSourcedGoalRepository(GoalRepository):
         command_scope: str,
         actor_ref: str | None,
         details: dict[str, JsonValue] | None = None,
+        additional_event_types: tuple[str, ...] = (),
     ) -> GoalState:
         if not idempotency_key.strip():
             raise ContractError(ErrorCode.INVALID_REQUEST, "idempotency_key must not be blank")
+        if any(not item.strip() for item in additional_event_types):
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "additional Goal event types must not be blank",
+            )
         existing = await self.find_command(command_scope, idempotency_key, operation)
         if existing is not None:
             if existing.stream_id != current.goal_id:
@@ -140,6 +147,26 @@ class EventSourcedGoalRepository(GoalRepository):
             return await self.get_goal(existing.result_id)
 
         expected_revision = 0 if previous is None else previous.stream_revision
+        provenance = Provenance(source="goal-service", actor_ref=actor_ref)
+        detail_payload: dict[str, JsonValue] = {}
+        if details:
+            detail_payload["details"] = dict(details)
+        additional_events = tuple(
+            PlatformEvent(
+                id=new_id("event"),
+                event_type=additional_type,
+                subject_type="goal",
+                subject_id=current.goal_id,
+                correlation_id=current.goal_id,
+                owner_ref=current.owner_ref,
+                project_id=current.project_id,
+                causation_id=idempotency_key,
+                payload=dict(detail_payload),
+                provenance=provenance,
+            )
+            for additional_type in additional_event_types
+        )
+
         event_id = new_id("event")
         payload: dict[str, JsonValue] = {"snapshot": goal_state_to_json(current)}
         if details:
@@ -154,7 +181,7 @@ class EventSourcedGoalRepository(GoalRepository):
             project_id=current.project_id,
             causation_id=idempotency_key,
             payload=payload,
-            provenance=Provenance(source="goal-service", actor_ref=actor_ref),
+            provenance=provenance,
         )
         command = CommandRecord(
             scope=command_scope,
@@ -164,10 +191,11 @@ class EventSourcedGoalRepository(GoalRepository):
             result_id=current.goal_id,
             event_id=event.id,
         )
+        committed_events = additional_events + (event,)
         result = await self._events.commit(
             stream_id=current.goal_id,
             expected_revision=expected_revision,
-            events=(event,),
+            events=committed_events,
             command=command,
         )
         if not result.applied:
@@ -176,7 +204,8 @@ class EventSourcedGoalRepository(GoalRepository):
                 raise ContractError(ErrorCode.CONFLICT, "Goal command commit conflicted")
             return await self.get_goal(duplicate.result_id)
         if self._event_sink is not None:
-            await self._event_sink.publish(event)
+            for committed_event in committed_events:
+                await self._event_sink.publish(committed_event)
         return replace(current, stream_revision=result.revision)
 
 

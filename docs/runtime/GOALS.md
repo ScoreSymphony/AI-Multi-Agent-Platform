@@ -25,7 +25,7 @@ This preserves the existing ownership boundaries:
 
 ## Canonical state and lifecycle
 
-`GoalState` is reconstructed from an append-only `goal_*` event stream in the existing `EventRepository`. Every mutation appends a canonical Goal event containing the resulting snapshot. The existing `CommandRecord` idempotency mechanism protects Goal commands from duplicate delivery.
+`GoalState` is reconstructed from an append-only `goal_*` event stream in the existing `EventRepository`. Every mutation appends canonical Goal events, with the command's final event carrying the resulting snapshot. The existing `CommandRecord` idempotency mechanism protects Goal commands from duplicate delivery.
 
 Goal state includes a stable ID, revision and SHA-256 digest; owner/project scope; explicit criteria; constraints and risk/data/security requirements; observation and Task-generation policy; bounded-autonomy policy; qualitative progress; evidence and review records; linked Tasks with the exact generating Goal revision; next review time; failed-cycle count; and terminal reason.
 
@@ -40,7 +40,7 @@ draft -> active <-> waiting
 active/waiting -> satisfied | failed | cancelled | superseded
 ```
 
-Invalid transitions fail deterministically. Satisfied/failed Goals require an explicit revision with `reopen_terminal=true`; cancelled/superseded Goals remain terminal.
+Invalid transitions fail deterministically. `goal.fail` provides an explicit reasoned terminal failure transition from active/waiting pursuit. Satisfied/failed Goals require an explicit revision with `reopen_terminal=true`; cancelled/superseded Goals remain terminal.
 
 ## Criteria and evidence
 
@@ -118,7 +118,7 @@ Review commands require `expected_revision`, so stale evaluators cannot mutate a
 
 `AutonomyPolicy` bounds automatic work with `max_tasks_per_review`, `max_consecutive_failed_cycles` and an optional human checkpoint. The reference implementation creates at most one Task per review, never creates another Task while equivalent linked work is active, and pauses/degrades the Goal when the failure-cycle limit is reached.
 
-Satisfied or paused/cancelled non-reviewable Goals cannot generate new work.
+Satisfied, failed, paused or cancelled non-reviewable Goals cannot generate new work. A satisfied/failed Goal can only return to active pursuit through an explicit versioned revision with `reopen_terminal=true`.
 
 ## Control Plane and single-node composition
 
@@ -130,6 +130,7 @@ goal.activate
 goal.pause
 goal.resume
 goal.cancel
+goal.fail
 goal.revise
 goal.review
 goal.attach-task
@@ -144,20 +145,32 @@ The existing Control Plane extension boundary provides northbound idempotency an
 
 The canonical Goal resource projection contains the complete Goal state together with stable `id`, resource `type`, current version, active Task IDs and stream revision. This is the only state source for CLI/Web clients; frontend or CLI code must not maintain a second Goal lifecycle model.
 
-Read-only generic CLI inspection remains available through:
+CLI inspection uses the registered extension collection:
 
 ```text
 platform extension list goals
 platform extension show goals <goal_id>
 ```
 
-Mutating Goal operations require the dedicated Goal command surface because the generic extension CLI deliberately does not execute arbitrary registered commands. The dedicated CLI/Web implementations call only the canonical `/api/v1/goals` resources and `/api/v1/commands/goal.*` commands.
+The current API-first CLI can also invoke **registered** canonical extension commands through `platform extension execute`. It first discovers the command from `x-registered-extension-commands`, requires an explicit resource reference and uses an idempotency key for mutation. Goal lifecycle operations therefore use the same canonical `/api/v1/commands/goal.*` handlers as Web and other Control Plane clients; there is no direct Goal repository/service bypass. `docs/cli/CLI_GOALS.md` documents the Goal-specific payloads and safe invocation examples, including explicit terminal failure with a reason.
+
+The Web surface uses a typed Goal client for `/api/v1/goals` and `/api/v1/commands/goal.*`. `/goals` exposes inventory and draft creation; `/goals/:goalId` exposes lifecycle/progress, criteria, constraints, linked Tasks, evidence/review history, revision provenance and the supported lifecycle/review/revision/attach operations. Canonical Task creation remains owned by the Task surface and can then be linked to the exact Goal revision.
 
 ## Events and recovery
 
-Committed state changes use canonical events including `goal.created`, lifecycle events, `goal.revised`, `goal.task_linked`, `goal.task_generated`, `goal.task_outcome_reconciled`, `goal.review_completed`, `goal.escalated` and `goal.satisfied`. `EventSourcedGoalRepository` can mirror committed events to the existing `EventProvider` for observability/notification projections without transferring Goal ownership.
+Goal review observability is committed atomically with the review state change. Supplementary events carry review/domain details without a second snapshot; the final `goal.review_completed` event carries the resulting canonical snapshot and command idempotency record. A replay of the same review command therefore does not duplicate review telemetry.
 
-The repository reuses `SqliteKernelRepository` for the local durable profile. Regression tests cover waiting-state restart, duplicate review delivery, restart/crash around Task creation, stale revision rejection, Task outcome reconciliation, pause/resume, revision provenance, satisfaction stopping work, and bounded failure escalation.
+Canonical Goal events include:
+
+- lifecycle: `goal.created`, `goal.activated`, `goal.paused`, `goal.resumed`, `goal.cancelled`, `goal.failed`, `goal.revised`;
+- review cycle: `goal.review_started`, `goal.review_completed`;
+- progress/evidence decision: `goal.progress_criterion_changed`, `goal.work_not_needed`;
+- work/provenance: `goal.task_generated`, `goal.task_linked`, `goal.task_outcome_reconciled`;
+- attention/outcomes: `goal.blocked`, `goal.escalated`, `goal.satisfied`.
+
+`EventSourcedGoalRepository` can mirror every committed event to the existing `EventProvider` for observability/notification projections without transferring Goal ownership. This is the #75-compatible notification hook; a richer notification UX does not need to become Goal authority.
+
+The repository reuses `SqliteKernelRepository` for the local durable profile. Regression tests cover waiting-state restart, duplicate review delivery, restart/crash around Task creation, stale revision rejection, Task outcome reconciliation, pause/resume, revision provenance, satisfaction stopping work, bounded failure escalation, explicit terminal failure/reopen, and durable review-event sequencing/idempotency.
 
 The runtime integration suite additionally proves that the composed Control Plane registers the Goal surface, #18 delivery replay cannot duplicate Goal work, a monitoring-only review succeeds without fabricating a Task, untrusted delivery payload is not treated as verified Goal evidence, and stale Automation revision bindings fail closed.
 
