@@ -11,6 +11,10 @@ import {
 import type { Page } from "../api/types";
 import { useCursorPagination } from "../app/pagination";
 import { AppLink } from "../app/router";
+import {
+  EvaluationManifestComparisonSummary,
+  EvaluationManifestSummary,
+} from "../components/EvaluationManifest";
 import { PaginationControls } from "../components/Pagination";
 import {
   Card,
@@ -259,6 +263,14 @@ export function EvaluationRunDetailPage({
         <SnapshotSummary snapshot={run.snapshot} />
       </Card>
 
+      <Card title="Reproducibility manifest">
+        {run.manifest ? (
+          <EvaluationManifestSummary manifest={run.manifest} />
+        ) : (
+          <p>No canonical EvalManifest is attached to this historical run.</p>
+        )}
+      </Card>
+
       <Card title="Results">
         <EvaluationResultTable run={run} />
       </Card>
@@ -418,6 +430,9 @@ function ComparisonSummary({ comparison }: { comparison: CanonicalEvaluationComp
         {comparison.policy_id}@{comparison.policy_version}
       </p>
       <p>{comparison.regression_count} regressions · {comparison.improvement_count} improvements</p>
+      {comparison.manifest_comparison ? (
+        <EvaluationManifestComparisonSummary comparison={comparison.manifest_comparison} />
+      ) : null}
       {comparison.findings.length === 0 ? <EmptyState title="No comparison findings" /> : (
         <ul>
           {comparison.findings.map((finding) => (
