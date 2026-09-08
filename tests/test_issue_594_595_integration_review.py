@@ -3,7 +3,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
-from ai_multi_agent_platform.evaluation.models import ConfigurationSnapshot, EvaluationCase, EvaluationSuite
+from ai_multi_agent_platform.evaluation.models import (
+    ConfigurationSnapshot,
+    EvaluationCase,
+    EvaluationSuite,
+)
 from ai_multi_agent_platform.evaluation.routing_profile_snapshot import (
     RoutingProfileAwareEvaluationTargetSnapshotEnricher,
 )
@@ -41,9 +45,7 @@ def test_eval_target_snapshot_pins_exact_routing_profile_revision() -> None:
     profile_id = new_model_routing_profile_id()
     agent_id = "agent_00000000-0000-4000-8000-000000000594"
     revision = SimpleNamespace(
-        profile=SimpleNamespace(
-            model=SimpleNamespace(routing_profile_ref=f"{profile_id}@r7")
-        )
+        profile=SimpleNamespace(model=SimpleNamespace(routing_profile_ref=f"{profile_id}@r7"))
     )
     agents = SimpleNamespace(
         service=SimpleNamespace(get_agent_revision=lambda _agent_id, _revision: revision)
@@ -77,9 +79,7 @@ def test_eval_target_snapshot_pins_exact_routing_profile_revision() -> None:
     enriched = enricher.enrich(suite, snapshot)
 
     routing_ref = next(
-        reference
-        for reference in enriched.references
-        if reference.kind == "model_routing_profile"
+        reference for reference in enriched.references if reference.kind == "model_routing_profile"
     )
     assert routing_ref.ref_id == profile_id
     assert routing_ref.version == "7"
