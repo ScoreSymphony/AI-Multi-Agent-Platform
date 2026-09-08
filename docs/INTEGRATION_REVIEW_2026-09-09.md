@@ -18,16 +18,20 @@ At review start the integration branch was 158 commits ahead of `main` and 0 com
 
 The runtime model already allows a successful `TriggerDelivery` with `generated_task_id=None`, and the Goal runtime intentionally uses that state when a Goal observation performs a review but no executable work is required.
 
-The older Automation callback contract still declared `TaskCreator -> Awaitable[str]`. The composed Goal Control Plane therefore had to cast an optional generated task id to `str`, even though the runtime result remained `None`. The Automation OpenAPI metadata also still described every trigger as necessarily producing a canonical Task.
+The older Automation callback contract still declared `TaskCreator -> Awaitable[str]`. The composed Goal Control Plane therefore had to cast an optional generated task id to `str`, even though the runtime result remained `None`.
 
-This branch aligns the contracts with the already-tested runtime behavior:
+A first integration fix widened `TaskCreator` to `Awaitable[str | None]`. Review correctly identified that this was too permissive: an ordinary Automation embedding could then return `None` accidentally and still satisfy the static callback contract.
 
-- `TaskCreator` now returns `Awaitable[str | None]`;
-- the Control Plane automation task-creation seam returns `str | None`;
-- the Goal composition returns `dispatch.generated_task_id` directly and removes the compatibility cast;
-- the `x-automation` invariant now models a canonical delivery followed by an optional canonical Task.
+The final fix preserves the ordinary Automation invariant and makes the Goal exception explicit:
 
-Ordinary Automations still use the canonical Task path and return a concrete task id. The optional result exists for explicitly handled delivery types such as Goal observation.
+- `TaskCreator` remains `Awaitable[str]`;
+- `NO_TASK_REQUIRED` is an explicit, platform-owned result signal for a handled delivery that legitimately needs no canonical Task;
+- `AutomationService` maps only that explicit signal to `generated_task_id=None`;
+- a missing, non-string, or blank ordinary TaskCreator result is treated as a contract violation rather than a successful delivery;
+- the Goal composition uses `NO_TASK_REQUIRED` only after `dispatch_goal_automation_delivery()` has explicitly handled the delivery and returned no generated Task;
+- the ordinary Control Plane automation task-creation seam remains `-> str`.
+
+Regression coverage now proves both sides of the contract: an ordinary creator returning `None` fails, while the explicit no-task signal succeeds without fabricating a Task. The existing Goal integration test continues to prove the composed monitoring-only Goal behavior.
 
 ## Verified contract alignment
 
@@ -106,8 +110,8 @@ Recommended follow-up: generate stable frontend DTO types from the canonical Ope
 
 ### 6. Full branch test execution remains a merge gate — high until green
 
-This review verified contracts statically and used existing targeted tests as evidence, but did not execute the complete Python/frontend/CI suite in the review environment. The branch must not be treated as merge-ready until the repository's required CI/type/frontend checks are green on the final combined commit.
+The previous PR head completed all repository workflows successfully. Because the review follow-up changed the Automation contract implementation and added regression coverage, the final head must complete the same required CI/type/frontend checks again before merge.
 
 ## Review conclusion
 
-No blocking endpoint or enum mismatch was found in the reviewed Goals or Marketplace UI paths. The concrete contradiction found between Automation and Goal observation semantics has been corrected on this fix branch. The highest remaining architectural risks are contract duplication rather than a currently demonstrated runtime break: frontend transport duplication, duplicated Marketplace taxonomy/parsing, and implicit Control Plane composition order.
+No blocking endpoint or enum mismatch was found in the reviewed Goals or Marketplace UI paths. The concrete contradiction found between Automation and Goal observation semantics has been corrected without weakening the ordinary Automation Task-creation contract. The highest remaining architectural risks are contract duplication rather than a currently demonstrated runtime break: frontend transport duplication, duplicated Marketplace taxonomy/parsing, and implicit Control Plane composition order.
