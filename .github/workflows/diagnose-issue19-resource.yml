@@ -52,6 +52,13 @@ jobs:
           if old not in text:
               raise SystemExit('authorization diagnostic anchor missing')
           authorization.write_text(text.replace(old, new, 1))
+
+          test = Path('tests/test_issue_19_product_completion.py')
+          text = test.read_text()
+          anchor = '        assert all(result["outcome"] == "passed" for result in results), results\n'
+          if anchor not in text:
+              raise SystemExit('issue 19 assertion anchor missing')
+          test.write_text(text.replace(anchor, '        print("ISSUE19_RESULTS", repr(results))\n' + anchor, 1))
           PY
           ruff format src/ai_multi_agent_platform/context/lifecycle.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/security/authorization.py
           ruff check src/ai_multi_agent_platform/context/lifecycle.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/security/authorization.py
