@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, replace
-from typing import cast
 
 from ai_multi_agent_platform.agents import (
     AgentRepository,
     AgentRevisionRef,
     AgentRunRecord,
+    AgentTeamRevision,
     AgentTeamRevisionRef,
 )
 from ai_multi_agent_platform.context import (
@@ -49,7 +49,12 @@ from ai_multi_agent_platform.observability import (
     TelemetryOutcome,
 )
 from ai_multi_agent_platform.research import ResearchRepository
-from ai_multi_agent_platform.security import ActorIdentity, ActorType, AuthorizationAction, ResourceType
+from ai_multi_agent_platform.security import (
+    ActorIdentity,
+    ActorType,
+    AuthorizationAction,
+    ResourceType,
+)
 from ai_multi_agent_platform.skills import SkillRepository
 from ai_multi_agent_platform.verification import VerificationEvidenceResolver
 
@@ -146,6 +151,7 @@ class CanonicalHandoffReferenceGateway(HandoffReferenceGateway):
 
         resolved = await self._resolve(reference, task_id=task_id)
         self._require_exact_reference(reference, resolved)
+        scoped_operation = _source_operation(operation, resolved)
         decision = normalize_authorization_decision(
             await self.authorization.authorize(
                 AuthorizationRequest(
@@ -162,7 +168,7 @@ class CanonicalHandoffReferenceGateway(HandoffReferenceGateway):
                         else ResourceType.GENERIC.value
                     ),
                     resource_ref=reference.resource_id,
-                    context=operation,
+                    context=scoped_operation,
                     organization_id=actor.organization_id,
                     team_id=actor.team_ids[0] if len(actor.team_ids) == 1 else None,
                     workspace_id=resolved.workspace_id,
@@ -230,7 +236,11 @@ class CanonicalHandoffReferenceGateway(HandoffReferenceGateway):
         if kind is HandoffSourceKind.RESEARCH_EVIDENCE:
             evidence = self.research.get_evidence(reference.resource_id)
             item = self.research.get_item(evidence.research_item_id)
-            _require_optional_task_scope(evidence.task_id or item.task_id, task_id, "Research Evidence")
+            _require_optional_task_scope(
+                evidence.task_id or item.task_id,
+                task_id,
+                "Research Evidence",
+            )
             return _ResolvedReference(
                 revision="1",
                 digest=_digest_value(evidence.digest),
@@ -382,7 +392,7 @@ class TelemetryHandoffAuditSink(HandoffAuditSink):
             ),
             timestamp=event.occurred_at,
             outcome=TelemetryOutcome.FAILED if denied else TelemetryOutcome.SUCCEEDED,
-            attributes=cast(dict[str, object], attributes),
+            attributes=attributes,
         )
 
 
@@ -396,25 +406,25 @@ class DurableConsumedHandoffContextAdapter(ContextSourceAdapter):
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
         candidates: list[ContextCandidate] = []
-        for handoff in self.repository.list_handoffs_for_task(request.task_id):
+        for consumption in self.repository.list_consumptions_for_run(request.run_id):
+            handoff = self.repository.get_handoff(
+                consumption.handoff_id,
+                consumption.handoff_revision,
+            )
+            if handoff.task_id != request.task_id:
+                continue
             if request.plan_id is not None and handoff.content.plan_id != request.plan_id:
                 continue
             if request.step_id is not None and handoff.content.consumer_step_id != request.step_id:
                 continue
-            for consumption in self.repository.list_consumptions(
-                handoff.handoff_id,
-                handoff.revision,
-            ):
-                if consumption.consuming_run_id != request.run_id:
-                    continue
-                if not self._consumer_matches_request(consumption.consumer, request):
-                    continue
-                runtime = HandoffRuntimeContext(
-                    handoff=handoff,
-                    consumption=consumption,
-                    context_source=handoff_context_source(handoff),
-                )
-                candidates.append(handoff_context_candidate(runtime))
+            if not self._consumer_matches_request(consumption.consumer, request):
+                continue
+            runtime = HandoffRuntimeContext(
+                handoff=handoff,
+                consumption=consumption,
+                context_source=handoff_context_source(handoff),
+            )
+            candidates.append(handoff_context_candidate(runtime))
         return tuple(sorted(candidates, key=lambda item: item.source.canonical_key))
 
     def _consumer_matches_request(
@@ -720,7 +730,7 @@ class ProductionHandoffRuntime:
         self,
         consumer: ParticipantRef,
         consumer_agent: AgentRevisionRef | None,
-    ) -> tuple[AgentRevisionRef, object | None]:
+    ) -> tuple[AgentRevisionRef, AgentTeamRevision | None]:
         if isinstance(consumer, AgentRevisionRef):
             if consumer_agent is not None and consumer_agent != consumer:
                 raise ContractError(
@@ -812,6 +822,20 @@ def _actor_agent_identity(actor: ActorIdentity) -> tuple[str | None, int | None]
         return agent_id, int(revision)
     except ValueError:
         return None, None
+
+
+def _source_operation(
+    operation: OperationContext,
+    reference: _ResolvedReference,
+) -> OperationContext:
+    if reference.project_id is None:
+        return operation
+    if operation.project_id is not None and operation.project_id != reference.project_id:
+        raise ContractError(
+            ErrorCode.NOT_FOUND,
+            "handoff source belongs to a different Project",
+        )
+    return replace(operation, project_id=reference.project_id)
 
 
 def _require_optional_task_scope(
