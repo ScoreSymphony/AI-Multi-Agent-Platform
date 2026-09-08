@@ -21,6 +21,8 @@ from ai_multi_agent_platform.skills import (
 from ai_multi_agent_platform.verification import VerificationService
 
 from .control_plane import LEARNING_COLLECTIONS, register_learning_control_plane
+from .governance import GovernedObservedLearningService, LearningPlatformPolicy
+from .post_promotion_repository import SQLitePostPromotionEvaluationRecorder
 from .promotion import (
     AgentPromotionAdapter,
     PromotionRegistry,
@@ -28,7 +30,7 @@ from .promotion import (
     SkillPromotionAdapter,
 )
 from .repository import SQLiteLearningRepository
-from .runtime import ObservedLearningService, PostPromotionEvaluator
+from .runtime import PostPromotionEvaluator
 from .runtime_control_plane import (
     LEARNING_POST_PROMOTION_COLLECTION,
     register_learning_runtime_control_plane,
@@ -42,8 +44,9 @@ class SingleNodeLearningComposition:
     """Prepared owner-preserving Learning composition for the shared single-node runtime."""
 
     repository: SQLiteLearningRepository
+    post_promotion_recorder: SQLitePostPromotionEvaluationRecorder
     skills: SkillService
-    service: ObservedLearningService
+    service: GovernedObservedLearningService
     sources: LearningSourceBridge
 
     def register_control_plane(
@@ -76,6 +79,7 @@ def build_single_node_learning(
     telemetry: Telemetry | None = None,
     skills: SkillService | None = None,
     research: ResearchService | None = None,
+    platform_policy: LearningPlatformPolicy | None = None,
     post_promotion_evaluator: PostPromotionEvaluator | None = None,
 ) -> SingleNodeLearningComposition:
     """Compose #595 around existing canonical owner services without replacing them."""
@@ -83,7 +87,10 @@ def build_single_node_learning(
     root = Path(database_dir)
     skill_service = skills or SkillService(JsonSkillRepository(root / "skills.json"))
     repository = SQLiteLearningRepository(root / "learning.sqlite3")
-    service = ObservedLearningService(
+    post_promotion_recorder = SQLitePostPromotionEvaluationRecorder(
+        root / "learning-post-promotion.sqlite3"
+    )
+    service = GovernedObservedLearningService(
         repository,
         quality_gate=LearningQualityGate(
             evaluation=evaluation,
@@ -97,11 +104,14 @@ def build_single_node_learning(
             )
         ),
         authorization_gate=approval_gate,
+        platform_policy=platform_policy,
         telemetry=telemetry,
         post_promotion_evaluator=post_promotion_evaluator,
+        post_promotion_recorder=post_promotion_recorder,
     )
     return SingleNodeLearningComposition(
         repository=repository,
+        post_promotion_recorder=post_promotion_recorder,
         skills=skill_service,
         service=service,
         sources=LearningSourceBridge(service, research=research),
