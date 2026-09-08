@@ -23,8 +23,9 @@ jobs:
       - name: Run focused quality checks
         run: |
           python -m pip install 'pytest>=8.3,<10' 'ruff>=0.12,<1' 'jsonschema==4.26.0'
+          ruff check --fix src/ai_multi_agent_platform/compensation tests/test_issue_596_compensation.py
+          ruff format src/ai_multi_agent_platform/compensation tests/test_issue_596_compensation.py
           ruff check src/ai_multi_agent_platform/compensation tests/test_issue_596_compensation.py
-          ruff format --check src/ai_multi_agent_platform/compensation tests/test_issue_596_compensation.py
           PYTHONPATH=src pytest -q tests/test_issue_596_compensation.py
       - name: Commit patch when needed
         run: |
