@@ -10,18 +10,18 @@ from .models import ConfigurationSnapshot, EvaluationSuite, VersionReference
 from .product import EvaluationTargetSnapshotEnricher, parse_agent_evaluation_target
 
 
-class RoutingProfileAwareEvaluationTargetSnapshotEnricher:
+class RoutingProfileAwareEvaluationTargetSnapshotEnricher(EvaluationTargetSnapshotEnricher):
     """Pin the exact #309 routing-profile revision used by an Agent target.
 
     ``EvaluationTargetSnapshotEnricher`` already records Agent, prompt, model, provider and
     capability identity. Durable Agent runtime may additionally resolve an immutable
     ModelRoutingProfile revision; omitting that revision makes two materially different routes
-    appear reproducibly identical. This wrapper keeps the generic product enricher unchanged
-    while closing the integrated single-node contract.
+    appear reproducibly identical. The subtype keeps the existing Evaluation service contract
+    intact while closing the integrated single-node reproducibility gap.
     """
 
     def __init__(self, *, agents: AgentRuntime, models: ModelRegistry) -> None:
-        self._agents = agents
+        super().__init__(agents=agents, models=models)
         self._base = EvaluationTargetSnapshotEnricher(agents=agents, models=models)
 
     def enrich(
