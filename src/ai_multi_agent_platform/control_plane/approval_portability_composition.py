@@ -9,8 +9,9 @@ module only after the Agent package is fully initialized.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from ai_multi_agent_platform.automation import Automation, TriggerDelivery
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.decisions import (
     DecisionRepository,
@@ -23,6 +24,7 @@ from ai_multi_agent_platform.goals import (
     EventSourcedGoalRepository,
     GoalService,
     KernelGoalTaskCreator,
+    dispatch_goal_automation_delivery,
 )
 from ai_multi_agent_platform.governance.control_plane import register_governance_control_plane
 from ai_multi_agent_platform.governance.repository import (
@@ -93,6 +95,33 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
             for command, handler in decision_record_command_handlers(decisions).items():
                 self.register_command(command, handler)
             self.decisions = decisions
+
+    async def _create_task_from_automation(
+        self,
+        automation: Automation,
+        delivery: TriggerDelivery,
+        payload: dict[str, JsonValue],
+        idempotency_key: str,
+    ) -> str:
+        dispatch = await dispatch_goal_automation_delivery(
+            self.goals,
+            automation,
+            delivery,
+            payload,
+            idempotency_key,
+        )
+        if not dispatch.handled:
+            return await super()._create_task_from_automation(
+                automation,
+                delivery,
+                payload,
+                idempotency_key,
+            )
+
+        # #18 already models generated_task_id as optional. Its legacy TaskCreator type still
+        # spells the return value as str, so keep the compatibility cast at this composition seam
+        # rather than fabricating a Task when a Goal review correctly needs no executable work.
+        return cast(str, dispatch.generated_task_id)
 
     async def list_extension_resources(
         self,
