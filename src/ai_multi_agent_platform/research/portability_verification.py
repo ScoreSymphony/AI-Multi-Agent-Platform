@@ -6,11 +6,12 @@ from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.verification import VerificationOutcome, VerificationService
 
 from .models import ResearchVerificationBinding
+from .portability import VerificationBindingValidator
 
 
 def canonical_verification_binding_validator(
     verification: VerificationService,
-):
+) -> VerificationBindingValidator:
     """Return a validator that accepts only an exact, locally completed #86 PASS.
 
     Serialized Research metadata is insufficient. The target deployment must already possess the
