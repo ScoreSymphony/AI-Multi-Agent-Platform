@@ -33,6 +33,7 @@ GOAL_COMMANDS = (
     "goal.pause",
     "goal.resume",
     "goal.cancel",
+    "goal.fail",
     "goal.revise",
     "goal.review",
     "goal.attach-task",
@@ -137,6 +138,18 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
     ) -> dict[str, JsonValue]:
         return _goal_resource(
             await service.cancel_goal(
+                goal_id=resource_ref,
+                idempotency_key=_idempotency(context),
+                reason=_required_string(payload, "reason"),
+                actor_ref=context.actor.principal_ref,
+            )
+        )
+
+    async def fail(
+        context: RequestContext, resource_ref: str, payload: dict[str, JsonValue]
+    ) -> dict[str, JsonValue]:
+        return _goal_resource(
+            await service.fail_goal(
                 goal_id=resource_ref,
                 idempotency_key=_idempotency(context),
                 reason=_required_string(payload, "reason"),
@@ -251,6 +264,7 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
         "goal.pause": pause,
         "goal.resume": resume,
         "goal.cancel": cancel,
+        "goal.fail": fail,
         "goal.revise": revise,
         "goal.review": review,
         "goal.attach-task": attach_task,
