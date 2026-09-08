@@ -10,10 +10,10 @@ from ai_multi_agent_platform.contracts import (
     EgressTargetKind,
     ErrorCode,
     OperationContext,
-    strongest_classification,
 )
 from ai_multi_agent_platform.security.egress import EgressGate
 
+from .classification import effective_context_bundle_classification
 from .models import ContextBundle
 from .rendering import (
     ContextContentProvider,
@@ -45,7 +45,7 @@ class ContextBundleEgressExporter:
     ) -> RenderedContext:
         if target.kind is not EgressTargetKind.CONTEXT_EXPORT:
             raise ValueError("context bundle export requires target kind context_export")
-        classification = _bundle_classification(bundle)
+        classification = effective_context_bundle_classification(bundle)
         decision = await self.egress_gate.enforce(
             EgressRequest(
                 request_id=f"context:{bundle.context_bundle_id}:{target.target_id}",
@@ -74,10 +74,3 @@ class ContextBundleEgressExporter:
             allow_secret_resolution=classification
             not in {DataClassification.SECRET, DataClassification.SECRET_REFERENCE},
         )
-
-
-def _bundle_classification(bundle: ContextBundle) -> DataClassification:
-    classifications = tuple(
-        DataClassification(entry.data_classification.value) for entry in bundle.entries
-    )
-    return strongest_classification(*classifications) or DataClassification.PUBLIC
