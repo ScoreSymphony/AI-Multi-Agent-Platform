@@ -87,9 +87,7 @@ async def _seed_research() -> tuple[ResearchService, str, str, str, str, str]:
 
 def test_research_search_projections_are_safe_and_reconstructable() -> None:
     async def scenario() -> None:
-        research, item_id, source_id, observation_id, claim_id, evidence_id = (
-            await _seed_research()
-        )
+        research, item_id, source_id, observation_id, claim_id, evidence_id = await _seed_research()
         services = research_search_resource_services(research)
 
         item = (await services[RESEARCH_ITEM_COLLECTION].list_search_resources())[0]  # type: ignore[attr-defined]
