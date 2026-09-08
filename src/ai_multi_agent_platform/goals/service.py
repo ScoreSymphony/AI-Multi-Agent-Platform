@@ -710,15 +710,15 @@ def _changed_criterion_ids(
     state: GoalState,
     evaluations: tuple[CriterionEvaluation, ...],
 ) -> tuple[str, ...]:
-    previous = (
-        {item.criterion_id: item.state for item in state.reviews[-1].criterion_evaluations}
-        if state.reviews
-        else {}
-    )
+    if not state.reviews:
+        return tuple(item.criterion_id for item in evaluations)
+    previous = {
+        item.criterion_id: item.state for item in state.reviews[-1].criterion_evaluations
+    }
     return tuple(
         item.criterion_id
         for item in evaluations
-        if previous.get(item.criterion_id, GoalCriterionState.UNKNOWN) is not item.state
+        if previous.get(item.criterion_id, GoalCriterionState.UNKNOWN) != item.state
     )
 
 
