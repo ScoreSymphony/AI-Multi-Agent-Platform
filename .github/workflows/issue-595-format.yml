@@ -19,55 +19,48 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - name: Apply issue 595 hardening edits
+      - name: Wire issue 595 single-node runtime
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
 
-          path = Path("src/ai_multi_agent_platform/learning/control_plane.py")
+          path = Path("src/ai_multi_agent_platform/deployment/single_node.py")
           text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              "from typing import cast\n",
-              "from enum import StrEnum\nfrom typing import cast\n",
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              if old not in text:
+                  return
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "from ai_multi_agent_platform.kernel import (\n    EventSourcedTaskRepository,\n    PlatformKernel,\n    SqliteKernelRepository,\n)\n",
+              "from ai_multi_agent_platform.kernel import (\n    EventSourcedTaskRepository,\n    PlatformKernel,\n    SqliteKernelRepository,\n)\nfrom ai_multi_agent_platform.learning import (\n    AgentPromotionAdapter,\n    LearningQualityGate,\n    LearningService,\n    PromotionRegistry,\n    RoutingProfilePromotionAdapter,\n    SQLiteLearningRepository,\n    SkillPromotionAdapter,\n    register_learning_control_plane,\n)\n",
           )
-          text = text.replace(
-              "from ai_multi_agent_platform.security import ActorIdentity, ActorType, RiskClassification, infer_actor_identity\n",
-              "from ai_multi_agent_platform.security import ActorIdentity, ActorType, RiskClassification, infer_actor_identity\nfrom ai_multi_agent_platform.security.approvals import ApprovalRecord\n",
+          replace_once(
+              "from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider\n",
+              "from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider\nfrom ai_multi_agent_platform.skills import JsonSkillRepository, SkillService, register_skill_control_plane\n",
           )
-          text = text.replace(
-              "    FeedbackType,\n",
-              "    FeedbackRecord,\n    FeedbackType,\n",
+          replace_once(
+              "    agents: AgentService\n    conversations: ConversationService\n",
+              "    agents: AgentService\n    skills: SkillService\n    learning: LearningService\n    conversations: ConversationService\n",
           )
-          text = text.replace("ErrorCode.INTERNAL", "ErrorCode.BACKEND_ERROR")
-          text = text.replace(
-              "def _approval_resource(record: object) -> dict[str, JsonValue]:",
-              "def _approval_resource(record: ApprovalRecord) -> dict[str, JsonValue]:",
+          replace_once(
+              "    agents = AgentService(JsonAgentRepository(database_dir / \"agents.json\"))\n    conversations = ConversationService(\n",
+              "    agents = AgentService(JsonAgentRepository(database_dir / \"agents.json\"))\n    skills = SkillService(JsonSkillRepository(database_dir / \"skills.json\"))\n    conversations = ConversationService(\n",
           )
-          text = text.replace(
-              "def _feedback_resource(feedback: object) -> dict[str, JsonValue]:",
-              "def _feedback_resource(feedback: FeedbackRecord) -> dict[str, JsonValue]:",
+          replace_once(
+              "    portability_workflow = build_agent_portability_workflow(\n",
+              "    learning = LearningService(\n        SQLiteLearningRepository(database_dir / \"learning.sqlite3\"),\n        quality_gate=LearningQualityGate(\n            evaluation=evaluation_composition.service,\n            verification=verification,\n        ),\n        promotion_registry=PromotionRegistry(\n            (\n                AgentPromotionAdapter(agents),\n                SkillPromotionAdapter(skills),\n                RoutingProfilePromotionAdapter(routing_profiles),\n            )\n        ),\n        authorization_gate=approval_gate,\n    )\n\n    portability_workflow = build_agent_portability_workflow(\n",
           )
-          text = text.replace(
-              "def _project_visible(project_id: str | None, context: RequestContext) -> bool:\n"
-              "    if project_id is None:\n"
-              "        return True\n"
-              "    return context.actor.project_id is None or context.actor.project_id == project_id\n",
-              "def _project_visible(project_id: str | None, context: RequestContext) -> bool:\n"
-              "    del project_id, context\n"
-              "    return True\n",
+          replace_once(
+              "    register_repository_control_plane(\n        control_plane,\n        repositories,\n        management=repository_management,\n    )\n",
+              "    register_repository_control_plane(\n        control_plane,\n        repositories,\n        management=repository_management,\n    )\n    register_skill_control_plane(control_plane, skills)\n    register_learning_control_plane(control_plane, learning)\n",
           )
-          text = text.replace(
-              "def _enum[EnumT](enum_type: type[EnumT], payload: Mapping[str, JsonValue], field_name: str) -> EnumT:",
-              "def _enum[EnumT: StrEnum](\n"
-              "    enum_type: type[EnumT], payload: Mapping[str, JsonValue], field_name: str\n"
-              ") -> EnumT:",
-          )
-          text = text.replace(
-              "def _enum_value[EnumT](enum_type: type[EnumT], value: JsonValue, field_name: str) -> EnumT:",
-              "def _enum_value[EnumT: StrEnum](\n"
-              "    enum_type: type[EnumT], value: JsonValue, field_name: str\n"
-              ") -> EnumT:",
+          replace_once(
+              "        agents=agents,\n        conversations=conversations,\n",
+              "        agents=agents,\n        skills=skills,\n        learning=learning,\n        conversations=conversations,\n",
           )
           path.write_text(text, encoding="utf-8")
           PY
@@ -76,15 +69,18 @@ jobs:
       - name: Format issue 595 files
         run: |
           ruff format tests/test_issue_595_governed_learning.py
+          ruff format src/ai_multi_agent_platform/learning/__init__.py
           ruff format src/ai_multi_agent_platform/learning/control_plane.py
+          ruff format src/ai_multi_agent_platform/learning/sources.py
+          ruff format src/ai_multi_agent_platform/deployment/single_node.py
       - name: Commit formatter output
         shell: bash
         run: |
-          if git diff --quiet -- tests/test_issue_595_governed_learning.py src/ai_multi_agent_platform/learning/control_plane.py; then
+          if git diff --quiet -- tests/test_issue_595_governed_learning.py src/ai_multi_agent_platform/learning src/ai_multi_agent_platform/deployment/single_node.py; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/test_issue_595_governed_learning.py src/ai_multi_agent_platform/learning/control_plane.py
-          git commit -m "style(learning): harden and format issue 595 surfaces"
+          git add tests/test_issue_595_governed_learning.py src/ai_multi_agent_platform/learning src/ai_multi_agent_platform/deployment/single_node.py
+          git commit -m "feat(learning): wire governed learning into single-node runtime"
           git push origin HEAD:feat/595-governed-learning-completion
