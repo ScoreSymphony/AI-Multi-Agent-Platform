@@ -26,9 +26,8 @@ from ai_multi_agent_platform.connectors import (
 )
 from ai_multi_agent_platform.connectors.egress import ConnectorClassificationResolver
 from ai_multi_agent_platform.context import ContextBundleEgressExporter
-from ai_multi_agent_platform.contracts import FileProvider
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane
-from ai_multi_agent_platform.data import FileEgressExporter
+from ai_multi_agent_platform.data import FileEgressExporter, FileProvider
 from ai_multi_agent_platform.models import DeterministicModelRouter, ModelRegistry, ModelRuntime
 from ai_multi_agent_platform.security import AuthorizationGate
 from ai_multi_agent_platform.security.classification_control_plane import (
