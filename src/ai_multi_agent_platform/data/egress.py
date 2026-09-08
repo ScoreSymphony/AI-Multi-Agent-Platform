@@ -78,6 +78,8 @@ def _file_classification(
     values: list[DataClassification | None] = []
     if context.classification is not None:
         values.append(_parse_classification(context.classification, "data access context"))
+    if record.classification is not None:
+        values.append(_parse_classification(record.classification, "file record"))
     raw = record.metadata.get("data_classification")
     if raw is not None:
         if not isinstance(raw, str):
@@ -90,7 +92,7 @@ def _file_classification(
     return strongest_classification(*values)
 
 
-def _parse_classification(value: str, source: str) -> DataClassification:
+def _parse_classification(value: DataClassification | str, source: str) -> DataClassification:
     try:
         return DataClassification(value)
     except ValueError as exc:
