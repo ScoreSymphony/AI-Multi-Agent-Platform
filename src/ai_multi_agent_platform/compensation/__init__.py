@@ -30,6 +30,7 @@ from .repository import (
     SQLiteCompensationRepository,
 )
 from .service import (
+    ApprovalReferenceLookup,
     CompensationCoordinator,
     CompensationReconciler,
     CompensationVerificationHook,
@@ -37,6 +38,7 @@ from .service import (
 )
 
 __all__ = [
+    "ApprovalReferenceLookup",
     "CompensationActionProjection",
     "CompensationActionView",
     "CompensationAutomation",
