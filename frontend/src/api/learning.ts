@@ -130,7 +130,7 @@ export interface CanonicalPostPromotionEvaluation {
   learning_candidate_id: string;
   candidate_revision: number;
   target_revision: number;
-  outcome: "passed" | "regression" | "failed";
+  outcome: "passed" | "regression" | "failed" | "not_configured";
   evaluation_run_ids: string[];
   details: Record<string, JsonValue>;
   created_at: string;
