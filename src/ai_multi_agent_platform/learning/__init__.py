@@ -1,5 +1,14 @@
 """Governed feedback, learning-candidate and owner-domain promotion workflow (#595)."""
 
+from .control_plane import (
+    LEARNING_CANDIDATE_COLLECTION,
+    LEARNING_COLLECTIONS,
+    LEARNING_COMMANDS,
+    LEARNING_FEEDBACK_COLLECTION,
+    LearningCandidateResourceService,
+    LearningFeedbackResourceService,
+    register_learning_control_plane,
+)
 from .models import (
     LEARNING_SCHEMA_VERSION,
     FeedbackRecord,
@@ -28,20 +37,28 @@ from .promotion import (
 )
 from .repository import InMemoryLearningRepository, LearningRepository, SQLiteLearningRepository
 from .service import LearningQualityGate, LearningService
+from .sources import LearningSourceBridge
 
 __all__ = [
+    "LEARNING_CANDIDATE_COLLECTION",
+    "LEARNING_COLLECTIONS",
+    "LEARNING_COMMANDS",
+    "LEARNING_FEEDBACK_COLLECTION",
     "LEARNING_SCHEMA_VERSION",
     "AgentPromotionAdapter",
     "FeedbackRecord",
     "FeedbackType",
     "InMemoryLearningRepository",
     "LearningCandidate",
+    "LearningCandidateResourceService",
     "LearningCandidateStatus",
+    "LearningFeedbackResourceService",
     "LearningGatePlan",
     "LearningQualityGate",
     "LearningReference",
     "LearningRepository",
     "LearningService",
+    "LearningSourceBridge",
     "LearningSourceType",
     "LearningTarget",
     "LearningTargetType",
@@ -57,4 +74,5 @@ __all__ = [
     "feedback_to_dict",
     "new_feedback_id",
     "new_learning_candidate_id",
+    "register_learning_control_plane",
 ]
