@@ -77,6 +77,7 @@ from .egress_approvals import (
     EgressApprovalExceptionPolicy,
     egress_proposed_action,
 )
+from .egress_composition import DurableEgressRuntime, build_durable_egress_runtime
 from .egress_profiles import (
     EGRESS_PROFILE_STORE_SCHEMA_VERSION,
     EgressProfileDefinition,
@@ -87,6 +88,7 @@ from .egress_profiles import (
     egress_profile_to_json,
     new_egress_profile_id,
 )
+from .egress_resolution import RepositoryBackedEgressPolicy
 from .paths import PathSecurityError, resolve_within
 from .policy import baseline_decision
 from .policy_profile_persistence import (
@@ -178,6 +180,7 @@ __all__ = [
     "CredentialKind",
     "CredentialRotation",
     "CredentialScope",
+    "DurableEgressRuntime",
     "EgressActorResolver",
     "EgressApprovalBridge",
     "EgressApprovalExceptionPolicy",
@@ -207,6 +210,7 @@ __all__ = [
     "PathSecurityError",
     "ProposedAction",
     "ReplayProtector",
+    "RepositoryBackedEgressPolicy",
     "ResourceType",
     "RiskClassification",
     "ScryptPasswordHasher",
@@ -221,6 +225,7 @@ __all__ = [
     "UntrustedInputError",
     "VerifiedExternalIdentity",
     "baseline_decision",
+    "build_durable_egress_runtime",
     "canonical_control_plane_vocabulary",
     "compile_local_principal_policy",
     "egress_profile_from_json",
