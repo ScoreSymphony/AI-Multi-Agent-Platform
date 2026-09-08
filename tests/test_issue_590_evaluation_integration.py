@@ -178,7 +178,9 @@ class _ContextEvaluationExecutor:
         return EvaluationObservation(
             data={
                 "identity_preserved": (
-                    reference.context_bundle_id == alternate.context_bundle_id == bundle.context_bundle_id
+                    reference.context_bundle_id
+                    == alternate.context_bundle_id
+                    == bundle.context_bundle_id
                     and reference.context_bundle_digest
                     == alternate.context_bundle_digest
                     == bundle.digest

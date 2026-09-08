@@ -240,7 +240,9 @@ class CompensationCoordinator:
                     provider_id=outcome.provider_id,
                     canonical_tool_invocation_id=outcome.canonical_tool_invocation_id,
                     error_code=ErrorCode.BACKEND_ERROR.value,
-                    error_message=f"unexpected compensation invocation status: {outcome.status.value}",
+                    error_message=(
+                        f"unexpected compensation invocation status: {outcome.status.value}"
+                    ),
                     manual_intervention_required=True,
                     completed_at=utc_now(),
                 )

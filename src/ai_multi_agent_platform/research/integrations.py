@@ -155,10 +155,17 @@ class ResearchPromotionBridge:
             retention=retention,
             origin=MemoryOrigin.AGENT_DERIVED,
             provenance=provenance,
-            classification=item.data_class,
+            classification=_promotion_classification(item.data_class),
             metadata=_promotion_metadata(action),
         )
         return await self.memory.write_entry(entry, access)
+
+
+def _promotion_classification(value: str) -> str:
+    # ``standard`` is legacy Research vocabulary from before the canonical
+    # platform-wide classification contract. Preserve old durable items without
+    # weakening them by mapping the legacy default to INTERNAL.
+    return "internal" if value == "standard" else value
 
 
 def _promotion_metadata(action: ResearchActionContext) -> dict[str, JsonValue]:

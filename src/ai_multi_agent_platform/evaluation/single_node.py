@@ -31,6 +31,7 @@ from .evidence import (
     EvaluationEvidenceProvider,
     EvidenceEnrichingCaseExecutor,
 )
+from .manifest_repository import SqliteEvalManifestRepository
 from .models import (
     ComparisonOperator,
     DeterministicAssertion,
@@ -238,6 +239,7 @@ def build_single_node_evaluation(
         executor=case_executor,
         evaluators=tuple(evaluators),
         isolation=isolation,
+        manifest_repository=SqliteEvalManifestRepository(database_path),
         configuration_references=(
             VersionReference(
                 kind="orchestrator",

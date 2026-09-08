@@ -6,6 +6,7 @@ from dataclasses import replace
 import pytest
 
 from ai_multi_agent_platform.contracts import ContractError
+from ai_multi_agent_platform.evaluation.context import EvaluationExecutionContext
 from ai_multi_agent_platform.evaluation.evaluators import DeterministicAssertionEvaluator
 from ai_multi_agent_platform.evaluation.manifest_repository import (
     InMemoryEvalManifestRepository,
@@ -42,7 +43,6 @@ from ai_multi_agent_platform.evaluation.reproducibility import (
     manifest_projection,
 )
 from ai_multi_agent_platform.evaluation.runner import EvaluationRunner
-from ai_multi_agent_platform.evaluation.context import EvaluationExecutionContext
 
 
 class StaticExecutor:
@@ -174,7 +174,11 @@ def test_fixed_seed_set_binds_each_repeat_and_projection_keeps_raw_outcomes() ->
             ),
         )
 
-        assert [result.seed for result in summary.results] == [11, 17, 23]
+        assert {(result.repetition_index, result.seed) for result in summary.results} == {
+            (0, 11),
+            (1, 17),
+            (2, 23),
+        }
         assert summary.manifest is not None
         assert summary.manifest.seed_policy.ordered_seeds == (11, 17, 23)
         projection = manifest_projection(summary.manifest, results=summary.results)
@@ -272,6 +276,37 @@ def test_environment_comparability_distinguishes_warning_and_performance_blocker
     assert quality.status is Comparability.WARNING
     assert performance.status is Comparability.INCOMPARABLE
     assert any(item.path == "environment.cpu" for item in performance.blocking_differences)
+
+
+def test_platform_drift_can_be_explicit_candidate_dimension() -> None:
+    builder = EvalManifestBuilder()
+    baseline = builder.build(
+        run=_run(),
+        suite=_suite(),
+        seed_policy=SeedPolicy(RandomnessMode.DETERMINISTIC),
+    )
+    candidate = builder.build(
+        run=replace(
+            _run(run_id="evaluation_run_platform_candidate"),
+            snapshot=_snapshot(commit="candidate"),
+        ),
+        suite=_suite(),
+        seed_policy=SeedPolicy(RandomnessMode.DETERMINISTIC),
+    )
+
+    blocked = ManifestComparator().compare(baseline, candidate)
+    intentional = ManifestComparator().compare(
+        baseline,
+        candidate,
+        candidate_reference_kinds=frozenset({"platform"}),
+    )
+
+    assert blocked.status is Comparability.INCOMPARABLE
+    assert intentional.status is Comparability.DIRECT
+    assert any(
+        item.path == "platform.commit" and item.intentional_candidate_dimension
+        for item in intentional.differences
+    )
 
 
 def test_sqlite_manifest_survives_restart_and_is_immutable(tmp_path) -> None:

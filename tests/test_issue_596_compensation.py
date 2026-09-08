@@ -425,9 +425,7 @@ def test_partial_sequence_continue_and_stop_modes_are_explicit() -> None:
         CompensationStatus.SUCCEEDED,
     )
 
-    stop_resources, stop_statuses = asyncio.run(
-        run_mode(CompensationFailureMode.STOP_AND_ESCALATE)
-    )
+    stop_resources, stop_statuses = asyncio.run(run_mode(CompensationFailureMode.STOP_AND_ESCALATE))
     assert stop_resources == ["third", "second"]
     assert stop_statuses == (
         None,
@@ -720,9 +718,7 @@ def test_plan_failure_hook_reacts_without_owning_plan_lifecycle() -> None:
         group = coordinator.register_group(
             _group(automation=CompensationAutomation.DOWNSTREAM_FAILURE)
         )
-        coordinator.record_completed_side_effect(
-            _action(group, resource="hook", execution_order=1)
-        )
+        coordinator.record_completed_side_effect(_action(group, resource="hook", execution_order=1))
         hooks = PlanCompensationHooks(coordinator.repository, coordinator)
 
         projections = await hooks.after_downstream_failure(
@@ -766,7 +762,9 @@ def test_control_plane_projection_links_attempts_without_exposing_arguments() ->
 
         view = CompensationControlPlaneProjection(coordinator.repository).get_group(group.group_id)
         assert view.actions[0].original_tool_invocation_id == action.tool_invocation_id
-        assert view.actions[0].compensation_tool_invocation_id == result.canonical_tool_invocation_id
+        assert (
+            view.actions[0].compensation_tool_invocation_id == result.canonical_tool_invocation_id
+        )
         assert "do-not-leak" not in repr(view)
         assert not hasattr(view.actions[0], "original_arguments")
         assert not hasattr(view.actions[0], "compensation_arguments")
@@ -781,9 +779,7 @@ def test_newer_plan_revision_is_not_compensated_without_explicit_policy() -> Non
         group = coordinator.register_group(
             _group(automation=CompensationAutomation.DOWNSTREAM_FAILURE)
         )
-        coordinator.record_completed_side_effect(
-            _action(group, resource="old", execution_order=1)
-        )
+        coordinator.record_completed_side_effect(_action(group, resource="old", execution_order=1))
 
         try:
             await coordinator.compensate_group(

@@ -110,12 +110,16 @@ class InMemoryLearningRepository:
         if existing_id is not None:
             return self.get_candidate(existing_id), False
         if candidate.revision != 1:
-            raise ContractError(ErrorCode.CONFLICT, "new learning candidate must start at revision 1")
+            raise ContractError(
+                ErrorCode.CONFLICT, "new learning candidate must start at revision 1"
+            )
         key = (candidate.learning_candidate_id, candidate.revision)
         if key in self._candidates:
             existing = self._candidates[key]
             if existing.content_digest != candidate.content_digest:
-                raise ContractError(ErrorCode.CONFLICT, "learning candidate revision already exists")
+                raise ContractError(
+                    ErrorCode.CONFLICT, "learning candidate revision already exists"
+                )
             return existing, False
         self._candidates[key] = candidate
         self._candidate_keys[dedupe_key] = candidate.learning_candidate_id
@@ -296,7 +300,9 @@ class SQLiteLearningRepository:
     ) -> tuple[LearningCandidate, bool]:
         _require_key(dedupe_key, "candidate dedupe_key")
         if candidate.revision != 1:
-            raise ContractError(ErrorCode.CONFLICT, "new learning candidate must start at revision 1")
+            raise ContractError(
+                ErrorCode.CONFLICT, "new learning candidate must start at revision 1"
+            )
         payload = _dump(candidate_to_dict(candidate))
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
@@ -313,7 +319,8 @@ class SQLiteLearningRepository:
             try:
                 connection.execute(
                     "INSERT INTO learning_candidate_revisions"
-                    "(learning_candidate_id, revision, digest, payload_json, created_at, updated_at) "
+                    "(learning_candidate_id, revision, digest, payload_json, "
+                    "created_at, updated_at) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (
                         candidate.learning_candidate_id,
@@ -372,7 +379,8 @@ class SQLiteLearningRepository:
             try:
                 connection.execute(
                     "INSERT INTO learning_candidate_revisions"
-                    "(learning_candidate_id, revision, digest, payload_json, created_at, updated_at) "
+                    "(learning_candidate_id, revision, digest, payload_json, "
+                    "created_at, updated_at) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (
                         candidate.learning_candidate_id,

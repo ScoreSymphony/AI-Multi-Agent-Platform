@@ -154,6 +154,7 @@ def test_evaluation_suites_and_runs_use_global_search_with_safe_flat_metadata() 
             ),
             baseline_run_id=baseline.run.run_id,
             regression_policy_ref_value=REGRESSION_POLICY_REF,
+            candidate_reference_kinds=frozenset({"platform"}),
         )
 
         exact_suite = await _search(http, type="evaluation-suite", id=suite_ref)

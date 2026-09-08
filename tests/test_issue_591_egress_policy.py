@@ -53,15 +53,21 @@ def _request(
 
 
 def test_merge_uses_strongest_classification() -> None:
-    assert strongest_classification(
-        DataClassification.PUBLIC,
-        DataClassification.CONFIDENTIAL,
-        DataClassification.INTERNAL,
-    ) is DataClassification.CONFIDENTIAL
-    assert strongest_classification(
-        DataClassification.SECRET_REFERENCE,
-        DataClassification.SECRET,
-    ) is DataClassification.SECRET
+    assert (
+        strongest_classification(
+            DataClassification.PUBLIC,
+            DataClassification.CONFIDENTIAL,
+            DataClassification.INTERNAL,
+        )
+        is DataClassification.CONFIDENTIAL
+    )
+    assert (
+        strongest_classification(
+            DataClassification.SECRET_REFERENCE,
+            DataClassification.SECRET,
+        )
+        is DataClassification.SECRET
+    )
 
 
 def test_silent_classification_downgrade_is_rejected() -> None:
@@ -73,12 +79,15 @@ def test_silent_classification_downgrade_is_rejected() -> None:
 
 
 def test_explicit_redaction_policy_can_downgrade_derivative() -> None:
-    assert require_monotonic_classification(
-        DataClassification.SECRET,
-        DataClassification.INTERNAL,
-        redacted=True,
-        policy_decision_id="egress-decision-1",
-    ) is DataClassification.INTERNAL
+    assert (
+        require_monotonic_classification(
+            DataClassification.SECRET,
+            DataClassification.INTERNAL,
+            redacted=True,
+            policy_decision_id="egress-decision-1",
+        )
+        is DataClassification.INTERNAL
+    )
 
 
 def test_unknown_target_posture_fails_closed() -> None:
@@ -176,7 +185,9 @@ def test_gate_applies_required_redaction_before_downgrade() -> None:
     request = replace(_request(DataClassification.SECRET), resource_type="connector_payload")
     payload = {"safe": "ok", "secret": "remove", "nested": {"token": "remove", "keep": 1}}
 
-    transformed, decision = asyncio.run(EgressGate(_RedactingPolicy()).enforce_json(request, payload))
+    transformed, decision = asyncio.run(
+        EgressGate(_RedactingPolicy()).enforce_json(request, payload)
+    )
 
     assert decision.effective_classification is DataClassification.INTERNAL
     assert transformed == {"safe": "ok", "nested": {"keep": 1}}

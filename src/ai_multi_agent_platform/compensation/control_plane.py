@@ -65,9 +65,7 @@ class CompensationControlPlaneProjection:
         for action in self.repository.list_actions(group.group_id):
             request = requests.get(action.action_id)
             result = (
-                None
-                if request is None
-                else self.repository.get_result(request.compensation_id)
+                None if request is None else self.repository.get_result(request.compensation_id)
             )
             descriptor = action.compensation
             views.append(
@@ -115,9 +113,7 @@ class CompensationControlPlaneProjection:
             automation=group.policy.automation.value,
             failure_mode=group.policy.failure_mode.value,
             require_human_approval=group.policy.require_human_approval,
-            manual_intervention_required=any(
-                view.manual_intervention_required for view in views
-            ),
+            manual_intervention_required=any(view.manual_intervention_required for view in views),
             actions=tuple(views),
         )
 

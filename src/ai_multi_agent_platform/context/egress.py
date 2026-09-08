@@ -15,7 +15,12 @@ from ai_multi_agent_platform.contracts import (
 from ai_multi_agent_platform.security.egress import EgressGate
 
 from .models import ContextBundle
-from .rendering import ContextContentProvider, ContextRenderer, ReferenceContextRenderer, RenderedContext
+from .rendering import (
+    ContextContentProvider,
+    ContextRenderer,
+    ReferenceContextRenderer,
+    RenderedContext,
+)
 
 
 class ContextBundleEgressExporter:
@@ -72,5 +77,7 @@ class ContextBundleEgressExporter:
 
 
 def _bundle_classification(bundle: ContextBundle) -> DataClassification:
-    classifications = tuple(DataClassification(entry.data_classification.value) for entry in bundle.entries)
+    classifications = tuple(
+        DataClassification(entry.data_classification.value) for entry in bundle.entries
+    )
     return strongest_classification(*classifications) or DataClassification.PUBLIC

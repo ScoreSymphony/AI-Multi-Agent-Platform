@@ -148,6 +148,8 @@ _REGISTRY_ITEM_SCHEMAS = {
 
 def validate_registry_item_document(document: dict[str, Any]) -> None:
     schema_version = document.get("schema_version")
+    if not isinstance(schema_version, str):
+        raise ValidationError("unsupported registry item schema_version")
     schema = _REGISTRY_ITEM_SCHEMAS.get(schema_version)
     if schema is None:
         raise ValidationError("unsupported registry item schema_version")

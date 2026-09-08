@@ -29,6 +29,7 @@ from ai_multi_agent_platform.evaluation import (
     RegressionPolicy,
     RegressionRule,
     RegressionRuleKind,
+    SqliteEvalManifestRepository,
     SqliteEvaluationRepository,
 )
 
@@ -166,6 +167,7 @@ def test_runner_can_compare_against_baseline_after_repository_restart(tmp_path: 
         suite = _suite()
         baseline_summary = await EvaluationRunner(
             repository=repository,
+            manifest_repository=SqliteEvalManifestRepository(path),
             executor=StatusExecutor("ok"),
             evaluators=(DeterministicAssertionEvaluator(),),
         ).run_suite(suite=suite, snapshot=_snapshot("0.0.1"))
@@ -173,6 +175,7 @@ def test_runner_can_compare_against_baseline_after_repository_restart(tmp_path: 
         reopened = SqliteEvaluationRepository(path)
         summary = await EvaluationRunner(
             repository=reopened,
+            manifest_repository=SqliteEvalManifestRepository(path),
             executor=StatusExecutor("regressed"),
             evaluators=(DeterministicAssertionEvaluator(),),
         ).run_suite(
@@ -189,6 +192,7 @@ def test_runner_can_compare_against_baseline_after_repository_restart(tmp_path: 
                     ),
                 ),
             ),
+            candidate_reference_kinds=frozenset({"platform"}),
         )
 
         assert summary.comparison is not None

@@ -85,7 +85,7 @@ class RepeatPolicy:
             raise ValueError("stability fields are only valid with strategy=stability")
 
     @classmethod
-    def for_run(cls, run: EvaluationRun) -> "RepeatPolicy":
+    def for_run(cls, run: EvaluationRun) -> RepeatPolicy:
         strategy = RepeatStrategy.SINGLE if run.repetitions == 1 else RepeatStrategy.FIXED_N
         return cls(strategy=strategy, repeat_count=run.repetitions)
 
@@ -117,7 +117,7 @@ class SeedPolicy:
             raise ValueError("seed policy limitations must be unique")
 
     @classmethod
-    def conservative_for_run(cls, run: EvaluationRun) -> "SeedPolicy":
+    def conservative_for_run(cls, run: EvaluationRun) -> SeedPolicy:
         if run.seed is None:
             return cls(
                 mode=RandomnessMode.UNKNOWN,
@@ -150,7 +150,7 @@ class ManifestReference:
         _reject_private_identity(self.ref_id)
 
     @classmethod
-    def from_version_reference(cls, value: VersionReference) -> "ManifestReference":
+    def from_version_reference(cls, value: VersionReference) -> ManifestReference:
         return cls(
             kind=value.kind,
             ref_id=value.ref_id,
@@ -375,17 +375,20 @@ class ManifestComparator:
             tuple(_case_payload(item) for item in baseline.cases),
             tuple(_case_payload(item) for item in candidate.cases),
         )
-        self._value(
+        platform_is_candidate = "platform" in candidate_reference_kinds
+        self._candidate_value(
             differences,
             "platform.version",
             baseline.platform_version,
             candidate.platform_version,
+            intentional=platform_is_candidate,
         )
-        self._value(
+        self._candidate_value(
             differences,
             "platform.commit",
             baseline.platform_commit,
             candidate.platform_commit,
+            intentional=platform_is_candidate,
         )
         for path, left, right in (
             (
@@ -456,8 +459,7 @@ class ManifestComparator:
             )
         blocking = any(item.blocking for item in differences)
         warnings = any(
-            not item.blocking and not item.intentional_candidate_dimension
-            for item in differences
+            not item.blocking and not item.intentional_candidate_dimension for item in differences
         )
         status = (
             Comparability.INCOMPARABLE
@@ -467,6 +469,26 @@ class ManifestComparator:
             else Comparability.DIRECT
         )
         return ManifestComparison(status, tuple(differences))
+
+    @staticmethod
+    def _candidate_value(
+        differences: list[ManifestDifference],
+        path: str,
+        baseline: object,
+        candidate: object,
+        *,
+        intentional: bool,
+    ) -> None:
+        if baseline != candidate:
+            differences.append(
+                ManifestDifference(
+                    path,
+                    baseline,
+                    candidate,
+                    blocking=not intentional,
+                    intentional_candidate_dimension=intentional,
+                )
+            )
 
     @staticmethod
     def _value(
@@ -494,12 +516,13 @@ class ManifestComparator:
                 continue
             kind, ref_id = identity
             intentional = kind in candidate_reference_kinds
+            comparison_only = kind in {"regression_policy", "aggregation_policy"}
             differences.append(
                 ManifestDifference(
                     path=f"{path}.{kind}:{ref_id}",
                     baseline=left.get(identity),
                     candidate=right.get(identity),
-                    blocking=not intentional,
+                    blocking=not intentional and not comparison_only,
                     intentional_candidate_dimension=intentional,
                 )
             )
@@ -657,8 +680,7 @@ def decode_manifest(raw: str) -> EvalManifest:
             tuple(
                 SnapshotValue(key=_string(item, "key"), value=_string(item, "value"))
                 for item in (
-                    _object(value, "environment.values[]")
-                    for value in _list(environment, "values")
+                    _object(value, "environment.values[]") for value in _list(environment, "values")
                 )
             )
         ),
@@ -670,9 +692,7 @@ def decode_manifest(raw: str) -> EvalManifest:
         dependencies=_decode_refs(obj, "dependencies"),
         contract_versions=_decode_refs(obj, "contract_versions"),
         workspace=(
-            None
-            if workspace_raw is None
-            else _decode_ref(_object(workspace_raw, "workspace"))
+            None if workspace_raw is None else _decode_ref(_object(workspace_raw, "workspace"))
         ),
         limitations=tuple(_strings(obj, "limitations")),
         schema_version=_string(obj, "schema_version"),

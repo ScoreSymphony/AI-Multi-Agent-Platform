@@ -52,6 +52,7 @@ from .models import (
     VersionReference,
 )
 from .regression import RegressionEngine
+from .reproducibility import EvalManifestContext, RepeatPolicy, SeedPolicy
 from .runner import EvaluationRunner, EvaluationRunSummary
 from .service import EvaluationService
 from .workspace import EvaluationFixtureResolver, ResolvedEvaluationFixtures
@@ -410,6 +411,11 @@ class TargetAwareEvaluationService(EvaluationService):
         baseline_run_id: str | None = None,
         regression_policy_ref_value: str | None = None,
         aggregation_policy_ref_value: str | None = None,
+        repeat_policy: RepeatPolicy | None = None,
+        seed_policy: SeedPolicy | None = None,
+        manifest_context: EvalManifestContext | None = None,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive_comparison: bool = False,
     ) -> EvaluationRunSummary:
         suite = self.get_suite(suite_ref)
         enriched = self._target_enricher.enrich(suite, snapshot)
@@ -421,6 +427,11 @@ class TargetAwareEvaluationService(EvaluationService):
             baseline_run_id=baseline_run_id,
             regression_policy_ref_value=regression_policy_ref_value,
             aggregation_policy_ref_value=aggregation_policy_ref_value,
+            repeat_policy=repeat_policy,
+            seed_policy=seed_policy,
+            manifest_context=manifest_context,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive_comparison=performance_sensitive_comparison,
         )
 
 

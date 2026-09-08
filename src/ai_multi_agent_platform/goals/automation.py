@@ -103,9 +103,7 @@ async def dispatch_goal_automation_delivery(
             )
 
     evidence = (
-        ()
-        if evidence_resolver is None
-        else await evidence_resolver(current, automation, delivery)
+        () if evidence_resolver is None else await evidence_resolver(current, automation, delivery)
     )
     reviewed = await goals.review_goal(
         goal_id=goal_id,

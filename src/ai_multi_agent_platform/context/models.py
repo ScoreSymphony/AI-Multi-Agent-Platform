@@ -272,10 +272,7 @@ class ContextCandidate:
             raise ValueError(
                 "secret-classified context must remain a reference, never inline content"
             )
-        if (
-            self.data_classification is ContextDataClassification.SECRET_REFERENCE
-            and self.metadata
-        ):
+        if self.data_classification is ContextDataClassification.SECRET_REFERENCE and self.metadata:
             raise ValueError("secret-classified context metadata must be empty")
         if self.inline_content is not None:
             digest = _sha256_text(self.inline_content)
@@ -342,10 +339,7 @@ class ContextEntry:
             and self.inline_content is not None
         ):
             raise ValueError("secret-classified context must remain a reference")
-        if (
-            self.data_classification is ContextDataClassification.SECRET_REFERENCE
-            and self.metadata
-        ):
+        if self.data_classification is ContextDataClassification.SECRET_REFERENCE and self.metadata:
             raise ValueError("secret-classified context metadata must be empty")
         object.__setattr__(self, "security_labels", tuple(self.security_labels))
         object.__setattr__(self, "metadata", _freeze_json_mapping(self.metadata))

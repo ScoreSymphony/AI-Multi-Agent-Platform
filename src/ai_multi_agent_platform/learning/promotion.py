@@ -398,7 +398,7 @@ def _mapping(value: JsonValue, name: str) -> dict[str, JsonValue]:
                 ErrorCode.INVALID_REQUEST,
                 f"{name} keys must be non-blank strings",
             )
-        result[key] = cast(JsonValue, item)
+        result[key] = item
     return result
 
 

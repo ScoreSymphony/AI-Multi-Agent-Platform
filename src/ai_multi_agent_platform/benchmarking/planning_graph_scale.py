@@ -88,10 +88,10 @@ class PlanningGraphScaleBenchmarkSpec:
             raise ValueError("safety_max_repetitions must be at least 1")
         if max(self.step_counts) > self.safety_max_steps_per_plan:
             raise ValueError("step_counts exceed configured planning-graph safety bound")
-        if self.repetitions > self.safety_max_repetitions:
-            raise ValueError("repetitions exceed configured planning-graph safety bound")
         if self.warmup_repetitions > self.safety_max_repetitions:
             raise ValueError("warmup_repetitions exceed configured planning-graph safety bound")
+        if self.repetitions > self.safety_max_repetitions:
+            raise ValueError("repetitions exceed configured planning-graph safety bound")
 
     def to_dict(self) -> dict[str, Any]:
         return {

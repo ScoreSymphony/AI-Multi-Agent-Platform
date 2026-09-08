@@ -165,7 +165,9 @@ class LearningGatePlan:
         if self.policy_version < 1:
             raise ValueError("learning gate policy_version must be >= 1")
         if not self.require_evaluation and not self.require_verification:
-            raise ValueError("promotable learning policy must require evaluation and/or verification")
+            raise ValueError(
+                "promotable learning policy must require evaluation and/or verification"
+            )
         if len(set(self.approval_required_risks)) != len(self.approval_required_risks):
             raise ValueError("approval-required risk classes must be unique")
         for value in (*self.evaluation_suite_refs, *self.verification_policy_refs):
@@ -438,7 +440,9 @@ def candidate_to_dict(
         "status": candidate.status.value,
         "project_id": candidate.project_id,
         "superseded_by": candidate.superseded_by,
-        "promotion": None if candidate.promotion is None else promotion_to_dict(candidate.promotion),
+        "promotion": None
+        if candidate.promotion is None
+        else promotion_to_dict(candidate.promotion),
         "created_at": candidate.created_at.isoformat(),
         "updated_at": candidate.updated_at.isoformat(),
         "provenance": (

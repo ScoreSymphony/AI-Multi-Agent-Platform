@@ -137,7 +137,10 @@ class EgressDecision:
 
         if self.request_id != request.request_id:
             raise ValueError("egress decision request_id does not match request")
-        if self.target_kind is not request.target.kind or self.target_id != request.target.target_id:
+        if (
+            self.target_kind is not request.target.kind
+            or self.target_id != request.target.target_id
+        ):
             raise ValueError("egress decision target does not match request")
         if request.classification is None:
             if self.effective_classification is not None:
@@ -148,7 +151,9 @@ class EgressDecision:
         if classification_strength(self.effective_classification) < classification_strength(
             request.classification
         ) and not (self.required_redactions or self.minimized):
-            raise ValueError("egress classification downgrade requires explicit redaction/minimization")
+            raise ValueError(
+                "egress classification downgrade requires explicit redaction/minimization"
+            )
 
 
 @dataclass(frozen=True, slots=True)

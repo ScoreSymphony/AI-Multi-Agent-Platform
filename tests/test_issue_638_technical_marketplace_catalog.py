@@ -14,7 +14,6 @@ from ai_multi_agent_platform.distribution import (
     registry_item_from_document,
 )
 
-
 CATALOG = Path(__file__).parents[1] / "catalogs" / "technical-components" / "catalog.json"
 EXPECTED_CODE_INTELLIGENCE = {
     "projectatlas",

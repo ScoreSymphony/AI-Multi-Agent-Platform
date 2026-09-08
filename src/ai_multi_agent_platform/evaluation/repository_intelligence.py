@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from time import perf_counter_ns
 
-from jsonschema import Draft202012Validator
+from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
 from ai_multi_agent_platform.capabilities import CapabilityToolProvider
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext, ToolInvocation
@@ -93,7 +93,7 @@ class RepositoryIntelligenceEvaluationCaseExecutor:
                 key=lambda error: tuple(str(part) for part in error.absolute_path),
             )
         )
-        contract_errors = [_schema_error(error) for error in schema_errors]
+        contract_errors: list[JsonValue] = [_schema_error(error) for error in schema_errors]
         provenance = _provenance_evidence(
             operation=operation,
             output=output,

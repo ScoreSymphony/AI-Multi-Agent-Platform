@@ -17,10 +17,12 @@ from ai_multi_agent_platform.security.egress import EgressGate
 from .invocation import (
     ApprovalHook,
     CanonicalInvocationBindingHook,
-    CapabilityInvoker as BaseCapabilityInvoker,
     GovernanceBindingHook,
     InvocationObserver,
     PolicyHook,
+)
+from .invocation import (
+    CapabilityInvoker as BaseCapabilityInvoker,
 )
 from .registry import CapabilityRegistry
 from .types import (
@@ -109,7 +111,10 @@ def _capability_posture(
     node_id: str | None,
     worker_id: str | None,
 ) -> EgressTargetPosture:
-    if capability.side_effects is SideEffectClassification.EXTERNAL or "external" in capability.tags:
+    if (
+        capability.side_effects is SideEffectClassification.EXTERNAL
+        or "external" in capability.tags
+    ):
         return EgressTargetPosture.EXTERNAL
     if node_id is not None or worker_id is not None:
         return EgressTargetPosture.INTERNAL

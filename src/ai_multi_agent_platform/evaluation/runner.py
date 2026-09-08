@@ -237,9 +237,9 @@ class EvaluationRunner:
             self._require_comparable_manifests(manifest_comparison)
 
         self._repository.save_run(run)
-        self._manifest_repository.save_manifest(manifest)
 
         try:
+            self._manifest_repository.save_manifest(manifest)
             for repetition_index in range(repetitions):
                 repetition_seed = self._seed_for_repetition(
                     legacy_seed=seed,
@@ -305,10 +305,14 @@ class EvaluationRunner:
 
     @staticmethod
     def _validate_seed_policy(policy: SeedPolicy, *, repetitions: int) -> None:
-        if policy.mode in {
-            RandomnessMode.FIXED_SEED_SUPPORTED,
-            RandomnessMode.FIXED_SEED_UNSUPPORTED,
-        } and len(policy.ordered_seeds) != repetitions:
+        if (
+            policy.mode
+            in {
+                RandomnessMode.FIXED_SEED_SUPPORTED,
+                RandomnessMode.FIXED_SEED_UNSUPPORTED,
+            }
+            and len(policy.ordered_seeds) != repetitions
+        ):
             raise ValueError("fixed seed policies require one ordered seed per repetition")
 
     @staticmethod

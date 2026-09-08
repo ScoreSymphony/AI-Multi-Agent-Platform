@@ -13,13 +13,12 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import resource
-import shutil
 import stat
 import subprocess
 import tempfile
 import time
+from pathlib import Path
 from typing import Any
 
 PINNED_VERSION = "0.4.5"
@@ -255,7 +254,9 @@ def run_pilot(binary: Path) -> dict[str, Any]:
         if source_digest_after != source_digest_before:
             raise RuntimeError("ProjectAtlas modified canonical source during the contained pilot")
         if (source_root / ".projectatlas").exists():
-            raise RuntimeError("ProjectAtlas created project-local state despite explicit external DB")
+            raise RuntimeError(
+                "ProjectAtlas created project-local state despite explicit external DB"
+            )
         if not database.is_file() or database.stat().st_size <= 0:
             raise RuntimeError("ProjectAtlas did not create its external derived-state database")
         if not _contains(outputs["search"], "needle") or not _contains(
@@ -279,8 +280,8 @@ def run_pilot(binary: Path) -> dict[str, Any]:
             "provider_state_bytes": state_bytes,
             "network_isolation_verified": False,
             "network_isolation_note": (
-                "This functional harness strips secrets but does not itself create a network namespace. "
-                "Egress denial remains a separate containment gate before adoption."
+                "This functional harness strips secrets but does not itself create a network "
+                "namespace. Egress denial remains a separate containment gate before adoption."
             ),
             "commands": measurements,
             "checks": {

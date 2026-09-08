@@ -19,10 +19,10 @@ from ai_multi_agent_platform.security.egress import EgressGate
 
 from .models import (
     ConnectorActionResult,
+    ConnectorSyncResult,
     ExternalNativeReference,
     ExternalResourceReference,
     SyncMode,
-    ConnectorSyncResult,
 )
 from .registry import ConnectorRegistry
 from .repository import ConnectorRepository

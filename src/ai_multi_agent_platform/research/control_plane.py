@@ -701,7 +701,7 @@ def _safe_metadata(value: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
             ErrorCode.CONTRACT_VIOLATION,
             "Research metadata could not be projected",
         )
-    return cast(dict[str, JsonValue], sanitized)
+    return sanitized
 
 
 def _freshness_policy(value: JsonValue) -> FreshnessPolicy:
@@ -713,9 +713,7 @@ def _freshness_policy(value: JsonValue) -> FreshnessPolicy:
             "freshness_policy must be an object",
         )
     raw_age = value.get("max_age_seconds")
-    if raw_age is not None and (
-        isinstance(raw_age, bool) or not isinstance(raw_age, (int, float))
-    ):
+    if raw_age is not None and (isinstance(raw_age, bool) or not isinstance(raw_age, (int, float))):
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
             "max_age_seconds must be numeric or null",

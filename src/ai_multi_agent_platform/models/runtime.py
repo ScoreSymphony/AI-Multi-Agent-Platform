@@ -262,7 +262,7 @@ def _allowed_classifications(config: ModelConfiguration) -> tuple[DataClassifica
             provider_id=config.provider_id,
         )
     try:
-        return tuple(DataClassification(item) for item in raw)
+        return tuple(DataClassification(item) for item in raw if isinstance(item, str))
     except ValueError as exc:
         raise ContractError(
             ErrorCode.INVALID_CONFIGURATION,

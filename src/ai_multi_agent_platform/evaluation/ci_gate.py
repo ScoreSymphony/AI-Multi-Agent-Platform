@@ -17,6 +17,7 @@ from .config import (
     load_regression_policy,
 )
 from .evaluators import DeterministicAssertionEvaluator, MetricThresholdEvaluator
+from .manifest_repository import InMemoryEvalManifestRepository
 from .models import (
     ComparisonFinding,
     ConfigurationSnapshot,
@@ -30,6 +31,7 @@ from .models import (
 )
 from .reference import KernelEvaluationCaseExecutor
 from .repository import InMemoryEvaluationRepository
+from .reproducibility import EvalManifestBuilder, RepeatPolicy, SeedPolicy
 from .runner import EvaluationRunner, EvaluationRunSummary
 
 _REFERENCE_WORKSPACE = "evaluation-ci"
@@ -192,10 +194,20 @@ async def run_reference_ci_gate(
         source="evaluation-ci-gate",
         poll_interval_seconds=0.001,
     )
+    manifest_repository = InMemoryEvalManifestRepository()
+    manifest_repository.save_manifest(
+        EvalManifestBuilder().build(
+            run=baseline.run,
+            suite=suite,
+            repeat_policy=RepeatPolicy.for_run(baseline.run),
+            seed_policy=SeedPolicy.conservative_for_run(baseline.run),
+        )
+    )
     runner = EvaluationRunner(
         repository=repository,
         executor=case_executor,
         evaluators=evaluators,
+        manifest_repository=manifest_repository,
     )
 
     snapshot = ConfigurationSnapshot(
@@ -241,6 +253,7 @@ async def run_reference_ci_gate(
         seed=_REFERENCE_SEED,
         baseline_run_id=baseline.run.run_id,
         regression_policy=policy,
+        candidate_reference_kinds=frozenset({"platform", "orchestrator", "executor", "evaluator"}),
     )
     return EvaluationCIGateReport(
         summary=summary,

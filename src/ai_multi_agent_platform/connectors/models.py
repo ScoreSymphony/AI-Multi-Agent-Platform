@@ -252,6 +252,7 @@ class ExternalResourceReference:
         object.__setattr__(self, "classification", _normalize_classification(self.classification))
 
     def to_dict(self) -> dict[str, JsonValue]:
+        classification = _normalize_classification(self.classification)
         return {
             "id": self.id,
             "connection_id": self.connection_id,
@@ -265,9 +266,7 @@ class ExternalResourceReference:
             "revision": self.revision,
             "provenance": dict(self.provenance),
             "metadata": dict(self.metadata),
-            "classification": (
-                None if self.classification is None else self.classification.value
-            ),
+            "classification": None if classification is None else classification.value,
         }
 
 

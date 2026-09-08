@@ -79,8 +79,7 @@ class SqliteEvalManifestRepository:
         try:
             with self._connect() as connection:
                 row = connection.execute(
-                    "SELECT manifest_digest FROM evaluation_manifests "
-                    "WHERE evaluation_run_id = ?",
+                    "SELECT manifest_digest FROM evaluation_manifests WHERE evaluation_run_id = ?",
                     (manifest.evaluation_run_id,),
                 ).fetchone()
                 if row is not None and str(row["manifest_digest"]) != manifest.manifest_digest:

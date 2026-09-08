@@ -347,9 +347,7 @@ class EvaluationService:
         if manifest_comparison.status is Comparability.UNKNOWN:
             raise ValueError("evaluation comparison requires canonical EvalManifests for both runs")
         if manifest_comparison.status is Comparability.INCOMPARABLE:
-            changed = ", ".join(
-                item.path for item in manifest_comparison.blocking_differences
-            )
+            changed = ", ".join(item.path for item in manifest_comparison.blocking_differences)
             raise ValueError(f"evaluation manifests are incomparable: {changed}")
 
         aggregation_policy = (

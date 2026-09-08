@@ -177,18 +177,14 @@ def test_control_plane_roundtrip_exposes_exact_source_and_freshness_provenance()
     assert source_view["current_binding"]["content_digest"] == "sha256:changed"
 
     observations = run(
-        control_plane.resources[RESEARCH_OBSERVATION_COLLECTION].list_resources(
-            owner, PageQuery()
-        )
+        control_plane.resources[RESEARCH_OBSERVATION_COLLECTION].list_resources(owner, PageQuery())
     )
     assert isinstance(observations, tuple)
     assert len(observations) == 2
     assert observations[0]["content_digest"] == "sha256:first"
     assert observations[1]["content_digest"] == "sha256:changed"
 
-    item_view = run(
-        control_plane.resources[RESEARCH_ITEM_COLLECTION].get_resource(owner, item_id)
-    )
+    item_view = run(control_plane.resources[RESEARCH_ITEM_COLLECTION].get_resource(owner, item_id))
     assert isinstance(item_view, dict)
     assert item_view["evidence_freshness"][evidence_id] == "stale"
     assert item_view["task_id"] is None

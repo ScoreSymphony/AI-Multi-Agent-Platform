@@ -11,7 +11,11 @@ from typing import Any, cast
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.domain import Provenance
-from ai_multi_agent_platform.evaluation import EvaluationOutcome, EvaluationRunStatus, EvaluationService
+from ai_multi_agent_platform.evaluation import (
+    EvaluationOutcome,
+    EvaluationRunStatus,
+    EvaluationService,
+)
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     AuthorizationAction,
@@ -134,7 +138,8 @@ class LearningQualityGate:
         if self.verification is None:
             raise ContractError(
                 ErrorCode.UNAVAILABLE,
-                "learning candidate requires Verification but no Verification service is configured",
+                "learning candidate requires Verification but no Verification "
+                "service is configured",
             )
         if not candidate.verification_ids:
             raise ContractError(
@@ -419,7 +424,10 @@ class LearningService:
     ) -> LearningCandidate:
         current = self.repository.get_candidate(learning_candidate_id)
         self._require_expected_revision(current, expected_revision)
-        if current.status in _TERMINAL_STATUSES or current.status is LearningCandidateStatus.ACCEPTED:
+        if (
+            current.status in _TERMINAL_STATUSES
+            or current.status is LearningCandidateStatus.ACCEPTED
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"cannot add gate evidence to candidate in {current.status.value} status",
@@ -592,8 +600,7 @@ class LearningService:
                         f"{current.gate_plan.policy_id}@{current.gate_plan.policy_version}"
                     ),
                     policy_id=(
-                        f"learning:{current.gate_plan.policy_id}@"
-                        f"{current.gate_plan.policy_version}"
+                        f"learning:{current.gate_plan.policy_id}@{current.gate_plan.policy_version}"
                     ),
                     risk=current.risk,
                 )
@@ -643,7 +650,10 @@ class LearningService:
             _append_reference(source_refs, reference)
         for reference in incoming.evidence_refs:
             _append_reference(evidence_refs, reference)
-        if tuple(source_refs) == current.source_refs and tuple(evidence_refs) == current.evidence_refs:
+        if (
+            tuple(source_refs) == current.source_refs
+            and tuple(evidence_refs) == current.evidence_refs
+        ):
             return current
         return self._append(
             current,
@@ -711,8 +721,7 @@ def _promotion_action(
             "target_type": candidate.target.resource_type.value,
         },
         payload_ref=(
-            f"{candidate.learning_candidate_id}@r{candidate.revision}"
-            f"#{candidate.content_digest}"
+            f"{candidate.learning_candidate_id}@r{candidate.revision}#{candidate.content_digest}"
         ),
     )
 
