@@ -330,7 +330,11 @@ class EvaluationRunner:
                 current_results=current_comparable,
                 policy=regression_policy,
             )
-            self._repository.save_comparison(comparison)
+            self._repository.save_comparison(
+                comparison,
+                candidate_reference_kinds=candidate_reference_kinds,
+                performance_sensitive=performance_sensitive_comparison,
+            )
 
         return EvaluationRunSummary(
             run=completed,

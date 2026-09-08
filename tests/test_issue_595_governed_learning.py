@@ -36,6 +36,7 @@ from ai_multi_agent_platform.learning import (
 from ai_multi_agent_platform.models import (
     JsonModelRoutingProfileRepository,
     ModelRoutingProfilePolicy,
+    ModelRoutingProfileRef,
     ModelRoutingProfileService,
     RoutingRequirements,
 )
@@ -546,7 +547,9 @@ def test_routing_profile_proposal_evaluation_and_promotion(tmp_path: Path) -> No
         )
     )
     definition = routing_repository.get_definition(original.profile_id)
-    latest = routing_repository.get_revision(definition.current_ref)
+    latest = routing_repository.get_revision(
+        ModelRoutingProfileRef(definition.profile_id, definition.current_revision)
+    )
 
     assert promoted.status is LearningCandidateStatus.PROMOTED
     assert latest.revision == original.revision + 1

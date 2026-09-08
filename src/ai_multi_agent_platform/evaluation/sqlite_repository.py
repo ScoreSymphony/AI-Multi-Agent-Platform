@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -122,6 +123,15 @@ class SqliteEvaluationRepository:
                         policy_id TEXT NOT NULL,
                         policy_version TEXT NOT NULL,
                         comparison_json TEXT NOT NULL
+                    )
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS evaluation_comparison_lenses (
+                        current_run_id TEXT PRIMARY KEY,
+                        candidate_reference_kinds_json TEXT NOT NULL,
+                        performance_sensitive INTEGER NOT NULL
                     )
                     """
                 )
@@ -478,10 +488,17 @@ class SqliteEvaluationRepository:
             ) from exc
         return tuple(self._decode_result(str(row["result_json"])) for row in rows)
 
-    def save_comparison(self, comparison: ComparisonReport) -> None:
+    def save_comparison(
+        self,
+        comparison: ComparisonReport,
+        *,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> None:
         self._require_run(comparison.current_run_id)
         self._require_run(comparison.baseline_run_id)
         raw = self._encode_comparison(comparison)
+        lens_raw = json.dumps(sorted(candidate_reference_kinds), separators=(",", ":"))
         try:
             with self._connect() as connection:
                 connection.execute(
@@ -503,6 +520,17 @@ class SqliteEvaluationRepository:
                         raw,
                     ),
                 )
+                connection.execute(
+                    """
+                    INSERT INTO evaluation_comparison_lenses(
+                        current_run_id, candidate_reference_kinds_json, performance_sensitive
+                    ) VALUES (?, ?, ?)
+                    ON CONFLICT(current_run_id) DO UPDATE SET
+                        candidate_reference_kinds_json = excluded.candidate_reference_kinds_json,
+                        performance_sensitive = excluded.performance_sensitive
+                    """,
+                    (comparison.current_run_id, lens_raw, int(performance_sensitive)),
+                )
         except sqlite3.Error as exc:
             raise ContractError(
                 ErrorCode.BACKEND_ERROR,
@@ -522,3 +550,34 @@ class SqliteEvaluationRepository:
                 "failed to read evaluation comparison",
             ) from exc
         return None if row is None else self._decode_comparison(str(row["comparison_json"]))
+
+    def get_comparison_lens(self, current_run_id: str) -> tuple[frozenset[str], bool] | None:
+        try:
+            with self._connect() as connection:
+                row = connection.execute(
+                    "SELECT candidate_reference_kinds_json, performance_sensitive "
+                    "FROM evaluation_comparison_lenses WHERE current_run_id = ?",
+                    (current_run_id,),
+                ).fetchone()
+        except sqlite3.Error as exc:
+            raise ContractError(
+                ErrorCode.BACKEND_ERROR,
+                "failed to read evaluation comparison lens",
+            ) from exc
+        if row is None:
+            return None
+        try:
+            raw_kinds = json.loads(str(row["candidate_reference_kinds_json"]))
+        except json.JSONDecodeError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "stored evaluation comparison lens is invalid",
+            ) from exc
+        if not isinstance(raw_kinds, list) or any(
+            not isinstance(item, str) or not item.strip() for item in raw_kinds
+        ):
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "stored evaluation comparison lens is invalid",
+            )
+        return frozenset(raw_kinds), bool(row["performance_sensitive"])

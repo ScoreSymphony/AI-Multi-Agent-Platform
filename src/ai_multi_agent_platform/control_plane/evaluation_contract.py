@@ -231,9 +231,16 @@ def _run_detail_resource(detail: EvaluationRunDetail) -> dict[str, JsonValue]:
     resource = _run_resource(detail.run)
     resource["results"] = [_result_resource(item) for item in detail.results]
     resource["aggregates"] = [_aggregate_resource(item) for item in detail.aggregates]
-    resource["comparison"] = (
-        None if detail.comparison is None else _comparison_resource(detail.comparison)
-    )
+    if detail.comparison is None:
+        resource["comparison"] = None
+    else:
+        comparison_resource = _comparison_resource(detail.comparison)
+        if detail.manifest_comparison is not None:
+            comparison_resource["manifest_comparison"] = cast(
+                JsonValue,
+                _manifest_comparison_resource(detail.manifest_comparison),
+            )
+        resource["comparison"] = comparison_resource
     resource["manifest"] = (
         None
         if detail.manifest is None

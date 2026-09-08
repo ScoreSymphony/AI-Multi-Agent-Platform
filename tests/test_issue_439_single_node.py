@@ -157,7 +157,10 @@ def test_public_single_node_composes_planning_and_hands_activation_to_coordinato
         assert agent_runs[0].agent.revision == 1
         assert agent_runs[0].selected_model_config_id == model_config_id
         assert model_provider.calls
-        assert model_provider.calls[-1].messages[-1] == planned_step.objective
+        assert any(
+            planned_step.objective in message for message in model_provider.calls[-1].messages
+        )
+        assert any(message.startswith("[context:") for message in model_provider.calls[-1].messages)
 
         assert "planning-proposals" in deployment.control_plane.registered_collections
         assert "planning.propose" in deployment.control_plane.registered_commands

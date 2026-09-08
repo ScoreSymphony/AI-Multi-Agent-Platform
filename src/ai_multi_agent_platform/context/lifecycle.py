@@ -476,7 +476,10 @@ def _actor_from_operation(context: OperationContext) -> ActorIdentity:
             ErrorCode.UNAUTHORIZED,
             f"unsupported Context actor owner_type: {context.owner_type!r}",
         )
-    return ActorIdentity(context.owner_id, actor_type)
+    actor_ref = context.owner_id
+    if ":" not in actor_ref and not actor_ref.startswith(f"{context.owner_type}_"):
+        actor_ref = f"{context.owner_type}:{actor_ref}"
+    return ActorIdentity(actor_ref, actor_type)
 
 
 def _required_metadata_string(
