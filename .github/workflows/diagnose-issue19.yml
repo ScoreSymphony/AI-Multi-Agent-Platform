@@ -1,0 +1,35 @@
+name: Diagnose issue 19 integration
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+    paths:
+      - .github/workflows/diagnose-issue19.yml
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: integration/active-branches-2026-09-08
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Instrument and run failing evaluation product test
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/test_issue_19_product_completion.py')
+          text = path.read_text()
+          anchor = '        assert all(result["outcome"] == "passed" for result in results)\n'
+          if anchor not in text:
+              raise SystemExit('result assertion anchor missing')
+          path.write_text(text.replace(anchor, '        print("ISSUE19_RESULTS", repr(results))\n' + anchor, 1))
+          PY
+          pytest -vv -s tests/test_issue_19_product_completion.py::test_agent_model_target_runs_through_product_evaluation_and_server_snapshot
