@@ -23,7 +23,7 @@ jobs:
           cache: pip
       - name: Install
         run: python -m pip install -e ".[dev]"
-      - name: Expose denied resource type and rerun issue 19
+      - name: Verify exact evaluation authorization boundary
         shell: bash
         run: |
           python - <<'PY'
@@ -40,7 +40,7 @@ jobs:
           deployment = Path('src/ai_multi_agent_platform/deployment/single_node.py')
           text = deployment.read_text()
           old = '                resource_types=frozenset({ResourceType.RUN}),\n'
-          new = '''                resource_types=frozenset(\n                    {ResourceType.RUN, ResourceType.TASK, ResourceType.AGENT}\n                ),\n'''
+          new = '''                resource_types=frozenset(\n                    {\n                        ResourceType.RUN,\n                        ResourceType.TASK,\n                        ResourceType.AGENT,\n                        ResourceType.FILE,\n                    }\n                ),\n'''
           if old not in text:
               raise SystemExit('evaluation policy anchor missing')
           deployment.write_text(text.replace(old, new, 1))
