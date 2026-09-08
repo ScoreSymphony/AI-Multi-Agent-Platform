@@ -225,6 +225,12 @@ export interface RunEvaluationInput {
   performance_sensitive?: boolean;
 }
 
+export interface CompareEvaluationOptions {
+  aggregation_policy_ref?: string | null;
+  candidate_reference_kinds?: string[];
+  performance_sensitive?: boolean;
+}
+
 export interface EvaluationClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
@@ -319,15 +325,24 @@ export class EvaluationClient {
     baselineRunId: string,
     regressionPolicyRef: string,
     idempotencyKey: string = crypto.randomUUID(),
+    options: CompareEvaluationOptions = {},
   ): Promise<CanonicalEvaluationComparison> {
     if (!baselineRunId.trim()) throw new Error("baseline evaluation run id is required");
     if (!regressionPolicyRef.trim()) throw new Error("regression policy ref is required");
+    const aggregationPolicyRef = optionalNonBlank(options.aggregation_policy_ref);
     return this.command<CanonicalEvaluationComparison>(
       "evaluation.compare",
       currentRunId,
       {
         baseline_run_id: baselineRunId,
         regression_policy_ref: regressionPolicyRef,
+        ...(aggregationPolicyRef === null ? {} : { aggregation_policy_ref: aggregationPolicyRef }),
+        ...(options.candidate_reference_kinds === undefined
+          ? {}
+          : { candidate_reference_kinds: options.candidate_reference_kinds }),
+        ...(options.performance_sensitive === undefined
+          ? {}
+          : { performance_sensitive: options.performance_sensitive }),
       },
       idempotencyKey,
     );
