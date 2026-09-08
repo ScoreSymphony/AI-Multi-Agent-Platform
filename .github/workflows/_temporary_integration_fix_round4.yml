@@ -1,0 +1,107 @@
+name: Temporary integration fix validation round 4
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+    paths:
+      - .github/workflows/_temporary_integration_fix_round4.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integration/active-branches-2026-09-08
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install development dependencies
+        run: python -m pip install -e '.[dev]'
+
+      - name: Reuse integration fix script from round 3
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/_temporary_integration_fix_round3.yml').read_text(
+              encoding='utf-8'
+          )
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          lines = workflow[start:end].splitlines()
+          script = "\n".join(
+              line[10:] if line.startswith("          ") else line for line in lines
+          )
+          Path('/tmp/integration_fix.py').write_text(script + '\n', encoding='utf-8')
+          PY
+          python /tmp/integration_fix.py
+
+      - name: Format and lint changed Python files
+        run: |
+          python -m ruff format \
+            src/ai_multi_agent_platform/repository_intelligence/resources.py \
+            src/ai_multi_agent_platform/planning/evidence.py \
+            src/ai_multi_agent_platform/handoffs/repository.py \
+            src/ai_multi_agent_platform/handoffs/service.py \
+            src/ai_multi_agent_platform/handoffs/control_plane.py \
+            src/ai_multi_agent_platform/deployment/handoff_composition.py \
+            src/ai_multi_agent_platform/deployment/durable_connectors.py \
+            src/ai_multi_agent_platform/agents/runtime.py \
+            src/ai_multi_agent_platform/evaluation/runner.py
+          python -m ruff check \
+            src/ai_multi_agent_platform/repository_intelligence/resources.py \
+            src/ai_multi_agent_platform/planning/evidence.py \
+            src/ai_multi_agent_platform/handoffs/repository.py \
+            src/ai_multi_agent_platform/handoffs/service.py \
+            src/ai_multi_agent_platform/handoffs/control_plane.py \
+            src/ai_multi_agent_platform/deployment/handoff_composition.py \
+            src/ai_multi_agent_platform/deployment/durable_connectors.py \
+            src/ai_multi_agent_platform/agents/runtime.py \
+            src/ai_multi_agent_platform/evaluation/runner.py
+
+      - name: Validate circular-import fixes in fresh interpreters
+        run: |
+          python -c "from ai_multi_agent_platform.repository_intelligence.resources import RepositoryResourceEstimate"
+          python -c "from ai_multi_agent_platform.planning.evidence import PlanningEvidence"
+
+      - name: Run targeted regression tests
+        run: |
+          python -m pytest -q \
+            tests/test_issue_650_single_node_context_e2e.py \
+            tests/test_issue_651_deployment_composition.py \
+            tests/contract/research/test_research_single_node_composition.py \
+            tests/contract/research/test_research_team_integration.py \
+            tests/test_issue_289_global_search_acceptance.py \
+            tests/test_issue_598_single_node_integration.py \
+            tests/test_evaluation_aggregation.py
+
+      - name: Commit validated fixes and remove temporary workflows
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm \
+            .github/workflows/_temporary_integration_fix_round3.yml \
+            .github/workflows/_temporary_integration_fix_round4.yml
+          git add \
+            src/ai_multi_agent_platform/repository_intelligence/resources.py \
+            src/ai_multi_agent_platform/planning/evidence.py \
+            src/ai_multi_agent_platform/handoffs/repository.py \
+            src/ai_multi_agent_platform/handoffs/service.py \
+            src/ai_multi_agent_platform/handoffs/control_plane.py \
+            src/ai_multi_agent_platform/deployment/handoff_composition.py \
+            src/ai_multi_agent_platform/deployment/durable_connectors.py \
+            src/ai_multi_agent_platform/agents/runtime.py \
+            src/ai_multi_agent_platform/evaluation/runner.py
+          git commit -m 'fix: resolve integration root-cause regressions'
+          git push origin HEAD:integration/active-branches-2026-09-08
