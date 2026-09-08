@@ -422,7 +422,7 @@ export function GoalDetailPage({ client, goalId }: { client: GoalClient; goalId:
   );
 }
 
-function GoalTable({ goals }: { goals: CanonicalGoal[] }) {
+export function GoalTable({ goals }: { goals: CanonicalGoal[] }) {
   if (goals.length === 0) return <EmptyState title="No Goals configured" />;
   return (
     <div className="table-wrap">
@@ -597,13 +597,13 @@ function parseCriteria(raw: string): CanonicalGoalCriterion[] {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error("success criteria must be a non-empty JSON array");
   }
-  return value as CanonicalGoalCriterion[];
+  return value as unknown as CanonicalGoalCriterion[];
 }
 
 function parseEvidence(raw: string): GoalEvidenceInput[] {
   const value = parseJson(raw, "evidence");
   if (!Array.isArray(value)) throw new Error("evidence must be a JSON array");
-  return value as GoalEvidenceInput[];
+  return value as unknown as GoalEvidenceInput[];
 }
 
 function parseJson(raw: string, label: string): JsonValue {
