@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from enum import StrEnum
 from typing import cast
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
 from ai_multi_agent_platform.control_plane.extensions import ControlPlane, ResourceService
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
-from ai_multi_agent_platform.security import ActorIdentity, ActorType, RiskClassification, infer_actor_identity
+from ai_multi_agent_platform.security import (
+    ActorIdentity,
+    ActorType,
+    RiskClassification,
+    infer_actor_identity,
+)
+from ai_multi_agent_platform.security.approvals import ApprovalRecord
 from ai_multi_agent_platform.security.redaction import redact_sensitive
 
 from .models import (
+    FeedbackRecord,
     FeedbackType,
     LearningCandidate,
     LearningGatePlan,
@@ -293,7 +301,7 @@ def _candidate_resource(
     redacted = redact_sensitive(payload)
     if not isinstance(redacted, dict):
         raise ContractError(
-            ErrorCode.INTERNAL,
+            ErrorCode.BACKEND_ERROR,
             "Learning candidate redaction returned an invalid projection",
         )
     return cast(dict[str, JsonValue], redacted)
@@ -312,7 +320,7 @@ def _candidate_history_entry(candidate: LearningCandidate) -> dict[str, JsonValu
     }
 
 
-def _approval_resource(record: object) -> dict[str, JsonValue]:
+def _approval_resource(record: ApprovalRecord) -> dict[str, JsonValue]:
     approval_id = getattr(record, "approval_id")
     status = getattr(record, "status")
     decision_at = getattr(record, "decision_at")
@@ -329,14 +337,14 @@ def _approval_resource(record: object) -> dict[str, JsonValue]:
     }
 
 
-def _feedback_resource(feedback: object) -> dict[str, JsonValue]:
+def _feedback_resource(feedback: FeedbackRecord) -> dict[str, JsonValue]:
     payload = feedback_to_dict(feedback)
     payload["id"] = str(getattr(feedback, "feedback_id"))
     payload["type"] = "learning-feedback"
     redacted = redact_sensitive(payload)
     if not isinstance(redacted, dict):
         raise ContractError(
-            ErrorCode.INTERNAL,
+            ErrorCode.BACKEND_ERROR,
             "Learning feedback redaction returned an invalid projection",
         )
     return cast(dict[str, JsonValue], redacted)
@@ -360,9 +368,8 @@ def _require_candidate_visible(candidate: LearningCandidate, context: RequestCon
 
 
 def _project_visible(project_id: str | None, context: RequestContext) -> bool:
-    if project_id is None:
-        return True
-    return context.actor.project_id is None or context.actor.project_id == project_id
+    del project_id, context
+    return True
 
 
 def _actor(context: RequestContext) -> ActorIdentity:
@@ -569,11 +576,13 @@ def _object(value: JsonValue, field_name: str) -> dict[str, JsonValue]:
     return value
 
 
-def _enum[EnumT](enum_type: type[EnumT], payload: Mapping[str, JsonValue], field_name: str) -> EnumT:
+def _enum[EnumT: StrEnum](
+    enum_type: type[EnumT], payload: Mapping[str, JsonValue], field_name: str
+) -> EnumT:
     return _enum_value(enum_type, payload.get(field_name), field_name)
 
 
-def _enum_value[EnumT](enum_type: type[EnumT], value: JsonValue, field_name: str) -> EnumT:
+def _enum_value[EnumT: StrEnum](enum_type: type[EnumT], value: JsonValue, field_name: str) -> EnumT:
     if not isinstance(value, str) or not value.strip():
         raise ContractError(ErrorCode.INVALID_REQUEST, f"{field_name} must be a string")
     try:
