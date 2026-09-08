@@ -60,12 +60,14 @@ Promotion still goes through the canonical owner service and #15 authorization a
 - exact source/evidence/target projections;
 - candidate revision history;
 - Approval bindings;
-- PromotionReceipt projection;
-- post-promotion status derived from the runtime recorder when available.
+- PromotionReceipt projection.
 
-`learning/runtime_control_plane.py` prepares the optional derived read collection:
+`learning/runtime_control_plane.py` prepares:
 
-- `learning-post-promotion-evaluations`.
+- `learning-post-promotion-evaluations`;
+- a runtime-aware replacement for the Candidate read projection that derives `post_promotion_regression_status` from the persistent recorder (`passed`, `regression`, `failed`, `not_configured`, `not_recorded`) instead of relying on mutable Candidate evidence.
+
+The runtime registration changes read projection only; mutation authority remains in the canonical Learning service.
 
 ### Source adapters
 
@@ -87,7 +89,8 @@ Feedback, Verification and Evaluation source creation remains in `LearningServic
 - `ObservedLearningService` for redacted log/timeline events;
 - optional `EvaluationPostPromotionEvaluator`;
 - derived post-promotion Evaluation records and recorder seam;
-- idempotent suppression when the same promoted Candidate revision was already evaluated.
+- explicit `not_configured` outcome instead of synthesizing PASS when no post-promotion suite exists;
+- idempotent suppression when the same promoted Candidate/target revision was already evaluated.
 
 `learning/post_promotion_repository.py` adds `SQLitePostPromotionEvaluationRecorder`. The prepared Single-Node composition uses it by default, so post-promotion results survive restart instead of existing only in process memory.
 
@@ -137,6 +140,8 @@ Prepared additive files:
 - `frontend/src/api/learning.ts`;
 - `frontend/src/pages/LearningPage.tsx`;
 - `frontend/src/app/learningManifest.ts`.
+
+The frontend contract includes all post-promotion outcomes, including `not_configured`.
 
 Unified branch wiring:
 
