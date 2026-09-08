@@ -67,16 +67,6 @@ from ai_multi_agent_platform.kernel import (
     PlatformKernel,
     SqliteKernelRepository,
 )
-from ai_multi_agent_platform.learning import (
-    AgentPromotionAdapter,
-    LearningQualityGate,
-    LearningService,
-    PromotionRegistry,
-    RoutingProfilePromotionAdapter,
-    SQLiteLearningRepository,
-    SkillPromotionAdapter,
-    register_learning_control_plane,
-)
 from ai_multi_agent_platform.models import (
     JsonModelRegistryStore,
     JsonModelRoutingProfileRepository,
@@ -138,11 +128,6 @@ from ai_multi_agent_platform.security import (
 )
 from ai_multi_agent_platform.security.sqlite_authentication import SqliteAuthenticationStore
 from ai_multi_agent_platform.security.sqlite_authorization import SqliteLocalAuthorizationProvider
-from ai_multi_agent_platform.skills import (
-    JsonSkillRepository,
-    SkillService,
-    register_skill_control_plane,
-)
 from ai_multi_agent_platform.templates import (
     AgentTeamTemplateExporter,
     AgentTemplateExporter,
@@ -230,8 +215,6 @@ class SingleNodeDeployment:
     repository_workspace_execution: RepositoryWorkspaceExecutionCoordinator
     repository_event_ingress: RepositoryEventRuntimeIngress
     agents: AgentService
-    skills: SkillService
-    learning: LearningService
     conversations: ConversationService
     agent_runtime: AgentRuntime
     capabilities: CapabilityRegistry
@@ -406,7 +389,6 @@ def build_single_node_deployment(
         owner_id=_EVALUATION_OWNER_ID,
     )
     agents = AgentService(JsonAgentRepository(database_dir / "agents.json"))
-    skills = SkillService(JsonSkillRepository(database_dir / "skills.json"))
     conversations = ConversationService(
         JsonConversationRepository(database_dir / "conversations.json")
     )
@@ -651,22 +633,6 @@ def build_single_node_deployment(
         distributed_runtime=effective_distributed_runtime,
     )
 
-    learning = LearningService(
-        SQLiteLearningRepository(database_dir / "learning.sqlite3"),
-        quality_gate=LearningQualityGate(
-            evaluation=evaluation_composition.service,
-            verification=verification,
-        ),
-        promotion_registry=PromotionRegistry(
-            (
-                AgentPromotionAdapter(agents),
-                SkillPromotionAdapter(skills),
-                RoutingProfilePromotionAdapter(routing_profiles),
-            )
-        ),
-        authorization_gate=approval_gate,
-    )
-
     portability_workflow = build_agent_portability_workflow(
         agents=agents.repository,
         models=models,
@@ -717,8 +683,6 @@ def build_single_node_deployment(
         repositories,
         management=repository_management,
     )
-    register_skill_control_plane(control_plane, skills)
-    register_learning_control_plane(control_plane, learning)
     for collection, service in evaluation_resource_services(evaluation_composition.service).items():
         control_plane.register_resource_service(collection, service)
     for command, handler in evaluation_command_handlers(evaluation_composition.service).items():
@@ -829,8 +793,6 @@ def build_single_node_deployment(
         repository_workspace_execution=repository_workspace_execution,
         repository_event_ingress=repository_event_ingress,
         agents=agents,
-        skills=skills,
-        learning=learning,
         conversations=conversations,
         agent_runtime=agent_runtime,
         capabilities=capabilities,
