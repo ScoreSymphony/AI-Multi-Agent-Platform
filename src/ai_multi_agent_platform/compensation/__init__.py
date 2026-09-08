@@ -1,0 +1,59 @@
+"""Canonical compensation and reversibility subsystem."""
+
+from .integration import PlanCompensationHooks
+from .models import (
+    CompensationActionProjection,
+    CompensationAutomation,
+    CompensationExecutionContext,
+    CompensationFailureMode,
+    CompensationGroup,
+    CompensationGroupProjection,
+    CompensationPolicy,
+    CompensationReconciliation,
+    CompensationRequest,
+    CompensationResult,
+    CompensationStatus,
+    CompensationTrigger,
+    CompletedSideEffect,
+    new_compensation_action_id,
+    new_compensation_group_id,
+    new_compensation_id,
+)
+from .repository import (
+    CompensationRepository,
+    InMemoryCompensationRepository,
+    SQLiteCompensationRepository,
+)
+from .service import (
+    CompensationCoordinator,
+    CompensationReconciler,
+    CompensationVerificationHook,
+    ExecutionContextFactory,
+)
+
+__all__ = [
+    "CompensationActionProjection",
+    "CompensationAutomation",
+    "CompensationCoordinator",
+    "CompensationExecutionContext",
+    "CompensationFailureMode",
+    "CompensationGroup",
+    "CompensationGroupProjection",
+    "CompensationPolicy",
+    "CompensationReconciler",
+    "CompensationReconciliation",
+    "CompensationRepository",
+    "CompensationRequest",
+    "CompensationResult",
+    "CompensationStatus",
+    "CompensationTrigger",
+    "CompensationVerificationHook",
+    "CompletedSideEffect",
+    "ExecutionContextFactory",
+    "InMemoryCompensationRepository",
+    "PlanCompensationHooks",
+    "SQLiteCompensationRepository",
+    "new_compensation_action_id",
+    "new_compensation_group_id",
+    "new_compensation_id",
+]
