@@ -35,7 +35,9 @@ from .retry_policy import (
     retry_exhausted,
 )
 
-TaskCreator = Callable[[Automation, TriggerDelivery, dict[str, JsonValue], str], Awaitable[str]]
+TaskCreator = Callable[
+    [Automation, TriggerDelivery, dict[str, JsonValue], str], Awaitable[str | None]
+]
 AutomationEventSink = Callable[[dict[str, JsonValue]], Awaitable[None]]
 AutomationClock = Callable[[], datetime]
 
