@@ -9,18 +9,25 @@ from dataclasses import replace
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,
+    DataClassification,
+    EgressRequest,
+    EgressTarget,
+    EgressTargetKind,
+    EgressTargetPosture,
     ErrorCode,
     ModelProvider,
     ModelRequest,
     ModelResponse,
     ModelSelection,
     ModelStreamEvent,
+    digest_egress_payload,
 )
+from ai_multi_agent_platform.security.egress import EgressGate
 
 from .protocol import CanonicalModelRequest, CanonicalModelResponse
 from .registry import ModelRegistry
 from .router import DeterministicModelRouter
-from .types import ModelConfiguration
+from .types import ModelConfiguration, ModelLocation
 
 
 class ModelRuntime:
@@ -30,9 +37,13 @@ class ModelRuntime:
         self,
         registry: ModelRegistry,
         router: DeterministicModelRouter | None = None,
+        *,
+        egress_gate: EgressGate | None = None,
     ) -> None:
         self.registry = registry
         self.router = router or DeterministicModelRouter(registry)
+        # A missing caller override must never disable enforcement.
+        self.egress_gate = egress_gate or EgressGate()
 
     async def select(self, request: ModelRequest) -> ModelSelection:
         return await self.router.select_provider(request)
@@ -126,6 +137,33 @@ class ModelRuntime:
             )
 
         provider = self.registry.get_provider(selection.provider_id)
+        classification = _request_classification(request)
+        await self.egress_gate.enforce(
+            EgressRequest(
+                request_id=f"model:{request.request_id}:{config.config_id}",
+                target=EgressTarget(
+                    kind=EgressTargetKind.MODEL_PROVIDER,
+                    target_id=config.config_id,
+                    posture=_posture_for_model(config.location),
+                    allowed_classifications=_allowed_classifications(config),
+                    policy_metadata={
+                        "allow_sensitive_external": _allow_sensitive_external(config),
+                        "provider_id": config.provider_id,
+                    },
+                ),
+                context=request.context,
+                classification=classification,
+                resource_type="model_request",
+                payload_digest=digest_egress_payload({"messages": list(request.messages)}),
+                task_id=_optional_request_ref(request, "task_id"),
+                run_id=_optional_request_ref(request, "run_id"),
+                policy_descriptors={
+                    "model_config_id": config.config_id,
+                    "model_location": config.location.value,
+                },
+            )
+        )
+
         requirements = dict(request.requirements)
         requirements["model_config_id"] = config.config_id
         routed_request = replace(request, requirements=requirements)
@@ -188,3 +226,64 @@ class ModelRuntime:
                 "model_config_id": config.config_id,
             },
         )
+
+
+def _request_classification(request: ModelRequest) -> DataClassification:
+    """Read platform-owned routing metadata; model/prompt text is never classification authority."""
+
+    raw = request.requirements.get("data_classification", DataClassification.INTERNAL.value)
+    if not isinstance(raw, str):
+        raise ContractError(ErrorCode.INVALID_REQUEST, "data_classification must be a string")
+    try:
+        return DataClassification(raw)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            f"unknown data_classification {raw!r}",
+        ) from exc
+
+
+def _posture_for_model(location: ModelLocation) -> EgressTargetPosture:
+    if location is ModelLocation.LOCAL:
+        return EgressTargetPosture.LOCAL
+    if location is ModelLocation.SELF_HOSTED:
+        return EgressTargetPosture.INTERNAL
+    return EgressTargetPosture.EXTERNAL
+
+
+def _allowed_classifications(config: ModelConfiguration) -> tuple[DataClassification, ...]:
+    raw = config.resource_hints.get("allowed_data_classifications")
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or any(not isinstance(item, str) for item in raw):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "allowed_data_classifications must be a list of classification strings",
+            provider_id=config.provider_id,
+        )
+    try:
+        return tuple(DataClassification(item) for item in raw)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "allowed_data_classifications contains an unknown classification",
+            provider_id=config.provider_id,
+        ) from exc
+
+
+def _allow_sensitive_external(config: ModelConfiguration) -> bool:
+    raw = config.resource_hints.get("allow_sensitive_external", False)
+    if not isinstance(raw, bool):
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION,
+            "allow_sensitive_external must be a boolean",
+            provider_id=config.provider_id,
+        )
+    return raw
+
+
+def _optional_request_ref(request: ModelRequest, key: str) -> str | None:
+    raw = request.requirements.get(key)
+    if raw is None:
+        return None
+    return raw if isinstance(raw, str) and raw.strip() else None
