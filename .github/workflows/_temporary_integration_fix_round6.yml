@@ -1,0 +1,117 @@
+name: Temporary integration root validation round 6
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+    paths:
+      - .github/workflows/_temporary_integration_fix_round6.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: integration/active-branches-2026-09-08
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install development dependencies
+        run: |
+          python -m pip install -e '.[dev]'
+          npm --prefix frontend install --no-audit --no-fund
+      - name: Apply prepared root fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          workflow = Path('.github/workflows/_temporary_integration_fix_round3.yml').read_text(encoding='utf-8')
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY\n", start)
+          lines = workflow[start:end].splitlines()
+          script = "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
+          Path('/tmp/integration_fix.py').write_text(script + '\n', encoding='utf-8')
+          PY
+          python /tmp/integration_fix.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/ai_multi_agent_platform/research/integrations.py')
+          text = path.read_text(encoding='utf-8')
+          old = 'from ai_multi_agent_platform.planning import PlanningService, PlanningTrigger, ProposalRecord'
+          new = (
+              'from ai_multi_agent_platform.planning.models import PlanningTrigger, ProposalRecord\n'
+              'from ai_multi_agent_platform.planning.supersession import PlanningService'
+          )
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one Research->Planning package import, found {text.count(old)}')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+      - name: Format and lint changed Python
+        run: |
+          python -m ruff format \
+            src/ai_multi_agent_platform/repository_intelligence/resources.py \
+            src/ai_multi_agent_platform/planning/evidence.py \
+            src/ai_multi_agent_platform/research/integrations.py \
+            src/ai_multi_agent_platform/handoffs/repository.py \
+            src/ai_multi_agent_platform/handoffs/service.py \
+            src/ai_multi_agent_platform/handoffs/control_plane.py \
+            src/ai_multi_agent_platform/deployment/handoff_composition.py \
+            src/ai_multi_agent_platform/deployment/durable_connectors.py \
+            src/ai_multi_agent_platform/agents/runtime.py \
+            src/ai_multi_agent_platform/evaluation/runner.py
+          python -m ruff check \
+            src/ai_multi_agent_platform/repository_intelligence/resources.py \
+            src/ai_multi_agent_platform/planning/evidence.py \
+            src/ai_multi_agent_platform/research/integrations.py \
+            src/ai_multi_agent_platform/handoffs/repository.py \
+            src/ai_multi_agent_platform/handoffs/service.py \
+            src/ai_multi_agent_platform/handoffs/control_plane.py \
+            src/ai_multi_agent_platform/deployment/handoff_composition.py \
+            src/ai_multi_agent_platform/deployment/durable_connectors.py \
+            src/ai_multi_agent_platform/agents/runtime.py \
+            src/ai_multi_agent_platform/evaluation/runner.py
+      - name: Run targeted regressions
+        run: |
+          python -m pytest -q \
+            tests/test_issue_650_single_node_context_e2e.py \
+            tests/test_issue_651_deployment_composition.py \
+            tests/contract/research/test_research_single_node_composition.py \
+            tests/contract/research/test_research_team_integration.py \
+            tests/test_issue_289_global_search_acceptance.py \
+            tests/test_issue_598_single_node_integration.py \
+            tests/test_evaluation_aggregation.py
+      - name: Run extended release conformance
+        run: |
+          platform-conformance --profile release --deployment-profile reference-single-node-extended --enable-optional E,N,Q,R,S,T,V,X,Y --json-report conformance-extended-reference.json
+      - name: Commit validated root fixes and clean temporary workflows
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm \
+            .github/workflows/_temporary_integration_fix_round3.yml \
+            .github/workflows/_temporary_integration_fix_round4.yml \
+            .github/workflows/_temporary_integration_fix_round5.yml \
+            .github/workflows/_temporary_integration_fix_round6.yml
+          git add \
+            src/ai_multi_agent_platform/repository_intelligence/resources.py \
+            src/ai_multi_agent_platform/planning/evidence.py \
+            src/ai_multi_agent_platform/research/integrations.py \
+            src/ai_multi_agent_platform/handoffs/repository.py \
+            src/ai_multi_agent_platform/handoffs/service.py \
+            src/ai_multi_agent_platform/handoffs/control_plane.py \
+            src/ai_multi_agent_platform/deployment/handoff_composition.py \
+            src/ai_multi_agent_platform/deployment/durable_connectors.py \
+            src/ai_multi_agent_platform/agents/runtime.py \
+            src/ai_multi_agent_platform/evaluation/runner.py
+          git commit -m 'fix: resolve integration root-cause regressions'
+          git push origin HEAD:integration/active-branches-2026-09-08
