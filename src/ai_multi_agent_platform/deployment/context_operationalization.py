@@ -11,8 +11,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ai_multi_agent_platform.agents import AgentCapabilityTurn
-from ai_multi_agent_platform.capabilities import bind_canonical_capability_invocation
+from ai_multi_agent_platform.capabilities import (
+    CapabilityInvocation,
+    CapabilitySpec,
+    bind_canonical_capability_invocation,
+)
 from ai_multi_agent_platform.context.bindings import JsonContextRunBindingRepository
+from ai_multi_agent_platform.context.classification import effective_context_bundle_classification
 from ai_multi_agent_platform.context.control_plane import register_context_control_plane
 from ai_multi_agent_platform.context.lifecycle import (
     CanonicalContextAgentLifecycleBackend,
@@ -44,7 +49,7 @@ from ai_multi_agent_platform.context.source_adapters import (
     TaskContextSourceAdapter,
 )
 from ai_multi_agent_platform.context.visibility import AuthorizationContextEntryVisibilityResolver
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import ContractError, DataClassification, ErrorCode
 from ai_multi_agent_platform.data import LocalKnowledgeProvider, LocalMemoryProvider
 from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourcedTaskRepository
 from ai_multi_agent_platform.research import (
@@ -271,6 +276,29 @@ def install_single_node_context(
         bundle = matches[0]
         return bundle.skill_bundle_id, bundle.digest
 
+    def capability_classification(
+        request: CapabilityInvocation,
+        capability: CapabilitySpec,
+    ) -> DataClassification:
+        del capability
+        matches = tuple(
+            bundle
+            for bundle in bundles.list_for_run(request.trace.run_id)
+            if bundle.task_id == request.trace.task_id
+            and bundle.agent_id == request.trace.agent_id
+        )
+        if len(matches) != 1:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "Context capability egress requires exactly one canonical Context Bundle",
+                details={
+                    "run_id": request.trace.run_id,
+                    "agent_id": request.trace.agent_id,
+                    "matching_context_bundles": len(matches),
+                },
+            )
+        return effective_context_bundle_classification(matches[0])
+
     capability_turn = (
         None
         if egress is None
@@ -280,6 +308,7 @@ def install_single_node_context(
             egress.capability_invoker(
                 base.capabilities,
                 canonical_binding_hook=bind_canonical_capability_invocation,
+                classification_resolver=capability_classification,
             ),
         )
     )
