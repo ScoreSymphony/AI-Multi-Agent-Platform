@@ -337,7 +337,10 @@ def test_user_correction_creates_candidate_bound_to_exact_feedback(tmp_path: Pat
     assert candidate.target == target
     assert candidate.source_refs[0].resource_id == feedback.feedback_id
     assert candidate.source_refs[0].digest == feedback.content_digest
-    assert learning.repository.get_feedback(feedback.feedback_id).content_digest == feedback.content_digest
+    assert (
+        learning.repository.get_feedback(feedback.feedback_id).content_digest
+        == feedback.content_digest
+    )
 
 
 def test_verification_finding_creates_candidate(tmp_path: Path) -> None:
@@ -588,7 +591,10 @@ def test_stale_target_revision_rejects_promotion(tmp_path: Path) -> None:
 
     assert error.value.code is ErrorCode.CONFLICT
     assert agents.get_agent_revision(original.agent_id).revision == original.revision + 1
-    assert learning.get_candidate(accepted.learning_candidate_id).status is LearningCandidateStatus.ACCEPTED
+    assert (
+        learning.get_candidate(accepted.learning_candidate_id).status
+        is LearningCandidateStatus.ACCEPTED
+    )
 
 
 def test_unauthorized_promotion_is_denied(tmp_path: Path) -> None:
@@ -707,7 +713,10 @@ def test_failed_evaluation_blocks_acceptance_and_promotion(tmp_path: Path) -> No
         )
 
     assert error.value.code is ErrorCode.CONFLICT
-    assert learning.get_candidate(candidate.learning_candidate_id).status is LearningCandidateStatus.EVALUATING
+    assert (
+        learning.get_candidate(candidate.learning_candidate_id).status
+        is LearningCandidateStatus.EVALUATING
+    )
 
 
 def test_restart_during_promotion_does_not_duplicate_owner_revision(tmp_path: Path) -> None:
@@ -740,7 +749,10 @@ def test_restart_during_promotion_does_not_duplicate_owner_revision(tmp_path: Pa
             )
         )
     assert agents.get_agent_revision(original.agent_id).revision == original.revision + 1
-    assert first_service.get_candidate(accepted.learning_candidate_id).status is LearningCandidateStatus.ACCEPTED
+    assert (
+        first_service.get_candidate(accepted.learning_candidate_id).status
+        is LearningCandidateStatus.ACCEPTED
+    )
 
     restarted = _service(
         SQLiteLearningRepository(path),
@@ -833,7 +845,7 @@ def test_historical_feedback_verification_and_evaluation_evidence_are_not_mutate
     assert verification.result_for("verify-source") is verification_result
     assert verification_result.outcome is verification_outcome
     assert evaluation.get_run_detail("eval-source") is regression_detail
-    assert tuple(
-        finding.current_result_id
-        for finding in regression_detail.comparison.regressions
-    ) == regression_ids
+    assert (
+        tuple(finding.current_result_id for finding in regression_detail.comparison.regressions)
+        == regression_ids
+    )
