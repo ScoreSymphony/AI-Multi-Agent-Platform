@@ -57,6 +57,10 @@ jobs:
           if old_scope not in text:
               raise SystemExit('issue 19 Agent scope anchor missing')
           text = text.replace(old_scope, new_scope, 1)
+          old_workspace = '        workspace = first.scopes.create_workspace(\n'
+          if old_workspace not in text:
+              raise SystemExit('issue 19 Workspace assignment anchor missing')
+          text = text.replace(old_workspace, '        _workspace = first.scopes.create_workspace(\n', 1)
           anchor = '        assert all(result["outcome"] == "passed" for result in results), results\n'
           if anchor not in text:
               raise SystemExit('issue 19 assertion anchor missing')
