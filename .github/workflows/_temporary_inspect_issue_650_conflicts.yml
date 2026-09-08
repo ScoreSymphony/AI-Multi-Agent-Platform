@@ -1,4 +1,4 @@
-name: Temporary inspect issue 650 conflicts
+name: Temporary resolve issue 650 conflicts
 
 on:
   push:
@@ -6,10 +6,10 @@ on:
       - integration/active-branches-2026-09-08
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  inspect:
+  resolve:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -17,28 +17,96 @@ jobs:
         with:
           fetch-depth: 0
           ref: integration/active-branches-2026-09-08
-      - name: Show exact merge conflicts
+      - name: Merge issue 650 with explicit Context resolution
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin issue-650-context-operationalization
-          git config merge.conflictstyle diff3
+
           set +e
           git merge --no-ff --no-commit origin/issue-650-context-operationalization
-          rc=$?
+          merge_rc=$?
           set -e
-          echo "MERGE_RC=$rc"
-          conflicts="$(git diff --name-only --diff-filter=U)"
-          echo "CONFLICT_FILES_BEGIN"
-          printf '%s\n' "$conflicts"
-          echo "CONFLICT_FILES_END"
-          while IFS= read -r file; do
-            [ -z "$file" ] && continue
-            echo "===== CONFLICT: $file ====="
-            cat "$file"
-            echo "===== END CONFLICT: $file ====="
-          done <<< "$conflicts"
-          git merge --abort >/dev/null 2>&1 || true
-          exit 0
+
+          conflicts="$(git diff --name-only --diff-filter=U | sort)"
+          expected=$'src/ai_multi_agent_platform/context/__init__.py\nsrc/ai_multi_agent_platform/context/control_plane.py'
+          if [ "$conflicts" != "$expected" ]; then
+            echo "Unexpected #650 conflicts:" >&2
+            printf '%s\n' "$conflicts" >&2
+            exit 1
+          fi
+
+          git checkout --theirs -- src/ai_multi_agent_platform/context/__init__.py
+          git checkout --theirs -- src/ai_multi_agent_platform/context/control_plane.py
+
+          python - <<'PY'
+          from pathlib import Path
+
+          init_path = Path('src/ai_multi_agent_platform/context/__init__.py')
+          text = init_path.read_text()
+          if 'from .classification import effective_context_bundle_classification\n' not in text:
+              text = text.replace(
+                  'from .control_plane import (\n',
+                  'from .classification import effective_context_bundle_classification\nfrom .control_plane import (\n',
+                  1,
+              )
+          if '    "effective_context_bundle_classification",\n' not in text:
+              text = text.replace(
+                  '    "merge_context_routing_requirements",\n',
+                  '    "effective_context_bundle_classification",\n    "merge_context_routing_requirements",\n',
+                  1,
+              )
+          init_path.write_text(text)
+
+          cp_path = Path('src/ai_multi_agent_platform/context/control_plane.py')
+          text = cp_path.read_text()
+          text = text.replace(
+              'from .bindings import ContextRunBindingRepository\n',
+              'from .bindings import ContextRunBinding, ContextRunBindingRepository\nfrom .classification import effective_context_bundle_classification\n',
+              1,
+          )
+          text = text.replace(
+              '            "agent_revision": bundle.agent_revision,\n',
+              '            "agent_revision": bundle.agent_revision,\n            "effective_data_classification": effective_context_bundle_classification(bundle).value,\n',
+              1,
+          )
+          old_ctor = '''    def __init__(self, repository: ContextRunBindingRepository) -> None:\n        self.repository = repository\n'''
+          new_ctor = '''    def __init__(\n        self,\n        repository: ContextRunBindingRepository,\n        bundles: ContextBundleReadRepository,\n    ) -> None:\n        self.repository = repository\n        self.bundles = bundles\n'''
+          if old_ctor not in text:
+              raise SystemExit('Expected #650 binding service constructor not found')
+          text = text.replace(old_ctor, new_ctor, 1)
+          old_list = '''        resources = tuple(\n            {"id": item.agent_run_id, **context_run_binding_projection(item)}\n            for item in self.repository.list_all()\n        )\n'''
+          new_list = '''        resources = tuple(self._projection(item) for item in self.repository.list_all())\n'''
+          if old_list not in text:
+              raise SystemExit('Expected #650 binding list projection not found')
+          text = text.replace(old_list, new_list, 1)
+          old_return = '        return {"id": binding.agent_run_id, **context_run_binding_projection(binding)}\n\n\ndef register_context_control_plane(\n'
+          new_return = '''        return self._projection(binding)\n\n    def _projection(self, binding: ContextRunBinding) -> dict[str, JsonValue]:\n        bundle = self.bundles.get(binding.context_bundle_id)\n        return {\n            "id": binding.agent_run_id,\n            **context_run_binding_projection(binding),\n            "effective_data_classification": effective_context_bundle_classification(bundle).value,\n        }\n\n\ndef register_context_control_plane(\n'''
+          if old_return not in text:
+              raise SystemExit('Expected #650 binding get projection not found')
+          text = text.replace(old_return, new_return, 1)
+          text = text.replace(
+              '        ContextRunBindingResourceService(bindings),\n',
+              '        ContextRunBindingResourceService(bindings, bundles),\n',
+              1,
+          )
+          cp_path.write_text(text)
+          PY
+
+          git add src/ai_multi_agent_platform/context/__init__.py src/ai_multi_agent_platform/context/control_plane.py
+          remaining="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$remaining" ]; then
+            echo "Unresolved conflicts remain:" >&2
+            printf '%s\n' "$remaining" >&2
+            exit 1
+          fi
+
+          if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            git commit -m "integration: merge issue 650 with egress-aware Context projections"
+          elif [ "$merge_rc" -ne 0 ]; then
+            echo "Merge failed without a resolvable merge state" >&2
+            exit "$merge_rc"
+          fi
+          git push origin HEAD:integration/active-branches-2026-09-08
