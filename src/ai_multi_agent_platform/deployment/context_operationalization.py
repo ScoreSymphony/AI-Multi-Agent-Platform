@@ -1,9 +1,8 @@
 """Operational #590 Context Bundle composition for the public single-node runtime.
 
-The lower-level deployment builder intentionally stays reusable for focused embeddings.  The
-normal server-facing composition installs this module after its durable domain repositories are
-available so every canonical Agent-bound Run crosses the Context Bundle boundary before model
-execution.
+The lower-level deployment builder intentionally stays reusable for focused embeddings. The normal
+server-facing composition installs this module after its durable domain repositories are available
+so every canonical Agent-bound Run crosses the Context Bundle boundary before model execution.
 """
 
 from __future__ import annotations
@@ -11,9 +10,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ai_multi_agent_platform.context.agent_lifecycle import CanonicalContextAgentLifecycleBackend
 from ai_multi_agent_platform.context.bindings import JsonContextRunBindingRepository
 from ai_multi_agent_platform.context.control_plane import register_context_control_plane
+from ai_multi_agent_platform.context.lifecycle import (
+    CanonicalContextAgentLifecycleBackend,
+    ContextLifecycleSourceRequest,
+)
+from ai_multi_agent_platform.context.models import ContextEntryRole, ContextSourceType
 from ai_multi_agent_platform.context.operational import (
     ContextRoutingPolicy,
     ModelRegistryContextEgressTargetResolver,
@@ -39,8 +42,7 @@ from ai_multi_agent_platform.context.source_adapters import (
     TaskContextSourceAdapter,
 )
 from ai_multi_agent_platform.context.visibility import AuthorizationContextEntryVisibilityResolver
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, ExecutionRequest
-from ai_multi_agent_platform.context.models import ContextEntryRole, ContextSourceType
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.data import LocalKnowledgeProvider, LocalMemoryProvider
 from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourcedTaskRepository
 from ai_multi_agent_platform.research import (
@@ -57,11 +59,10 @@ from ai_multi_agent_platform.security import (
 from ai_multi_agent_platform.skills import JsonSkillRepository, SkillService, register_skill_control_plane
 
 if TYPE_CHECKING:
-    from ai_multi_agent_platform.agents.execution_profile import AgentExecutionBinding
     from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment as BaseDeployment
 
 
-# Explicit provider-neutral output reserve.  This is intentionally a platform constant rather than
+# Explicit provider-neutral output reserve. This is intentionally a platform constant rather than
 # an adapter/model-specific guess and can later become deployment configuration without changing
 # Context Bundle identity semantics.
 CONTEXT_OUTPUT_RESERVE_TOKENS = 2_048
@@ -88,10 +89,9 @@ class SingleNodeContextComposition:
 def install_single_node_context(base: BaseDeployment) -> SingleNodeContextComposition:
     """Install the canonical Context Bundle path into one already-built single-node deployment.
 
-    The installer replaces only the kernel's lifecycle participant.  Every other canonical owner
-    remains unchanged and the existing authorization wrapper stays the outer execution boundary.
-    This makes the operation suitable for the public durable-connectors composition while avoiding
-    a second Task/Run/Agent architecture.
+    The installer replaces only the kernel lifecycle participant. Every other canonical owner
+    remains unchanged and one #15 authorization wrapper stays the outer execution boundary. This
+    keeps Task/Run/Agent ownership intact while making #590 the effective context authority.
     """
 
     database_dir = base.config.database_dir
@@ -100,10 +100,7 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
 
     bundles = JsonContextBundleRepository(database_dir / "context-bundles.json")
     run_bindings = JsonContextRunBindingRepository(database_dir / "context-run-bindings.json")
-    canonical_assembly = ContextAssemblyService(
-        ContextResolver(base.authorization),
-        bundles,
-    )
+    canonical_assembly = ContextAssemblyService(ContextResolver(base.authorization), bundles)
     assembly = OperationalContextAssemblyService(canonical_assembly)
     context_runtime = OperationalContextBoundAgentRuntime(
         base.agent_runtime,
@@ -115,9 +112,9 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         ),
     )
 
-    # Reuse the authoritative local File store.  Memory/Knowledge use their canonical local SQLite
+    # Reuse the authoritative local File store. Memory/Knowledge use canonical local SQLite
     # providers so the reference profile remains fully local and requires no hosted RAG/vector
-    # service.  Authorization wrappers preserve #15 at each source boundary.
+    # service. Authorization wrappers preserve #15 at each source boundary.
     protected_files = AuthorizedDataFileProvider(base.files, base.approval_gate)
     memory = LocalMemoryProvider(database_dir / "memory.sqlite3")
     knowledge = LocalKnowledgeProvider(database_dir / "knowledge.sqlite3")
@@ -144,23 +141,40 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
     knowledge_adapter = KnowledgeContextSourceAdapter(protected_knowledge, base.agents)
 
     def binding_factory(
-        request: ExecutionRequest,
-        binding: AgentExecutionBinding | None,
-        objective: str,
+        source: ContextLifecycleSourceRequest,
     ) -> tuple[ContextSourceAdapterBinding, ...]:
-        del binding, objective
-        project_id = request.context.project_id
-        bindings: list[ContextSourceAdapterBinding] = []
-        if request.subject_type == "step":
+        bindings: list[ContextSourceAdapterBinding] = [
+            ContextSourceAdapterBinding(
+                adapter=task_adapter,
+                source_type=ContextSourceType.TASK,
+                source_id=source.task_id,
+                role=ContextEntryRole.CONTEXT,
+                mandatory=True,
+                record_absence=True,
+                project_id=source.project_id,
+            ),
+            ContextSourceAdapterBinding(
+                adapter=agent_adapter,
+                source_type=ContextSourceType.AGENT,
+                source_id=source.agent_id,
+                role=ContextEntryRole.INSTRUCTION,
+                mandatory=True,
+                record_absence=True,
+                project_id=source.project_id,
+                workspace_id=source.workspace_id,
+            ),
+        ]
+        if source.step_id is not None:
             bindings.append(
                 ContextSourceAdapterBinding(
                     adapter=plan_adapter,
                     source_type=ContextSourceType.PLAN_STEP,
-                    source_id=request.subject_id,
+                    source_id=source.step_id,
                     role=ContextEntryRole.CONTEXT,
                     mandatory=True,
                     record_absence=True,
-                    project_id=project_id,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
                 )
             )
         bindings.extend(
@@ -168,68 +182,65 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
                 ContextSourceAdapterBinding(
                     adapter=skill_adapter,
                     source_type=ContextSourceType.SKILL,
-                    source_id=f"run:{request.run_id}:skill-bundle",
+                    source_id=f"run:{source.run_id}:skill-bundle",
                     role=ContextEntryRole.INSTRUCTION,
-                    project_id=project_id,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
                 ),
                 ContextSourceAdapterBinding(
                     adapter=research_adapter,
                     source_type=ContextSourceType.RESEARCH_EVIDENCE,
-                    source_id=f"run:{request.run_id}:research",
+                    source_id=f"run:{source.run_id}:research",
                     role=ContextEntryRole.EVIDENCE,
-                    project_id=project_id,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
                 ),
                 ContextSourceAdapterBinding(
                     adapter=repository_adapter,
                     source_type=ContextSourceType.REPOSITORY,
-                    source_id=f"run:{request.run_id}:repositories",
+                    source_id=f"run:{source.run_id}:repositories",
                     role=ContextEntryRole.CONTEXT,
-                    project_id=project_id,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
                 ),
                 ContextSourceAdapterBinding(
                     adapter=file_adapter,
                     source_type=ContextSourceType.FILE,
-                    source_id=f"run:{request.run_id}:files-artifacts-results",
+                    source_id=f"run:{source.run_id}:files-artifacts-results",
                     role=ContextEntryRole.CONTEXT,
-                    project_id=project_id,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
                 ),
                 ContextSourceAdapterBinding(
                     adapter=memory_adapter,
                     source_type=ContextSourceType.MEMORY,
-                    source_id=f"run:{request.run_id}:memory",
+                    source_id=f"run:{source.run_id}:memory",
                     role=ContextEntryRole.CONTEXT,
-                    project_id=project_id,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
                 ),
                 ContextSourceAdapterBinding(
                     adapter=knowledge_adapter,
                     source_type=ContextSourceType.KNOWLEDGE,
-                    source_id=f"run:{request.run_id}:knowledge",
+                    source_id=f"run:{source.run_id}:knowledge",
                     role=ContextEntryRole.CONTEXT,
-                    project_id=project_id,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
                 ),
             )
         )
         return tuple(bindings)
 
-    def plan_id_resolver(request: ExecutionRequest) -> str | None:
-        if request.subject_type != "step":
-            return None
-        try:
-            return base.coordination_repository.get_step_record(request.subject_id).plan_id
-        except (KeyError, ContractError):
-            # The Plan/Step adapter is mandatory for Step-bound execution and will produce the
-            # canonical missing/unavailable blocker.  Returning None here avoids inventing a plan.
-            return None
-
     def skill_bundle_resolver(
-        run_id: str,
-        agent_id: str,
-        agent_revision: int,
+        source: ContextLifecycleSourceRequest,
     ) -> tuple[str, str] | None:
         matches = tuple(
             bundle
-            for bundle in skills_repository.list_bundles(run_id=run_id)
-            if bundle.agent_id == agent_id and bundle.agent_revision == agent_revision
+            for bundle in skills_repository.list_bundles(run_id=source.run_id)
+            if bundle.task_id == source.task_id
+            and bundle.agent_id == source.agent_id
+            and bundle.agent_revision == source.agent_revision
+            and (source.step_id is None or bundle.step_id in {None, source.step_id})
         )
         if len(matches) > 1:
             raise ContractError(
@@ -242,7 +253,7 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         return bundle.skill_bundle_id, bundle.digest
 
     previous_lifecycle = base.kernel._lifecycle  # noqa: SLF001 - composition boundary replacement
-    # The base profile intentionally already wraps its inner lifecycle with #15.  Reuse that inner
+    # The base profile intentionally already wraps its inner lifecycle with #15. Reuse that inner
     # participant as the fallback and make one fresh #15 wrapper the outermost boundary, avoiding
     # duplicate authorization/audit events for non-Agent executions.
     fallback = getattr(previous_lifecycle, "_inner", previous_lifecycle)
@@ -253,10 +264,7 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         models=base.model_runtime,
         assembly=assembly,
         context_runtime=context_runtime,
-        task_adapter=task_adapter,
-        agent_adapter=agent_adapter,
         binding_factory=binding_factory,
-        plan_id_resolver=plan_id_resolver,
         skill_bundle_resolver=skill_bundle_resolver,
     )
     base.kernel._lifecycle = AuthorizedLifecycleBackend(  # noqa: SLF001
