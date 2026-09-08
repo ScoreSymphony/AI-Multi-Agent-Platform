@@ -7,6 +7,7 @@ import { ControlPlaneCollectionClient } from "../api/collections";
 import { ConversationClient } from "../api/conversations";
 import { ComputeClient } from "../api/compute";
 import { EvaluationClient } from "../api/evaluations";
+import { GoalClient } from "../api/goals";
 import { IntegrationsClient } from "../api/integrations";
 import { GovernanceClient } from "../api/governance";
 import { MemoryKnowledgeClient } from "../api/memoryKnowledge";
@@ -53,6 +54,7 @@ import {
   EvaluationSuiteDetailPage,
   EvaluationsPage,
 } from "../pages/EvaluationsPage";
+import { GoalDetailPage, GoalsPage } from "../pages/GoalsPage";
 import {
   ConnectionDetailPage,
   ConnectorDefinitionDetailPage,
@@ -140,6 +142,10 @@ export function Shell() {
     () => new AutomationClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
+  const goalClient = useMemo(
+    () => new GoalClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
   const computeClient = useMemo(
     () => new ComputeClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
@@ -207,6 +213,7 @@ export function Shell() {
   const repositoryMatch = matchPath("/repositories/:repositoryId", path);
   const taskManagementMatch = matchPath("/tasks/:taskId/manage", path);
   const taskMatch = matchPath("/tasks/:taskId", path);
+  const goalMatch = matchPath("/goals/:goalId", path);
   const governanceProposalMatch = matchPath("/governance/proposals/:proposalId", path);
   const governanceSpecificationMatch = matchPath("/governance/specifications/:specificationId", path);
   const runMatch = matchPath("/runs/:runId", path);
@@ -310,6 +317,18 @@ export function Shell() {
         verificationClient={verificationClient}
         taskId={taskMatch.taskId}
       />
+    );
+  } else if (path === "/goals") {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Goals" resource="goals">
+        <GoalsPage client={goalClient} />
+      </ManifestResourcePage>
+    );
+  } else if (goalMatch) {
+    content = (
+      <ManifestResourcePage state={manifestState} manifest={manifest} label="Goals" resource="goals">
+        <GoalDetailPage client={goalClient} goalId={goalMatch.goalId} />
+      </ManifestResourcePage>
     );
   }
   else if (path === "/governance") {
