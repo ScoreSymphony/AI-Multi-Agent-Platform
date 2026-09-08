@@ -241,7 +241,7 @@ class _OperationalContextMapper(AgentOrchestratorMapper):
         }
         if target is not None:
             reserved["context_egress_target_id"] = target.target_id
-            reserved["context_egress_target_posture"] = target.posture.value
+            reserved["context_egress_target_posture"] = target.effective_posture.value
         for key, value in reserved.items():
             existing = metadata.get(key)
             if existing is not None and existing != value:
