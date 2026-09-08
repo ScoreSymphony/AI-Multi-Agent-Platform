@@ -1,0 +1,72 @@
+name: Apply validated evaluation scope code only
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+    paths:
+      - .github/workflows/apply-evaluation-scope-code-only.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: integration/active-branches-2026-09-08
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Reuse validated scope patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import textwrap
+
+          workflow = Path('.github/workflows/apply-evaluation-scope-integration.yml').read_text()
+          marker = "          python - <<'PY'\n"
+          start = workflow.index(marker) + len(marker)
+          end = workflow.index("\n          PY", start)
+          script = textwrap.dedent(workflow[start:end])
+          exec(compile(script, 'evaluation-scope-patch', 'exec'))
+          PY
+      - name: Validate with final actor normalization
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          lifecycle = Path('src/ai_multi_agent_platform/context/lifecycle.py')
+          text = lifecycle.read_text()
+          old = '    return ActorIdentity(context.owner_id, actor_type)\n'
+          new = '''    actor_ref = context.owner_id\n    if ":" not in actor_ref and not actor_ref.startswith(f"{context.owner_type}_"):\n        actor_ref = f"{context.owner_type}:{actor_ref}"\n    return ActorIdentity(actor_ref, actor_type)\n'''
+          if old not in text:
+              raise SystemExit('actor normalization anchor missing')
+          lifecycle.write_text(text.replace(old, new, 1))
+          PY
+          ruff format src/ai_multi_agent_platform/evaluation/workspace.py src/ai_multi_agent_platform/evaluation/product.py src/ai_multi_agent_platform/evaluation/single_node.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/context/lifecycle.py tests/test_issue_19_product_completion.py
+          ruff check src/ai_multi_agent_platform/evaluation/workspace.py src/ai_multi_agent_platform/evaluation/product.py src/ai_multi_agent_platform/evaluation/single_node.py src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/context/lifecycle.py tests/test_issue_19_product_completion.py
+          mypy src/ai_multi_agent_platform/evaluation src/ai_multi_agent_platform/deployment/single_node.py src/ai_multi_agent_platform/context/lifecycle.py
+          pytest -q tests/test_evaluation_workspace_isolation.py tests/test_issue_19_product_completion.py::test_agent_model_target_runs_through_product_evaluation_and_server_snapshot
+          git checkout -- src/ai_multi_agent_platform/context/lifecycle.py
+      - name: Commit validated code
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/ai_multi_agent_platform/evaluation/workspace.py \
+            src/ai_multi_agent_platform/evaluation/product.py \
+            src/ai_multi_agent_platform/evaluation/single_node.py \
+            src/ai_multi_agent_platform/deployment/single_node.py \
+            tests/test_issue_19_product_completion.py
+          git diff --cached --check
+          git commit -m "fix: preserve project scope in isolated evaluation targets"
+          git push origin HEAD:integration/active-branches-2026-09-08
