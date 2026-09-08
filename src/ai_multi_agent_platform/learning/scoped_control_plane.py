@@ -33,8 +33,10 @@ from .runtime_control_plane import (
     LEARNING_POST_PROMOTION_COLLECTION,
     LearningPostPromotionResourceService,
     RuntimeAwareLearningCandidateResourceService,
-    _resource as _post_promotion_resource,
     register_learning_runtime_control_plane,
+)
+from .runtime_control_plane import (
+    _resource as _post_promotion_resource,
 )
 
 _RECORD_SCOPED_AUTHORIZATION = ContextVar(
