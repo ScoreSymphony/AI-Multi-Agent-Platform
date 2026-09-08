@@ -135,17 +135,23 @@ class RepositoryIntelligenceEvaluationCaseExecutor:
 def _operation(case: EvaluationCase) -> RepositoryIntelligenceOperation:
     raw = case.input_template.get("operation")
     if not isinstance(raw, str):
-        raise ValueError("repository-intelligence evaluation case requires input_template.operation")
+        raise ValueError(
+            "repository-intelligence evaluation case requires input_template.operation"
+        )
     try:
         return RepositoryIntelligenceOperation(raw)
     except ValueError as exc:
-        raise ValueError(f"unsupported repository-intelligence evaluation operation: {raw!r}") from exc
+        raise ValueError(
+            f"unsupported repository-intelligence evaluation operation: {raw!r}"
+        ) from exc
 
 
 def _arguments(case: EvaluationCase) -> dict[str, JsonValue]:
     raw = case.input_template.get("arguments")
     if not isinstance(raw, dict):
-        raise ValueError("repository-intelligence evaluation case requires input_template.arguments")
+        raise ValueError(
+            "repository-intelligence evaluation case requires input_template.arguments"
+        )
     if any(not isinstance(key, str) for key in raw):
         raise ValueError("repository-intelligence evaluation arguments must use string keys")
     return dict(raw)
