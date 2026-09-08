@@ -18,6 +18,7 @@ from .control_plane import (
     ContextRunBindingResourceService,
     register_context_control_plane,
 )
+from .egress import ContextBundleEgressExporter
 from .models import (
     ContextBudget,
     ContextBudgetUsage,
@@ -80,6 +81,7 @@ __all__ = [
     "ContextBudget",
     "ContextBudgetUsage",
     "ContextBundle",
+    "ContextBundleEgressExporter",
     "ContextBundleRepository",
     "ContextBundleResourceService",
     "ContextCandidate",

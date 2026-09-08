@@ -15,6 +15,7 @@ from ai_multi_agent_platform.connectors import (
     SqliteConnectorRepository,
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
+from ai_multi_agent_platform.connectors.egress import EgressConnectorService
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.kernel import PlatformKernel
@@ -115,7 +116,7 @@ def build_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=effective_repository_resolver,
     )
-    connectors = ConnectorService(
+    connectors = EgressConnectorService(
         connector_repository,
         connector_registry,
         authorization_gate=base.approval_gate,

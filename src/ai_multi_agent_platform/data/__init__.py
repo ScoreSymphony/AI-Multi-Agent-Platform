@@ -1,6 +1,7 @@
 """Persistence, file, scoped-memory and knowledge provider boundaries."""
 
 from .contracts import FileProvider, KnowledgeProvider, MemoryProvider
+from .egress import FileEgressExporter
 from .models import (
     DataAccessContext,
     FileRecord,
@@ -34,6 +35,7 @@ from .registry import DataProviderSet
 __all__ = [
     "DataAccessContext",
     "DataProviderSet",
+    "FileEgressExporter",
     "FileProvider",
     "FileRecord",
     "FileState",
