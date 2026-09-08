@@ -205,7 +205,7 @@ class ControlPlane(_BaseControlPlane):
         delivery: TriggerDelivery,
         payload: dict[str, JsonValue],
         idempotency_key: str,
-    ) -> str | None:
+    ) -> str:
         context = RequestContext(
             request_id=f"automation:{delivery.id}",
             correlation_id=delivery.id,
@@ -518,7 +518,7 @@ def _augment_automation_openapi(
     specification["x-registered-extension-collections"] = list(sorted(set(extension_collections)))
     specification["x-registered-extension-commands"] = list(sorted(set(extension_commands)))
     specification["x-automation"] = {
-        "invariant": "trigger -> automation -> canonical delivery -> optional canonical task",
+        "invariant": "trigger -> automation -> canonical task -> normal lifecycle",
         "collections": [AUTOMATION_COLLECTION, DELIVERY_COLLECTION],
         "commands": list(AUTOMATION_COMMANDS),
         "scheduler": "replaceable deterministic reference scheduler",
