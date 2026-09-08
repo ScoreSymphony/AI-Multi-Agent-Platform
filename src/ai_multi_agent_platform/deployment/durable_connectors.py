@@ -53,6 +53,10 @@ from ai_multi_agent_platform.templates import (
 )
 
 from .config import SingleNodeConfig
+from .handoff_composition import (
+    HandoffDeploymentComposition,
+    build_single_node_handoff_composition,
+)
 from .single_node import (
     SingleNodeDeployment as BaseSingleNodeDeployment,
 )
@@ -66,7 +70,7 @@ from .single_node import (
 
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
-    """Normal single-node deployment with durable Connector and Planning state."""
+    """Normal single-node deployment with durable Connector, Planning and Handoff state."""
 
     connector_repository: SqliteConnectorRepository
     connector_registry: ConnectorRegistry
@@ -74,6 +78,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     planning_repository: JsonPlanningRepository
     planning_kernel: PlatformKernel
     planning: PlanningService
+    handoffs: HandoffDeploymentComposition
 
 
 def build_single_node_deployment(
@@ -87,13 +92,12 @@ def build_single_node_deployment(
     enable_distributed_execution: bool = False,
     repository_discovery_resolver: RepositoryDiscoveryResolver | None = None,
 ) -> SingleNodeDeployment:
-    """Build the normal single-node profile with durable Connector and Planning source state.
+    """Build the normal single-node profile with durable source and Handoff state.
 
     The lower-level ``deployment.single_node`` composition remains usable by focused tests and
     explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
-    wrapper so Connector Definitions, Connections, external-resource identities and sync
-    checkpoints live in ``db/connectors.sqlite3`` and #439 planning proposals live durably in
-    ``db/planning.json``.
+    wrapper so Connector Definitions, Connections, planning proposals, canonical ContextBundle
+    evidence and Agent Handoffs are durable across process restarts.
     """
 
     # Preserve the base deployment's canonical configuration error boundary before the Connector
@@ -156,6 +160,17 @@ def build_single_node_deployment(
     for command, handler in planning_command_handlers(planning).items():
         base.control_plane.register_command(command, handler)
 
+    handoffs = build_single_node_handoff_composition(
+        database_dir=config.database_dir,
+        control_plane=base.control_plane,
+        agents=base.agents.repository,
+        agent_runtime=base.agent_runtime,
+        coordinator=base.coordination_repository,
+        authorization=base.approval_gate.provider,
+        verification=base.verification_runtime.evidence,
+        telemetry=base.telemetry,
+    )
+
     # The public deployment now has an authoritative canonical Connector inventory. Rebind the
     # Template surface to a resolver that includes exactly those ConnectorDefinition IDs instead
     # of leaving connector requirements permanently fail-closed. The callback closes over the
@@ -207,6 +222,7 @@ def build_single_node_deployment(
         planning_repository=planning_repository,
         planning_kernel=planning_kernel,
         planning=planning,
+        handoffs=handoffs,
     )
 
 
