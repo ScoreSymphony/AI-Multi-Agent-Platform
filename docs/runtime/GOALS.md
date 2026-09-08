@@ -58,9 +58,30 @@ Evidence IDs are immutable: reusing one with different content is rejected.
 
 ## Reviews and #18 Automation
 
-Each review records an external `trigger_ref`. Scheduled/event-driven deployments should use the #18 Automation/Delivery/Event reference that caused the review. Goal state persists the Goal-specific semantics: evidence observed, criterion outcomes, work decision, reason, generated Tasks and next review time.
+Each review records an external `trigger_ref`. Scheduled/event-driven deployments use the canonical #18 Automation/Delivery that caused the review. Goal state persists the Goal-specific semantics: evidence observed, criterion outcomes, work decision, reason, generated Tasks and next review time.
 
-The Goal layer does **not** implement another scheduler. `ObservationPolicy.automation_id` is only a durable reference to generic #18 trigger delivery; Automation state never substitutes for Goal state.
+The Goal layer does **not** implement another scheduler. `ObservationPolicy.automation_id` is a durable reference to the #18 Automation responsible for admitting, deduplicating and retrying review deliveries. Automation state never substitutes for Goal state.
+
+The production-shaped Control Plane composes Goal review dispatch into the existing Automation task-creation seam. An Automation opts into Goal review by carrying an exact Goal binding in its canonical `TaskTemplate.payload`:
+
+```json
+{
+  "goal_observation": {
+    "goal_id": "goal_...",
+    "goal_revision": 3
+  }
+}
+```
+
+The revision is intentionally static. A delivery created for revision 3 cannot silently mutate revision 4 after the objective, success criteria, constraints or policy have changed. The Goal must be revised together with its observation Automation binding.
+
+Ordinary Automations remain ordinary Task-producing Automations. Only an explicitly marked `goal_observation` delivery is intercepted by the Goal dispatcher. #18 therefore remains the single scheduling/event-delivery authority and no second generic scheduler is introduced.
+
+A Goal review can legitimately complete without creating a Task. In that case the #18 delivery succeeds with `generated_task_id = null`; the platform does not fabricate no-op work merely to satisfy the old TaskCreator return shape.
+
+### Evidence trust boundary
+
+Delivery payload is a trigger, not proof. Webhook/event payload fields are never promoted directly into verified `GoalEvidence`, even if an untrusted payload claims `verified=true`. A deployment that wants a delivery to contribute evidence must provide a `GoalEvidenceResolver` backed by a canonical verification/promotion boundary such as #86. Without that resolver the delivery still causes a review, but contributes no new authoritative evidence.
 
 ## Goal -> Task bridge
 
@@ -80,6 +101,8 @@ The Goal itself stores a typed `GoalTaskLink`. Direct human Tasks can be linked 
 
 Automatically generated Task IDs are deterministic from Goal ID, Goal revision, review idempotency key and index. A restart after Task creation but before Goal commit therefore retries the same canonical Task identity/idempotency key instead of creating duplicate work.
 
+The Task metadata above is also the planner-facing #439 provenance boundary: planners receive ordinary canonical Tasks whose metadata preserves the exact Goal revision/digest/review and constraint snapshot that caused the work. Goal state does not become a planner-private input channel.
+
 ## Revision semantics
 
 A revision changes objective, criteria, constraints or policy and gets a new digest. Earlier event snapshots remain immutable. Every link retains the original `goal_revision`.
@@ -89,7 +112,7 @@ A revision changes objective, criteria, constraints or policy and gets a new dig
 - `retain`: existing linked Tasks remain valid;
 - `supersede`: links become invalid for the new revision and active links are marked superseded in the Goal projection. This does not silently cancel the canonical Task; Task cancellation stays owned by the Task lifecycle/authorization path.
 
-Review commands require `expected_revision`, so stale evaluators cannot mutate a newer Goal revision.
+Review commands require `expected_revision`, so stale evaluators cannot mutate a newer Goal revision. The #18 bridge applies the same guard using the revision embedded in the Automation template.
 
 ## Bounded autonomy
 
@@ -97,7 +120,7 @@ Review commands require `expected_revision`, so stale evaluators cannot mutate a
 
 Satisfied or paused/cancelled non-reviewable Goals cannot generate new work.
 
-## Control Plane
+## Control Plane and single-node composition
 
 `control_plane.goal_contract` exposes the canonical `goals` collection and commands:
 
@@ -113,12 +136,29 @@ goal.attach-task
 goal.record-task-outcome
 ```
 
+The production-shaped single-node Control Plane composes this collection and command set automatically. `GoalService` uses an `EventSourcedGoalRepository` over the same durable `EventRepository` as the Task/Run kernel, and generated work uses the same `PlatformKernel` instance. Goal persistence and Task persistence therefore share the same local restart boundary without introducing a Goal-specific database or execution stack.
+
 The existing Control Plane extension boundary provides northbound idempotency and #15 authorization. Goal code does not bypass it.
+
+## CLI and Web projection
+
+The canonical Goal resource projection contains the complete Goal state together with stable `id`, resource `type`, current version, active Task IDs and stream revision. This is the only state source for CLI/Web clients; frontend or CLI code must not maintain a second Goal lifecycle model.
+
+Read-only generic CLI inspection remains available through:
+
+```text
+platform extension list goals
+platform extension show goals <goal_id>
+```
+
+Mutating Goal operations require the dedicated Goal command surface because the generic extension CLI deliberately does not execute arbitrary registered commands. The dedicated CLI/Web implementations call only the canonical `/api/v1/goals` resources and `/api/v1/commands/goal.*` commands.
 
 ## Events and recovery
 
 Committed state changes use canonical events including `goal.created`, lifecycle events, `goal.revised`, `goal.task_linked`, `goal.task_generated`, `goal.task_outcome_reconciled`, `goal.review_completed`, `goal.escalated` and `goal.satisfied`. `EventSourcedGoalRepository` can mirror committed events to the existing `EventProvider` for observability/notification projections without transferring Goal ownership.
 
 The repository reuses `SqliteKernelRepository` for the local durable profile. Regression tests cover waiting-state restart, duplicate review delivery, restart/crash around Task creation, stale revision rejection, Task outcome reconciliation, pause/resume, revision provenance, satisfaction stopping work, and bounded failure escalation.
+
+The runtime integration suite additionally proves that the composed Control Plane registers the Goal surface, #18 delivery replay cannot duplicate Goal work, a monitoring-only review succeeds without fabricating a Task, untrusted delivery payload is not treated as verified Goal evidence, and stale Automation revision bindings fail closed.
 
 No paid scheduler, workflow engine, database or model service is required by the baseline implementation.
