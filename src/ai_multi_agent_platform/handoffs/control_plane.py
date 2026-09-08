@@ -63,14 +63,15 @@ class HandoffControlPlaneProjection:
 
 
 class HandoffResourceService:
-    """Registered read surface; canonical ControlPlane performs #15 authorization first.
+    """Task-scoped registered read surface for canonical Handoff history.
 
-    Unscoped enumeration is deliberately rejected. History must be requested through an
-    exact Task or Step filter, preventing this read-only surface from becoming a metadata
-    discovery authority of its own.
+    The extension ControlPlane first applies collection-level #15 authorization. This service
+    then applies the same owner/project-aware Task authorization used by other task-scoped
+    domains before returning each Handoff. Unscoped enumeration is deliberately rejected.
     """
 
-    def __init__(self, service: HandoffService) -> None:
+    def __init__(self, control_plane: ControlPlane, service: HandoffService) -> None:
+        self.control_plane = control_plane
         self.service = service
 
     async def list_resources(
@@ -78,18 +79,21 @@ class HandoffResourceService:
         context: RequestContext,
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
-        del context
-        values = self._filtered(query)
-        return tuple(handoff_projection(self.service, handoff) for handoff in values)
+        projected: list[dict[str, JsonValue]] = []
+        for handoff in self._filtered(query):
+            if await self._can_view(context, handoff, action="agent-handoff:list"):
+                projected.append(handoff_projection(self.service, handoff))
+        return tuple(projected)
 
     async def get_resource(
         self,
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        del context
         handoff_id, revision = _parse_handoff_resource_id(resource_id)
-        return handoff_projection(self.service, self.service.get_handoff(handoff_id, revision))
+        handoff = self.service.get_handoff(handoff_id, revision)
+        await self._require_view(context, handoff, action="agent-handoff:read")
+        return handoff_projection(self.service, handoff)
 
     def _filtered(self, query: PageQuery) -> tuple[AgentHandoff, ...]:
         filters = query.filters or {}
@@ -109,34 +113,81 @@ class HandoffResourceService:
             "handoff history listing requires task_id or step_id filter",
         )
 
+    async def _can_view(
+        self,
+        context: RequestContext,
+        handoff: AgentHandoff,
+        *,
+        action: str,
+    ) -> bool:
+        task = await self.control_plane._kernel.get_task(handoff.task_id)
+        return await self.control_plane._allowed_for_task(
+            context,
+            action,
+            _handoff_resource_id(handoff),
+            task,
+        )
+
+    async def _require_view(
+        self,
+        context: RequestContext,
+        handoff: AgentHandoff,
+        *,
+        action: str,
+    ) -> None:
+        task = await self.control_plane._kernel.get_task(handoff.task_id)
+        await self.control_plane._authorize_for_task(
+            context,
+            action,
+            _handoff_resource_id(handoff),
+            task,
+        )
+
 
 class HandoffConsumptionResourceService:
-    """Read-only exact consumption history over already authorized Handoff metadata."""
+    """Task-scoped read-only history for durable HandoffConsumption evidence."""
 
-    def __init__(self, service: HandoffService) -> None:
+    def __init__(self, control_plane: ControlPlane, service: HandoffService) -> None:
+        self.control_plane = control_plane
         self.service = service
-        self.handoffs = HandoffResourceService(service)
+        self.handoffs = HandoffResourceService(control_plane, service)
 
     async def list_resources(
         self,
         context: RequestContext,
         query: PageQuery,
     ) -> tuple[dict[str, JsonValue], ...]:
-        del context
         filters = query.filters or {}
         handoff_id = filters.get("handoff_id")
         if handoff_id is not None:
             revision_value = filters.get("revision")
-            revision = int(revision_value) if revision_value is not None else None
+            try:
+                revision = int(revision_value) if revision_value is not None else None
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.INVALID_REQUEST,
+                    "invalid Handoff consumption revision filter",
+                ) from exc
             handoff = self.service.get_handoff(handoff_id, revision)
+            if not await self.handoffs._can_view(
+                context,
+                handoff,
+                action="agent-handoff-consumption:list",
+            ):
+                return ()
             return tuple(
                 consumption_projection(item)
                 for item in self.service.list_consumptions(handoff.handoff_id, handoff.revision)
             )
 
-        handoffs = self.handoffs._filtered(query)
         resources: list[dict[str, JsonValue]] = []
-        for handoff in handoffs:
+        for handoff in self.handoffs._filtered(query):
+            if not await self.handoffs._can_view(
+                context,
+                handoff,
+                action="agent-handoff-consumption:list",
+            ):
+                continue
             resources.extend(
                 consumption_projection(item)
                 for item in self.service.list_consumptions(handoff.handoff_id, handoff.revision)
@@ -148,8 +199,13 @@ class HandoffConsumptionResourceService:
         context: RequestContext,
         resource_id: str,
     ) -> dict[str, JsonValue]:
-        del context
         handoff_id, revision, run_id = _parse_consumption_resource_id(resource_id)
+        handoff = self.service.get_handoff(handoff_id, revision)
+        await self.handoffs._require_view(
+            context,
+            handoff,
+            action="agent-handoff-consumption:read",
+        )
         for consumption in self.service.list_consumptions(handoff_id, revision):
             if consumption.consuming_run_id == run_id:
                 return consumption_projection(consumption)
@@ -157,12 +213,15 @@ class HandoffConsumptionResourceService:
 
 
 def register_handoff_control_plane(control_plane: ControlPlane, service: HandoffService) -> None:
-    """Register Handoff evidence without introducing mutation/workflow commands."""
+    """Register task-authorized Handoff evidence without mutation/workflow commands."""
 
-    control_plane.register_resource_service(HANDOFF_COLLECTION, HandoffResourceService(service))
+    control_plane.register_resource_service(
+        HANDOFF_COLLECTION,
+        HandoffResourceService(control_plane, service),
+    )
     control_plane.register_resource_service(
         HANDOFF_CONSUMPTION_COLLECTION,
-        HandoffConsumptionResourceService(service),
+        HandoffConsumptionResourceService(control_plane, service),
     )
 
 
