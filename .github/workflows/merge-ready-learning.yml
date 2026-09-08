@@ -1,0 +1,757 @@
+name: Merge-ready Learning integration
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+    paths:
+      - .github/workflows/merge-ready-learning.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: integration/active-branches-2026-09-08
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.23.2"
+      - name: Patch final Learning integration
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected patch anchor not found in {path}: {old[:100]!r}")
+              target.write_text(text.replace(old, new, 1))
+
+          path = "src/ai_multi_agent_platform/learning/control_plane.py"
+          replace(
+              path,
+              "from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext\n",
+              "from ai_multi_agent_platform.contracts import (\n"
+              "    ContractError,\n"
+              "    ErrorCode,\n"
+              "    JsonValue,\n"
+              "    OperationContext,\n"
+              "    OperationControl,\n"
+              ")\n"
+              "from ai_multi_agent_platform.contracts.authorization import AuthorizationRequest\n"
+              "from ai_multi_agent_platform.contracts.interfaces import AuthorizationProvider\n",
+          )
+          replace(
+              path,
+              "    def __init__(self, learning: LearningService) -> None:\n"
+              "        self._learning = learning\n\n"
+              "    async def list_resources(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        query: PageQuery,\n"
+              "    ) -> tuple[dict[str, JsonValue], ...]:\n"
+              "        del query\n"
+              "        return tuple(\n"
+              "            _candidate_resource(self._learning, candidate)\n"
+              "            for candidate in self._learning.list_candidates()\n"
+              "            if _candidate_visible(candidate, context)\n"
+              "        )\n\n"
+              "    async def get_resource(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        resource_id: str,\n"
+              "    ) -> dict[str, JsonValue]:\n"
+              "        candidate = self._learning.get_candidate(resource_id)\n"
+              "        _require_candidate_visible(candidate, context)\n"
+              "        return _candidate_resource(self._learning, candidate)\n",
+              "    def __init__(\n"
+              "        self,\n"
+              "        learning: LearningService,\n"
+              "        *,\n"
+              "        authorization: AuthorizationProvider | None = None,\n"
+              "    ) -> None:\n"
+              "        self._learning = learning\n"
+              "        self._authorization = authorization\n\n"
+              "    async def list_resources(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        query: PageQuery,\n"
+              "    ) -> tuple[dict[str, JsonValue], ...]:\n"
+              "        del query\n"
+              "        resources: list[dict[str, JsonValue]] = []\n"
+              "        for candidate in self._learning.list_candidates():\n"
+              "            if await _candidate_visible(\n"
+              "                candidate,\n"
+              "                context,\n"
+              "                self._authorization,\n"
+              "                action=\"learning-candidate:list\",\n"
+              "            ):\n"
+              "                resources.append(_candidate_resource(self._learning, candidate))\n"
+              "        return tuple(resources)\n\n"
+              "    async def get_resource(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        resource_id: str,\n"
+              "    ) -> dict[str, JsonValue]:\n"
+              "        candidate = self._learning.get_candidate(resource_id)\n"
+              "        await _require_candidate_visible(\n"
+              "            candidate,\n"
+              "            context,\n"
+              "            self._authorization,\n"
+              "            action=\"learning-candidate:read\",\n"
+              "        )\n"
+              "        return _candidate_resource(self._learning, candidate)\n",
+          )
+          replace(
+              path,
+              "    def __init__(self, learning: LearningService) -> None:\n"
+              "        self._learning = learning\n\n"
+              "    async def list_resources(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        query: PageQuery,\n"
+              "    ) -> tuple[dict[str, JsonValue], ...]:\n"
+              "        del query\n"
+              "        return tuple(\n"
+              "            _feedback_resource(feedback)\n"
+              "            for feedback in self._learning.repository.list_feedback()\n"
+              "            if _project_visible(feedback.project_id, context)\n"
+              "        )\n\n"
+              "    async def get_resource(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        resource_id: str,\n"
+              "    ) -> dict[str, JsonValue]:\n"
+              "        feedback = self._learning.repository.get_feedback(resource_id)\n"
+              "        if not _project_visible(feedback.project_id, context):\n"
+              "            raise ContractError(ErrorCode.NOT_FOUND, \"Learning feedback was not found\")\n"
+              "        return _feedback_resource(feedback)\n",
+              "    def __init__(\n"
+              "        self,\n"
+              "        learning: LearningService,\n"
+              "        *,\n"
+              "        authorization: AuthorizationProvider | None = None,\n"
+              "    ) -> None:\n"
+              "        self._learning = learning\n"
+              "        self._authorization = authorization\n\n"
+              "    async def list_resources(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        query: PageQuery,\n"
+              "    ) -> tuple[dict[str, JsonValue], ...]:\n"
+              "        del query\n"
+              "        resources: list[dict[str, JsonValue]] = []\n"
+              "        for feedback in self._learning.repository.list_feedback():\n"
+              "            if await _project_visible(\n"
+              "                feedback.project_id,\n"
+              "                context,\n"
+              "                self._authorization,\n"
+              "                action=\"learning-feedback:list\",\n"
+              "                resource_ref=feedback.feedback_id,\n"
+              "            ):\n"
+              "                resources.append(_feedback_resource(feedback))\n"
+              "        return tuple(resources)\n\n"
+              "    async def get_resource(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        resource_id: str,\n"
+              "    ) -> dict[str, JsonValue]:\n"
+              "        feedback = self._learning.repository.get_feedback(resource_id)\n"
+              "        if not await _project_visible(\n"
+              "            feedback.project_id,\n"
+              "            context,\n"
+              "            self._authorization,\n"
+              "            action=\"learning-feedback:read\",\n"
+              "            resource_ref=feedback.feedback_id,\n"
+              "        ):\n"
+              "            raise ContractError(ErrorCode.NOT_FOUND, \"Learning feedback was not found\")\n"
+              "        return _feedback_resource(feedback)\n",
+          )
+          replace(
+              path,
+              "def register_learning_control_plane(control_plane: ControlPlane, learning: LearningService) -> None:\n",
+              "def register_learning_control_plane(\n"
+              "    control_plane: ControlPlane,\n"
+              "    learning: LearningService,\n"
+              "    *,\n"
+              "    authorization: AuthorizationProvider | None = None,\n"
+              ") -> None:\n",
+          )
+          replace(
+              path,
+              "        LearningCandidateResourceService(learning),\n",
+              "        LearningCandidateResourceService(learning, authorization=authorization),\n",
+          )
+          replace(
+              path,
+              "        LearningFeedbackResourceService(learning),\n",
+              "        LearningFeedbackResourceService(learning, authorization=authorization),\n",
+          )
+          replace(
+              path,
+              "        feedback = learning.repository.get_feedback(resource_ref)\n"
+              "        if not _project_visible(feedback.project_id, context):\n"
+              "            raise ContractError(ErrorCode.NOT_FOUND, \"Learning feedback was not found\")\n",
+              "        feedback = learning.repository.get_feedback(resource_ref)\n"
+              "        if not await _project_visible(\n"
+              "            feedback.project_id,\n"
+              "            context,\n"
+              "            authorization,\n"
+              "            action=\"learning.propose-from-feedback\",\n"
+              "            resource_ref=feedback.feedback_id,\n"
+              "        ):\n"
+              "            raise ContractError(ErrorCode.NOT_FOUND, \"Learning feedback was not found\")\n",
+          )
+          replace(
+              path,
+              "        candidate = learning.get_candidate(resource_ref)\n"
+              "        _require_candidate_visible(candidate, context)\n"
+              "        updated = learning.record_gate_evidence(\n",
+              "        candidate = learning.get_candidate(resource_ref)\n"
+              "        await _require_candidate_visible(\n"
+              "            candidate, context, authorization, action=\"learning.evidence\"\n"
+              "        )\n"
+              "        updated = learning.record_gate_evidence(\n",
+          )
+          replace(
+              path,
+              "        _require_candidate_visible(learning.get_candidate(resource_ref), context)\n"
+              "        updated = learning.accept(\n",
+              "        await _require_candidate_visible(\n"
+              "            learning.get_candidate(resource_ref),\n"
+              "            context,\n"
+              "            authorization,\n"
+              "            action=\"learning.accept\",\n"
+              "        )\n"
+              "        updated = learning.accept(\n",
+          )
+          replace(
+              path,
+              "        _require_candidate_visible(learning.get_candidate(resource_ref), context)\n"
+              "        updated = learning.reject(\n",
+              "        await _require_candidate_visible(\n"
+              "            learning.get_candidate(resource_ref),\n"
+              "            context,\n"
+              "            authorization,\n"
+              "            action=\"learning.reject\",\n"
+              "        )\n"
+              "        updated = learning.reject(\n",
+          )
+          replace(
+              path,
+              "        _require_candidate_visible(learning.get_candidate(resource_ref), context)\n"
+              "        replacement_id = _required_string(payload, \"superseded_by\")\n"
+              "        _require_candidate_visible(learning.get_candidate(replacement_id), context)\n",
+              "        await _require_candidate_visible(\n"
+              "            learning.get_candidate(resource_ref),\n"
+              "            context,\n"
+              "            authorization,\n"
+              "            action=\"learning.supersede\",\n"
+              "        )\n"
+              "        replacement_id = _required_string(payload, \"superseded_by\")\n"
+              "        await _require_candidate_visible(\n"
+              "            learning.get_candidate(replacement_id),\n"
+              "            context,\n"
+              "            authorization,\n"
+              "            action=\"learning.supersede\",\n"
+              "        )\n",
+          )
+          replace(
+              path,
+              "        candidate = learning.get_candidate(resource_ref)\n"
+              "        _require_candidate_visible(candidate, context)\n"
+              "        updated = await learning.promote(\n",
+              "        candidate = learning.get_candidate(resource_ref)\n"
+              "        await _require_candidate_visible(\n"
+              "            candidate, context, authorization, action=\"learning.promote\"\n"
+              "        )\n"
+              "        updated = await learning.promote(\n",
+          )
+          replace(
+              path,
+              "def _candidate_visible(candidate: LearningCandidate, context: RequestContext) -> bool:\n"
+              "    return _project_visible(candidate.project_id, context)\n\n\n"
+              "def _require_candidate_visible(candidate: LearningCandidate, context: RequestContext) -> None:\n"
+              "    if not _candidate_visible(candidate, context):\n"
+              "        raise ContractError(ErrorCode.NOT_FOUND, \"Learning Candidate was not found\")\n\n\n"
+              "def _project_visible(project_id: str | None, context: RequestContext) -> bool:\n"
+              "    del project_id, context\n"
+              "    return True\n",
+              "async def _candidate_visible(\n"
+              "    candidate: LearningCandidate,\n"
+              "    context: RequestContext,\n"
+              "    authorization: AuthorizationProvider | None,\n"
+              "    *,\n"
+              "    action: str,\n"
+              ") -> bool:\n"
+              "    return await _project_visible(\n"
+              "        candidate.project_id,\n"
+              "        context,\n"
+              "        authorization,\n"
+              "        action=action,\n"
+              "        resource_ref=candidate.learning_candidate_id,\n"
+              "    )\n\n\n"
+              "async def _require_candidate_visible(\n"
+              "    candidate: LearningCandidate,\n"
+              "    context: RequestContext,\n"
+              "    authorization: AuthorizationProvider | None,\n"
+              "    *,\n"
+              "    action: str,\n"
+              ") -> None:\n"
+              "    if not await _candidate_visible(\n"
+              "        candidate, context, authorization, action=action\n"
+              "    ):\n"
+              "        raise ContractError(ErrorCode.NOT_FOUND, \"Learning Candidate was not found\")\n\n\n"
+              "async def _project_visible(\n"
+              "    project_id: str | None,\n"
+              "    context: RequestContext,\n"
+              "    authorization: AuthorizationProvider | None,\n"
+              "    *,\n"
+              "    action: str,\n"
+              "    resource_ref: str,\n"
+              ") -> bool:\n"
+              "    if authorization is None:\n"
+              "        return True\n"
+              "    actor_type = context.actor.actor_type\n"
+              "    if actor_type is None:\n"
+              "        actor_type = infer_actor_identity(context.actor.principal_ref).actor_type.value\n"
+              "    decision = await authorization.authorize(\n"
+              "        AuthorizationRequest(\n"
+              "            principal_ref=context.actor.principal_ref,\n"
+              "            actor_type=actor_type,\n"
+              "            action=action,\n"
+              "            resource_ref=resource_ref,\n"
+              "            context=OperationContext(\n"
+              "                correlation_id=context.correlation_id,\n"
+              "                owner_type=context.actor.owner_type,\n"
+              "                owner_id=context.actor.owner_id,\n"
+              "                project_id=project_id,\n"
+              "                control=OperationControl(idempotency_key=context.idempotency_key),\n"
+              "            ),\n"
+              "            trust_context=context.actor.trust_context,\n"
+              "        )\n"
+              "    )\n"
+              "    return decision.allowed\n",
+          )
+
+          path = "src/ai_multi_agent_platform/learning/runtime_control_plane.py"
+          replace(
+              path,
+              "from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue\n",
+              "from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue\n"
+              "from ai_multi_agent_platform.contracts.interfaces import AuthorizationProvider\n",
+          )
+          replace(
+              path,
+              "from .control_plane import LEARNING_CANDIDATE_COLLECTION, LearningCandidateResourceService\n",
+              "from .control_plane import (\n"
+              "    LEARNING_CANDIDATE_COLLECTION,\n"
+              "    LearningCandidateResourceService,\n"
+              "    _candidate_visible,\n"
+              ")\n",
+          )
+          replace(
+              path,
+              "    def __init__(self, learning: ObservedLearningService) -> None:\n"
+              "        super().__init__(learning)\n"
+              "        self._observed_learning = learning\n",
+              "    def __init__(\n"
+              "        self,\n"
+              "        learning: ObservedLearningService,\n"
+              "        *,\n"
+              "        authorization: AuthorizationProvider | None = None,\n"
+              "    ) -> None:\n"
+              "        super().__init__(learning, authorization=authorization)\n"
+              "        self._observed_learning = learning\n",
+          )
+          replace(
+              path,
+              "class LearningPostPromotionResourceService(ResourceService):\n"
+              "    def __init__(self, learning: ObservedLearningService) -> None:\n"
+              "        self._learning = learning\n\n"
+              "    async def list_resources(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        query: PageQuery,\n"
+              "    ) -> tuple[dict[str, JsonValue], ...]:\n"
+              "        del context, query\n"
+              "        records: list[dict[str, JsonValue]] = []\n"
+              "        for candidate in self._learning.list_candidates():\n"
+              "            records.extend(\n"
+              "                _resource(record)\n"
+              "                for record in self._learning.post_promotion_recorder.list_for_candidate(\n"
+              "                    candidate.learning_candidate_id\n"
+              "                )\n"
+              "            )\n"
+              "        return tuple(records)\n\n"
+              "    async def get_resource(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        resource_id: str,\n"
+              "    ) -> dict[str, JsonValue]:\n"
+              "        del context\n"
+              "        for candidate in self._learning.list_candidates():\n"
+              "            for record in self._learning.post_promotion_recorder.list_for_candidate(\n"
+              "                candidate.learning_candidate_id\n"
+              "            ):\n"
+              "                if record.record_id == resource_id:\n"
+              "                    return _resource(record)\n",
+              "class LearningPostPromotionResourceService(ResourceService):\n"
+              "    def __init__(\n"
+              "        self,\n"
+              "        learning: ObservedLearningService,\n"
+              "        *,\n"
+              "        authorization: AuthorizationProvider | None = None,\n"
+              "    ) -> None:\n"
+              "        self._learning = learning\n"
+              "        self._authorization = authorization\n\n"
+              "    async def list_resources(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        query: PageQuery,\n"
+              "    ) -> tuple[dict[str, JsonValue], ...]:\n"
+              "        del query\n"
+              "        records: list[dict[str, JsonValue]] = []\n"
+              "        for candidate in self._learning.list_candidates():\n"
+              "            if not await _candidate_visible(\n"
+              "                candidate,\n"
+              "                context,\n"
+              "                self._authorization,\n"
+              "                action=\"learning-candidate:read\",\n"
+              "            ):\n"
+              "                continue\n"
+              "            records.extend(\n"
+              "                _resource(record)\n"
+              "                for record in self._learning.post_promotion_recorder.list_for_candidate(\n"
+              "                    candidate.learning_candidate_id\n"
+              "                )\n"
+              "            )\n"
+              "        return tuple(records)\n\n"
+              "    async def get_resource(\n"
+              "        self,\n"
+              "        context: RequestContext,\n"
+              "        resource_id: str,\n"
+              "    ) -> dict[str, JsonValue]:\n"
+              "        for candidate in self._learning.list_candidates():\n"
+              "            if not await _candidate_visible(\n"
+              "                candidate,\n"
+              "                context,\n"
+              "                self._authorization,\n"
+              "                action=\"learning-candidate:read\",\n"
+              "            ):\n"
+              "                continue\n"
+              "            for record in self._learning.post_promotion_recorder.list_for_candidate(\n"
+              "                candidate.learning_candidate_id\n"
+              "            ):\n"
+              "                if record.record_id == resource_id:\n"
+              "                    return _resource(record)\n",
+          )
+          replace(
+              path,
+              "def register_learning_runtime_control_plane(\n"
+              "    control_plane: ControlPlane,\n"
+              "    learning: ObservedLearningService,\n"
+              ") -> None:\n",
+              "def register_learning_runtime_control_plane(\n"
+              "    control_plane: ControlPlane,\n"
+              "    learning: ObservedLearningService,\n"
+              "    *,\n"
+              "    authorization: AuthorizationProvider | None = None,\n"
+              ") -> None:\n",
+          )
+          replace(
+              path,
+              "        RuntimeAwareLearningCandidateResourceService(learning),\n",
+              "        RuntimeAwareLearningCandidateResourceService(\n"
+              "            learning, authorization=authorization\n"
+              "        ),\n",
+          )
+          replace(
+              path,
+              "        LearningPostPromotionResourceService(learning),\n",
+              "        LearningPostPromotionResourceService(learning, authorization=authorization),\n",
+          )
+
+          path = "src/ai_multi_agent_platform/learning/single_node.py"
+          replace(
+              path,
+              "from ai_multi_agent_platform.control_plane.extensions import ControlPlane\n",
+              "from ai_multi_agent_platform.contracts.interfaces import AuthorizationProvider\n"
+              "from ai_multi_agent_platform.control_plane.extensions import ControlPlane\n",
+          )
+          replace(
+              path,
+              "        *,\n"
+              "        register_skills: bool = True,\n"
+              "    ) -> None:\n",
+              "        *,\n"
+              "        register_skills: bool = True,\n"
+              "        authorization: AuthorizationProvider | None = None,\n"
+              "    ) -> None:\n",
+          )
+          replace(
+              path,
+              "            register_learning_control_plane(control_plane, self.service)\n",
+              "            register_learning_control_plane(\n"
+              "                control_plane, self.service, authorization=authorization\n"
+              "            )\n",
+          )
+          replace(
+              path,
+              "            register_learning_runtime_control_plane(control_plane, self.service)\n",
+              "            register_learning_runtime_control_plane(\n"
+              "                control_plane, self.service, authorization=authorization\n"
+              "            )\n",
+          )
+
+          path = "src/ai_multi_agent_platform/deployment/durable_connectors.py"
+          replace(
+              path,
+              "from ai_multi_agent_platform.kernel import PlatformKernel\n",
+              "from ai_multi_agent_platform.kernel import PlatformKernel\n"
+              "from ai_multi_agent_platform.learning import (\n"
+              "    SingleNodeLearningComposition,\n"
+              "    build_single_node_learning,\n"
+              ")\n",
+          )
+          replace(
+              path,
+              "from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver\n",
+              "from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver\n"
+              "from ai_multi_agent_platform.security import ControlPlaneAuthorizationBridge\n",
+          )
+          replace(
+              path,
+              "    context: SingleNodeContextComposition\n"
+              "    handoffs: HandoffDeploymentComposition\n",
+              "    context: SingleNodeContextComposition\n"
+              "    handoffs: HandoffDeploymentComposition\n"
+              "    learning: SingleNodeLearningComposition\n",
+          )
+          anchor = "    handoffs = build_single_node_handoff_composition(\n"
+          start = Path(path).read_text().index(anchor)
+          end_marker = "    )\n\n    # The public deployment now has an authoritative canonical Connector inventory."
+          text = Path(path).read_text()
+          end = text.index(end_marker, start) + len("    )\n")
+          handoff_block = text[start:end]
+          learning_block = handoff_block + "\n    learning = build_single_node_learning(\n" \
+              "        database_dir=config.database_dir,\n" \
+              "        agents=base.agents,\n" \
+              "        routing_profiles=base.routing_profiles,\n" \
+              "        evaluation=base.evaluation,\n" \
+              "        verification=base.verification,\n" \
+              "        approval_gate=base.approval_gate,\n" \
+              "        telemetry=base.telemetry,\n" \
+              "        skills=context.skills,\n" \
+              "        research=context.research,\n" \
+              "    )\n" \
+              "    learning.register_control_plane(\n" \
+              "        base.control_plane,\n" \
+              "        authorization=ControlPlaneAuthorizationBridge(base.approval_gate),\n" \
+              "    )\n"
+          Path(path).write_text(text[:start] + learning_block + text[end:])
+          replace(
+              path,
+              "        context=context,\n"
+              "        handoffs=handoffs,\n"
+              "    )\n",
+              "        context=context,\n"
+              "        handoffs=handoffs,\n"
+              "        learning=learning,\n"
+              "    )\n",
+          )
+
+          path = "src/ai_multi_agent_platform/cli/main.py"
+          replace(
+              path,
+              "from .evaluation import add_evaluation_parser, execute_evaluation\n",
+              "from .evaluation import add_evaluation_parser, execute_evaluation\n"
+              "from .learning import add_learning_parser, execute_learning\n",
+          )
+          replace(
+              path,
+              "    add_evaluation_parser(areas)\n"
+              "    add_memory_knowledge_parsers(areas)\n",
+              "    add_evaluation_parser(areas)\n"
+              "    add_learning_parser(areas)\n"
+              "    add_memory_knowledge_parsers(areas)\n",
+          )
+          replace(
+              path,
+              "    if args.area == \"evaluation\":\n"
+              "        return CommandResult(execute_evaluation(args, client))\n"
+              "    if args.area == \"onboarding\":\n",
+              "    if args.area == \"evaluation\":\n"
+              "        return CommandResult(execute_evaluation(args, client))\n"
+              "    if args.area == \"learning\":\n"
+              "        return CommandResult(execute_learning(args, client, _require_confirmation))\n"
+              "    if args.area == \"onboarding\":\n",
+          )
+
+          path = "frontend/src/app/navigation.ts"
+          replace(
+              path,
+              '  { label: "Evaluations", path: "/evaluations", group: "Intelligence", apiResource: "evaluation-suites" },\n',
+              '  { label: "Evaluations", path: "/evaluations", group: "Intelligence", apiResource: "evaluation-suites" },\n'
+              '  { label: "Learning", path: "/learning", group: "Intelligence", apiResource: "learning-candidates" },\n',
+          )
+
+          path = "frontend/src/app/Shell.tsx"
+          replace(
+              path,
+              'import { IntegrationsClient } from "../api/integrations";\n',
+              'import { IntegrationsClient } from "../api/integrations";\n'
+              'import { LearningClient } from "../api/learning";\n',
+          )
+          replace(
+              path,
+              'import { navigation } from "./navigation";\n',
+              'import { learningManifestCapabilities } from "./learningManifest";\n'
+              'import { navigation } from "./navigation";\n',
+          )
+          replace(
+              path,
+              'import { MarketplacePage } from "../pages/MarketplacePage";\n',
+              'import { LearningDetailPage, LearningPage } from "../pages/LearningPage";\n'
+              'import { MarketplacePage } from "../pages/MarketplacePage";\n',
+          )
+          replace(
+              path,
+              'const EVALUATION_RESOURCES = ["evaluation-suites", "evaluation-runs"] as const;\n',
+              'const EVALUATION_RESOURCES = ["evaluation-suites", "evaluation-runs"] as const;\n'
+              'const LEARNING_RESOURCES = ["learning-candidates", "learning-feedback"] as const;\n',
+          )
+          replace(
+              path,
+              "  const evaluationClient = useMemo(\n"
+              "    () => new EvaluationClient({ baseUrl, fetchImpl: session.fetch }),\n"
+              "    [baseUrl, session],\n"
+              "  );\n",
+              "  const evaluationClient = useMemo(\n"
+              "    () => new EvaluationClient({ baseUrl, fetchImpl: session.fetch }),\n"
+              "    [baseUrl, session],\n"
+              "  );\n"
+              "  const learningClient = useMemo(\n"
+              "    () => new LearningClient({ baseUrl, fetchImpl: session.fetch }),\n"
+              "    [baseUrl, session],\n"
+              "  );\n",
+          )
+          replace(
+              path,
+              '  const evaluationRunMatch = matchPath("/evaluations/runs/:evaluationRunId", path);\n',
+              '  const evaluationRunMatch = matchPath("/evaluations/runs/:evaluationRunId", path);\n'
+              '  const learningMatch = matchPath("/learning/:candidateId", path);\n',
+          )
+          replace(
+              path,
+              "  const approvalDecisionState = approvalDecisionManifestState(manifestState, manifest);\n",
+              "  const approvalDecisionState = approvalDecisionManifestState(manifestState, manifest);\n"
+              "  const learningCapabilities = learningManifestCapabilities(manifestState, manifest);\n",
+          )
+          replace(
+              path,
+              "  } else if (evaluationRunMatch) {\n"
+              "    content = (\n"
+              "      <ManifestResourcesPage state={manifestState} manifest={manifest} label=\"Evaluations\" resources={EVALUATION_RESOURCES}>\n"
+              "        <EvaluationRunDetailPage client={evaluationClient} evaluationRunId={evaluationRunMatch.evaluationRunId} />\n"
+              "      </ManifestResourcesPage>\n"
+              "    );\n"
+              "  } else if (path === \"/marketplace\") {\n",
+              "  } else if (evaluationRunMatch) {\n"
+              "    content = (\n"
+              "      <ManifestResourcesPage state={manifestState} manifest={manifest} label=\"Evaluations\" resources={EVALUATION_RESOURCES}>\n"
+              "        <EvaluationRunDetailPage client={evaluationClient} evaluationRunId={evaluationRunMatch.evaluationRunId} />\n"
+              "      </ManifestResourcesPage>\n"
+              "    );\n"
+              "  } else if (path === \"/learning\") {\n"
+              "    content = (\n"
+              "      <ManifestResourcesPage\n"
+              "        state={manifestState}\n"
+              "        manifest={manifest}\n"
+              "        label=\"Learning\"\n"
+              "        resources={LEARNING_RESOURCES}\n"
+              "      >\n"
+              "        <LearningPage\n"
+              "          client={learningClient}\n"
+              "          commands={learningCapabilities.commands}\n"
+              "          postPromotionAvailable={learningCapabilities.postPromotionAvailable}\n"
+              "        />\n"
+              "      </ManifestResourcesPage>\n"
+              "    );\n"
+              "  } else if (learningMatch) {\n"
+              "    content = (\n"
+              "      <ManifestResourcesPage\n"
+              "        state={manifestState}\n"
+              "        manifest={manifest}\n"
+              "        label=\"Learning\"\n"
+              "        resources={LEARNING_RESOURCES}\n"
+              "      >\n"
+              "        <LearningDetailPage\n"
+              "          client={learningClient}\n"
+              "          candidateId={learningMatch.candidateId}\n"
+              "          commands={learningCapabilities.commands}\n"
+              "          postPromotionAvailable={learningCapabilities.postPromotionAvailable}\n"
+              "        />\n"
+              "      </ManifestResourcesPage>\n"
+              "    );\n"
+              "  } else if (path === \"/marketplace\") {\n",
+          )
+          PY
+      - name: Install backend test environment
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          echo "$VIRTUAL_ENV/bin" >> "$GITHUB_PATH"
+          echo "VIRTUAL_ENV=$VIRTUAL_ENV" >> "$GITHUB_ENV"
+      - name: Format and lint patched backend
+        run: |
+          ruff format src/ai_multi_agent_platform/learning/control_plane.py src/ai_multi_agent_platform/learning/runtime_control_plane.py src/ai_multi_agent_platform/learning/single_node.py src/ai_multi_agent_platform/deployment/durable_connectors.py src/ai_multi_agent_platform/cli/main.py
+          ruff check src/ai_multi_agent_platform/learning/control_plane.py src/ai_multi_agent_platform/learning/runtime_control_plane.py src/ai_multi_agent_platform/learning/single_node.py src/ai_multi_agent_platform/deployment/durable_connectors.py src/ai_multi_agent_platform/cli/main.py
+      - name: Backend targeted regression
+        run: |
+          pytest -q tests/test_issue_595_governed_learning.py tests/test_issue_650_single_node_context_e2e.py tests/test_issue_651_deployment_composition.py
+          python - <<'PY'
+          from ai_multi_agent_platform.cli.main import _build_parser
+          args = _build_parser().parse_args(["learning", "candidate", "list"])
+          assert args.area == "learning"
+          assert args.command == "candidate"
+          assert args.candidate_command == "list"
+          PY
+      - name: Backend typecheck
+        run: mypy
+      - name: Install and validate frontend
+        working-directory: frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm test -- --run
+          npm run build
+      - name: Commit validated fixes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            src/ai_multi_agent_platform/learning/control_plane.py \
+            src/ai_multi_agent_platform/learning/runtime_control_plane.py \
+            src/ai_multi_agent_platform/learning/single_node.py \
+            src/ai_multi_agent_platform/deployment/durable_connectors.py \
+            src/ai_multi_agent_platform/cli/main.py \
+            frontend/src/app/navigation.ts \
+            frontend/src/app/Shell.tsx
+          git diff --cached --check
+          git commit -m "fix: complete governed learning integration"
+          git push origin HEAD:integration/active-branches-2026-09-08
