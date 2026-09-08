@@ -4,7 +4,9 @@
 The harness deliberately does not install ProjectAtlas or call ``projectatlas init``. The caller
 supplies an already verified executable. ProjectAtlas receives a read-only fixture repository and a
 separate writable state directory, plus a deliberately minimal environment with no platform or CI
-secrets. The report is suitable as reproducible evaluation evidence, not as an adoption decision.
+secrets. On Linux x86-64 every untrusted ProjectAtlas process is executed through the supplied
+seccomp no-network wrapper. The report is reproducible evaluation evidence, not an adoption
+decision.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import os
 import resource
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -24,6 +27,16 @@ from typing import Any
 PINNED_VERSION = "0.4.5"
 _MAX_OUTPUT_BYTES = 2_000_000
 _COMMAND_TIMEOUT_SECONDS = 180
+_NETWORK_SELF_TEST = """\
+import errno
+import socket
+
+try:
+    socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+except OSError as exc:
+    raise SystemExit(0 if exc.errno == errno.EPERM else 3)
+raise SystemExit(2)
+"""
 
 
 def _sha256(path: Path) -> str:
@@ -144,15 +157,73 @@ def _json_payload(stdout: str, command: str) -> Any:
         raise RuntimeError(f"{command} did not return JSON output: {stdout[:500]!r}") from exc
 
 
+def _sandbox_command(wrapper: Path, command: list[str]) -> list[str]:
+    return [sys.executable, str(wrapper), "--", *command]
+
+
+def _verify_network_isolation(
+    *,
+    wrapper: Path,
+    cwd: Path,
+    environment: dict[str, str],
+) -> None:
+    completed = subprocess.run(
+        _sandbox_command(wrapper, [sys.executable, "-c", _NETWORK_SELF_TEST]),
+        cwd=cwd,
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+        close_fds=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "network sandbox self-test failed: expected AF_INET socket creation to return EPERM; "
+            f"status={completed.returncode}, stdout={completed.stdout[:500]!r}, "
+            f"stderr={completed.stderr[:500]!r}"
+        )
+
+
+def _probe_version(
+    *,
+    binary: Path,
+    wrapper: Path,
+    cwd: Path,
+    environment: dict[str, str],
+) -> str:
+    completed = subprocess.run(
+        _sandbox_command(wrapper, [str(binary), "--version"]),
+        cwd=cwd,
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+        close_fds=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"ProjectAtlas version probe failed inside network sandbox: {completed.stderr[:500]!r}"
+        )
+    version = completed.stdout.strip()
+    if version != f"projectatlas {PINNED_VERSION}":
+        raise RuntimeError(f"unexpected ProjectAtlas runtime: {version!r}")
+    return version
+
+
 def _run_projectatlas(
     *,
     binary: Path,
+    no_network_wrapper: Path,
     source_root: Path,
     database: Path,
     environment: dict[str, str],
     args: tuple[str, ...],
 ) -> tuple[Any, dict[str, float | int | str]]:
-    command = [
+    provider_command = [
         str(binary),
         "--require-version",
         PINNED_VERSION,
@@ -162,6 +233,7 @@ def _run_projectatlas(
         "json",
         *args,
     ]
+    command = _sandbox_command(no_network_wrapper, provider_command)
     usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
     started = time.perf_counter_ns()
     completed = subprocess.run(
@@ -173,6 +245,7 @@ def _run_projectatlas(
         text=True,
         timeout=_COMMAND_TIMEOUT_SECONDS,
         check=False,
+        close_fds=True,
     )
     elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000.0
     usage_after = resource.getrusage(resource.RUSAGE_CHILDREN)
@@ -190,6 +263,7 @@ def _run_projectatlas(
         "user_cpu_seconds": max(0.0, usage_after.ru_utime - usage_before.ru_utime),
         "system_cpu_seconds": max(0.0, usage_after.ru_stime - usage_before.ru_stime),
         "max_rss_kb": int(usage_after.ru_maxrss),
+        "network_sandbox": "linux-x86_64-seccomp-no-network",
     }
 
 
@@ -197,21 +271,13 @@ def _contains(payload: Any, text: str) -> bool:
     return text.casefold() in json.dumps(payload, ensure_ascii=False).casefold()
 
 
-def run_pilot(binary: Path) -> dict[str, Any]:
+def run_pilot(binary: Path, no_network_wrapper: Path) -> dict[str, Any]:
     binary = binary.resolve()
+    no_network_wrapper = no_network_wrapper.resolve()
     if not binary.is_file():
         raise FileNotFoundError(binary)
-
-    version = subprocess.run(
-        [str(binary), "--version"],
-        check=True,
-        capture_output=True,
-        text=True,
-        stdin=subprocess.DEVNULL,
-        env={"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8"},
-    ).stdout.strip()
-    if PINNED_VERSION not in version:
-        raise RuntimeError(f"unexpected ProjectAtlas runtime: {version!r}")
+    if not no_network_wrapper.is_file():
+        raise FileNotFoundError(no_network_wrapper)
 
     with tempfile.TemporaryDirectory(prefix="issue502-projectatlas-") as temporary:
         root = Path(temporary)
@@ -221,6 +287,17 @@ def run_pilot(binary: Path) -> dict[str, Any]:
         state_dir.mkdir()
         database = state_dir / "projectatlas.db"
         environment = _provider_environment(state_dir)
+        _verify_network_isolation(
+            wrapper=no_network_wrapper,
+            cwd=state_dir,
+            environment=environment,
+        )
+        version = _probe_version(
+            binary=binary,
+            wrapper=no_network_wrapper,
+            cwd=state_dir,
+            environment=environment,
+        )
         revision = _make_fixture(source_root)
         source_digest_before = _tree_digest(source_root)
         _make_read_only(source_root)
@@ -240,6 +317,7 @@ def run_pilot(binary: Path) -> dict[str, Any]:
             ):
                 payload, measurement = _run_projectatlas(
                     binary=binary,
+                    no_network_wrapper=no_network_wrapper,
                     source_root=source_root,
                     database=database,
                     environment=environment,
@@ -268,7 +346,7 @@ def run_pilot(binary: Path) -> dict[str, Any]:
 
         state_bytes = sum(path.stat().st_size for path in state_dir.rglob("*") if path.is_file())
         return {
-            "schema_version": "1",
+            "schema_version": "2",
             "candidate": "ProjectAtlas",
             "candidate_version": PINNED_VERSION,
             "runtime_version": version,
@@ -278,13 +356,16 @@ def run_pilot(binary: Path) -> dict[str, Any]:
             "project_local_state_created": False,
             "provider_database_outside_source": True,
             "provider_state_bytes": state_bytes,
-            "network_isolation_verified": False,
+            "network_isolation_verified": True,
+            "network_isolation_mechanism": "linux-x86_64-seccomp-no-network",
             "network_isolation_note": (
-                "This functional harness strips secrets but does not itself create a network "
-                "namespace. Egress denial remains a separate containment gate before adoption."
+                "Every untrusted ProjectAtlas execution ran after PR_SET_NO_NEW_PRIVS under a "
+                "seccomp filter that denies socket creation and socket networking syscalls. A "
+                "pre-provider AF_INET socket self-test verified EPERM."
             ),
             "commands": measurements,
             "checks": {
+                "network_socket_denied": True,
                 "scan_json": isinstance(outputs["scan"], (dict, list)),
                 "search_expected_hit": True,
                 "slice_exact_source": True,
@@ -297,10 +378,11 @@ def run_pilot(binary: Path) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--no-network-wrapper", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
 
-    report = run_pilot(args.binary)
+    report = run_pilot(args.binary, args.no_network_wrapper)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True))

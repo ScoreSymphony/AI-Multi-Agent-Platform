@@ -9,31 +9,40 @@
         "item_type": "tool",
         "name": "ProjectAtlas",
         "description": "Agent-first repository intelligence candidate for purpose metadata, compact navigation, source slices, graph relationships and workspace-aware code context.",
-        "version": "0.4.4",
+        "version": "0.4.5",
         "publisher": "styler-ai",
         "source": {
           "repository": "https://github.com/styler-ai/ProjectAtlas",
-          "package_reference": "github:styler-ai/ProjectAtlas@v0.4.4",
-          "revision": "v0.4.4"
+          "package_reference": "github:styler-ai/ProjectAtlas@v0.4.5",
+          "revision": "v0.4.5"
         },
         "license": "MIT",
-        "provenance": "Curated candidate listing verified against the upstream repository and v0.4.4 release documentation; no third-party executable code is bundled by this catalog.",
+        "provenance": "Curated candidate listing refreshed on 2026-09-08. The contained #502 Linux x86-64 v0.4.5 pilot verified release/runtime identity, SHA-256 e22ac7f9e37b1eb49929e4a8ad72c51affd2668731832652ee4783e20a8fabd9, read-only source execution and external derived state. Network-egress isolation remains unverified; no third-party executable code is bundled by this catalog.",
         "supported_platform": {
           "minimum": null,
           "maximum": null
         },
         "dependencies": [],
-        "requested_permissions": [],
+        "requested_permissions": [
+          "capability_registration",
+          "worker_execution"
+        ],
         "required_capabilities": [],
         "required_plugins": [],
         "required_connectors": [],
         "required_models": [],
         "tags": [
           "candidate",
+          "experimental",
           "external-component",
           "agent-first",
           "repository-intelligence",
-          "mcp"
+          "mcp",
+          "free-local",
+          "functional-pilot-passed",
+          "checksum-verified",
+          "egress-unverified",
+          "health-index-status-only"
         ],
         "categories": [
           "code-intelligence"
@@ -41,9 +50,9 @@
         "distribution_route": "manual",
         "integrity": {},
         "trust_status": "untrusted",
-        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
-        "released_at": null,
-        "changelog": "Initial curated discovery entry. Architecture role: P1 agent-first repository-intelligence candidate; benchmark required before adoption.",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/502",
+        "released_at": "2026-08-20T16:55:18Z",
+        "changelog": "Refreshed to v0.4.5 after a successful contained functional pilot. Candidate plugin shell may expose health/index-status only; source and graph capabilities remain blocked pending enforced egress containment and comparative evaluation.",
         "deprecated": false,
         "yanked": false
       },
@@ -56,15 +65,15 @@
         "item_type": "tool",
         "name": "Graphify",
         "description": "Code-intelligence graph and architecture specialist candidate that builds queryable knowledge graphs from code and related project material.",
-        "version": "0.9.47",
+        "version": "0.9.56",
         "publisher": "Graphify Labs",
         "source": {
           "repository": "https://github.com/Graphify-Labs/graphify",
-          "package_reference": "github:Graphify-Labs/graphify@v0.9.47",
-          "revision": "v0.9.47"
+          "package_reference": "github:Graphify-Labs/graphify@v0.9.56",
+          "revision": "v0.9.56"
         },
         "license": "Apache-2.0",
-        "provenance": "Curated candidate listing verified against the upstream repository, package metadata and v0.9.47 release; no third-party executable code is bundled by this catalog.",
+        "provenance": "Curated candidate listing refreshed on 2026-09-08 against the current upstream v0.9.56 release published 2026-09-07; no third-party executable code is bundled by this catalog.",
         "supported_platform": {
           "minimum": null,
           "maximum": null
@@ -80,7 +89,8 @@
           "external-component",
           "knowledge-graph",
           "architecture",
-          "tree-sitter"
+          "tree-sitter",
+          "free-local"
         ],
         "categories": [
           "code-intelligence"
@@ -88,9 +98,9 @@
         "distribution_route": "manual",
         "integrity": {},
         "trust_status": "untrusted",
-        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
-        "released_at": null,
-        "changelog": "Initial curated discovery entry. Architecture role: graph/architecture specialist candidate; capability benchmark required before adoption.",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/502",
+        "released_at": "2026-09-07T19:57:32Z",
+        "changelog": "Refreshed to v0.9.56. Architecture role remains graph/architecture specialist candidate; platform-specific containment, freshness and baseline-comparison evidence are still required before adoption.",
         "deprecated": false,
         "yanked": false
       },
@@ -111,7 +121,7 @@
           "revision": "v0.20.1"
         },
         "license": "Apache-2.0",
-        "provenance": "Curated candidate listing verified against the upstream repository, Apache-2.0 license and v0.20.1 release; no third-party executable code is bundled by this catalog.",
+        "provenance": "Curated candidate listing rechecked on 2026-09-08 against the current upstream Apache-2.0 v0.20.1 release; no third-party executable code is bundled by this catalog.",
         "supported_platform": {
           "minimum": null,
           "maximum": null
@@ -127,7 +137,8 @@
           "external-component",
           "structural-analysis",
           "semantic-graph",
-          "mcp"
+          "mcp",
+          "free-local"
         ],
         "categories": [
           "code-intelligence"
@@ -135,9 +146,9 @@
         "distribution_route": "manual",
         "integrity": {},
         "trust_status": "untrusted",
-        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
-        "released_at": null,
-        "changelog": "Initial curated discovery entry. Architecture role: structural comparison candidate; capability benchmark required before adoption.",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/502",
+        "released_at": "2026-08-10T02:23:35Z",
+        "changelog": "Release v0.20.1 remains current at the 2026-09-08 refresh. Architecture role remains structural comparison candidate; capability benchmark required before adoption.",
         "deprecated": false,
         "yanked": false
       },
@@ -150,15 +161,15 @@
         "item_type": "tool",
         "name": "Understand Anything",
         "description": "Semantic/domain/impact code-intelligence specialist candidate combining static analysis with an interactive project knowledge graph.",
-        "version": "2.7.3",
-        "publisher": "Lum1104",
+        "version": "2.9.0",
+        "publisher": "Egonex-AI",
         "source": {
-          "repository": "https://github.com/Lum1104/Understand-Anything",
-          "package_reference": "github:Lum1104/Understand-Anything@v2.7.3",
-          "revision": "v2.7.3"
+          "repository": "https://github.com/Egonex-AI/Understand-Anything",
+          "package_reference": "github:Egonex-AI/Understand-Anything@v2.9.0",
+          "revision": "v2.9.0"
         },
         "license": "MIT",
-        "provenance": "Curated candidate listing verified against the upstream repository, MIT license and v2.7.3 release; no third-party executable code is bundled by this catalog.",
+        "provenance": "Curated candidate listing refreshed on 2026-09-08 after the canonical upstream moved to Egonex-AI/Understand-Anything. Latest release is v2.9.0; no third-party executable code is bundled by this catalog.",
         "supported_platform": {
           "minimum": null,
           "maximum": null
@@ -174,7 +185,8 @@
           "external-component",
           "semantic-analysis",
           "domain-view",
-          "impact-analysis"
+          "impact-analysis",
+          "model-assisted"
         ],
         "categories": [
           "code-intelligence"
@@ -182,9 +194,9 @@
         "distribution_route": "manual",
         "integrity": {},
         "trust_status": "untrusted",
-        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
-        "released_at": null,
-        "changelog": "Initial curated discovery entry. Architecture role: semantic/domain/impact specialist candidate; capability benchmark required before adoption.",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/502",
+        "released_at": "2026-07-10T09:36:42Z",
+        "changelog": "Refreshed from the old Lum1104/v2.7.3 card to the current Egonex-AI upstream v2.9.0. Remains a later semantic/domain specialist candidate rather than a deterministic reference-path dependency.",
         "deprecated": false,
         "yanked": false
       },
