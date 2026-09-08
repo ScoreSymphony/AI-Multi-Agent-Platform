@@ -131,7 +131,7 @@ jobs:
           edit(
               runner_path,
               "        baseline = self._validate_baseline(\n            suite=suite,\n            baseline_run_id=baseline_run_id,\n            regression_policy=regression_policy,\n            aggregation_policy=aggregation_policy,\n        )\n\n        run = EvaluationRun(",
-              "        baseline = self._validate_baseline(\n            suite=suite,\n            baseline_run_id=baseline_run_id,\n            regression_policy=regression_policy,\n            aggregation_policy=aggregation_policy,\n        )\n        if (\n            baseline is not None\n            and aggregation_policy is not None\n            and aggregation_policy.require_equal_sample_count\n            and baseline.repetitions != repetitions\n        ):\n            raise ValueError(\n                \"aggregation policy requires baseline and current runs to use the same repetition count\"\n            )\n\n        run = EvaluationRun(",
+              "        baseline = self._validate_baseline(\n            suite=suite,\n            baseline_run_id=baseline_run_id,\n            regression_policy=regression_policy,\n            aggregation_policy=aggregation_policy,\n        )\n        if (\n            baseline is not None\n            and aggregation_policy is not None\n            and aggregation_policy.require_equal_sample_count\n            and baseline.repetitions != repetitions\n        ):\n            raise ValueError(\n                \"aggregation policy requires baseline and current runs \"\n                \"to use the same repetition count\"\n            )\n\n        run = EvaluationRun(",
           )
           edit(
               runner_path,
