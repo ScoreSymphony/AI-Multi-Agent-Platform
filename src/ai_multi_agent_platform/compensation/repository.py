@@ -116,17 +116,17 @@ class InMemoryCompensationRepository:
     def create_request(self, request: CompensationRequest) -> CompensationRequest:
         existing_id = self._request_keys.get(request.idempotency_key)
         if existing_id is not None:
-            existing = self._requests[existing_id]
-            if _same_idempotency_target(existing, request):
-                return existing
+            existing_by_key = self._requests[existing_id]
+            if _same_idempotency_target(existing_by_key, request):
+                return existing_by_key
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "compensation idempotency key already belongs to another target",
             )
-        existing = self._requests.get(request.compensation_id)
-        if existing is not None:
-            if existing == request:
-                return existing
+        existing_by_id = self._requests.get(request.compensation_id)
+        if existing_by_id is not None:
+            if existing_by_id == request:
+                return existing_by_id
             raise ContractError(ErrorCode.CONFLICT, "compensation request already exists")
         self._requests[request.compensation_id] = request
         self._request_keys[request.idempotency_key] = request.compensation_id
