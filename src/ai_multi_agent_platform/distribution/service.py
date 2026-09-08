@@ -11,6 +11,7 @@ from .models import DistributionRoute
 from .provider import RegistryProvider
 from .signatures import RegistrySignatureVerifier
 from .state import RegistryInstallation, RegistryInstallationStore
+from .technical_catalog import derive_technical_metadata
 from .validation import ValidationContext, ValidationFinding, has_errors, validate_item
 
 
@@ -58,14 +59,16 @@ class DistributionService:
         return self._installations is not None
 
     def search(self, query: RegistryQuery | None = None) -> tuple[RegistryItem, ...]:
-        """Discover registry metadata without exposing a concrete provider northbound."""
+        """Discover validated registry metadata without exposing a concrete provider northbound."""
 
-        return self._require_provider().search(query or RegistryQuery())
+        items = self._require_provider().search(query or RegistryQuery())
+        return tuple(_validate_provider_metadata(item) for item in items)
 
     def get(self, item_id: str, version: str | None = None) -> RegistryItem:
-        """Read exact registry metadata through the provider-neutral domain boundary."""
+        """Read exact validated registry metadata through the provider-neutral domain boundary."""
 
-        return self._require_provider().get(item_id, version)
+        item = self._require_provider().get(item_id, version)
+        return _validate_provider_metadata(item)
 
     def installed(self, item_id: str) -> RegistryInstallation | None:
         if self._installations is None:
@@ -98,7 +101,7 @@ class DistributionService:
         context: ValidationContext,
     ) -> DistributionPreview:
         provider = self._require_provider()
-        item = provider.get(item_id, version)
+        item = _validate_provider_metadata(provider.get(item_id, version))
         artifact = provider.fetch_artifact(item_id, version)
         resolved_context = self._resolved_context(item, artifact, context)
         findings = validate_item(item, artifact, resolved_context)
@@ -124,7 +127,9 @@ class DistributionService:
         provider = self._require_provider()
         if provider.provider_id != preview.provider_id:
             raise RuntimeError("registry provider changed after preview")
-        current = provider.get(preview.item.item_id, preview.item.version)
+        current = _validate_provider_metadata(
+            provider.get(preview.item.item_id, preview.item.version)
+        )
         if current != preview.item:
             raise RuntimeError("registry metadata changed after preview")
         artifact = provider.fetch_artifact(current.item_id, current.version)
@@ -180,3 +185,10 @@ class DistributionService:
         if self._installations is None:
             raise RuntimeError("registry installation persistence is not configured")
         return self._installations
+
+
+def _validate_provider_metadata(item: RegistryItem) -> RegistryItem:
+    """Fail closed on malformed technical metadata from any replaceable provider."""
+
+    derive_technical_metadata(item)
+    return item
