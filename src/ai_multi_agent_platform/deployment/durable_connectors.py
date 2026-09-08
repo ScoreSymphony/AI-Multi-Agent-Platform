@@ -19,6 +19,10 @@ from ai_multi_agent_platform.connectors.egress import EgressConnectorService
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
 from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.learning.single_node import (
+    SingleNodeLearningComposition,
+    build_single_node_learning,
+)
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
 from ai_multi_agent_platform.observability import (
     FailureComponent,
@@ -75,7 +79,7 @@ from .single_node import (
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
     """Normal single-node deployment with durable Connector, Planning,
-    canonical Context and Handoff state.
+    canonical Context, governed Learning and Handoff state.
     """
 
     connector_repository: SqliteConnectorRepository
@@ -85,6 +89,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     planning_kernel: PlatformKernel
     planning: PlanningService
     context: SingleNodeContextComposition
+    learning: SingleNodeLearningComposition
     handoffs: HandoffDeploymentComposition
 
 
@@ -104,8 +109,8 @@ def build_single_node_deployment(
     The lower-level ``deployment.single_node`` composition remains usable by focused tests and
     explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
     wrapper so Connector Definitions, Connections, planning proposals, canonical Context Bundle/
-    Run-binding evidence and Agent Handoffs are durable across process restarts. Context execution
-    remains fully local by default and introduces no hosted RAG/model dependency.
+    Run-binding evidence, governed Learning and Agent Handoffs are durable across process restarts.
+    Context execution remains fully local by default and introduces no hosted RAG/model dependency.
     """
 
     # Preserve the base deployment's canonical configuration error boundary before the Connector
@@ -172,6 +177,22 @@ def build_single_node_deployment(
     # Agent and model components are available. The installer replaces the Agent-bound lifecycle
     # seam on the same kernel object, so existing services use the canonical Context path.
     context = install_single_node_context(base)
+
+    # Compose governed Learning only after Context created the authoritative Skill and Research
+    # services. Reusing those exact owner instances avoids a learning-private shadow Skill store;
+    # Agent and routing-profile promotion likewise use the base deployment's canonical services.
+    learning = build_single_node_learning(
+        database_dir=config.database_dir,
+        agents=base.agents,
+        routing_profiles=base.routing_profiles,
+        evaluation=base.evaluation,
+        verification=base.verification,
+        approval_gate=base.approval_gate,
+        telemetry=base.telemetry,
+        skills=context.skills,
+        research=context.research,
+    )
+    learning.register_control_plane(base.control_plane)
 
     handoffs = build_single_node_handoff_composition(
         database_dir=config.database_dir,
@@ -240,6 +261,7 @@ def build_single_node_deployment(
         planning_kernel=planning_kernel,
         planning=planning,
         context=context,
+        learning=learning,
         handoffs=handoffs,
     )
 
