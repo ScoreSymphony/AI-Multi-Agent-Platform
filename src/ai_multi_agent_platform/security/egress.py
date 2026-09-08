@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from ai_multi_agent_platform.contracts.classification import (
     DataClassification,
     classification_strength,
@@ -43,10 +41,7 @@ class CanonicalEgressPolicy(EgressPolicyPort):
             return self._deny(request, EgressReasonCode.CLASSIFICATION_REQUIRED)
         if target.posture is EgressTargetPosture.UNKNOWN:
             return self._deny(request, EgressReasonCode.UNKNOWN_TARGET_POSTURE)
-        if (
-            target.allowed_classifications
-            and classification not in target.allowed_classifications
-        ):
+        if target.allowed_classifications and classification not in target.allowed_classifications:
             return self._deny(request, EgressReasonCode.TARGET_POLICY_DENIED)
         if target.posture is EgressTargetPosture.EXTERNAL and classification in {
             DataClassification.SECRET,
