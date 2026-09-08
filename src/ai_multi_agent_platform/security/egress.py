@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Protocol
+
 from ai_multi_agent_platform.contracts.classification import (
     DataClassification,
     classification_strength,
@@ -21,7 +24,23 @@ from ai_multi_agent_platform.contracts.egress import (
     EgressTargetPosture,
 )
 from ai_multi_agent_platform.contracts.errors import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue
+from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
+
+from .authorization import ActorIdentity
+
+
+type EgressActorResolver = Callable[[OperationContext], ActorIdentity]
+
+
+class EgressApprovalResolver(Protocol):
+    async def resolve(
+        self,
+        request: EgressRequest,
+        decision: EgressDecision,
+        *,
+        actor: ActorIdentity,
+        approval_id: str | None = None,
+    ) -> EgressDecision: ...
 
 
 class CanonicalEgressPolicy(EgressPolicyPort):
@@ -174,24 +193,40 @@ class EgressGate:
         policy: EgressPolicyPort | None = None,
         *,
         audit_sink: EgressAuditSink | None = None,
+        approval_resolver: EgressApprovalResolver | None = None,
+        actor_resolver: EgressActorResolver | None = None,
     ) -> None:
         self.policy = policy or CanonicalEgressPolicy()
         self.audit_sink = audit_sink or NullEgressAuditSink()
+        self.approval_resolver = approval_resolver
+        self.actor_resolver = actor_resolver
 
-    async def evaluate(self, request: EgressRequest) -> EgressDecision:
+    async def evaluate(
+        self,
+        request: EgressRequest,
+        *,
+        actor: ActorIdentity | None = None,
+        approval_id: str | None = None,
+    ) -> EgressDecision:
         decision = await self.policy.evaluate(request)
-        try:
-            decision.validate_against(request)
-        except ValueError as exc:
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "egress policy returned an invalid decision",
-                details={
-                    "egress_request_id": request.request_id,
-                    "target_kind": request.target.kind.value,
-                    "target_id": request.target.target_id,
-                },
-            ) from exc
+        self._validate_decision(request, decision)
+
+        effective_actor = actor
+        if effective_actor is None and self.actor_resolver is not None:
+            effective_actor = self.actor_resolver(request.context)
+        if (
+            not decision.allowed
+            and self.approval_resolver is not None
+            and effective_actor is not None
+        ):
+            decision = await self.approval_resolver.resolve(
+                request,
+                decision,
+                actor=effective_actor,
+                approval_id=approval_id,
+            )
+            self._validate_decision(request, decision)
+
         await self._record(request, decision, EgressAuditEventType.EVALUATED)
         await self._record(
             request,
@@ -200,8 +235,14 @@ class EgressGate:
         )
         return decision
 
-    async def enforce(self, request: EgressRequest) -> EgressDecision:
-        decision = await self.evaluate(request)
+    async def enforce(
+        self,
+        request: EgressRequest,
+        *,
+        actor: ActorIdentity | None = None,
+        approval_id: str | None = None,
+    ) -> EgressDecision:
+        decision = await self.evaluate(request, actor=actor, approval_id=approval_id)
         if not decision.allowed:
             details: dict[str, JsonValue] = {
                 "egress_request_id": request.request_id,
@@ -232,10 +273,13 @@ class EgressGate:
         self,
         request: EgressRequest,
         payload: JsonValue,
+        *,
+        actor: ActorIdentity | None = None,
+        approval_id: str | None = None,
     ) -> tuple[JsonValue, EgressDecision]:
         """Enforce policy and apply required field redactions before transport."""
 
-        decision = await self.enforce(request)
+        decision = await self.enforce(request, actor=actor, approval_id=approval_id)
         transformed = _apply_redactions(payload, decision.required_redactions)
         if request.classification is not None and decision.effective_classification is not None:
             downgraded = classification_strength(decision.effective_classification) < (
@@ -254,6 +298,21 @@ class EgressGate:
                     details={"egress_request_id": request.request_id},
                 )
         return transformed, decision
+
+    @staticmethod
+    def _validate_decision(request: EgressRequest, decision: EgressDecision) -> None:
+        try:
+            decision.validate_against(request)
+        except ValueError as exc:
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "egress policy returned an invalid decision",
+                details={
+                    "egress_request_id": request.request_id,
+                    "target_kind": request.target.kind.value,
+                    "target_id": request.target.target_id,
+                },
+            ) from exc
 
     async def _record(
         self,
