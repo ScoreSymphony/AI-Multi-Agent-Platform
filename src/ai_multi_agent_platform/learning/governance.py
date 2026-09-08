@@ -65,25 +65,29 @@ class LearningPlatformPolicy:
         self.validate_gate_plan(candidate.gate_plan)
 
     def validate_gate_plan(self, gate_plan: LearningGatePlan) -> None:
-        if (
-            self.require_versioned_evaluation_refs
-            and gate_plan.require_evaluation
-            and not gate_plan.evaluation_suite_refs
-        ):
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "Learning platform policy requires explicit versioned Evaluation suite refs",
-                details={"platform_policy": self.ref},
+        if self.require_versioned_evaluation_refs and gate_plan.require_evaluation:
+            if not gate_plan.evaluation_suite_refs:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Learning platform policy requires explicit versioned Evaluation suite refs",
+                    details={"platform_policy": self.ref},
+                )
+            _require_versioned_refs(
+                gate_plan.evaluation_suite_refs,
+                "Evaluation suite",
+                self.ref,
             )
-        if (
-            self.require_versioned_verification_refs
-            and gate_plan.require_verification
-            and not gate_plan.verification_policy_refs
-        ):
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "Learning platform policy requires explicit versioned Verification policy refs",
-                details={"platform_policy": self.ref},
+        if self.require_versioned_verification_refs and gate_plan.require_verification:
+            if not gate_plan.verification_policy_refs:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Learning platform policy requires explicit versioned Verification policy refs",
+                    details={"platform_policy": self.ref},
+                )
+            _require_versioned_refs(
+                gate_plan.verification_policy_refs,
+                "Verification policy",
+                self.ref,
             )
 
     def requires_approval(self, candidate: LearningCandidate) -> bool:
@@ -236,6 +240,23 @@ class GovernedObservedLearningService(ObservedLearningService):
             approval_id=approval_id,
             automatic=automatic,
             expected_revision=expected_revision,
+        )
+
+
+def _require_versioned_refs(refs: tuple[str, ...], kind: str, platform_policy: str) -> None:
+    invalid = []
+    for reference in refs:
+        identifier, separator, version = reference.rpartition("@")
+        if not separator or not identifier.strip() or not version.strip():
+            invalid.append(reference)
+    if invalid:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            f"{kind} references must use exact <id>@<version> form",
+            details={
+                "platform_policy": platform_policy,
+                "invalid_refs": invalid,
+            },
         )
 
 
