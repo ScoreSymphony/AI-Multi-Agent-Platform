@@ -1,4 +1,4 @@
-# CLI extension inspection
+# CLI extension inspection and execution
 
 Issue: #38
 
@@ -29,26 +29,34 @@ Before accessing the collection, the CLI verifies that it is present in `x-regis
 
 Pagination, filtering, field selection, human output, JSON output, correlation metadata and defense-in-depth redaction use the same contracts as other CLI reads.
 
-## No generic command execution
+## Registered command execution
 
-The CLI deliberately does **not** provide a generic equivalent of:
+The current CLI also exposes an explicit registered-command transport:
 
-```text
-POST /api/v1/commands/{command}
+```bash
+platform extension execute CANONICAL_COMMAND RESOURCE_REF \
+  --payload '{...}' \
+  --idempotency-key UNIQUE_KEY
 ```
 
-Registered extension commands may have destructive, privileged or externally visible side effects. A generic executor would not know the owning domain's confirmation, approval, dry-run, payload validation or recovery semantics and would undermine the safety requirements of #38.
+Before sending a mutation, the CLI verifies that `CANONICAL_COMMAND` appears in the Control Plane's `x-registered-extension-commands` list. It then sends the request only through:
 
-Mutating extension operations must therefore receive explicit domain-specific CLI commands once their canonical API and safety contract are known. `platform extension commands` is inspection only and never executes a command.
+```text
+POST /api/v1/commands/{CANONICAL_COMMAND}
+```
+
+with the supplied `resource_ref`, JSON-object payload and explicit idempotency key. The CLI never imports the owning domain service or accesses its repository directly.
+
+This generic transport does **not** invent domain semantics. Authorization, approval requirements, revision checks, payload validation, recovery and lifecycle rules remain owned by the canonical server-side command. Operators must use the owning domain's documented payload contract; discovery of a command name alone is not sufficient to infer safe arguments.
+
+Where a domain needs additional client-side confirmation, dry-run handling or structured argument validation, it may still provide a dedicated top-level CLI command. Such convenience commands must resolve to the same canonical Control Plane operation rather than becoming an alternate execution path.
 
 ## Progressive domain commands
 
-Generic extension reads complement, but do not replace, first-class commands. As domains such as capabilities/tools, agents/teams, nodes/workers, approvals or authentication become fully integrated into the Control Plane, #38 should add stable domain-specific command groups for their supported operations.
-
-The architectural direction remains:
+Generic extension reads/execution complement, but do not replace, first-class commands where stronger domain ergonomics are useful. As domains such as capabilities/tools, agents/teams, nodes/workers, approvals, authentication or Goals become fully integrated, their documented CLI surfaces must preserve the same architectural direction:
 
 ```text
 platform CLI -> /api/v1 Control Plane -> canonical application services
 ```
 
-No extension inspection command imports or contacts domain repositories, providers, workers, databases or adapters directly.
+No extension command imports or contacts domain repositories, providers, workers, databases, schedulers or adapters directly.
