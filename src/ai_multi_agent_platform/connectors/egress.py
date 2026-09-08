@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 
 from ai_multi_agent_platform.contracts import (
     DataClassification,
@@ -13,12 +14,14 @@ from ai_multi_agent_platform.contracts import (
     JsonValue,
     OperationContext,
     digest_egress_payload,
+    strongest_classification,
 )
 from ai_multi_agent_platform.security import ActorIdentity
 from ai_multi_agent_platform.security.egress import EgressGate
 
 from .models import (
     ConnectorActionResult,
+    ConnectorEvent,
     ConnectorSyncResult,
     ExternalNativeReference,
     ExternalResourceReference,
@@ -36,7 +39,8 @@ class EgressConnectorService(ConnectorService):
 
     The legacy base service remains implementation-compatible for internal/local tests. Production
     composition should use this class so direct control-plane calls and capability-bridge calls
-    cannot bypass the same egress gate.
+    cannot bypass the same egress gate. Provider-returned data inherits the strongest originating
+    classification so a connector cannot silently downgrade data derived from protected input.
     """
 
     def __init__(
@@ -69,20 +73,22 @@ class EgressConnectorService(ConnectorService):
         query: dict[str, JsonValue] | None = None,
         data_classification: DataClassification | None = None,
     ) -> tuple[ExternalResourceReference, ...]:
+        classification = self._classification(context, data_classification)
         await self._enforce_connector_egress(
             connection_id,
             context=context,
-            classification=self._classification(context, data_classification),
+            classification=classification,
             resource_type="connector_resource_query",
             payload={"resource_type": resource_type, "query": query or {}},
         )
-        return await super().list_resources(
+        resources = await super().list_resources(
             connection_id,
             resource_type,
             actor=actor,
             context=context,
             query=query,
         )
+        return tuple(_classified_resource(resource, classification) for resource in resources)
 
     async def read_resource(
         self,
@@ -93,17 +99,27 @@ class EgressConnectorService(ConnectorService):
         context: OperationContext,
         data_classification: DataClassification | None = None,
     ) -> ExternalResourceReference:
+        classification = _inherited_classification(
+            self._classification(context, data_classification),
+            resource.classification,
+        )
         await self._enforce_connector_egress(
             connection_id,
             context=context,
-            classification=self._classification(context, data_classification),
+            classification=classification,
             resource_type="connector_resource_read",
             payload={
                 "external_resource_id": resource.id,
                 "resource_type": resource.resource_type,
             },
         )
-        return await super().read_resource(connection_id, resource, actor=actor, context=context)
+        refreshed = await super().read_resource(
+            connection_id,
+            resource,
+            actor=actor,
+            context=context,
+        )
+        return _classified_resource(refreshed, classification)
 
     async def invoke_action(
         self,
@@ -117,10 +133,11 @@ class EgressConnectorService(ConnectorService):
         approval_id: str | None = None,
         data_classification: DataClassification | None = None,
     ) -> ConnectorActionResult:
+        classification = self._classification(context, data_classification)
         await self._enforce_connector_egress(
             connection_id,
             context=context,
-            classification=self._classification(context, data_classification),
+            classification=classification,
             resource_type="connector_action",
             payload={
                 "connection_id": connection_id,
@@ -130,7 +147,7 @@ class EgressConnectorService(ConnectorService):
             },
             capability_id=action,
         )
-        return await super().invoke_action(
+        result = await super().invoke_action(
             connection_id,
             action,
             arguments,
@@ -138,6 +155,14 @@ class EgressConnectorService(ConnectorService):
             actor=actor,
             context=context,
             approval_id=approval_id,
+        )
+        effective = _inherited_classification(classification, result.classification)
+        return replace(
+            result,
+            classification=effective,
+            resource_refs=tuple(
+                _classified_resource(resource, effective) for resource in result.resource_refs
+            ),
         )
 
     async def subscribe_events(
@@ -205,19 +230,27 @@ class EgressConnectorService(ConnectorService):
         mode: SyncMode = SyncMode.INCREMENTAL,
         data_classification: DataClassification | None = None,
     ) -> ConnectorSyncResult:
+        classification = self._classification(context, data_classification)
         await self._enforce_connector_egress(
             connection_id,
             context=context,
-            classification=self._classification(context, data_classification),
+            classification=classification,
             resource_type="connector_sync",
             payload={"stream": stream, "mode": mode.value},
         )
-        return await super().synchronize(
+        result = await super().synchronize(
             connection_id,
             stream,
             actor=actor,
             context=context,
             mode=mode,
+        )
+        return replace(
+            result,
+            resources=tuple(
+                _classified_resource(resource, classification) for resource in result.resources
+            ),
+            events=tuple(_classified_event(event, classification) for event in result.events),
         )
 
     def _classification(
@@ -267,3 +300,37 @@ class EgressConnectorService(ConnectorService):
                 policy_descriptors={"connection_id": connection_id},
             )
         )
+
+
+def _classified_resource(
+    resource: ExternalResourceReference,
+    source: DataClassification,
+) -> ExternalResourceReference:
+    return replace(
+        resource,
+        classification=_inherited_classification(source, resource.classification),
+    )
+
+
+def _classified_event(event: ConnectorEvent, source: DataClassification) -> ConnectorEvent:
+    return replace(
+        event,
+        classification=_inherited_classification(source, event.classification),
+    )
+
+
+def _inherited_classification(
+    source: DataClassification,
+    reported: DataClassification | str | None,
+) -> DataClassification:
+    normalized: DataClassification | None
+    if reported is None:
+        normalized = None
+    elif isinstance(reported, DataClassification):
+        normalized = reported
+    else:
+        normalized = DataClassification(reported)
+    effective = strongest_classification(source, normalized)
+    if effective is None:
+        raise AssertionError("source classification must produce an effective classification")
+    return effective
