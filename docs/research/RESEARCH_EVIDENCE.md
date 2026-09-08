@@ -134,6 +134,41 @@ reference profile requires:
 The Research package does not implement another container, scheduler or executor. Existing runtime
 components consume these constraints when executable research is actually run.
 
+## Control Plane
+
+`register_research_control_plane(...)` registers backend-neutral northbound projections for:
+
+- `research-items`;
+- `research-sources`;
+- `research-source-observations`;
+- `research-claims`;
+- `research-evidence`.
+
+The projections intentionally expose the evidence needed to answer *why* a conclusion exists:
+Research Item revision/digest, exact source observation identity, source revision/hash/snapshot
+binding, Evidence relation and current freshness, Verification bindings, Artifact references and
+canonical Task/Plan/Run provenance where present. Sensitive metadata is redacted before it leaves
+the domain boundary.
+
+The registered commands are deliberately research-semantic mutations only:
+
+- `research.create`;
+- `research.source.add`;
+- `research.source.observe`;
+- `research.claim.add`;
+- `research.evidence.add`;
+- `research.evidence.revalidate`.
+
+They do not create Tasks/Runs, approve decisions, grant permissions or execute downloaded code.
+Existing Control Plane authorization is applied first, the Research service remains subject to #15,
+and the domain registration additionally enforces the authenticated owner scope. Observation
+commands reuse the northbound `Idempotency-Key`, so retries cannot silently replace an earlier
+source/content binding.
+
+The generic Control Plane extension layer supplies list/get HTTP routes, command routes and OpenAPI
+entries for the registered Research resources. Web, CLI and other clients therefore consume the
+same canonical resource surface rather than reading the Research repository directly.
+
 ## Persistence
 
 `ResearchRepository` owns canonical Research records. The baseline provides an in-memory
@@ -142,12 +177,14 @@ implementation and a dependency-free SQLite implementation for single-node resta
 Source Observations, Evidence and completed Verification bindings are append-only historical
 records. Research Items and Claims use explicit optimistic revisions for their mutable projections.
 
-## Core-slice scope
+## Current #589 scope
 
-This first #589 implementation establishes the canonical model, durability, freshness semantics,
+The current implementation establishes the canonical model, durability, freshness semantics,
 #86 binding, #439 provenance handoff, #502 provenance consumption, explicit Knowledge/Memory
-promotion and the untrusted-execution policy contract.
+promotion, the untrusted-execution policy contract, and the canonical Control Plane resources and
+commands.
 
-Remaining #589 work can extend these contracts with Control Plane/Web/CLI projections, Search
-registration, evaluation fixtures, portability and broader end-to-end coverage. Those additions
-must not redefine the authority boundaries above.
+Remaining #589 work includes Search registration, research-specific #19 evaluation fixtures,
+portability, downstream Decision/provenance integration where the canonical consumers expose the
+required seams, Research Team integration coverage, and broader end-to-end coverage. Those
+additions must extend the authority boundaries above rather than redefine them.

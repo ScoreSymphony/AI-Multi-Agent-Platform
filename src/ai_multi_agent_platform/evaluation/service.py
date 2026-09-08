@@ -25,6 +25,14 @@ from .models import (
     RegressionPolicy,
 )
 from .regression import RegressionEngine
+from .reproducibility import (
+    Comparability,
+    EvalManifest,
+    EvalManifestContext,
+    ManifestComparison,
+    RepeatPolicy,
+    SeedPolicy,
+)
 from .runner import EvaluationRunner, EvaluationRunSummary
 from .suite_assets import EvaluationSuiteAssetRepository
 
@@ -55,6 +63,7 @@ class EvaluationRunDetail:
     results: tuple[EvaluationResult, ...]
     comparison: ComparisonReport | None
     aggregates: tuple[AggregatedEvaluationResult, ...] = ()
+    manifest: EvalManifest | None = None
 
 
 class EvaluationService:
@@ -237,6 +246,22 @@ class EvaluationService:
             results=self._repository.list_results(run_id),
             comparison=self._repository.get_comparison(run_id),
             aggregates=self._repository.list_aggregates(run_id),
+            manifest=self._runner.get_manifest(run_id),
+        )
+
+    def compare_manifests(
+        self,
+        *,
+        current_run_id: str,
+        baseline_run_id: str,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> ManifestComparison:
+        return self._runner.compare_manifests(
+            baseline_run_id=baseline_run_id,
+            current_run_id=current_run_id,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
         )
 
     async def run_suite(
@@ -249,6 +274,11 @@ class EvaluationService:
         baseline_run_id: str | None = None,
         regression_policy_ref_value: str | None = None,
         aggregation_policy_ref_value: str | None = None,
+        repeat_policy: RepeatPolicy | None = None,
+        seed_policy: SeedPolicy | None = None,
+        manifest_context: EvalManifestContext | None = None,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive_comparison: bool = False,
     ) -> EvaluationRunSummary:
         suite = self.get_suite(suite_ref)
         policy = (
@@ -269,6 +299,11 @@ class EvaluationService:
             baseline_run_id=baseline_run_id,
             regression_policy=policy,
             aggregation_policy=aggregation_policy,
+            repeat_policy=repeat_policy,
+            seed_policy=seed_policy,
+            manifest_context=manifest_context,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive_comparison=performance_sensitive_comparison,
         )
 
     def compare_runs(
@@ -278,6 +313,8 @@ class EvaluationService:
         baseline_run_id: str,
         regression_policy_ref_value: str,
         aggregation_policy_ref_value: str | None = None,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
     ) -> ComparisonReport:
         current = self._repository.get_run(current_run_id)
         baseline = self._repository.get_run(baseline_run_id)
@@ -300,6 +337,18 @@ class EvaluationService:
             baseline.suite_version,
         ):
             raise ValueError("evaluation runs must use the same suite identity/version")
+
+        manifest_comparison = self.compare_manifests(
+            current_run_id=current_run_id,
+            baseline_run_id=baseline_run_id,
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
+        )
+        if manifest_comparison.status is Comparability.UNKNOWN:
+            raise ValueError("evaluation comparison requires canonical EvalManifests for both runs")
+        if manifest_comparison.status is Comparability.INCOMPARABLE:
+            changed = ", ".join(item.path for item in manifest_comparison.blocking_differences)
+            raise ValueError(f"evaluation manifests are incomparable: {changed}")
 
         aggregation_policy = (
             None

@@ -11,6 +11,7 @@ from ai_multi_agent_platform.evaluation import (
     ConfigurationSnapshot,
     DeterministicAssertion,
     DeterministicAssertionEvaluator,
+    EvalManifestBuilder,
     EvaluationAttempt,
     EvaluationCase,
     EvaluationExecutionContext,
@@ -20,11 +21,13 @@ from ai_multi_agent_platform.evaluation import (
     EvaluationRunner,
     EvaluationRunStatus,
     EvaluationSuite,
+    InMemoryEvalManifestRepository,
     InMemoryEvaluationRepository,
     KernelEvaluationCaseExecutor,
     RegressionPolicy,
     RegressionRule,
     RegressionRuleKind,
+    VersionReference,
 )
 from ai_multi_agent_platform.kernel import InMemoryKernelRepository, PlatformKernel
 from ai_multi_agent_platform.testing import FakeLifecycleBackend, FakeOrchestrator
@@ -205,15 +208,28 @@ def test_runner_contains_case_execution_failure_and_still_completes_suite() -> N
 def test_runner_persists_single_repetition_baseline_comparison() -> None:
     async def scenario() -> None:
         repository = InMemoryEvaluationRepository()
+        evaluator = DeterministicAssertionEvaluator()
+        baseline_snapshot = ConfigurationSnapshot(
+            platform_version=_snapshot().platform_version,
+            platform_commit=_snapshot().platform_commit,
+            references=(
+                VersionReference("evaluation_suite", "suite.runner", "1"),
+                VersionReference(
+                    "evaluator",
+                    evaluator.descriptor.evaluator_id,
+                    evaluator.descriptor.version,
+                ),
+            ),
+        )
         baseline = EvaluationRun(
             suite_id="suite.runner",
             suite_version="1",
-            snapshot=_snapshot(),
+            snapshot=baseline_snapshot,
             status=EvaluationRunStatus.COMPLETED,
             completed_at=datetime.now(UTC),
         )
         repository.save_run(baseline)
-        baseline_result = DeterministicAssertionEvaluator().evaluate(
+        baseline_result = evaluator.evaluate(
             evaluation_run_id=baseline.run_id,
             case=_case(),
             observation=EvaluationObservation(data={"result": {"status": "ok"}}),
@@ -230,10 +246,13 @@ def test_runner_persists_single_repetition_baseline_comparison() -> None:
                 ),
             ),
         )
+        manifests = InMemoryEvalManifestRepository()
+        manifests.save_manifest(EvalManifestBuilder().build(run=baseline, suite=_suite()))
         runner = EvaluationRunner(
             repository=repository,
+            manifest_repository=manifests,
             executor=RecordingExecutor([]),
-            evaluators=(DeterministicAssertionEvaluator(),),
+            evaluators=(evaluator,),
         )
         summary = await runner.run_suite(
             suite=_suite(),

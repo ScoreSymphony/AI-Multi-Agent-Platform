@@ -18,7 +18,7 @@ Agent/AgentTeam revision
           |
           +-- identity/execution authority: Agent runtime
 
-Artifact / Result / Research / future Skill/Context resources
+Artifact / Result / Research / Skill / Context resources
           |
           +-- source authority: their owning services
 
@@ -97,7 +97,7 @@ Agent/Team revision. Before returning runtime context it:
 2. confirms that the consumer is the pinned recipient or satisfies an injected canonical
    consumer-requirement policy;
 3. revalidates every source reference for existence and read authorization;
-4. optionally validates a future ContextBundle reference;
+4. optionally validates an independently supplied exact ContextBundle reference;
 5. durably records `handoff_id + revision + digest -> consuming Run`;
 6. only then returns the Handoff as runtime context.
 
@@ -110,17 +110,36 @@ a source that became unreadable after Handoff creation is not silently dereferen
 
 ## Handoff versus Context Bundle
 
-The types intentionally keep the #590 integration narrow:
+The #590 integration keeps the two lifecycles separate while making the Handoff an actual
+canonical context source:
 
-- `AgentHandoff` is the semantic work-transfer artifact.
-- `HandoffContextSource` exposes the exact Handoff ID/revision/digest as one provider-neutral
-  source candidate for a future canonical `ContextBundle`.
-- `HandoffConsumption.context_bundle_ref` can record the exact Context Bundle that delivered
-  the Handoff once #590 is implemented.
+- `AgentHandoff` remains the semantic work-transfer artifact and canonical source authority.
+- `HandoffContextSource` exposes the exact Handoff ID, revision, digest and execution references.
+- `ContextSourceType.AGENT_HANDOFF` gives #590 a stable source vocabulary without introducing a
+  Handoff-specific resolver or permission system.
+- `ConsumedHandoffContextAdapter` accepts only `HandoffRuntimeContext` values whose exact
+  consuming-Run binding is already durable, then contributes them through the normal #590
+  `ContextSourceAdapter` seam.
+- The adapter snapshots the compact structured Handoff itself as deterministic inline context,
+  so `ReferenceContextRenderer` and context-bound Agent execution can consume it without
+  orchestrator-private state or a special content provider.
+- The Context source identity retains the canonical Handoff digest; the Context entry's own
+  content digest protects the rendered snapshot. These are deliberately separate identities.
+- Producer statements enter the Context Bundle with `UNTRUSTED` trust and `CONTEXT` role, so a
+  Handoff cannot acquire security/instruction authority merely by being included.
+- Referenced Artifacts, Results and Research Evidence are not copied into the Context Bundle by
+  this bridge. Their owning domains and normal authorization/verification boundaries remain
+  authoritative.
 
-This does not implement or shadow the Context Bundle resolver. The same pattern applies to the
-progressive Skill Bundle (#588) and Research Evidence (#589) integrations: Handoffs can carry
-exact source references now while those owner domains retain their own lifecycle and schemas.
+The #590 resolver applies its normal read-authorization gate before including the Handoff.
+A denied mandatory Handoff fails closed. Collection is additionally scoped to the exact Task,
+consuming Run, Plan/consumer Step and, for direct Agent consumers, exact Agent revision.
+
+`HandoffConsumption.context_bundle_ref` remains available when an exact Context Bundle is
+already known at the consumption boundary. It is not a second ownership mechanism: the final
+#590 `ContextRunBinding` remains the canonical proof of which complete Context Bundle an
+AgentRun actually used, while Handoff consumption independently proves which exact Handoff
+revision was bound to that Run.
 
 ## Persistence and recovery
 
@@ -141,7 +160,9 @@ permission system. Production composition must implement it by delegating to the
 Artifact/Result/Research/Skill/Context service plus canonical #15 authorization.
 
 A Handoff never treats visibility as permission and never transports secret values. Source
-references are identifiers/revisions/digests only.
+references are identifiers/revisions/digests only. ContextBundle inclusion adds a separate
+normal #590 read-authorization gate for the Handoff source itself; it never replaces or weakens
+source-resource authorization.
 
 ## Observability and Control Plane
 
@@ -164,12 +185,15 @@ assignment authority.
 No canonical Handoff field contains an orchestrator/provider-private runtime identity. An
 orchestrator may render or transport the Handoff, but replacing the orchestrator leaves the
 canonical Handoff ID, revision, digest, producer/consumer revisions and consuming Run binding
-unchanged.
+unchanged. ContextBundle rendering receives the same platform-owned Handoff snapshot regardless
+of the selected orchestrator adapter.
 
 ## Security invariants
 
 - Handoffs do not grant permissions or capabilities.
 - Referenced data must pass normal source-resource authorization.
+- ContextBundle inclusion is separately authorization-gated and fail-closed when mandatory.
+- Producer Handoff statements remain untrusted context rather than verification authority.
 - Missing/stale references fail explicitly.
 - Historical Handoff revisions are immutable.
 - Exact Agent/Team revisions are pinned.

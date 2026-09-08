@@ -1,0 +1,55 @@
+name: Repository intelligence ProjectAtlas pilot
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/repository-intelligence-projectatlas-pilot.yml"
+      - "scripts/ci/issue502_projectatlas_pilot.py"
+      - "docs/extensions/REPOSITORY_INTELLIGENCE_EVALUATION.md"
+
+permissions:
+  contents: read
+
+jobs:
+  projectatlas-v045:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out platform
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Download pinned ProjectAtlas runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .pilot/projectatlas
+          curl --fail --location --silent --show-error \
+            "https://github.com/styler-ai/ProjectAtlas/releases/download/v0.4.5/projectatlas-v0.4.5-x86_64-unknown-linux-gnu.tar.gz" \
+            --output .pilot/projectatlas.tar.gz
+          echo "e22ac7f9e37b1eb49929e4a8ad72c51affd2668731832652ee4783e20a8fabd9  .pilot/projectatlas.tar.gz" \
+            | sha256sum --check --strict
+          tar -xzf .pilot/projectatlas.tar.gz -C .pilot/projectatlas
+          PROJECTATLAS_BIN="$(find .pilot/projectatlas -type f -name projectatlas -print -quit)"
+          test -n "$PROJECTATLAS_BIN"
+          chmod +x "$PROJECTATLAS_BIN"
+          echo "PROJECTATLAS_BIN=$PROJECTATLAS_BIN" >> "$GITHUB_ENV"
+
+      - name: Run contained read-only pilot
+        run: |
+          python scripts/ci/issue502_projectatlas_pilot.py \
+            --binary "$PROJECTATLAS_BIN" \
+            --report artifacts/repository-intelligence/projectatlas-v0.4.5.json
+
+      - name: Upload machine-readable pilot evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: repository-intelligence-projectatlas-v0.4.5
+          path: artifacts/repository-intelligence/projectatlas-v0.4.5.json
+          if-no-files-found: warn

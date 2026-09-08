@@ -148,7 +148,7 @@ class ResearchItem:
     task_id: str | None = None
     plan_id: str | None = None
     run_id: str | None = None
-    data_class: str = "standard"
+    data_class: str = "internal"
     constraints: tuple[str, ...] = ()
     source_ids: tuple[str, ...] = ()
     claim_ids: tuple[str, ...] = ()

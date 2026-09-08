@@ -1,6 +1,7 @@
 """Canonical external connector framework."""
 
 from .capability_bridge import ConnectorActorResolver, ConnectorCapabilityProvider
+from .egress import EgressConnectorService
 from .models import (
     ConflictPolicy,
     Connection,
@@ -48,6 +49,7 @@ __all__ = [
     "ConnectorService",
     "ConnectorSyncRequest",
     "ConnectorSyncResult",
+    "EgressConnectorService",
     "ExternalNativeReference",
     "ExternalResourceReference",
     "InMemoryConnectorRepository",

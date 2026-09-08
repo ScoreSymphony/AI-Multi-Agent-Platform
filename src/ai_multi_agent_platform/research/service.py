@@ -67,7 +67,7 @@ class ResearchService:
         task_id: str | None = None,
         plan_id: str | None = None,
         run_id: str | None = None,
-        data_class: str = "standard",
+        data_class: str = "internal",
         constraints: tuple[str, ...] = (),
         freshness_policy: FreshnessPolicy | None = None,
         provenance: Provenance | None = None,

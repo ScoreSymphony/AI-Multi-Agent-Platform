@@ -181,6 +181,7 @@ def test_evaluation_service_runs_and_compares_configured_suite() -> None:
             current_run_id=current.run.run_id,
             baseline_run_id=baseline.run.run_id,
             regression_policy_ref_value=regression_policy_ref(policy),
+            candidate_reference_kinds=frozenset({"platform"}),
         )
         assert len(comparison.regressions) == 1
         detail = service.get_run_detail(current.run.run_id)
@@ -273,6 +274,7 @@ def test_control_plane_exposes_evaluation_resources_run_and_compare_commands() -
                     "resource_ref": current_run_id,
                     "baseline_run_id": baseline_run_id,
                     "regression_policy_ref": "reference.pr@1.0",
+                    "candidate_reference_kinds": ["platform"],
                 },
             )
         )
@@ -291,6 +293,8 @@ def test_control_plane_exposes_evaluation_resources_run_and_compare_commands() -
         assert loaded.status == 200
         assert isinstance(loaded.body, dict)
         assert loaded.body["comparison"] == comparison.body
+        assert isinstance(loaded.body["manifest"], dict)
+        assert loaded.body["manifest"]["manifest_id"]
 
     asyncio.run(scenario())
 
@@ -360,6 +364,7 @@ def test_control_plane_repeated_runs_require_and_expose_exact_aggregation_policy
                     "resource_ref": current_run_id,
                     "baseline_run_id": baseline_run_id,
                     "regression_policy_ref": "reference.pr@1.0",
+                    "candidate_reference_kinds": ["platform"],
                     "aggregation_policy_ref": aggregation_ref,
                 },
             )

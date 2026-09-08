@@ -188,6 +188,7 @@ _RESOURCE_TYPES: Mapping[ContextSourceType, str] = {
     ContextSourceType.PRIOR_RUN: "run",
     ContextSourceType.VERIFICATION: "generic",
     ContextSourceType.HUMAN: "generic",
+    ContextSourceType.AGENT_HANDOFF: "generic",
 }
 
 _ROLE_ORDER: Mapping[ContextEntryRole, int] = {
@@ -213,6 +214,7 @@ _SOURCE_ORDER: Mapping[ContextSourceType, int] = {
     ContextSourceType.RESULT: 12,
     ContextSourceType.PRIOR_RUN: 13,
     ContextSourceType.VERIFICATION: 14,
+    ContextSourceType.AGENT_HANDOFF: 15,
 }
 
 

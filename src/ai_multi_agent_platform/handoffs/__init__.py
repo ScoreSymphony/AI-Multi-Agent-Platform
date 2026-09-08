@@ -1,5 +1,6 @@
 """Canonical structured work-transfer contracts for Agents and Agent Teams."""
 
+from .context import ConsumedHandoffContextAdapter, handoff_context_candidate
 from .control_plane import HandoffControlPlaneProjection, HandoffViewAuthorizer
 from .coordination import CoordinatedHandoffService
 from .models import (
@@ -38,6 +39,7 @@ from .service import (
 __all__ = [
     "HANDOFF_SCHEMA_VERSION",
     "AgentHandoff",
+    "ConsumedHandoffContextAdapter",
     "ConsumerRequirementEvaluator",
     "CoordinatedHandoffService",
     "HandoffAgentRevisionRepository",
@@ -64,6 +66,7 @@ __all__ = [
     "compute_handoff_digest",
     "consumption_from_dict",
     "consumption_to_dict",
+    "handoff_context_candidate",
     "handoff_context_source",
     "handoff_from_dict",
     "handoff_to_dict",

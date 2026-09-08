@@ -32,6 +32,9 @@ from ai_multi_agent_platform.evaluation import (
     SqliteEvaluationRepository,
     load_aggregation_policy,
 )
+from ai_multi_agent_platform.evaluation.manifest_repository import (
+    InMemoryEvalManifestRepository,
+)
 from ai_multi_agent_platform.evaluation.service import (
     EvaluationService,
     aggregation_policy_ref,
@@ -256,17 +259,19 @@ def test_aggregation_policy_loader_is_strict(tmp_path: Path) -> None:
 def test_runner_compares_repeated_runs_through_versioned_aggregates() -> None:
     async def scenario() -> None:
         memory = InMemoryEvaluationRepository()
+        manifests = InMemoryEvalManifestRepository()
         suite = _suite()
         aggregation = _aggregation_policy()
         regression = _regression_policy()
 
         baseline = await EvaluationRunner(
             repository=memory,
+            manifest_repository=manifests,
             executor=RepetitionStatusExecutor(("ok", "ok", "ok")),
             evaluators=(DeterministicAssertionEvaluator(),),
         ).run_suite(
             suite=suite,
-            snapshot=_snapshot("baseline"),
+            snapshot=_snapshot("comparison"),
             repetitions=3,
             seed=50,
             aggregation_policy=aggregation,
@@ -276,13 +281,14 @@ def test_runner_compares_repeated_runs_through_versioned_aggregates() -> None:
 
         current = await EvaluationRunner(
             repository=memory,
+            manifest_repository=manifests,
             executor=RepetitionStatusExecutor(("ok", "bad", "ok")),
             evaluators=(DeterministicAssertionEvaluator(),),
         ).run_suite(
             suite=suite,
-            snapshot=_snapshot("current"),
+            snapshot=_snapshot("comparison"),
             repetitions=3,
-            seed=80,
+            seed=50,
             baseline_run_id=baseline.run.run_id,
             regression_policy=regression,
             aggregation_policy=aggregation,
@@ -349,27 +355,30 @@ def test_runner_rejects_mismatched_sample_counts_when_policy_requires_equality()
 def test_service_can_compare_existing_repeated_runs_post_hoc() -> None:
     async def scenario() -> None:
         repository = InMemoryEvaluationRepository()
+        manifests = InMemoryEvalManifestRepository()
         suite = _suite()
         aggregation = _aggregation_policy()
         regression = _regression_policy()
         baseline_runner = EvaluationRunner(
             repository=repository,
+            manifest_repository=manifests,
             executor=RepetitionStatusExecutor(("ok", "ok")),
             evaluators=(DeterministicAssertionEvaluator(),),
         )
         baseline = await baseline_runner.run_suite(
             suite=suite,
-            snapshot=_snapshot("baseline"),
+            snapshot=_snapshot("posthoc"),
             repetitions=2,
         )
         current_runner = EvaluationRunner(
             repository=repository,
+            manifest_repository=manifests,
             executor=RepetitionStatusExecutor(("bad", "bad")),
             evaluators=(DeterministicAssertionEvaluator(),),
         )
         current = await current_runner.run_suite(
             suite=suite,
-            snapshot=_snapshot("current"),
+            snapshot=_snapshot("posthoc"),
             repetitions=2,
         )
         service = EvaluationService(

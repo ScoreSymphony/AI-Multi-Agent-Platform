@@ -24,6 +24,7 @@ from ai_multi_agent_platform.evaluation.models import (
     SnapshotValue,
     VersionReference,
 )
+from ai_multi_agent_platform.evaluation.reproducibility import manifest_projection
 from ai_multi_agent_platform.evaluation.service import (
     EvaluationRunDetail,
     EvaluationService,
@@ -113,6 +114,7 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
             baseline_run_id=_optional_string(payload, "baseline_run_id"),
             regression_policy_ref_value=_optional_string(payload, "regression_policy_ref"),
             aggregation_policy_ref_value=_optional_string(payload, "aggregation_policy_ref"),
+            candidate_reference_kinds=_optional_string_set(payload, "candidate_reference_kinds"),
         )
         return _run_detail_resource(service.get_run_detail(summary.run.run_id))
 
@@ -127,6 +129,7 @@ def evaluation_command_handlers(service: EvaluationService) -> dict[str, Command
             baseline_run_id=_required_string(payload, "baseline_run_id"),
             regression_policy_ref_value=_required_string(payload, "regression_policy_ref"),
             aggregation_policy_ref_value=_optional_string(payload, "aggregation_policy_ref"),
+            candidate_reference_kinds=_optional_string_set(payload, "candidate_reference_kinds"),
         )
         return _comparison_resource(comparison)
 
@@ -177,6 +180,14 @@ def _run_detail_resource(detail: EvaluationRunDetail) -> dict[str, JsonValue]:
     resource["aggregates"] = [_aggregate_resource(item) for item in detail.aggregates]
     resource["comparison"] = (
         None if detail.comparison is None else _comparison_resource(detail.comparison)
+    )
+    resource["manifest"] = (
+        None
+        if detail.manifest is None
+        else cast(
+            JsonValue,
+            manifest_projection(detail.manifest, results=detail.results),
+        )
     )
     return resource
 
@@ -279,6 +290,22 @@ def _optional_string(payload: dict[str, JsonValue], key: str) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{key} must be a non-blank string or null")
     return value
+
+
+def _optional_string_set(payload: dict[str, JsonValue], key: str) -> frozenset[str]:
+    value = payload.get(key)
+    if value is None:
+        return frozenset()
+    if not isinstance(value, list):
+        raise ValueError(f"{key} must be an array or null")
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"{key} entries must be non-blank strings")
+        result.append(item)
+    if len(result) != len(set(result)):
+        raise ValueError(f"{key} entries must be unique")
+    return frozenset(result)
 
 
 def _optional_int(payload: dict[str, JsonValue], key: str) -> int | None:

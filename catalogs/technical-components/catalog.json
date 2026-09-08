@@ -1,0 +1,194 @@
+{
+  "schema_version": "1",
+  "provider_id": "technical-components-reference",
+  "items": [
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "projectatlas",
+        "item_type": "tool",
+        "name": "ProjectAtlas",
+        "description": "Agent-first repository intelligence candidate for purpose metadata, compact navigation, source slices, graph relationships and workspace-aware code context.",
+        "version": "0.4.4",
+        "publisher": "styler-ai",
+        "source": {
+          "repository": "https://github.com/styler-ai/ProjectAtlas",
+          "package_reference": "github:styler-ai/ProjectAtlas@v0.4.4",
+          "revision": "v0.4.4"
+        },
+        "license": "MIT",
+        "provenance": "Curated candidate listing verified against the upstream repository and v0.4.4 release documentation; no third-party executable code is bundled by this catalog.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "required_plugins": [],
+        "required_connectors": [],
+        "required_models": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "agent-first",
+          "repository-intelligence",
+          "mcp"
+        ],
+        "categories": [
+          "code-intelligence"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Initial curated discovery entry. Architecture role: P1 agent-first repository-intelligence candidate; benchmark required before adoption.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/projectatlas.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "graphify",
+        "item_type": "tool",
+        "name": "Graphify",
+        "description": "Code-intelligence graph and architecture specialist candidate that builds queryable knowledge graphs from code and related project material.",
+        "version": "0.9.47",
+        "publisher": "Graphify Labs",
+        "source": {
+          "repository": "https://github.com/Graphify-Labs/graphify",
+          "package_reference": "github:Graphify-Labs/graphify@v0.9.47",
+          "revision": "v0.9.47"
+        },
+        "license": "Apache-2.0",
+        "provenance": "Curated candidate listing verified against the upstream repository, package metadata and v0.9.47 release; no third-party executable code is bundled by this catalog.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "required_plugins": [],
+        "required_connectors": [],
+        "required_models": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "knowledge-graph",
+          "architecture",
+          "tree-sitter"
+        ],
+        "categories": [
+          "code-intelligence"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Initial curated discovery entry. Architecture role: graph/architecture specialist candidate; capability benchmark required before adoption.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/graphify.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "codegraph",
+        "item_type": "tool",
+        "name": "CodeGraph",
+        "description": "Structural code-intelligence comparison candidate exposing semantic code graphs, references, call chains and MCP-oriented repository queries.",
+        "version": "0.20.1",
+        "publisher": "codegraph-ai",
+        "source": {
+          "repository": "https://github.com/codegraph-ai/CodeGraph",
+          "package_reference": "github:codegraph-ai/CodeGraph@v0.20.1",
+          "revision": "v0.20.1"
+        },
+        "license": "Apache-2.0",
+        "provenance": "Curated candidate listing verified against the upstream repository, Apache-2.0 license and v0.20.1 release; no third-party executable code is bundled by this catalog.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "required_plugins": [],
+        "required_connectors": [],
+        "required_models": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "structural-analysis",
+          "semantic-graph",
+          "mcp"
+        ],
+        "categories": [
+          "code-intelligence"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Initial curated discovery entry. Architecture role: structural comparison candidate; capability benchmark required before adoption.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/codegraph.md"
+    },
+    {
+      "metadata": {
+        "schema_version": "2",
+        "item_id": "understand-anything",
+        "item_type": "tool",
+        "name": "Understand Anything",
+        "description": "Semantic/domain/impact code-intelligence specialist candidate combining static analysis with an interactive project knowledge graph.",
+        "version": "2.7.3",
+        "publisher": "Lum1104",
+        "source": {
+          "repository": "https://github.com/Lum1104/Understand-Anything",
+          "package_reference": "github:Lum1104/Understand-Anything@v2.7.3",
+          "revision": "v2.7.3"
+        },
+        "license": "MIT",
+        "provenance": "Curated candidate listing verified against the upstream repository, MIT license and v2.7.3 release; no third-party executable code is bundled by this catalog.",
+        "supported_platform": {
+          "minimum": null,
+          "maximum": null
+        },
+        "dependencies": [],
+        "requested_permissions": [],
+        "required_capabilities": [],
+        "required_plugins": [],
+        "required_connectors": [],
+        "required_models": [],
+        "tags": [
+          "candidate",
+          "external-component",
+          "semantic-analysis",
+          "domain-view",
+          "impact-analysis"
+        ],
+        "categories": [
+          "code-intelligence"
+        ],
+        "distribution_route": "manual",
+        "integrity": {},
+        "trust_status": "untrusted",
+        "review_reference": "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638",
+        "released_at": null,
+        "changelog": "Initial curated discovery entry. Architecture role: semantic/domain/impact specialist candidate; capability benchmark required before adoption.",
+        "deprecated": false,
+        "yanked": false
+      },
+      "artifact": "artifacts/understand-anything.md"
+    }
+  ]
+}

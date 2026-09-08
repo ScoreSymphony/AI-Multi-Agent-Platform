@@ -24,6 +24,7 @@ from .hardening import (
     merge_snapshot_references,
     validate_snapshot_reference_kinds,
 )
+from .manifest_repository import EvalManifestRepository, InMemoryEvalManifestRepository
 from .models import (
     ComparisonReport,
     ConfigurationSnapshot,
@@ -39,6 +40,17 @@ from .models import (
     utc_now,
 )
 from .regression import RegressionEngine
+from .reproducibility import (
+    Comparability,
+    EvalManifest,
+    EvalManifestBuilder,
+    EvalManifestContext,
+    ManifestComparator,
+    ManifestComparison,
+    RandomnessMode,
+    RepeatPolicy,
+    SeedPolicy,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +61,8 @@ class EvaluationRunSummary:
     results: tuple[EvaluationResult, ...]
     comparison: ComparisonReport | None = None
     aggregates: tuple[AggregatedEvaluationResult, ...] = ()
+    manifest: EvalManifest | None = None
+    manifest_comparison: ManifestComparison | None = None
 
 
 class NoopEvaluationIsolation:
@@ -92,6 +106,9 @@ class EvaluationRunner:
         configuration_references: tuple[VersionReference, ...] = (),
         required_snapshot_kinds: tuple[str, ...] = (),
         resource_limit_evaluator: ResourceLimitEvaluator | None = None,
+        manifest_repository: EvalManifestRepository | None = None,
+        manifest_builder: EvalManifestBuilder | None = None,
+        manifest_comparator: ManifestComparator | None = None,
     ) -> None:
         if not evaluators:
             raise ValueError("evaluation runner requires at least one evaluator")
@@ -115,6 +132,31 @@ class EvaluationRunner:
         self._configuration_references = configuration_references
         self._required_snapshot_kinds = normalized_required
         self._resource_limit_evaluator = resource_limit_evaluator or ResourceLimitEvaluator()
+        self._manifest_repository = manifest_repository or InMemoryEvalManifestRepository()
+        self._manifest_builder = manifest_builder or EvalManifestBuilder()
+        self._manifest_comparator = manifest_comparator or ManifestComparator()
+
+    @property
+    def manifest_repository(self) -> EvalManifestRepository:
+        return self._manifest_repository
+
+    def get_manifest(self, evaluation_run_id: str) -> EvalManifest | None:
+        return self._manifest_repository.get_manifest(evaluation_run_id)
+
+    def compare_manifests(
+        self,
+        *,
+        baseline_run_id: str,
+        current_run_id: str,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive: bool = False,
+    ) -> ManifestComparison:
+        return self._manifest_comparator.compare(
+            self.get_manifest(baseline_run_id),
+            self.get_manifest(current_run_id),
+            candidate_reference_kinds=candidate_reference_kinds,
+            performance_sensitive=performance_sensitive,
+        )
 
     async def run_suite(
         self,
@@ -126,6 +168,11 @@ class EvaluationRunner:
         baseline_run_id: str | None = None,
         regression_policy: RegressionPolicy | None = None,
         aggregation_policy: AggregationPolicy | None = None,
+        repeat_policy: RepeatPolicy | None = None,
+        seed_policy: SeedPolicy | None = None,
+        manifest_context: EvalManifestContext | None = None,
+        candidate_reference_kinds: frozenset[str] = frozenset(),
+        performance_sensitive_comparison: bool = False,
     ) -> EvaluationRunSummary:
         """Run every case/repetition and persist canonical results as they are produced."""
 
@@ -140,6 +187,8 @@ class EvaluationRunner:
                 "automatic baseline comparison with repeated samples requires aggregation_policy; "
                 "without aggregation repetitions=1 is required"
             )
+        if seed_policy is not None and seed is not None:
+            raise ValueError("seed and seed_policy are alternative reproducibility inputs")
 
         snapshot = self._complete_snapshot(
             suite=suite,
@@ -165,11 +214,38 @@ class EvaluationRunner:
             repetitions=repetitions,
             seed=seed,
         )
+        effective_repeat_policy = repeat_policy or RepeatPolicy.for_run(run)
+        if effective_repeat_policy.repeat_count != repetitions:
+            raise ValueError("repeat_policy.repeat_count must match repetitions")
+        effective_seed_policy = seed_policy or SeedPolicy.conservative_for_run(run)
+        self._validate_seed_policy(effective_seed_policy, repetitions=repetitions)
+        manifest = self._manifest_builder.build(
+            run=run,
+            suite=suite,
+            repeat_policy=effective_repeat_policy,
+            seed_policy=effective_seed_policy,
+            context=manifest_context,
+        )
+        manifest_comparison: ManifestComparison | None = None
+        if baseline is not None:
+            manifest_comparison = self._manifest_comparator.compare(
+                self._manifest_repository.get_manifest(baseline.run_id),
+                manifest,
+                candidate_reference_kinds=candidate_reference_kinds,
+                performance_sensitive=performance_sensitive_comparison,
+            )
+            self._require_comparable_manifests(manifest_comparison)
+
         self._repository.save_run(run)
 
         try:
+            self._manifest_repository.save_manifest(manifest)
             for repetition_index in range(repetitions):
-                repetition_seed = None if seed is None else seed + repetition_index
+                repetition_seed = self._seed_for_repetition(
+                    legacy_seed=seed,
+                    policy=effective_seed_policy,
+                    repetition_index=repetition_index,
+                )
                 for case in suite.cases:
                     attempt = EvaluationAttempt(
                         evaluation_run_id=run.run_id,
@@ -223,7 +299,48 @@ class EvaluationRunner:
             results=results,
             comparison=comparison,
             aggregates=aggregates,
+            manifest=manifest,
+            manifest_comparison=manifest_comparison,
         )
+
+    @staticmethod
+    def _validate_seed_policy(policy: SeedPolicy, *, repetitions: int) -> None:
+        if (
+            policy.mode
+            in {
+                RandomnessMode.FIXED_SEED_SUPPORTED,
+                RandomnessMode.FIXED_SEED_UNSUPPORTED,
+            }
+            and len(policy.ordered_seeds) != repetitions
+        ):
+            raise ValueError("fixed seed policies require one ordered seed per repetition")
+
+    @staticmethod
+    def _seed_for_repetition(
+        *,
+        legacy_seed: int | None,
+        policy: SeedPolicy,
+        repetition_index: int,
+    ) -> int | None:
+        if policy.mode in {
+            RandomnessMode.FIXED_SEED_SUPPORTED,
+            RandomnessMode.FIXED_SEED_UNSUPPORTED,
+        }:
+            return policy.ordered_seeds[repetition_index]
+        if legacy_seed is not None:
+            return legacy_seed + repetition_index
+        return None
+
+    @staticmethod
+    def _require_comparable_manifests(comparison: ManifestComparison) -> None:
+        if comparison.status not in {Comparability.INCOMPARABLE, Comparability.UNKNOWN}:
+            return
+        if comparison.status is Comparability.UNKNOWN:
+            raise ValueError(
+                "evaluation baseline has no canonical EvalManifest; comparison is unknown"
+            )
+        changed = ", ".join(item.path for item in comparison.blocking_differences)
+        raise ValueError(f"evaluation manifests are incomparable: {changed}")
 
     def _complete_snapshot(
         self,

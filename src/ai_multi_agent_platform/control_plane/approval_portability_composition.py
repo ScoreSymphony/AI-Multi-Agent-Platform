@@ -9,8 +9,9 @@ module only after the Agent package is fully initialized.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
+from ai_multi_agent_platform.automation import Automation, TriggerDelivery
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.decisions import (
     DecisionRepository,
@@ -18,6 +19,12 @@ from ai_multi_agent_platform.decisions import (
     SqliteDecisionRepository,
     decision_record_command_handlers,
     decision_record_resource_services,
+)
+from ai_multi_agent_platform.goals import (
+    EventSourcedGoalRepository,
+    GoalService,
+    KernelGoalTaskCreator,
+    dispatch_goal_automation_delivery,
 )
 from ai_multi_agent_platform.governance.control_plane import register_governance_control_plane
 from ai_multi_agent_platform.governance.repository import (
@@ -29,12 +36,13 @@ from ai_multi_agent_platform.security import AuthorizationGate
 
 from .approval_decision_composition import ControlPlane as _ApprovalControlPlane
 from .extensions import _singular, _validate_resources
+from .goal_contract import goal_command_handlers, goal_resource_services
 from .models import PageQuery, RequestContext, paginate
 from .portability_api import ControlPlane as _PortabilityControlPlane
 
 
 class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
-    """Approval-aware Control Plane with portability and durable governance/decisions."""
+    """Approval-aware Control Plane with durable canonical product resources."""
 
     def __init__(
         self,
@@ -46,6 +54,19 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
+
+        # Goals are canonical product state, not an optional deployment extension. Reuse the
+        # existing kernel EventRepository so Goal snapshots, idempotency records and Task work
+        # survive the same local restart boundary as Tasks/Runs.
+        self.goals = GoalService(
+            EventSourcedGoalRepository(self._events),
+            task_creator=KernelGoalTaskCreator(self._kernel),
+        )
+        for collection, service in goal_resource_services(self.goals).items():
+            self.register_resource_service(collection, service)
+        for command, handler in goal_command_handlers(self.goals).items():
+            self.register_command(command, handler)
+
         self.governance: GovernanceService | None = None
         self.decisions: DecisionService | None = None
         gate = getattr(self, "approval_gate", None)
@@ -74,6 +95,33 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
             for command, handler in decision_record_command_handlers(decisions).items():
                 self.register_command(command, handler)
             self.decisions = decisions
+
+    async def _create_task_from_automation(
+        self,
+        automation: Automation,
+        delivery: TriggerDelivery,
+        payload: dict[str, JsonValue],
+        idempotency_key: str,
+    ) -> str:
+        dispatch = await dispatch_goal_automation_delivery(
+            self.goals,
+            automation,
+            delivery,
+            payload,
+            idempotency_key,
+        )
+        if not dispatch.handled:
+            return await super()._create_task_from_automation(
+                automation,
+                delivery,
+                payload,
+                idempotency_key,
+            )
+
+        # #18 already models generated_task_id as optional. Its legacy TaskCreator type still
+        # spells the return value as str, so keep the compatibility cast at this composition seam
+        # rather than fabricating a Task when a Goal review correctly needs no executable work.
+        return cast(str, dispatch.generated_task_id)
 
     async def list_extension_resources(
         self,

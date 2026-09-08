@@ -1,0 +1,60 @@
+"""Governed feedback, learning-candidate and owner-domain promotion workflow (#595)."""
+
+from .models import (
+    LEARNING_SCHEMA_VERSION,
+    FeedbackRecord,
+    FeedbackType,
+    LearningCandidate,
+    LearningCandidateStatus,
+    LearningGatePlan,
+    LearningReference,
+    LearningSourceType,
+    LearningTarget,
+    LearningTargetType,
+    PromotionReceipt,
+    candidate_from_dict,
+    candidate_to_dict,
+    feedback_from_dict,
+    feedback_to_dict,
+    new_feedback_id,
+    new_learning_candidate_id,
+)
+from .promotion import (
+    AgentPromotionAdapter,
+    OwnerPromotionAdapter,
+    PromotionRegistry,
+    RoutingProfilePromotionAdapter,
+    SkillPromotionAdapter,
+)
+from .repository import InMemoryLearningRepository, LearningRepository, SQLiteLearningRepository
+from .service import LearningQualityGate, LearningService
+
+__all__ = [
+    "LEARNING_SCHEMA_VERSION",
+    "AgentPromotionAdapter",
+    "FeedbackRecord",
+    "FeedbackType",
+    "InMemoryLearningRepository",
+    "LearningCandidate",
+    "LearningCandidateStatus",
+    "LearningGatePlan",
+    "LearningQualityGate",
+    "LearningReference",
+    "LearningRepository",
+    "LearningService",
+    "LearningSourceType",
+    "LearningTarget",
+    "LearningTargetType",
+    "OwnerPromotionAdapter",
+    "PromotionReceipt",
+    "PromotionRegistry",
+    "RoutingProfilePromotionAdapter",
+    "SQLiteLearningRepository",
+    "SkillPromotionAdapter",
+    "candidate_from_dict",
+    "candidate_to_dict",
+    "feedback_from_dict",
+    "feedback_to_dict",
+    "new_feedback_id",
+    "new_learning_candidate_id",
+]

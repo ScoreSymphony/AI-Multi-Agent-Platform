@@ -5,10 +5,10 @@ from .canonical_binding import (
     canonical_tool_id,
     canonical_tool_invocation_id,
 )
+from .egress import CapabilityClassificationResolver, EgressCapabilityInvoker
 from .invocation import (
     ApprovalHook,
     CanonicalInvocationBindingHook,
-    CapabilityInvoker,
     GovernanceBindingHook,
     InvocationObserver,
     NullInvocationObserver,
@@ -38,9 +38,13 @@ from .types import (
     SideEffectClassification,
 )
 
+# Keep the established public name while making egress enforcement the default application path.
+CapabilityInvoker = EgressCapabilityInvoker
+
 __all__ = [
     "ApprovalHook",
     "CanonicalInvocationBindingHook",
+    "CapabilityClassificationResolver",
     "CapabilityCompatibilityRequest",
     "CapabilityDiscoveryPolicyHook",
     "CapabilityDiscoveryRequest",
@@ -55,6 +59,7 @@ __all__ = [
     "CompensationIdempotency",
     "CredentialRequirement",
     "ECHO_CAPABILITY_ID",
+    "EgressCapabilityInvoker",
     "EventRepositoryInvocationObserver",
     "GovernanceBindingHook",
     "ISOLATED_WORKSPACE_WRITE_FEATURE",
