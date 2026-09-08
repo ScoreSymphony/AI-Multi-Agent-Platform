@@ -4,7 +4,7 @@
   "items": [
     {
       "metadata": {
-        "schema_version": "1",
+        "schema_version": "2",
         "item_id": "projectatlas",
         "item_type": "tool",
         "name": "ProjectAtlas",
@@ -51,7 +51,7 @@
     },
     {
       "metadata": {
-        "schema_version": "1",
+        "schema_version": "2",
         "item_id": "graphify",
         "item_type": "tool",
         "name": "Graphify",
@@ -98,7 +98,7 @@
     },
     {
       "metadata": {
-        "schema_version": "1",
+        "schema_version": "2",
         "item_id": "codegraph",
         "item_type": "tool",
         "name": "CodeGraph",
@@ -145,7 +145,7 @@
     },
     {
       "metadata": {
-        "schema_version": "1",
+        "schema_version": "2",
         "item_id": "understand-anything",
         "item_type": "tool",
         "name": "Understand Anything",
