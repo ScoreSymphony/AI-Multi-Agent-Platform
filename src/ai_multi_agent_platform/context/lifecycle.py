@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 from ai_multi_agent_platform.agents import (
     AgentCapabilityTurn,
@@ -45,29 +46,42 @@ from ai_multi_agent_platform.security import ActorIdentity, ActorType
 from .models import ContextBudget
 from .operational import OperationalContextBoundAgentRuntime
 from .rendering import ContextRenderingError
-from .resolver import (
-    ContextAssemblyRequest,
-    ContextAssemblyService,
-    ContextResolutionError,
-    ContextSourceAdapter,
-)
+from .resolver import ContextAssemblyRequest, ContextResolutionError
+from .source_adapters import ContextSourceAdapterBinding, OperationalContextAssemblyService
 
-ContextAdapterFactory = Callable[
-    [ExecutionRequest, AgentExecutionBinding | None, str],
-    Sequence[ContextSourceAdapter],
+
+@dataclass(frozen=True, slots=True)
+class ContextLifecycleSourceRequest:
+    """Canonical identities needed to choose operational Context source bindings."""
+
+    execution: ExecutionRequest
+    task_id: str
+    run_id: str
+    agent_id: str
+    agent_revision: int
+    project_id: str | None
+    workspace_id: str | None
+    plan_id: str | None
+    step_id: str | None
+    objective: str
+    execution_binding: AgentExecutionBinding | None
+
+
+ContextBindingFactory = Callable[
+    [ContextLifecycleSourceRequest],
+    Sequence[ContextSourceAdapterBinding],
 ]
-PlanIdResolver = Callable[[ExecutionRequest], str | None]
-SkillBundleResolver = Callable[[str, str, int], tuple[str, str] | None]
+SkillBundleResolver = Callable[[ContextLifecycleSourceRequest], tuple[str, str] | None]
 ActorResolver = Callable[[OperationContext], ActorIdentity]
 
 
 class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
-    """Execute Agent-bound Runs only after resolving one immutable effective Context Bundle.
+    """Execute Agent-bound Runs through exactly one canonical Context Bundle.
 
     Unmarked executions continue through the supplied delegate. Marked Agent executions no longer
-    pass legacy ``task_context``/``project_context`` dictionaries to orchestrator adapters: Task,
-    Agent, Skill, Research, Repository and data sources enter through #590 adapters and the exact
-    rendered Bundle becomes the model input.
+    pass legacy ``task_context``/``project_context`` dictionaries to orchestrator adapters: source
+    domains contribute through #590 adapters, #15 resolves visibility, the immutable Bundle derives
+    #10 routing constraints, and the exact egress-approved rendering becomes the model input.
     """
 
     def __init__(
@@ -77,11 +91,9 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         tasks: TaskRepository,
         agents: AgentRuntime,
         models: ModelRuntime,
-        assembly: ContextAssemblyService,
+        assembly: OperationalContextAssemblyService,
         context_runtime: OperationalContextBoundAgentRuntime,
-        adapters: Sequence[ContextSourceAdapter],
-        adapter_factory: ContextAdapterFactory | None = None,
-        plan_id_resolver: PlanIdResolver | None = None,
+        binding_factory: ContextBindingFactory,
         skill_bundle_resolver: SkillBundleResolver | None = None,
         actor_resolver: ActorResolver | None = None,
         budget: ContextBudget = ContextBudget(
@@ -97,9 +109,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
         self._models = models
         self._assembly = assembly
         self._context_runtime = context_runtime
-        self._adapters = tuple(adapters)
-        self._adapter_factory = adapter_factory
-        self._plan_id_resolver = plan_id_resolver
+        self._binding_factory = binding_factory
         self._skill_bundle_resolver = skill_bundle_resolver
         self._actor_resolver = actor_resolver or _actor_from_operation
         self._budget = budget
@@ -185,18 +195,26 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
 
         revision = self._agents.service.get_agent_revision(agent_id, agent_revision)
         actor = self._actor_resolver(request.context)
-        plan_id = self._plan_id_resolver(request) if self._plan_id_resolver is not None else None
-        step_id = request.subject_id if request.subject_type == "step" else None
+        source_request = ContextLifecycleSourceRequest(
+            execution=request,
+            task_id=task.task_id,
+            run_id=request.run_id,
+            agent_id=revision.agent_id,
+            agent_revision=revision.revision,
+            project_id=task.task.project_id,
+            workspace_id=workspace_id,
+            plan_id=task.plan_ref,
+            step_id=request.subject_id if request.subject_type == "step" else None,
+            objective=objective,
+            execution_binding=binding,
+        )
+        adapter_bindings = tuple(self._binding_factory(source_request))
         skill_ref = (
-            self._skill_bundle_resolver(request.run_id, revision.agent_id, revision.revision)
+            self._skill_bundle_resolver(source_request)
             if self._skill_bundle_resolver is not None
             else None
         )
-        dynamic_adapters = (
-            tuple(self._adapter_factory(request, binding, objective))
-            if self._adapter_factory is not None
-            else ()
-        )
+
         try:
             bundle = await self._assembly.assemble(
                 ContextAssemblyRequest(
@@ -209,12 +227,12 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                     candidates=(),
                     budget=self._budget,
                     workspace_id=workspace_id,
-                    plan_id=plan_id,
-                    step_id=step_id,
+                    plan_id=task.plan_ref,
+                    step_id=source_request.step_id,
                     skill_bundle_id=skill_ref[0] if skill_ref is not None else None,
                     skill_bundle_digest=skill_ref[1] if skill_ref is not None else None,
                 ),
-                adapters=(*self._adapters, *dynamic_adapters),
+                bindings=adapter_bindings,
             )
             context_execution = await self._context_runtime.start_agent(
                 bundle=bundle,
@@ -445,8 +463,6 @@ def _actor_from_operation(context: OperationContext) -> ActorIdentity:
         "worker": ActorType.WORKER,
         "automation": ActorType.AUTOMATION,
         "integration": ActorType.INTEGRATION,
-        # Organization/team owners represent an authenticated human-facing scope in the
-        # reference single-node profile; #15 still decides whether that principal may read.
         "organization": ActorType.HUMAN,
         "team": ActorType.HUMAN,
     }.get(context.owner_type)
@@ -482,4 +498,8 @@ def _optional_metadata_string(
     return value
 
 
-__all__ = ["CanonicalContextAgentLifecycleBackend"]
+__all__ = [
+    "CanonicalContextAgentLifecycleBackend",
+    "ContextBindingFactory",
+    "ContextLifecycleSourceRequest",
+]
