@@ -9,6 +9,7 @@ from .control_plane import (
     LearningFeedbackResourceService,
     register_learning_control_plane,
 )
+from .governance import GovernedObservedLearningService, LearningPlatformPolicy
 from .models import (
     LEARNING_SCHEMA_VERSION,
     FeedbackRecord,
@@ -28,6 +29,7 @@ from .models import (
     new_feedback_id,
     new_learning_candidate_id,
 )
+from .post_promotion_repository import SQLitePostPromotionEvaluationRecorder
 from .promotion import (
     AgentPromotionAdapter,
     OwnerPromotionAdapter,
@@ -65,6 +67,7 @@ __all__ = [
     "EvaluationPostPromotionEvaluator",
     "FeedbackRecord",
     "FeedbackType",
+    "GovernedObservedLearningService",
     "InMemoryLearningRepository",
     "InMemoryPostPromotionEvaluationRecorder",
     "LearningCandidate",
@@ -72,6 +75,7 @@ __all__ = [
     "LearningCandidateStatus",
     "LearningFeedbackResourceService",
     "LearningGatePlan",
+    "LearningPlatformPolicy",
     "LearningPostPromotionResourceService",
     "LearningQualityGate",
     "LearningReference",
@@ -91,6 +95,7 @@ __all__ = [
     "PromotionRegistry",
     "RoutingProfilePromotionAdapter",
     "SQLiteLearningRepository",
+    "SQLitePostPromotionEvaluationRecorder",
     "SingleNodeLearningComposition",
     "SkillPromotionAdapter",
     "build_single_node_learning",
