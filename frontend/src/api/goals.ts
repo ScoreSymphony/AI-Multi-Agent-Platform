@@ -229,6 +229,10 @@ export class GoalClient {
     return this.command("goal.cancel", goalId, { reason });
   }
 
+  fail(goalId: string, reason: string): Promise<CanonicalGoal> {
+    return this.command("goal.fail", goalId, { reason });
+  }
+
   revise(goalId: string, input: ReviseGoalInput): Promise<CanonicalGoal> {
     return this.command("goal.revise", goalId, input);
   }
