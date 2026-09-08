@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -16,6 +17,7 @@ from ai_multi_agent_platform.context import (
     ContextSourceType,
     ContextTrust,
     InMemoryContextBundleRepository,
+    ReferenceContextRenderer,
 )
 from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.domain import new_id
@@ -81,7 +83,7 @@ def _assembly_request(
         actor=ActorIdentity(consumer.agent_id, ActorType.AGENT),
         operation=OperationContext(correlation_id="issue-592-context-bundle"),
         candidates=(),
-        budget=ContextBudget(max_items=4, max_tokens=256, max_bytes=4096),
+        budget=ContextBudget(max_items=4, max_tokens=2048, max_bytes=16384),
         plan_id=runtime_context.handoff.content.plan_id,
         step_id=runtime_context.handoff.content.consumer_step_id,
     )
@@ -109,14 +111,25 @@ def test_consumed_handoff_is_a_canonical_context_bundle_source() -> None:
     assert entry.source.source_id == runtime_context.handoff.handoff_id
     assert entry.source.revision == str(runtime_context.handoff.revision)
     assert entry.source.digest == runtime_context.handoff.content_digest
-    assert entry.content_digest == runtime_context.handoff.content_digest
-    assert entry.content_ref == (
+    assert entry.source.locator == (
         f"handoff:{runtime_context.handoff.handoff_id}@{runtime_context.handoff.revision}"
     )
+    assert entry.inline_content is not None
+    assert entry.content_ref is None
     assert entry.selection_reason == "intentional_agent_handoff"
     assert entry.trust is ContextTrust.UNTRUSTED
+    assert entry.metadata["handoff_digest"] == runtime_context.handoff.content_digest
     assert entry.metadata["consuming_run_id"] == runtime_context.consumption.consuming_run_id
     assert bundle.reproducibility_limited is False
+
+    rendered = asyncio.run(ReferenceContextRenderer().render(bundle))
+    assert len(rendered.parts) == 1
+    assert rendered.parts[0].source_type is ContextSourceType.AGENT_HANDOFF
+    rendered_handoff = json.loads(rendered.parts[0].content)
+    assert rendered_handoff["handoff_id"] == runtime_context.handoff.handoff_id
+    assert rendered_handoff["revision"] == runtime_context.handoff.revision
+    assert rendered_handoff["content_digest"] == runtime_context.handoff.content_digest
+    assert rendered_handoff["content"]["objective"] == runtime_context.handoff.content.objective
 
     assert len(authorization.calls) == 1
     auth_request = authorization.calls[0]
