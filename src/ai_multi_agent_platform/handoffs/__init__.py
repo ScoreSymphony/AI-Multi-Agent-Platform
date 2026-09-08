@@ -1,15 +1,12 @@
 """Canonical structured work-transfer contracts for Agents and Agent Teams."""
 
 from .context import ConsumedHandoffContextAdapter, handoff_context_candidate
-from .control_plane import (
+from .control_plane import HandoffControlPlaneProjection, HandoffViewAuthorizer
+from .control_plane_resources import (
     HANDOFF_COLLECTION,
     HANDOFF_CONSUMPTION_COLLECTION,
     HandoffConsumptionResourceService,
-    HandoffControlPlaneProjection,
     HandoffResourceService,
-    HandoffViewAuthorizer,
-    consumption_projection,
-    handoff_projection,
     register_handoff_control_plane,
 )
 from .coordination import CoordinatedHandoffService
@@ -42,6 +39,7 @@ from .production import (
     HandoffConsumerExecution,
     ProductionHandoffRuntime,
     TelemetryHandoffAuditSink,
+    build_production_handoff_runtime,
 )
 from .repository import HandoffRepository, InMemoryHandoffRepository, SQLiteHandoffRepository
 from .service import (
@@ -68,9 +66,9 @@ __all__ = [
     "HandoffAgentRevisionRepository",
     "HandoffAuditEvent",
     "HandoffAuditSink",
-    "HandoffConsumerExecution",
     "HandoffConsumption",
     "HandoffConsumptionResourceService",
+    "HandoffConsumerExecution",
     "HandoffContent",
     "HandoffContextSource",
     "HandoffControlPlaneProjection",
@@ -90,15 +88,14 @@ __all__ = [
     "SQLiteHandoffRepository",
     "TelemetryHandoffAuditSink",
     "build_handoff",
+    "build_production_handoff_runtime",
     "compute_creation_request_digest",
     "compute_handoff_digest",
     "consumption_from_dict",
-    "consumption_projection",
     "consumption_to_dict",
     "handoff_context_candidate",
     "handoff_context_source",
     "handoff_from_dict",
-    "handoff_projection",
     "handoff_to_dict",
     "new_handoff_id",
     "participant_key",
