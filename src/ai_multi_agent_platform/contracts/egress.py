@@ -301,6 +301,7 @@ class EgressAuditEvent:
     payload_digest: str
     policy_version: str
     correlation_id: str
+    project_id: str | None = None
     task_id: str | None = None
     run_id: str | None = None
     capability_id: str | None = None
@@ -312,6 +313,10 @@ class EgressAuditEvent:
     def __post_init__(self) -> None:
         _validate_sha256(self.payload_digest, "egress audit payload_digest")
         for value, name in (
+            (self.project_id, "egress audit project_id"),
+            (self.task_id, "egress audit task_id"),
+            (self.run_id, "egress audit run_id"),
+            (self.capability_id, "egress audit capability_id"),
             (self.profile_ref, "egress audit profile_ref"),
             (self.approval_ref, "egress audit approval_ref"),
         ):
