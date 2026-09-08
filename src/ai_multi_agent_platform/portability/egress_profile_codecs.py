@@ -82,7 +82,10 @@ class EgressProfilePortableCodec:
             payload={
                 "schema_version": EGRESS_PROFILE_PORTABLE_SCHEMA_VERSION,
                 "definition": _definition_to_json(snapshot.definition),
-                "revisions": [egress_profile_to_json(item) for item in snapshot.revisions],
+                "revisions": [
+                    egress_profile_to_json(_portable_revision(item))
+                    for item in snapshot.revisions
+                ],
             },
             id_policy=self.id_policy,
             dependencies=_dependencies(snapshot),
@@ -140,6 +143,22 @@ def register_egress_profile_portability_codec(
     registry.register(EgressProfilePortableCodec(id_policy=id_policy))
 
 
+def _portable_revision(revision: EgressProfile) -> EgressProfile:
+    """Strip arbitrary metadata values before a profile crosses the #79 portability boundary.
+
+    EgressProfile metadata is an extension point and may contain deployment-private notes or
+    verification evidence. Portability therefore carries only the single canonical boolean that
+    changes disclosure semantics. The destination still removes that opt-in and all source trust
+    during deserialization, so imported configuration cannot grant itself external authority.
+    """
+
+    allow_sensitive = revision.metadata.get("allow_sensitive_external")
+    metadata: dict[str, JsonValue] = {}
+    if isinstance(allow_sensitive, bool):
+        metadata["allow_sensitive_external"] = allow_sensitive
+    return replace(revision, metadata=metadata)
+
+
 def _sanitize_and_remap(
     snapshot: EgressProfilePortableSnapshot,
     context: ImportContext,
@@ -171,6 +190,9 @@ def _sanitize_and_remap(
 
 
 def _sanitized_import_metadata(value: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    # The portable serializer already restricts metadata to safe policy fields. The target
+    # nevertheless strips the sensitive-egress opt-in and any legacy verification keys so a
+    # handcrafted/older package cannot retain source-system disclosure authority.
     metadata = {
         key: item
         for key, item in value.items()
