@@ -99,6 +99,7 @@ from .models import (
 from .reference import KernelEvaluationCaseExecutor
 from .regression import RegressionEngine
 from .repository import InMemoryEvaluationRepository
+from .repository_intelligence import RepositoryIntelligenceEvaluationCaseExecutor
 from .reproducibility import (
     EVAL_MANIFEST_SCHEMA_VERSION,
     CaseReproducibilitySpec,
@@ -242,6 +243,7 @@ __all__ = [
     "RepeatPolicy",
     "RepeatStrategy",
     "ReproducibleRegressionGate",
+    "RepositoryIntelligenceEvaluationCaseExecutor",
     "ResolvedEvaluationFixtures",
     "ResourceLimitEvaluator",
     "ResultAggregator",
