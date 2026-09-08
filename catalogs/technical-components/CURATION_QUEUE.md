@@ -20,6 +20,8 @@ Before moving a name from this queue into the loaded catalog, a reviewer must re
 
 Unknown facts stay unknown. Popularity, stars, vendor claims or a Marketplace listing never substitute for evaluation or adoption governance.
 
+The loaded seed intentionally contains only reviewed entries. The names below remain queued even when they were already named in architecture documents: architecture mention is a reason to evaluate a component, not evidence that its current upstream identity, license and project status have been verified.
+
 ## Code intelligence / static analysis
 
 - Serena
