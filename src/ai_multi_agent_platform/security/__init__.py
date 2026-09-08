@@ -77,13 +77,6 @@ from .egress_approvals import (
     EgressApprovalExceptionPolicy,
     egress_proposed_action,
 )
-from .egress_control_plane import (
-    EGRESS_PROFILE_COLLECTION,
-    EGRESS_PROFILE_COMMANDS,
-    EgressProfileCommandHandlers,
-    EgressProfileResourceService,
-    register_egress_profile_control_plane,
-)
 from .egress_profiles import (
     EGRESS_PROFILE_STORE_SCHEMA_VERSION,
     EgressProfileDefinition,
@@ -138,8 +131,6 @@ from .enforced_providers import (
 from .validation import UntrustedInputError, validate_untrusted_json
 
 __all__ = [
-    "EGRESS_PROFILE_COLLECTION",
-    "EGRESS_PROFILE_COMMANDS",
     "EGRESS_PROFILE_STORE_SCHEMA_VERSION",
     "POLICY_PROFILE_REPOSITORY_SCHEMA_VERSION",
     "POLICY_PROFILE_SCHEMA_VERSION",
@@ -192,10 +183,8 @@ __all__ = [
     "EgressApprovalExceptionPolicy",
     "EgressApprovalResolver",
     "EgressGate",
-    "EgressProfileCommandHandlers",
     "EgressProfileDefinition",
     "EgressProfileRepository",
-    "EgressProfileResourceService",
     "EgressProfileService",
     "ExternalIdentityMapping",
     "ExternalSideEffect",
@@ -244,7 +233,6 @@ __all__ = [
     "redact_exception",
     "redact_sensitive",
     "redact_text",
-    "register_egress_profile_control_plane",
     "resolve_within",
     "safe_actor",
     "safe_credential",
