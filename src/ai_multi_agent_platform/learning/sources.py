@@ -31,8 +31,7 @@ class LearningSourceBridge:
     def from_run_failure_pattern(
         self,
         *,
-        source_ref: LearningReference,
-        repeated_failure_count: int,
+        source_refs: tuple[LearningReference, ...],
         problem: str,
         target: LearningTarget,
         improvement_type: str,
@@ -45,7 +44,7 @@ class LearningSourceBridge:
         evidence_refs: tuple[LearningReference, ...] = (),
         project_id: str | None = None,
     ) -> tuple[LearningCandidate, bool]:
-        _require_repeated_pattern(repeated_failure_count, "Run failure")
+        bound_sources = _require_repeated_pattern(source_refs, "Run failure")
         return self.learning.create_candidate(
             source_type=LearningSourceType.RUN_FAILURE_PATTERN,
             problem=problem,
@@ -55,8 +54,8 @@ class LearningSourceBridge:
             risk=risk,
             gate_plan=gate_plan,
             creator_ref=creator_ref,
-            source_refs=(source_ref,),
-            evidence_refs=(source_ref, *evidence_refs),
+            source_refs=bound_sources,
+            evidence_refs=(*bound_sources, *evidence_refs),
             proposed_change=proposed_change,
             proposed_artifact_ref=proposed_artifact_ref,
             project_id=project_id,
@@ -65,8 +64,7 @@ class LearningSourceBridge:
     def from_planning_failure_pattern(
         self,
         *,
-        source_ref: LearningReference,
-        repeated_failure_count: int,
+        source_refs: tuple[LearningReference, ...],
         problem: str,
         target: LearningTarget,
         improvement_type: str,
@@ -79,7 +77,7 @@ class LearningSourceBridge:
         evidence_refs: tuple[LearningReference, ...] = (),
         project_id: str | None = None,
     ) -> tuple[LearningCandidate, bool]:
-        _require_repeated_pattern(repeated_failure_count, "Planning failure")
+        bound_sources = _require_repeated_pattern(source_refs, "Planning failure")
         return self.learning.create_candidate(
             source_type=LearningSourceType.PLANNING_FAILURE_PATTERN,
             problem=problem,
@@ -89,8 +87,8 @@ class LearningSourceBridge:
             risk=risk,
             gate_plan=gate_plan,
             creator_ref=creator_ref,
-            source_refs=(source_ref,),
-            evidence_refs=(source_ref, *evidence_refs),
+            source_refs=bound_sources,
+            evidence_refs=(*bound_sources, *evidence_refs),
             proposed_change=proposed_change,
             proposed_artifact_ref=proposed_artifact_ref,
             project_id=project_id,
@@ -115,26 +113,39 @@ class LearningSourceBridge:
             raise ContractError(ErrorCode.UNAVAILABLE, "Research service is not configured")
         evidence = self.research.repository.get_evidence(evidence_id)
         item = self.research.repository.get_item(evidence.research_item_id)
+        claim = self.research.repository.get_claim(evidence.claim_id)
+        observation = self.research.repository.get_observation(evidence.source_observation_id)
         source_ref = LearningReference(
             kind="research_evidence",
             resource_id=evidence.evidence_id,
-            revision=_research_revision(evidence),
-            digest=_research_digest(evidence),
+            digest=evidence.digest,
         )
+        observation_revision = (
+            observation.resolved_repository_revision
+            or observation.revision
+            or observation.version
+            or observation.commit
+            or observation.etag
+        )
+        observation_digest = observation.content_digest or observation.snapshot_digest
         supporting_refs = (
             LearningReference(
                 kind="research_item",
-                resource_id=evidence.research_item_id,
+                resource_id=item.research_item_id,
+                revision=str(item.revision),
+                digest=item.digest,
             ),
             LearningReference(
                 kind="research_claim",
-                resource_id=evidence.claim_id,
+                resource_id=claim.claim_id,
+                revision=str(claim.revision),
+                digest=claim.digest,
             ),
             LearningReference(
                 kind="research_source_observation",
-                resource_id=evidence.source_observation_id,
-                revision=evidence.source_revision,
-                digest=evidence.source_content_digest or evidence.source_snapshot_digest,
+                resource_id=observation.observation_id,
+                revision=observation_revision,
+                digest=observation_digest,
             ),
         )
         return self.learning.create_candidate(
@@ -186,25 +197,20 @@ class LearningSourceBridge:
         )
 
 
-def _require_repeated_pattern(count: int, name: str) -> None:
-    if isinstance(count, bool) or count < 2:
+def _require_repeated_pattern(
+    source_refs: tuple[LearningReference, ...],
+    name: str,
+) -> tuple[LearningReference, ...]:
+    unique: list[LearningReference] = []
+    seen: set[tuple[str, str, str | None, str | None]] = set()
+    for reference in source_refs:
+        if reference.key in seen:
+            continue
+        seen.add(reference.key)
+        unique.append(reference)
+    if len(unique) < 2:
         raise ContractError(
             ErrorCode.INVALID_REQUEST,
-            f"{name} pattern requires at least two observed failures",
+            f"{name} pattern requires at least two distinct concrete source references",
         )
-
-
-def _research_revision(evidence: object) -> str | None:
-    for name in ("source_revision", "source_version", "source_commit", "source_etag"):
-        value = getattr(evidence, name)
-        if value is not None:
-            return str(value)
-    return None
-
-
-def _research_digest(evidence: object) -> str | None:
-    for name in ("excerpt_digest", "source_content_digest", "source_snapshot_digest"):
-        value = getattr(evidence, name)
-        if value is not None:
-            return str(value)
-    return None
+    return tuple(unique)
