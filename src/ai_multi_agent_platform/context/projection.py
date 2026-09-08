@@ -7,6 +7,7 @@ from collections.abc import Callable
 from ai_multi_agent_platform.contracts.types import JsonValue
 
 from .bindings import ContextRunBinding
+from .classification import effective_context_bundle_classification
 from .models import ContextBundle, ContextEntry
 
 ContextEntryVisibility = Callable[[ContextEntry], bool]
@@ -68,6 +69,7 @@ def context_bundle_projection(
         "step_id": bundle.step_id,
         "skill_bundle_id": bundle.skill_bundle_id,
         "skill_bundle_digest": bundle.skill_bundle_digest,
+        "effective_data_classification": effective_context_bundle_classification(bundle).value,
         "entries": entries,
         "omissions": [
             {
