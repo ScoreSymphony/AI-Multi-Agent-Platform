@@ -149,14 +149,17 @@ class RepositoryIntelligenceEvaluationObservation:
         return tuple(
             field.name
             for field in fields(self)
-            if field.name not in {"provider_id", "fixture_id", "source_revision", "environment_ref", "notes"}
+            if field.name
+            not in {"provider_id", "fixture_id", "source_revision", "environment_ref", "notes"}
             and getattr(self, field.name) is not None
         )
 
     @property
     def missing_metric_names(self) -> tuple[str, ...]:
         measured = set(self.measured_metric_names)
-        return tuple(metric.value for metric in RepositoryIntelligenceMetric if metric.value not in measured)
+        return tuple(
+            metric.value for metric in RepositoryIntelligenceMetric if metric.value not in measured
+        )
 
     def to_json(self) -> dict[str, JsonValue]:
         metrics: dict[str, JsonValue] = {}

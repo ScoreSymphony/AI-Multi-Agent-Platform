@@ -84,7 +84,10 @@ class InMemoryPostPromotionEvaluationRecorder:
         self._records: list[PostPromotionEvaluationRecord] = []
 
     def store(self, record: PostPromotionEvaluationRecord) -> None:
-        if self.record_for_promotion(record.learning_candidate_id, record.target_revision) is not None:
+        if (
+            self.record_for_promotion(record.learning_candidate_id, record.target_revision)
+            is not None
+        ):
             return
         self._records.append(record)
 

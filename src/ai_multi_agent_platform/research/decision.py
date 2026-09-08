@@ -58,9 +58,12 @@ class ResearchDecisionBridge:
             require_verification=require_verification,
         )
         item = self.research.repository.get_item(research_item_id)
-        claims = tuple(self.research.repository.get_claim(claim_id) for claim_id in action.claim_ids)
+        claims = tuple(
+            self.research.repository.get_claim(claim_id) for claim_id in action.claim_ids
+        )
         evidence = tuple(
-            self.research.repository.get_evidence(evidence_id) for evidence_id in action.evidence_ids
+            self.research.repository.get_evidence(evidence_id)
+            for evidence_id in action.evidence_ids
         )
         return ResearchDecisionReferences(
             research_item=DecisionReference(

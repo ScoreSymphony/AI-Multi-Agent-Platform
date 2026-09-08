@@ -204,10 +204,14 @@ class CanonicalHandoffReferenceGateway(HandoffReferenceGateway):
 
     def can_read(self, participant: ParticipantRef, reference: HandoffSourceRef) -> bool:
         prepared = self._prepared.get()
-        return prepared is not None and (
-            participant_key(participant),
-            reference.identity,
-        ) in prepared.readable
+        return (
+            prepared is not None
+            and (
+                participant_key(participant),
+                reference.identity,
+            )
+            in prepared.readable
+        )
 
     async def _resolve(self, reference: HandoffSourceRef, *, task_id: str) -> _ResolvedReference:
         kind = reference.kind
@@ -346,7 +350,9 @@ class CanonicalConsumerRequirementEvaluator(ConsumerRequirementEvaluator):
             revision = self.agents.get_agent_revision(consumer.agent_id, consumer.revision)
             profile = revision.profile
             roles = {profile.role}
-            capabilities = set(profile.capabilities.allowed) | set(profile.capabilities.required_ids)
+            capabilities = set(profile.capabilities.allowed) | set(
+                profile.capabilities.required_ids
+            )
             policies = set(profile.policy_hooks.verification_policy_refs)
             if profile.policy_hooks.authorization_profile_ref is not None:
                 policies.add(profile.policy_hooks.authorization_profile_ref)

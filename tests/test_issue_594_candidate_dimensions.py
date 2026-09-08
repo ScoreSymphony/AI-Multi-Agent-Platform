@@ -124,6 +124,5 @@ def test_context_candidate_does_not_hide_unrelated_source_drift() -> None:
         for item in comparison.differences
     )
     assert any(
-        item.path.startswith("fixture_sources") and item.blocking
-        for item in comparison.differences
+        item.path.startswith("fixture_sources") and item.blocking for item in comparison.differences
     )

@@ -263,7 +263,8 @@ class RepositoryContextFunnel:
 
 
 RepositoryContextRequestResolver = Callable[
-    [ContextSourceRequest], Awaitable[tuple[RepositoryContextRequest, RepositoryContextCaller] | None]
+    [ContextSourceRequest],
+    Awaitable[tuple[RepositoryContextRequest, RepositoryContextCaller] | None],
 ]
 
 

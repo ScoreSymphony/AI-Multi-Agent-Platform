@@ -197,7 +197,9 @@ class OperationalContextAssemblyService:
                 candidates.append(
                     _unavailable_candidate(
                         binding,
-                        availability="missing" if exc.code is ErrorCode.NOT_FOUND else "unavailable",
+                        availability="missing"
+                        if exc.code is ErrorCode.NOT_FOUND
+                        else "unavailable",
                         detail=exc.message,
                     )
                 )
@@ -601,7 +603,9 @@ class RepositoryContextSourceAdapter:
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
         candidates: list[ContextCandidate] = []
-        provenance = tuple(sorted(self.provenance.for_run(request.run_id), key=lambda x: x.repository_id))
+        provenance = tuple(
+            sorted(self.provenance.for_run(request.run_id), key=lambda x: x.repository_id)
+        )
         for record in provenance:
             content = _canonical_json(
                 {
@@ -652,20 +656,32 @@ class RepositoryContextSourceAdapter:
             start_line = raw.get("start_line", 1)
             end_line = raw.get("end_line", start_line + 199 if isinstance(start_line, int) else 200)
             if not isinstance(repository_id, str) or not repository_id.strip():
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "repository slice requires repository_id")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "repository slice requires repository_id"
+                )
             if not isinstance(path, str) or not path.strip():
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "repository slice requires path")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "repository slice requires path"
+                )
             if isinstance(start_line, bool) or not isinstance(start_line, int) or start_line < 1:
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "repository slice start_line invalid")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "repository slice start_line invalid"
+                )
             if isinstance(end_line, bool) or not isinstance(end_line, int) or end_line < start_line:
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "repository slice end_line invalid")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "repository slice end_line invalid"
+                )
             if end_line - start_line + 1 > _MAX_REPOSITORY_SLICE_LINES:
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "repository slice exceeds line limit")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "repository slice exceeds line limit"
+                )
             explicit_revision = raw.get("revision")
             if explicit_revision is not None and (
                 not isinstance(explicit_revision, str) or not explicit_revision.strip()
             ):
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "repository slice revision invalid")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "repository slice revision invalid"
+                )
             bound = by_repository.get(repository_id)
             revision = cast(str | None, explicit_revision) or (
                 None if bound is None else bound.input_revision
@@ -690,7 +706,9 @@ class RepositoryContextSourceAdapter:
             )
             entry = next((item for item in tree.entries if item.relative_path == path), None)
             if entry is None:
-                raise ContractError(ErrorCode.NOT_FOUND, f"repository source path not found: {path}")
+                raise ContractError(
+                    ErrorCode.NOT_FOUND, f"repository source path not found: {path}"
+                )
             try:
                 text = entry.data.decode("utf-8")
             except UnicodeDecodeError as exc:
@@ -753,7 +771,12 @@ class FileArtifactResultContextSourceAdapter:
             run_id=request.run_id,
             agent_id=request.agent_id,
         )
-        refs: set[str] = set(task.artifact_ids) | set(task.result_ids) | set(run.artifact_ids) | set(run.result_ids)
+        refs: set[str] = (
+            set(task.artifact_ids)
+            | set(task.result_ids)
+            | set(run.artifact_ids)
+            | set(run.result_ids)
+        )
         binding = (
             decode_agent_step_execution_binding(task.task.metadata, request.step_id)
             if request.step_id is not None
@@ -821,7 +844,9 @@ class FileArtifactResultContextSourceAdapter:
                 )
             )
         for artifact_id in sorted(ref for ref in refs if ref.startswith("artifact_")):
-            linked_files = sorted(file.file_id for file in files if artifact_id in file.artifact_ids)
+            linked_files = sorted(
+                file.file_id for file in files if artifact_id in file.artifact_ids
+            )
             body = _canonical_json({"artifact_id": artifact_id, "file_ids": linked_files})
             digest = _digest(body)
             candidates.append(
@@ -969,9 +994,7 @@ class KnowledgeContextSourceAdapter:
                     data_classification=classification,
                     priority=25,
                     relevance=(
-                        max(0.0, min(1.0, result.score))
-                        if result.score is not None
-                        else 0.5
+                        max(0.0, min(1.0, result.score)) if result.score is not None else 0.5
                     ),
                     project_id=request.project_id,
                     workspace_id=request.workspace_id,

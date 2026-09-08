@@ -304,10 +304,7 @@ def _handoff_resource_id(handoff: AgentHandoff) -> str:
 
 
 def _consumption_resource_id(consumption: HandoffConsumption) -> str:
-    return (
-        f"{consumption.handoff_id}@{consumption.handoff_revision}:"
-        f"{consumption.consuming_run_id}"
-    )
+    return f"{consumption.handoff_id}@{consumption.handoff_revision}:{consumption.consuming_run_id}"
 
 
 def _parse_handoff_resource_id(resource_id: str) -> tuple[str, int | None]:

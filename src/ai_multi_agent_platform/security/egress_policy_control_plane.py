@@ -159,7 +159,9 @@ def _enum[T](value: Mapping[str, object], field: str, enum_type: type[T]) -> T:
     try:
         return enum_type(item)
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field} contains an unknown value") from exc
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, f"{field} contains an unknown value"
+        ) from exc
 
 
 __all__ = [

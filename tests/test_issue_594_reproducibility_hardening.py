@@ -156,13 +156,11 @@ def test_context_and_source_drift_are_independently_blocking() -> None:
 
     assert context_comparison.status is Comparability.INCOMPARABLE
     assert any(
-        item.path.startswith("context_bundles")
-        for item in context_comparison.blocking_differences
+        item.path.startswith("context_bundles") for item in context_comparison.blocking_differences
     )
     assert source_comparison.status is Comparability.INCOMPARABLE
     assert any(
-        item.path.startswith("fixture_sources")
-        for item in source_comparison.blocking_differences
+        item.path.startswith("fixture_sources") for item in source_comparison.blocking_differences
     )
 
 
@@ -265,9 +263,7 @@ def test_paired_ab_allows_only_declared_candidate_dimension() -> None:
         repeat_policy=repeat_policy,
         seed_policy=seed_policy,
         context=EvalManifestContext(
-            skill_bundles=(
-                ManifestReference("skill_bundle", "candidate", digest="skill-a"),
-            ),
+            skill_bundles=(ManifestReference("skill_bundle", "candidate", digest="skill-a"),),
         ),
     )
     candidate = builder.build(
@@ -276,9 +272,7 @@ def test_paired_ab_allows_only_declared_candidate_dimension() -> None:
         repeat_policy=repeat_policy,
         seed_policy=seed_policy,
         context=EvalManifestContext(
-            skill_bundles=(
-                ManifestReference("skill_bundle", "candidate", digest="skill-b"),
-            ),
+            skill_bundles=(ManifestReference("skill_bundle", "candidate", digest="skill-b"),),
         ),
     )
 

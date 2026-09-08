@@ -199,8 +199,7 @@ def test_generic_extension_cli_traces_run_binding_to_exact_context_bundle_withou
     assert "never expose this inline context value" not in serialized
 
     assert any(
-        path == "/api/v1/context-run-bindings"
-        and query.get("filter[run_id]") == bundle.run_id
+        path == "/api/v1/context-run-bindings" and query.get("filter[run_id]") == bundle.run_id
         for _, path, query in transport.calls
     )
     assert any(

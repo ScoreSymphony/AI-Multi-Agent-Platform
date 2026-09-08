@@ -162,7 +162,9 @@ def _single_tag_value(
     if not values:
         return default
     if len(values) != 1:
-        raise ValueError(f"technical Marketplace item {item.item_id!r} has conflicting {prefix} tags")
+        raise ValueError(
+            f"technical Marketplace item {item.item_id!r} has conflicting {prefix} tags"
+        )
     value = values[0]
     if value not in allowed:
         raise ValueError(
@@ -199,5 +201,7 @@ def _optional_freeform_value(item: RegistryItem, prefix: str) -> str | None:
     if not values:
         return None
     if len(values) != 1:
-        raise ValueError(f"technical Marketplace item {item.item_id!r} has conflicting {prefix} tags")
+        raise ValueError(
+            f"technical Marketplace item {item.item_id!r} has conflicting {prefix} tags"
+        )
     return values[0]

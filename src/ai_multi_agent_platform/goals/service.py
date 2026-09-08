@@ -712,9 +712,7 @@ def _changed_criterion_ids(
 ) -> tuple[str, ...]:
     if not state.reviews:
         return tuple(item.criterion_id for item in evaluations)
-    previous = {
-        item.criterion_id: item.state for item in state.reviews[-1].criterion_evaluations
-    }
+    previous = {item.criterion_id: item.state for item in state.reviews[-1].criterion_evaluations}
     return tuple(
         item.criterion_id
         for item in evaluations

@@ -421,8 +421,7 @@ class EvaluationRunner:
                 values = tuple(float(item.score) for item in recent if item.score is not None)
             else:
                 values = tuple(
-                    1.0 if item.outcome is EvaluationOutcome.PASSED else 0.0
-                    for item in recent
+                    1.0 if item.outcome is EvaluationOutcome.PASSED else 0.0 for item in recent
                 )
             if pvariance(values) > policy.variance_threshold:
                 return False

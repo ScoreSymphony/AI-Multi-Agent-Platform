@@ -371,7 +371,9 @@ def _parse_resource_ref(value: str) -> tuple[str, int | None]:
     try:
         revision = int(raw_revision)
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, "egress profile revision ref is invalid") from exc
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, "egress profile revision ref is invalid"
+        ) from exc
     if revision < 1:
         raise ContractError(ErrorCode.INVALID_REQUEST, "egress profile revision must be positive")
     return profile_id, revision
@@ -469,7 +471,9 @@ def _classification_tuple(
     try:
         return tuple(DataClassification(cast(str, entry)) for entry in item)
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field} contains an unknown classification") from exc
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, f"{field} contains an unknown classification"
+        ) from exc
 
 
 def _enum[T](value: Mapping[str, object], field: str, enum_type: type[T]) -> T:
@@ -477,7 +481,9 @@ def _enum[T](value: Mapping[str, object], field: str, enum_type: type[T]) -> T:
     try:
         return enum_type(item)
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field} contains an unknown value") from exc
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, f"{field} contains an unknown value"
+        ) from exc
 
 
 def _optional_enum[T](
@@ -495,7 +501,9 @@ def _optional_enum[T](
     try:
         return enum_type(item)
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"{field} contains an unknown value") from exc
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, f"{field} contains an unknown value"
+        ) from exc
 
 
 __all__ = [

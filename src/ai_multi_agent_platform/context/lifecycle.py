@@ -15,7 +15,10 @@ from ai_multi_agent_platform.agents.execution_profile import (
     decode_agent_execution_binding,
     decode_agent_step_execution_binding,
 )
-from ai_multi_agent_platform.capabilities import CapabilityInvoker, bind_canonical_capability_invocation
+from ai_multi_agent_platform.capabilities import (
+    CapabilityInvoker,
+    bind_canonical_capability_invocation,
+)
 from ai_multi_agent_platform.contracts import (
     AdapterMetadata,
     ContractError,

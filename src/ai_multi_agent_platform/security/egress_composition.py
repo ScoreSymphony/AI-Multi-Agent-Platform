@@ -56,9 +56,7 @@ def build_durable_egress_runtime(
 
     exception_policy = approval_policy or EgressApprovalExceptionPolicy()
     approval_resolver = (
-        None
-        if approval_gate is None
-        else EgressApprovalBridge(approval_gate, exception_policy)
+        None if approval_gate is None else EgressApprovalBridge(approval_gate, exception_policy)
     )
     gate = EgressGate(
         policy,

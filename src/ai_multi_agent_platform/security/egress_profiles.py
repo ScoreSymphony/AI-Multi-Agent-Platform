@@ -208,7 +208,9 @@ class JsonEgressProfileRepository:
 
     def get_revision(self, profile_id: str, revision: int) -> EgressProfile:
         if revision < 1:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "egress profile revision must be positive")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "egress profile revision must be positive"
+            )
         try:
             return self._revisions[(profile_id, revision)]
         except KeyError as exc:
@@ -231,7 +233,9 @@ class JsonEgressProfileRepository:
         current = self.get_definition(profile_id)
         if current.enabled is enabled:
             return current
-        updated = replace(current, enabled=enabled, updated_at=max(datetime.now(UTC), current.updated_at))
+        updated = replace(
+            current, enabled=enabled, updated_at=max(datetime.now(UTC), current.updated_at)
+        )
         self._definitions[profile_id] = updated
         try:
             self._persist()
@@ -315,7 +319,10 @@ class JsonEgressProfileRepository:
                 ErrorCode.CONTRACT_VIOLATION,
                 "egress profile definition/revision identity mismatch",
             )
-        if definition.current_revision != expected_revision or revision.revision != expected_revision:
+        if (
+            definition.current_revision != expected_revision
+            or revision.revision != expected_revision
+        ):
             raise ContractError(
                 ErrorCode.CONFLICT,
                 "egress profile revision must advance contiguously",
@@ -340,7 +347,9 @@ class JsonEgressProfileRepository:
             return
         raw = cast(object, json.loads(self.path.read_text(encoding="utf-8")))
         if not isinstance(raw, dict):
-            raise ContractError(ErrorCode.INVALID_CONFIGURATION, "egress profile store must be an object")
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION, "egress profile store must be an object"
+            )
         if raw.get("schema_version") != EGRESS_PROFILE_STORE_SCHEMA_VERSION:
             raise ContractError(
                 ErrorCode.INVALID_CONFIGURATION,
@@ -348,14 +357,20 @@ class JsonEgressProfileRepository:
             )
         profiles = raw.get("profiles")
         if not isinstance(profiles, list):
-            raise ContractError(ErrorCode.INVALID_CONFIGURATION, "egress profile store profiles must be a list")
+            raise ContractError(
+                ErrorCode.INVALID_CONFIGURATION, "egress profile store profiles must be a list"
+            )
         for raw_profile in profiles:
             if not isinstance(raw_profile, dict):
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "egress profile entry must be an object")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "egress profile entry must be an object"
+                )
             definition = _definition_from_json(raw_profile.get("definition"))
             raw_revisions = raw_profile.get("revisions")
             if not isinstance(raw_revisions, list) or not raw_revisions:
-                raise ContractError(ErrorCode.INVALID_CONFIGURATION, "egress profile requires revision history")
+                raise ContractError(
+                    ErrorCode.INVALID_CONFIGURATION, "egress profile requires revision history"
+                )
             revisions = tuple(egress_profile_from_json(item) for item in raw_revisions)
             expected_numbers = tuple(range(1, definition.current_revision + 1))
             if tuple(item.revision for item in revisions) != expected_numbers:
@@ -448,7 +463,9 @@ class EgressProfileService:
         self._require_project_scope(project_id, context)
         self._reject_unverified_write_as_verified(profile)
         if profile.revision != 1:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "new egress profiles must start at revision 1")
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST, "new egress profiles must start at revision 1"
+            )
         await self._authorize(
             principal_ref=principal_ref,
             context=context,
@@ -536,7 +553,9 @@ class EgressProfileService:
             owner_ref=current.owner_ref,
         )
         if expected_revision != current.current_revision:
-            raise ContractError(ErrorCode.CONFLICT, "egress profile verification base revision is stale")
+            raise ContractError(
+                ErrorCode.CONFLICT, "egress profile verification base revision is stale"
+            )
         previous = self.repository.get_revision(profile_id, current.current_revision)
         verified = replace(
             previous,
@@ -741,11 +760,15 @@ def egress_profile_from_json(value: object) -> EgressProfile:
             policy_source=_string(item, "policy_source"),
             source_revision=_string(item, "source_revision"),
             trust=EgressProfileTrust(_string(item, "trust")),
-            metadata=cast(dict[str, JsonValue], _object(item.get("metadata", {}), "egress metadata")),
+            metadata=cast(
+                dict[str, JsonValue], _object(item.get("metadata", {}), "egress metadata")
+            ),
             schema_version=_string(item, "schema_version"),
         )
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, f"invalid egress profile: {exc}") from exc
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, f"invalid egress profile: {exc}"
+        ) from exc
 
 
 def _definition_to_json(definition: EgressProfileDefinition) -> dict[str, JsonValue]:
@@ -768,7 +791,9 @@ def _definition_from_json(value: object) -> EgressProfileDefinition:
     owner = _object(item.get("owner_ref"), "egress profile owner_ref")
     owner_type = _string(owner, "type")
     if owner_type not in {"user", "organization", "team", "service"}:
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "unsupported egress profile owner type")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "unsupported egress profile owner type"
+        )
     return EgressProfileDefinition(
         profile_id=_string(item, "profile_id"),
         target_kind=EgressTargetKind(_string(item, "target_kind")),
@@ -801,7 +826,9 @@ def _optional_string(item: Mapping[str, object], field: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, f"{field} must be non-blank when provided")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, f"{field} must be non-blank when provided"
+        )
     return value
 
 
@@ -824,7 +851,9 @@ def _optional_bool(item: Mapping[str, object], field: str) -> bool | None:
     if value is None:
         return None
     if not isinstance(value, bool):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, f"{field} must be a boolean when provided")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, f"{field} must be a boolean when provided"
+        )
     return value
 
 
@@ -833,7 +862,9 @@ def _timestamp(item: Mapping[str, object], field: str) -> datetime:
     try:
         value = datetime.fromisoformat(raw)
     except ValueError as exc:
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, f"{field} is not an ISO timestamp") from exc
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, f"{field} is not an ISO timestamp"
+        ) from exc
     if value.tzinfo is None or value.utcoffset() is None:
         raise ContractError(ErrorCode.INVALID_CONFIGURATION, f"{field} must be timezone-aware")
     return value
@@ -843,7 +874,9 @@ def _classifications(value: object) -> tuple[DataClassification, ...]:
     if value is None:
         return ()
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "classification list must contain strings")
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "classification list must contain strings"
+        )
     try:
         return tuple(DataClassification(cast(str, item)) for item in value)
     except ValueError as exc:

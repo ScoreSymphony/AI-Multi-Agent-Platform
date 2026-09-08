@@ -50,9 +50,7 @@ PROJECTATLAS_EXTENSION_ID = "capability-provider.repository-intelligence.project
 PROJECTATLAS_PROVIDER_ID = "plugin.repository-intelligence.projectatlas"
 PROJECTATLAS_RUNTIME_VERSION = "0.4.5"
 PROJECTATLAS_PLUGIN_VERSION = "0.1.0"
-PROJECTATLAS_ARCHIVE_SHA256 = (
-    "e22ac7f9e37b1eb49929e4a8ad72c51affd2668731832652ee4783e20a8fabd9"
-)
+PROJECTATLAS_ARCHIVE_SHA256 = "e22ac7f9e37b1eb49929e4a8ad72c51affd2668731832652ee4783e20a8fabd9"
 _PROJECTATLAS_CAPABILITIES = (
     RepositoryIntelligenceOperation.HEALTH,
     RepositoryIntelligenceOperation.INDEX_STATUS,
@@ -73,7 +71,9 @@ class ProjectAtlasRuntimeIdentity:
 class ProjectAtlasRuntimeProbe(Protocol):
     """Probe the configured runtime without touching repository or Workspace content."""
 
-    async def probe(self, *, binary_path: Path, state_root: Path) -> ProjectAtlasRuntimeIdentity: ...
+    async def probe(
+        self, *, binary_path: Path, state_root: Path
+    ) -> ProjectAtlasRuntimeIdentity: ...
 
 
 class LocalProjectAtlasRuntimeProbe:
@@ -138,10 +138,7 @@ class LocalProjectAtlasRuntimeProbe:
             return ProjectAtlasRuntimeIdentity(
                 version,
                 False,
-                (
-                    "runtime version mismatch: expected "
-                    f"projectatlas {PROJECTATLAS_RUNTIME_VERSION}"
-                ),
+                (f"runtime version mismatch: expected projectatlas {PROJECTATLAS_RUNTIME_VERSION}"),
             )
         return ProjectAtlasRuntimeIdentity(version, True)
 

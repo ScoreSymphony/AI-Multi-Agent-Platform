@@ -211,13 +211,15 @@ def test_research_bundle_import_preserves_exact_source_provenance() -> None:
     assert imported_item.digest == original_item.digest
     original_evidence = source.repository.get_evidence(original_item.evidence_ids[0])
     imported_evidence = target.repository.get_evidence(imported_item.evidence_ids[0])
-    imported_observation = target.repository.get_observation(imported_evidence.source_observation_id)
+    imported_observation = target.repository.get_observation(
+        imported_evidence.source_observation_id
+    )
     assert imported_evidence == original_evidence
     assert imported_evidence.source_content_digest == imported_observation.content_digest
     assert imported_evidence.source_snapshot_digest == imported_observation.snapshot_digest
-    assert target.build_action_context(item_id, require_verification=False).research_item_digest == (
-        original_item.digest
-    )
+    assert target.build_action_context(
+        item_id, require_verification=False
+    ).research_item_digest == (original_item.digest)
 
 
 def test_portable_verification_bindings_fail_closed_without_local_issue86_authority() -> None:

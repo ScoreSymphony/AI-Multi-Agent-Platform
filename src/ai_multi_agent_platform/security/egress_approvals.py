@@ -184,9 +184,7 @@ def egress_proposed_action(
         else _metadata_string(decision, "cost_class")
     )
     profile_trust = (
-        profile.trust.value
-        if profile is not None
-        else _metadata_string(decision, "profile_trust")
+        profile.trust.value if profile is not None else _metadata_string(decision, "profile_trust")
     )
 
     payload: dict[str, JsonValue] = {

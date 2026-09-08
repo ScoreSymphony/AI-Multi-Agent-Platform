@@ -166,11 +166,18 @@ def test_project_profile_precedes_global_default_and_disable_falls_back(tmp_path
         scoped_profile,
     )
 
-    assert repository.resolve(EgressTargetKind.MODEL_PROVIDER, target_id, project_id) == scoped_profile
-    assert repository.resolve(EgressTargetKind.MODEL_PROVIDER, target_id, new_id("project")) == global_profile
+    assert (
+        repository.resolve(EgressTargetKind.MODEL_PROVIDER, target_id, project_id) == scoped_profile
+    )
+    assert (
+        repository.resolve(EgressTargetKind.MODEL_PROVIDER, target_id, new_id("project"))
+        == global_profile
+    )
 
     repository.set_enabled(scoped_profile.profile_id, False)
-    assert repository.resolve(EgressTargetKind.MODEL_PROVIDER, target_id, project_id) == global_profile
+    assert (
+        repository.resolve(EgressTargetKind.MODEL_PROVIDER, target_id, project_id) == global_profile
+    )
 
 
 def test_verified_trust_requires_explicit_verification_transition(tmp_path) -> None:

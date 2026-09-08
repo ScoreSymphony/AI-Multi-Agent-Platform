@@ -53,9 +53,7 @@ class DataClassificationResourceService:
                 )
             canonical_only = raw
         values = tuple(
-            item
-            for item in DataClassification
-            if not canonical_only or item in _CANONICAL
+            item for item in DataClassification if not canonical_only or item in _CANONICAL
         )
         return tuple(_classification_resource(item) for item in values)
 

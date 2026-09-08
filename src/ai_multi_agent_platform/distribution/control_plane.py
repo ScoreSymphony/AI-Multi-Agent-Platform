@@ -214,9 +214,7 @@ def _registry_query(query: PageQuery) -> tuple[RegistryQuery, bool | None]:
         _optional_bool(filters.pop("include_deprecated", None), default=False)
     )
     include_yanked = bool(_optional_bool(filters.pop("include_yanked", None), default=False))
-    technical_only = bool(
-        _optional_bool(filters.pop("technical_component", None), default=False)
-    )
+    technical_only = bool(_optional_bool(filters.pop("technical_component", None), default=False))
     update_available = _optional_bool(filters.pop("update_available", None), default=None)
     if filters:
         raise ContractError(

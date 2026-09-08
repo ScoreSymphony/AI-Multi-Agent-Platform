@@ -57,10 +57,7 @@ class ResearchEvaluationCaseExecutor:
             for value in evidence
         }
 
-        claim_quality = tuple(
-            _claim_quality(claim, evidence, freshness)
-            for claim in claims
-        )
+        claim_quality = tuple(_claim_quality(claim, evidence, freshness) for claim in claims)
         supported_claim_count = sum(value == "supported" for value in claim_quality)
         disputed_claim_count = sum(value == "disputed" for value in claim_quality)
         unsupported_claim_count = sum(value == "unsupported" for value in claim_quality)
@@ -69,9 +66,7 @@ class ResearchEvaluationCaseExecutor:
         current_evidence_count = sum(
             value is EvidenceFreshness.CURRENT for value in freshness.values()
         )
-        stale_evidence_count = sum(
-            value is EvidenceFreshness.STALE for value in freshness.values()
-        )
+        stale_evidence_count = sum(value is EvidenceFreshness.STALE for value in freshness.values())
         unavailable_evidence_count = sum(
             value is EvidenceFreshness.UNAVAILABLE for value in freshness.values()
         )
@@ -138,13 +133,7 @@ class ResearchEvaluationCaseExecutor:
             task_id=item.task_id,
             run_id=item.run_id,
             artifact_refs=tuple(
-                sorted(
-                    {
-                        value.artifact_id
-                        for value in evidence
-                        if value.artifact_id is not None
-                    }
-                )
+                sorted({value.artifact_id for value in evidence if value.artifact_id is not None})
             ),
         )
 

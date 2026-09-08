@@ -211,8 +211,7 @@ def test_executor_exposes_reproducible_research_quality_evidence() -> None:
         assert observation.metrics["source_binding_integrity_rate"] == 1.0
         assert observation.metrics["verification_coverage"] == 1.0
         assert evidence_id in {
-            value.evidence_id
-            for value in research.repository.list_evidence(item_id)
+            value.evidence_id for value in research.repository.list_evidence(item_id)
         }
         assert observation.capability_refs == ()
 
@@ -221,9 +220,13 @@ def test_executor_exposes_reproducible_research_quality_evidence() -> None:
 
 def test_changed_source_fails_freshness_gate_without_rewriting_historical_evidence() -> None:
     async def scenario() -> None:
-        research, item_id, source_id, original_observation_id, evidence_id = (
-            await _seed_verified_research()
-        )
+        (
+            research,
+            item_id,
+            source_id,
+            original_observation_id,
+            evidence_id,
+        ) = await _seed_verified_research()
         historical = research.repository.get_evidence(evidence_id)
         assert historical.source_observation_id == original_observation_id
         assert historical.source_content_digest == "sha256:fixture-source-v1"
@@ -302,9 +305,7 @@ def test_provider_metadata_replacement_does_not_change_research_quality_semantic
             execution_context=EvaluationExecutionContext(attempt_id=attempt.attempt_id),
         )
         comparable_data = {
-            key: value
-            for key, value in result.data.items()
-            if key not in {"research_item_id"}
+            key: value for key, value in result.data.items() if key not in {"research_item_id"}
         }
         return comparable_data, dict(result.metrics)
 

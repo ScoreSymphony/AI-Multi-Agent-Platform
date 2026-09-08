@@ -83,9 +83,7 @@ class RepeatPolicy:
             if self.stability_window > self.repeat_count:
                 raise ValueError("stability_window cannot exceed repeat_count")
             if self.variance_threshold is None or self.variance_threshold < 0:
-                raise ValueError(
-                    "stability strategy requires a non-negative variance_threshold"
-                )
+                raise ValueError("stability strategy requires a non-negative variance_threshold")
         elif self.stability_window is not None or self.variance_threshold is not None:
             raise ValueError("stability fields are only valid with strategy=stability")
 
@@ -306,9 +304,7 @@ class EvalManifestBuilder:
         randomness = seed_policy or SeedPolicy.conservative_for_run(run)
         if randomness.mode is RandomnessMode.FIXED_SEED_SUPPORTED:
             if len(randomness.ordered_seeds) != run.repetitions:
-                raise ValueError(
-                    "fixed supported seed set must contain one seed per repetition"
-                )
+                raise ValueError("fixed supported seed set must contain one seed per repetition")
         extras = context or EvalManifestContext()
         return EvalManifest(
             evaluation_run_id=run.run_id,
@@ -692,8 +688,7 @@ def decode_manifest(raw: str) -> EvalManifest:
             tuple(
                 SnapshotValue(key=_string(item, "key"), value=_string(item, "value"))
                 for item in (
-                    _object(value, "environment.values[]")
-                    for value in _list(environment, "values")
+                    _object(value, "environment.values[]") for value in _list(environment, "values")
                 )
             )
         ),
@@ -705,9 +700,7 @@ def decode_manifest(raw: str) -> EvalManifest:
         dependencies=_decode_refs(obj, "dependencies"),
         contract_versions=_decode_refs(obj, "contract_versions"),
         workspace=(
-            None
-            if workspace_raw is None
-            else _decode_ref(_object(workspace_raw, "workspace"))
+            None if workspace_raw is None else _decode_ref(_object(workspace_raw, "workspace"))
         ),
         limitations=tuple(_strings(obj, "limitations")),
         schema_version=_string(obj, "schema_version"),
@@ -922,8 +915,7 @@ def _decode_case(obj: dict[str, Any]) -> CaseReproducibilitySpec:
         resource_limits=tuple(
             SnapshotValue(key=_string(item, "key"), value=_string(item, "value"))
             for item in (
-                _object(value, "resource_limits[]")
-                for value in _list(obj, "resource_limits")
+                _object(value, "resource_limits[]") for value in _list(obj, "resource_limits")
             )
         ),
     )

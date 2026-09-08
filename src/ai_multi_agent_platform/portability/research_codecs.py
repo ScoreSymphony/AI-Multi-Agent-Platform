@@ -119,7 +119,9 @@ def _bundle_item(bundle: dict[str, JsonValue]) -> ResearchItem:
     try:
         item = _decode(bundle.get("research_item"))
     except (KeyError, TypeError, ValueError) as exc:
-        raise ContractError(ErrorCode.INVALID_CONFIGURATION, "invalid Research bundle item") from exc
+        raise ContractError(
+            ErrorCode.INVALID_CONFIGURATION, "invalid Research bundle item"
+        ) from exc
     if not isinstance(item, ResearchItem):
         raise ContractError(ErrorCode.INVALID_CONFIGURATION, "invalid Research bundle item")
     return item

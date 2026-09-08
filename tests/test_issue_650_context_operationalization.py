@@ -132,9 +132,7 @@ def _request(candidates: tuple[ContextCandidate, ...] = ()) -> ContextAssemblyRe
 
 
 def _resolve(candidates: tuple[ContextCandidate, ...]):
-    return asyncio.run(
-        ContextResolver(FakeAuthorizationProvider()).resolve(_request(candidates))
-    )
+    return asyncio.run(ContextResolver(FakeAuthorizationProvider()).resolve(_request(candidates)))
 
 
 def test_optional_provider_failure_is_auditable_unavailable_omission() -> None:

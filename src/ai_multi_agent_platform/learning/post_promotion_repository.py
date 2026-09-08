@@ -113,7 +113,9 @@ class SQLitePostPromotionEvaluationRecorder:
 def _record_from_row(row: sqlite3.Row) -> PostPromotionEvaluationRecord:
     run_ids_raw = json.loads(str(row["evaluation_run_ids_json"]))
     details_raw = json.loads(str(row["details_json"]))
-    if not isinstance(run_ids_raw, list) or not all(isinstance(value, str) for value in run_ids_raw):
+    if not isinstance(run_ids_raw, list) or not all(
+        isinstance(value, str) for value in run_ids_raw
+    ):
         raise ValueError("stored post-promotion Evaluation run IDs are malformed")
     if not isinstance(details_raw, dict):
         raise ValueError("stored post-promotion Evaluation details are malformed")

@@ -56,10 +56,16 @@ from ai_multi_agent_platform.security import (
     AuthorizedDataMemoryProvider,
     AuthorizedLifecycleBackend,
 )
-from ai_multi_agent_platform.skills import JsonSkillRepository, SkillService, register_skill_control_plane
+from ai_multi_agent_platform.skills import (
+    JsonSkillRepository,
+    SkillService,
+    register_skill_control_plane,
+)
 
 if TYPE_CHECKING:
-    from ai_multi_agent_platform.deployment.single_node import SingleNodeDeployment as BaseDeployment
+    from ai_multi_agent_platform.deployment.single_node import (
+        SingleNodeDeployment as BaseDeployment,
+    )
 
 
 # Explicit provider-neutral output reserve. This is intentionally a platform constant rather than

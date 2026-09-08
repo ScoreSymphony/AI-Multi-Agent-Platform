@@ -38,13 +38,28 @@ def test_curated_technical_catalog_loads_cross_category_seed() -> None:
     all_items = provider.search(RegistryQuery(technical_only=True))
 
     assert len(all_items) >= 22
-    assert {item.item_id for item in provider.search(RegistryQuery(categories=frozenset({"code-intelligence"})))} == EXPECTED_CODE_INTELLIGENCE
-    assert {item.item_id for item in provider.search(RegistryQuery(categories=frozenset({"coding-agent"})))} == EXPECTED_CODING_AGENTS
-    assert {item.item_id for item in provider.search(RegistryQuery(categories=frozenset({"agent-framework"})))} == EXPECTED_AGENT_FRAMEWORKS
+    assert {
+        item.item_id
+        for item in provider.search(RegistryQuery(categories=frozenset({"code-intelligence"})))
+    } == EXPECTED_CODE_INTELLIGENCE
+    assert {
+        item.item_id
+        for item in provider.search(RegistryQuery(categories=frozenset({"coding-agent"})))
+    } == EXPECTED_CODING_AGENTS
+    assert {
+        item.item_id
+        for item in provider.search(RegistryQuery(categories=frozenset({"agent-framework"})))
+    } == EXPECTED_AGENT_FRAMEWORKS
     assert EXPECTED_MEMORY.issubset(
-        {item.item_id for item in provider.search(RegistryQuery(categories=frozenset({"memory-and-context"})))}
+        {
+            item.item_id
+            for item in provider.search(RegistryQuery(categories=frozenset({"memory-and-context"})))
+        }
     )
-    assert {item.item_id for item in provider.search(RegistryQuery(categories=frozenset({"inference-runtime"})))} == EXPECTED_INFERENCE
+    assert {
+        item.item_id
+        for item in provider.search(RegistryQuery(categories=frozenset({"inference-runtime"})))
+    } == EXPECTED_INFERENCE
 
 
 def test_curated_catalog_entries_remain_manual_untrusted_candidates() -> None:
@@ -61,9 +76,15 @@ def test_curated_catalog_entries_remain_manual_untrusted_candidates() -> None:
         assert technical.cost_status in {"compatible", "conditional", "unknown"}
         assert technical.network_status in {"none", "optional", "unknown"}
         if item.item_id in EXPECTED_CODE_INTELLIGENCE:
-            assert item.review_reference == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/502"
+            assert (
+                item.review_reference
+                == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/502"
+            )
         else:
-            assert item.review_reference == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638"
+            assert (
+                item.review_reference
+                == "https://github.com/ScoreSymphony/AI-Multi-Agent-Platform/issues/638"
+            )
 
 
 def test_curated_catalog_preserves_explicit_unknowns_instead_of_guessing() -> None:

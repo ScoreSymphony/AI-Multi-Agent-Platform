@@ -204,8 +204,12 @@ def test_task_and_agent_adapters_preserve_canonical_revision_and_instruction_aut
         ),
     )
 
-    task_candidate = asyncio.run(TaskContextSourceAdapter(_TaskRepository(task_state)).collect(request))[0]
-    agent_candidate = asyncio.run(AgentContextSourceAdapter(_AgentService(agent_revision)).collect(request))[0]
+    task_candidate = asyncio.run(
+        TaskContextSourceAdapter(_TaskRepository(task_state)).collect(request)
+    )[0]
+    agent_candidate = asyncio.run(
+        AgentContextSourceAdapter(_AgentService(agent_revision)).collect(request)
+    )[0]
 
     assert task_candidate.source.source_type is ContextSourceType.TASK
     assert task_candidate.source.revision == "7"

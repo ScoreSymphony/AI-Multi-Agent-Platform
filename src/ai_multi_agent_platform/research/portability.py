@@ -146,9 +146,13 @@ def _validate_bundle_graph(
     _unique(bindings, "binding_id", "Verification binding")
 
     if set(item.source_ids) != set(source_by_id):
-        raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research bundle Source graph is incomplete")
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION, "Research bundle Source graph is incomplete"
+        )
     if set(item.claim_ids) != set(claim_by_id):
-        raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research bundle Claim graph is incomplete")
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION, "Research bundle Claim graph is incomplete"
+        )
     if set(item.evidence_ids) != set(evidence_by_id):
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
@@ -326,7 +330,9 @@ def _decoded[T](value: JsonValue | None, expected: type[T], label: str) -> T:
     try:
         decoded = _decode(value)
     except (KeyError, TypeError, ValueError) as exc:
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"invalid portable Research {label}") from exc
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, f"invalid portable Research {label}"
+        ) from exc
     if not isinstance(decoded, expected):
         raise ContractError(ErrorCode.INVALID_REQUEST, f"invalid portable Research {label}")
     return decoded
@@ -334,7 +340,9 @@ def _decoded[T](value: JsonValue | None, expected: type[T], label: str) -> T:
 
 def _decoded_array[T](value: JsonValue | None, expected: type[T], label: str) -> tuple[T, ...]:
     if not isinstance(value, list):
-        raise ContractError(ErrorCode.INVALID_REQUEST, f"portable Research {label} must be an array")
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST, f"portable Research {label} must be an array"
+        )
     return tuple(_decoded(item, expected, label) for item in value)
 
 

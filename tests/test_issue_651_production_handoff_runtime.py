@@ -221,15 +221,19 @@ async def _bootstrap_domain(
             agent_id=producer.agent_id,
             revision=producer.revision,
         )
-    return agents, runtime, _Ids(
-        task_id=task_id,
-        plan_id=plan_id,
-        producer_step_id=producer_step_id,
-        consumer_step_id=consumer_step_id,
-        producer_run_id=producer_run_id,
-        consumer_run_id=consumer_run_id,
-        producer=producer,
-        consumer=consumer,
+    return (
+        agents,
+        runtime,
+        _Ids(
+            task_id=task_id,
+            plan_id=plan_id,
+            producer_step_id=producer_step_id,
+            consumer_step_id=consumer_step_id,
+            producer_run_id=producer_run_id,
+            consumer_run_id=consumer_run_id,
+            producer=producer,
+            consumer=consumer,
+        ),
     )
 
 
@@ -593,7 +597,9 @@ async def test_two_real_context_orchestrators_receive_same_canonical_handoff_bun
             plan_id=ids.plan_id,
             step_id=ids.consumer_step_id,
         ),
-        adapters=(DurableConsumedHandoffContextAdapter(parts.runtime.repository, agent_repository),),  # type: ignore[attr-defined]
+        adapters=(
+            DurableConsumedHandoffContextAdapter(parts.runtime.repository, agent_repository),
+        ),  # type: ignore[attr-defined]
     )
 
     runtime_a = ContextBoundAgentRuntime(
@@ -614,7 +620,9 @@ async def test_two_real_context_orchestrators_receive_same_canonical_handoff_bun
     assert binding_a.context_bundle_id == binding_b.context_bundle_id == bundle.context_bundle_id
     assert binding_a.context_bundle_digest == binding_b.context_bundle_digest == bundle.digest
     handoff_entries = [
-        entry for entry in bundle.entries if entry.source.source_type is ContextSourceType.AGENT_HANDOFF
+        entry
+        for entry in bundle.entries
+        if entry.source.source_type is ContextSourceType.AGENT_HANDOFF
     ]
     assert len(handoff_entries) == 1
     assert handoff_entries[0].source.source_id == handoff.handoff_id

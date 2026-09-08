@@ -93,10 +93,7 @@ class CanonicalEgressPolicy(EgressPolicyPort):
         if allowed_classifications and classification not in allowed_classifications:
             return self._deny(request, EgressReasonCode.TARGET_POLICY_DENIED)
         if profile is not None and posture is EgressTargetPosture.EXTERNAL:
-            if (
-                profile.cost_class is EgressCostClass.PAID_EXTERNAL
-                and not self.allow_paid_external
-            ):
+            if profile.cost_class is EgressCostClass.PAID_EXTERNAL and not self.allow_paid_external:
                 return self._deny(request, EgressReasonCode.PAID_EXTERNAL_DENIED)
             if (
                 profile.cost_class is EgressCostClass.UNKNOWN
@@ -112,12 +109,12 @@ class CanonicalEgressPolicy(EgressPolicyPort):
             DataClassification.SECRET_REFERENCE,
             DataClassification.REGULATED,
         }:
-            profile_opt_in = profile is not None and profile.metadata.get(
-                "allow_sensitive_external"
-            ) is True
+            profile_opt_in = (
+                profile is not None and profile.metadata.get("allow_sensitive_external") is True
+            )
             legacy_opt_in = target.policy_metadata.get("allow_sensitive_external") is True
-            explicitly_allowed = (
-                classification in allowed_classifications and (profile_opt_in or legacy_opt_in)
+            explicitly_allowed = classification in allowed_classifications and (
+                profile_opt_in or legacy_opt_in
             )
             if not explicitly_allowed:
                 return self._deny(request, EgressReasonCode.SENSITIVE_EXTERNAL_DENIED)

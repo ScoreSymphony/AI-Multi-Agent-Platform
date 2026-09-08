@@ -57,8 +57,7 @@ class ContextBundleResourceService:
         return tuple(
             resource
             for resource in resources
-            if _matches_filters(resource, query.filters)
-            and _matches_search(resource, query.search)
+            if _matches_filters(resource, query.filters) and _matches_search(resource, query.search)
         )
 
     async def get_resource(
@@ -138,8 +137,7 @@ class ContextRunBindingResourceService:
         return tuple(
             resource
             for resource in resources
-            if _matches_filters(resource, query.filters)
-            and _matches_search(resource, query.search)
+            if _matches_filters(resource, query.filters) and _matches_search(resource, query.search)
         )
 
     async def get_resource(

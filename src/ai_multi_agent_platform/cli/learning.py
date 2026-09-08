@@ -128,8 +128,7 @@ def add_learning_parser(
     promote = commands.add_parser(
         "promote",
         help=(
-            "promote an accepted candidate through Evaluation, authorization and "
-            "owner-domain gates"
+            "promote an accepted candidate through Evaluation, authorization and owner-domain gates"
         ),
     )
     promote.add_argument("candidate_id")
@@ -216,9 +215,7 @@ def execute_learning(
         if args.command == "propose" and args.project_id is not None:
             body["project_id"] = str(args.project_id)
         command = (
-            "learning.propose"
-            if args.command == "propose"
-            else "learning.propose-from-feedback"
+            "learning.propose" if args.command == "propose" else "learning.propose-from-feedback"
         )
         return client.post(
             f"/commands/{command}",
@@ -284,12 +281,8 @@ def execute_learning(
                 query=_page_query(args),
             )
         if args.post_eval_command == "show":
-            return client.get(
-                f"/learning-post-promotion-evaluations/{_segment(args.record_id)}"
-            )
-        raise ProfileError(
-            f"unsupported Learning post-eval command: {args.post_eval_command}"
-        )
+            return client.get(f"/learning-post-promotion-evaluations/{_segment(args.record_id)}")
+        raise ProfileError(f"unsupported Learning post-eval command: {args.post_eval_command}")
 
     raise ProfileError(f"unsupported Learning command: {args.command}")
 

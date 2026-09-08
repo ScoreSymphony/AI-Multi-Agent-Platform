@@ -161,7 +161,10 @@ class EgressTarget:
         if len(set(self.allowed_classifications)) != len(self.allowed_classifications):
             raise ValueError("egress target allowed classifications must be unique")
         if self.profile is not None:
-            if self.profile.target_kind is not self.kind or self.profile.target_id != self.target_id:
+            if (
+                self.profile.target_kind is not self.kind
+                or self.profile.target_id != self.target_id
+            ):
                 raise ValueError("egress profile target identity does not match target")
             if (
                 self.posture is not EgressTargetPosture.UNKNOWN

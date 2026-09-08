@@ -47,10 +47,7 @@ def test_standard_research_team_preserves_member_role_and_capability_boundaries(
     team = agents.get_team_revision(team_template.team_id)
 
     assert team.profile.leader_agent_id == _RESEARCHER_ID
-    assert {
-        (member.agent.agent_id, member.role)
-        for member in team.profile.members
-    } == {
+    assert {(member.agent.agent_id, member.role) for member in team.profile.members} == {
         (_RESEARCHER_ID, "researcher"),
         (_REVIEWER_ID, "source_checker_reviewer"),
         (STANDARD_AGENT_IDS["data_analyst"], "analyst_writer"),
@@ -174,8 +171,8 @@ def test_standard_researcher_and_reviewer_use_canonical_research_and_verificatio
         )
         assert accepted.verifier.agent_id == _REVIEWER_ID
         assert accepted.verifier.agent_id != evidence.agent_id
-        assert research.repository.list_verification_bindings(item.research_item_id)[0].subject_id == (
-            claim.claim_id
-        )
+        assert research.repository.list_verification_bindings(item.research_item_id)[
+            0
+        ].subject_id == (claim.claim_id)
 
     asyncio.run(scenario())

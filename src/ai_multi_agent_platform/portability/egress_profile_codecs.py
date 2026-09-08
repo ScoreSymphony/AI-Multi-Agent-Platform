@@ -83,8 +83,7 @@ class EgressProfilePortableCodec:
                 "schema_version": EGRESS_PROFILE_PORTABLE_SCHEMA_VERSION,
                 "definition": _definition_to_json(snapshot.definition),
                 "revisions": [
-                    egress_profile_to_json(_portable_revision(item))
-                    for item in snapshot.revisions
+                    egress_profile_to_json(_portable_revision(item)) for item in snapshot.revisions
                 ],
             },
             id_policy=self.id_policy,
@@ -169,7 +168,9 @@ def _sanitize_and_remap(
         if snapshot.definition.project_id is None
         else context.remap("project", snapshot.definition.project_id)
     )
-    target_id = _remap_target(context, snapshot.definition.target_kind, snapshot.definition.target_id)
+    target_id = _remap_target(
+        context, snapshot.definition.target_kind, snapshot.definition.target_id
+    )
     definition = replace(
         snapshot.definition,
         profile_id=target_profile_id,

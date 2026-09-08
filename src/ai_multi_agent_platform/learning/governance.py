@@ -174,7 +174,9 @@ class GovernedObservedLearningService(ObservedLearningService):
         *,
         expected_revision: int | None = None,
     ) -> LearningCandidate:
-        self.platform_policy.validate_candidate(self.repository.get_candidate(learning_candidate_id))
+        self.platform_policy.validate_candidate(
+            self.repository.get_candidate(learning_candidate_id)
+        )
         return super().accept(
             learning_candidate_id,
             expected_revision=expected_revision,

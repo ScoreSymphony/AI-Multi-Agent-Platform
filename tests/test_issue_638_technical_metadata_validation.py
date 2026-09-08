@@ -34,9 +34,7 @@ def test_local_provider_rejects_unsupported_structured_technical_tag() -> None:
 
 def test_local_provider_rejects_conflicting_single_value_technical_tags() -> None:
     with pytest.raises(ValueError, match="conflicting lifecycle"):
-        LocalRegistryProvider(
-            (_technical_item("lifecycle:candidate", "lifecycle:adopted"),)
-        )
+        LocalRegistryProvider((_technical_item("lifecycle:candidate", "lifecycle:adopted"),))
 
 
 def test_local_provider_allows_generic_registry_tags_without_technical_taxonomy() -> None:

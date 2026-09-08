@@ -60,9 +60,7 @@ def _runtime(
         )
     )
     provider = (
-        _StrongerResultProvider(secrets)
-        if stronger_result
-        else ReferenceConnectorProvider(secrets)
+        _StrongerResultProvider(secrets) if stronger_result else ReferenceConnectorProvider(secrets)
     )
     service = EgressConnectorService(InMemoryConnectorRepository(), ConnectorRegistry())
     asyncio.run(service.register_provider(provider))
@@ -77,9 +75,7 @@ def _runtime(
         secret_references=(secret_ref,),
         requested_scopes=("read", "write"),
     )
-    connection = asyncio.run(
-        service.create_connection(connection, actor=actor, context=context)
-    )
+    connection = asyncio.run(service.create_connection(connection, actor=actor, context=context))
     return service, actor, context, connection
 
 
@@ -163,7 +159,6 @@ def test_sync_resources_and_events_inherit_request_classification() -> None:
     assert result.resources
     assert result.events
     assert all(
-        resource.classification is DataClassification.RESTRICTED
-        for resource in result.resources
+        resource.classification is DataClassification.RESTRICTED for resource in result.resources
     )
     assert all(event.classification is DataClassification.RESTRICTED for event in result.events)
