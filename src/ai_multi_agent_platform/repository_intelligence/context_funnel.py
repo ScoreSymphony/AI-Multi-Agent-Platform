@@ -16,16 +16,16 @@ from ai_multi_agent_platform.capabilities import (
     CapabilityInvocationResult,
     InvocationTrace,
 )
-from ai_multi_agent_platform.context import (
+from ai_multi_agent_platform.context.models import (
     ContextCandidate,
     ContextDataClassification,
     ContextEntryRole,
     ContextFreshness,
     ContextSourceRef,
-    ContextSourceRequest,
     ContextSourceType,
     ContextTrust,
 )
+from ai_multi_agent_platform.context.resolver import ContextSourceRequest
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
 

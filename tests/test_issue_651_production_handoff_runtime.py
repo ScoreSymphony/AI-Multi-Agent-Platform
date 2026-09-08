@@ -42,10 +42,8 @@ from ai_multi_agent_platform.context import (
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.coordination.models import CoordinationPhase, StepCoordinationRecord
-from ai_multi_agent_platform.coordination.repository import (
-    InMemoryCoordinatorRepository,
-    SQLiteCoordinatorRepository,
-)
+from ai_multi_agent_platform.coordination.repository import InMemoryCoordinatorRepository
+from ai_multi_agent_platform.coordination.sqlite_repository import SQLiteCoordinatorRepository
 from ai_multi_agent_platform.domain import OwnerRef, Plan, Step, new_id
 from ai_multi_agent_platform.handoffs import (
     CanonicalConsumerRequirementEvaluator,
@@ -545,7 +543,7 @@ async def test_restart_after_consumption_recovers_same_handoff_and_executes_cons
         operation=_operation(ids),
         budget=ContextBudget(max_tokens=4096, max_bytes=16384, max_items=16),
     )
-    assert execution.runtime_context.consumption == consumed
+    assert execution.runtime_context == consumed
     assert execution.context_binding.context_bundle_digest == execution.context_bundle.digest
 
     reopened_contexts = JsonContextBundleRepository(context_path)

@@ -177,6 +177,7 @@ async def test_research_claim_and_evidence_resolve_from_real_research_repository
         relation=EvidenceRelation.SUPPORTS,
         location_ref="section:handoff",
     )
+    claim = repository.get_claim(claim.claim_id)
     gateway = _gateway(research=repository)
     claim_ref = HandoffSourceRef(
         HandoffSourceKind.RESEARCH_CLAIM,
