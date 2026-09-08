@@ -40,6 +40,7 @@ class PostPromotionEvaluationOutcome(StrEnum):
     PASSED = "passed"
     REGRESSION = "regression"
     FAILED = "failed"
+    NOT_CONFIGURED = "not_configured"
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,13 +72,19 @@ class PostPromotionEvaluationRecorder(Protocol):
         learning_candidate_id: str,
     ) -> tuple[PostPromotionEvaluationRecord, ...]: ...
 
+    def record_for_promotion(
+        self,
+        learning_candidate_id: str,
+        target_revision: int,
+    ) -> PostPromotionEvaluationRecord | None: ...
+
 
 class InMemoryPostPromotionEvaluationRecorder:
     def __init__(self) -> None:
         self._records: list[PostPromotionEvaluationRecord] = []
 
     def store(self, record: PostPromotionEvaluationRecord) -> None:
-        if any(existing.record_id == record.record_id for existing in self._records):
+        if self.record_for_promotion(record.learning_candidate_id, record.target_revision) is not None:
             return
         self._records.append(record)
 
@@ -89,6 +96,21 @@ class InMemoryPostPromotionEvaluationRecorder:
             record
             for record in self._records
             if record.learning_candidate_id == learning_candidate_id
+        )
+
+    def record_for_promotion(
+        self,
+        learning_candidate_id: str,
+        target_revision: int,
+    ) -> PostPromotionEvaluationRecord | None:
+        return next(
+            (
+                record
+                for record in self._records
+                if record.learning_candidate_id == learning_candidate_id
+                and record.target_revision == target_revision
+            ),
+            None,
         )
 
 
@@ -130,7 +152,7 @@ class EvaluationPostPromotionEvaluator:
                 learning_candidate_id=candidate.learning_candidate_id,
                 candidate_revision=candidate.revision,
                 target_revision=candidate.promotion.new_revision,
-                outcome=PostPromotionEvaluationOutcome.PASSED,
+                outcome=PostPromotionEvaluationOutcome.NOT_CONFIGURED,
                 details={"reason": "no post-promotion suites configured"},
             )
 
@@ -360,14 +382,40 @@ class ObservedLearningService(LearningService):
         self._emit_candidate("learning.candidate.promoted", promoted, operation=operation)
         if (
             promoted.status is LearningCandidateStatus.PROMOTED
+            and promoted.promotion is not None
             and self.post_promotion_evaluator is not None
         ):
+            existing = self.post_promotion_recorder.record_for_promotion(
+                promoted.learning_candidate_id,
+                promoted.promotion.new_revision,
+            )
+            if existing is not None:
+                self._emit(
+                    "learning.post_promotion_evaluation.reused",
+                    project_id=promoted.project_id,
+                    correlation_id=operation.correlation_id,
+                    attributes={
+                        "learning_candidate_id": promoted.learning_candidate_id,
+                        "record_id": existing.record_id,
+                        "post_promotion_outcome": existing.outcome.value,
+                        "target_revision": existing.target_revision,
+                    },
+                )
+                return promoted
             try:
                 record = await self.post_promotion_evaluator.evaluate(
                     promoted,
                     operation=operation,
                 )
             except Exception as exc:
+                record = PostPromotionEvaluationRecord(
+                    learning_candidate_id=promoted.learning_candidate_id,
+                    candidate_revision=promoted.revision,
+                    target_revision=promoted.promotion.new_revision,
+                    outcome=PostPromotionEvaluationOutcome.FAILED,
+                    details={"error_type": type(exc).__name__},
+                )
+                self.post_promotion_recorder.store(record)
                 self._emit(
                     "learning.post_promotion_evaluation.failed",
                     project_id=promoted.project_id,
@@ -377,25 +425,28 @@ class ObservedLearningService(LearningService):
                     attributes={
                         "learning_candidate_id": promoted.learning_candidate_id,
                         "candidate_revision": promoted.revision,
+                        "record_id": record.record_id,
                         "error_type": type(exc).__name__,
+                        "target_revision": record.target_revision,
                     },
                 )
             else:
                 self.post_promotion_recorder.store(record)
+                if record.outcome is PostPromotionEvaluationOutcome.PASSED:
+                    telemetry_outcome = TelemetryOutcome.SUCCEEDED
+                    severity = TelemetrySeverity.INFO
+                elif record.outcome is PostPromotionEvaluationOutcome.NOT_CONFIGURED:
+                    telemetry_outcome = TelemetryOutcome.UNKNOWN
+                    severity = TelemetrySeverity.INFO
+                else:
+                    telemetry_outcome = TelemetryOutcome.FAILED
+                    severity = TelemetrySeverity.WARNING
                 self._emit(
                     "learning.post_promotion_evaluation.completed",
                     project_id=promoted.project_id,
                     correlation_id=operation.correlation_id,
-                    outcome=(
-                        TelemetryOutcome.SUCCEEDED
-                        if record.outcome is PostPromotionEvaluationOutcome.PASSED
-                        else TelemetryOutcome.FAILED
-                    ),
-                    severity=(
-                        TelemetrySeverity.INFO
-                        if record.outcome is PostPromotionEvaluationOutcome.PASSED
-                        else TelemetrySeverity.WARNING
-                    ),
+                    outcome=telemetry_outcome,
+                    severity=severity,
                     attributes={
                         "learning_candidate_id": promoted.learning_candidate_id,
                         "record_id": record.record_id,
