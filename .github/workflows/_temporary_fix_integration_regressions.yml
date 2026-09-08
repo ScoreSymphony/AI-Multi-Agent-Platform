@@ -1,0 +1,84 @@
+name: Temporary integration regression fixes
+
+on:
+  push:
+    branches:
+      - integration/active-branches-2026-09-08
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: integration/active-branches-2026-09-08
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Apply and validate import-cycle and storage-metric fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          onboarding = Path('src/ai_multi_agent_platform/onboarding/service.py')
+          text = onboarding.read_text()
+          old = 'from ai_multi_agent_platform.agents import STARTER_CATALOG_SOURCE, AgentRuntime, AgentService\n'
+          new = (
+              'from ai_multi_agent_platform.agents.runtime import AgentRuntime\n'
+              'from ai_multi_agent_platform.agents.service import AgentService\n'
+              'from ai_multi_agent_platform.agents.standards import STARTER_CATALOG_SOURCE\n'
+          )
+          if old not in text:
+              raise SystemExit('Expected onboarding root-package import not found')
+          onboarding.write_text(text.replace(old, new, 1))
+
+          planning = Path('src/ai_multi_agent_platform/benchmarking/planning_pressure.py')
+          text = planning.read_text()
+          if 'import sqlite3\n' not in text:
+              text = text.replace('import asyncio\n', 'import asyncio\nimport sqlite3\n', 1)
+
+          old_before = '''        measured_tasks = await _ready_tasks(\n            kernel,\n            count=spec.operation_count,\n            prefix="measured",\n        )\n        storage_before = _directory_size(self._data_dir)\n'''
+          new_before = '''        measured_tasks = await _ready_tasks(\n            kernel,\n            count=spec.operation_count,\n            prefix="measured",\n        )\n        # Normalize WAL state before measuring persistent growth. Task seeding can leave\n        # transient WAL pages that are checkpointed during the measured lifecycle; counting\n        # those pages in the baseline can otherwise report negative "growth" even though the\n        # canonical stores gained records.\n        _checkpoint_sqlite_storage(db_dir / "kernel.sqlite3")\n        _checkpoint_sqlite_storage(db_dir / "coordination.sqlite3")\n        storage_before = _directory_size(self._data_dir)\n'''
+          if old_before not in text:
+              raise SystemExit('Expected planning storage baseline block not found')
+          text = text.replace(old_before, new_before, 1)
+
+          old_after = '''        if not tracing_was_active:\n            tracemalloc.stop()\n        storage_after = _directory_size(self._data_dir)\n\n        errors = tuple(error for result in results if (error := result.error) is not None)\n'''
+          new_after = '''        if not tracing_was_active:\n            tracemalloc.stop()\n        # Compare like-for-like durable SQLite footprints instead of transient WAL state.\n        _checkpoint_sqlite_storage(db_dir / "kernel.sqlite3")\n        _checkpoint_sqlite_storage(db_dir / "coordination.sqlite3")\n        storage_after = _directory_size(self._data_dir)\n\n        errors = tuple(error for result in results if (error := result.error) is not None)\n'''
+          if old_after not in text:
+              raise SystemExit('Expected planning storage final block not found')
+          text = text.replace(old_after, new_after, 1)
+
+          marker = '\n\ndef _linear_draft('
+          helper = '''\n\ndef _checkpoint_sqlite_storage(path: Path) -> None:\n    """Normalize SQLite WAL state so byte-growth snapshots are comparable."""\n\n    if not path.exists():\n        return\n    with sqlite3.connect(path) as connection:\n        mode_row = connection.execute("PRAGMA journal_mode").fetchone()\n        mode = str(mode_row[0]).casefold() if mode_row is not None else ""\n        if mode != "wal":\n            return\n        checkpoint = connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()\n        if checkpoint is None or int(checkpoint[0]) != 0:\n            raise RuntimeError(f"SQLite WAL checkpoint could not complete for {path}")\n'''
+          if '_checkpoint_sqlite_storage(path: Path)' not in text:
+              if marker not in text:
+                  raise SystemExit('Expected planning helper insertion point not found')
+              text = text.replace(marker, helper + marker, 1)
+          planning.write_text(text)
+          PY
+
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+          ruff format src/ai_multi_agent_platform/onboarding/service.py src/ai_multi_agent_platform/benchmarking/planning_pressure.py
+          ruff check src/ai_multi_agent_platform/onboarding/service.py src/ai_multi_agent_platform/benchmarking/planning_pressure.py
+          mypy src/ai_multi_agent_platform/onboarding/service.py src/ai_multi_agent_platform/benchmarking/planning_pressure.py
+          python -c 'import ai_multi_agent_platform.adapters; import ai_multi_agent_platform.context; import ai_multi_agent_platform.onboarding'
+          pytest -q tests/test_issue_252_acceptance_gate.py
+          for iteration in 1 2 3; do
+            echo "planning pressure verification ${iteration}/3"
+            pytest -q tests/performance/test_issue_440_planning_pressure.py
+          done
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/_temporary_fix_integration_regressions.yml
+          git add src/ai_multi_agent_platform/onboarding/service.py src/ai_multi_agent_platform/benchmarking/planning_pressure.py
+          git commit -m "fix: stabilize integrated onboarding and planning benchmarks"
+          git push origin HEAD:integration/active-branches-2026-09-08
