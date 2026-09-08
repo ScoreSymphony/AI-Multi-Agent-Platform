@@ -85,9 +85,37 @@ def test_only_manual_distribution_route_can_override_type_routing() -> None:
         )
 
 
-def test_registry_schema_accepts_manual_route_and_rejects_other_overrides() -> None:
-    document = {
-        "schema_version": "1",
+def test_registry_item_v1_documents_remain_readable() -> None:
+    document = _registry_document(schema_version="1")
+
+    item = registry_item_from_document(document)
+
+    assert item.route is DistributionRoute.PORTABLE_IMPORT
+
+
+def test_registry_item_v2_accepts_manual_route_and_rejects_other_overrides() -> None:
+    document = _registry_document(schema_version="2")
+    document["distribution_route"] = "manual"
+
+    item = registry_item_from_document(document)
+    assert item.route is DistributionRoute.MANUAL
+
+    document["distribution_route"] = "portable_import"
+    with pytest.raises(ValidationError):
+        registry_item_from_document(document)
+
+
+def test_registry_item_v1_rejects_v2_manual_route_field() -> None:
+    document = _registry_document(schema_version="1")
+    document["distribution_route"] = "manual"
+
+    with pytest.raises(ValidationError):
+        registry_item_from_document(document)
+
+
+def _registry_document(*, schema_version: str) -> dict[str, object]:
+    return {
+        "schema_version": schema_version,
         "item_id": "candidate-tool",
         "item_type": "tool",
         "name": "Candidate Tool",
@@ -104,16 +132,8 @@ def test_registry_schema_accepts_manual_route_and_rejects_other_overrides() -> N
         "dependencies": [],
         "requested_permissions": [],
         "required_capabilities": [],
-        "distribution_route": "manual",
         "integrity": {},
         "trust_status": "untrusted",
         "deprecated": False,
         "yanked": False,
     }
-
-    item = registry_item_from_document(document)
-    assert item.route is DistributionRoute.MANUAL
-
-    document["distribution_route"] = "portable_import"
-    with pytest.raises(ValidationError):
-        registry_item_from_document(document)
