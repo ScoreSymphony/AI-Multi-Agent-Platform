@@ -19,6 +19,11 @@ from ai_multi_agent_platform.decisions import (
     decision_record_command_handlers,
     decision_record_resource_services,
 )
+from ai_multi_agent_platform.goals import (
+    EventSourcedGoalRepository,
+    GoalService,
+    KernelGoalTaskCreator,
+)
 from ai_multi_agent_platform.governance.control_plane import register_governance_control_plane
 from ai_multi_agent_platform.governance.repository import (
     GovernanceRepository,
@@ -29,12 +34,13 @@ from ai_multi_agent_platform.security import AuthorizationGate
 
 from .approval_decision_composition import ControlPlane as _ApprovalControlPlane
 from .extensions import _singular, _validate_resources
+from .goal_contract import goal_command_handlers, goal_resource_services
 from .models import PageQuery, RequestContext, paginate
 from .portability_api import ControlPlane as _PortabilityControlPlane
 
 
 class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
-    """Approval-aware Control Plane with portability and durable governance/decisions."""
+    """Approval-aware Control Plane with durable canonical product resources."""
 
     def __init__(
         self,
@@ -46,6 +52,19 @@ class ControlPlane(_ApprovalControlPlane, _PortabilityControlPlane):
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
+
+        # Goals are canonical product state, not an optional deployment extension. Reuse the
+        # existing kernel EventRepository so Goal snapshots, idempotency records and Task work
+        # survive the same local restart boundary as Tasks/Runs.
+        self.goals = GoalService(
+            EventSourcedGoalRepository(self._events),
+            task_creator=KernelGoalTaskCreator(self._kernel),
+        )
+        for collection, service in goal_resource_services(self.goals).items():
+            self.register_resource_service(collection, service)
+        for command, handler in goal_command_handlers(self.goals).items():
+            self.register_command(command, handler)
+
         self.governance: GovernanceService | None = None
         self.decisions: DecisionService | None = None
         gate = getattr(self, "approval_gate", None)
