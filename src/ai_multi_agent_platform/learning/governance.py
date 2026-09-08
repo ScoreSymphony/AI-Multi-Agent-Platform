@@ -6,18 +6,16 @@ from dataclasses import dataclass
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
 from ai_multi_agent_platform.domain import Provenance
+from ai_multi_agent_platform.observability import Telemetry
 from ai_multi_agent_platform.security import ActorIdentity, AuthorizationGate, RiskClassification
 
 from .models import (
-    FeedbackRecord,
-    FeedbackType,
     LearningCandidate,
     LearningCandidateStatus,
     LearningGatePlan,
     LearningReference,
     LearningSourceType,
     LearningTarget,
-    LearningTargetType,
 )
 from .promotion import PromotionRegistry
 from .repository import LearningRepository
@@ -113,7 +111,7 @@ class GovernedObservedLearningService(ObservedLearningService):
         promotion_registry: PromotionRegistry,
         authorization_gate: AuthorizationGate,
         platform_policy: LearningPlatformPolicy | None = None,
-        telemetry=None,
+        telemetry: Telemetry | None = None,
         post_promotion_evaluator: PostPromotionEvaluator | None = None,
         post_promotion_recorder: PostPromotionEvaluationRecorder | None = None,
     ) -> None:
