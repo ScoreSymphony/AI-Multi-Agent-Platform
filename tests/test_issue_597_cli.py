@@ -16,6 +16,7 @@ _GOAL_COMMANDS = [
     "goal.pause",
     "goal.resume",
     "goal.cancel",
+    "goal.fail",
     "goal.revise",
     "goal.review",
     "goal.attach-task",
@@ -110,6 +111,7 @@ def test_goal_lifecycle_revision_and_task_link_commands_use_registered_control_p
         ("goal.pause", "goal_cli", {}),
         ("goal.resume", "goal_cli", {}),
         ("goal.cancel", "goal_cli", {"reason": "operator decision"}),
+        ("goal.fail", "goal_cli", {"reason": "objective is no longer achievable"}),
         (
             "goal.revise",
             "goal_cli",
@@ -146,11 +148,15 @@ def test_goal_lifecycle_revision_and_task_link_commands_use_registered_control_p
     assert posts[2][2] == {"resource_ref": "goal_cli", "reason": "operator decision"}
     assert posts[3][2] == {
         "resource_ref": "goal_cli",
+        "reason": "objective is no longer achievable",
+    }
+    assert posts[4][2] == {
+        "resource_ref": "goal_cli",
         "expected_revision": 3,
         "objective": "Revised objective",
         "active_task_policy": "retain",
     }
-    assert posts[4][2] == {
+    assert posts[5][2] == {
         "resource_ref": "goal_cli",
         "expected_revision": 4,
         "task_id": "task_cli",
