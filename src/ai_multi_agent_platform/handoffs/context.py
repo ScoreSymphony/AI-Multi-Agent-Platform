@@ -8,6 +8,7 @@ Artifacts/Results/Evidence.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from ai_multi_agent_platform.agents.models import AgentRevisionRef
@@ -21,7 +22,7 @@ from ai_multi_agent_platform.context import (
     ContextTrust,
 )
 
-from .models import HandoffRuntimeContext
+from .models import HandoffRuntimeContext, handoff_to_dict
 
 
 def _validate_runtime_context(runtime_context: HandoffRuntimeContext) -> None:
@@ -50,6 +51,17 @@ def _validate_runtime_context(runtime_context: HandoffRuntimeContext) -> None:
         raise ValueError("handoff context source execution references do not match handoff content")
 
 
+def _render_handoff_context(runtime_context: HandoffRuntimeContext) -> str:
+    """Return a deterministic, directly renderable snapshot of the immutable Handoff."""
+
+    return json.dumps(
+        handoff_to_dict(runtime_context.handoff),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
 def handoff_context_candidate(
     runtime_context: HandoffRuntimeContext,
     *,
@@ -64,20 +76,19 @@ def handoff_context_candidate(
 
     _validate_runtime_context(runtime_context)
     source = runtime_context.context_source
-    content_ref = f"handoff:{source.handoff_id}@{source.revision}"
+    locator = f"handoff:{source.handoff_id}@{source.revision}"
     return ContextCandidate(
         source=ContextSourceRef(
             source_type=ContextSourceType.AGENT_HANDOFF,
             source_id=source.handoff_id,
             revision=str(source.revision),
             digest=source.digest,
-            locator=content_ref,
+            locator=locator,
         ),
         role=ContextEntryRole.CONTEXT,
         selection_reason=source.selection_reason,
         mandatory=mandatory,
-        content_ref=content_ref,
-        content_digest=source.digest,
+        inline_content=_render_handoff_context(runtime_context),
         trust=ContextTrust.UNTRUSTED,
         data_classification=ContextDataClassification.INTERNAL,
         relevance=1.0,
@@ -87,6 +98,7 @@ def handoff_context_candidate(
             "producer_step_id": source.producer_step_id,
             "consumer_step_id": source.consumer_step_id,
             "consuming_run_id": runtime_context.consumption.consuming_run_id,
+            "handoff_digest": source.digest,
         },
     )
 
