@@ -7,7 +7,7 @@ import pytest
 
 from ai_multi_agent_platform.capabilities import CapabilityRegistry, CapabilityToolProvider
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import OperationContext, ToolInvocation
+from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext, ToolInvocation
 from ai_multi_agent_platform.plugins import (
     CapabilityRegistryBinder,
     ExtensionType,
@@ -51,7 +51,7 @@ def _plugin_registry(capabilities: CapabilityRegistry) -> PluginRegistry:
     )
 
 
-def _configuration(tmp_path: Path) -> dict[str, str]:
+def _configuration(tmp_path: Path) -> dict[str, JsonValue]:
     state_root = tmp_path / "projectatlas-state"
     state_root.mkdir()
     return {
@@ -90,6 +90,10 @@ def test_projectatlas_plugin_registers_and_removes_only_status_capabilities(tmp_
     registry = _plugin_registry(capabilities)
     manifest = projectatlas_candidate_manifest()
     configuration = _configuration(tmp_path)
+    binary_path = configuration["binary_path"]
+    state_root = configuration["state_root"]
+    assert isinstance(binary_path, str)
+    assert isinstance(state_root, str)
     probe = _Probe(ProjectAtlasRuntimeIdentity("projectatlas 0.4.5", True))
     runtime = ProjectAtlasCandidatePlugin(probe)
 
@@ -105,9 +109,7 @@ def test_projectatlas_plugin_registers_and_removes_only_status_capabilities(tmp_
 
     assert enabled.state is PluginState.ENABLED
     assert enabled.health is PluginHealth.HEALTHY
-    assert probe.calls == [
-        (Path(configuration["binary_path"]), Path(configuration["state_root"]))
-    ]
+    assert probe.calls == [(Path(binary_path), Path(state_root))]
     assert {provider.provider_id for provider in capabilities.inventory_providers()} == {
         PROJECTATLAS_PROVIDER_ID
     }
@@ -151,6 +153,7 @@ def test_projectatlas_provider_rejects_source_operations_until_containment_passe
             )
         )
     )
+    assert isinstance(health.output, dict)
     assert health.output["provider_id"] == PROJECTATLAS_PROVIDER_ID
     assert health.output["health"] == "healthy"
 
@@ -164,6 +167,7 @@ def test_projectatlas_provider_rejects_source_operations_until_containment_passe
             )
         )
     )
+    assert isinstance(status.output, dict)
     assert status.output["indexed"] is False
     assert status.output["freshness"] == "unknown"
     assert status.output["rebuild_required"] is True
