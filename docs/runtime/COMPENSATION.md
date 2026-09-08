@@ -63,9 +63,11 @@ through the explicit group while preserving each visible failure.
 ## Request identity and duplicate delivery
 
 Every `CompensationRequest` has a stable compensation ID and idempotency key. The reference
-coordinator derives an automatic key from group, action, Plan revision and trigger; callers may
-provide a stronger external key where needed. The repositories enforce key uniqueness, so duplicate
-failure/cancellation delivery resolves to the already-created request.
+coordinator derives an automatic key from group, action and Plan revision. Trigger changes do not
+create a second default compensation identity for the same completed side effect, so a downstream
+failure followed by cancellation or manual recovery cannot repeat an already-requested undo. Callers
+may provide a stronger external key where needed. Reusing one key for a different immutable
+compensation target is rejected with `conflict` instead of silently aliasing the requests.
 
 For a descriptor whose provider idempotency is guaranteed, the same key is propagated through
 `OperationControl` with `RetryMode.IDEMPOTENT`. Other providers receive `RetryMode.NEVER`; the

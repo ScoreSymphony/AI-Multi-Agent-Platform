@@ -143,7 +143,7 @@ class CompensationCoordinator:
     ) -> CompensationRequest:
         action = self.repository.get_action(action_id)
         descriptor = action.compensation
-        key = idempotency_key or self._default_idempotency_key(action, trigger)
+        key = idempotency_key or self._default_idempotency_key(action)
         request = CompensationRequest(
             compensation_id=new_compensation_id(),
             idempotency_key=key,
@@ -547,13 +547,10 @@ class CompensationCoordinator:
         return False
 
     @staticmethod
-    def _default_idempotency_key(
-        action: CompletedSideEffect,
-        trigger: CompensationTrigger,
-    ) -> str:
+    def _default_idempotency_key(action: CompletedSideEffect) -> str:
         return (
             f"compensation:{action.group_id}:{action.action_id}:"
-            f"plan-revision-{action.plan_revision}:{trigger.value}"
+            f"plan-revision-{action.plan_revision}"
         )
 
     @staticmethod

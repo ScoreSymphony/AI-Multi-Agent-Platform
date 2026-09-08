@@ -116,7 +116,13 @@ class InMemoryCompensationRepository:
     def create_request(self, request: CompensationRequest) -> CompensationRequest:
         existing_id = self._request_keys.get(request.idempotency_key)
         if existing_id is not None:
-            return self._requests[existing_id]
+            existing = self._requests[existing_id]
+            if _same_idempotency_target(existing, request):
+                return existing
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                "compensation idempotency key already belongs to another target",
+            )
         existing = self._requests.get(request.compensation_id)
         if existing is not None:
             if existing == request:
@@ -299,7 +305,12 @@ class SQLiteCompensationRepository:
         except sqlite3.IntegrityError:
             existing = self.find_request_by_key(request.idempotency_key)
             if existing is not None:
-                return existing
+                if _same_idempotency_target(existing, request):
+                    return existing
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "compensation idempotency key already belongs to another target",
+                ) from None
             existing_by_id = self.get_request(request.compensation_id)
             if existing_by_id == request:
                 return existing_by_id
@@ -421,6 +432,29 @@ def _policy_from_json(value: JsonValue) -> CompensationPolicy:
         failure_mode=CompensationFailureMode(cast(str, data["failure_mode"])),
         require_human_approval=bool(data["require_human_approval"]),
         allow_newer_plan_revision=bool(data["allow_newer_plan_revision"]),
+    )
+
+
+def _same_idempotency_target(
+    existing: CompensationRequest,
+    candidate: CompensationRequest,
+) -> bool:
+    """Return whether two deliveries identify the same immutable compensation target."""
+
+    return (
+        existing.group_id == candidate.group_id
+        and existing.action_id == candidate.action_id
+        and existing.original_task_id == candidate.original_task_id
+        and existing.original_plan_id == candidate.original_plan_id
+        and existing.original_plan_revision == candidate.original_plan_revision
+        and existing.original_project_id == candidate.original_project_id
+        and existing.original_step_id == candidate.original_step_id
+        and existing.original_run_id == candidate.original_run_id
+        and existing.original_tool_invocation_id == candidate.original_tool_invocation_id
+        and existing.original_result_ref == candidate.original_result_ref
+        and existing.external_resource_ref == candidate.external_resource_ref
+        and existing.requested_capability_id == candidate.requested_capability_id
+        and existing.requested_capability_version == candidate.requested_capability_version
     )
 
 

@@ -35,6 +35,7 @@ from ai_multi_agent_platform.compensation import (
     new_compensation_action_id,
     new_compensation_group_id,
 )
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.contracts.domain_mapping import map_tool_invocation_to_domain
 from ai_multi_agent_platform.contracts.types import (
     Capability,
@@ -798,3 +799,93 @@ def test_newer_plan_revision_is_not_compensated_without_explicit_policy() -> Non
         assert provider.calls == []
 
     asyncio.run(scenario())
+
+
+def test_default_idempotency_identity_is_stable_across_compensation_triggers() -> None:
+    async def scenario() -> None:
+        provider = UndoProvider()
+        coordinator = await _coordinator(provider)
+        group = coordinator.register_group(_group())
+        action = coordinator.record_completed_side_effect(
+            _action(group, resource="cross-trigger", execution_order=1)
+        )
+
+        failure = coordinator.request_compensation(
+            action.action_id,
+            trigger=CompensationTrigger.DOWNSTREAM_FAILURE,
+            reason="downstream failed",
+            actor_ref="service:coordination",
+            correlation_id="corr-cross-trigger-failure",
+        )
+        cancellation = coordinator.request_compensation(
+            action.action_id,
+            trigger=CompensationTrigger.CANCELLATION,
+            reason="task was later cancelled",
+            actor_ref="service:coordination",
+            correlation_id="corr-cross-trigger-cancellation",
+        )
+        manual = coordinator.request_compensation(
+            action.action_id,
+            trigger=CompensationTrigger.MANUAL,
+            reason="operator reviewed recovery",
+            actor_ref="user:user-1",
+            correlation_id="corr-cross-trigger-manual",
+        )
+
+        assert cancellation.compensation_id == failure.compensation_id
+        assert manual.compensation_id == failure.compensation_id
+        assert cancellation.idempotency_key == failure.idempotency_key
+        assert manual.idempotency_key == failure.idempotency_key
+
+        first = await coordinator.execute(failure.compensation_id, _execution_context(group))
+        repeated = await coordinator.execute(manual.compensation_id, _execution_context(group, 2))
+        assert first.status is CompensationStatus.SUCCEEDED
+        assert repeated == first
+        assert len(provider.calls) == 1
+
+    asyncio.run(scenario())
+
+
+def test_explicit_idempotency_key_collision_across_actions_is_rejected(tmp_path: Path) -> None:
+    async def exercise(repository) -> None:
+        provider = UndoProvider()
+        registry = CapabilityRegistry()
+        await registry.register_provider(provider)
+        invoker = CapabilityInvoker(
+            registry,
+            canonical_binding_hook=_canonical_binding,
+        )
+        coordinator = CompensationCoordinator(repository, invoker)
+        group = coordinator.register_group(_group())
+        first = coordinator.record_completed_side_effect(
+            _action(group, resource="collision-first", execution_order=1)
+        )
+        second = coordinator.record_completed_side_effect(
+            _action(group, resource="collision-second", execution_order=2)
+        )
+        coordinator.request_compensation(
+            first.action_id,
+            trigger=CompensationTrigger.MANUAL,
+            reason="first recovery",
+            actor_ref="user:user-1",
+            correlation_id="corr-key-first",
+            idempotency_key="shared-external-recovery-key",
+        )
+
+        try:
+            coordinator.request_compensation(
+                second.action_id,
+                trigger=CompensationTrigger.MANUAL,
+                reason="second recovery",
+                actor_ref="user:user-1",
+                correlation_id="corr-key-second",
+                idempotency_key="shared-external-recovery-key",
+            )
+        except ContractError as exc:
+            assert exc.code is ErrorCode.CONFLICT
+            assert "idempotency key" in exc.message
+        else:
+            raise AssertionError("cross-action idempotency collision must be rejected")
+
+    asyncio.run(exercise(InMemoryCompensationRepository()))
+    asyncio.run(exercise(SQLiteCompensationRepository(tmp_path / "collision.sqlite3")))
