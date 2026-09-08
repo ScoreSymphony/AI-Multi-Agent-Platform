@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://scoresymphony.github.io/ai-multi-agent-platform/schemas/benchmark-planning-graph-scale.v1.schema.json",
+  "title": "AI Multi-Agent Platform Planning Graph Scale Benchmark Report v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "benchmark",
+    "platform_version",
+    "platform_commit",
+    "started_at",
+    "duration_seconds",
+    "environment",
+    "points",
+    "resources",
+    "correctness",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "step_counts",
+        "repetitions",
+        "warmup_repetitions",
+        "timeout_seconds",
+        "safety_max_steps_per_plan",
+        "safety_max_repetitions",
+        "benchmark_id",
+        "benchmark_version",
+        "deployment_profile",
+        "persistence_profile",
+        "planner_profile",
+        "inspection_profile",
+        "expected_invariants",
+        "captured_metrics"
+      ],
+      "properties": {
+        "step_counts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1}
+        },
+        "repetitions": {"type": "integer", "minimum": 1},
+        "warmup_repetitions": {"type": "integer", "minimum": 0},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "safety_max_steps_per_plan": {"type": "integer", "minimum": 1},
+        "safety_max_repetitions": {"type": "integer", "minimum": 1},
+        "benchmark_id": {"const": "single-node.planning-graph-scale"},
+        "benchmark_version": {"const": "1.0"},
+        "deployment_profile": {"const": "single-node-reference"},
+        "persistence_profile": {"type": "string", "minLength": 1},
+        "planner_profile": {"const": "deterministic-reference-no-model-provider"},
+        "inspection_profile": {"const": "canonical-planning-proposal-resource"},
+        "expected_invariants": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "captured_metrics": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "additionalProperties": false
+    },
+    "platform_version": {"type": "string", "minLength": 1},
+    "platform_commit": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "format": "date-time"},
+    "duration_seconds": {"type": "number", "minimum": 0},
+    "environment": {"type": "object"},
+    "points": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "step_count",
+          "requested_repetitions",
+          "completed_repetitions",
+          "proposal_validation_latency",
+          "activation_handoff_latency",
+          "inspection_latency",
+          "validated_proposals",
+          "activated_plans",
+          "canonical_handoffs",
+          "exact_step_inspections",
+          "provider_invocations",
+          "errors",
+          "passed"
+        ],
+        "properties": {
+          "step_count": {"type": "integer", "minimum": 1},
+          "requested_repetitions": {"type": "integer", "minimum": 1},
+          "completed_repetitions": {"type": "integer", "minimum": 0},
+          "proposal_validation_latency": {"$ref": "#/$defs/latency"},
+          "activation_handoff_latency": {"$ref": "#/$defs/latency"},
+          "inspection_latency": {"$ref": "#/$defs/latency"},
+          "validated_proposals": {"type": "integer", "minimum": 0},
+          "activated_plans": {"type": "integer", "minimum": 0},
+          "canonical_handoffs": {"type": "integer", "minimum": 0},
+          "exact_step_inspections": {"type": "integer", "minimum": 0},
+          "provider_invocations": {"const": 0},
+          "errors": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "passed": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "resources": {"$ref": "#/$defs/resources"},
+    "correctness": {
+      "type": "object",
+      "required": [
+        "requested_points",
+        "completed_points",
+        "requested_repetitions",
+        "completed_repetitions",
+        "provider_invocations",
+        "passed"
+      ],
+      "properties": {
+        "requested_points": {"type": "integer", "minimum": 1},
+        "completed_points": {"type": "integer", "minimum": 0},
+        "requested_repetitions": {"type": "integer", "minimum": 1},
+        "completed_repetitions": {"type": "integer", "minimum": 0},
+        "provider_invocations": {"const": 0},
+        "passed": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "errors": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "latency": {
+      "type": "object",
+      "required": ["count", "min_ms", "mean_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "min_ms": {"type": "number", "minimum": 0},
+        "mean_ms": {"type": "number", "minimum": 0},
+        "p50_ms": {"type": "number", "minimum": 0},
+        "p95_ms": {"type": "number", "minimum": 0},
+        "p99_ms": {"type": "number", "minimum": 0},
+        "max_ms": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object",
+      "required": [
+        "process_cpu_seconds",
+        "traced_memory_current_bytes",
+        "traced_memory_peak_bytes",
+        "peak_rss_bytes",
+        "storage_bytes_before",
+        "storage_bytes_after",
+        "storage_growth_bytes",
+        "open_file_descriptors"
+      ],
+      "properties": {
+        "process_cpu_seconds": {"type": "number", "minimum": 0},
+        "traced_memory_current_bytes": {"type": "integer", "minimum": 0},
+        "traced_memory_peak_bytes": {"type": "integer", "minimum": 0},
+        "peak_rss_bytes": {"type": ["integer", "null"], "minimum": 0},
+        "storage_bytes_before": {"type": "integer", "minimum": 0},
+        "storage_bytes_after": {"type": "integer", "minimum": 0},
+        "storage_growth_bytes": {"type": "integer"},
+        "open_file_descriptors": {"type": ["integer", "null"], "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
