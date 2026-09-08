@@ -14,15 +14,15 @@ from dataclasses import dataclass
 from ai_multi_agent_platform.capabilities import (
     CapabilityInvocation,
     CapabilityInvocationResult,
-    CapabilityInvoker,
     InvocationTrace,
 )
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-from ai_multi_agent_platform.contracts.types import JsonValue, OperationContext
+from ai_multi_agent_platform.contracts.types import OperationContext
 from ai_multi_agent_platform.search import SearchMode, SearchPage, SearchQuery, SearchResult
 from ai_multi_agent_platform.search.models import decode_search_cursor, encode_search_cursor
 
 from .capabilities import RepositoryIntelligenceOperation
+from .fallback import CapabilityInvocationPort
 
 RepositorySearchAuthorizer = Callable[[SearchResult], Awaitable[bool]]
 
@@ -49,11 +49,17 @@ class RepositorySearchCaller:
     granted_permissions: frozenset[str]
     available_worker_capabilities: frozenset[str] = frozenset()
 
+    def __post_init__(self) -> None:
+        if self.trace.correlation_id != self.context.correlation_id:
+            raise ValueError("repository search trace/context correlation mismatch")
+        if self.trace.project_id != self.context.project_id:
+            raise ValueError("repository search trace/context project mismatch")
+
 
 class RepositoryIntelligenceSearchFederator:
     """Expose authorized source hits as scoped #45 results without persistent duplicate indexing."""
 
-    def __init__(self, invoker: CapabilityInvoker, *, max_candidates: int = 500) -> None:
+    def __init__(self, invoker: CapabilityInvocationPort, *, max_candidates: int = 500) -> None:
         if not 1 <= max_candidates <= 500:
             raise ValueError("repository search max_candidates must be between 1 and 500")
         self._invoker = invoker
@@ -161,12 +167,20 @@ def _project_hits(
         )
     resolved_revision = provenance.get("resolved_revision")
     freshness = provenance.get("freshness")
-    if not isinstance(resolved_revision, str):
+    if not isinstance(resolved_revision, str) or len(resolved_revision) not in {40, 64}:
         raise ContractError(
             ErrorCode.INVALID_PROVIDER_RESPONSE,
-            "repository search provenance lacks resolved revision",
+            "repository search provenance lacks immutable resolved revision",
             provider_id=result.provider_id,
         )
+    try:
+        int(resolved_revision, 16)
+    except ValueError as exc:
+        raise ContractError(
+            ErrorCode.INVALID_PROVIDER_RESPONSE,
+            "repository search resolved revision is not hexadecimal",
+            provider_id=result.provider_id,
+        ) from exc
 
     projected: list[SearchResult] = []
     for index, hit in enumerate(hits):
