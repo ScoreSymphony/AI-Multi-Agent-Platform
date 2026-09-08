@@ -68,10 +68,10 @@ def import_research_bundle(
 ) -> str:
     """Import exact historical Research records through the owning repository.
 
-    All records are decoded and cross-validated in an isolated staging repository before the
-    destination is touched. Existing exact records are treated as idempotent. A conflicting ID
-    fails closed. Serialized #86 bindings require an explicit deployment-owned validator and are
-    never trusted merely because they were present in the bundle.
+    All records are decoded and cross-validated before the destination is touched. Existing exact
+    records are treated as idempotent. A conflicting ID fails closed. Serialized #86 bindings
+    require an explicit deployment-owned validator and are never trusted merely because they were
+    present in the bundle.
     """
 
     if bundle.get("schema_version") != RESEARCH_BUNDLE_SCHEMA_VERSION:
@@ -110,8 +110,24 @@ def import_research_bundle(
                 details={"verification_id": binding.verification_id},
             )
 
-    _preflight_destination(research.repository, item, sources, observations, claims, evidence, bindings)
-    _apply_if_missing(research.repository, item, sources, observations, claims, evidence, bindings)
+    _preflight_destination(
+        research.repository,
+        item,
+        sources,
+        observations,
+        claims,
+        evidence,
+        bindings,
+    )
+    _apply_if_missing(
+        research.repository,
+        item,
+        sources,
+        observations,
+        claims,
+        evidence,
+        bindings,
+    )
     return item.research_item_id
 
 
@@ -134,19 +150,29 @@ def _validate_bundle_graph(
     if set(item.claim_ids) != set(claim_by_id):
         raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research bundle Claim graph is incomplete")
     if set(item.evidence_ids) != set(evidence_by_id):
-        raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research bundle Evidence graph is incomplete")
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Research bundle Evidence graph is incomplete",
+        )
 
     for source in sources:
         if source.research_item_id != item.research_item_id:
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research Source belongs to another item")
-        if set(source.observation_ids) != {
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "Research Source belongs to another item",
+            )
+        source_observation_ids = {
             value.observation_id for value in observations if value.source_id == source.source_id
-        }:
+        }
+        if set(source.observation_ids) != source_observation_ids:
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "Research Source observation history is incomplete",
             )
-        if source.current_observation_id is not None and source.current_observation_id not in observation_by_id:
+        if (
+            source.current_observation_id is not None
+            and source.current_observation_id not in observation_by_id
+        ):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "Research Source current observation is missing from bundle",
@@ -157,18 +183,30 @@ def _validate_bundle_graph(
             raise ContractError(ErrorCode.CONTRACT_VIOLATION, "orphan Research SourceObservation")
     for claim in claims:
         if claim.research_item_id != item.research_item_id:
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research Claim belongs to another item")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "Research Claim belongs to another item",
+            )
         if any(value not in evidence_by_id for value in claim.evidence_ids):
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research Claim references missing Evidence")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "Research Claim references missing Evidence",
+            )
     for value in evidence:
         claim = claim_by_id.get(value.claim_id)
         observation = observation_by_id.get(value.source_observation_id)
         if claim is None or observation is None or value.source_id not in source_by_id:
             raise ContractError(ErrorCode.CONTRACT_VIOLATION, "orphan Research Evidence")
         if value.research_item_id != item.research_item_id:
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research Evidence belongs to another item")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "Research Evidence belongs to another item",
+            )
         if observation.source_id != value.source_id:
-            raise ContractError(ErrorCode.CONTRACT_VIOLATION, "Research Evidence source binding is invalid")
+            raise ContractError(
+                ErrorCode.CONTRACT_VIOLATION,
+                "Research Evidence source binding is invalid",
+            )
         expected_binding = (
             value.source_revision,
             value.source_version,
@@ -201,7 +239,11 @@ def _preflight_destination(
 ) -> None:
     _same_or_missing(lambda: repository.get_item(item.research_item_id), item, "Research Item")
     for source in sources:
-        _same_or_missing(lambda source=source: repository.get_source(source.source_id), source, "Source")
+        _same_or_missing(
+            lambda source=source: repository.get_source(source.source_id),
+            source,
+            "Source",
+        )
     for observation in observations:
         _same_or_missing(
             lambda observation=observation: repository.get_observation(observation.observation_id),
@@ -217,7 +259,8 @@ def _preflight_destination(
             "Evidence",
         )
     existing_bindings = {
-        value.binding_id: value for value in repository.list_verification_bindings(item.research_item_id)
+        value.binding_id: value
+        for value in repository.list_verification_bindings(item.research_item_id)
     }
     for binding in bindings:
         existing = existing_bindings.get(binding.binding_id)
@@ -279,7 +322,7 @@ def _exists(loader: Callable[[], object]) -> bool:
     return True
 
 
-def _decoded(value: JsonValue | None, expected: type[object], label: str) -> object:
+def _decoded[T](value: JsonValue | None, expected: type[T], label: str) -> T:
     try:
         decoded = _decode(value)
     except (KeyError, TypeError, ValueError) as exc:
@@ -292,7 +335,7 @@ def _decoded(value: JsonValue | None, expected: type[object], label: str) -> obj
 def _decoded_array[T](value: JsonValue | None, expected: type[T], label: str) -> tuple[T, ...]:
     if not isinstance(value, list):
         raise ContractError(ErrorCode.INVALID_REQUEST, f"portable Research {label} must be an array")
-    return tuple(cast(T, _decoded(item, expected, label)) for item in value)
+    return tuple(_decoded(item, expected, label) for item in value)
 
 
 def _unique[T](values: tuple[T, ...], attribute: str, label: str) -> dict[str, T]:
