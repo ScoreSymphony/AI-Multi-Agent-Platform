@@ -52,8 +52,8 @@ jobs:
 
           test = Path('tests/test_issue_19_product_completion.py')
           text = test.read_text()
-          old_scope = '''                project_id=project.id,\n                workspace_id=workspace.id,\n                name="Evaluation Target Assistant",\n'''
-          new_scope = '''                project_id=None,\n                workspace_id=None,\n                name="Evaluation Target Assistant",\n'''
+          old_scope = '''            project_id=project.id,\n            workspace_id=workspace.id,\n            name="Evaluation Target Assistant",\n'''
+          new_scope = '''            project_id=None,\n            workspace_id=None,\n            name="Evaluation Target Assistant",\n'''
           if old_scope not in text:
               raise SystemExit('issue 19 Agent scope anchor missing')
           text = text.replace(old_scope, new_scope, 1)
