@@ -107,7 +107,9 @@ class DistributionService:
             item=item,
             route=item.route,
             findings=findings,
-            activation_allowed=not has_errors(findings),
+            activation_allowed=(
+                item.route is not DistributionRoute.MANUAL and not has_errors(findings)
+            ),
         )
 
     async def activate(
