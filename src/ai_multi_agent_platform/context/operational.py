@@ -1,8 +1,8 @@
 """Production-shaped execution helpers for canonical Context Bundles.
 
 This module operationalizes the existing #590 boundary without changing Context Bundle
-ownership. It composes context-derived model routing, optional egress enforcement,
-context-aware AgentRun binding, and the exact rendered model input used by execution.
+ownership. It composes context-derived model routing, egress enforcement, context-aware
+AgentRun binding, and the exact rendered model input used by execution.
 """
 
 from __future__ import annotations
@@ -19,7 +19,12 @@ from ai_multi_agent_platform.agents import (
     AgentRuntime,
     OrchestratorMapping,
 )
-from ai_multi_agent_platform.contracts import EgressTarget, OperationContext
+from ai_multi_agent_platform.contracts import (
+    EgressTarget,
+    EgressTargetKind,
+    EgressTargetPosture,
+    OperationContext,
+)
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.models import ModelLocation, ModelRegistry, RoutingRequirements
 from ai_multi_agent_platform.security.egress import EgressGate
@@ -90,11 +95,12 @@ class ContextEgressTargetResolver(Protocol):
 
 
 class ModelRegistryContextEgressTargetResolver:
-    """Treat local models as in-process and self-hosted/remote models as explicit egress.
+    """Resolve canonical model location into a Context egress trust boundary.
 
-    Target policy is supplied by ``target_factory`` so deployment composition remains the
-    authority for allowed classifications. If no factory is supplied, known non-local
-    targets are emitted with their trust posture and the canonical baseline egress policy.
+    Local models remain in-process. Self-hosted and remote models cross the canonical egress
+    boundary before rendering. Operators may override a provider target with an explicit
+    classification allowlist through ``target_factory`` without leaking provider-native model
+    identifiers into Context Bundle state.
     """
 
     def __init__(
@@ -120,12 +126,9 @@ class ModelRegistryContextEgressTargetResolver:
             return None
         configured = self.target_factory.get(model.provider_id)
         if configured is not None:
+            if configured.kind is not EgressTargetKind.CONTEXT_EXPORT:
+                raise ValueError("configured model Context egress target must use context_export")
             return configured
-
-        from ai_multi_agent_platform.contracts import (
-            EgressTargetKind,
-            EgressTargetPosture,
-        )
 
         posture = (
             EgressTargetPosture.INTERNAL
@@ -145,7 +148,7 @@ def merge_context_routing_requirements(
     *,
     policy: ContextRoutingPolicy = ContextRoutingPolicy(),
 ) -> RoutingRequirements:
-    """Monotonically add the effective Bundle size to an existing routing request."""
+    """Monotonically add the effective Bundle size to an existing routing requirement set."""
 
     current = base or RoutingRequirements()
     required = context_window_requirement(
@@ -303,8 +306,8 @@ class OperationalContextBoundAgentRuntime:
         verification_context: Mapping[str, JsonValue] | None = None,
     ) -> OperationalContextExecution:
         stored_bundle = self.bundle_repository.put(bundle)
-        routing_requirements = merge_context_routing_requirements(
-            task_model_override,
+        runtime_requirements = merge_context_routing_requirements(
+            None,
             stored_bundle,
             policy=self.routing_policy,
         )
@@ -324,7 +327,8 @@ class OperationalContextBoundAgentRuntime:
             agent_id=stored_bundle.agent_id,
             revision=stored_bundle.agent_revision,
             mapper=mapper,
-            task_model_override=routing_requirements,
+            task_model_override=task_model_override,
+            runtime_model_requirements=runtime_requirements,
             requested_capability_ids=requested_capability_ids,
             available_capability_ids=available_capability_ids,
             granted_permissions=granted_permissions,
