@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Protocol, cast
+from typing import Never, Protocol, cast
 
 from ai_multi_agent_platform.contracts import (
     AuthorizationDecision,
     AuthorizationOutcome,
+    ContractError,
+    ErrorCode,
     JsonValue,
     ProviderDescriptor,
 )
@@ -395,8 +397,6 @@ def _payload_project_id(payload: dict[str, JsonValue]) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-
         raise ContractError(ErrorCode.INVALID_REQUEST, "project_id must be a non-blank string")
     return value
 
@@ -404,15 +404,11 @@ def _payload_project_id(payload: dict[str, JsonValue]) -> str | None:
 def _required_payload_string(payload: dict[str, JsonValue], field: str) -> str:
     value = payload.get(field)
     if not isinstance(value, str) or not value.strip():
-        from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-
         raise ContractError(ErrorCode.INVALID_REQUEST, f"{field} must be a non-blank string")
     return value
 
 
-def _not_found(label: str) -> None:
-    from ai_multi_agent_platform.contracts import ContractError, ErrorCode
-
+def _not_found(label: str) -> Never:
     raise ContractError(ErrorCode.NOT_FOUND, f"{label} was not found")
 
 
