@@ -126,7 +126,8 @@ def test_running_mixed_identity_recovery_bypasses_reconciler_and_surfaces_confli
         group = coordinator.register_group(_group())
         action = coordinator.record_completed_side_effect(_action(group))
         canonical_key = (
-            f"compensation:{action.group_id}:{action.action_id}:plan-revision-{action.plan_revision}"
+            f"compensation:{action.group_id}:{action.action_id}:"
+            f"plan-revision-{action.plan_revision}"
         )
         started = datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
 
@@ -212,7 +213,8 @@ def test_terminal_mixed_identity_history_is_projected_without_mutating_results()
         group = coordinator.register_group(_group())
         action = coordinator.record_completed_side_effect(_action(group))
         canonical_key = (
-            f"compensation:{action.group_id}:{action.action_id}:plan-revision-{action.plan_revision}"
+            f"compensation:{action.group_id}:{action.action_id}:"
+            f"plan-revision-{action.plan_revision}"
         )
         started = datetime(2026, 9, 9, 13, 0, tzinfo=UTC)
 
@@ -271,7 +273,9 @@ def test_terminal_mixed_identity_history_is_projected_without_mutating_results()
 
         async def context_factory(request, completed_action):
             del request, completed_action
-            raise AssertionError("terminal mixed-identity recovery must not execute or request context")
+            raise AssertionError(
+                "terminal mixed-identity recovery must not execute or request context"
+            )
 
         recovered = await coordinator.recover_group(
             group.group_id,
