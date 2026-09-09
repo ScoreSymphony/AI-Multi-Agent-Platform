@@ -38,8 +38,15 @@ def build_durable_egress_runtime(
     audit_sink: EgressAuditSink | None = None,
     allow_paid_external: bool = False,
     allow_unknown_external_cost: bool = False,
+    require_external_profile: bool = True,
 ) -> DurableEgressRuntime:
     """Build one reusable policy gate for model/capability/connector/context/file egress.
+
+    Durable production-shaped composition requires an explicit EgressProfile for external targets
+    by default. This closes the legacy ambiguity where an external destination with no trust/cost
+    profile could otherwise bypass the baseline paid/unknown-external policy. Focused compatibility
+    embeddings may opt out explicitly with ``require_external_profile=False``; direct
+    ``CanonicalEgressPolicy`` use retains its legacy profileless behavior.
 
     ``approval_policy`` is deliberately inert unless the existing #15 ``approval_gate`` is also
     supplied. The default exception policy approves no reason code, so ordinary deployments gain
@@ -52,7 +59,11 @@ def build_durable_egress_runtime(
         allow_paid_external=allow_paid_external,
         allow_unknown_external_cost=allow_unknown_external_cost,
     )
-    policy = RepositoryBackedEgressPolicy(repository, canonical)
+    policy = RepositoryBackedEgressPolicy(
+        repository,
+        canonical,
+        require_external_profile=require_external_profile,
+    )
 
     exception_policy = approval_policy or EgressApprovalExceptionPolicy()
     approval_resolver = (
