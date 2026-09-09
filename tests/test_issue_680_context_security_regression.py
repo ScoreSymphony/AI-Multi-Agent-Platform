@@ -101,6 +101,7 @@ def _artifact_verification(
         policy_version=policy.version,
         stage_id="quality",
         subject=subject,
+        artifact_ids=(artifact_id,),
         correlation_id=task_id,
         project_id=project_id,
     )
