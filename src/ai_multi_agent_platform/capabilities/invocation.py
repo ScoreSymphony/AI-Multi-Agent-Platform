@@ -153,8 +153,15 @@ class CapabilityInvoker:
             )
 
         approval_decision: str | None = None
-        approval_required = policy_decision is PolicyDecision.REQUIRE_APPROVAL or bool(
-            capability.required_approvals
+        # Canonical workflows may strengthen the approval requirement for one invocation without
+        # weakening CapabilitySpec or policy requirements. Compensation uses this to require a
+        # fresh #15 approval for an undo even when the compensating capability is not globally
+        # approval-gated.
+        invocation_requires_approval = bool(getattr(request, "require_approval", False))
+        approval_required = (
+            invocation_requires_approval
+            or policy_decision is PolicyDecision.REQUIRE_APPROVAL
+            or bool(capability.required_approvals)
         )
         if approval_required:
             if canonical_invocation is None:
