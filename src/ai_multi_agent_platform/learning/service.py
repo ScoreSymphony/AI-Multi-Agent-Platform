@@ -16,6 +16,7 @@ from ai_multi_agent_platform.evaluation import (
     EvaluationRunStatus,
     EvaluationService,
 )
+from ai_multi_agent_platform.evaluation.product import parse_agent_evaluation_target
 from ai_multi_agent_platform.security import (
     ActorIdentity,
     AuthorizationAction,
@@ -202,6 +203,67 @@ class LearningService:
         self.quality_gate = quality_gate
         self.promotion_registry = promotion_registry
         self.authorization_gate = authorization_gate
+
+    def evaluation_run_project_id(self, evaluation_run_id: str) -> str | None:
+        """Resolve the canonical project scope of one persisted Evaluation run's targets."""
+
+        evaluation = self.quality_gate.evaluation
+        if evaluation is None:
+            raise ContractError(ErrorCode.UNAVAILABLE, "Evaluation service is not configured")
+        detail = evaluation.get_run_detail(evaluation_run_id)
+        suite_ref = f"{detail.run.suite_id}@{detail.run.suite_version}"
+        suite = evaluation.get_suite(suite_ref)
+        snapshot_targets = {
+            (reference.ref_id, reference.version)
+            for reference in detail.run.snapshot.references
+            if reference.kind == "agent"
+        }
+        project_ids: set[str | None] = set()
+        found_target = False
+        for case in suite.cases:
+            try:
+                target = parse_agent_evaluation_target(case)
+            except ValueError as exc:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Evaluation run suite contains an invalid canonical target",
+                    details={"evaluation_run_id": evaluation_run_id, "suite_ref": suite_ref},
+                ) from exc
+            if target is None:
+                continue
+            found_target = True
+            identity = (target.agent_id, str(target.agent_revision))
+            if identity not in snapshot_targets:
+                raise ContractError(
+                    ErrorCode.CONTRACT_VIOLATION,
+                    "Evaluation run snapshot does not pin its declared Agent target",
+                    details={
+                        "evaluation_run_id": evaluation_run_id,
+                        "agent_id": target.agent_id,
+                        "agent_revision": target.agent_revision,
+                    },
+                )
+            learning_target = LearningTarget(
+                resource_type=LearningTargetType.AGENT,
+                resource_id=target.agent_id,
+                revision=target.agent_revision,
+            )
+            if not self.promotion_registry.supports(learning_target.resource_type):
+                raise ContractError(
+                    ErrorCode.UNAVAILABLE,
+                    "Learning cannot resolve Evaluation Agent target scope",
+                    details={"evaluation_run_id": evaluation_run_id},
+                )
+            project_ids.add(self.promotion_registry.resolve_project_id(learning_target))
+        if not found_target:
+            return None
+        if len(project_ids) != 1:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "Evaluation evidence spans multiple project scopes",
+                details={"evaluation_run_id": evaluation_run_id},
+            )
+        return next(iter(project_ids))
 
     def record_feedback(
         self,
@@ -401,6 +463,11 @@ class LearningService:
             if self.promotion_registry.supports(target.resource_type)
             else None
         )
+        _require_matching_evaluation_project_scope(
+            project_id,
+            self.evaluation_run_project_id(evaluation_run_id),
+            evaluation_run_id,
+        )
         run_ref = LearningReference(
             kind="evaluation_run",
             resource_id=detail.run.run_id,
@@ -456,6 +523,11 @@ class LearningService:
             if evaluation is None:
                 raise ContractError(ErrorCode.UNAVAILABLE, "Evaluation service is not configured")
             for run_id in evaluation_run_ids:
+                _require_matching_evaluation_project_scope(
+                    current.project_id,
+                    self.evaluation_run_project_id(run_id),
+                    run_id,
+                )
                 detail = evaluation.get_run_detail(run_id)
                 if run_id not in eval_ids:
                     eval_ids.append(run_id)
@@ -532,6 +604,12 @@ class LearningService:
             raise ContractError(
                 ErrorCode.CONFLICT,
                 f"cannot accept candidate in {current.status.value} status",
+            )
+        for run_id in current.evaluation_run_ids:
+            _require_matching_evaluation_project_scope(
+                current.project_id,
+                self.evaluation_run_project_id(run_id),
+                run_id,
             )
         self.quality_gate.enforce(current)
         return self._append(current, status=LearningCandidateStatus.ACCEPTED)
@@ -611,6 +689,12 @@ class LearningService:
             raise ContractError(
                 ErrorCode.FORBIDDEN,
                 "learning candidate project scope does not match promotion operation",
+            )
+        for run_id in current.evaluation_run_ids:
+            _require_matching_evaluation_project_scope(
+                current.project_id,
+                self.evaluation_run_project_id(run_id),
+                run_id,
             )
         self.quality_gate.enforce(current)
         adapter = self.promotion_registry.resolve(current.target.resource_type)
@@ -769,6 +853,23 @@ def _feedback_dedupe_key(record: FeedbackRecord) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _require_matching_evaluation_project_scope(
+    candidate_project_id: str | None,
+    evaluation_project_id: str | None,
+    evaluation_run_id: str,
+) -> None:
+    if candidate_project_id != evaluation_project_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "learning candidate project scope does not match Evaluation evidence",
+            details={
+                "evaluation_run_id": evaluation_run_id,
+                "candidate_project_id": candidate_project_id,
+                "evaluation_project_id": evaluation_project_id,
+            },
+        )
 
 
 def _append_reference(values: list[LearningReference], reference: LearningReference) -> None:
