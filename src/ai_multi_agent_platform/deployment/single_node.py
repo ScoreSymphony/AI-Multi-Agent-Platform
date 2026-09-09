@@ -112,6 +112,11 @@ from ai_multi_agent_platform.repositories import (
     restore_managed_local_repositories,
 )
 from ai_multi_agent_platform.repositories.control_plane import register_repository_control_plane
+from ai_multi_agent_platform.research import (
+    ResearchService,
+    SqliteResearchRepository,
+    register_searchable_research_control_plane,
+)
 from ai_multi_agent_platform.security import (
     ActorType,
     AuthorizationAction,
@@ -230,6 +235,7 @@ class SingleNodeDeployment:
     workflows: AuthorizedWorkflowService
     coordination_repository: SQLiteCoordinatorRepository
     coordination: DurablePlanStepCoordinator
+    research: ResearchService
     evaluation_repository: SqliteEvaluationRepository
     evaluation: EvaluationService
     accounting_service: AccountingService | None
@@ -494,6 +500,10 @@ def build_single_node_deployment(
     )
     workflow_service = WorkflowService(JsonWorkflowRepository(database_dir / "workflows.json"))
     workflows = AuthorizedWorkflowService(workflow_service, approval_gate)
+    research = ResearchService(
+        SqliteResearchRepository(database_dir / "research.sqlite3"),
+        authorization=approval_gate,
+    )
 
     template_handlers = ContextualTemplateHandlerRegistry()
     register_agent_template_handlers(template_handlers, agents)
@@ -652,6 +662,7 @@ def build_single_node_deployment(
         routing_profiles=routing_profile_repository,
         evaluation=evaluation_composition.service,
         evaluation_fixture_exists=evaluation_composition.fixture_exists,
+        research=research,
     )
 
     health_provider = AggregatedHealthProvider(
@@ -692,6 +703,7 @@ def build_single_node_deployment(
         repositories,
         management=repository_management,
     )
+    register_searchable_research_control_plane(control_plane, research)
     for collection, service in evaluation_resource_services(evaluation_composition.service).items():
         control_plane.register_resource_service(collection, service)
     for command, handler in evaluation_command_handlers(evaluation_composition.service).items():
@@ -817,6 +829,7 @@ def build_single_node_deployment(
         workflows=workflows,
         coordination_repository=coordination_repository,
         coordination=coordination,
+        research=research,
         evaluation_repository=evaluation_composition.repository,
         evaluation=evaluation_composition.service,
         accounting_service=accounting_service,

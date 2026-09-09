@@ -20,104 +20,133 @@ Before moving a name from this queue into the loaded catalog, a reviewer must re
 
 Unknown facts stay unknown. Popularity, stars, vendor claims or a Marketplace listing never substitute for evaluation or adoption governance.
 
-The loaded seed intentionally contains only reviewed entries. The names below remain queued even when they were already named in architecture documents: architecture mention is a reason to evaluate a component, not evidence that its current upstream identity, license and project status have been verified.
+## 2026-09-09 loaded promotion batch
 
-## Code intelligence / static analysis
+The following queue leads were resolved against their current official upstream identity, license and GitHub project status and are already represented in the loaded catalog on the #638 completion branch:
 
-- Serena
-- ast-grep
-- Semgrep
-- SCIP
+- Code intelligence: Serena, ast-grep, Semgrep and SCIP. SCIP records the canonical `scip-code/scip` namespace rather than the former redirected Sourcegraph URL.
+- Coding agents: OpenCode, Goose, Cline, Roo Code, Plandex, Gemini CLI and Codex CLI. OpenCode and Goose record their current post-move namespaces. Roo Code is explicitly an archived `reference`, not an active candidate.
+- Agent platforms/frameworks: Dify, Flowise, AnythingLLM, Microsoft Agent Framework, Agno and CrewAI. Dify preserves its modified Apache-2.0 terms; Flowise is an archived reference with mixed Apache/commercial licensing recorded explicitly.
+- Memory/context: Letta.
+- Evaluation/security: Inspect AI, AgentDojo, garak and DeepEval.
+- Browser/execution: Stagehand.
+- Inference/model infrastructure: TEI and ONNX Runtime.
+- Domain/model tooling: Transformers.js.
 
-## Coding agents / workers
+Promotion still means discovery/evaluation only. All active additions remain `manual`, `untrusted`, `candidate`, and `evaluation:required`; archived entries remain `manual`, `untrusted`, `reference`, and non-activatable.
 
-- OpenCode
-- Goose
-- Cline
-- Roo Code
-- Plandex
-- jcode
-- Kimi Code CLI
-- MiMo Code
-- ZCode
-- Gemini CLI
-- Copilot CLI
-- Cursor Agent
-- Kiro
-- Claude Code
-- Codex CLI
-- mini-SWE-agent
-- SWE-ReX
+## 2026-09-09 second verified review wave
 
-## Alternative agent / orchestration platforms
+The following names now have a sufficiently resolved official identity, license and current repository status for a later catalog promotion commit. They are **reviewed research outcomes but are not yet loaded by `FilesystemRegistryProvider`** until they are moved into `catalog.json`.
 
-- Paperclip
-- Agent Zero
-- PAI / LifeOS
-- Dify
-- Flowise
-- Sim Studio
-- AnythingLLM
-- Multica
-- Open Agent
-- Fable / Fabel
-- Ruflo / Claude-Flow
-- Gas Town
-- Microsoft Agent Framework
-- Agno
-- CrewAI
-- Langflow
+### Active candidates ready for promotion
 
-## Specification / skills systems
+#### Coding agents / workers
 
-- Superpowers
-- ECC
-- GSD
-- OpenSpec
-- BMAD Method
+- jcode — `cnjack/jcode`, MIT, non-archived.
+- Kimi Code CLI — current canonical project `MoonshotAI/kimi-code`, MIT, non-archived.
+- MiMo Code — `XiaomiMiMo/MiMo-Code`, MIT, non-archived.
+- ZCode — `RenovZ/zcode`, MIT, non-archived.
+- mini-SWE-agent — `SWE-agent/mini-swe-agent`, MIT, non-archived.
+- SWE-ReX — `SWE-agent/SWE-ReX`, MIT, non-archived.
 
-## Memory / context / retrieval
+#### Alternative agent / orchestration platforms
 
-- OpenViking
-- TurboVec
-- Letta
+- Paperclip — `paperclipai/paperclip`, MIT, non-archived.
+- Agent Zero — `agent0ai/agent-zero`, non-archived; the repository root license is MIT even though GitHub's detector currently reports `NOASSERTION`.
+- PAI / LifeOS — canonical repository `danielmiessler/LifeOS`, MIT, non-archived.
+- Sim Studio — canonical repository `simstudioai/sim`, Apache-2.0, non-archived.
+- Ruflo / Claude-Flow — current canonical project `ruvnet/ruflo`, MIT, non-archived; the former Claude-Flow naming must not be treated as a separate current product identity.
+- Gas Town — canonical repository `gastownhall/gastown`, MIT, non-archived.
+- Langflow — `langflow-ai/langflow`, MIT, non-archived.
 
-## Evaluation / security
+#### Specification / skills systems
 
-- Harbor
-- OpenEnv
-- AgentShield
-- Inspect AI
-- AgentDojo
-- garak
-- DeepEval
+- Superpowers — `obra/superpowers`, MIT, non-archived.
+- ECC — canonical repository `affaan-m/ECC`, MIT, non-archived.
+- OpenSpec — `Fission-AI/OpenSpec`, MIT, non-archived.
+- BMAD Method — canonical organization repository `bmad-code-org/BMAD-METHOD`, non-archived; the root license is MIT with trademark/branding notices even though GitHub's detector reports `NOASSERTION`.
 
-## Inference / model infrastructure
+#### Memory / context / retrieval
 
-- Colibri
-- Hugging Face tooling umbrella entry
-- TEI
-- ONNX Runtime
+- OpenViking — `volcengine/OpenViking`, AGPL-3.0, non-archived. Copyleft implications must stay visible during evaluation.
 
-## Domain / music AI
+#### Evaluation / security
 
-- BACHI
-- AnalysisGNN
-- CLaMP 3
-- MusicBERT
-- MERT
-- MuSViT
-- LEGATO
-- Transformers.js
+- Harbor — `harbor-framework/harbor`, Apache-2.0, non-archived.
+- OpenEnv — `huggingface/OpenEnv`, BSD-3-Clause, non-archived.
 
-## Discovery sources
+#### Domain / music AI
 
-- MCP Registry — discovery-source candidate only; must never become an automatically trusted install source.
+- BACHI — official implementation `AndyWeasley2004/BACHI_Chord_Recognition`, MIT, non-archived.
+- AnalysisGNN — `manoskary/analysisgnn`, MIT, non-archived.
+- CLaMP 3 — `sanderwood/clamp3`, MIT, non-archived.
+- MERT — `yizhilll/MERT`, Apache-2.0, non-archived.
+
+### Reviewed but requires restricted/reference semantics
+
+These entries have enough evidence to classify, but must not be presented as ordinary free/open active candidates:
+
+- Copilot CLI — `github/copilot-cli`, non-archived, but governed by the custom GitHub Copilot CLI license rather than an open-source license. The license permits install/run and limited unmodified redistribution but does not grant a general modification/derivative-work right. GitHub service access/cost is a separate requirement. Promote only with explicit restricted-license and cost-policy metadata, likely `deferred` or `reference` under the project's cost policy.
+- Claude Code — `anthropics/claude-code`, non-archived, but the repository license states all rights reserved and use is subject to Anthropic commercial terms. It must not be represented as open source or cost-compatible; any listing should be `reference`/`deferred` unless project governance changes.
+- Multica — `multica-ai/multica`, non-archived, but its "Multica License" is Apache-2.0 plus additional hosted-service, branding and attribution restrictions. It must use explicit modified-license metadata rather than plain `Apache-2.0`.
+- GSD — canonical `gsd-build/get-shit-done`, MIT, but GitHub reports the repository archived. Preserve only as an explicit archived `reference` unless a governance decision selects a documented successor rather than silently substituting a fork.
+- MuSViT — `OMR-PRAIG-UA-ES/MuSViT`, non-archived, but the project README explicitly licenses the work under CC BY-NC-SA 4.0 and requires GPU-backed experiment paths. It should be `reference`/`deferred` for commercial/general platform adoption unless the non-commercial restriction is acceptable for the intended domain use.
+
+### Reviewed identity, but dependency/license model still needs one more pass
+
+- MusicBERT — architecture lead resolves to the MusicBERT implementation under Microsoft's broader `microsoft/muzic` project. Before promotion, record whether the catalog card represents the subproject or the umbrella repository and verify the applicable subproject/model-data license boundary.
+- LEGATO — code identity resolves to `guang-yng/legato`, but the practical model path also depends on gated Meta Llama 3.2 Vision assets and materially higher GPU resources. The code license alone is therefore insufficient for a truthful cost/provider/license card.
+
+## Truly unresolved / ambiguous leads
+
+These still lack an unambiguous current identity, suitable component boundary, or complete licensing/status evidence and must stay out of the loaded catalog:
+
+### Coding agents / workers
+
+- Cursor Agent — proprietary product identity is clear, but there is no canonical open repository/package identity suitable for the current local reference-catalog contract.
+- Kiro — product identity is clear, but the catalog still needs a canonical source/project reference and licensing/cost model appropriate to the Registry metadata contract.
+
+### Alternative agent / orchestration platforms
+
+- Open Agent — name is too ambiguous to select a canonical upstream safely.
+- Fable / Fabel — architecture label is ambiguous; exact intended upstream has not been resolved.
+
+### Memory / context / retrieval
+
+- TurboVec — exact intended upstream identity remains unresolved.
+
+### Evaluation / security
+
+- AgentShield — multiple active projects use the exact name for materially different security products. The architecture mention alone does not identify which upstream was intended.
+
+### Inference / model infrastructure
+
+- Colibri — exact intended inference/model project remains ambiguous.
+- Hugging Face tooling umbrella entry — this is an ecosystem umbrella rather than one canonical distributable component. Keep it out of the loaded catalog until a deliberate aggregate/reference-card model is defined; individual HF projects such as TEI, Sentence Transformers, smolagents, Lighteval and Transformers.js are already modeled separately.
+
+### Domain / music AI
+
+- LEGATO — dependency/model-license and resource review remains open as described above.
+- MusicBERT — subproject/umbrella license boundary remains open as described above.
+
+### Discovery sources
+
+- MCP Registry — the generic discovery seam already exists, but an MCP Registry listing/import source must remain discovery-only and can never become an automatically trusted install source. A concrete adapter is optional follow-up work rather than a prerequisite to preserve #638's trust boundary.
 
 ## Intentionally absent from the default technical home surface
 
 Ordinary SaaS productivity connectors such as Gmail, Google Calendar or Slack may remain valid generic Registry items, but they are not the technical Marketplace product identity and are not promoted through this queue merely to increase catalog size.
 
-## Branch-preparation note
+## Completion boundary
 
-The loaded seed, taxonomy, Marketplace presentation and discovery-source seam are prepared in `issue-638-technical-marketplace-complete`. The remaining names in this file are intentionally data-curation work rather than missing execution/install code. They must not be bulk-promoted merely to make issue #638 appear numerically complete.
+The Marketplace engine, technical taxonomy, graphical presentation, manual/reference routing and discovery-source seam are already implemented. Remaining items in this file are **curation evidence work**, not missing Registry execution/install code.
+
+A queued name can be resolved by:
+
+1. promotion as a reviewed manual candidate;
+2. explicit archived/restricted `reference` or `deferred` classification;
+3. explicit rejection when licensing/security/cost policy makes it unsuitable; or
+4. documenting that no sufficiently unambiguous/current upstream identity exists.
+
+No name should be silently dropped, guessed, or bulk-promoted merely to make issue #638 appear numerically complete.
