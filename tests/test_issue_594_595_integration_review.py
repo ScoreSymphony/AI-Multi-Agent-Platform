@@ -289,7 +289,9 @@ def test_learning_control_plane_enforces_record_project_scope(tmp_path) -> None:
     asyncio.run(scenario())
 
 
-def test_learning_supported_target_scope_blocks_cross_project_proposal_and_promotion(tmp_path) -> None:
+def test_learning_supported_target_scope_blocks_cross_project_proposal_and_promotion(
+    tmp_path,
+) -> None:
     async def scenario() -> None:
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "target-scope", secure_cookie=False)
