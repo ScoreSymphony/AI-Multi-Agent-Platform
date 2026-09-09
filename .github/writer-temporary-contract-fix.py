@@ -21,7 +21,7 @@ text = governed_path.read_text(encoding="utf-8")
 
 eval_start = text.index("class _EvaluationStub:")
 eval_end = text.index("\n\nclass _VerificationStub:")
-evaluation_stub = '''class _EvaluationStub:
+evaluation_stub = """class _EvaluationStub:
     def __init__(self) -> None:
         self._details: dict[str, SimpleNamespace] = {}
 
@@ -88,12 +88,12 @@ evaluation_stub = '''class _EvaluationStub:
     def get_suite(self, suite_ref: str) -> SimpleNamespace:
         assert suite_ref == "learning-suite@1"
         return SimpleNamespace(cases=())
-'''
+"""
 text = text[:eval_start] + evaluation_stub + text[eval_end:]
 
 verify_start = text.index("class _VerificationStub:")
 verify_end = text.index("\n\nclass _FailPromotionAppendRepository")
-verification_stub = '''class _VerificationStub:
+verification_stub = """class _VerificationStub:
     def __init__(self) -> None:
         self._requests: dict[str, SimpleNamespace] = {}
         self._results: dict[str, SimpleNamespace] = {}
@@ -142,32 +142,32 @@ verification_stub = '''class _VerificationStub:
 
     def result_for(self, verification_id: str) -> SimpleNamespace | None:
         return self._results.get(verification_id)
-'''
+"""
 text = text[:verify_start] + verification_stub + text[verify_end:]
 
 text = replace_once(
     text,
-    '''    assert created is True
+    """    assert created is True
     evaluating = learning.record_gate_evidence(
-''',
-    '''    assert created is True
+""",
+    """    assert created is True
     evaluation = learning.quality_gate.evaluation
     assert isinstance(evaluation, _EvaluationStub)
     evaluation.bind_target(run_id, target)
     evaluating = learning.record_gate_evidence(
-''',
+""",
     "bind proposal evaluation target",
 )
 
 text = replace_once(
     text,
-    '''def test_verification_finding_creates_candidate(tmp_path: Path) -> None:
+    """def test_verification_finding_creates_candidate(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
     verification = _VerificationStub()
     verification.add("verify-595", outcome=VerificationOutcome.NEEDS_CHANGES)
     learning = _service(
-''',
-    '''def test_verification_finding_creates_candidate(tmp_path: Path) -> None:
+""",
+    """def test_verification_finding_creates_candidate(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
     verification = _VerificationStub()
     target = _target()
@@ -177,30 +177,30 @@ text = replace_once(
         target=target,
     )
     learning = _service(
-''',
+""",
     "verification candidate target setup",
 )
 text = replace_once(
     text,
-    '''        target=_target(),
+    """        target=_target(),
         improvement_type="verification_fix",
-''',
-    '''        target=target,
+""",
+    """        target=target,
         improvement_type="verification_fix",
-''',
+""",
     "verification candidate target use",
 )
 
 text = replace_once(
     text,
-    '''def test_evaluation_regression_creates_candidate(tmp_path: Path) -> None:
+    """def test_evaluation_regression_creates_candidate(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
     detail = evaluation.add("eval-regression", regressions=True)
     learning = _service(SQLiteLearningRepository(tmp_path / "learning.db"), evaluation)
 
     candidate, created = learning.create_from_evaluation_regression(
-''',
-    '''def test_evaluation_regression_creates_candidate(tmp_path: Path) -> None:
+""",
+    """def test_evaluation_regression_creates_candidate(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
     target = _target()
     detail = evaluation.add("eval-regression", regressions=True)
@@ -208,52 +208,52 @@ text = replace_once(
     learning = _service(SQLiteLearningRepository(tmp_path / "learning.db"), evaluation)
 
     candidate, created = learning.create_from_evaluation_regression(
-''',
+""",
     "evaluation regression target setup",
 )
 text = replace_once(
     text,
-    '''        target=_target(),
+    """        target=_target(),
         improvement_type="regression_fix",
-''',
-    '''        target=target,
+""",
+    """        target=target,
         improvement_type="regression_fix",
-''',
+""",
     "evaluation regression target use",
 )
 
 text = replace_once(
     text,
-    '''def test_failed_evaluation_blocks_acceptance_and_promotion(tmp_path: Path) -> None:
+    """def test_failed_evaluation_blocks_acceptance_and_promotion(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
     evaluation.add("eval-fail", outcome=EvaluationOutcome.FAILED)
     learning = _service(SQLiteLearningRepository(tmp_path / "learning.db"), evaluation)
     candidate, _ = learning.create_candidate(
-''',
-    '''def test_failed_evaluation_blocks_acceptance_and_promotion(tmp_path: Path) -> None:
+""",
+    """def test_failed_evaluation_blocks_acceptance_and_promotion(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
     target = _target()
     evaluation.add("eval-fail", outcome=EvaluationOutcome.FAILED)
     evaluation.bind_target("eval-fail", target)
     learning = _service(SQLiteLearningRepository(tmp_path / "learning.db"), evaluation)
     candidate, _ = learning.create_candidate(
-''',
+""",
     "failed evaluation target setup",
 )
 text = replace_once(
     text,
-    '''        problem="Candidate must prove the proposed method.",
+    """        problem="Candidate must prove the proposed method.",
         target=_target(),
         improvement_type="method_revision",
-''',
-    '''        problem="Candidate must prove the proposed method.",
+""",
+    """        problem="Candidate must prove the proposed method.",
         target=target,
         improvement_type="method_revision",
-''',
+""",
     "failed evaluation target use",
 )
 
-old_history = '''    evaluation = _EvaluationStub()
+old_history = """    evaluation = _EvaluationStub()
     regression_detail = evaluation.add("eval-source", regressions=True)
     verification = _VerificationStub()
     verification_request, verification_result = verification.add(
@@ -263,8 +263,8 @@ old_history = '''    evaluation = _EvaluationStub()
     repository = SQLiteLearningRepository(tmp_path / "learning.db")
     learning = _service(repository, evaluation, verification=verification)
     target = _target()
-'''
-new_history = '''    evaluation = _EvaluationStub()
+"""
+new_history = """    evaluation = _EvaluationStub()
     evaluation_target = _target(resource_id=new_id("agent"))
     regression_detail = evaluation.add("eval-source", regressions=True)
     evaluation.bind_target("eval-source", evaluation_target)
@@ -278,26 +278,26 @@ new_history = '''    evaluation = _EvaluationStub()
     repository = SQLiteLearningRepository(tmp_path / "learning.db")
     learning = _service(repository, evaluation, verification=verification)
     target = _target()
-'''
+"""
 text = replace_once(text, old_history, new_history, "historical source target setup")
 text = replace_once(
     text,
-    '''        target=_target(resource_id=new_id("agent")),
+    """        target=_target(resource_id=new_id("agent")),
         improvement_type="verification_fix",
-''',
-    '''        target=verification_target,
+""",
+    """        target=verification_target,
         improvement_type="verification_fix",
-''',
+""",
     "historical verification target use",
 )
 text = replace_once(
     text,
-    '''        target=_target(resource_id=new_id("agent")),
+    """        target=_target(resource_id=new_id("agent")),
         improvement_type="regression_fix",
-''',
-    '''        target=evaluation_target,
+""",
+    """        target=evaluation_target,
         improvement_type="regression_fix",
-''',
+""",
     "historical evaluation target use",
 )
 
@@ -305,7 +305,7 @@ governed_path.write_text(text, encoding="utf-8")
 
 final_path = Path("tests/test_issue_594_595_final_review_regressions.py")
 text = final_path.read_text(encoding="utf-8")
-old = '''        self._details[run_id] = SimpleNamespace(
+old = """        self._details[run_id] = SimpleNamespace(
             run=SimpleNamespace(
                 run_id=run_id,
                 suite_id="learning-suite",
@@ -316,8 +316,8 @@ old = '''        self._details[run_id] = SimpleNamespace(
             results=(result,),
             comparison=SimpleNamespace(regressions=findings),
         )
-'''
-new = '''        baseline_run_id = f"{run_id}-baseline"
+"""
+new = """        baseline_run_id = f"{run_id}-baseline"
         self._details[run_id] = SimpleNamespace(
             run=SimpleNamespace(
                 run_id=run_id,
@@ -340,6 +340,6 @@ new = '''        baseline_run_id = f"{run_id}-baseline"
                 configuration_references=references,
             ),
         )
-'''
+"""
 text = replace_once(text, old, new, "final-review evaluation lookup contract")
 final_path.write_text(text, encoding="utf-8")
