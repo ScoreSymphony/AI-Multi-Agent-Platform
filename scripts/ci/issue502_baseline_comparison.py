@@ -9,7 +9,6 @@ should become the default provider.
 
 from __future__ import annotations
 
-import json
 import resource
 import subprocess
 import time
@@ -51,7 +50,6 @@ def _run_git(
         "stderr_bytes": len(completed.stderr.encode("utf-8")),
         "user_cpu_seconds": max(0.0, usage_after.ru_utime - usage_before.ru_utime),
         "system_cpu_seconds": max(0.0, usage_after.ru_stime - usage_before.ru_stime),
-        "max_rss_kb": int(usage_after.ru_maxrss),
     }
 
 
@@ -93,13 +91,6 @@ def measure_git_reference_baseline(
     if "Needle from exact source" not in exact_slice:
         raise RuntimeError("baseline source slice did not return the expected exact line")
 
-    normalized_context = {
-        "hit": next(hit for hit in hits if "src/demo.py" in hit),
-        "slice": exact_slice,
-    }
-    context_bytes = len(
-        json.dumps(normalized_context, sort_keys=True, ensure_ascii=False).encode("utf-8")
-    )
     useful_context_ms = float(search_measurement["elapsed_ms"]) + float(
         slice_measurement["elapsed_ms"]
     )
@@ -111,7 +102,6 @@ def measure_git_reference_baseline(
         "tool_calls_to_useful_context": 2,
         "cold_time_to_useful_context_ms": useful_context_ms,
         "warm_time_to_useful_context_ms": useful_context_ms,
-        "returned_context_bytes": context_bytes,
         "checks": {
             "repository_map_contains_target": True,
             "search_expected_hit": True,
@@ -134,7 +124,7 @@ def build_provider_comparison(
     candidate_version: str,
     fixture_revision: str,
 ) -> dict[str, Any]:
-    """Build comparable measured signals without inventing unmeasured correctness metrics."""
+    """Build only like-for-like measured deltas and label other observations non-comparable."""
 
     measurements = {str(item["command"]): item for item in candidate_measurements}
     scan = measurements.get("scan .")
@@ -145,14 +135,13 @@ def build_provider_comparison(
 
     candidate_warm_ms = float(search["elapsed_ms"]) + float(source_slice["elapsed_ms"])
     candidate_cold_ms = float(scan["elapsed_ms"]) + candidate_warm_ms
-    candidate_context_bytes = int(search["stdout_bytes"]) + int(source_slice["stdout_bytes"])
 
     baseline_revision = baseline.get("fixture_revision")
     if baseline_revision != fixture_revision:
         raise RuntimeError("baseline and candidate comparison revisions differ")
 
     return {
-        "schema_version": "1",
+        "schema_version": "2",
         "fixture_kind": "deterministic-tiny-git",
         "fixture_revision": fixture_revision,
         "baseline": baseline,
@@ -164,7 +153,6 @@ def build_provider_comparison(
             "tool_calls_to_useful_context": 3,
             "cold_time_to_useful_context_ms": candidate_cold_ms,
             "warm_time_to_useful_context_ms": candidate_warm_ms,
-            "returned_context_bytes": candidate_context_bytes,
             "checks": {
                 "search_expected_hit": True,
                 "slice_exact_source": True,
@@ -181,14 +169,23 @@ def build_provider_comparison(
             "tool_calls_to_useful_context": (
                 3 - int(baseline["tool_calls_to_useful_context"])
             ),
-            "returned_context_bytes": (
-                candidate_context_bytes - int(baseline["returned_context_bytes"])
-            ),
             "persistent_state_bytes": (
                 candidate_state_bytes - int(baseline["persistent_state_bytes"])
             ),
         },
+        "observed_but_not_normalized": {
+            "baseline_search_stdout_bytes": int(baseline["commands"]["search"]["stdout_bytes"]),
+            "baseline_slice_stdout_bytes": int(baseline["commands"]["slice"]["stdout_bytes"]),
+            "candidate_search_stdout_bytes": int(search["stdout_bytes"]),
+            "candidate_slice_stdout_bytes": int(source_slice["stdout_bytes"]),
+            "note": (
+                "Raw stdout sizes use provider-specific envelopes and are retained only as transport "
+                "observations. They are not a model-context-size comparison."
+            ),
+        },
         "unmeasured_or_not_comparable": [
+            "normalized model-context bytes/tokens",
+            "comparable baseline-vs-candidate peak RSS",
             "representative agent first-pass success",
             "symbol/reference/dependency correctness",
             "architecture/domain/impact usefulness",
@@ -196,8 +193,9 @@ def build_provider_comparison(
             "dirty-workspace provider freshness",
         ],
         "decision_scope": (
-            "This tiny-fixture comparison is sufficient to record real baseline-vs-candidate "
-            "measurements for the #502 experimental decision, but it is not sufficient evidence "
-            "to adopt ProjectAtlas as a default or to enable production source capabilities."
+            "This tiny-fixture comparison is sufficient to record real like-for-like timing, "
+            "tool-call and persistent-state measurements for the #502 experimental decision, but "
+            "it is not sufficient evidence to adopt ProjectAtlas as a default or to enable "
+            "production source capabilities."
         ),
     }
