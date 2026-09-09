@@ -54,9 +54,7 @@ class _PlanningStub:
         self.records = records
 
     def history(self, task_id: str) -> tuple[ProposalRecord, ...]:
-        return tuple(
-            record for record in self.records if record.proposal.task_id == task_id
-        )
+        return tuple(record for record in self.records if record.proposal.task_id == task_id)
 
 
 def _task(project_id: str) -> TaskState:
@@ -190,9 +188,7 @@ def test_duplicate_planning_evidence_does_not_satisfy_pattern_minimum() -> None:
     failed = _proposal(task)
     bridge = LearningSourceBridge(
         _learning(),
-        planning_failures=PlanningProposalFailureEvidenceResolver(
-            _PlanningStub(task, (failed,))
-        ),
+        planning_failures=PlanningProposalFailureEvidenceResolver(_PlanningStub(task, (failed,))),
     )
     reference = PlanningFailureSourceRef(task.task_id, failed.proposal.proposal_id)
 
