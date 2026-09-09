@@ -616,6 +616,7 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
                     method="GET",
                     path=f"/api/v1/tasks/{task_id}/timeline",
                     headers=_headers(token),
+                    query={"limit": "200"},
                 )
             )
             assert (
@@ -625,6 +626,7 @@ def test_authenticated_worker_artifact_is_exact_verification_evidence_same_run(
             assert isinstance(run_view.body, dict)
             assert isinstance(result_view.body, dict)
             assert isinstance(timeline.body, dict)
+            assert timeline.body["next_cursor"] is None
             assert task_view.body["status"] == TaskStatus.SUCCEEDED.value
             assert run_view.body["status"] == RunStatus.SUCCEEDED.value
             assert result_view.body["task_id"] == task_id
