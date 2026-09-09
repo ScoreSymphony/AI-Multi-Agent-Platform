@@ -25,6 +25,13 @@ if new not in restore:
     if old not in restore:
         raise SystemExit("restore Learning Evaluation scope block target not found")
     restore = restore.replace(old, new, 1)
+
+immutable_open = 'sqlite3.connect(f"file:{post_database}?mode=ro&immutable=1", uri=True)'
+wal_safe_open = 'sqlite3.connect(f"file:{post_database}?mode=ro", uri=True)'
+if wal_safe_open not in restore:
+    if immutable_open not in restore:
+        raise SystemExit("post-promotion SQLite restore reader target not found")
+    restore = restore.replace(immutable_open, wal_safe_open, 1)
 RESTORE.write_text(restore, encoding="utf-8")
 
 TEST.write_text(
