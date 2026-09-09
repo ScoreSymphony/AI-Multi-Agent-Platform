@@ -208,6 +208,7 @@ def build_single_node_deployment(
         context_bundle_repository=context.bundles,
         context_binding_repository=context.run_bindings,
         egress_gate=egress.runtime.gate,
+        model_runtime=base.model_runtime,
     )
 
     # The public deployment now has an authoritative canonical Connector inventory. Rebind the
