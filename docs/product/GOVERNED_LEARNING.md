@@ -101,7 +101,7 @@ Verification acceptance follows the same pattern for configured Verification pol
 
 `LearningPlatformPolicy` is independent from the Candidate's `LearningGatePlan`. It is owned by the deployment and exists so a Candidate cannot weaken the platform minimum by proposing a permissive gate plan.
 
-The prepared default policy:
+The default policy:
 
 - requires explicit versioned Evaluation suite references when Evaluation is enabled;
 - requires explicit versioned Verification policy references when Verification is enabled;
@@ -109,7 +109,7 @@ The prepared default policy:
 - conservatively requires Approval for global/unscoped targets;
 - disables automatic promotion at platform level by default.
 
-`GovernedObservedLearningService` enforces this floor during candidate creation, acceptance and promotion. Automatic promotion requires both the platform policy and Candidate policy to opt in and is restricted to project-scoped STANDARD-risk candidates by the prepared default implementation.
+`GovernedObservedLearningService` enforces this floor during candidate creation, acceptance and promotion. Automatic promotion requires both the platform policy and Candidate policy to opt in and is restricted to project-scoped STANDARD-risk candidates by the default implementation.
 
 ## Promotion
 
@@ -144,11 +144,11 @@ Telemetry carries IDs, revisions, digests, target identity, risk and gate-policy
 
 Post-promotion results are derived evidence. They do not rewrite the PromotionReceipt or the owner revision. `learning-post-promotion-evaluations` exposes the recorded outcome and canonical Evaluation run IDs. A regression can therefore be surfaced and acted upon by a new Learning Candidate or rollback workflow without rewriting history.
 
-The runtime checks whether the same Candidate/target revision already has a post-promotion record before scheduling another evaluation. `SQLitePostPromotionEvaluationRecorder` persists these derived records across restart and is the prepared Single-Node default.
+The runtime checks whether the same Candidate/target revision already has a post-promotion record before scheduling another evaluation. `SQLitePostPromotionEvaluationRecorder` persists these derived records across restart and is the Single-Node default.
 
 When runtime registration is enabled, `RuntimeAwareLearningCandidateResourceService` replaces only the Candidate read projection and derives `post_promotion_regression_status` from that recorder. Possible runtime statuses include `passed`, `regression`, `failed`, `not_configured`, `not_recorded` and `not_applicable`. Mutation authority remains in the canonical Learning service.
 
-The integration must provide the `ConfigurationSnapshot` factory because target-specific snapshot construction belongs to the owning deployment/evaluation composition. If no post-promotion evaluator or suite is configured, no synthetic PASS result is created.
+A target-aware `ConfigurationSnapshot` factory is required only when post-promotion Evaluation is configured because target-specific snapshot construction belongs to the owning deployment/evaluation composition. If no post-promotion evaluator or suite is configured, no synthetic PASS result is created.
 
 ## Persistence and recovery
 
@@ -194,9 +194,15 @@ and replaces the Candidate **read projection** with the runtime-aware version de
 
 ## CLI
 
-The generic extension CLI remains deliberately read-only. It can inspect registered Learning collections and discover advertised commands:
+The distributed `platform` entrypoint registers governed Learning as a first-class domain through `src/ai_multi_agent_platform/cli/issue_81.py` and `src/ai_multi_agent_platform/cli/learning.py`.
+
+Read-only inspection is available through both the domain adapter and the generic extension surface:
 
 ```bash
+platform learning candidate list
+platform learning candidate show <learning_candidate_id>
+platform learning feedback list
+
 platform extension list learning-candidates
 platform extension show learning-candidates <learning_candidate_id>
 platform extension list learning-feedback
@@ -204,76 +210,57 @@ platform extension list learning-post-promotion-evaluations
 platform extension commands
 ```
 
-Mutations use the prepared first-class `platform learning` adapter in `src/ai_multi_agent_platform/cli/learning.py`, not a generic extension executor. The adapter exposes explicit feedback, proposal, evidence, accept/reject/supersede and promotion commands, uses the canonical Feedback/Risk enum values and preserves the CLI's normal confirmation semantics for promotion. The unified integration branch must register and dispatch that module in the final CLI composition. See `docs/cli/CLI_LEARNING.md` for concrete command examples.
+The generic extension CLI remains deliberately read-only. Explicit Learning mutations use `platform learning`, including feedback creation, proposal, evidence binding, accept/reject/supersede and promotion. Promotion requires the CLI's global explicit confirmation (`platform --yes learning promote ...`) before transport; the server still owns authorization, exact-action Approval, stale-revision checks, quality gates and owner-domain revision creation. See `docs/cli/CLI_LEARNING.md` for command examples.
 
-## Web preparation
+## Web
 
-The branch prepares these additive frontend modules:
+The production frontend exposes the governed Learning surface through:
 
 - `frontend/src/api/learning.ts` — typed read/write Control Plane client;
 - `frontend/src/pages/LearningPage.tsx` — queue, detail, evidence/history and decision surfaces;
-- `frontend/src/app/learningManifest.ts` — manifest-aware capability detection.
+- `frontend/src/app/learningManifest.ts` — manifest-aware capability detection;
+- `frontend/src/app/Shell.tsx` — public route composition;
+- `frontend/src/app/navigation.ts` — canonical product navigation.
 
-The frontend post-promotion contract includes `passed`, `regression`, `failed` and `not_configured` outcomes.
-
-The later integration branch should mount:
+Public routes:
 
 ```text
 /learning
 /learning/:learningCandidateId
 ```
 
-and pass the manifest-advertised Learning commands to `LearningDetailPage`. Missing commands remain disabled; the browser never invents a direct service fallback.
+The list/detail routes require both `learning-candidates` and `learning-feedback` in the Control Plane manifest. `LearningDetailPage` receives only manifest-advertised Learning decision commands, and `learning-post-promotion-evaluations` is treated as an optional capability. Missing commands remain disabled; the browser never invents a direct service fallback.
 
-## Single-node integration seam
+## Single-node production composition
 
-`build_single_node_learning(...)` prepares the production-shaped composition using existing canonical services:
+`build_single_node_learning(...)` composes governed Learning from existing canonical services:
 
 - AgentService;
-- SkillService (existing service can be supplied; otherwise a durable `skills.json` owner store is created);
+- SkillService;
 - ModelRoutingProfileService;
 - EvaluationService;
 - VerificationService;
 - AuthorizationGate / Approval service;
-- `LearningPlatformPolicy` (default or deployment override);
+- `LearningPlatformPolicy`;
 - SQLite Learning Candidate/feedback persistence;
 - SQLite post-promotion evaluation persistence;
 - optional Telemetry;
 - optional ResearchService;
 - optional PostPromotionEvaluator.
 
-`SingleNodeLearningComposition.register_control_plane(...)` registers only missing additive Skill/Learning collections. This is intentionally separated from `deployment/single_node.py` on the issue branch so the later all-active-branches integration can wire it once after reconciling other composition changes.
+The public durable deployment composes this through `src/ai_multi_agent_platform/deployment/durable_connectors.py`, which calls `build_single_node_learning(...)` against the deployment's canonical Agent, Skill, routing, Evaluation, Verification and Approval services. `SingleNodeLearningComposition.register_control_plane(...)` registers the scoped Learning Control Plane surfaces without creating a parallel owner domain.
 
-Recommended integration shape:
+This means the production path uses the same canonical services for Learning proposals and promotions as the rest of the platform rather than a Learning-private shadow store.
 
-```python
-learning = build_single_node_learning(
-    database_dir=database_dir,
-    agents=agents,
-    skills=skills,
-    routing_profiles=routing_profiles,
-    evaluation=evaluation_composition.service,
-    verification=verification,
-    approval_gate=approval_gate,
-    telemetry=telemetry,
-    research=research,
-)
-learning.register_control_plane(control_plane)
-```
+## Completion and regression coverage
 
-The shared `SingleNodeDeployment` can then expose `skills` and `learning.service` as long-lived fields.
+Issue #595's product path is covered at several layers:
 
-## Integration-branch checklist
+- `tests/test_issue_595_governed_learning.py` — core governed candidate, gate, promotion, persistence and recovery behavior;
+- `tests/test_issue_594_595_integration_review.py` — #594 Evaluation/Learning integration and exact evidence binding;
+- `tests/test_issue_81_cli_entrypoint.py` — public `platform learning` dispatch and promotion confirmation semantics;
+- `tests/test_issue_595_product_surfaces.py` — public Shell/navigation/CLI wiring regression;
+- `frontend/src/app/navigation.test.ts` — Learning navigation registration;
+- `frontend/src/app/learningManifest.test.ts` — required-resource, read-only and manifest-command gating.
 
-The future branch that combines all active work should:
-
-1. reuse the canonical Skill/Research services if another branch already composes them;
-2. call `build_single_node_learning(...)` after Evaluation, Verification, routing and Approval are available;
-3. preserve or explicitly review the `LearningPlatformPolicy` floor rather than inheriting Candidate policy as platform authority;
-4. register the Learning composition on the final composed Control Plane;
-5. register `add_learning_parser(...)` / `execute_learning(...)` in the final CLI dispatcher;
-6. mount the prepared `/learning` routes in the final Shell/navigation;
-7. supply a target-aware `ConfigurationSnapshot` factory only if post-promotion Evaluation is enabled;
-8. then run the repository-wide formatter, typecheck, tests and required CI once on the unified branch.
-
-This issue branch intentionally does not treat CI/test execution as completion evidence because validation is being deferred to that unified integration branch.
+The backend, Control Plane and durable Single-Node composition were integrated into `main` by #679. The remaining product-surface wiring is intentionally additive: it exposes the already-governed canonical Learning service through the public CLI and Web shell without changing its authority, persistence or promotion semantics.
