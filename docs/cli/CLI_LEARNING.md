@@ -23,7 +23,7 @@ platform extension list learning-post-promotion-evaluations
 platform extension commands
 ```
 
-The generic extension CLI is deliberately read-only. It does not execute `POST /api/v1/commands/{command}` because a generic mutation layer cannot know a domain's confirmation, Approval and recovery semantics. Mutations use the explicit `platform learning` adapter instead.
+The generic extension framework still supports `extension execute` for other registered domains. The public `platform` entrypoint explicitly rejects `platform extension execute learning.*`, however, because a generic executor cannot preserve Learning-specific confirmation and governance semantics. Every governed Learning mutation must use the first-class `platform learning` adapter instead.
 
 ## First-class Learning commands
 
@@ -174,8 +174,8 @@ The public CLI composition now:
 1. imports `add_learning_parser` and `execute_learning`;
 2. registers `platform learning` exactly once alongside the Registry domain;
 3. dispatches it through the same authenticated `ControlPlaneClient` and confirmation helper as other top-level domains;
-4. retains the generic extension CLI as read-only;
+4. keeps generic extension inspection available while blocking `extension execute learning.*` from bypassing the domain adapter;
 5. preserves the deployment-owned `LearningPlatformPolicy` floor;
 6. delegates every unrelated CLI area unchanged to the existing lower-level composition.
 
-Regression coverage in `tests/test_issue_81_cli_entrypoint.py` proves that candidate inspection reaches `/api/v1/learning-candidates`, promotion requires global `--yes` before transport, and confirmed promotion dispatches the exact candidate revision and optional Approval binding.
+Regression coverage in `tests/test_issue_81_cli_entrypoint.py` proves that candidate inspection reaches `/api/v1/learning-candidates`, promotion requires global `--yes` before transport, confirmed promotion dispatches the exact candidate revision and optional Approval binding, and generic extension execution cannot bypass the Learning domain safeguards.
