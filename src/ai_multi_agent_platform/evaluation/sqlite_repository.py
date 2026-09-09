@@ -315,7 +315,7 @@ class SqliteEvaluationRepository:
                         """,
                         (
                             failed.status.value,
-                            failed.completed_at.isoformat(),
+                            now.isoformat(),
                             self._encode_run(failed),
                             failed.run_id,
                         ),
