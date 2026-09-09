@@ -94,7 +94,7 @@ class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
         )
         self._require_bundle_contains_handoff(bundle, runtime_context)
         context_runtime = cast(OperationalContextBoundAgentRuntime, self.context_runtime)
-        context_execution = await context_runtime.start_agent(
+        context_execution = await context_runtime.start_agent_binding(
             bundle=bundle,
             operation=operation,
             adapter=adapter,
