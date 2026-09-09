@@ -1,0 +1,112 @@
+name: Temporary PR 677 final review P1 fixes
+
+on:
+  push:
+    branches:
+      - fix/591-650-651-context-egress-handoffs
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fixes:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/591-650-651-context-egress-handoffs
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply exact review fixes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          operational = Path('src/ai_multi_agent_platform/context/operational.py')
+          text = operational.read_text()
+          text = text.replace(
+              '    ContractError,\n    EgressTarget,\n',
+              '    ContractError,\n    EgressRequest,\n    EgressTarget,\n',
+              1,
+          )
+          marker = '\n\nclass _OperationalContextMapper(AgentOrchestratorMapper):\n'
+          helper = '''\n\ndef _context_export_preflight_request(\n    bundle: ContextBundle,\n    *,\n    target: EgressTarget,\n    operation: OperationContext,\n) -> EgressRequest:\n    return EgressRequest(\n        request_id=f"context-route:{bundle.context_bundle_id}:{target.target_id}",\n        target=target,\n        context=operation,\n        classification=effective_context_bundle_classification(bundle),\n        resource_type="context_bundle",\n        payload_digest=bundle.digest,\n        task_id=bundle.task_id,\n        run_id=bundle.run_id,\n        policy_descriptors={\n            "context_bundle_id": bundle.context_bundle_id,\n            "entry_count": len(bundle.entries),\n            "phase": "model_candidate_preflight",\n        },\n    )\n'''
+          if helper.strip() not in text:
+              if marker not in text:
+                  raise SystemExit('operational mapper marker not found')
+              text = text.replace(marker, helper + marker, 1)
+
+          start = text.index('    async def _classification_aware_route(\n')
+          end = text.index('    async def start_agent_binding(\n', start)
+          replacement = '''    async def _context_export_candidate_allowed(\n        self,\n        *,\n        bundle: ContextBundle,\n        operation: OperationContext,\n        agent: object,\n        model_config_id: str,\n        provider_id: str,\n    ) -> tuple[bool, str | None]:\n        target_resolver = self.target_resolver\n        if target_resolver is None:\n            return True, None\n        target = target_resolver.resolve(\n            AgentExecutionSpec(\n                task_id=bundle.task_id,\n                run_id=bundle.run_id,\n                agent_revision=agent,  # type: ignore[arg-type]\n                capability_ids=(),\n                selected_model_config_id=model_config_id,\n                selected_provider_id=provider_id,\n            ),\n            bundle,\n        )\n        if target is None:\n            return True, None\n        decision = await self.exporter.egress_gate.evaluate(\n            _context_export_preflight_request(\n                bundle,\n                target=target,\n                operation=operation,\n            )\n        )\n        return decision.allowed, None if decision.allowed else decision.reason_code.value\n\n    async def _classification_aware_route(\n        self,\n        *,\n        bundle: ContextBundle,\n        operation: OperationContext,\n        task_model_override: RoutingRequirements | None,\n        runtime_requirements: RoutingRequirements,\n    ) -> RoutingRequirements:\n        model_runtime = self.model_runtime\n        if model_runtime is None:\n            return runtime_requirements\n\n        agent = self.runtime.service.get_agent_revision(bundle.agent_id, bundle.agent_revision)\n        effective = self.runtime._effective_model_requirements(  # noqa: SLF001\n            agent,\n            task_model_override,\n            runtime_requirements,\n        )\n\n        def request_for(requirements: RoutingRequirements) -> ModelRequest:\n            return ModelRequest(\n                request_id=f"{bundle.run_id}:context-route",\n                messages=(bundle.digest,),\n                context=operation,\n                requirements=_routing_request_requirements(requirements, bundle),\n            )\n\n        # Focused/local embeddings without a Context target resolver retain the ordinary #591\n        # model-provider candidate policy. Public production composition supplies a resolver and\n        # therefore evaluates the separate Context-export policy before pinning a model.\n        if self.target_resolver is None:\n            try:\n                selection = await model_runtime.select(request_for(effective))\n            except ContractError as exc:\n                if (\n                    exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE\n                    or effective.explicit_model_id is None\n                    or agent.profile.model.fallback is not ModelFallbackPolicy.ROUTE\n                ):\n                    raise\n                selection = await model_runtime.select(\n                    request_for(replace(effective, explicit_model_id=None))\n                )\n            if selection.model_ref is None:\n                raise ContractError(\n                    ErrorCode.CONTRACT_VIOLATION,\n                    "classification-aware model routing returned no canonical model configuration ID",\n                )\n            return replace(runtime_requirements, explicit_model_id=selection.model_ref)\n\n        fallback_allowed = agent.profile.model.fallback is ModelFallbackPolicy.ROUTE\n        candidate_ids: list[str] = []\n        if effective.explicit_model_id is not None:\n            candidate_ids.append(effective.explicit_model_id)\n            if fallback_allowed:\n                candidates = model_runtime.router._candidate_configs(  # noqa: SLF001\n                    replace(effective, explicit_model_id=None)\n                )\n                candidate_ids.extend(\n                    candidate.config_id\n                    for candidate in candidates\n                    if candidate.config_id != effective.explicit_model_id\n                )\n        else:\n            candidates = model_runtime.router._candidate_configs(effective)  # noqa: SLF001\n            candidate_ids.extend(candidate.config_id for candidate in candidates)\n\n        if not candidate_ids:\n            # Preserve the router's canonical NO_COMPATIBLE_ROUTE diagnostics.\n            await model_runtime.select(request_for(effective))\n            raise ContractError(\n                ErrorCode.CONTRACT_VIOLATION,\n                "model routing returned without a candidate",\n            )\n\n        context_denied: list[str] = []\n        model_denied: list[str] = []\n        for index, candidate_id in enumerate(candidate_ids):\n            candidate_requirements = replace(effective, explicit_model_id=candidate_id)\n            try:\n                selection = await model_runtime.select(request_for(candidate_requirements))\n            except ContractError as exc:\n                if exc.code is not ErrorCode.NO_COMPATIBLE_ROUTE:\n                    raise\n                if index == 0 and effective.explicit_model_id is not None and not fallback_allowed:\n                    raise\n                model_denied.append(candidate_id)\n                continue\n\n            if selection.model_ref is None:\n                raise ContractError(\n                    ErrorCode.CONTRACT_VIOLATION,\n                    "classification-aware model routing returned no canonical model configuration ID",\n                )\n            allowed, _reason = await self._context_export_candidate_allowed(\n                bundle=bundle,\n                operation=operation,\n                agent=agent,\n                model_config_id=selection.model_ref,\n                provider_id=selection.provider_id,\n            )\n            if allowed:\n                return replace(runtime_requirements, explicit_model_id=selection.model_ref)\n\n            context_denied.append(selection.model_ref)\n            if index == 0 and effective.explicit_model_id is not None and not fallback_allowed:\n                raise ContractError(\n                    ErrorCode.NO_COMPATIBLE_ROUTE,\n                    "explicit model assignment is prohibited by Context-export policy",\n                    provider_id=selection.provider_id,\n                    details={"explicit_model_id": selection.model_ref},\n                )\n\n        raise ContractError(\n            ErrorCode.NO_COMPATIBLE_ROUTE,\n            "no registered model satisfies both model-provider and Context-export egress policy",\n            details={\n                "candidate_ids": ",".join(candidate_ids),\n                "model_policy_denied": ",".join(model_denied),\n                "context_export_denied": ",".join(context_denied),\n            },\n        )\n\n'''
+          text = text[:start] + replacement + text[end:]
+          operational.write_text(text)
+
+          handoff = Path('src/ai_multi_agent_platform/deployment/handoff_composition.py')
+          text = handoff.read_text()
+          text = text.replace('from dataclasses import dataclass\n', 'from dataclasses import dataclass, replace\n', 1)
+          text = text.replace(
+              'from ai_multi_agent_platform.contracts import AuthorizationProvider, OperationContext\n',
+              'from ai_multi_agent_platform.contracts import (\n    AuthorizationProvider,\n    ContractError,\n    ErrorCode,\n    OperationContext,\n)\n',
+              1,
+          )
+          text = text.replace(
+              'from ai_multi_agent_platform.models import ModelRuntime\n',
+              'from ai_multi_agent_platform.kernel import EventSourcedTaskRepository\nfrom ai_multi_agent_platform.models import ModelRuntime\n',
+              1,
+          )
+          class_marker = '''class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):\n    """Bridge #651 consumption into the production #650/#591 Context runtime."""\n\n'''
+          constructor = '''class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):\n    """Bridge #651 consumption into the production #650/#591 Context runtime."""\n\n    def __init__(\n        self,\n        *,\n        service: HandoffService,\n        coordinated: CoordinatedHandoffService,\n        repository: SQLiteHandoffRepository,\n        references: CanonicalHandoffReferenceGateway,\n        agents: AgentRepository,\n        context_assembly: ContextAssemblyService,\n        context_runtime: OperationalContextBoundAgentRuntime,\n        audit: TelemetryHandoffAuditSink,\n        tasks: EventSourcedTaskRepository,\n    ) -> None:\n        super().__init__(\n            service=service,\n            coordinated=coordinated,\n            repository=repository,\n            references=references,\n            agents=agents,\n            context_assembly=context_assembly,\n            context_runtime=context_runtime,  # type: ignore[arg-type]\n            audit=audit,\n        )\n        self.tasks = tasks\n\n'''
+          if class_marker not in text:
+              raise SystemExit('handoff runtime class marker not found')
+          text = text.replace(class_marker, constructor, 1)
+          old_start = '''    ) -> HandoffConsumerExecution:\n        runtime_context = await self.consume_handoff(\n            handoff_id,\n            revision,\n            consuming_run_id=consuming_run_id,\n            consumer=consumer,\n            consumer_actor=consumer_actor,\n            operation=operation,\n        )\n        execution_agent, team_revision = self._execution_identity(consumer, consumer_agent)\n        handoff = runtime_context.handoff\n'''
+          new_start = '''    ) -> HandoffConsumerExecution:\n        handoff = self.service.get_handoff(handoff_id, revision)\n        task = await self.tasks.get_task(handoff.task_id)\n        operation = _bind_handoff_task_project_scope(operation, task.task.project_id)\n        runtime_context = await self.consume_handoff(\n            handoff_id,\n            revision,\n            consuming_run_id=consuming_run_id,\n            consumer=consumer,\n            consumer_actor=consumer_actor,\n            operation=operation,\n        )\n        execution_agent, team_revision = self._execution_identity(consumer, consumer_agent)\n        handoff = runtime_context.handoff\n'''
+          if old_start not in text:
+              raise SystemExit('handoff start_consumer marker not found')
+          text = text.replace(old_start, new_start, 1)
+          dataclass_marker = '\n\n@dataclass(slots=True)\nclass HandoffDeploymentComposition:\n'
+          scope_helper = '''\n\ndef _bind_handoff_task_project_scope(\n    operation: OperationContext,\n    task_project_id: str | None,\n) -> OperationContext:\n    if task_project_id is None:\n        return operation\n    if operation.project_id is not None and operation.project_id != task_project_id:\n        raise ContractError(\n            ErrorCode.NOT_FOUND,\n            "Handoff Project scope conflicts with the canonical Task",\n        )\n    if operation.project_id == task_project_id:\n        return operation\n    return replace(operation, project_id=task_project_id)\n'''
+          if scope_helper.strip() not in text:
+              if dataclass_marker not in text:
+                  raise SystemExit('handoff composition marker not found')
+              text = text.replace(dataclass_marker, scope_helper + dataclass_marker, 1)
+          text = text.replace(
+              '    coordinator: CoordinatorRepository,\n    authorization: AuthorizationProvider,\n',
+              '    coordinator: CoordinatorRepository,\n    tasks: EventSourcedTaskRepository,\n    authorization: AuthorizationProvider,\n',
+              1,
+          )
+          text = text.replace(
+              '        context_runtime=context_runtime,  # type: ignore[arg-type]\n        audit=audit,\n    )\n',
+              '        context_runtime=context_runtime,\n        audit=audit,\n        tasks=tasks,\n    )\n',
+              1,
+          )
+          handoff.write_text(text)
+
+          durable = Path('src/ai_multi_agent_platform/deployment/durable_connectors.py')
+          text = durable.read_text()
+          text = text.replace(
+              'from ai_multi_agent_platform.kernel import PlatformKernel\n',
+              'from ai_multi_agent_platform.kernel import EventSourcedTaskRepository, PlatformKernel\n',
+              1,
+          )
+          text = text.replace(
+              '        coordinator=base.coordination_repository,\n        authorization=base.approval_gate.provider,\n',
+              '        coordinator=base.coordination_repository,\n        tasks=EventSourcedTaskRepository(base.kernel_repository),\n        authorization=base.approval_gate.provider,\n',
+              1,
+          )
+          durable.write_text(text)
+      - name: Format changed Python
+        run: |
+          python -m pip install 'ruff==0.16.6'
+          ruff format src/ai_multi_agent_platform/context/operational.py src/ai_multi_agent_platform/deployment/handoff_composition.py src/ai_multi_agent_platform/deployment/durable_connectors.py
+      - name: Commit fixes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/ai_multi_agent_platform/context/operational.py src/ai_multi_agent_platform/deployment/handoff_composition.py src/ai_multi_agent_platform/deployment/durable_connectors.py
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'fix: enforce context export routing and handoff project scope'
+          git push origin HEAD:fix/591-650-651-context-egress-handoffs
