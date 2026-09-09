@@ -175,9 +175,7 @@ class CompensationControlPlaneProjection:
             f"plan-revision-{action.plan_revision}"
         )
         default_keys = {canonical_key}
-        default_keys.update(
-            f"{canonical_key}:{trigger.value}" for trigger in CompensationTrigger
-        )
+        default_keys.update(f"{canonical_key}:{trigger.value}" for trigger in CompensationTrigger)
         identities = {
             request.compensation_id
             for request in requests
