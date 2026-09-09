@@ -15,12 +15,12 @@ from ai_multi_agent_platform.connectors import (
     SqliteConnectorRepository,
 )
 from ai_multi_agent_platform.connectors.control_plane import register_connector_control_plane
-from ai_multi_agent_platform.connectors.egress import EgressConnectorService
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.distributed import DistributedRuntime
-from ai_multi_agent_platform.kernel import PlatformKernel
+from ai_multi_agent_platform.kernel import EventSourcedTaskRepository, PlatformKernel
 from ai_multi_agent_platform.models import ModelRoutingProfileRef
 from ai_multi_agent_platform.observability import (
+    EgressTelemetryAuditSink,
     FailureComponent,
     InMemoryExporter,
     Telemetry,
@@ -45,6 +45,7 @@ from ai_multi_agent_platform.repositories import RepositoryDiscoveryResolver
 from ai_multi_agent_platform.repositories.connector_bootstrap import (
     connector_repository_discovery_resolver,
 )
+from ai_multi_agent_platform.security import build_durable_egress_runtime
 from ai_multi_agent_platform.templates import (
     AgentTemplateExporter,
     AutomationTemplateExporter,
@@ -57,6 +58,7 @@ from .context_operationalization import (
     SingleNodeContextComposition,
     install_single_node_context,
 )
+from .egress_bindings import EgressDeploymentBindings
 from .handoff_composition import (
     HandoffDeploymentComposition,
     build_single_node_handoff_composition,
@@ -75,7 +77,7 @@ from .single_node import (
 @dataclass(slots=True)
 class SingleNodeDeployment(BaseSingleNodeDeployment):
     """Normal single-node deployment with durable Connector, Planning,
-    canonical Context and Handoff state.
+    canonical Context, Egress and Handoff state.
     """
 
     connector_repository: SqliteConnectorRepository
@@ -84,6 +86,7 @@ class SingleNodeDeployment(BaseSingleNodeDeployment):
     planning_repository: JsonPlanningRepository
     planning_kernel: PlatformKernel
     planning: PlanningService
+    egress: EgressDeploymentBindings
     context: SingleNodeContextComposition
     handoffs: HandoffDeploymentComposition
 
@@ -104,8 +107,9 @@ def build_single_node_deployment(
     The lower-level ``deployment.single_node`` composition remains usable by focused tests and
     explicitly minimal/ephemeral profiles. Public deployment/server composition comes through this
     wrapper so Connector Definitions, Connections, planning proposals, canonical Context Bundle/
-    Run-binding evidence and Agent Handoffs are durable across process restarts. Context execution
-    remains fully local by default and introduces no hosted RAG/model dependency.
+    Run-binding evidence, one durable #591 egress policy runtime and Agent Handoffs are durable
+    across process restarts. Context execution remains fully local by default and introduces no
+    hosted RAG/model dependency.
     """
 
     # Preserve the base deployment's canonical configuration error boundary before the Connector
@@ -128,12 +132,27 @@ def build_single_node_deployment(
         enable_distributed_execution=enable_distributed_execution,
         repository_discovery_resolver=effective_repository_resolver,
     )
-    connectors = EgressConnectorService(
+
+    # #591 owns one durable disclosure-policy runtime for the public process. Rebind the already
+    # constructed ModelRuntime rather than replacing it so Conversation/Onboarding/Lifecycle
+    # references retain object identity while both routing preselection and provider invocation see
+    # the shared gate.
+    egress_runtime = build_durable_egress_runtime(
+        config.database_dir / "egress-profiles.json",
+        authorization=base.authorization,
+        approval_gate=base.approval_gate,
+        audit_sink=EgressTelemetryAuditSink(base.telemetry),
+    )
+    egress = EgressDeploymentBindings(egress_runtime)
+    base.model_runtime.egress_gate = egress.runtime.gate
+
+    connectors = egress.connector_service(
         connector_repository,
         connector_registry,
         authorization_gate=base.approval_gate,
     )
     register_connector_control_plane(base.control_plane, connectors)
+    egress.register_control_plane(base.control_plane)
 
     planning_repository = JsonPlanningRepository(config.database_dir / "planning.json")
     planning_kernel = PlatformKernel(
@@ -170,8 +189,10 @@ def build_single_node_deployment(
 
     # Install canonical Context only after the authoritative Task/Run, Coordination, Repository,
     # Agent and model components are available. The installer replaces the Agent-bound lifecycle
-    # seam on the same kernel object, so existing services use the canonical Context path.
-    context = install_single_node_context(base)
+    # seam on the same kernel object, so existing services use the canonical Context path. Passing
+    # the shared #591 bindings prevents provider-bound rendering/capabilities from creating private
+    # policy gates.
+    context = install_single_node_context(base, egress=egress)
 
     handoffs = build_single_node_handoff_composition(
         database_dir=config.database_dir,
@@ -179,6 +200,7 @@ def build_single_node_deployment(
         agents=base.agents.repository,
         agent_runtime=base.agent_runtime,
         coordinator=base.coordination_repository,
+        tasks=EventSourcedTaskRepository(base.kernel_repository),
         authorization=base.approval_gate.provider,
         verification=base.verification_runtime.evidence,
         telemetry=base.telemetry,
@@ -186,6 +208,8 @@ def build_single_node_deployment(
         skill_repository=context.skills_repository,
         context_bundle_repository=context.bundles,
         context_binding_repository=context.run_bindings,
+        egress_gate=egress.runtime.gate,
+        model_runtime=base.model_runtime,
     )
 
     # The public deployment now has an authoritative canonical Connector inventory. Rebind the
@@ -239,6 +263,7 @@ def build_single_node_deployment(
         planning_repository=planning_repository,
         planning_kernel=planning_kernel,
         planning=planning,
+        egress=egress,
         context=context,
         handoffs=handoffs,
     )

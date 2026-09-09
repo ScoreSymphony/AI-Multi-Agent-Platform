@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ai_multi_agent_platform.agents import (
     AgentCapabilityTurn,
@@ -46,6 +46,7 @@ from ai_multi_agent_platform.onboarding.agent_lifecycle import (
 )
 from ai_multi_agent_platform.security import ActorIdentity, ActorType
 
+from .classification import effective_context_bundle_classification
 from .models import ContextBudget
 from .operational import OperationalContextBoundAgentRuntime
 from .rendering import ContextRenderingError
@@ -136,6 +137,10 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
 
     async def start(self, request: ExecutionRequest) -> ExecutionHandle:
         task = await self._tasks.get_task(request.context.correlation_id)
+        request = replace(
+            request,
+            context=_bind_task_project_scope(request.context, task.task.project_id),
+        )
         step_binding = (
             self._step_binding(task.task.metadata, request.subject_id)
             if request.subject_type == "step"
@@ -264,6 +269,7 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
             ) from exc
 
         agent_run = context_execution.agent_run
+        data_classification = effective_context_bundle_classification(bundle)
         self._context_refs[request.run_id] = (
             context_execution.binding.context_bundle_id,
             context_execution.binding.context_bundle_digest,
@@ -292,6 +298,8 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                     capability_ids=agent_run.capability_ids,
                     capability_versions=dict(agent_run.capability_versions),
                     context=request.context,
+                    agent_run_id=agent_run.agent_run_id,
+                    data_classification=data_classification,
                 )
                 text = turn.text
                 model_ref = turn.model_ref
@@ -304,6 +312,10 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                 requirements: dict[str, JsonValue] = {
                     "model_config_id": agent_run.selected_model_config_id,
                     "modalities": ["text"],
+                    "data_classification": data_classification.value,
+                    "task_id": task.task_id,
+                    "run_id": request.run_id,
+                    "agent_id": agent_run.agent.agent_id,
                 }
                 if self_hosted_only:
                     requirements["self_hosted_only"] = True
@@ -453,6 +465,24 @@ class CanonicalContextAgentLifecycleBackend(LifecycleBackend):
                 ErrorCode.INVALID_CONFIGURATION,
                 f"invalid canonical Step Agent execution binding: {exc}",
             ) from exc
+
+
+def _bind_task_project_scope(
+    context: OperationContext,
+    task_project_id: str | None,
+) -> OperationContext:
+    """Bind outbound execution to canonical Task scope without accepting caller widening."""
+
+    if task_project_id is None:
+        return context
+    if context.project_id is not None and context.project_id != task_project_id:
+        raise ContractError(
+            ErrorCode.NOT_FOUND,
+            "Context-bound execution Project scope conflicts with the canonical Task",
+        )
+    if context.project_id == task_project_id:
+        return context
+    return replace(context, project_id=task_project_id)
 
 
 def _actor_from_operation(context: OperationContext) -> ActorIdentity:

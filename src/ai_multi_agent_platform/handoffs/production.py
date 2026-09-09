@@ -294,7 +294,7 @@ class CanonicalHandoffReferenceGateway(HandoffReferenceGateway):
         reference: HandoffSourceRef,
         resolved: _ResolvedReference,
     ) -> None:
-        if reference.revision is not None and reference.revision != resolved.revision:
+        if reference.revision is None or reference.revision != resolved.revision:
             raise ContractError(
                 ErrorCode.NOT_FOUND,
                 "handoff source reference revision is missing or stale",
@@ -305,7 +305,7 @@ class CanonicalHandoffReferenceGateway(HandoffReferenceGateway):
                     "resolved_revision": resolved.revision,
                 },
             )
-        if reference.digest is not None and reference.digest != resolved.digest:
+        if reference.digest is None or reference.digest != resolved.digest:
             raise ContractError(
                 ErrorCode.NOT_FOUND,
                 "handoff source reference digest is missing or stale",

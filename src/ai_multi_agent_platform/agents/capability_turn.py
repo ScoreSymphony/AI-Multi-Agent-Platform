@@ -27,7 +27,13 @@ from ai_multi_agent_platform.capabilities import (
     SafetyClassification,
     SideEffectClassification,
 )
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue, OperationContext
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    DataClassification,
+    ErrorCode,
+    JsonValue,
+    OperationContext,
+)
 from ai_multi_agent_platform.models import (
     CanonicalModelRequest,
     CanonicalModelResponse,
@@ -77,6 +83,8 @@ class AgentCapabilityTurn:
         capability_ids: tuple[str, ...],
         capability_versions: dict[str, str],
         context: OperationContext,
+        agent_run_id: str | None = None,
+        data_classification: DataClassification = DataClassification.INTERNAL,
     ) -> AgentCapabilityTurnResult:
         tools, tool_names = self._tool_definitions(
             capability_ids,
@@ -96,6 +104,7 @@ class AgentCapabilityTurn:
                 routing_requirements={
                     "modalities": ["text"],
                     "tool_calling": bool(tools),
+                    "data_classification": data_classification.value,
                 },
             )
         )
@@ -131,6 +140,7 @@ class AgentCapabilityTurn:
                         task_id=task_id,
                         run_id=run_id,
                         agent_id=agent_id,
+                        agent_run_id=agent_run_id,
                         project_id=operation.project_id,
                         causation_id=operation.causation_id,
                     ),

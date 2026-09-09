@@ -7,14 +7,25 @@ so every canonical Agent-bound Run crosses the Context Bundle boundary before mo
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from ai_multi_agent_platform.context.bindings import JsonContextRunBindingRepository
+from ai_multi_agent_platform.agents import AgentCapabilityTurn, AgentRepository, AgentRunStatus
+from ai_multi_agent_platform.capabilities import (
+    CapabilityInvocation,
+    CapabilitySpec,
+    bind_canonical_capability_invocation,
+)
+from ai_multi_agent_platform.context.bindings import (
+    ContextRunBindingRepository,
+    JsonContextRunBindingRepository,
+)
+from ai_multi_agent_platform.context.classification import effective_context_bundle_classification
 from ai_multi_agent_platform.context.control_plane import register_context_control_plane
 from ai_multi_agent_platform.context.lifecycle import (
     CanonicalContextAgentLifecycleBackend,
     ContextLifecycleSourceRequest,
+    _bind_task_project_scope,
 )
 from ai_multi_agent_platform.context.models import ContextEntryRole, ContextSourceType
 from ai_multi_agent_platform.context.operational import (
@@ -27,7 +38,11 @@ from ai_multi_agent_platform.context.reconciliation import (
     ContextBindingReconciliationReport,
     reconcile_context_run_bindings,
 )
-from ai_multi_agent_platform.context.resolver import ContextAssemblyService, ContextResolver
+from ai_multi_agent_platform.context.resolver import (
+    ContextAssemblyService,
+    ContextBundleRepository,
+    ContextResolver,
+)
 from ai_multi_agent_platform.context.source_adapters import (
     AgentContextSourceAdapter,
     ContextSourceAdapterBinding,
@@ -42,7 +57,17 @@ from ai_multi_agent_platform.context.source_adapters import (
     TaskContextSourceAdapter,
 )
 from ai_multi_agent_platform.context.visibility import AuthorizationContextEntryVisibilityResolver
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    DataClassification,
+    ErrorCode,
+    ExecutionHandle,
+    ExecutionRequest,
+    ExecutionSnapshot,
+    LifecycleBackend,
+    OperationContext,
+    ProviderDescriptor,
+)
 from ai_multi_agent_platform.data import LocalKnowledgeProvider, LocalMemoryProvider
 from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourcedTaskRepository
 from ai_multi_agent_platform.research import (
@@ -62,6 +87,8 @@ from ai_multi_agent_platform.skills import (
     register_skill_control_plane,
 )
 
+from .egress_bindings import EgressDeploymentBindings
+
 if TYPE_CHECKING:
     from ai_multi_agent_platform.deployment.single_node import (
         SingleNodeDeployment as BaseDeployment,
@@ -72,6 +99,115 @@ if TYPE_CHECKING:
 # an adapter/model-specific guess and can later become deployment configuration without changing
 # Context Bundle identity semantics.
 CONTEXT_OUTPUT_RESERVE_TOKENS = 2_048
+
+
+class _TaskProjectScopeLifecycleBackend(LifecycleBackend):
+    """Resolve canonical Task Project scope before the #15 lifecycle authorization boundary."""
+
+    def __init__(
+        self,
+        inner: LifecycleBackend,
+        tasks: EventSourcedTaskRepository,
+    ) -> None:
+        self._inner = inner
+        self._tasks = tasks
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        return self._inner.descriptor
+
+    async def start(self, request: ExecutionRequest) -> ExecutionHandle:
+        task = await self._tasks.get_task(request.context.correlation_id)
+        context = _bind_task_project_scope(request.context, task.task.project_id)
+        return await self._inner.start(replace(request, context=context))
+
+    async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        return await self._inner.get(run_id, context)
+
+    async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        return await self._inner.cancel(run_id, context)
+
+
+def _bound_capability_classification(
+    request: CapabilityInvocation,
+    *,
+    agents: AgentRepository,
+    bundles: ContextBundleRepository,
+    run_bindings: ContextRunBindingRepository,
+) -> DataClassification:
+    agent_run_id = request.trace.agent_run_id
+    if agent_run_id is None:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress requires the exact invoking AgentRun identity",
+            details={
+                "run_id": request.trace.run_id,
+                "agent_id": request.trace.agent_id,
+            },
+        )
+    try:
+        agent_run = agents.get_agent_run(agent_run_id)
+    except KeyError as exc:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress references a missing invoking AgentRun",
+            details={"agent_run_id": agent_run_id},
+        ) from exc
+    if (
+        agent_run.run_id != request.trace.run_id
+        or agent_run.task_id != request.trace.task_id
+        or agent_run.agent.agent_id != request.trace.agent_id
+        or agent_run.status is not AgentRunStatus.RUNNING
+    ):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress AgentRun does not match the invocation trace",
+            details={"agent_run_id": agent_run_id},
+        )
+    try:
+        binding = run_bindings.get(agent_run_id)
+    except KeyError as exc:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress requires the invoking AgentRun Context binding",
+            details={"agent_run_id": agent_run_id},
+        ) from exc
+    if (
+        binding.run_id != request.trace.run_id
+        or binding.task_id != request.trace.task_id
+        or binding.agent_id != request.trace.agent_id
+        or binding.agent_revision != agent_run.agent.revision
+    ):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress binding does not match the invoking AgentRun",
+            details={"agent_run_id": agent_run_id},
+        )
+    try:
+        bundle = bundles.get(binding.context_bundle_id)
+    except KeyError as exc:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress binding references a missing Context Bundle",
+            details={"context_bundle_id": binding.context_bundle_id},
+        ) from exc
+    if (
+        bundle.context_bundle_id != binding.context_bundle_id
+        or bundle.digest != binding.context_bundle_digest
+        or bundle.run_id != binding.run_id
+        or bundle.task_id != binding.task_id
+        or bundle.agent_id != binding.agent_id
+        or bundle.agent_revision != binding.agent_revision
+    ):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress bundle does not match the invoking AgentRun binding",
+            details={
+                "agent_run_id": agent_run_id,
+                "context_bundle_id": binding.context_bundle_id,
+            },
+        )
+    return effective_context_bundle_classification(bundle)
 
 
 @dataclass(slots=True)
@@ -92,12 +228,21 @@ class SingleNodeContextComposition:
     reconciliation: ContextBindingReconciliationReport
 
 
-def install_single_node_context(base: BaseDeployment) -> SingleNodeContextComposition:
+def install_single_node_context(
+    base: BaseDeployment,
+    *,
+    egress: EgressDeploymentBindings | None = None,
+) -> SingleNodeContextComposition:
     """Install the canonical Context Bundle path into one already-built single-node deployment.
 
     The installer replaces only the kernel lifecycle participant. Every other canonical owner
-    remains unchanged and one #15 authorization wrapper stays the outer execution boundary. This
-    keeps Task/Run/Agent ownership intact while making #590 the effective context authority.
+    remains unchanged and one #15 authorization wrapper stays the execution enforcement boundary
+    after canonical Task Project scope is resolved. This keeps Task/Run/Agent ownership intact
+    while making #590 the effective context authority.
+
+    When the public deployment supplies #591 bindings, Context rendering and capability execution
+    share that exact durable egress gate. Focused lower-level embeddings may omit the bindings and
+    retain the conservative local default gate.
     """
 
     database_dir = base.config.database_dir
@@ -112,7 +257,9 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         base.agent_runtime,
         bundle_repository=bundles,
         binding_repository=run_bindings,
+        egress_gate=None if egress is None else egress.runtime.gate,
         target_resolver=ModelRegistryContextEgressTargetResolver(base.models),
+        model_runtime=base.model_runtime if egress is not None else None,
         routing_policy=ContextRoutingPolicy(
             output_reserve_tokens=CONTEXT_OUTPUT_RESERVE_TOKENS,
         ),
@@ -258,10 +405,36 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         bundle = matches[0]
         return bundle.skill_bundle_id, bundle.digest
 
+    def capability_classification(
+        request: CapabilityInvocation,
+        capability: CapabilitySpec,
+    ) -> DataClassification:
+        del capability
+        return _bound_capability_classification(
+            request,
+            agents=base.agents.repository,
+            bundles=bundles,
+            run_bindings=run_bindings,
+        )
+
+    capability_turn = (
+        None
+        if egress is None
+        else AgentCapabilityTurn(
+            base.model_runtime,
+            base.capabilities,
+            egress.capability_invoker(
+                base.capabilities,
+                canonical_binding_hook=bind_canonical_capability_invocation,
+                classification_resolver=capability_classification,
+            ),
+        )
+    )
+
     previous_lifecycle = base.kernel._lifecycle  # noqa: SLF001 - composition boundary replacement
     # The base profile intentionally already wraps its inner lifecycle with #15. Reuse that inner
-    # participant as the fallback and make one fresh #15 wrapper the outermost boundary, avoiding
-    # duplicate authorization/audit events for non-Agent executions.
+    # participant as the fallback and make one fresh #15 wrapper after canonical Project-scope
+    # binding, avoiding duplicate authorization/audit events for non-Agent executions.
     fallback = getattr(previous_lifecycle, "_inner", previous_lifecycle)
     lifecycle = CanonicalContextAgentLifecycleBackend(
         delegate=fallback,
@@ -272,11 +445,16 @@ def install_single_node_context(base: BaseDeployment) -> SingleNodeContextCompos
         context_runtime=context_runtime,
         binding_factory=binding_factory,
         skill_bundle_resolver=skill_bundle_resolver,
+        capability_turn=capability_turn,
     )
-    base.kernel._lifecycle = AuthorizedLifecycleBackend(  # noqa: SLF001
+    authorized_lifecycle = AuthorizedLifecycleBackend(
         lifecycle,
         base.approval_gate,
         allow_internal_service_reads=True,
+    )
+    base.kernel._lifecycle = _TaskProjectScopeLifecycleBackend(  # noqa: SLF001
+        authorized_lifecycle,
+        tasks,
     )
 
     register_context_control_plane(

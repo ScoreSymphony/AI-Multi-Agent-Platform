@@ -5,6 +5,7 @@ from __future__ import annotations
 from ai_multi_agent_platform.contracts import (
     ContractError,
     DataClassification,
+    EgressDecision,
     EgressRequest,
     EgressTarget,
     EgressTargetKind,
@@ -43,6 +44,24 @@ class ContextBundleEgressExporter:
         context: OperationContext,
         content_provider: ContextContentProvider | None = None,
     ) -> RenderedContext:
+        rendered, _ = await self.export_with_decision(
+            bundle,
+            target=target,
+            context=context,
+            content_provider=content_provider,
+        )
+        return rendered
+
+    async def export_with_decision(
+        self,
+        bundle: ContextBundle,
+        *,
+        target: EgressTarget,
+        context: OperationContext,
+        content_provider: ContextContentProvider | None = None,
+    ) -> tuple[RenderedContext, EgressDecision]:
+        """Export Context and retain the exact policy decision that governed disclosure."""
+
         if target.kind is not EgressTargetKind.CONTEXT_EXPORT:
             raise ValueError("context bundle export requires target kind context_export")
         classification = effective_context_bundle_classification(bundle)
@@ -68,9 +87,10 @@ class ContextBundleEgressExporter:
                 "context egress downgrade requires creation of an explicit redacted Context Bundle",
                 details={"egress_request_id": decision.request_id},
             )
-        return await self.renderer.render(
+        rendered = await self.renderer.render(
             bundle,
             content_provider=content_provider,
             allow_secret_resolution=classification
             not in {DataClassification.SECRET, DataClassification.SECRET_REFERENCE},
         )
+        return rendered, decision
