@@ -82,6 +82,18 @@ class CompensationControlPlaneProjection:
                 None if request is None else self.repository.get_result(request.compensation_id)
             )
             mixed_identity = self._has_mixed_default_identities(action, requests)
+            status = None if result is None else result.status
+            error_code = None if result is None else result.error_code
+            error_message = None if result is None else result.error_message
+            manual_intervention_required = (
+                False if result is None else result.manual_intervention_required
+            )
+            if mixed_identity:
+                status = CompensationStatus.RECONCILIATION_REQUIRED
+                error_code = ErrorCode.CONFLICT.value
+                error_message = _MIXED_IDENTITY_MESSAGE
+                manual_intervention_required = True
+
             descriptor = action.compensation
             views.append(
                 CompensationActionView(
@@ -99,11 +111,7 @@ class CompensationControlPlaneProjection:
                         None if descriptor is None else descriptor.capability_id
                     ),
                     compensation_id=None if request is None else request.compensation_id,
-                    status=(
-                        CompensationStatus.RECONCILIATION_REQUIRED
-                        if mixed_identity
-                        else None if result is None else result.status
-                    ),
+                    status=status,
                     compensation_run_id=None if result is None else result.execution_run_id,
                     compensation_tool_invocation_id=(
                         None if result is None else result.canonical_tool_invocation_id
@@ -116,20 +124,9 @@ class CompensationControlPlaneProjection:
                     evidence_refs=(
                         action.evidence_refs if result is None else result.evidence_refs
                     ),
-                    error_code=(
-                        ErrorCode.CONFLICT.value
-                        if mixed_identity
-                        else None if result is None else result.error_code
-                    ),
-                    error_message=(
-                        _MIXED_IDENTITY_MESSAGE
-                        if mixed_identity
-                        else None if result is None else result.error_message
-                    ),
-                    manual_intervention_required=(
-                        mixed_identity
-                        or (False if result is None else result.manual_intervention_required)
-                    ),
+                    error_code=error_code,
+                    error_message=error_message,
+                    manual_intervention_required=manual_intervention_required,
                 )
             )
         return CompensationGroupView(
