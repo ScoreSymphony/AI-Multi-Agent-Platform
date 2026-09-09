@@ -57,6 +57,10 @@ class SQLitePostPromotionEvaluationRecorder:
                 """
             )
 
+            # Restore-integrity readers open immutable snapshots. Checkpoint the schema too,
+            # so a newly initialized empty recorder is fully visible without consulting its WAL.
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
     def store(self, record: PostPromotionEvaluationRecord) -> None:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")

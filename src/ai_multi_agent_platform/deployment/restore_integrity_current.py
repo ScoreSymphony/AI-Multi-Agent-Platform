@@ -466,7 +466,7 @@ def _validate_learning(
 
     post_database = deployment.config.database_dir / "learning-post-promotion.sqlite3"
     try:
-        with sqlite3.connect(f"file:{post_database}?mode=ro", uri=True) as connection:
+        with sqlite3.connect(f"file:{post_database}?mode=ro&immutable=1", uri=True) as connection:
             rows = connection.execute(
                 "SELECT record_id, learning_candidate_id, target_revision "
                 "FROM learning_post_promotion_evaluations ORDER BY record_id"
