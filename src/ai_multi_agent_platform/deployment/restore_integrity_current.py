@@ -424,17 +424,14 @@ def _validate_learning(
             )
         for evaluation_run_id in candidate.evaluation_run_ids:
             try:
-                evaluation_project_id = learning.service.evaluation_run_project_id(
-                    evaluation_run_id
+                learning.service.require_evaluation_project_scope(
+                    candidate,
+                    evaluation_run_id,
                 )
             except ContractError as exc:
                 raise RestoreValidationError(
-                    f"{entity} cannot reconstruct Evaluation scope for {evaluation_run_id}"
+                    f"{entity} cannot validate Evaluation scope for {evaluation_run_id}"
                 ) from exc
-            if evaluation_project_id != candidate.project_id:
-                raise RestoreValidationError(
-                    f"{entity} Evaluation evidence belongs to a different project"
-                )
         missing_verifications = set(candidate.verification_ids) - set(index.verification_ids)
         if missing_verifications:
             raise RestoreValidationError(
@@ -469,7 +466,7 @@ def _validate_learning(
 
     post_database = deployment.config.database_dir / "learning-post-promotion.sqlite3"
     try:
-        with sqlite3.connect(f"file:{post_database}?mode=ro&immutable=1", uri=True) as connection:
+        with sqlite3.connect(f"file:{post_database}?mode=ro", uri=True) as connection:
             rows = connection.execute(
                 "SELECT record_id, learning_candidate_id, target_revision "
                 "FROM learning_post_promotion_evaluations ORDER BY record_id"

@@ -286,7 +286,7 @@ class LearningService:
             )
         return next(iter(project_ids))
 
-    def _require_evaluation_project_scope(
+    def require_evaluation_project_scope(
         self,
         candidate: LearningCandidate,
         evaluation_run_id: str,
@@ -596,7 +596,7 @@ class LearningService:
             for run_id in evaluation_run_ids:
                 detail = evaluation.get_run_detail(run_id)
                 _require_evaluation_target_binding(current, detail, run_id)
-                self._require_evaluation_project_scope(current, run_id)
+                self.require_evaluation_project_scope(current, run_id)
                 if run_id not in eval_ids:
                     eval_ids.append(run_id)
                 _append_reference(
@@ -681,7 +681,7 @@ class LearningService:
                 f"cannot accept candidate in {current.status.value} status",
             )
         for run_id in current.evaluation_run_ids:
-            self._require_evaluation_project_scope(current, run_id)
+            self.require_evaluation_project_scope(current, run_id)
         self.quality_gate.enforce(current)
         return self._append(current, status=LearningCandidateStatus.ACCEPTED)
 
@@ -762,7 +762,7 @@ class LearningService:
                 "learning candidate project scope does not match promotion operation",
             )
         for run_id in current.evaluation_run_ids:
-            self._require_evaluation_project_scope(current, run_id)
+            self.require_evaluation_project_scope(current, run_id)
         self.quality_gate.enforce(current)
         adapter = self.promotion_registry.resolve(current.target.resource_type)
         action = _promotion_action(current, actor=actor, operation=operation)
