@@ -219,13 +219,12 @@ class _RecordingLearningAccess:
 
 
 def _create_documentation_candidate(
-    deployment: object,
+    deployment,
     project_id: str,
     *,
     source_id: str,
 ):
-    service = getattr(getattr(deployment, "learning"), "service")
-    return service.create_candidate(
+    return deployment.learning.service.create_candidate(
         source_type=LearningSourceType.OPERATOR_PROPOSAL,
         problem="project-scoped dedupe regression",
         target=LearningTarget(
