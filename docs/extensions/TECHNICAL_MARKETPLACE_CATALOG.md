@@ -199,7 +199,7 @@ catalogs/technical-components/catalog.json
 
 It is consumed by the existing `FilesystemRegistryProvider`, so the technical Marketplace remains deterministic and usable without a hosted Registry.
 
-The current seed contains the architecture-derived Code Intelligence candidates plus a verified cross-category review set. It includes:
+As of the 2026-09-09 curation pass, the loaded catalog contains at least 47 reviewed entries across the technical taxonomy.
 
 ### Code intelligence
 
@@ -207,18 +207,42 @@ The current seed contains the architecture-derived Code Intelligence candidates 
 - Graphify
 - CodeGraph
 - Understand Anything
+- Serena
+- ast-grep
+- Semgrep
+- SCIP
+
+SCIP records the current `scip-code/scip` identity rather than the former redirected Sourcegraph namespace.
 
 ### Coding agents
 
 - OpenHands
 - Aider
+- OpenCode
+- Goose
+- Cline
+- Roo Code — archived/reference only
+- Plandex
+- Gemini CLI
+- Codex CLI
 
-### Agent frameworks
+OpenCode and Goose record their current post-move repository namespaces. Roo Code is intentionally represented as an archived `reference`, not an active candidate.
+
+### Agent frameworks and platforms
 
 - Pydantic AI
 - LangGraph
 - smolagents
 - Google ADK
+- AnythingLLM
+- Microsoft Agent Framework
+- Agno
+- CrewAI
+- Dify
+- Flowise — archived/reference only
+- Letta
+
+Dify's actual modified Apache-2.0 terms are recorded rather than normalized to plain Apache-2.0. Flowise is explicitly archived and records its mixed Apache/commercial licensing instead of being shown as a recommended install.
 
 ### Specification and skills
 
@@ -229,30 +253,48 @@ The current seed contains the architecture-derived Code Intelligence candidates 
 - Mem0
 - Graphiti
 - Qdrant
+- AnythingLLM
+- Letta
 
 ### Evaluation / security
 
 - Promptfoo
 - Lighteval
+- Inspect AI
+- DeepEval
+- AgentDojo
+- garak
+- Semgrep
 
 ### Browser and execution
 
 - Browser Use
 - Playwright
+- Stagehand
 
 ### Inference
 
 - llama.cpp
 - Ollama
 - vLLM
+- Text Embeddings Inference (TEI)
+- ONNX Runtime
+- Transformers.js
 
 ### Retrieval / model tooling
 
 - Sentence Transformers
+- TEI
+- ONNX Runtime
+- Transformers.js
 
-For the externally researched review set above, the official repository identity, license and GitHub non-archived status were verified before promotion on 2026-09-08. Where an upstream release/revision was not explicitly pinned during this review, the source revision remains `null`; the Registry `version` is the version of the curated catalog record, not a fabricated upstream release number.
+### Domain/model tooling
 
-All external entries remain manual, untrusted candidates and evaluation-required. `cost:compatible` means the reviewed deployment has no mandatory recurring paid service under the project cost policy; `cost:conditional` means optional/provider choices can introduce costs and must be checked during evaluation.
+- Transformers.js
+
+For reviewed external entries, official repository identity, license and project status are verified before promotion. Where an upstream release/revision was not explicitly pinned during review, the source revision remains `null`; the Registry `version` is the version of the curated catalog record, not a fabricated upstream release number.
+
+Active external entries remain `manual`, `untrusted`, `candidate` and `evaluation:required`. Archived upstreams can remain discoverable only as explicit `reference` entries and remain manual/non-activatable. `cost:compatible` means the reviewed deployment has no mandatory recurring paid service under the project cost policy; `cost:conditional` means optional/provider choices can introduce costs and must be checked during evaluation.
 
 ## Curation queue
 
@@ -262,12 +304,14 @@ Unresolved leads live in:
 catalogs/technical-components/CURATION_QUEUE.md
 ```
 
-The queue is deliberately not loadable by `FilesystemRegistryProvider`. It includes the remaining architecture-derived names and externally researched leads from #638 whose exact identity/license/status or other required facts have not yet been completed.
+The queue is deliberately not loadable by `FilesystemRegistryProvider`. It contains names whose exact identity, current licensing/status or suitability still needs evidence before promotion or explicit rejection/deferment.
 
 This prevents two common catalog failures:
 
 1. silently guessing metadata to make cards look complete;
 2. presenting an unreviewed upstream as if it were a trusted/installable component.
+
+The queue also records completed promotion batches so repository moves, archival status and nonstandard licensing decisions stay reviewable.
 
 ## Discovery-source seam
 
@@ -309,6 +353,8 @@ Before adding or materially changing a loaded external component entry:
 10. record lifecycle/evaluation status separately from Registry trust;
 11. preserve the project's no-mandatory-recurring-paid-service policy;
 12. route any real future installation/integration through existing #81, #15, security, evaluation and owner-domain boundaries.
+
+Repository redirects/moves must be resolved to the current canonical identity before promotion. Non-standard or mixed licensing must be recorded literally enough that the Marketplace does not imply standard SPDX compatibility. Archived projects must not retain active-candidate semantics merely because they were historically listed in architecture notes.
 
 ## Review and promotion
 
