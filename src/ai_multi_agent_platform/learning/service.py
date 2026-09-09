@@ -396,6 +396,11 @@ class LearningService:
                 ErrorCode.INVALID_REQUEST,
                 "Evaluation run does not contain a regression finding",
             )
+        project_id = (
+            self.promotion_registry.resolve_project_id(target)
+            if self.promotion_registry.supports(target.resource_type)
+            else None
+        )
         run_ref = LearningReference(
             kind="evaluation_run",
             resource_id=detail.run.run_id,
@@ -422,6 +427,7 @@ class LearningService:
             evidence_refs=(run_ref, *finding_refs, *evidence_refs),
             proposed_change=proposed_change,
             proposed_artifact_ref=proposed_artifact_ref,
+            project_id=project_id,
         )
 
     def record_gate_evidence(
