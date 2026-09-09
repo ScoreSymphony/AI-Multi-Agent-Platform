@@ -284,8 +284,7 @@ def install_single_node_context(
         matches = tuple(
             bundle
             for bundle in bundles.list_for_run(request.trace.run_id)
-            if bundle.task_id == request.trace.task_id
-            and bundle.agent_id == request.trace.agent_id
+            if bundle.task_id == request.trace.task_id and bundle.agent_id == request.trace.agent_id
         )
         if len(matches) != 1:
             raise ContractError(
