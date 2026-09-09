@@ -1,4 +1,4 @@
-"""Additive single-node composition seam for governed Learning (#595)."""
+"""Additive single-node composition seam for governed Learning (#595/#694)."""
 
 from __future__ import annotations
 
@@ -32,6 +32,12 @@ from .repository import SQLiteLearningRepository
 from .runtime import PostPromotionEvaluator
 from .scoped_control_plane import register_scoped_learning_control_plane
 from .service import LearningQualityGate
+from .source_evidence import (
+    KernelRunFailureEvidenceResolver,
+    LearningRunEvidenceKernel,
+    PlanningEvidenceService,
+    PlanningProposalFailureEvidenceResolver,
+)
 from .sources import LearningSourceBridge
 
 
@@ -67,13 +73,15 @@ def build_single_node_learning(
     evaluation: EvaluationService,
     verification: VerificationService,
     approval_gate: AuthorizationGate,
+    kernel: LearningRunEvidenceKernel,
+    planning: PlanningEvidenceService,
     telemetry: Telemetry | None = None,
     skills: SkillService | None = None,
     research: ResearchService | None = None,
     platform_policy: LearningPlatformPolicy | None = None,
     post_promotion_evaluator: PostPromotionEvaluator | None = None,
 ) -> SingleNodeLearningComposition:
-    """Compose #595 around existing canonical owner services without replacing them."""
+    """Compose governed Learning around existing canonical owners without replacing them."""
 
     root = Path(database_dir)
     skill_service = skills or SkillService(JsonSkillRepository(root / "skills.json"))
@@ -105,5 +113,10 @@ def build_single_node_learning(
         post_promotion_recorder=post_promotion_recorder,
         skills=skill_service,
         service=service,
-        sources=LearningSourceBridge(service, research=research),
+        sources=LearningSourceBridge(
+            service,
+            research=research,
+            run_failures=KernelRunFailureEvidenceResolver(kernel),
+            planning_failures=PlanningProposalFailureEvidenceResolver(planning),
+        ),
     )
