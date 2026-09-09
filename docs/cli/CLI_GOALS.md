@@ -108,7 +108,7 @@ platform extension execute goal.review GOAL_ID \
   }'
 ```
 
-Evidence-backed criteria require canonical evidence marked as verified according to the Goal contract. Free-form Agent self-report does not become Goal truth merely because it is supplied in a review payload.
+Direct CLI/Web review cannot self-promote non-human evidence: a client-supplied `verified=true` claim is rejected and evidence actor identity is bound to the authenticated principal. Authenticated user `human_acceptance` is promoted at the Control Plane boundary; all other verified evidence must arrive through a canonical verification/promotion integration such as #86.
 
 Scheduled/event reviews should normally arrive through the #18 Automation delivery integration rather than from a shell loop. #18 owns delivery timing/deduplication; the Goal subsystem owns the review semantics and durable progress state.
 
@@ -116,13 +116,7 @@ A successful review commits canonical review observability atomically with Goal 
 
 ## Task outcome reconciliation
 
-```bash
-platform extension execute goal.record-task-outcome GOAL_ID \
-  --idempotency-key reconcile-task-42 \
-  --payload '{"task_id":"task_...","task_state":"succeeded"}'
-```
-
-Valid `task_state` values are `active`, `succeeded`, `failed`, `cancelled` and `superseded` according to the canonical Goal Task-link projection.
+Task terminal state is not writable through a northbound Goal command. The canonical Task/Run kernel emits terminal Task events, and the Goal runtime projects `task.succeeded`, `task.failed` and `task.cancelled` into matching Goal Task links before #18 advances the event cursor. This prevents CLI/Web clients from claiming Task completion independently of the canonical Task lifecycle.
 
 ## Contract boundary
 

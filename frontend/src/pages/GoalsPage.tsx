@@ -373,9 +373,9 @@ export function GoalDetailPage({ client, goalId }: { client: GoalClient; goalId:
 
       <Card title="Review Goal now">
         <p>
-          Manual review uses the same explicit evidence contract as scheduled reviews. Evidence is
-          not considered authoritative merely because it was typed into this form; the canonical
-          Goal evaluator still requires `verified=true` for evidence-backed criteria.
+          Manual review uses the same explicit evidence contract as scheduled reviews. Browser
+          evidence cannot self-promote to verified truth: human acceptance is bound to the
+          authenticated user, while other verified evidence must enter through a canonical verifier.
         </p>
         <form className="stack" onSubmit={(event) => void submitReview(event)}>
           <div className="form-grid">

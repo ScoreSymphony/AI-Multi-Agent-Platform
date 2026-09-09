@@ -174,9 +174,8 @@ export interface GoalEvidenceInput {
   criterion_id: string;
   kind: string;
   value: JsonValue;
-  source_ref: string;
-  verified: boolean;
-  actor_ref?: string;
+  source_ref?: string;
+  verified?: false;
   observed_at?: string;
 }
 
@@ -245,17 +244,6 @@ export class GoalClient {
     return this.command("goal.attach-task", goalId, {
       task_id: taskId,
       expected_revision: expectedRevision,
-    });
-  }
-
-  recordTaskOutcome(
-    goalId: string,
-    taskId: string,
-    taskState: GoalTaskState,
-  ): Promise<CanonicalGoal> {
-    return this.command("goal.record-task-outcome", goalId, {
-      task_id: taskId,
-      task_state: taskState,
     });
   }
 

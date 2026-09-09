@@ -48,7 +48,7 @@ This keeps Python as the fail-closed authority even while the frontend taxonomy 
 The frontend `GoalClient` and backend Goal Control Plane agree on:
 
 - resource collection: `goals`;
-- commands: `goal.create`, `goal.activate`, `goal.pause`, `goal.resume`, `goal.cancel`, `goal.fail`, `goal.revise`, `goal.review`, `goal.attach-task`, `goal.record-task-outcome`;
+- commands: `goal.create`, `goal.activate`, `goal.pause`, `goal.resume`, `goal.cancel`, `goal.fail`, `goal.revise`, `goal.review`, `goal.attach-task`;
 - Goal status and progress enum values;
 - criterion kinds/operators and task-link states;
 - revision-aware mutations;

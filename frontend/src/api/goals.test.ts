@@ -79,7 +79,6 @@ describe("GoalClient", () => {
       evidence: [],
     });
     await client.attachTask("goal_1", "task_1", 4);
-    await client.recordTaskOutcome("goal_1", "task_1", "succeeded");
 
     expect(calls.map((call) => call.url)).toEqual([
       "/api/v1/commands/goal.activate",
@@ -90,7 +89,6 @@ describe("GoalClient", () => {
       "/api/v1/commands/goal.revise",
       "/api/v1/commands/goal.review",
       "/api/v1/commands/goal.attach-task",
-      "/api/v1/commands/goal.record-task-outcome",
     ]);
     expect(calls[3]?.body).toEqual({ resource_ref: "goal_1", reason: "operator decision" });
     expect(calls[4]?.body).toEqual({
