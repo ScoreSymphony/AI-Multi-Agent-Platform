@@ -1,44 +1,19 @@
-# Research single-node integration handoff (#589)
+# Research single-node integration (#589)
 
-This active branch prepares the final production-shaped single-node composition without forcing a
-concurrent edit into the heavily shared `deployment/single_node.py` integration point.
+Research is part of the standard ``build_single_node_deployment(...)`` composition. The deployment
+opens ``db/research.sqlite3`` through ``SqliteResearchRepository``, constructs ``ResearchService``
+with the existing #15 ``AuthorizationGate``, registers the Search-aware Research Control Plane
+surface and exposes the long-lived service as ``SingleNodeDeployment.research``.
 
-## Prepared composition
+``compose_single_node_research(...)`` remains only as an idempotent compatibility accessor for the
+standard store. Supplying an explicit alternate database path still creates a separate isolated
+composition for compatibility/tests.
 
-`compose_single_node_research(...)` attaches the canonical Research domain to an already-built
-`SingleNodeDeployment` by:
+The Research quality suite is a versioned opt-in suite because ``canonical_research_quality_suite``
+is bound to one exact Research Item identity. Research bundle export is registered in the shared
+#79 portability composition; owner-domain import remains explicit so local #86 Verification
+authority is revalidated rather than trusted from serialized metadata.
 
-1. opening the durable `database/research.sqlite3` store through `SqliteResearchRepository`;
-2. constructing `ResearchService` with the deployment's existing #15 `AuthorizationGate`;
-3. registering the Search-aware Research Control Plane surface from the #589 Search slice.
-
-No second Task/Run, authorization, verification, file, artifact or search authority is introduced.
-
-## Aggregate-branch fold-in
-
-When all active branches are consolidated, fold this seam into the standard
-`build_single_node_deployment(...)` composition:
-
-- add a long-lived `research: ResearchService` field to `SingleNodeDeployment`;
-- create the service from `database_dir / "research.sqlite3"` after `approval_gate` exists;
-- register `register_searchable_research_control_plane(control_plane, research)` after the Control
-  Plane is constructed;
-- return the same Research service on the deployment object;
-- keep `compose_single_node_research(...)` either as a compatibility/helper seam or reduce it to an
-  idempotent accessor after the central composition is merged.
-
-The aggregate branch should also decide whether the Research quality evaluator from the separate
-#589 evaluation slice is registered into deployment-owned evaluation assets by default or remains a
-versioned opt-in suite. That policy choice should be made once, after all active evaluation changes
-have been combined.
-
-## Prepared acceptance coverage
-
-`tests/contract/research/test_research_single_node_composition.py` prepares coverage for:
-
-- #15-authorized Research creation in the ordinary single-node deployment;
-- durable restart through `research.sqlite3`;
-- Search registration/rebuild from the restored canonical Research state.
-
-Per-branch CI, CodeQL and smoke execution are intentionally deferred. This branch is intended to be
-validated only after it is included in the unified integration branch.
+Acceptance coverage lives under ``tests/contract/research`` and includes public single-node
+composition/restart/Search, shared portability export, deterministic Research evaluation, Research
+Team role separation, Decision provenance and fail-closed imported Verification validation.
