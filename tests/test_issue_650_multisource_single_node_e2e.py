@@ -5,7 +5,12 @@ import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ai_multi_agent_platform.agents import AgentInstructions, AgentProfile, InstructionSource
+from ai_multi_agent_platform.agents import (
+    AgentInstructions,
+    AgentModelPolicy,
+    AgentProfile,
+    InstructionSource,
+)
 from ai_multi_agent_platform.agents.execution_profile import (
     AgentExecutionBinding,
     encode_agent_step_execution_bindings,
@@ -70,6 +75,7 @@ def test_public_single_node_multisource_context_flows_through_restart_and_inspec
                         version="issue-650-multisource-v1",
                     )
                 ),
+                model=AgentModelPolicy(allow_task_override=True),
             ),
             owner_ref=owner,
             project_id=project.id,
