@@ -92,9 +92,7 @@ def test_upgrade_with_legacy_and_canonical_requests_fails_closed(tmp_path: Path)
             correlation_id=f"corr-{trigger.value}",
         )
 
-    repository.create_request(
-        request(canonical_key, CompensationTrigger.MANUAL)
-    )
+    repository.create_request(request(canonical_key, CompensationTrigger.MANUAL))
     repository.create_request(
         request(
             f"{canonical_key}:{CompensationTrigger.DOWNSTREAM_FAILURE.value}",
