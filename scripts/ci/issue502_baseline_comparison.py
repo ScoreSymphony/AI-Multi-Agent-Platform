@@ -166,9 +166,7 @@ def build_provider_comparison(
             "warm_time_to_useful_context_ms": (
                 candidate_warm_ms - float(baseline["warm_time_to_useful_context_ms"])
             ),
-            "tool_calls_to_useful_context": (
-                3 - int(baseline["tool_calls_to_useful_context"])
-            ),
+            "tool_calls_to_useful_context": (3 - int(baseline["tool_calls_to_useful_context"])),
             "persistent_state_bytes": (
                 candidate_state_bytes - int(baseline["persistent_state_bytes"])
             ),
