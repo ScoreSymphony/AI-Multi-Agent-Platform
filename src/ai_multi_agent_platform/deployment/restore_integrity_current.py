@@ -30,6 +30,7 @@ class _CurrentIndex:
     user_ids: frozenset[str]
     automation_ids: frozenset[str]
     verification_ids: frozenset[str]
+    evaluation_run_ids: frozenset[str]
     event_ids: frozenset[str]
 
 
@@ -42,6 +43,7 @@ def single_node_current_restore_integrity_validators(
         index = await _build_index(deployment, reports)
         _validate_notifications(deployment, index)
         _validate_templates(deployment, index)
+        _validate_learning(deployment, index)
         return ()
 
     return (current,)
@@ -85,6 +87,10 @@ async def _build_index(
         automations = await deployment.control_plane.automation_service.list_automations()
     except (ContractError, ValueError) as exc:
         raise RestoreValidationError("cannot reconstruct restored automation identities") from exc
+    try:
+        evaluation_runs = deployment.evaluation.list_runs(limit=None)
+    except (ContractError, ValueError) as exc:
+        raise RestoreValidationError("cannot reconstruct restored Evaluation identities") from exc
 
     return _CurrentIndex(
         task_ids=frozenset(task_ids),
@@ -99,6 +105,7 @@ async def _build_index(
         verification_ids=frozenset(
             item.verification_id for item in deployment.verification.snapshot_requests()
         ),
+        evaluation_run_ids=frozenset(item.run_id for item in evaluation_runs),
         event_ids=await _event_ids(deployment),
     )
 
@@ -369,6 +376,149 @@ def _validate_templates(deployment: SingleNodeDeployment, index: _CurrentIndex) 
             )
         checked += 1
     return checked
+
+
+def _validate_learning(deployment: SingleNodeDeployment, index: _CurrentIndex) -> tuple[int, int, int]:
+    try:
+        feedback_records = deployment.learning.repository.list_feedback()
+        candidates = deployment.learning.repository.list_candidates()
+    except (ContractError, ValueError, TypeError) as exc:
+        raise RestoreValidationError("cannot reconstruct restored Learning repository") from exc
+
+    candidate_ids = frozenset(candidate.learning_candidate_id for candidate in candidates)
+    for feedback in feedback_records:
+        _validate_project(feedback.project_id, index, f"learning feedback {feedback.feedback_id}")
+
+    for candidate in candidates:
+        entity = f"learning candidate {candidate.learning_candidate_id}@{candidate.revision}"
+        _validate_project(candidate.project_id, index, entity)
+        if deployment.learning.service.promotion_registry.supports(candidate.target.resource_type):
+            try:
+                target_project_id = deployment.learning.service.promotion_registry.resolve_project_id(
+                    candidate.target
+                )
+            except ContractError as exc:
+                raise RestoreValidationError(
+                    f"{entity} references missing canonical promotion target"
+                ) from exc
+            if target_project_id != candidate.project_id:
+                raise RestoreValidationError(
+                    f"{entity} project scope differs from its canonical target"
+                )
+        if candidate.superseded_by is not None and candidate.superseded_by not in candidate_ids:
+            raise RestoreValidationError(
+                f"{entity} references missing replacement candidate {candidate.superseded_by}"
+            )
+        missing_evaluations = set(candidate.evaluation_run_ids) - set(index.evaluation_run_ids)
+        if missing_evaluations:
+            raise RestoreValidationError(
+                f"{entity} references missing Evaluation runs {sorted(missing_evaluations)!r}"
+            )
+        for evaluation_run_id in candidate.evaluation_run_ids:
+            try:
+                evaluation_project_id = deployment.learning.service.evaluation_run_project_id(
+                    evaluation_run_id
+                )
+            except ContractError as exc:
+                raise RestoreValidationError(
+                    f"{entity} cannot reconstruct Evaluation scope for {evaluation_run_id}"
+                ) from exc
+            if evaluation_project_id != candidate.project_id:
+                raise RestoreValidationError(
+                    f"{entity} Evaluation evidence belongs to a different project"
+                )
+        missing_verifications = set(candidate.verification_ids) - set(index.verification_ids)
+        if missing_verifications:
+            raise RestoreValidationError(
+                f"{entity} references missing Verification requests "
+                f"{sorted(missing_verifications)!r}"
+            )
+        if candidate.promotion is not None:
+            receipt = candidate.promotion
+            if (
+                receipt.target_type is not candidate.target.resource_type
+                or receipt.target_id != candidate.target.resource_id
+                or receipt.previous_revision != candidate.target.revision
+            ):
+                raise RestoreValidationError(f"{entity} has an inconsistent PromotionReceipt")
+            promoted_target = type(candidate.target)(
+                resource_type=receipt.target_type,
+                resource_id=receipt.target_id,
+                revision=receipt.new_revision,
+            )
+            try:
+                promoted_project_id = (
+                    deployment.learning.service.promotion_registry.resolve_project_id(promoted_target)
+                )
+            except ContractError as exc:
+                raise RestoreValidationError(
+                    f"{entity} references missing promoted target revision"
+                ) from exc
+            if promoted_project_id != candidate.project_id:
+                raise RestoreValidationError(
+                    f"{entity} promoted target belongs to a different project"
+                )
+
+    post_database = deployment.config.database_dir / "learning-post-promotion.sqlite3"
+    try:
+        with sqlite3.connect(f"file:{post_database}?mode=ro&immutable=1", uri=True) as connection:
+            rows = connection.execute(
+                "SELECT record_id, learning_candidate_id, target_revision "
+                "FROM learning_post_promotion_evaluations ORDER BY record_id"
+            ).fetchall()
+    except sqlite3.Error as exc:
+        raise RestoreValidationError(
+            "cannot enumerate restored post-promotion Learning evaluations"
+        ) from exc
+
+    post_records = 0
+    for record_id, candidate_id, target_revision in rows:
+        learning_candidate_id = str(candidate_id)
+        if learning_candidate_id not in candidate_ids:
+            raise RestoreValidationError(
+                f"post-promotion Learning Evaluation {record_id} references missing candidate "
+                f"{learning_candidate_id}"
+            )
+        try:
+            record = deployment.learning.post_promotion_recorder.record_for_promotion(
+                learning_candidate_id,
+                int(target_revision),
+            )
+        except (ValueError, TypeError) as exc:
+            raise RestoreValidationError(
+                f"cannot reconstruct post-promotion Learning Evaluation {record_id}"
+            ) from exc
+        if record is None or record.record_id != str(record_id):
+            raise RestoreValidationError(
+                f"post-promotion Learning Evaluation {record_id} identity is inconsistent"
+            )
+        try:
+            candidate_revision = deployment.learning.repository.get_candidate(
+                learning_candidate_id,
+                record.candidate_revision,
+            )
+        except ContractError as exc:
+            raise RestoreValidationError(
+                f"post-promotion Learning Evaluation {record.record_id} references missing "
+                "candidate revision"
+            ) from exc
+        if (
+            candidate_revision.promotion is None
+            or candidate_revision.promotion.new_revision != record.target_revision
+        ):
+            raise RestoreValidationError(
+                f"post-promotion Learning Evaluation {record.record_id} does not match its "
+                "candidate promotion"
+            )
+        missing_runs = set(record.evaluation_run_ids) - set(index.evaluation_run_ids)
+        if missing_runs:
+            raise RestoreValidationError(
+                f"post-promotion Learning Evaluation {record.record_id} references missing "
+                f"Evaluation runs {sorted(missing_runs)!r}"
+            )
+        post_records += 1
+
+    return len(feedback_records), len(candidates), post_records
 
 
 def _validate_project(project_id: str | None, index: _CurrentIndex, entity: str) -> None:
