@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 from ai_multi_agent_platform.agents import STANDARD_AGENT_IDS, bootstrap_standard_agents
@@ -113,10 +114,12 @@ def test_completed_verification_findings_project_as_exact_untrusted_evidence() -
     )[0]
 
     assert candidate.source.source_type is ContextSourceType.VERIFICATION
-    assert candidate.source.source_id == verification_result.verification_result_id
-    assert candidate.source.revision == verification_request.verification_id
+    assert candidate.source.source_id == verification_request.verification_id
+    assert candidate.source.revision == verification_result.verification_result_id
     assert candidate.source.digest == candidate.content_digest
-    assert candidate.source.locator == f"verification:{verification_request.verification_id}"
+    assert candidate.source.locator == (
+        f"verification-result:{verification_result.verification_result_id}"
+    )
     assert candidate.role is ContextEntryRole.EVIDENCE
     assert candidate.trust is ContextTrust.UNTRUSTED
     assert candidate.project_id == project_id
@@ -209,7 +212,7 @@ def test_explicit_user_objective_remains_task_owned_canonical_context() -> None:
 
 
 def test_public_single_node_real_adapters_preserve_historical_bundle_across_source_revision(
-    tmp_path,
+    tmp_path: Path,
 ) -> None:
     async def scenario() -> None:
         data_dir = tmp_path / "issue-680-conformance"
@@ -320,11 +323,12 @@ def test_public_single_node_real_adapters_preserve_historical_bundle_across_sour
 
         historical = deployment.context.bundles.get(first.context_bundle_id)
         assert historical.digest == first.digest
-        assert next(
+        historical_task_entry = next(
             entry
             for entry in historical.entries
             if entry.source.source_type is ContextSourceType.TASK
-        ).source.revision == "1"
+        )
+        assert historical_task_entry.source.revision == "1"
 
         restarted = build_single_node_deployment(
             SingleNodeConfig(data_dir=data_dir, secure_cookie=False)
