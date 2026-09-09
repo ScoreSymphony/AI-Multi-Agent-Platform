@@ -21,6 +21,7 @@
   "properties": {
     "backup_format_version": {"const": 1},
     "manifest_schema_version": {"const": 1},
+    "store_contract_version": {"type": "integer", "minimum": 1, "maximum": 2},
     "created_at": {"type": "string", "format": "date-time"},
     "platform": {
       "type": "object",

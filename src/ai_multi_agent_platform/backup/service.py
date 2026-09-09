@@ -14,7 +14,12 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .dependencies import DependencyInventoryError, discover_single_node_external_dependencies
-from .inventory import optional_single_node_store_paths, required_single_node_store_paths
+from .inventory import (
+    SINGLE_NODE_STORE_CONTRACT_VERSION,
+    optional_single_node_store_paths,
+    required_single_node_store_paths,
+    required_single_node_store_specs_added_after,
+)
 from .manifest import ManifestSchemaError, validate_backup_manifest_v1
 from .recovery import write_restore_recovery_marker
 
@@ -26,9 +31,6 @@ _SQLITE_SUFFIXES = {".sqlite", ".sqlite3", ".db"}
 _SQLITE_SIDECARS = ("-wal", "-shm", "-journal")
 _REQUIRED_SINGLE_NODE_COMPONENTS = frozenset(
     {"db", "files", "workspaces", "configuration-metadata"}
-)
-_REQUIRED_SINGLE_NODE_ENTRIES = frozenset(
-    (*required_single_node_store_paths(), "metadata/deployment.json")
 )
 
 
@@ -132,6 +134,7 @@ def create_single_node_backup(
         manifest: dict[str, Any] = {
             "backup_format_version": BACKUP_FORMAT_VERSION,
             "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
+            "store_contract_version": SINGLE_NODE_STORE_CONTRACT_VERSION,
             "created_at": datetime.now(UTC).isoformat(),
             "platform": {"version": platform_version, "commit": platform_commit},
             "schema_migration": {"sqlite_user_versions": sqlite_versions},
@@ -170,7 +173,7 @@ def create_single_node_backup(
 
 
 def verify_backup(backup_dir: Path) -> BackupVerification:
-    """Validate schema, scope completeness, checksums, and SQLite payload integrity."""
+    """Validate schema, source-contract scope, checksums, and SQLite payload integrity."""
 
     root = backup_dir.expanduser().resolve()
     manifest_path = root / MANIFEST_NAME
@@ -188,6 +191,7 @@ def verify_backup(backup_dir: Path) -> BackupVerification:
         manifest = validate_backup_manifest_v1(raw)
     except ManifestSchemaError as exc:
         raise BackupError(f"backup manifest schema validation failed: {exc}") from exc
+    _manifest_store_contract_version(manifest)
 
     entries = manifest["entries"]
     if not isinstance(entries, list):  # guarded by JSON Schema; retained for type/runtime defense
@@ -265,6 +269,7 @@ def restore_single_node_backup(
 
     verification = verify_backup(backup_dir)
     manifest = verification.manifest
+    source_store_contract = _manifest_store_contract_version(manifest)
     platform = manifest.get("platform")
     if not isinstance(platform, dict):  # guarded by schema
         raise BackupError("backup platform metadata is invalid")
@@ -319,10 +324,17 @@ def restore_single_node_backup(
                 _checkpoint_sqlite_wal(connection, auth_db)
             _remove_sqlite_sidecars(auth_db)
 
+        initialized_versions = _initialize_new_required_single_node_stores(
+            partial,
+            source_store_contract_version=source_store_contract,
+        )
+        expected_sqlite_versions = _manifest_sqlite_versions(manifest)
+        expected_sqlite_versions.update(initialized_versions)
+
         (partial / "executor").mkdir(parents=True, exist_ok=True)
         verify_restored_single_node_data_root(
             partial,
-            expected_sqlite_user_versions=_manifest_sqlite_versions(manifest),
+            expected_sqlite_user_versions=expected_sqlite_versions,
         )
         write_restore_recovery_marker(partial, manifest)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -411,7 +423,16 @@ def _verify_required_backup_scope(
         raise BackupError(
             f"backup is missing required single-node components: {sorted(missing_components)!r}"
         )
-    missing_entries = _REQUIRED_SINGLE_NODE_ENTRIES - seen
+    store_contract_version = _manifest_store_contract_version(manifest)
+    required_entries = frozenset(
+        (
+            *required_single_node_store_paths(
+                store_contract_version=store_contract_version,
+            ),
+            "metadata/deployment.json",
+        )
+    )
+    missing_entries = required_entries - seen
     if missing_entries:
         raise BackupError(
             f"backup is missing required single-node entries: {sorted(missing_entries)!r}"
@@ -425,6 +446,54 @@ def _verify_required_backup_scope(
     if not isinstance(metadata, dict) or metadata.get("profile") != "single-node":
         raise BackupError("backup deployment metadata does not identify the single-node profile")
     _assert_non_secret_metadata(metadata)
+
+
+def _manifest_store_contract_version(manifest: Mapping[str, Any]) -> int:
+    raw = manifest.get("store_contract_version", 1)
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise BackupError("backup store_contract_version must be an integer")
+    if raw < 1 or raw > SINGLE_NODE_STORE_CONTRACT_VERSION:
+        raise BackupError(
+            "unsupported backup store contract version: "
+            f"{raw}; current={SINGLE_NODE_STORE_CONTRACT_VERSION}"
+        )
+    return raw
+
+
+def _initialize_new_required_single_node_stores(
+    root: Path,
+    *,
+    source_store_contract_version: int,
+) -> dict[str, int]:
+    initialized_versions: dict[str, int] = {}
+    for spec in required_single_node_store_specs_added_after(source_store_contract_version):
+        path = root.joinpath(*PurePosixPath(spec.path).parts)
+        if path.exists():
+            if path.is_symlink() or not path.is_file():
+                raise BackupError(
+                    f"restored durable store is not a regular file: {spec.path}"
+                )
+            if spec.kind == "sqlite":
+                _verify_sqlite_integrity(path)
+                initialized_versions[spec.path] = _sqlite_user_version(path)
+            continue
+        if spec.kind != "sqlite":
+            raise BackupError(
+                "historical backup requires an explicit initializer for new durable store: "
+                f"{spec.path}"
+            )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with sqlite3.connect(path) as connection:
+                connection.execute("PRAGMA user_version = 0")
+                connection.commit()
+        except sqlite3.Error as exc:
+            raise BackupError(
+                f"cannot initialize new durable SQLite store: {spec.path}"
+            ) from exc
+        _verify_sqlite_integrity(path)
+        initialized_versions[spec.path] = _sqlite_user_version(path)
+    return initialized_versions
 
 
 def _manifest_sqlite_versions(manifest: dict[str, Any]) -> dict[str, int]:
