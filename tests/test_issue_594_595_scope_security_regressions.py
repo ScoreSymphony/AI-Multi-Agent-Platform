@@ -117,9 +117,7 @@ def test_learning_evidence_rejects_cross_project_verification_in_service(
         )
 
     assert denied.value.code is ErrorCode.FORBIDDEN
-    assert (
-        deployment.learning.service.get_candidate(candidate.learning_candidate_id).revision == 1
-    )
+    assert deployment.learning.service.get_candidate(candidate.learning_candidate_id).revision == 1
 
 
 def test_learning_evidence_authorizes_each_verification_id_and_project(
