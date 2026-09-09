@@ -56,6 +56,7 @@ from ai_multi_agent_platform.context.source_adapters import (
     SkillBundleContextSourceAdapter,
     TaskContextSourceAdapter,
 )
+from ai_multi_agent_platform.context.verification_source import VerificationContextSourceAdapter
 from ai_multi_agent_platform.context.visibility import AuthorizationContextEntryVisibilityResolver
 from ai_multi_agent_platform.contracts import (
     ContractError,
@@ -284,6 +285,7 @@ def install_single_node_context(
     plan_adapter = PlanStepContextSourceAdapter(base.coordination_repository, runs=runs)
     skill_adapter = SkillBundleContextSourceAdapter(skills_repository)
     research_adapter = ResearchEvidenceContextSourceAdapter(research)
+    verification_adapter = VerificationContextSourceAdapter(base.verification)
     repository_adapter = RepositoryContextSourceAdapter(
         base.repository_provenance,
         repositories=base.repositories,
@@ -344,6 +346,14 @@ def install_single_node_context(
                     adapter=research_adapter,
                     source_type=ContextSourceType.RESEARCH_EVIDENCE,
                     source_id=f"run:{source.run_id}:research",
+                    role=ContextEntryRole.EVIDENCE,
+                    project_id=source.project_id,
+                    workspace_id=source.workspace_id,
+                ),
+                ContextSourceAdapterBinding(
+                    adapter=verification_adapter,
+                    source_type=ContextSourceType.VERIFICATION,
+                    source_id=f"task:{source.task_id}:verification",
                     role=ContextEntryRole.EVIDENCE,
                     project_id=source.project_id,
                     workspace_id=source.workspace_id,
