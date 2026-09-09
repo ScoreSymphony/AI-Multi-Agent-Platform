@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 from ai_multi_agent_platform.verification import VerificationService
 
@@ -16,6 +18,7 @@ from .models import (
     ContextCandidate,
     ContextDataClassification,
     ContextEntryRole,
+    ContextFreshness,
     ContextSourceRef,
     ContextSourceType,
     ContextTrust,
@@ -36,14 +39,34 @@ class VerificationContextSourceAdapter:
 
     adapter_id = "platform.verification-context/v1"
 
-    def __init__(self, verification: VerificationService) -> None:
+    def __init__(
+        self,
+        verification: VerificationService,
+        *,
+        now: Callable[[], datetime] | None = None,
+    ) -> None:
         self.verification = verification
+        self._now = now or (lambda: datetime.now(UTC))
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
         candidates: list[ContextCandidate] = []
+        current = self._now()
+        if current.tzinfo is None or current.utcoffset() is None:
+            raise ValueError("Verification Context clock must be timezone-aware")
+
         for verification_request, result in self.verification.history(task_id=request.task_id):
             if result is None:
                 continue
+
+            policy = self.verification.get_policy(
+                verification_request.policy_id,
+                verification_request.policy_version,
+            )
+            freshness = ContextFreshness.CURRENT
+            if policy.result_expiry_seconds is not None:
+                expires_at = result.completed_at + timedelta(seconds=policy.result_expiry_seconds)
+                if expires_at <= current:
+                    freshness = ContextFreshness.STALE
 
             content = _canonical_json(
                 {
@@ -104,8 +127,12 @@ class VerificationContextSourceAdapter:
                     ),
                     inline_content=content,
                     content_digest=digest,
+                    freshness=freshness,
                     trust=ContextTrust.UNTRUSTED,
-                    data_classification=ContextDataClassification.INTERNAL,
+                    # #86 Verification records do not currently expose an independent data
+                    # classification. Fail conservatively instead of downgrading findings that may
+                    # quote confidential/restricted source material.
+                    data_classification=ContextDataClassification.RESTRICTED,
                     priority=65,
                     relevance=0.9,
                     project_id=verification_request.project_id,
