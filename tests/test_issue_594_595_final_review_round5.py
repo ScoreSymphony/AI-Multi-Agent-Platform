@@ -7,8 +7,8 @@ from typing import Any, cast
 import pytest
 
 from ai_multi_agent_platform.agents import AgentInstructions, AgentProfile, InstructionSource
-from ai_multi_agent_platform.backup import required_single_node_store_paths
 from ai_multi_agent_platform.backup.integrity import RestoreValidationError
+from ai_multi_agent_platform.backup.inventory import required_single_node_store_paths
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 from ai_multi_agent_platform.control_plane import ActorContext, RequestContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
