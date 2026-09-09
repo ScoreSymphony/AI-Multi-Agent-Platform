@@ -137,6 +137,11 @@ request. If an upgraded store contains conflicting canonical and historical requ
 unresolved `reconciliation_required` result with manual intervention takes precedence over a newer
 sibling success so the conflict cannot disappear from the read model.
 
+If every conflicting sibling is already terminal, those durable `succeeded`/`failed` results remain
+immutable historical evidence. The coordinator and Control Plane instead project a read-only
+`reconciliation_required` conflict for operator surfaces; recovery does not replay the external
+operation or rewrite the successful terminal result.
+
 The projection exposes original/compensating linkage, current status, evidence and
 `manual_intervention_required` without altering historical execution records. The Control Plane
 projection applies the same fail-closed visibility rule. These are the read models intended for
