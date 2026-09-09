@@ -131,9 +131,14 @@ cleanup.
 
 ## Operator projection
 
-`CompensationCoordinator.projection(group_id)` joins the immutable completed action with its request
-and latest result. The projection exposes original/compensating linkage, current status, evidence
-and `manual_intervention_required` without altering historical execution records.
+`CompensationCoordinator.projection(group_id)` joins each immutable completed action with the
+persisted request/result state that operators must act on. Under normal history this is the latest
+request. If an upgraded store contains conflicting canonical and historical request identities, an
+unresolved `reconciliation_required` result with manual intervention takes precedence over a newer
+sibling success so the conflict cannot disappear from the read model.
 
-This is the read model intended for Control Plane/UI/CLI surfaces. It includes irreversible and
-unknown actions rather than hiding them.
+The projection exposes original/compensating linkage, current status, evidence and
+`manual_intervention_required` without altering historical execution records. The Control Plane
+projection applies the same fail-closed visibility rule. These are the read models intended for
+Control Plane/UI/CLI surfaces, and they include irreversible and unknown actions rather than hiding
+them.
