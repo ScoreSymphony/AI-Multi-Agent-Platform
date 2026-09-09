@@ -116,13 +116,7 @@ A successful review commits canonical review observability atomically with Goal 
 
 ## Task outcome reconciliation
 
-```bash
-platform extension execute goal.record-task-outcome GOAL_ID \
-  --idempotency-key reconcile-task-42 \
-  --payload '{"task_id":"task_...","task_state":"succeeded"}'
-```
-
-Valid `task_state` values are `active`, `succeeded`, `failed`, `cancelled` and `superseded` according to the canonical Goal Task-link projection.
+Task terminal state is not writable through a northbound Goal command. The canonical Task/Run kernel emits terminal Task events, and the Goal runtime projects `task.succeeded`, `task.failed` and `task.cancelled` into matching Goal Task links before #18 advances the event cursor. This prevents CLI/Web clients from claiming Task completion independently of the canonical Task lifecycle.
 
 ## Contract boundary
 

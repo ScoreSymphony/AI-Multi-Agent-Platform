@@ -500,3 +500,9 @@ def test_task_outcome_reconciliation_preserves_paused_and_terminal_progress() ->
         assert reconciled_terminal.linked_tasks[0].task_state is GoalTaskState.SUCCEEDED
 
     _run(scenario())
+
+
+def test_task_outcome_mutation_is_not_northbound_goal_authority() -> None:
+    from ai_multi_agent_platform.control_plane.goal_contract import GOAL_COMMANDS
+
+    assert "goal.record-task-outcome" not in GOAL_COMMANDS

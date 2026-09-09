@@ -247,17 +247,6 @@ export class GoalClient {
     });
   }
 
-  recordTaskOutcome(
-    goalId: string,
-    taskId: string,
-    taskState: GoalTaskState,
-  ): Promise<CanonicalGoal> {
-    return this.command("goal.record-task-outcome", goalId, {
-      task_id: taskId,
-      task_state: taskState,
-    });
-  }
-
   private command(
     command: string,
     resourceRef: string,

@@ -83,7 +83,7 @@ A Goal review can legitimately complete without creating a Task. In that case th
 
 Delivery payload is a trigger, not proof. Webhook/event payload fields are never promoted directly into verified `GoalEvidence`, even if an untrusted payload claims `verified=true`. A deployment that wants a delivery to contribute evidence must provide a `GoalEvidenceResolver` backed by a canonical verification/promotion boundary such as #86. Without that resolver the delivery still causes a review, but contributes no new authoritative evidence.
 
-Direct Control Plane `goal.review` follows the same trust rule. A client cannot self-assert `verified=true` for metric/state/assertion evidence and cannot attribute evidence to another actor. The authenticated principal is bound server-side. `human_acceptance` is the one northbound promotion case: it is accepted only from an authenticated `user` owner context and the server records that principal as the canonical actor/source. All other verified evidence must enter through a trusted resolver/promotion integration rather than a Web/CLI claim.
+Direct Control Plane `goal.review` follows the same trust rule. A client cannot self-assert `verified=true` for metric/state/assertion evidence and cannot attribute evidence to another actor. The authenticated principal is bound server-side. `human_acceptance` is the one northbound promotion case: the evidence criterion ID and kind must match the current canonical Goal revision, the caller must be a canonical human actor, and the server records that principal as the canonical actor/source. All other verified evidence must enter through a trusted resolver/promotion integration rather than a Web/CLI claim.
 
 ## Goal -> Task bridge
 
@@ -101,7 +101,7 @@ Direct Control Plane `goal.review` follows the same trust rule. A client cannot 
 
 The Goal itself stores a typed `GoalTaskLink`. Direct human Tasks can be linked with `goal.attach-task`.
 
-Canonical Task terminal events are reconciled automatically before #18 advances its durable event cursor or dispatches event-triggered Automations. `task.succeeded`, `task.failed` and `task.cancelled` update matching `GoalTaskLink` projections through idempotent `goal.record_task_outcome` semantics. The canonical Event ID is the reconciliation idempotency key, so restart/replay cannot double-count failed cycles. Because reconciliation precedes event delivery, a Goal observation triggered by the same Task terminal event evaluates the updated link state.
+Canonical Task terminal events are reconciled automatically before #18 advances its durable event cursor or dispatches event-triggered Automations. `task.succeeded`, `task.failed` and `task.cancelled` update matching `GoalTaskLink` projections through the internal idempotent Goal service reconciliation operation. There is deliberately no northbound Task-outcome mutation command. The canonical Event ID is the reconciliation idempotency key, so restart/replay cannot double-count failed cycles. Because reconciliation precedes event delivery, a Goal observation triggered by the same Task terminal event evaluates the updated link state.
 
 Automatically generated Task IDs are deterministic from Goal ID, Goal revision, review idempotency key and index. A restart after Task creation but before Goal commit therefore retries the same canonical Task identity/idempotency key instead of creating duplicate work.
 
@@ -140,7 +140,6 @@ goal.fail
 goal.revise
 goal.review
 goal.attach-task
-goal.record-task-outcome
 ```
 
 The production-shaped single-node Control Plane composes this collection and command set automatically. `GoalService` uses an `EventSourcedGoalRepository` over the same durable `EventRepository` as the Task/Run kernel, and generated work uses the same `PlatformKernel` instance. Goal persistence and Task persistence therefore share the same local restart boundary without introducing a Goal-specific database or execution stack.
