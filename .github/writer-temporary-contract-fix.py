@@ -1,5 +1,5 @@
-from pathlib import Path
 import shutil
+from pathlib import Path
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
