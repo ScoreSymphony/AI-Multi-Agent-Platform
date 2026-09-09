@@ -575,7 +575,9 @@ class AutomationService:
         )
         idempotency_key = f"automation:{automation.id}:{processing.dedupe_key}"
         try:
-            task_result = await self._task_creator(automation, processing, rendered, idempotency_key)
+            task_result = await self._task_creator(
+                automation, processing, rendered, idempotency_key
+            )
             if task_result is NO_TASK_REQUIRED:
                 task_id: str | None = None
             elif not isinstance(task_result, str) or not task_result.strip():
