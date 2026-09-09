@@ -1,0 +1,48 @@
+name: Temporary writer restore scope fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/594-595-eval-learning-integration
+    paths:
+      - .github/workflows/writer-temporary-restore-scope-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  restore-scope-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/594-595-eval-learning-integration
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Apply restore scope regression fix
+        run: python .github/writer-temporary-restore-scope-fix.py
+      - name: Validate targeted regression
+        shell: bash
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+          ruff format src/ai_multi_agent_platform/learning/service.py src/ai_multi_agent_platform/deployment/restore_integrity_current.py tests/test_issue_594_595_restore_scope_regression.py
+          ruff format --check src/ai_multi_agent_platform/learning/service.py src/ai_multi_agent_platform/deployment/restore_integrity_current.py tests/test_issue_594_595_restore_scope_regression.py
+          ruff check src/ai_multi_agent_platform/learning/service.py src/ai_multi_agent_platform/deployment/restore_integrity_current.py tests/test_issue_594_595_restore_scope_regression.py
+          pytest -q tests/test_issue_594_595_restore_scope_regression.py tests/test_issue_594_595_final_review_round5.py
+      - name: Commit validated fix and remove temporary writer files
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/writer-temporary-restore-scope-fix.py .github/workflows/writer-temporary-restore-scope-fix.yml
+          git add src/ai_multi_agent_platform/learning/service.py src/ai_multi_agent_platform/deployment/restore_integrity_current.py tests/test_issue_594_595_restore_scope_regression.py
+          git diff --cached --check
+          git commit -m 'fix: preserve identity-bound learning scope on restore'
+          git push origin HEAD:fix/594-595-eval-learning-integration
