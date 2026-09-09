@@ -65,8 +65,7 @@ def test_upgrade_with_legacy_and_canonical_requests_fails_closed(tmp_path: Path)
         )
     )
     canonical_key = (
-        f"compensation:{action.group_id}:{action.action_id}:"
-        f"plan-revision-{action.plan_revision}"
+        f"compensation:{action.group_id}:{action.action_id}:plan-revision-{action.plan_revision}"
     )
 
     def request(key: str, trigger: CompensationTrigger) -> CompensationRequest:
