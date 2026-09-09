@@ -291,3 +291,212 @@ def test_task_terminal_event_reconciles_before_event_driven_goal_review() -> Non
         assert replayed.consecutive_failed_cycles == 0
 
     _run(scenario())
+
+
+def test_evidence_kind_is_bound_to_the_canonical_criterion() -> None:
+    async def scenario() -> None:
+        control_plane, _, _ = _stack()
+        created = await control_plane.goals.create_goal(
+            idempotency_key="create-kind-boundary-goal",
+            title="Metric kind boundary",
+            objective="Prevent evidence kind spoofing",
+            owner_ref=_OWNER,
+            success_criteria=(
+                SuccessCriterion(
+                    criterion_id="quality",
+                    kind=GoalCriterionKind.METRIC,
+                    description="Quality reaches 90",
+                    operator="gte",
+                    target=90,
+                ),
+            ),
+            task_generation_policy=TaskGenerationPolicy(enabled=False),
+        )
+        await control_plane.goals.activate_goal(
+            goal_id=created.goal_id,
+            idempotency_key="activate-kind-boundary-goal",
+        )
+        with pytest.raises(ContractError) as raised:
+            await control_plane.execute_command(
+                _context("spoof-human-kind-for-metric"),
+                "goal.review",
+                created.goal_id,
+                {
+                    "expected_revision": 1,
+                    "trigger_ref": "manual:spoof",
+                    "evidence": [
+                        {
+                            "criterion_id": "quality",
+                            "kind": "human_acceptance",
+                            "value": 100,
+                        }
+                    ],
+                },
+            )
+        assert raised.value.code is ErrorCode.INVALID_REQUEST
+        unchanged = await control_plane.goals.get_goal(created.goal_id)
+        assert unchanged.evidence == ()
+        assert unchanged.reviews == ()
+
+    _run(scenario())
+
+
+def test_service_actor_cannot_promote_human_acceptance_even_in_user_owner_scope() -> None:
+    async def scenario() -> None:
+        control_plane, _, _ = _stack()
+        created = await control_plane.goals.create_goal(
+            idempotency_key="create-service-acceptance-guard",
+            title="Human-only acceptance",
+            objective="Only a human actor may accept this Goal",
+            owner_ref=_OWNER,
+            success_criteria=(
+                SuccessCriterion(
+                    criterion_id="accepted",
+                    kind=GoalCriterionKind.HUMAN_ACCEPTANCE,
+                    description="A human accepts the outcome",
+                    target=True,
+                ),
+            ),
+            task_generation_policy=TaskGenerationPolicy(enabled=False),
+        )
+        await control_plane.goals.activate_goal(
+            goal_id=created.goal_id,
+            idempotency_key="activate-service-acceptance-guard",
+        )
+        service_context = RequestContext(
+            request_id="request:service-acceptance",
+            correlation_id="correlation:service-acceptance",
+            actor=ActorContext(
+                principal_ref="service:goal-reviewer",
+                owner_type="user",
+                owner_id=_OWNER_ID,
+                actor_type="service",
+            ),
+            idempotency_key="service-acceptance-review",
+        )
+        with pytest.raises(ContractError) as raised:
+            await control_plane.execute_command(
+                service_context,
+                "goal.review",
+                created.goal_id,
+                {
+                    "expected_revision": 1,
+                    "trigger_ref": "manual:service",
+                    "evidence": [
+                        {
+                            "criterion_id": "accepted",
+                            "kind": "human_acceptance",
+                            "value": True,
+                        }
+                    ],
+                },
+            )
+        assert raised.value.code is ErrorCode.FORBIDDEN
+        unchanged = await control_plane.goals.get_goal(created.goal_id)
+        assert unchanged.evidence == ()
+        assert unchanged.reviews == ()
+
+    _run(scenario())
+
+
+def test_task_outcome_reconciliation_preserves_paused_and_terminal_progress() -> None:
+    async def scenario() -> None:
+        control_plane, _, _ = _stack()
+
+        paused_goal = await control_plane.goals.create_goal(
+            idempotency_key="create-paused-progress-guard",
+            title="Paused progress guard",
+            objective="Preserve human pause semantics during Task reconciliation",
+            owner_ref=_OWNER,
+            success_criteria=(
+                SuccessCriterion(
+                    criterion_id="accepted",
+                    kind=GoalCriterionKind.HUMAN_ACCEPTANCE,
+                    description="Human acceptance",
+                    target=True,
+                ),
+            ),
+            task_generation_policy=TaskGenerationPolicy(enabled=False),
+        )
+        await control_plane.goals.activate_goal(
+            goal_id=paused_goal.goal_id,
+            idempotency_key="activate-paused-progress-guard",
+        )
+        paused_task_id = new_id("task")
+        await control_plane.goals.attach_task(
+            goal_id=paused_goal.goal_id,
+            task_id=paused_task_id,
+            expected_revision=1,
+            idempotency_key="attach-paused-progress-task",
+        )
+        paused = await control_plane.goals.pause_goal(
+            goal_id=paused_goal.goal_id,
+            idempotency_key="pause-progress-guard",
+        )
+        paused_progress = paused.progress
+        reconciled_paused = await control_plane.goals.record_task_outcome(
+            goal_id=paused_goal.goal_id,
+            task_id=paused_task_id,
+            task_state=GoalTaskState.SUCCEEDED,
+            idempotency_key="reconcile-paused-progress-task",
+        )
+        assert reconciled_paused.status is GoalStatus.PAUSED
+        assert reconciled_paused.progress is paused_progress
+        assert reconciled_paused.linked_tasks[0].task_state is GoalTaskState.SUCCEEDED
+
+        terminal_goal = await control_plane.goals.create_goal(
+            idempotency_key="create-terminal-progress-guard",
+            title="Terminal progress guard",
+            objective="Preserve satisfied progress during late Task reconciliation",
+            owner_ref=_OWNER,
+            success_criteria=(
+                SuccessCriterion(
+                    criterion_id="accepted",
+                    kind=GoalCriterionKind.HUMAN_ACCEPTANCE,
+                    description="Human acceptance",
+                    target=True,
+                ),
+            ),
+            task_generation_policy=TaskGenerationPolicy(enabled=False),
+        )
+        await control_plane.goals.activate_goal(
+            goal_id=terminal_goal.goal_id,
+            idempotency_key="activate-terminal-progress-guard",
+        )
+        terminal_task_id = new_id("task")
+        await control_plane.goals.attach_task(
+            goal_id=terminal_goal.goal_id,
+            task_id=terminal_task_id,
+            expected_revision=1,
+            idempotency_key="attach-terminal-progress-task",
+        )
+        satisfied_resource = await control_plane.execute_command(
+            _context("satisfy-terminal-progress-guard"),
+            "goal.review",
+            terminal_goal.goal_id,
+            {
+                "expected_revision": 1,
+                "trigger_ref": "manual:human",
+                "evidence": [
+                    {
+                        "criterion_id": "accepted",
+                        "kind": "human_acceptance",
+                        "value": True,
+                    }
+                ],
+            },
+        )
+        assert satisfied_resource["status"] == GoalStatus.SATISFIED.value
+        satisfied = await control_plane.goals.get_goal(terminal_goal.goal_id)
+        assert satisfied.progress is GoalProgress.SATISFIED
+        reconciled_terminal = await control_plane.goals.record_task_outcome(
+            goal_id=terminal_goal.goal_id,
+            task_id=terminal_task_id,
+            task_state=GoalTaskState.SUCCEEDED,
+            idempotency_key="reconcile-terminal-progress-task",
+        )
+        assert reconciled_terminal.status is GoalStatus.SATISFIED
+        assert reconciled_terminal.progress is GoalProgress.SATISFIED
+        assert reconciled_terminal.linked_tasks[0].task_state is GoalTaskState.SUCCEEDED
+
+    _run(scenario())
