@@ -331,6 +331,7 @@ class EgressGate:
                 payload_digest=request.payload_digest,
                 policy_version=decision.policy_version,
                 correlation_id=request.context.correlation_id,
+                project_id=request.context.project_id,
                 task_id=request.task_id,
                 run_id=request.run_id,
                 capability_id=request.capability_id,
