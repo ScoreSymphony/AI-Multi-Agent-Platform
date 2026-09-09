@@ -19,7 +19,20 @@ from ai_multi_agent_platform.research import (
 )
 
 
-def test_shared_portability_composition_exports_research_history() -> None:
+def test_shared_portability_composition_keeps_research_export_disabled_by_default() -> None:
+    research = ResearchService(InMemoryResearchRepository())
+    workflow = build_agent_portability_workflow(
+        agents=InMemoryAgentRepository(),
+        models=ModelRegistry(),
+        scopes=ScopeStore(),
+        platform_version="0.0.1",
+        research=research,
+    )
+
+    assert RESEARCH_BUNDLE_RESOURCE_TYPE not in workflow.export_resource_types
+
+
+def test_shared_portability_composition_exports_research_history_when_explicitly_enabled() -> None:
     async def scenario() -> None:
         research = ResearchService(InMemoryResearchRepository())
         item = await research.create_item(
@@ -34,6 +47,7 @@ def test_shared_portability_composition_exports_research_history() -> None:
             scopes=ScopeStore(),
             platform_version="0.0.1",
             research=research,
+            research_export_enabled=True,
         )
 
         exported = await workflow.export_package(
