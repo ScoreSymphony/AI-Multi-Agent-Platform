@@ -4,8 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .models import CompensationRequest, CompensationStatus
+from ai_multi_agent_platform.contracts import ErrorCode
+
+from .models import (
+    CompensationRequest,
+    CompensationStatus,
+    CompensationTrigger,
+    CompletedSideEffect,
+)
 from .repository import CompensationRepository
+
+_MIXED_IDENTITY_MESSAGE = (
+    "canonical and legacy compensation requests coexist for one immutable target; "
+    "manual reconciliation is required"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,10 +76,12 @@ class CompensationControlPlaneProjection:
 
         views: list[CompensationActionView] = []
         for action in self.repository.list_actions(group.group_id):
-            request = self._select_request(requests_by_action.get(action.action_id, []))
+            requests = requests_by_action.get(action.action_id, [])
+            request = self._select_request(requests)
             result = (
                 None if request is None else self.repository.get_result(request.compensation_id)
             )
+            mixed_identity = self._has_mixed_default_identities(action, requests)
             descriptor = action.compensation
             views.append(
                 CompensationActionView(
@@ -85,7 +99,11 @@ class CompensationControlPlaneProjection:
                         None if descriptor is None else descriptor.capability_id
                     ),
                     compensation_id=None if request is None else request.compensation_id,
-                    status=None if result is None else result.status,
+                    status=(
+                        CompensationStatus.RECONCILIATION_REQUIRED
+                        if mixed_identity
+                        else None if result is None else result.status
+                    ),
                     compensation_run_id=None if result is None else result.execution_run_id,
                     compensation_tool_invocation_id=(
                         None if result is None else result.canonical_tool_invocation_id
@@ -98,10 +116,19 @@ class CompensationControlPlaneProjection:
                     evidence_refs=(
                         action.evidence_refs if result is None else result.evidence_refs
                     ),
-                    error_code=None if result is None else result.error_code,
-                    error_message=None if result is None else result.error_message,
+                    error_code=(
+                        ErrorCode.CONFLICT.value
+                        if mixed_identity
+                        else None if result is None else result.error_code
+                    ),
+                    error_message=(
+                        _MIXED_IDENTITY_MESSAGE
+                        if mixed_identity
+                        else None if result is None else result.error_message
+                    ),
                     manual_intervention_required=(
-                        False if result is None else result.manual_intervention_required
+                        mixed_identity
+                        or (False if result is None else result.manual_intervention_required)
                     ),
                 )
             )
@@ -140,3 +167,23 @@ class CompensationControlPlaneProjection:
             ):
                 selected = request
         return selected
+
+    @staticmethod
+    def _has_mixed_default_identities(
+        action: CompletedSideEffect,
+        requests: list[CompensationRequest],
+    ) -> bool:
+        canonical_key = (
+            f"compensation:{action.group_id}:{action.action_id}:"
+            f"plan-revision-{action.plan_revision}"
+        )
+        default_keys = {canonical_key}
+        default_keys.update(
+            f"{canonical_key}:{trigger.value}" for trigger in CompensationTrigger
+        )
+        identities = {
+            request.compensation_id
+            for request in requests
+            if request.idempotency_key in default_keys
+        }
+        return len(identities) > 1
