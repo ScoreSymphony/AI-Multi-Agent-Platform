@@ -274,7 +274,9 @@ def test_verification_artifact_classification_fails_closed_on_malformed_metadata
     assert classification is ContextDataClassification.SECRET_REFERENCE
 
 
-def test_verification_distinct_auxiliary_evidence_without_frozen_provenance_is_reference_only() -> None:
+def test_verification_distinct_auxiliary_evidence_without_frozen_provenance_is_reference_only() -> (
+    None
+):
     task_id = new_id("task")
     project_id = new_id("project")
     artifact_id = new_id("artifact")
