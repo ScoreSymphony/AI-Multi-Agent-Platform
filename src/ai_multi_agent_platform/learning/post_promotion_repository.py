@@ -83,6 +83,12 @@ class SQLitePostPromotionEvaluationRecorder:
                     record.created_at.isoformat(),
                 ),
             )
+        # Restore-integrity readers intentionally open immutable snapshots. Checkpoint after the
+        # committed write so the canonical database file, not only its WAL, contains the record.
+        # Post-promotion records are low-volume governance evidence, so this durability boundary is
+        # preferable to allowing a validated backup/restore path to miss a just-committed record.
+        with self._connect() as connection:
+            connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
     def list_for_candidate(
         self,
