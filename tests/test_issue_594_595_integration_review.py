@@ -5,9 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from ai_multi_agent_platform.contracts import ContractError, ErrorCode
+from ai_multi_agent_platform.agents import AgentInstructions, AgentProfile, InstructionSource
+from ai_multi_agent_platform.contracts import ContractError, ErrorCode, OperationContext
 from ai_multi_agent_platform.control_plane import ActorContext, PageQuery, RequestContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
+from ai_multi_agent_platform.domain import OwnerRef
 from ai_multi_agent_platform.evaluation.models import (
     ConfigurationSnapshot,
     EvaluationCase,
@@ -23,9 +25,13 @@ from ai_multi_agent_platform.learning.models import (
     LearningTarget,
     LearningTargetType,
 )
+from ai_multi_agent_platform.learning.promotion import AgentPromotionAdapter
 from ai_multi_agent_platform.learning.runtime import (
     PostPromotionEvaluationOutcome,
     PostPromotionEvaluationRecord,
+)
+from ai_multi_agent_platform.learning.scoped_control_plane import (
+    ScopedLearningPostPromotionResourceService,
 )
 from ai_multi_agent_platform.models import new_model_routing_profile_id
 from ai_multi_agent_platform.security import (
@@ -283,6 +289,155 @@ def test_learning_control_plane_enforces_record_project_scope(tmp_path) -> None:
     asyncio.run(scenario())
 
 
+def test_learning_supported_target_scope_blocks_cross_project_proposal_and_promotion(tmp_path) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(data_dir=tmp_path / "target-scope", secure_cookie=False)
+        )
+        project_a = deployment.scopes.create_project(
+            key="target-scope-a",
+            name="Target scope A",
+            owner_type="user",
+            owner_id="owner-a",
+        )
+        project_b = deployment.scopes.create_project(
+            key="target-scope-b",
+            name="Target scope B",
+            owner_type="user",
+            owner_id="owner-b",
+        )
+        target_agent = deployment.agents.create_agent(
+            _agent_profile("Project B target"),
+            owner_ref=OwnerRef(type="user", id="owner-b"),
+            project_id=project_b.id,
+        )
+
+        principal = "user:target-project-a"
+        deployment.authorization.register(
+            LocalPrincipalPolicy(
+                principal_ref=principal,
+                actor_types=frozenset({ActorType.HUMAN}),
+                allowed_actions=frozenset({AuthorizationAction.MODIFY}),
+                resource_types=frozenset({ResourceType.GENERIC}),
+                project_ids=frozenset({project_a.id}),
+            )
+        )
+        context = RequestContext(
+            request_id="cross-project-proposal",
+            correlation_id="cross-project-proposal",
+            idempotency_key="cross-project-proposal",
+            actor=ActorContext(
+                principal_ref=principal,
+                actor_type=ActorType.HUMAN.value,
+            ),
+        )
+        with pytest.raises(ContractError) as denied_proposal:
+            await deployment.control_plane.execute_command(
+                context,
+                "learning.propose",
+                "learning-candidates",
+                _proposal_payload(project_a.id, target_agent.agent_id),
+            )
+        assert denied_proposal.value.code is ErrorCode.FORBIDDEN
+
+        candidate, _ = deployment.learning.service.create_candidate(
+            source_type=LearningSourceType.OPERATOR_PROPOSAL,
+            problem="cross-project mutation probe",
+            target=LearningTarget(
+                resource_type=LearningTargetType.AGENT,
+                resource_id=target_agent.agent_id,
+                revision=target_agent.revision,
+            ),
+            improvement_type="agent_profile",
+            expected_benefit="security regression coverage",
+            risk=RiskClassification.STANDARD,
+            gate_plan=_gate_plan(),
+            creator_ref="user:seed",
+            source_refs=(LearningReference(kind="scope-test", resource_id="cross-project"),),
+            proposed_change={"description": "must not be applied"},
+            project_id=project_a.id,
+        )
+        with pytest.raises(ContractError) as denied_adapter:
+            await AgentPromotionAdapter(deployment.agents).promote(
+                candidate,
+                principal_ref=principal,
+                context=OperationContext(
+                    correlation_id="cross-project-adapter",
+                    project_id=project_a.id,
+                ),
+                actor_type=ActorType.HUMAN.value,
+            )
+        assert denied_adapter.value.code is ErrorCode.FORBIDDEN
+        assert deployment.agents.get_agent_revision(target_agent.agent_id).revision == 1
+
+    asyncio.run(scenario())
+
+
+def test_post_promotion_list_authorizes_each_record_id(tmp_path) -> None:
+    async def scenario() -> None:
+        deployment = build_single_node_deployment(
+            SingleNodeConfig(data_dir=tmp_path / "record-id-scope", secure_cookie=False)
+        )
+        project = deployment.scopes.create_project(
+            key="record-id-scope",
+            name="Record ID scope",
+            owner_type="user",
+            owner_id="owner-a",
+        )
+        candidate = _candidate(deployment, project.id, "record-id")
+        first = PostPromotionEvaluationRecord(
+            learning_candidate_id=candidate.learning_candidate_id,
+            candidate_revision=candidate.revision,
+            target_revision=2,
+            outcome=PostPromotionEvaluationOutcome.PASSED,
+        )
+        second = PostPromotionEvaluationRecord(
+            learning_candidate_id=candidate.learning_candidate_id,
+            candidate_revision=candidate.revision,
+            target_revision=3,
+            outcome=PostPromotionEvaluationOutcome.PASSED,
+        )
+        deployment.learning.post_promotion_recorder.store(first)
+        deployment.learning.post_promotion_recorder.store(second)
+        access = _RecordingLearningAccess()
+        service = ScopedLearningPostPromotionResourceService(deployment.learning.service, access)
+        context = RequestContext(
+            request_id="record-id-list",
+            correlation_id="record-id-list",
+            actor=ActorContext(principal_ref="user:record-reader"),
+        )
+
+        resources = await service.list_resources(context, PageQuery())
+
+        assert {item["id"] for item in resources} == {first.record_id, second.record_id}
+        assert {(resource_ref, project_id) for _, resource_ref, project_id in access.calls} == {
+            (first.record_id, project.id),
+            (second.record_id, project.id),
+        }
+        assert candidate.learning_candidate_id not in {
+            resource_ref for _, resource_ref, _ in access.calls
+        }
+
+    asyncio.run(scenario())
+
+
+class _RecordingLearningAccess:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str | None]] = []
+
+    async def allowed(
+        self,
+        context: RequestContext,
+        action: str,
+        resource_ref: str,
+        *,
+        project_id: str | None,
+    ) -> bool:
+        del context
+        self.calls.append((action, resource_ref, project_id))
+        return True
+
+
 def _candidate(deployment, project_id: str, suffix: str):
     candidate, _ = deployment.learning.service.create_candidate(
         source_type=LearningSourceType.OPERATOR_PROPOSAL,
@@ -295,13 +450,48 @@ def _candidate(deployment, project_id: str, suffix: str):
         improvement_type="documentation",
         expected_benefit="scope regression coverage",
         risk=RiskClassification.STANDARD,
-        gate_plan=LearningGatePlan(
-            policy_id="scope-test-policy",
-            policy_version=1,
-            evaluation_suite_refs=("single-node.reference.lifecycle@1.0",),
-        ),
+        gate_plan=_gate_plan(),
         creator_ref="user:seed",
         source_refs=(LearningReference(kind="scope-test", resource_id=f"source-{suffix}"),),
         project_id=project_id,
     )
     return candidate
+
+
+def _agent_profile(name: str) -> AgentProfile:
+    return AgentProfile(
+        name=name,
+        role="worker",
+        instructions=AgentInstructions(
+            role=InstructionSource(content="Perform the assigned work."),
+        ),
+    )
+
+
+def _gate_plan() -> LearningGatePlan:
+    return LearningGatePlan(
+        policy_id="scope-test-policy",
+        policy_version=1,
+        evaluation_suite_refs=("single-node.reference.lifecycle@1.0",),
+    )
+
+
+def _proposal_payload(project_id: str, agent_id: str) -> dict[str, object]:
+    return {
+        "problem": "cross-project target",
+        "target": {
+            "resource_type": "agent",
+            "resource_id": agent_id,
+            "revision": 1,
+        },
+        "improvement_type": "agent_profile",
+        "expected_benefit": "must remain project scoped",
+        "risk": "standard",
+        "gate_plan": {
+            "policy_id": "scope-test-policy",
+            "policy_version": 1,
+            "evaluation_suite_refs": ["single-node.reference.lifecycle@1.0"],
+        },
+        "proposed_change": {"description": "must not cross project scope"},
+        "project_id": project_id,
+    }
