@@ -306,6 +306,7 @@ jobs:
       - name: Format and lint focused changes
         run: |
           ruff format src/ai_multi_agent_platform/control_plane/goal_contract.py src/ai_multi_agent_platform/goals/service.py src/ai_multi_agent_platform/goals/reconciliation.py tests/test_issue_597_completion_gaps.py
+          ruff check --fix src/ai_multi_agent_platform/control_plane/goal_contract.py src/ai_multi_agent_platform/goals/service.py src/ai_multi_agent_platform/goals/reconciliation.py tests/test_issue_597_completion_gaps.py
           ruff check src/ai_multi_agent_platform/control_plane/goal_contract.py src/ai_multi_agent_platform/goals/service.py src/ai_multi_agent_platform/goals/reconciliation.py tests/test_issue_597_completion_gaps.py
 
       - name: Focused Goal regressions
