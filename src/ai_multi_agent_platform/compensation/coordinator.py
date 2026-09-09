@@ -80,8 +80,8 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
 
         group = self.repository.get_group(group_id)
         requests_by_action: dict[str, list[CompensationRequest]] = {}
-        for request in self.repository.list_requests(group_id):
-            requests_by_action.setdefault(request.action_id, []).append(request)
+        for stored_request in self.repository.list_requests(group_id):
+            requests_by_action.setdefault(stored_request.action_id, []).append(stored_request)
 
         actions: list[CompensationActionProjection] = []
         for action in self.repository.list_actions(group_id):
