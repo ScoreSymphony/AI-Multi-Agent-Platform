@@ -38,14 +38,12 @@ jobs:
           pytest
           python scripts/ci/issue19_evaluation_gate.py --platform-commit "$GITHUB_SHA"
           python -m build
-      - name: Commit validated fix and remove temporary helpers
+      - name: Commit validated contract updates
         shell: bash
         run: |
-          git rm .github/workflows/writer-temporary-pytest-contract-fix.yml
-          git rm .github/writer-temporary-contract-fix.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
+          git add schemas/backup-manifest-v1.schema.json tests/test_issue_595_governed_learning.py tests/test_issue_594_595_final_review_regressions.py .github/writer-temporary-contract-fix.py
           git diff --cached --check
           git commit -m 'test: align learning evidence fixtures with canonical contracts'
           git push origin HEAD:fix/594-595-eval-learning-integration
