@@ -33,6 +33,16 @@ export const LEARNING_DECISION_COMMANDS = [
   "learning.promote",
 ] as const;
 
+const CANDIDATE_PAGE_SIZE = 100;
+const POST_PROMOTION_PAGE_SIZE = 200;
+
+interface CandidateCounts {
+  proposed: number;
+  evaluating: number;
+  accepted: number;
+  promoted: number;
+}
+
 export interface LearningSurfaceProps {
   client: LearningClient;
   commands?: readonly string[];
@@ -41,16 +51,35 @@ export interface LearningSurfaceProps {
 
 export function LearningPage({ client }: LearningSurfaceProps) {
   const [candidates, setCandidates] = useState<Page<CanonicalLearningCandidate> | null>(null);
+  const [candidateCounts, setCandidateCounts] = useState<CandidateCounts | null>(null);
   const [feedback, setFeedback] = useState<Page<CanonicalLearningFeedback> | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [loadingMoreCandidates, setLoadingMoreCandidates] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [candidatePage, feedbackPage] = await Promise.all([
-        client.listCandidates({ limit: 100, sort: "id", direction: "asc" }),
+      const [
+        candidatePage,
+        feedbackPage,
+        proposedPage,
+        evaluatingPage,
+        acceptedPage,
+        promotedPage,
+      ] = await Promise.all([
+        client.listCandidates({ limit: CANDIDATE_PAGE_SIZE, sort: "id", direction: "asc" }),
         client.listFeedback({ limit: 50, sort: "id", direction: "desc" }),
+        client.listCandidates({ limit: 1, filters: { status: "proposed" } }),
+        client.listCandidates({ limit: 1, filters: { status: "evaluating" } }),
+        client.listCandidates({ limit: 1, filters: { status: "accepted" } }),
+        client.listCandidates({ limit: 1, filters: { status: "promoted" } }),
       ]);
       setCandidates(candidatePage);
+      setCandidateCounts({
+        proposed: proposedPage.total,
+        evaluating: evaluatingPage.total,
+        accepted: acceptedPage.total,
+        promoted: promotedPage.total,
+      });
       setFeedback(feedbackPage);
       setError(null);
     } catch (nextError) {
@@ -58,19 +87,36 @@ export function LearningPage({ client }: LearningSurfaceProps) {
     }
   }, [client]);
 
+  const loadMoreCandidates = useCallback(async () => {
+    const cursor = candidates?.next_cursor;
+    if (!cursor || loadingMoreCandidates) return;
+    setLoadingMoreCandidates(true);
+    try {
+      const nextPage = await client.listCandidates({
+        limit: CANDIDATE_PAGE_SIZE,
+        cursor,
+        sort: "id",
+        direction: "asc",
+      });
+      setCandidates((current) => {
+        if (current === null) return nextPage;
+        return {
+          ...nextPage,
+          items: [...current.items, ...nextPage.items],
+          limit: current.limit,
+        };
+      });
+      setError(null);
+    } catch (nextError) {
+      setError(nextError);
+    } finally {
+      setLoadingMoreCandidates(false);
+    }
+  }, [candidates?.next_cursor, client, loadingMoreCandidates]);
+
   useEffect(() => {
     void load();
   }, [load]);
-
-  const counts = useMemo(() => {
-    const values = candidates?.items ?? [];
-    return {
-      proposed: values.filter((item) => item.status === "proposed").length,
-      evaluating: values.filter((item) => item.status === "evaluating").length,
-      accepted: values.filter((item) => item.status === "accepted").length,
-      promoted: values.filter((item) => item.status === "promoted").length,
-    };
-  }, [candidates]);
 
   return (
     <div className="stack">
@@ -86,16 +132,29 @@ export function LearningPage({ client }: LearningSurfaceProps) {
 
       <div className="metrics">
         <Metric label="Candidates" value={candidates?.total ?? "—"} />
-        <Metric label="Proposed" value={counts.proposed} />
-        <Metric label="Evaluating" value={counts.evaluating} />
-        <Metric label="Accepted" value={counts.accepted} />
-        <Metric label="Promoted" value={counts.promoted} />
+        <Metric label="Proposed" value={candidateCounts?.proposed ?? "—"} />
+        <Metric label="Evaluating" value={candidateCounts?.evaluating ?? "—"} />
+        <Metric label="Accepted" value={candidateCounts?.accepted ?? "—"} />
+        <Metric label="Promoted" value={candidateCounts?.promoted ?? "—"} />
         <Metric label="Feedback records" value={feedback?.total ?? "—"} />
       </div>
 
       <Card title="Learning Candidates">
         <div className="actions">
           <button onClick={() => void load()}>Refresh</button>
+          {candidates ? (
+            <span>
+              Showing {candidates.items.length} of {candidates.total}
+            </span>
+          ) : null}
+          {candidates?.next_cursor ? (
+            <button
+              disabled={loadingMoreCandidates}
+              onClick={() => void loadMoreCandidates()}
+            >
+              {loadingMoreCandidates ? "Loading…" : "Load more"}
+            </button>
+          ) : null}
         </div>
         {error ? <ErrorState error={error} onRetry={() => void load()} /> : null}
         {!candidates && !error ? <LoadingState /> : null}
@@ -129,10 +188,11 @@ export function LearningDetailPage({
       const current = await client.getCandidate(candidateId);
       setCandidate(current);
       if (postPromotionAvailable) {
-        const page = await client.listPostPromotionEvaluations({ limit: 200 });
         setPostPromotion(
-          page.items.filter((item) => item.learning_candidate_id === current.id),
+          await loadPostPromotionEvaluations(client, current.learning_candidate_id),
         );
+      } else {
+        setPostPromotion([]);
       }
       setError(null);
     } catch (nextError) {
@@ -346,6 +406,26 @@ export function LearningDetailPage({
       </Card>
     </div>
   );
+}
+
+async function loadPostPromotionEvaluations(
+  client: LearningClient,
+  learningCandidateId: string,
+): Promise<CanonicalPostPromotionEvaluation[]> {
+  const records: CanonicalPostPromotionEvaluation[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await client.listPostPromotionEvaluations({
+      limit: POST_PROMOTION_PAGE_SIZE,
+      cursor,
+      sort: "id",
+      direction: "asc",
+      filters: { learning_candidate_id: learningCandidateId },
+    });
+    records.push(...page.items);
+    cursor = page.next_cursor ?? undefined;
+  } while (cursor !== undefined);
+  return records;
 }
 
 function CandidateTable({ candidates }: { candidates: CanonicalLearningCandidate[] }) {
