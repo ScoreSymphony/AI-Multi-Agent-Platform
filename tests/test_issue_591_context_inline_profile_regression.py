@@ -130,7 +130,7 @@ def test_durable_provider_context_profile_precedes_inline_model_profile(tmp_path
     assert target is not None
 
     runtime = build_durable_egress_runtime(tmp_path / "egress-profiles.json")
-    project_id = "project_context_restricted"
+    project_id = new_id("project")
     now = datetime.now(UTC)
     durable_profile = _durable_context_denial()
     runtime.repository.create_profile(
@@ -179,7 +179,7 @@ def test_durable_context_profile_drives_audit_and_enforcement_fields(tmp_path) -
         tmp_path / "egress-profiles.json",
         audit_sink=audit_sink,
     )
-    project_id = "project_context_audit"
+    project_id = new_id("project")
     now = datetime.now(UTC)
     durable_profile = replace(
         _durable_context_denial(),
@@ -239,7 +239,7 @@ def test_durable_context_profile_revision_invalidates_inline_fallback_approval(t
     )
     actor = ActorIdentity(new_id("user"), ActorType.HUMAN)
     approver = ActorIdentity(new_id("user"), ActorType.HUMAN)
-    project_id = "project_context_approval"
+    project_id = new_id("project")
     operation = OperationContext(
         correlation_id="corr-context-approval",
         project_id=project_id,
