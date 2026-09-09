@@ -36,15 +36,19 @@ creates a second provider registry. A model target therefore uses the existing
 - trust (`configured`, `verified`, `unverified`).
 
 Profile assertions are not silently trusted. An external `unverified` profile is blocked. Unknown
-posture is blocked. For profile-aware external destinations, unknown cost is blocked and
-`paid_external` is denied by the baseline policy. A deployment may explicitly instantiate
+posture is blocked. For external destinations, unknown cost is blocked and `paid_external` is denied
+by the baseline policy. A deployment may explicitly instantiate
 `CanonicalEgressPolicy(allow_paid_external=True)` when it deliberately permits paid external
 routes. This is a policy decision, not a router heuristic.
 
-Legacy targets without a profile retain the original posture/classification behavior so existing
-configurations do not change meaning merely because the profile contract was introduced. New
-external integrations should use the durable profile path rather than rely on that compatibility
-path.
+ADR 0011 makes explicit profiles part of the production-shaped durable security boundary. A target
+whose effective posture is `external` must resolve an enabled Project/global durable profile or
+carry an inline profile from its canonical owning domain. If neither exists, the durable runtime
+fails closed with `UNKNOWN_BLOCKED` / `UNVERIFIED_PROFILE` before provider execution. Profileless
+`local` and `internal` targets keep their established behavior. Direct lower-level
+`CanonicalEgressPolicy` use retains the original compatibility semantics, and focused embeddings may
+explicitly opt out of the durable strict rule; that opt-out is not the normative production
+baseline and cannot claim the no-paid/unknown-external guarantee.
 
 ## Durable profile history and scope
 
@@ -72,9 +76,11 @@ This keeps policy resolution independent of the provider registries and means th
 be shared by model, capability, Connector, Context Bundle and file/artifact egress gates.
 
 `build_durable_egress_runtime()` composes the repository, authorized profile service and one reusable
-`EgressGate`. It defaults to no paid-external access, no optimistic unknown-cost access and no
-Approval exceptions. Deployments can pass that same gate to provider-facing runtimes so policy
-configuration and execution observe the same revision history.
+`EgressGate`. It defaults to no paid-external access, no optimistic unknown-cost access, no Approval
+exceptions and, per ADR 0011, explicit profiles for external targets. Deployments pass that same
+gate to provider-facing runtimes so policy configuration and execution observe the same revision
+history. A focused compatibility embedding may set `require_external_profile=False`, but the public
+single-node/server composition does not opt out.
 
 ## Model routing
 
