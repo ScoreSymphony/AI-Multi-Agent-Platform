@@ -14,7 +14,9 @@ from ai_multi_agent_platform.capabilities import CapabilityInvocation
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
 from .models import (
+    CompensationActionProjection,
     CompensationExecutionContext,
+    CompensationGroupProjection,
     CompensationRequest,
     CompensationResult,
     CompensationStatus,
@@ -22,7 +24,10 @@ from .models import (
     CompletedSideEffect,
     utc_now,
 )
-from .service import CompensationCoordinator as _BaseCompensationCoordinator
+from .service import (
+    CompensationCoordinator as _BaseCompensationCoordinator,
+    ExecutionContextFactory,
+)
 
 
 class CompensationCoordinator(_BaseCompensationCoordinator):
@@ -69,6 +74,31 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
             correlation_id=correlation_id,
             idempotency_key=idempotency_key,
         )
+
+    def projection(self, group_id: str) -> CompensationGroupProjection:
+        """Prefer unresolved reconciliation state over a newer sibling request in read models."""
+
+        group = self.repository.get_group(group_id)
+        requests_by_action: dict[str, list[CompensationRequest]] = {}
+        for request in self.repository.list_requests(group_id):
+            requests_by_action.setdefault(request.action_id, []).append(request)
+
+        actions: list[CompensationActionProjection] = []
+        for action in self.repository.list_actions(group_id):
+            request = self._select_projection_request(
+                requests_by_action.get(action.action_id, [])
+            )
+            result = (
+                None if request is None else self.repository.get_result(request.compensation_id)
+            )
+            actions.append(
+                CompensationActionProjection(
+                    action=action,
+                    request=request,
+                    result=result,
+                )
+            )
+        return CompensationGroupProjection(group=group, actions=tuple(actions))
 
     async def execute(
         self,
@@ -170,6 +200,39 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
                 )
             )
         return result
+
+    async def recover_group(
+        self,
+        group_id: str,
+        *,
+        context_factory: ExecutionContextFactory,
+    ) -> CompensationGroupProjection:
+        """Recover persisted work while validating mixed identities before RUNNING reconciliation."""
+
+        for request in self.repository.list_requests(group_id):
+            result = self.repository.get_result(request.compensation_id)
+            if result is not None and self._is_terminal(result.status):
+                continue
+            action = self.repository.get_action(request.action_id)
+            if result is not None and result.status is CompensationStatus.RUNNING:
+                identity_conflict = self._request_identity_conflict(action)
+                if identity_conflict is not None:
+                    self.repository.save_result(
+                        replace(
+                            result,
+                            status=CompensationStatus.RECONCILIATION_REQUIRED,
+                            error_code=identity_conflict.code.value,
+                            error_message=identity_conflict.message,
+                            manual_intervention_required=True,
+                            completed_at=utc_now(),
+                        )
+                    )
+                else:
+                    await self._reconcile_ambiguous(request, action, result)
+                continue
+            context = await context_factory(request, action)
+            await self.execute(request.compensation_id, context)
+        return self.projection(group_id)
 
     def _build_invocation(
         self,
@@ -276,6 +339,23 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
                 "manual reconciliation is required",
             )
         return next(iter(unique.values()), None)
+
+    def _select_projection_request(
+        self,
+        requests: list[CompensationRequest],
+    ) -> CompensationRequest | None:
+        if not requests:
+            return None
+        selected = requests[-1]
+        for request in requests:
+            result = self.repository.get_result(request.compensation_id)
+            if (
+                result is not None
+                and result.status is CompensationStatus.RECONCILIATION_REQUIRED
+                and result.manual_intervention_required
+            ):
+                selected = request
+        return selected
 
     @staticmethod
     def _validate_request_target(
