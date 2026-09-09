@@ -24,6 +24,7 @@ from ai_multi_agent_platform.compensation import (
     new_compensation_group_id,
     new_compensation_id,
 )
+from ai_multi_agent_platform.contracts import ErrorCode
 from ai_multi_agent_platform.domain import new_id
 
 
@@ -195,5 +196,99 @@ def test_running_mixed_identity_recovery_bypasses_reconciler_and_surfaces_confli
         assert action_view.compensation_id == legacy.compensation_id
         assert action_view.status is CompensationStatus.RECONCILIATION_REQUIRED
         assert action_view.manual_intervention_required
+
+    asyncio.run(scenario())
+
+
+def test_terminal_mixed_identity_history_is_projected_without_mutating_results() -> None:
+    async def scenario() -> None:
+        repository = InMemoryCompensationRepository()
+        reconciler = _WouldSucceedReconciler()
+        coordinator = CompensationCoordinator(
+            repository,
+            CapabilityInvoker(CapabilityRegistry()),
+            reconciler=reconciler,
+        )
+        group = coordinator.register_group(_group())
+        action = coordinator.record_completed_side_effect(_action(group))
+        canonical_key = (
+            f"compensation:{action.group_id}:{action.action_id}:plan-revision-{action.plan_revision}"
+        )
+        started = datetime(2026, 9, 9, 13, 0, tzinfo=UTC)
+
+        legacy = repository.create_request(
+            _request(
+                action,
+                key=f"{canonical_key}:{CompensationTrigger.DOWNSTREAM_FAILURE.value}",
+                trigger=CompensationTrigger.DOWNSTREAM_FAILURE,
+                requested_at=started,
+            )
+        )
+        repository.save_result(
+            CompensationResult(
+                compensation_id=legacy.compensation_id,
+                status=CompensationStatus.FAILED,
+                error_code=ErrorCode.PERMANENT_FAILURE.value,
+                error_message="legacy provider outcome failed",
+                manual_intervention_required=True,
+                completed_at=started + timedelta(seconds=1),
+            )
+        )
+        canonical = repository.create_request(
+            _request(
+                action,
+                key=canonical_key,
+                trigger=CompensationTrigger.MANUAL,
+                requested_at=started + timedelta(seconds=2),
+            )
+        )
+        repository.save_result(
+            CompensationResult(
+                compensation_id=canonical.compensation_id,
+                status=CompensationStatus.SUCCEEDED,
+                result_ref="undo:record-1",
+                completed_at=started + timedelta(seconds=3),
+            )
+        )
+
+        before = coordinator.projection(group.group_id)
+        assert before.manual_intervention_required
+        projected_before = before.actions[0]
+        assert projected_before.request is not None
+        assert projected_before.request.compensation_id == canonical.compensation_id
+        assert projected_before.result is not None
+        assert projected_before.result.status is CompensationStatus.RECONCILIATION_REQUIRED
+        assert projected_before.result.error_code == ErrorCode.CONFLICT.value
+        assert projected_before.result.manual_intervention_required
+
+        operator_before = CompensationControlPlaneProjection(repository).get_group(group.group_id)
+        assert operator_before.manual_intervention_required
+        operator_action = operator_before.actions[0]
+        assert operator_action.compensation_id == canonical.compensation_id
+        assert operator_action.status is CompensationStatus.RECONCILIATION_REQUIRED
+        assert operator_action.error_code == ErrorCode.CONFLICT.value
+        assert operator_action.manual_intervention_required
+
+        async def context_factory(request, completed_action):
+            del request, completed_action
+            raise AssertionError("terminal mixed-identity recovery must not execute or request context")
+
+        recovered = await coordinator.recover_group(
+            group.group_id,
+            context_factory=context_factory,
+        )
+        assert reconciler.calls == 0
+        assert recovered.manual_intervention_required
+        assert recovered.actions[0].result is not None
+        assert recovered.actions[0].result.status is CompensationStatus.RECONCILIATION_REQUIRED
+
+        stored_legacy = repository.get_result(legacy.compensation_id)
+        stored_canonical = repository.get_result(canonical.compensation_id)
+        assert stored_legacy is not None
+        assert stored_legacy.status is CompensationStatus.FAILED
+        assert stored_legacy.error_code == ErrorCode.PERMANENT_FAILURE.value
+        assert stored_canonical is not None
+        assert stored_canonical.status is CompensationStatus.SUCCEEDED
+        assert stored_canonical.result_ref == "undo:record-1"
 
     asyncio.run(scenario())
