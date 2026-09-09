@@ -424,7 +424,9 @@ def _validate_learning(
             )
         for evaluation_run_id in candidate.evaluation_run_ids:
             try:
-                evaluation_project_id = learning.service.evaluation_run_project_id(evaluation_run_id)
+                evaluation_project_id = learning.service.evaluation_run_project_id(
+                    evaluation_run_id
+                )
             except ContractError as exc:
                 raise RestoreValidationError(
                     f"{entity} cannot reconstruct Evaluation scope for {evaluation_run_id}"
