@@ -10,6 +10,7 @@ import { EvaluationClient } from "../api/evaluations";
 import { GoalClient } from "../api/goals";
 import { IntegrationsClient } from "../api/integrations";
 import { GovernanceClient } from "../api/governance";
+import { LearningClient } from "../api/learning";
 import { MemoryKnowledgeClient } from "../api/memoryKnowledge";
 import { NotificationClient } from "../api/notifications";
 import { OnboardingClient } from "../api/onboarding";
@@ -25,6 +26,7 @@ import { OnboardingCallout } from "../components/OnboardingCallout";
 import { LoadingState } from "../components/States";
 import { PermissionHintsProvider } from "../security/permissions";
 import { approvalDecisionManifestState } from "./approvalManifest";
+import { learningManifestCapabilities } from "./learningManifest";
 import { navigation } from "./navigation";
 import { AppLink, matchPath, useRouter } from "./router";
 import { templateManifestState } from "./templateManifest";
@@ -65,6 +67,11 @@ import {
   ProposalGovernanceDetailPage,
   SpecificationGovernanceDetailPage,
 } from "../pages/GovernancePage";
+import {
+  LEARNING_REQUIRED_RESOURCES,
+  LearningDetailPage,
+  LearningPage,
+} from "../pages/LearningPage";
 import { MarketplacePage } from "../pages/MarketplacePage";
 import {
   KnowledgeDetailPage,
@@ -162,6 +169,10 @@ export function Shell() {
     () => new IntegrationsClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
   );
+  const learningClient = useMemo(
+    () => new LearningClient({ baseUrl, fetchImpl: session.fetch }),
+    [baseUrl, session],
+  );
   const memoryKnowledgeClient = useMemo(
     () => new MemoryKnowledgeClient({ baseUrl, fetchImpl: session.fetch }),
     [baseUrl, session],
@@ -229,6 +240,7 @@ export function Shell() {
   const modelMatch = matchPath("/models/:modelId", path);
   const evaluationSuiteMatch = matchPath("/evaluations/suites/:suiteRef", path);
   const evaluationRunMatch = matchPath("/evaluations/runs/:evaluationRunId", path);
+  const learningCandidateMatch = matchPath("/learning/:learningCandidateId", path);
   const computeNodeMatch = matchPath("/compute/nodes/:nodeId", path);
   const computeWorkerMatch = matchPath("/compute/workers/:workerId", path);
   const computeWorkerJobMatch = matchPath("/compute/jobs/:workerJobId", path);
@@ -245,6 +257,7 @@ export function Shell() {
   const navItem = navigation.find((item) => item.path === path);
   const pluginCandidatesAvailable = manifest?.resources.includes("plugin-candidates") ?? false;
   const approvalDecisionState = approvalDecisionManifestState(manifestState, manifest);
+  const learningCapabilities = learningManifestCapabilities(manifestState, manifest);
   const onboardingAvailable = manifest?.resources.includes("onboarding") ?? false;
   let content;
   if (path === "/") content = <OverviewPage client={client} />;
@@ -611,6 +624,33 @@ export function Shell() {
     content = (
       <ManifestResourcesPage state={manifestState} manifest={manifest} label="Evaluations" resources={EVALUATION_RESOURCES}>
         <EvaluationRunDetailPage client={evaluationClient} evaluationRunId={evaluationRunMatch.evaluationRunId} />
+      </ManifestResourcesPage>
+    );
+  } else if (path === "/learning") {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Learning"
+        resources={LEARNING_REQUIRED_RESOURCES}
+      >
+        <LearningPage client={learningClient} />
+      </ManifestResourcesPage>
+    );
+  } else if (learningCandidateMatch) {
+    content = (
+      <ManifestResourcesPage
+        state={manifestState}
+        manifest={manifest}
+        label="Learning"
+        resources={LEARNING_REQUIRED_RESOURCES}
+      >
+        <LearningDetailPage
+          client={learningClient}
+          candidateId={learningCandidateMatch.learningCandidateId}
+          commands={learningCapabilities.commands}
+          postPromotionAvailable={learningCapabilities.postPromotionAvailable}
+        />
       </ManifestResourcesPage>
     );
   } else if (path === "/marketplace") {
