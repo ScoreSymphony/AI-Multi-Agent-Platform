@@ -62,7 +62,7 @@ The first successful contained integration run on the tiny deterministic fixture
 
 Additional observations from that run:
 
-- maximum reported child RSS: **19,032 KiB**;
+- process-lifetime child RSS high-water observed during the pilot: **19,032 KiB**;
 - provider-owned state after the pilot: **820,744 bytes**;
 - expected search hit returned: yes;
 - exact source slice returned: yes;
@@ -70,6 +70,10 @@ Additional observations from that run:
 - source unchanged after execution: yes;
 - project-local `.projectatlas` state created: no;
 - provider database outside source: yes.
+
+`RUSAGE_CHILDREN.ru_maxrss` is cumulative high-water evidence across terminated child processes; it
+is not a per-command measurement. The final comparison artifact therefore records it only as a
+whole-pilot observation and does not compare it to the Git baseline.
 
 These figures are fixture evidence only. They are not a large-repository performance claim and must
 not be generalized to production indexing workloads.
@@ -94,12 +98,11 @@ The final #502 workflow now runs `scripts/ci/issue502_projectatlas_comparison.py
 deterministic immutable Git fixture for the candidate and the local Git reference baseline and
 fails if the fixture revisions differ.
 
-The machine-readable artifact records, for both paths:
+The machine-readable artifact compares like-for-like metrics for both paths:
 
 - cold time to useful context;
 - warm search/slice time to useful context;
 - tool calls to useful context;
-- returned context bytes;
 - persistent provider-state bytes;
 - per-command elapsed/CPU measurements where available.
 
@@ -107,10 +110,15 @@ ProjectAtlas cold time includes `scan + search + slice`; warm time includes `sea
 reference path uses bounded `git grep` plus exact-revision `git show` extraction and has no persistent
 index state.
 
+Raw stdout byte counts remain available as transport observations but are **not** compared as model
+context: ProjectAtlas and Git use different output envelopes. Normalized model-context bytes/tokens
+remain explicitly unmeasured until both paths are reduced to the same logical payload. Comparable
+baseline-vs-candidate peak RSS is likewise unmeasured.
+
 The workflow deliberately does **not** convert unmeasured areas to zero. Representative agent
 first-pass success, symbol/reference/dependency correctness, architecture/domain/impact usefulness,
-large-repository rebuild cost and dirty-Workspace freshness for ProjectAtlas remain outside this
-tiny-fixture comparison.
+large-repository rebuild cost and dirty-Workspace freshness for ProjectAtlas also remain outside
+this tiny-fixture comparison.
 
 ## Final #502 decision
 
@@ -140,5 +148,6 @@ A future production source-capability issue would still need, at minimum:
    pilot as an implicit production sandbox.
 
 None of those optional provider-adoption steps block completion of the clarified provider-neutral
-#502 v1 core. The deterministic Git/ripgrep/LSP-compatible baseline remains fully usable when
-ProjectAtlas is absent or disabled.
+#502 v1 core. The explicit scope decision is recorded in
+`docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md`. The deterministic
+Git/ripgrep/LSP-compatible baseline remains fully usable when ProjectAtlas is absent or disabled.
