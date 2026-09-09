@@ -32,20 +32,14 @@ def test_eval_snapshot_keeps_distinct_revisions_of_shared_routing_profile() -> N
     second_agent_id = "agent_00000000-0000-4000-8000-000000000602"
     revisions = {
         first_agent_id: SimpleNamespace(
-            profile=SimpleNamespace(
-                model=SimpleNamespace(routing_profile_ref=f"{profile_id}@r1")
-            )
+            profile=SimpleNamespace(model=SimpleNamespace(routing_profile_ref=f"{profile_id}@r1"))
         ),
         second_agent_id: SimpleNamespace(
-            profile=SimpleNamespace(
-                model=SimpleNamespace(routing_profile_ref=f"{profile_id}@r2")
-            )
+            profile=SimpleNamespace(model=SimpleNamespace(routing_profile_ref=f"{profile_id}@r2"))
         ),
     }
     agents = SimpleNamespace(
-        service=SimpleNamespace(
-            get_agent_revision=lambda agent_id, _revision: revisions[agent_id]
-        )
+        service=SimpleNamespace(get_agent_revision=lambda agent_id, _revision: revisions[agent_id])
     )
     enricher = RoutingProfileAwareEvaluationTargetSnapshotEnricher(
         agents=agents,
