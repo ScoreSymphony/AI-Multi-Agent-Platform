@@ -209,6 +209,36 @@ def test_learning_promotion_with_yes_dispatches_exact_candidate_revision(
     }
 
 
+def test_generic_extension_execute_cannot_bypass_learning_domain_safeguards(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    transport = RecordingTransport()
+    stderr = StringIO()
+
+    code = run_cli(
+        [
+            "--config",
+            str(config),
+            "--yes",
+            "extension",
+            "execute",
+            "learning.promote",
+            "learning_candidate_example",
+            "--payload",
+            '{"expected_revision":4}',
+            "--idempotency-key",
+            "learning-promote-bypass-test",
+        ],
+        transport=transport,
+        stderr=stderr,
+    )
+
+    assert code == 2
+    assert transport.calls == []
+    assert "first-class `platform learning` domain" in stderr.getvalue()
+
+
 def test_non_owned_area_delegates_to_issue_82(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[list[str]] = []
 
@@ -225,6 +255,36 @@ def test_non_owned_area_delegates_to_issue_82(monkeypatch: pytest.MonkeyPatch) -
 
     assert code == 17
     assert captured == [["repository", "list"]]
+
+
+def test_non_learning_extension_execution_still_delegates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: list[list[str]] = []
+
+    def delegated(
+        arguments: list[str],
+        **_: object,
+    ) -> int:
+        captured.append(arguments)
+        return 19
+
+    monkeypatch.setattr("ai_multi_agent_platform.cli.issue_81.issue_82_run_cli", delegated)
+    arguments = [
+        "extension",
+        "execute",
+        "custom.mutate",
+        "resource:1",
+        "--payload",
+        "{}",
+        "--idempotency-key",
+        "custom-test",
+    ]
+
+    code = run_cli(arguments)
+
+    assert code == 19
+    assert captured == [arguments]
 
 
 def test_distribution_script_points_at_issue_81_composition() -> None:
