@@ -109,7 +109,7 @@ def test_eval_target_snapshot_pins_exact_routing_profile_revision() -> None:
     routing_ref = next(
         reference for reference in enriched.references if reference.kind == "model_routing_profile"
     )
-    assert routing_ref.ref_id == profile_id
+    assert routing_ref.ref_id == f"{profile_id}@r7"
     assert routing_ref.version == "7"
 
 
@@ -178,6 +178,7 @@ def test_learning_control_plane_enforces_record_project_scope(tmp_path) -> None:
                     {
                         AuthorizationAction.VIEW,
                         AuthorizationAction.READ,
+                        AuthorizationAction.CREATE,
                         AuthorizationAction.MODIFY,
                     }
                 ),
@@ -319,7 +320,9 @@ def test_learning_supported_target_scope_blocks_cross_project_proposal_and_promo
             LocalPrincipalPolicy(
                 principal_ref=principal,
                 actor_types=frozenset({ActorType.HUMAN}),
-                allowed_actions=frozenset({AuthorizationAction.MODIFY}),
+                allowed_actions=frozenset(
+                    {AuthorizationAction.CREATE, AuthorizationAction.MODIFY}
+                ),
                 resource_types=frozenset({ResourceType.GENERIC}),
                 project_ids=frozenset({project_a.id}),
             )
