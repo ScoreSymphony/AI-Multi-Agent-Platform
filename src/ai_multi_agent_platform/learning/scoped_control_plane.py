@@ -343,6 +343,25 @@ class ScopedLearningCommand:
             project_id=candidate.project_id,
         )
         if self.action == "learning.evidence":
+            evaluation_run_ids = _parse_string_tuple(
+                payload.get("evaluation_run_ids"),
+                "evaluation_run_ids",
+            )
+            if evaluation_run_ids:
+                evaluation = self.learning.quality_gate.evaluation
+                if evaluation is None:
+                    raise ContractError(
+                        ErrorCode.UNAVAILABLE,
+                        "Evaluation service is not configured",
+                    )
+                for evaluation_run_id in evaluation_run_ids:
+                    evaluation.get_run_detail(evaluation_run_id)
+                    await self.access.authorize(
+                        context,
+                        self.action,
+                        evaluation_run_id,
+                        project_id=candidate.project_id,
+                    )
             verification_ids = _parse_string_tuple(
                 payload.get("verification_ids"),
                 "verification_ids",
