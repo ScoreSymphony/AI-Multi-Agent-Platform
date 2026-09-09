@@ -315,16 +315,28 @@ class _EvaluationLookup:
                 ),
             )
         )
+        baseline_run_id = f"{run_id}-baseline"
         self._details[run_id] = SimpleNamespace(
             run=SimpleNamespace(
                 run_id=run_id,
                 suite_id="learning-suite",
                 suite_version="1",
                 status=EvaluationRunStatus.COMPLETED,
+                baseline_run_id=baseline_run_id,
                 snapshot=SimpleNamespace(references=references),
             ),
             results=(result,),
-            comparison=SimpleNamespace(regressions=findings),
+            comparison=SimpleNamespace(
+                current_run_id=run_id,
+                baseline_run_id=baseline_run_id,
+                regressions=findings,
+            ),
+            manifest=SimpleNamespace(
+                evaluation_run_id=run_id,
+                suite_id="learning-suite",
+                suite_version="1",
+                configuration_references=references,
+            ),
         )
         self._suites["learning-suite@1"] = SimpleNamespace(cases=cases)
 

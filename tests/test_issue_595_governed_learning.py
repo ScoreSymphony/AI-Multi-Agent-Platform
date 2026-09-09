@@ -87,19 +87,41 @@ class _EvaluationStub:
             if regressions
             else ()
         )
+        baseline_run_id = f"{run_id}-baseline"
         detail = SimpleNamespace(
             run=SimpleNamespace(
                 run_id=run_id,
                 suite_id="learning-suite",
                 suite_version=1,
                 status=EvaluationRunStatus.COMPLETED,
+                baseline_run_id=baseline_run_id,
                 snapshot=SimpleNamespace(references=()),
             ),
             results=(result,),
-            comparison=SimpleNamespace(regressions=findings),
+            comparison=SimpleNamespace(
+                current_run_id=run_id,
+                baseline_run_id=baseline_run_id,
+                regressions=findings,
+            ),
+            manifest=SimpleNamespace(
+                evaluation_run_id=run_id,
+                suite_id="learning-suite",
+                suite_version=1,
+                configuration_references=(),
+            ),
         )
         self._details[run_id] = detail
         return detail
+
+    def bind_target(self, run_id: str, target: LearningTarget) -> None:
+        detail = self._details[run_id]
+        reference = SimpleNamespace(
+            kind=target.resource_type.value,
+            ref_id=target.resource_id,
+            version=str(target.revision),
+        )
+        detail.run.snapshot = SimpleNamespace(references=(reference,))
+        detail.manifest.configuration_references = (reference,)
 
     def get_run_detail(self, run_id: str) -> SimpleNamespace:
         return self._details[run_id]
@@ -120,17 +142,34 @@ class _VerificationStub:
         *,
         outcome: VerificationOutcome,
         project_id: str | None = None,
+        target: LearningTarget | None = None,
     ) -> tuple[SimpleNamespace, SimpleNamespace]:
+        subject = SimpleNamespace(
+            subject_type="verification_artifact",
+            subject_id=f"{verification_id}-artifact",
+            revision="1",
+            digest=f"digest-{verification_id}",
+        )
+        producer = (
+            SimpleNamespace(
+                agent_id=target.resource_id,
+                agent_revision=target.revision,
+            )
+            if target is not None and target.resource_type is LearningTargetType.AGENT
+            else None
+        )
         request = SimpleNamespace(
             verification_id=verification_id,
             policy_id="learning-verification",
             policy_version=1,
             project_id=project_id,
+            subject=subject,
+            producer=producer,
         )
         result = SimpleNamespace(
             verification_result_id=f"{verification_id}-result",
             outcome=outcome,
-            subject=SimpleNamespace(revision="1", digest=f"digest-{verification_id}"),
+            subject=subject,
         )
         self._requests[verification_id] = request
         self._results[verification_id] = result
@@ -265,6 +304,9 @@ def _propose_and_accept(
         proposed_change=proposed_change,
     )
     assert created is True
+    evaluation = learning.quality_gate.evaluation
+    assert isinstance(evaluation, _EvaluationStub)
+    evaluation.bind_target(run_id, target)
     evaluating = learning.record_gate_evidence(
         candidate.learning_candidate_id,
         evaluation_run_ids=(run_id,),
@@ -352,7 +394,12 @@ def test_user_correction_creates_candidate_bound_to_exact_feedback(tmp_path: Pat
 def test_verification_finding_creates_candidate(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
     verification = _VerificationStub()
-    verification.add("verify-595", outcome=VerificationOutcome.NEEDS_CHANGES)
+    target = _target()
+    verification.add(
+        "verify-595",
+        outcome=VerificationOutcome.NEEDS_CHANGES,
+        target=target,
+    )
     learning = _service(
         SQLiteLearningRepository(tmp_path / "learning.db"),
         evaluation,
@@ -362,7 +409,7 @@ def test_verification_finding_creates_candidate(tmp_path: Path) -> None:
     candidate, created = learning.create_from_verification(
         "verify-595",
         problem="Verification requires a safer method.",
-        target=_target(),
+        target=target,
         improvement_type="verification_fix",
         expected_benefit="Pass the bounded verification policy.",
         risk=RiskClassification.STANDARD,
@@ -382,13 +429,15 @@ def test_verification_finding_creates_candidate(tmp_path: Path) -> None:
 
 def test_evaluation_regression_creates_candidate(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
+    target = _target()
     detail = evaluation.add("eval-regression", regressions=True)
+    evaluation.bind_target("eval-regression", target)
     learning = _service(SQLiteLearningRepository(tmp_path / "learning.db"), evaluation)
 
     candidate, created = learning.create_from_evaluation_regression(
         "eval-regression",
         problem="The current revision regressed a deterministic case.",
-        target=_target(),
+        target=target,
         improvement_type="regression_fix",
         expected_benefit="Restore the regression fixture.",
         risk=RiskClassification.STANDARD,
@@ -695,12 +744,14 @@ def test_high_risk_promotion_requires_exact_approval(tmp_path: Path) -> None:
 
 def test_failed_evaluation_blocks_acceptance_and_promotion(tmp_path: Path) -> None:
     evaluation = _EvaluationStub()
+    target = _target()
     evaluation.add("eval-fail", outcome=EvaluationOutcome.FAILED)
+    evaluation.bind_target("eval-fail", target)
     learning = _service(SQLiteLearningRepository(tmp_path / "learning.db"), evaluation)
     candidate, _ = learning.create_candidate(
         source_type=LearningSourceType.OPERATOR_PROPOSAL,
         problem="Candidate must prove the proposed method.",
-        target=_target(),
+        target=target,
         improvement_type="method_revision",
         expected_benefit="Improve quality.",
         risk=RiskClassification.STANDARD,
@@ -785,11 +836,15 @@ def test_historical_feedback_verification_and_evaluation_evidence_are_not_mutate
     tmp_path: Path,
 ) -> None:
     evaluation = _EvaluationStub()
+    evaluation_target = _target(resource_id=new_id("agent"))
     regression_detail = evaluation.add("eval-source", regressions=True)
+    evaluation.bind_target("eval-source", evaluation_target)
     verification = _VerificationStub()
+    verification_target = _target(resource_id=new_id("agent"))
     verification_request, verification_result = verification.add(
         "verify-source",
         outcome=VerificationOutcome.FAIL,
+        target=verification_target,
     )
     repository = SQLiteLearningRepository(tmp_path / "learning.db")
     learning = _service(repository, evaluation, verification=verification)
@@ -826,7 +881,7 @@ def test_historical_feedback_verification_and_evaluation_evidence_are_not_mutate
     from_verification, _ = learning.create_from_verification(
         verification_request.verification_id,
         problem="Verification-backed candidate.",
-        target=_target(resource_id=new_id("agent")),
+        target=verification_target,
         improvement_type="verification_fix",
         expected_benefit="Preserve verification evidence.",
         risk=RiskClassification.STANDARD,
@@ -837,7 +892,7 @@ def test_historical_feedback_verification_and_evaluation_evidence_are_not_mutate
     from_evaluation, _ = learning.create_from_evaluation_regression(
         regression_detail.run.run_id,
         problem="Evaluation-backed candidate.",
-        target=_target(resource_id=new_id("agent")),
+        target=evaluation_target,
         improvement_type="regression_fix",
         expected_benefit="Preserve regression evidence.",
         risk=RiskClassification.STANDARD,
