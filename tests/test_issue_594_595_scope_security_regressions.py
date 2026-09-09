@@ -71,14 +71,18 @@ def test_candidate_dedupe_is_project_scoped(tmp_path: Path) -> None:
     assert linked_a.learning_candidate_id == candidate_a.learning_candidate_id
     assert linked_a.project_id == project_a.id
     assert linked_a.revision == 2
-    assert deployment.learning.service.get_candidate(candidate_b.learning_candidate_id).revision == 1
+    assert (
+        deployment.learning.service.get_candidate(candidate_b.learning_candidate_id).revision == 1
+    )
     assert {reference.resource_id for reference in linked_a.source_refs} == {
         "project-a-source",
         "project-a-second-source",
     }
 
 
-def test_learning_evidence_rejects_cross_project_verification_in_service(tmp_path: Path) -> None:
+def test_learning_evidence_rejects_cross_project_verification_in_service(
+    tmp_path: Path,
+) -> None:
     deployment = build_single_node_deployment(
         SingleNodeConfig(data_dir=tmp_path / "evidence-domain-scope", secure_cookie=False)
     )
@@ -100,7 +104,10 @@ def test_learning_evidence_rejects_cross_project_verification_in_service(tmp_pat
         source_id="domain-evidence-source",
     )
     lookup = _VerificationLookup(project_b.id)
-    deployment.learning.service.quality_gate.verification = cast(VerificationService, lookup)
+    deployment.learning.service.quality_gate.verification = cast(
+        VerificationService,
+        lookup,
+    )
 
     with pytest.raises(ContractError) as denied:
         deployment.learning.service.record_gate_evidence(
@@ -110,10 +117,14 @@ def test_learning_evidence_rejects_cross_project_verification_in_service(tmp_pat
         )
 
     assert denied.value.code is ErrorCode.FORBIDDEN
-    assert deployment.learning.service.get_candidate(candidate.learning_candidate_id).revision == 1
+    assert (
+        deployment.learning.service.get_candidate(candidate.learning_candidate_id).revision == 1
+    )
 
 
-def test_learning_evidence_authorizes_each_verification_id_and_project(tmp_path: Path) -> None:
+def test_learning_evidence_authorizes_each_verification_id_and_project(
+    tmp_path: Path,
+) -> None:
     async def scenario() -> None:
         deployment = build_single_node_deployment(
             SingleNodeConfig(data_dir=tmp_path / "evidence-command-scope", secure_cookie=False)
@@ -130,7 +141,10 @@ def test_learning_evidence_authorizes_each_verification_id_and_project(tmp_path:
             source_id="command-evidence-source",
         )
         lookup = _VerificationLookup(project.id)
-        deployment.learning.service.quality_gate.verification = cast(VerificationService, lookup)
+        deployment.learning.service.quality_gate.verification = cast(
+            VerificationService,
+            lookup,
+        )
         access = _RecordingLearningAccess()
 
         async def delegate(
