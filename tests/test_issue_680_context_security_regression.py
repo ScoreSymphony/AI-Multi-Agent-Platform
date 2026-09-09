@@ -37,8 +37,17 @@ from ai_multi_agent_platform.verification import (
 
 
 class _ArtifactFileProvider:
-    def __init__(self, artifact_id: str, classification: DataClassification) -> None:
+    def __init__(
+        self,
+        artifact_id: str,
+        classification: DataClassification,
+        *,
+        file_id: str,
+        sha256: str,
+    ) -> None:
         self.record = SimpleNamespace(
+            file_id=file_id,
+            sha256=sha256,
             artifact_ids=(artifact_id,),
             classification=classification.value,
         )
@@ -66,6 +75,49 @@ def _source_request(*, task_id: str, project_id: str) -> OperationalContextSourc
     )
 
 
+def _artifact_verification(
+    *,
+    artifact_id: str,
+    file_id: str,
+    sha256: str,
+    task_id: str,
+    project_id: str,
+) -> tuple[object, VerificationResult]:
+    subject = VerificationSubject(
+        subject_type="artifact",
+        subject_id=artifact_id,
+        revision=file_id,
+        digest=f"sha256:{sha256}",
+    )
+    policy = VerificationPolicy(
+        name="Issue 680 artifact classification",
+        stages=(VerificationStage(stage_id="quality", verifier_kind=VerifierKind.DETERMINISTIC),),
+    )
+    verification = VerificationService()
+    verification.register_policy(policy)
+    request = verification.request_verification(
+        task_id=task_id,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+        stage_id="quality",
+        subject=subject,
+        artifact_ids=(artifact_id,),
+        correlation_id=task_id,
+        project_id=project_id,
+    )
+    result = VerificationResult(
+        verification_id=request.verification_id,
+        verifier=VerifierIdentity(
+            verifier_ref="deterministic:issue-680-classification",
+            kind=VerifierKind.DETERMINISTIC,
+            read_only=True,
+        ),
+        outcome=VerificationOutcome.PASS,
+        subject=subject,
+    )
+    return request, result
+
+
 @pytest.mark.parametrize(
     ("source_classification", "expected"),
     (
@@ -83,50 +135,71 @@ def test_verification_artifact_classification_inherits_canonical_file_owner(
     task_id = new_id("task")
     project_id = new_id("project")
     artifact_id = new_id("artifact")
-    subject = VerificationSubject(
-        subject_type="artifact",
-        subject_id=artifact_id,
-        revision="artifact-revision-1",
-        digest="d" * 64,
-    )
-    policy = VerificationPolicy(
-        name="Issue 680 artifact classification",
-        stages=(VerificationStage(stage_id="quality", verifier_kind=VerifierKind.DETERMINISTIC),),
-    )
-    verification = VerificationService()
-    verification.register_policy(policy)
-    request = verification.request_verification(
+    file_id = new_id("file")
+    sha256 = "d" * 64
+    request, result = _artifact_verification(
+        artifact_id=artifact_id,
+        file_id=file_id,
+        sha256=sha256,
         task_id=task_id,
-        policy_id=policy.policy_id,
-        policy_version=policy.version,
-        stage_id="quality",
-        subject=subject,
-        correlation_id=task_id,
         project_id=project_id,
     )
-    result = VerificationResult(
-        verification_id=request.verification_id,
-        verifier=VerifierIdentity(
-            verifier_ref="deterministic:issue-680-classification",
-            kind=VerifierKind.DETERMINISTIC,
-            read_only=True,
-        ),
-        outcome=VerificationOutcome.PASS,
-        subject=subject,
-    )
     resolver = CanonicalVerificationContextClassificationResolver(
-        _ArtifactFileProvider(artifact_id, source_classification)  # type: ignore[arg-type]
+        _ArtifactFileProvider(
+            artifact_id,
+            source_classification,
+            file_id=file_id,
+            sha256=sha256,
+        )  # type: ignore[arg-type]
     )
 
     classification = asyncio.run(
         resolver.classify(
             _source_request(task_id=task_id, project_id=project_id),
-            request,
+            request,  # type: ignore[arg-type]
             result,
         )
     )
 
     assert classification is expected
+
+
+@pytest.mark.parametrize("mismatch", ("revision", "digest"))
+def test_verification_artifact_classification_fails_closed_on_subject_provenance_mismatch(
+    mismatch: str,
+) -> None:
+    task_id = new_id("task")
+    project_id = new_id("project")
+    artifact_id = new_id("artifact")
+    file_id = new_id("file")
+    sha256 = "e" * 64
+    request, result = _artifact_verification(
+        artifact_id=artifact_id,
+        file_id=file_id,
+        sha256=sha256,
+        task_id=task_id,
+        project_id=project_id,
+    )
+    provider_file_id = new_id("file") if mismatch == "revision" else file_id
+    provider_sha256 = "f" * 64 if mismatch == "digest" else sha256
+    resolver = CanonicalVerificationContextClassificationResolver(
+        _ArtifactFileProvider(
+            artifact_id,
+            DataClassification.PUBLIC,
+            file_id=provider_file_id,
+            sha256=provider_sha256,
+        )  # type: ignore[arg-type]
+    )
+
+    classification = asyncio.run(
+        resolver.classify(
+            _source_request(task_id=task_id, project_id=project_id),
+            request,  # type: ignore[arg-type]
+            result,
+        )
+    )
+
+    assert classification is ContextDataClassification.SECRET_REFERENCE
 
 
 def test_public_single_node_live_task_source_fails_closed_for_unauthorized_actor(
