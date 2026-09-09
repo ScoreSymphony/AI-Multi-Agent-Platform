@@ -43,6 +43,8 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
                 await self._artifact_classification(
                     source_request,
                     result.subject.subject_id,
+                    expected_file_id=result.subject.revision,
+                    expected_digest=result.subject.digest,
                 )
             )
         else:
@@ -62,6 +64,9 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
         self,
         request: ContextSourceRequest,
         artifact_id: str,
+        *,
+        expected_file_id: str | None = None,
+        expected_digest: str | None = None,
     ) -> DataClassification:
         operation = getattr(request, "operation", None)
         actor_ref = getattr(request, "actor_ref", None)
@@ -90,7 +95,16 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
         if len(linked) != 1:
             # Missing or ambiguous owner evidence cannot justify rendering reviewer prose inline.
             return DataClassification.SECRET
-        classification = linked[0].classification
+        record = linked[0]
+        if expected_file_id is not None and record.file_id != expected_file_id:
+            # The reviewed Artifact revision must still resolve to the exact canonical FileRecord
+            # that Verification bound. A same-ID Artifact projection is not sufficient evidence.
+            return DataClassification.SECRET
+        if expected_digest is not None and f"sha256:{record.sha256}" != expected_digest:
+            # Never inherit a weaker classification from content that no longer matches the
+            # immutable digest captured by the Verification subject.
+            return DataClassification.SECRET
+        classification = record.classification
         if classification is None:
             return DataClassification.SECRET
         try:
