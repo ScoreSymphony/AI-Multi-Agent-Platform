@@ -76,7 +76,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         )
 
     def projection(self, group_id: str) -> CompensationGroupProjection:
-        """Prefer unresolved reconciliation state over a newer sibling request in read models."""
+        """Project operator-visible state without mutating terminal historical results."""
 
         group = self.repository.get_group(group_id)
         requests_by_action: dict[str, list[CompensationRequest]] = {}
@@ -91,6 +91,13 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
             result = (
                 None if request is None else self.repository.get_result(request.compensation_id)
             )
+            identity_conflict = self._request_identity_conflict(action)
+            if identity_conflict is not None and request is not None:
+                result = self._project_identity_conflict(
+                    request,
+                    result,
+                    identity_conflict,
+                )
             actions.append(
                 CompensationActionProjection(
                     action=action,
@@ -108,13 +115,12 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         request = self.repository.get_request(compensation_id)
         action = self.repository.get_action(request.action_id)
         current = self.repository.get_result(compensation_id)
+        identity_conflict = self._request_identity_conflict(action)
 
-        # Terminal results stay immutable. Recovery must nevertheless refuse to execute a sibling
-        # request when an upgraded store contains multiple persisted identities for the same
-        # immutable compensation target.
+        # Terminal results are historical evidence and stay immutable. Mixed persisted identities
+        # are still validated here and are surfaced fail-closed through operator projections.
         if current is not None and self._is_terminal(current.status):
             return current
-        identity_conflict = self._request_identity_conflict(action)
         if identity_conflict is not None:
             checked_at = utc_now()
             if current is not None:
@@ -207,15 +213,18 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         *,
         context_factory: ExecutionContextFactory,
     ) -> CompensationGroupProjection:
-        """Recover persisted work while validating mixed identities before RUNNING reconciliation."""
+        """Recover persisted work while validating mixed identities before all shortcuts."""
 
         for request in self.repository.list_requests(group_id):
             result = self.repository.get_result(request.compensation_id)
+            action = self.repository.get_action(request.action_id)
+            identity_conflict = self._request_identity_conflict(action)
+
+            # Validate mixed identities before the terminal shortcut, but never rewrite historical
+            # terminal results. projection() surfaces the duplicate-identity conflict read-only.
             if result is not None and self._is_terminal(result.status):
                 continue
-            action = self.repository.get_action(request.action_id)
             if result is not None and result.status is CompensationStatus.RUNNING:
-                identity_conflict = self._request_identity_conflict(action)
                 if identity_conflict is not None:
                     self.repository.save_result(
                         replace(
@@ -356,6 +365,35 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
             ):
                 selected = request
         return selected
+
+    @staticmethod
+    def _project_identity_conflict(
+        request: CompensationRequest,
+        result: CompensationResult | None,
+        error: ContractError,
+    ) -> CompensationResult:
+        """Create a read-only conflict result while preserving stored terminal evidence."""
+
+        if result is None:
+            return CompensationResult(
+                compensation_id=request.compensation_id,
+                status=CompensationStatus.RECONCILIATION_REQUIRED,
+                error_code=error.code.value,
+                error_message=error.message,
+                manual_intervention_required=True,
+            )
+        if (
+            result.status is CompensationStatus.RECONCILIATION_REQUIRED
+            and result.manual_intervention_required
+        ):
+            return result
+        return replace(
+            result,
+            status=CompensationStatus.RECONCILIATION_REQUIRED,
+            error_code=error.code.value,
+            error_message=error.message,
+            manual_intervention_required=True,
+        )
 
     @staticmethod
     def _validate_request_target(
