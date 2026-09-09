@@ -88,6 +88,7 @@ from ai_multi_agent_platform.skills import (
     register_skill_control_plane,
 )
 
+from .context_verification import CanonicalVerificationContextClassificationResolver
 from .egress_bindings import EgressDeploymentBindings
 
 if TYPE_CHECKING:
@@ -285,7 +286,10 @@ def install_single_node_context(
     plan_adapter = PlanStepContextSourceAdapter(base.coordination_repository, runs=runs)
     skill_adapter = SkillBundleContextSourceAdapter(skills_repository)
     research_adapter = ResearchEvidenceContextSourceAdapter(research)
-    verification_adapter = VerificationContextSourceAdapter(base.verification)
+    verification_adapter = VerificationContextSourceAdapter(
+        base.verification,
+        classification_resolver=CanonicalVerificationContextClassificationResolver(protected_files),
+    )
     repository_adapter = RepositoryContextSourceAdapter(
         base.repository_provenance,
         repositories=base.repositories,
