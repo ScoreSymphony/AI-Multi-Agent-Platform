@@ -277,7 +277,7 @@ def test_final_boundary_expiry_preserves_prior_approval_invocation_tuple(
         coordinator = CompensationCoordinator(
             repository,
             invoker,
-            approval_reference_lookup=lambda invocation_id: f"approval:{invocation_id}",
+            approval_reference_lookup=lambda _: new_id("approval"),
         )
         started = datetime(2026, 9, 9, 12, 0, tzinfo=UTC)
         group = coordinator.register_group(_group())
