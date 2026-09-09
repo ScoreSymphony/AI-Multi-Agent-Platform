@@ -5,8 +5,11 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import pytest
+
 from ai_multi_agent_platform.context import ModelRegistryContextEgressTargetResolver
 from ai_multi_agent_platform.contracts import (
+    ContractError,
     DataClassification,
     EgressCostClass,
     EgressOutcome,
@@ -33,6 +36,7 @@ from ai_multi_agent_platform.security import (
     EgressApprovalExceptionPolicy,
     build_durable_egress_runtime,
 )
+from ai_multi_agent_platform.security.egress import InMemoryEgressAuditSink
 from ai_multi_agent_platform.security.egress_profiles import EgressProfileDefinition
 from ai_multi_agent_platform.testing import FakeAuthorizationProvider
 
@@ -161,6 +165,64 @@ def test_durable_provider_context_profile_precedes_inline_model_profile(tmp_path
 
     assert decision.outcome is EgressOutcome.DENY
     assert decision.reason_code is EgressReasonCode.TARGET_POLICY_DENIED
+
+
+def test_durable_context_profile_drives_audit_and_enforcement_fields(tmp_path) -> None:
+    target = _context_target()
+    assert target is not None
+    assert target.profile is not None
+    assert target.profile.posture is EgressTargetPosture.EXTERNAL
+    assert target.profile.cost_class is EgressCostClass.FREE_EXTERNAL
+
+    audit_sink = InMemoryEgressAuditSink()
+    runtime = build_durable_egress_runtime(
+        tmp_path / "egress-profiles.json",
+        audit_sink=audit_sink,
+    )
+    project_id = "project-context-audit"
+    now = datetime.now(UTC)
+    durable_profile = replace(
+        _durable_context_denial(),
+        posture=EgressTargetPosture.INTERNAL,
+        network_egress_required=False,
+        cost_class=EgressCostClass.LOCAL,
+    )
+    runtime.repository.create_profile(
+        EgressProfileDefinition(
+            profile_id=durable_profile.profile_id,
+            target_kind=durable_profile.target_kind,
+            target_id=durable_profile.target_id,
+            owner_ref=OwnerRef(type="user", id="context-audit-owner"),
+            current_revision=1,
+            project_id=project_id,
+            created_at=now,
+            updated_at=now,
+        ),
+        durable_profile,
+    )
+    request = EgressRequest(
+        request_id="context-durable-profile-audit",
+        target=target,
+        context=OperationContext(
+            correlation_id="corr-context-durable-audit",
+            project_id=project_id,
+        ),
+        classification=DataClassification.PUBLIC,
+        resource_type="context_bundle",
+        payload_digest=digest_egress_payload({"context_bundle_id": "bundle-audit"}),
+    )
+
+    with pytest.raises(ContractError) as denied:
+        asyncio.run(runtime.gate.enforce(request))
+
+    assert denied.value.details["target_posture"] == EgressTargetPosture.INTERNAL.value
+    assert denied.value.details["profile_ref"] == durable_profile.canonical_ref
+    assert denied.value.details["cost_class"] == EgressCostClass.LOCAL.value
+    assert len(audit_sink.events) == 2
+    for event in audit_sink.events:
+        assert event.target_posture is EgressTargetPosture.INTERNAL
+        assert event.profile_ref == durable_profile.canonical_ref
+        assert event.cost_class is EgressCostClass.LOCAL
 
 
 def test_durable_context_profile_revision_invalidates_inline_fallback_approval(tmp_path) -> None:
