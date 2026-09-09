@@ -314,24 +314,24 @@ class ScopedLearningCommand:
 
         if self.action == "learning.propose":
             project_id = _payload_project_id(payload)
-            self._require_supported_target_scope(_payload_target(payload), project_id)
             await self.access.authorize(
                 context,
                 self.action,
                 resource_ref,
                 project_id=project_id,
             )
+            self._require_supported_target_scope(_payload_target(payload), project_id)
             return
 
         if self.action == "learning.propose-from-feedback":
             feedback = self.learning.repository.get_feedback(resource_ref)
-            self._require_supported_target_scope(_payload_target(payload), feedback.project_id)
             await self.access.authorize(
                 context,
                 self.action,
                 resource_ref,
                 project_id=feedback.project_id,
             )
+            self._require_supported_target_scope(_payload_target(payload), feedback.project_id)
             return
 
         candidate = self.learning.get_candidate(resource_ref)
@@ -342,7 +342,9 @@ class ScopedLearningCommand:
             project_id=candidate.project_id,
         )
         if self.action == "learning.promote":
-            target_project_id = self.learning.promotion_registry.resolve_project_id(candidate.target)
+            target_project_id = self.learning.promotion_registry.resolve_project_id(
+                candidate.target
+            )
             _require_matching_project_scope(candidate.project_id, target_project_id)
             await self.access.authorize(
                 context,
