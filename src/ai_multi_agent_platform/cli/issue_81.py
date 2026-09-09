@@ -42,6 +42,21 @@ def run_cli(
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
     requested_area = _requested_area(arguments)
+    if _is_learning_extension_execution(arguments):
+        renderer = Renderer(
+            json_mode="--json" in arguments,
+            verbose="--verbose" in arguments,
+            stdout=stdout,
+            stderr=stderr,
+        )
+        renderer.error(
+            ProfileError(
+                "generic extension execution is disabled for governed Learning commands; "
+                "use the first-class `platform learning` domain so confirmation and domain "
+                "safeguards cannot be bypassed"
+            )
+        )
+        return 2
     if requested_area not in {"registry", "learning"}:
         return issue_82_run_cli(
             arguments,
@@ -130,7 +145,23 @@ def _require_confirmation(args: argparse.Namespace, action: str, target: str) ->
 
 
 def _requested_area(arguments: list[str]) -> str | None:
+    positionals = _leading_positionals(arguments, limit=1)
+    return positionals[0] if positionals else None
+
+
+def _is_learning_extension_execution(arguments: list[str]) -> bool:
+    positionals = _leading_positionals(arguments, limit=3)
+    return (
+        len(positionals) == 3
+        and positionals[0] == "extension"
+        and positionals[1] == "execute"
+        and positionals[2].startswith("learning.")
+    )
+
+
+def _leading_positionals(arguments: list[str], *, limit: int) -> list[str]:
     options_with_value = {"--config", "--profile", "--endpoint", "--timeout", "--retries"}
+    positionals: list[str] = []
     skip_next = False
     for token in arguments:
         if skip_next:
@@ -141,5 +172,7 @@ def _requested_area(arguments: list[str]) -> str | None:
             continue
         if token.startswith("-"):
             continue
-        return token
-    return None
+        positionals.append(token)
+        if len(positionals) == limit:
+            break
+    return positionals
