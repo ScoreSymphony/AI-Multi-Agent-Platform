@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .models import CompensationStatus
+from .models import CompensationRequest, CompensationStatus
 from .repository import CompensationRepository
 
 
@@ -58,12 +58,13 @@ class CompensationControlPlaneProjection:
 
     def get_group(self, group_id: str) -> CompensationGroupView:
         group = self.repository.get_group(group_id)
-        requests = {
-            request.action_id: request for request in self.repository.list_requests(group.group_id)
-        }
+        requests_by_action: dict[str, list[CompensationRequest]] = {}
+        for request in self.repository.list_requests(group.group_id):
+            requests_by_action.setdefault(request.action_id, []).append(request)
+
         views: list[CompensationActionView] = []
         for action in self.repository.list_actions(group.group_id):
-            request = requests.get(action.action_id)
+            request = self._select_request(requests_by_action.get(action.action_id, []))
             result = (
                 None if request is None else self.repository.get_result(request.compensation_id)
             )
@@ -122,3 +123,20 @@ class CompensationControlPlaneProjection:
             self.get_group(group.group_id)
             for group in self.repository.list_groups_for_plan(plan_id)
         )
+
+    def _select_request(
+        self,
+        requests: list[CompensationRequest],
+    ) -> CompensationRequest | None:
+        if not requests:
+            return None
+        selected = requests[-1]
+        for request in requests:
+            result = self.repository.get_result(request.compensation_id)
+            if (
+                result is not None
+                and result.status is CompensationStatus.RECONCILIATION_REQUIRED
+                and result.manual_intervention_required
+            ):
+                selected = request
+        return selected
