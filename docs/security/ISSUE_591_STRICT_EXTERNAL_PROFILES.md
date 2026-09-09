@@ -7,7 +7,10 @@ not expose an `EgressProfile`. That path preserved historical behavior, but it a
 production-shaped durable runtime could not prove the baseline "no paid/unknown external route"
 policy when cost and trust metadata were absent entirely.
 
-This follow-up closes that gap without removing the lower-level compatibility seam.
+This follow-up closes that gap without removing the lower-level compatibility seam. The material
+security-boundary decision is normative in
+[ADR 0011](../adr/0011-require-explicit-external-egress-profiles.md) and is reflected in
+`docs/ARCHITECTURE_PRINCIPLES.md` and `docs/security/DATA_CLASSIFICATION_AND_EGRESS.md`.
 
 ## Production rule
 
