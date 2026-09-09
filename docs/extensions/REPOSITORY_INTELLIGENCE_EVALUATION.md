@@ -80,7 +80,12 @@ The current Linux x86-64 evaluation workflow verifies:
 7. a pre-provider `AF_INET` self-test that must fail with `EPERM`;
 8. source-tree digest unchanged after the pilot;
 9. no project-local `.projectatlas` state;
-10. measured command latency/CPU/RSS and provider-state size on the deterministic tiny fixture.
+10. measured command latency/CPU and provider-state size on the deterministic tiny fixture, plus a
+    whole-pilot child-RSS high-water mark.
+
+`RUSAGE_CHILDREN.ru_maxrss` is a process-lifetime maximum across terminated children. The final
+comparison artifact therefore does not attribute that value to individual commands and does not
+compare it with baseline RSS.
 
 This proves **evaluation containment**, not a generic production sandbox. The candidate plugin shell
 does not itself install that process boundary around future source operations, so production source
@@ -96,18 +101,24 @@ the revisions differ.
 The local reference path measures bounded repository navigation/search/slice work with Git and owns
 no persistent index. The ProjectAtlas path measures the pinned candidate on the same source.
 
-The resulting machine-readable artifact records:
+The resulting machine-readable artifact records like-for-like comparison metrics for:
 
 - cold time to useful context: baseline `search + slice`, candidate `scan + search + slice`;
 - warm time to useful context: baseline `search + slice`, candidate `search + slice`;
 - tool calls to useful context;
-- returned context bytes;
 - persistent provider-state bytes;
 - per-command elapsed time and CPU observations;
 - exact fixture revision and correctness checks for the expected search hit/source slice.
 
+Raw stdout byte counts are retained separately as **provider-specific transport observations**. They
+are not compared as model-context size because the Git baseline and ProjectAtlas return different
+envelopes. A future normalized canonical-output evaluation may compare model-context bytes/tokens
+only after both paths are reduced to the same logical payload.
+
 The comparison intentionally records the following as unmeasured/not comparable instead of zero:
 
+- normalized model-context bytes/tokens;
+- comparable baseline-vs-candidate peak RSS;
 - representative agent first-pass success;
 - symbol/reference/dependency correctness;
 - architecture/domain/impact usefulness;
@@ -142,5 +153,6 @@ can outrank the baseline.
 
 This deferred candidate decision does not block #502 itself. The clarified v1 requirement is the
 provider-neutral repository/code-intelligence core and deterministic local baseline, both of which
-remain usable without any third-party provider. See `docs/history/issues/ISSUE_502_COMPLETION.md`
-for the final acceptance record.
+remain usable without any third-party provider. The architecture decision is recorded in
+`docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md`; see
+`docs/history/issues/ISSUE_502_COMPLETION.md` for the final acceptance record.
