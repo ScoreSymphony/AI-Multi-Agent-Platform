@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from ai_multi_agent_platform.agents import AgentRepository, AgentRevisionRef, AgentRuntime
 from ai_multi_agent_platform.context import (
@@ -37,15 +38,13 @@ from ai_multi_agent_platform.handoffs import (
 )
 from ai_multi_agent_platform.observability import Telemetry
 from ai_multi_agent_platform.research import SqliteResearchRepository
-from ai_multi_agent_platform.security import EgressGate
+from ai_multi_agent_platform.security import ActorIdentity, EgressGate
 from ai_multi_agent_platform.skills import JsonSkillRepository
 from ai_multi_agent_platform.verification import VerificationEvidenceResolver
 
 
 class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
     """Bridge #651 consumption into the production #650/#591 Context runtime."""
-
-    context_runtime: OperationalContextBoundAgentRuntime
 
     async def start_consumer(
         self,
@@ -54,7 +53,7 @@ class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
         *,
         consuming_run_id: str,
         consumer: ParticipantRef,
-        consumer_actor,
+        consumer_actor: ActorIdentity,
         operation: OperationContext,
         budget: ContextBudget,
         consumer_agent: AgentRevisionRef | None = None,
@@ -94,7 +93,8 @@ class _OperationalProductionHandoffRuntime(ProductionHandoffRuntime):
             adapters=(durable_adapter,),
         )
         self._require_bundle_contains_handoff(bundle, runtime_context)
-        context_execution = await self.context_runtime.start_agent(
+        context_runtime = cast(OperationalContextBoundAgentRuntime, self.context_runtime)
+        context_execution = await context_runtime.start_agent(
             bundle=bundle,
             operation=operation,
             adapter=adapter,
