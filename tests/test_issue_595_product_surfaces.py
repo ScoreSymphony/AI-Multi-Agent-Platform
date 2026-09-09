@@ -31,3 +31,19 @@ def test_public_cli_registers_and_dispatches_learning_domain() -> None:
     assert "add_learning_parser(areas)" in cli
     assert 'elif args.area == "learning":' in cli
     assert "execute_learning(args, client, _require_confirmation)" in cli
+    assert "_is_learning_extension_execution(arguments)" in cli
+    assert 'positionals[2].startswith("learning.")' in cli
+
+
+def test_learning_web_surface_handles_collection_pagination_safely() -> None:
+    learning_page = Path("frontend/src/pages/LearningPage.tsx").read_text(encoding="utf-8")
+
+    assert 'filters: { status: "proposed" }' in learning_page
+    assert 'filters: { status: "evaluating" }' in learning_page
+    assert 'filters: { status: "accepted" }' in learning_page
+    assert 'filters: { status: "promoted" }' in learning_page
+    assert "candidates?.next_cursor" in learning_page
+    assert '"Load more"' in learning_page
+    assert "loadPostPromotionEvaluations" in learning_page
+    assert 'filters: { learning_candidate_id: learningCandidateId }' in learning_page
+    assert "page.next_cursor ?? undefined" in learning_page
