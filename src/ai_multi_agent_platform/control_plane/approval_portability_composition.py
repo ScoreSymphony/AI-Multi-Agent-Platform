@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ai_multi_agent_platform.automation import Automation, NO_TASK_REQUIRED, TriggerDelivery
+from ai_multi_agent_platform.automation import NO_TASK_REQUIRED, Automation, TriggerDelivery
 from ai_multi_agent_platform.contracts.types import JsonValue
 from ai_multi_agent_platform.decisions import (
     DecisionRepository,
