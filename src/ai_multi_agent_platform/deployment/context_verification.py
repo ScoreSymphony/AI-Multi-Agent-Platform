@@ -1,8 +1,8 @@
 """Single-node classification bridge for Verification-derived Context evidence.
 
-The #86 Verification model intentionally binds exact subject/evidence identity but does not persist an
-independent data-classification field. Context must therefore derive classification from canonical
-owners without silently weakening sensitive findings.
+The #86 Verification model intentionally binds exact subject/evidence identity but does not
+persist an independent data-classification field. Context must therefore derive classification
+from canonical owners without silently weakening sensitive findings.
 """
 
 from __future__ import annotations
@@ -42,7 +42,8 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
         else:
             # Canonical Result output currently has no persisted owner classification. Do not infer
             # a weaker class from the reviewing Agent, Task or input Context; findings may quote the
-            # Result verbatim. Until the Result owner exposes classification, keep it reference-only.
+            # Result verbatim. Until the Result owner exposes classification, keep it
+            # reference-only.
             classifications.append(DataClassification.SECRET)
 
         for artifact_id in result.evidence_artifact_ids:
