@@ -125,7 +125,91 @@ def test_registry_activation_with_yes_dispatches_exact_version(tmp_path: Path) -
     assert body == {"resource_ref": "example.asset", "version": "1.2.3"}
 
 
-def test_non_registry_area_delegates_to_issue_82(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_learning_candidate_list_is_reachable_through_platform_entrypoint(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    transport = RecordingTransport()
+
+    code = run_cli(
+        ["--config", str(config), "--json", "learning", "candidate", "list"],
+        transport=transport,
+        stdout=StringIO(),
+    )
+
+    assert code == 0
+    assert len(transport.calls) == 1
+    method, path, headers, body = transport.calls[0]
+    assert method == "GET"
+    assert path == "/api/v1/learning-candidates"
+    assert headers["accept"] == "application/json"
+    assert headers["x-principal-ref"] == "user:test"
+    assert body is None
+
+
+def test_learning_promotion_requires_global_yes_before_transport(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    transport = RecordingTransport()
+    stderr = StringIO()
+
+    code = run_cli(
+        [
+            "--config",
+            str(config),
+            "learning",
+            "promote",
+            "learning_candidate_example",
+            "--expected-revision",
+            "4",
+        ],
+        transport=transport,
+        stderr=stderr,
+    )
+
+    assert code == 2
+    assert transport.calls == []
+    assert "--yes" in stderr.getvalue()
+
+
+def test_learning_promotion_with_yes_dispatches_exact_candidate_revision(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    transport = RecordingTransport()
+
+    code = run_cli(
+        [
+            "--config",
+            str(config),
+            "--yes",
+            "learning",
+            "promote",
+            "learning_candidate_example",
+            "--expected-revision",
+            "4",
+            "--approval-id",
+            "approval_example",
+            "--idempotency-key",
+            "learning-promote-test",
+        ],
+        transport=transport,
+        stdout=StringIO(),
+    )
+
+    assert code == 0
+    assert len(transport.calls) == 1
+    method, path, headers, body = transport.calls[0]
+    assert method == "POST"
+    assert path == "/api/v1/commands/learning.promote"
+    assert headers["idempotency-key"] == "learning-promote-test"
+    assert body == {
+        "resource_ref": "learning_candidate_example",
+        "expected_revision": 4,
+        "approval_id": "approval_example",
+    }
+
+
+def test_non_owned_area_delegates_to_issue_82(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[list[str]] = []
 
     def delegated(
