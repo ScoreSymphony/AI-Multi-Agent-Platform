@@ -17,6 +17,7 @@ from ai_multi_agent_platform.models import ModelRegistry
 from ai_multi_agent_platform.models.routing_profile_repository import (
     ModelRoutingProfileRepository,
 )
+from ai_multi_agent_platform.research import ResearchService
 from ai_multi_agent_platform.security.policy_profiles import (
     AuthorizationPolicyProfileCallContext,
     AuthorizationPolicyProfileRepository,
@@ -61,6 +62,11 @@ from .policy_profile_import import AuthorizationPolicyProfileImportMutationHandl
 from .project_codecs import PROJECT_RESOURCE_TYPE, register_project_portability_codec
 from .project_import import ProjectDependencyAudit, ProjectImportMutationHandler
 from .registry import ResourceSerializerRegistry
+from .research_codecs import (
+    RESEARCH_BUNDLE_RESOURCE_TYPE,
+    portable_research_bundle,
+    register_research_bundle_portability_codec,
+)
 from .routing_profile_reference_audit import build_routing_profile_dependency_audit
 from .routing_profile_reference_codecs import (
     register_routing_profile_aware_agent_portability_codecs,
@@ -86,6 +92,8 @@ def build_agent_portability_workflow(
     routing_profiles: ModelRoutingProfileRepository | None = None,
     evaluation: EvaluationService | None = None,
     evaluation_fixture_exists: Callable[[str], bool] | None = None,
+    research: ResearchService | None = None,
+    research_export_enabled: bool = False,
     policy_profiles: AuthorizationPolicyProfileRepository | None = None,
     policy_profile_service: AuthorizationPolicyProfileService | None = None,
     policy_profile_import_context: AuthorizationPolicyProfileCallContext | None = None,
@@ -100,9 +108,12 @@ def build_agent_portability_workflow(
 
     Agent, Agent Team and Project are always available. Template, model-routing-profile
     and EvaluationSuite portability are enabled only when their owning-domain repositories
-    or services are supplied. Authorization-policy portability is enabled only when the
-    canonical #310 repository, lifecycle service, explicit import context and destination
-    owner are supplied together.
+    or services are supplied. Research bundle export is an explicit owner-domain opt-in: supplying
+    the canonical Research service alone does not expose Research through a generic northbound
+    portability workflow that lacks caller owner scope. Import remains an explicit owner-domain
+    operation so destination-local #86 Verification authority can be revalidated.
+    Authorization-policy portability is enabled only when the canonical #310 repository, lifecycle
+    service, explicit import context and destination owner are supplied together.
 
     Project rollback deliberately fails closed unless the caller supplies a cross-domain
     dependency audit that can prove removal is safe. Routing-profile compensation always
@@ -113,6 +124,9 @@ def build_agent_portability_workflow(
     ``additional_resource_exists``. Without that view, dependencies remain unavailable and
     import preview fails closed rather than making optimistic assumptions about target state.
     """
+
+    if research_export_enabled and research is None:
+        raise ValueError("research export requires the canonical Research service")
 
     policy_parts = (
         policy_profiles,
@@ -154,6 +168,8 @@ def build_agent_portability_workflow(
         register_model_routing_profile_portability_codec(serializers, id_policy=id_policy)
     if evaluation is not None:
         register_evaluation_suite_portability_codec(serializers)
+    if research is not None and research_export_enabled:
+        register_research_bundle_portability_codec(serializers)
     if policy_profiles is not None:
         register_authorization_policy_profile_portability_codec(
             serializers,
@@ -192,6 +208,12 @@ def build_agent_portability_workflow(
             return evaluation.get_suite(resource_id)
 
         export_sources.register(EVALUATION_SUITE_RESOURCE_TYPE, load_evaluation_suite)
+    if research is not None and research_export_enabled:
+
+        async def load_research_bundle(resource_id: str) -> object:
+            return portable_research_bundle(research, resource_id)
+
+        export_sources.register(RESEARCH_BUNDLE_RESOURCE_TYPE, load_research_bundle)
     if policy_profiles is not None:
 
         async def load_policy_profile(resource_id: str) -> object:
@@ -259,6 +281,12 @@ def build_agent_portability_workflow(
             return _canonical_exists(lambda: scopes.get_project(resource_id))
         if resource_type == EVALUATION_SUITE_RESOURCE_TYPE and evaluation is not None:
             return _canonical_exists(lambda: evaluation.get_suite(resource_id))
+        if (
+            resource_type == RESEARCH_BUNDLE_RESOURCE_TYPE
+            and research is not None
+            and research_export_enabled
+        ):
+            return _canonical_exists(lambda: research.repository.get_item(resource_id))
         if resource_type == EVALUATION_FIXTURE_RESOURCE_TYPE:
             return (
                 False
