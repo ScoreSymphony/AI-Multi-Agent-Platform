@@ -347,21 +347,18 @@ class ScopedLearningCommand:
                 payload.get("evaluation_run_ids"),
                 "evaluation_run_ids",
             )
-            if evaluation_run_ids:
-                evaluation = self.learning.quality_gate.evaluation
-                if evaluation is None:
-                    raise ContractError(
-                        ErrorCode.UNAVAILABLE,
-                        "Evaluation service is not configured",
-                    )
-                for evaluation_run_id in evaluation_run_ids:
-                    evaluation.get_run_detail(evaluation_run_id)
-                    await self.access.authorize(
-                        context,
-                        self.action,
-                        evaluation_run_id,
-                        project_id=candidate.project_id,
-                    )
+            for evaluation_run_id in evaluation_run_ids:
+                evaluation_project_id = self.learning.evaluation_run_project_id(evaluation_run_id)
+                _require_matching_evaluation_evidence_project_scope(
+                    candidate.project_id,
+                    evaluation_project_id,
+                )
+                await self.access.authorize(
+                    context,
+                    self.action,
+                    evaluation_run_id,
+                    project_id=evaluation_project_id,
+                )
             verification_ids = _parse_string_tuple(
                 payload.get("verification_ids"),
                 "verification_ids",
@@ -500,6 +497,17 @@ def _require_matching_project_scope(
         raise ContractError(
             ErrorCode.FORBIDDEN,
             "learning candidate project scope does not match the canonical target project",
+        )
+
+
+def _require_matching_evaluation_evidence_project_scope(
+    candidate_project_id: str | None,
+    evaluation_project_id: str | None,
+) -> None:
+    if candidate_project_id != evaluation_project_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "learning candidate project scope does not match Evaluation evidence",
         )
 
 
