@@ -177,8 +177,8 @@ def build_provider_comparison(
             "candidate_search_stdout_bytes": int(search["stdout_bytes"]),
             "candidate_slice_stdout_bytes": int(source_slice["stdout_bytes"]),
             "note": (
-                "Raw stdout sizes use provider-specific envelopes and are retained only as transport "
-                "observations. They are not a model-context-size comparison."
+                "Raw stdout sizes use provider-specific envelopes and are retained only "
+                "as transport observations. They are not a model-context-size comparison."
             ),
         },
         "unmeasured_or_not_comparable": [
