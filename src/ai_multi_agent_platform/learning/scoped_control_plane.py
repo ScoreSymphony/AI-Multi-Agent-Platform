@@ -13,11 +13,11 @@ from ai_multi_agent_platform.contracts import (
     ProviderDescriptor,
 )
 from ai_multi_agent_platform.contracts.authorization import (
-    AuthorizationDecision,
+    AuthorizationDecision as CanonicalAuthorizationDecision,
     AuthorizationOutcome,
-    AuthorizationRequest,
 )
 from ai_multi_agent_platform.contracts.interfaces import AuthorizationProvider
+from ai_multi_agent_platform.contracts.types import AuthorizationDecision, AuthorizationRequest
 from ai_multi_agent_platform.control_plane.extensions import CommandHandler, ControlPlane
 from ai_multi_agent_platform.control_plane.models import PageQuery, RequestContext
 
@@ -88,7 +88,7 @@ class DeferredLearningAuthorizationProvider(AuthorizationProvider):
 
     async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision:
         if _is_learning_action(request.action) and not _RECORD_SCOPED_AUTHORIZATION.get():
-            return AuthorizationDecision(
+            return CanonicalAuthorizationDecision(
                 AuthorizationOutcome.ALLOW,
                 reason="Learning authorization is deferred to canonical record scope",
                 policy_id="learning:record-scope",
