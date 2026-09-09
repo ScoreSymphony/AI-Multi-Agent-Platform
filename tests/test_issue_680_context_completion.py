@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,7 +10,9 @@ from ai_multi_agent_platform.agents import STANDARD_AGENT_IDS, bootstrap_standar
 from ai_multi_agent_platform.context import (
     ContextAssemblyRequest,
     ContextBudget,
+    ContextDataClassification,
     ContextEntryRole,
+    ContextFreshness,
     ContextLifecycleSourceRequest,
     ContextSourceType,
     ContextTrust,
@@ -122,6 +125,8 @@ def test_completed_verification_findings_project_as_exact_untrusted_evidence() -
     )
     assert candidate.role is ContextEntryRole.EVIDENCE
     assert candidate.trust is ContextTrust.UNTRUSTED
+    assert candidate.freshness is ContextFreshness.CURRENT
+    assert candidate.data_classification is ContextDataClassification.RESTRICTED
     assert candidate.project_id == project_id
 
     payload = json.loads(candidate.inline_content or "{}")
@@ -145,6 +150,61 @@ def test_completed_verification_findings_project_as_exact_untrusted_evidence() -
     ]
     assert "private_adapter_note" not in (candidate.inline_content or "")
     assert "must-not-be-copied" not in (candidate.inline_content or "")
+
+
+def test_expired_verification_result_projects_as_stale_evidence() -> None:
+    now = datetime(2026, 9, 9, 19, 30, tzinfo=UTC)
+    completed_at = now - timedelta(seconds=10)
+    task_id = new_id("task")
+    project_id = new_id("project")
+    result_id = new_id("result")
+    subject = VerificationSubject(
+        subject_type="result",
+        subject_id=result_id,
+        revision="1",
+        digest="c" * 64,
+    )
+    policy = VerificationPolicy(
+        name="Expiring verification",
+        stages=(
+            VerificationStage(stage_id="quality", verifier_kind=VerifierKind.DETERMINISTIC),
+        ),
+        result_expiry_seconds=5,
+    )
+    verification = VerificationService()
+    verification.register_policy(policy)
+    request = verification.request_verification(
+        task_id=task_id,
+        policy_id=policy.policy_id,
+        policy_version=policy.version,
+        stage_id="quality",
+        subject=subject,
+        correlation_id=task_id,
+        result_id=result_id,
+        project_id=project_id,
+    )
+    verification.submit_result(
+        VerificationResult(
+            verification_id=request.verification_id,
+            verifier=VerifierIdentity(
+                verifier_ref="deterministic:expiry",
+                kind=VerifierKind.DETERMINISTIC,
+            ),
+            outcome=VerificationOutcome.PASS,
+            subject=subject,
+            started_at=completed_at,
+            completed_at=completed_at,
+        )
+    )
+
+    candidate = asyncio.run(
+        VerificationContextSourceAdapter(verification, now=lambda: now).collect(
+            _source_request(task_id=task_id, project_id=project_id)
+        )
+    )[0]
+
+    assert candidate.freshness is ContextFreshness.STALE
+    assert candidate.data_classification is ContextDataClassification.RESTRICTED
 
 
 def test_pending_verification_request_does_not_become_context_evidence() -> None:
