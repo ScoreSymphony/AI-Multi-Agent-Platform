@@ -46,7 +46,7 @@ class RoutingProfileAwareEvaluationTargetSnapshotEnricher(EvaluationTargetSnapsh
             references.append(
                 VersionReference(
                     kind="model_routing_profile",
-                    ref_id=ref.profile_id,
+                    ref_id=ref.canonical_ref,
                     version=str(ref.revision),
                 )
             )
