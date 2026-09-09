@@ -18,9 +18,7 @@ from ai_multi_agent_platform.data.models import DataAccessContext
 from ai_multi_agent_platform.verification import VerificationRequest, VerificationResult
 
 
-class CanonicalVerificationContextClassificationResolver(
-    VerificationContextClassificationResolver
-):
+class CanonicalVerificationContextClassificationResolver(VerificationContextClassificationResolver):
     """Inherit artifact classifications and fail closed for unclassified Result subjects."""
 
     def __init__(self, files: FileProvider) -> None:
@@ -48,9 +46,7 @@ class CanonicalVerificationContextClassificationResolver(
             classifications.append(DataClassification.SECRET)
 
         for artifact_id in result.evidence_artifact_ids:
-            classifications.append(
-                await self._artifact_classification(source_request, artifact_id)
-            )
+            classifications.append(await self._artifact_classification(source_request, artifact_id))
 
         strongest = strongest_classification(*classifications) or DataClassification.SECRET
         return _context_classification(strongest)
