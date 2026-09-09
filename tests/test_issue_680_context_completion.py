@@ -22,6 +22,9 @@ from ai_multi_agent_platform.context import (
 )
 from ai_multi_agent_platform.contracts import OperationContext
 from ai_multi_agent_platform.deployment import SingleNodeConfig, build_single_node_deployment
+from ai_multi_agent_platform.deployment.context_verification import (
+    CanonicalVerificationContextClassificationResolver,
+)
 from ai_multi_agent_platform.domain import OwnerRef, new_id
 from ai_multi_agent_platform.security import ActorIdentity, ActorType
 from ai_multi_agent_platform.verification import (
@@ -53,6 +56,15 @@ def _source_request(*, task_id: str, project_id: str) -> OperationalContextSourc
         ),
         actor_ref="user:issue-680",
     )
+
+
+class _FixedVerificationClassificationResolver:
+    def __init__(self, classification: ContextDataClassification) -> None:
+        self.classification = classification
+
+    async def classify(self, source_request, verification_request, result):
+        del source_request, verification_request, result
+        return self.classification
 
 
 def test_completed_verification_findings_project_as_exact_untrusted_evidence() -> None:
@@ -109,11 +121,25 @@ def test_completed_verification_findings_project_as_exact_untrusted_evidence() -
         metadata={"private_adapter_note": "must-not-be-copied"},
     )
     verification.submit_result(verification_result)
+    source_request = _source_request(task_id=task_id, project_id=project_id)
+
+    fail_closed = asyncio.run(
+        VerificationContextSourceAdapter(verification).collect(source_request)
+    )[0]
+    assert fail_closed.data_classification is ContextDataClassification.SECRET_REFERENCE
+    assert fail_closed.inline_content is None
+    assert fail_closed.content_ref == (
+        f"verification-result:{verification_result.verification_result_id}"
+    )
+    assert fail_closed.metadata == {}
 
     candidate = asyncio.run(
-        VerificationContextSourceAdapter(verification).collect(
-            _source_request(task_id=task_id, project_id=project_id)
-        )
+        VerificationContextSourceAdapter(
+            verification,
+            classification_resolver=_FixedVerificationClassificationResolver(
+                ContextDataClassification.RESTRICTED
+            ),
+        ).collect(source_request)
     )[0]
 
     assert candidate.source.source_type is ContextSourceType.VERIFICATION
@@ -166,9 +192,7 @@ def test_expired_verification_result_projects_as_stale_evidence() -> None:
     )
     policy = VerificationPolicy(
         name="Expiring verification",
-        stages=(
-            VerificationStage(stage_id="quality", verifier_kind=VerifierKind.DETERMINISTIC),
-        ),
+        stages=(VerificationStage(stage_id="quality", verifier_kind=VerifierKind.DETERMINISTIC),),
         result_expiry_seconds=5,
     )
     verification = VerificationService()
@@ -198,9 +222,13 @@ def test_expired_verification_result_projects_as_stale_evidence() -> None:
     )
 
     candidate = asyncio.run(
-        VerificationContextSourceAdapter(verification, now=lambda: now).collect(
-            _source_request(task_id=task_id, project_id=project_id)
-        )
+        VerificationContextSourceAdapter(
+            verification,
+            classification_resolver=_FixedVerificationClassificationResolver(
+                ContextDataClassification.RESTRICTED
+            ),
+            now=lambda: now,
+        ).collect(_source_request(task_id=task_id, project_id=project_id))
     )[0]
 
     assert candidate.freshness is ContextFreshness.STALE
@@ -330,10 +358,15 @@ def test_public_single_node_real_adapters_preserve_historical_bundle_across_sour
         )
         binding_factory = deployment.context.lifecycle._binding_factory  # noqa: SLF001
         bindings = tuple(binding_factory(source))
-        assert any(
-            isinstance(binding.adapter, VerificationContextSourceAdapter)
-            and binding.source_type is ContextSourceType.VERIFICATION
+        verification_binding = next(
+            binding
             for binding in bindings
+            if isinstance(binding.adapter, VerificationContextSourceAdapter)
+            and binding.source_type is ContextSourceType.VERIFICATION
+        )
+        assert isinstance(
+            verification_binding.adapter.classification_resolver,
+            CanonicalVerificationContextClassificationResolver,
         )
 
         def assembly_request() -> ContextAssemblyRequest:
