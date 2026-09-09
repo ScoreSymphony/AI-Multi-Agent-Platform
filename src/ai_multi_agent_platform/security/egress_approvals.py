@@ -183,9 +183,7 @@ def egress_proposed_action(
     profile_trust = _metadata_string(decision, "profile_trust") or (
         None if profile is None else profile.trust.value
     )
-    target_posture = (
-        _metadata_string(decision, "target_posture") or target.effective_posture.value
-    )
+    target_posture = _metadata_string(decision, "target_posture") or target.effective_posture.value
 
     payload: dict[str, JsonValue] = {
         "egress_target_kind": target.kind.value,

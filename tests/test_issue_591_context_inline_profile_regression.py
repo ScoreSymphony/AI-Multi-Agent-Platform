@@ -220,9 +220,7 @@ def test_durable_context_profile_revision_invalidates_inline_fallback_approval(t
             operation=operation,
         )
     )
-    approved = asyncio.run(
-        runtime.gate.evaluate(request, actor=actor, approval_id=approval_id)
-    )
+    approved = asyncio.run(runtime.gate.evaluate(request, actor=actor, approval_id=approval_id))
     assert approved.outcome is EgressOutcome.ALLOW
     assert approved.approval_ref == approval_id
 
