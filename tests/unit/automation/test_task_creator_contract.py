@@ -4,10 +4,10 @@ import asyncio
 from typing import Any
 
 from ai_multi_agent_platform.automation import (
+    NO_TASK_REQUIRED,
     Automation,
     DeliveryStatus,
     IdentityContext,
-    NO_TASK_REQUIRED,
     TaskTemplate,
     TriggerDefinition,
     TriggerType,
