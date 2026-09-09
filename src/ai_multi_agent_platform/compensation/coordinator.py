@@ -7,6 +7,9 @@ enforcement and invocation-scoped Approval requirements.
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import timedelta
+
 from ai_multi_agent_platform.capabilities import CapabilityInvocation
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode
 
@@ -83,12 +86,24 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         if current is not None and current.status is CompensationStatus.RUNNING:
             return await super().execute(compensation_id, context)
 
-        # Re-check all time-sensitive evidence immediately before provider execution. In
-        # particular, a request that waited for Approval must not run after its declared window.
+        # Fail early when the window is already closed, while preserving any prior governed
+        # invocation linkage (for example an APPROVAL_REQUIRED result). CapabilityInvoker repeats
+        # the deadline check after all asynchronous governance and immediately before the provider.
         checked_at = utc_now()
         validation_error = self._validate_compensation_evidence(action, checked_at)
         if validation_error is not None:
             status, error_code, message = validation_error
+            if current is not None:
+                return self.repository.save_result(
+                    replace(
+                        current,
+                        status=status,
+                        error_code=error_code,
+                        error_message=message,
+                        manual_intervention_required=True,
+                        completed_at=checked_at,
+                    )
+                )
             return self.repository.save_result(
                 CompensationResult(
                     compensation_id=request.compensation_id,
@@ -97,7 +112,6 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
                     execution_run_id=context.run_id,
                     execution_agent_id=context.agent_id,
                     invocation_id=context.invocation_id,
-                    approval_id=None if current is None else current.approval_id,
                     error_code=error_code,
                     error_message=message,
                     manual_intervention_required=True,
@@ -119,6 +133,9 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         require_approval = group.policy.require_human_approval or bool(
             descriptor is not None and descriptor.requires_approval
         )
+        expires_at = None
+        if descriptor is not None and descriptor.window_seconds is not None:
+            expires_at = action.completed_at + timedelta(seconds=descriptor.window_seconds)
         return CapabilityInvocation(
             invocation_id=invocation.invocation_id,
             capability_id=invocation.capability_id,
@@ -130,7 +147,31 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
             granted_permissions=invocation.granted_permissions,
             available_worker_capabilities=invocation.available_worker_capabilities,
             require_approval=require_approval,
+            expires_at=expires_at,
         )
+
+    def _record_invocation_failure(
+        self,
+        running: CompensationResult,
+        error: ContractError,
+    ) -> CompensationResult:
+        if bool(error.details.get("invocation_expired", False)):
+            canonical_id = error.details.get("canonical_tool_invocation_id")
+            if not isinstance(canonical_id, str):
+                canonical_id = None
+            return self.repository.save_result(
+                replace(
+                    running,
+                    status=CompensationStatus.EXPIRED,
+                    provider_id=error.provider_id,
+                    canonical_tool_invocation_id=canonical_id,
+                    error_code=error.code.value,
+                    error_message=error.message,
+                    manual_intervention_required=True,
+                    completed_at=utc_now(),
+                )
+            )
+        return super()._record_invocation_failure(running, error)
 
     def _find_legacy_request(self, action: CompletedSideEffect) -> CompensationRequest | None:
         """Resolve pre-hardening trigger-suffixed keys without creating a second undo.
