@@ -103,6 +103,7 @@ from .source_adapters import (
     SkillBundleContextSourceAdapter,
     TaskContextSourceAdapter,
 )
+from .verification_source import VerificationContextSourceAdapter
 from .visibility import AuthorizationContextEntryVisibilityResolver
 
 __all__ = [
@@ -179,6 +180,7 @@ __all__ = [
     "SkillBundleContextSourceAdapter",
     "StaticContextSourceAdapter",
     "TaskContextSourceAdapter",
+    "VerificationContextSourceAdapter",
     "assert_render_preserves_bundle",
     "context_binding_from_agent_run_metadata",
     "context_bundle_from_json",

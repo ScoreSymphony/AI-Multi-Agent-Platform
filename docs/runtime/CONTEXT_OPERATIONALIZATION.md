@@ -13,7 +13,8 @@ therefore follow this path:
 
 1. the canonical Task/Run lifecycle resolves the exact Agent revision and optional Plan/Step binding;
 2. source-domain adapters project authorized candidates from Task, Agent, Plan/Step, Skill Bundle,
-   Research Evidence, Repository state, File/Artifact/Result references, Memory and Knowledge;
+   Research Evidence, completed Verification findings, Repository state, File/Artifact/Result
+   references, Memory and Knowledge;
 3. `OperationalContextAssemblyService` converts source-provider absence/failure into explicit
    `UNAVAILABLE` observations and delegates selection truth to the #590 `ContextResolver`;
 4. the immutable Bundle is persisted before execution;
@@ -42,8 +43,10 @@ normal deployment database directory:
 - `skills.json` — canonical Skill revisions/Bundles/bindings;
 - `research.sqlite3` — canonical Research Evidence state.
 
-File, Task/Run, Agent, Coordination/Planning and Repository state continue to use their existing
-canonical owners. Context adapters do not create shadow copies of those lifecycles.
+File, Task/Run, Agent, Coordination/Planning, Verification and Repository state continue to use their
+existing canonical owners. In particular, Verification remains in the existing #86 durable service;
+the Context adapter only projects completed result/findings evidence and never creates a shadow
+Verification store. Context adapters do not create shadow copies of those lifecycles.
 
 ## Source availability semantics
 
@@ -59,6 +62,10 @@ source identity and mandatory/optional semantics.
   by the #590 resolver;
 - untrusted retrieved content remains Context/Evidence and cannot acquire Security/Instruction
   authority;
+- completed Verification findings are optional `VERIFICATION` / `EVIDENCE` candidates and reviewer
+  prose is deliberately `UNTRUSTED`;
+- explicit user-provided task intent is already carried by the exact canonical Task revision through
+  `TaskContextSourceAdapter`; no second Human/user-message Context store is introduced;
 - secret values are never promoted out of canonical secret references.
 
 ## Routing and output reserve
@@ -131,10 +138,9 @@ ID and digest and the durable Bundle still matches that digest.
 Reconciliation is idempotent. Conflicting or incomplete evidence fails closed instead of inventing a
 new binding. Existing correct bindings are preserved unchanged.
 
-## Prepared acceptance coverage
+## Acceptance coverage
 
-Issue #650 adds focused regression/acceptance files for later execution in the shared integration
-branch:
+The combined #650/#680 operational regression evidence is:
 
 - `tests/test_issue_650_context_operationalization.py`
   - optional vs mandatory source unavailability;
@@ -158,11 +164,18 @@ branch:
   - persisted AgentRun → Bundle binding;
   - Control Plane inspection;
   - restart restoration/reconciliation;
+- `tests/test_issue_680_context_completion.py`
+  - completed Verification finding/result → canonical `VERIFICATION` evidence;
+  - pending Verification is not misrepresented as evidence;
+  - reviewer-owned arbitrary metadata is not copied into Context;
+  - explicit user objective remains Task-owned and exact-revision bound;
+  - the public single-node binding factory includes the Verification source adapter;
+  - a real Task revision changes the Bundle digest while the historical Bundle remains stable across restart;
 - `tests/unit/cli/test_cli_context_inspection.py`
   - generic API-first CLI Run → binding → Bundle tracing;
   - ordinary CLI inspection never exposes inline Context values;
 - `frontend/src/api/context.test.ts`
   - Run → binding → Bundle frontend reads through the canonical extension collections.
 
-These tests are intended to run after the active implementation branches are unified so integration
-conflicts and shared contracts are validated once against the combined branch.
+Together these tests exercise the full public AgentRun path plus focused live-source conformance
+without creating a duplicate Context-specific runner or requiring a paid external service.
