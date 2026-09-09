@@ -1,3 +1,5 @@
+"""Regression guards for paired A/B manifest comparability in issue #594."""
+
 from __future__ import annotations
 
 from dataclasses import replace
