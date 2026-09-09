@@ -1,1 +1,2 @@
 Trigger the checked-in Issue #597 final hardening workflow from an authenticated branch write. This marker is temporary and will be removed after the hardening chain completes.
+Authenticated trigger after installing the owner-gated one-shot workflow.
