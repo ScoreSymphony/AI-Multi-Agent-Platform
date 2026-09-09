@@ -8,7 +8,7 @@ The canonical flow is:
 
 ```text
 Task / Plan / Step / Agent / Skill Bundle / Memory / Knowledge
-Research Evidence / Repository Intelligence / Files / Results
+Research Evidence / Repository Intelligence / Files / Results / Verification
                          |
                          v
                Context source candidates
@@ -28,7 +28,7 @@ Research Evidence / Repository Intelligence / Files / Results
         model/orchestrator
 ```
 
-Source systems remain authoritative for their own records. Context assembly records exact references, revisions, digests, freshness, classification and selection evidence; it does not become a second Task, Skill, Research, Repository, Memory or File store.
+Source systems remain authoritative for their own records. Context assembly records exact references, revisions, digests, freshness, classification and selection evidence; it does not become a second Task, Skill, Research, Repository, Memory, Verification or File store.
 
 The orchestrator or model provider is not allowed to become the hidden context authority. Rendering may translate an already-resolved bundle into a provider-native representation, but it may not silently widen scope, replace mandatory entries, reorder canonical entries or redefine bundle identity.
 
@@ -74,6 +74,13 @@ Budget limits are resource constraints, not authorization boundaries. Mandatory 
 
 The source vocabulary includes Task, Plan/Step, Agent, Skill, Memory, Knowledge, Research Evidence, Repository, File, Artifact, Result, prior Run, Verification, human-provided context and system/security context.
 
+The operational path deliberately maps source vocabulary to existing canonical owners rather than requiring one adapter class per enum value:
+
+- explicit human/user task intent and constraints remain owned by the canonical Task/Specification path. `TaskContextSourceAdapter` projects the exact Task revision, including its user-provided objective, so Context assembly does not create a second user-message truth store or adapter-private prompt channel;
+- completed #86 Verification results/findings are projected by `VerificationContextSourceAdapter` as `VERIFICATION` / `EVIDENCE` candidates. The projection binds the canonical Verification request/result IDs, policy/stage, exact subject revision/digest, outcome and findings. Reviewer-authored prose remains `UNTRUSTED` evidence and cannot acquire `INSTRUCTION` authority merely by entering Context;
+- pending Verification requests are not treated as findings/evidence;
+- arbitrary Verification result metadata is not copied into Context. The Verification subsystem remains the only owner of its full canonical record.
+
 Skill integration preserves the resolved `skill_bundle_id` and digest on the bundle in addition to exact Skill source entries. Research Evidence and Repository Intelligence contribute source revisions/digests/locators through normal candidates; neither subsystem owns final ordering, authorization or budgeting.
 
 ## Secret and untrusted-content boundary
@@ -110,9 +117,18 @@ A historical run remains explainable even if live source domains later change be
 
 The reference persistence path supports the critical restart case: a bundle can be resolved and durably stored before execution, reloaded after restart, and reused for identical canonical inputs without silently substituting changed/stale/unauthorized live context.
 
-## Control Plane inspection
+## Control Plane / Web / CLI inspection
 
-The context Control Plane resources expose safe projections of bundles and Run bindings. Inspection surfaces are expected to show bundle identity, source references, revisions/freshness, selection/omission reasons, budget usage and resolver/policy versions while respecting entry visibility rules. Secret values are never made visible merely because a bundle contains a SecretReference.
+The context Control Plane exposes safe read-only `context-bundles` and `context-run-bindings` projections. The Web Run detail follows `Run -> context-run-bindings -> context-bundles`, and the generic extension CLI reaches the same canonical resources. These surfaces show bundle identity, source references, revisions/freshness, selection/omission reasons, budget usage and resolver/policy versions while respecting entry visibility rules. Secret values and inline Context content are never made visible merely because a caller can read a Bundle resource.
+
+The CLI uses the existing API-first extension surface rather than a second Context transport, for example:
+
+```text
+platform extension list context-run-bindings --filter run_id=<run_id>
+platform extension show context-run-bindings <agent_run_id>
+platform extension list context-bundles --filter run_id=<run_id>
+platform extension show context-bundles <context_bundle_id>
+```
 
 ## Evaluation integration
 
@@ -138,4 +154,6 @@ The #19 evaluation framework remains the canonical evaluation owner. Context ass
 
 `tests/test_issue_590_secret_reference_metadata.py` proves the reference-only secret metadata boundary. `tests/test_issue_590_agent_run_integration.py` proves that an actual `ContextBoundAgentRuntime` AgentRun carries and persists the exact canonical Bundle ID/digest. `tests/test_issue_590_evaluation_integration.py` runs the context scenarios through the canonical #19 evaluation framework.
 
-All #590 tests use local fakes/reference implementations and therefore preserve the self-hosted/no-paid-service requirement.
+The operational completion coverage additionally uses `tests/test_issue_650_single_node_context_e2e.py` for the public AgentRun / restart path and `tests/test_issue_680_context_completion.py` for Verification projection, explicit user-intent ownership, real single-node source-adapter composition and historical Bundle stability across a changed Task revision.
+
+All #590/#650/#680 Context tests use local fakes/reference implementations and therefore preserve the self-hosted/no-paid-service requirement.
