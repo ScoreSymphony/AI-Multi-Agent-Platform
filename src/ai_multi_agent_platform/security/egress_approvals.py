@@ -165,32 +165,30 @@ def egress_proposed_action(
     """Bind Approval to the exact value-free disclosure subject and policy revision.
 
     Durable repository-backed policies may resolve a profile after the transport adapter has
-    constructed its request. In that case the canonical policy projects the exact resolved
-    profile revision into ``decision.audit_metadata``. Approval binding therefore prefers the
-    request-attached profile but safely falls back to those policy-produced metadata fields.
+    constructed its request. The canonical policy projects the exact profile that actually
+    produced the decision into ``decision.audit_metadata``. Those decision-bound fields are
+    therefore authoritative for Approval identity; the request-attached profile is only a fallback
+    for policies that do not project profile metadata.
     """
 
     target = request.target
     profile = target.profile
-    profile_ref = target.profile_ref or _metadata_string(decision, "profile_ref")
-    profile_source_revision = (
-        profile.source_revision
-        if profile is not None
-        else _metadata_string(decision, "source_revision")
+    profile_ref = _metadata_string(decision, "profile_ref") or target.profile_ref
+    profile_source_revision = _metadata_string(decision, "source_revision") or (
+        None if profile is None else profile.source_revision
     )
-    profile_cost_class = (
-        profile.cost_class.value
-        if profile is not None
-        else _metadata_string(decision, "cost_class")
+    profile_cost_class = _metadata_string(decision, "cost_class") or (
+        None if profile is None else profile.cost_class.value
     )
-    profile_trust = (
-        profile.trust.value if profile is not None else _metadata_string(decision, "profile_trust")
+    profile_trust = _metadata_string(decision, "profile_trust") or (
+        None if profile is None else profile.trust.value
     )
+    target_posture = _metadata_string(decision, "target_posture") or target.effective_posture.value
 
     payload: dict[str, JsonValue] = {
         "egress_target_kind": target.kind.value,
         "egress_target_id": target.target_id,
-        "egress_target_posture": target.effective_posture.value,
+        "egress_target_posture": target_posture,
         "data_classification": (
             None if request.classification is None else request.classification.value
         ),
@@ -223,7 +221,7 @@ def egress_proposed_action(
                 ),
             ),
             trust_context={
-                "egress_target_posture": target.effective_posture.value,
+                "egress_target_posture": target_posture,
                 "egress_profile_ref": profile_ref,
                 "egress_profile_source_revision": profile_source_revision,
                 "egress_policy_version": decision.policy_version,
