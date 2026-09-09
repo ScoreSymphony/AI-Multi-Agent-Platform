@@ -249,9 +249,7 @@ def test_mixed_valid_invalid_run_pattern_fails_as_a_whole() -> None:
     succeeded = _run(task, status=RunStatus.SUCCEEDED)
     bridge = LearningSourceBridge(
         _learning(),
-        run_failures=KernelRunFailureEvidenceResolver(
-            _KernelStub(task, (failed, succeeded))
-        ),
+        run_failures=KernelRunFailureEvidenceResolver(_KernelStub(task, (failed, succeeded))),
     )
 
     with pytest.raises(ContractError) as error:
