@@ -26,8 +26,8 @@ from .models import (
 )
 from .service import (
     CompensationCoordinator as _BaseCompensationCoordinator,
-    ExecutionContextFactory,
 )
+from .service import ExecutionContextFactory
 
 
 class CompensationCoordinator(_BaseCompensationCoordinator):
