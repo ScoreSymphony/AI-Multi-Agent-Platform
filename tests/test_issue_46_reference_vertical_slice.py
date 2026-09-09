@@ -443,6 +443,7 @@ def test_authenticated_reference_vertical_preserves_canonical_evidence_end_to_en
                 method="GET",
                 path=f"/api/v1/tasks/{task_id}/timeline",
                 headers=_headers(token),
+                query={"limit": "200"},
             )
         )
         assert task_view.status == run_view.status == result_view.status == timeline.status == 200

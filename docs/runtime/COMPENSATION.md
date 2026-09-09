@@ -69,6 +69,12 @@ failure followed by cancellation or manual recovery cannot repeat an already-req
 may provide a stronger external key where needed. Reusing one key for a different immutable
 compensation target is rejected with `conflict` instead of silently aliasing the requests.
 
+The hardened coordinator also recognizes the trigger-suffixed default keys written by the initial
+#596 implementation. An upgraded durable store therefore reuses the historical request rather than
+creating a second external undo. If more than one legacy request already exists for the same
+immutable target, recovery fails closed with `conflict` and requires manual reconciliation instead
+of guessing which historical side effect is authoritative.
+
 For a descriptor whose provider idempotency is guaranteed, the same key is propagated through
 `OperationControl` with `RetryMode.IDEMPOTENT`. Other providers receive `RetryMode.NEVER`; the
 platform does not promote an unknown provider guarantee into retry safety.
@@ -76,7 +82,7 @@ platform does not promote an unknown provider guarantee into retry safety.
 A terminal compensation result is returned on duplicate execution instead of invoking the external
 provider again.
 
-## Crash and restart safety
+## Crash, restart and expiry safety
 
 Before the provider call starts, the coordinator persists a `running` result with the canonical
 execution Task/Run/Agent and invocation identity. This creates an intentionally conservative crash
@@ -93,21 +99,28 @@ outcome becomes one of:
 Without a reconciler, the state becomes `reconciliation_required` and requires operator action.
 The SQLite reference repository proves this state survives process restart.
 
+A declared `window_seconds` is checked when the request is created **and again immediately before
+provider invocation**. This second check covers queued, restarted and Approval-delayed requests. A
+request whose compensation window expired while waiting becomes `expired` and does not reach the
+external provider.
+
 ## Approval and authorization
 
 A compensating action does not inherit authorization from the original action. The coordinator
-constructs a fresh `CapabilityInvocation` with the compensation execution Task/Run/Agent context.
-The configured `CapabilityInvoker` then applies its ordinary policy hook, canonical ToolInvocation
-binding and Approval hook.
+constructs a fresh canonical capability invocation with the compensation execution Task/Run/Agent
+context. The configured `CapabilityInvoker` then applies its ordinary policy hook, canonical
+ToolInvocation binding and Approval hook.
+
+`CompensationDescriptor.requires_approval` and
+`CompensationPolicy.require_human_approval` strengthen that individual invocation through the same
+ordinary `CapabilityInvoker` Approval path. They do not create a compensation-private approval
+mechanism and cannot weaken `CapabilitySpec.required_approvals` or a policy decision that already
+requires Approval.
 
 If #15 requires Approval, the invocation is not sent to the provider. The compensation result is
 `approval_required` and retains the canonical compensating ToolInvocation linkage exposed by the
 invoker. A later retry of the same compensation request may proceed only when the ordinary #15
 Approval hook accepts that exact action. Policy denial is persisted separately as `denied`.
-
-Deployments claiming compensation support should declare Approval requirements consistently on the
-compensating `CapabilitySpec` and `CompensationDescriptor`; core compensation code never creates a
-private Approval mechanism.
 
 ## Verification
 
@@ -118,9 +131,19 @@ cleanup.
 
 ## Operator projection
 
-`CompensationCoordinator.projection(group_id)` joins the immutable completed action with its request
-and latest result. The projection exposes original/compensating linkage, current status, evidence
-and `manual_intervention_required` without altering historical execution records.
+`CompensationCoordinator.projection(group_id)` joins each immutable completed action with the
+persisted request/result state that operators must act on. Under normal history this is the latest
+request. If an upgraded store contains conflicting canonical and historical request identities, an
+unresolved `reconciliation_required` result with manual intervention takes precedence over a newer
+sibling success so the conflict cannot disappear from the read model.
 
-This is the read model intended for Control Plane/UI/CLI surfaces. It includes irreversible and
-unknown actions rather than hiding them.
+If every conflicting sibling is already terminal, those durable `succeeded`/`failed` results remain
+immutable historical evidence. The coordinator and Control Plane instead project a read-only
+`reconciliation_required` conflict for operator surfaces; recovery does not replay the external
+operation or rewrite the successful terminal result.
+
+The projection exposes original/compensating linkage, current status, evidence and
+`manual_intervention_required` without altering historical execution records. The Control Plane
+projection applies the same fail-closed visibility rule. These are the read models intended for
+Control Plane/UI/CLI surfaces, and they include irreversible and unknown actions rather than hiding
+them.

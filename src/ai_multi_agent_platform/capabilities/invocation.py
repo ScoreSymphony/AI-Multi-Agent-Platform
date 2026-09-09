@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
+from datetime import UTC, datetime
 from time import perf_counter
 from typing import Protocol, runtime_checkable
 
@@ -153,8 +154,14 @@ class CapabilityInvoker:
             )
 
         approval_decision: str | None = None
-        approval_required = policy_decision is PolicyDecision.REQUIRE_APPROVAL or bool(
-            capability.required_approvals
+        # Canonical workflows may strengthen the approval requirement for one invocation without
+        # weakening CapabilitySpec or policy requirements. Compensation uses this to require a
+        # fresh #15 approval for an undo even when the compensating capability is not globally
+        # approval-gated.
+        approval_required = (
+            request.require_approval
+            or policy_decision is PolicyDecision.REQUIRE_APPROVAL
+            or bool(capability.required_approvals)
         )
         if approval_required:
             if canonical_invocation is None:
@@ -217,6 +224,27 @@ class CapabilityInvoker:
             canonical_invocation=canonical_invocation,
             approval_decision=approval_decision,
         )
+        if request.expires_at is not None and datetime.now(UTC) > request.expires_at:
+            await self._record(
+                request,
+                registration,
+                InvocationStatus.FAILED,
+                ErrorCode.CONFLICT.value,
+                canonical_invocation=canonical_invocation,
+                approval_decision=approval_decision,
+            )
+            raise ContractError(
+                ErrorCode.CONFLICT,
+                f"capability {capability.capability_id!r} expired before provider execution",
+                provider_id=registration.provider_id,
+                details={
+                    "invocation_expired": True,
+                    "canonical_tool_invocation_id": (
+                        None if canonical_invocation is None else canonical_invocation.id
+                    ),
+                },
+            )
+
         timeout = capability.timeout_seconds or request.context.control.timeout_seconds
         provider_started = perf_counter()
         execution_invocation = provider_invocation

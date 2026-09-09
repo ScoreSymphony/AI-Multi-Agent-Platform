@@ -4,8 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .models import CompensationStatus
+from ai_multi_agent_platform.contracts import ErrorCode
+
+from .models import (
+    CompensationRequest,
+    CompensationStatus,
+    CompensationTrigger,
+    CompletedSideEffect,
+)
 from .repository import CompensationRepository
+
+_MIXED_IDENTITY_MESSAGE = (
+    "canonical and legacy compensation requests coexist for one immutable target; "
+    "manual reconciliation is required"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,15 +70,30 @@ class CompensationControlPlaneProjection:
 
     def get_group(self, group_id: str) -> CompensationGroupView:
         group = self.repository.get_group(group_id)
-        requests = {
-            request.action_id: request for request in self.repository.list_requests(group.group_id)
-        }
+        requests_by_action: dict[str, list[CompensationRequest]] = {}
+        for stored_request in self.repository.list_requests(group.group_id):
+            requests_by_action.setdefault(stored_request.action_id, []).append(stored_request)
+
         views: list[CompensationActionView] = []
         for action in self.repository.list_actions(group.group_id):
-            request = requests.get(action.action_id)
+            requests = requests_by_action.get(action.action_id, [])
+            request = self._select_request(requests)
             result = (
                 None if request is None else self.repository.get_result(request.compensation_id)
             )
+            mixed_identity = self._has_mixed_default_identities(action, requests)
+            status = None if result is None else result.status
+            error_code = None if result is None else result.error_code
+            error_message = None if result is None else result.error_message
+            manual_intervention_required = (
+                False if result is None else result.manual_intervention_required
+            )
+            if mixed_identity:
+                status = CompensationStatus.RECONCILIATION_REQUIRED
+                error_code = ErrorCode.CONFLICT.value
+                error_message = _MIXED_IDENTITY_MESSAGE
+                manual_intervention_required = True
+
             descriptor = action.compensation
             views.append(
                 CompensationActionView(
@@ -84,7 +111,7 @@ class CompensationControlPlaneProjection:
                         None if descriptor is None else descriptor.capability_id
                     ),
                     compensation_id=None if request is None else request.compensation_id,
-                    status=None if result is None else result.status,
+                    status=status,
                     compensation_run_id=None if result is None else result.execution_run_id,
                     compensation_tool_invocation_id=(
                         None if result is None else result.canonical_tool_invocation_id
@@ -97,11 +124,9 @@ class CompensationControlPlaneProjection:
                     evidence_refs=(
                         action.evidence_refs if result is None else result.evidence_refs
                     ),
-                    error_code=None if result is None else result.error_code,
-                    error_message=None if result is None else result.error_message,
-                    manual_intervention_required=(
-                        False if result is None else result.manual_intervention_required
-                    ),
+                    error_code=error_code,
+                    error_message=error_message,
+                    manual_intervention_required=manual_intervention_required,
                 )
             )
         return CompensationGroupView(
@@ -122,3 +147,38 @@ class CompensationControlPlaneProjection:
             self.get_group(group.group_id)
             for group in self.repository.list_groups_for_plan(plan_id)
         )
+
+    def _select_request(
+        self,
+        requests: list[CompensationRequest],
+    ) -> CompensationRequest | None:
+        if not requests:
+            return None
+        selected = requests[-1]
+        for request in requests:
+            result = self.repository.get_result(request.compensation_id)
+            if (
+                result is not None
+                and result.status is CompensationStatus.RECONCILIATION_REQUIRED
+                and result.manual_intervention_required
+            ):
+                selected = request
+        return selected
+
+    @staticmethod
+    def _has_mixed_default_identities(
+        action: CompletedSideEffect,
+        requests: list[CompensationRequest],
+    ) -> bool:
+        canonical_key = (
+            f"compensation:{action.group_id}:{action.action_id}:"
+            f"plan-revision-{action.plan_revision}"
+        )
+        default_keys = {canonical_key}
+        default_keys.update(f"{canonical_key}:{trigger.value}" for trigger in CompensationTrigger)
+        identities = {
+            request.compensation_id
+            for request in requests
+            if request.idempotency_key in default_keys
+        }
+        return len(identities) > 1
