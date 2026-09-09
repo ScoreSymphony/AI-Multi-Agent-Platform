@@ -20,55 +20,52 @@ Before moving a name from this queue into the loaded catalog, a reviewer must re
 
 Unknown facts stay unknown. Popularity, stars, vendor claims or a Marketplace listing never substitute for evaluation or adoption governance.
 
-The loaded seed intentionally contains only reviewed entries. The names below remain queued even when they were already named in architecture documents: architecture mention is a reason to evaluate a component, not evidence that its current upstream identity, license and project status have been verified.
+## 2026-09-09 verified promotion batch
 
-## Code intelligence / static analysis
+The following queue leads were resolved against their current official upstream identity, license and GitHub project status and are now represented in the loaded catalog:
 
-- Serena
-- ast-grep
-- Semgrep
-- SCIP
+- Code intelligence: Serena, ast-grep, Semgrep and SCIP. SCIP now records the canonical `scip-code/scip` namespace rather than the former redirected Sourcegraph URL.
+- Coding agents: OpenCode, Goose, Cline, Roo Code, Plandex, Gemini CLI and Codex CLI. OpenCode and Goose record their current post-move namespaces. Roo Code is explicitly an archived `reference`, not an active candidate.
+- Agent platforms/frameworks: Dify, Flowise, AnythingLLM, Microsoft Agent Framework, Agno and CrewAI. Dify preserves its modified Apache-2.0 terms; Flowise is an archived reference with mixed Apache/commercial licensing recorded explicitly.
+- Memory/context: Letta.
+- Evaluation/security: Inspect AI, AgentDojo, garak and DeepEval.
+- Browser/execution: Stagehand.
+- Inference/model infrastructure: TEI and ONNX Runtime.
+- Domain/model tooling: Transformers.js.
 
-## Coding agents / workers
+Promotion still means discovery/evaluation only. All active additions remain `manual`, `untrusted`, `candidate`, and `evaluation:required`; archived entries remain `manual`, `untrusted`, `reference`, and non-activatable.
 
-- OpenCode
-- Goose
-- Cline
-- Roo Code
-- Plandex
+## Remaining unresolved leads
+
+These names remain queued because their exact current identity, license/status, product boundary, or suitability still needs a separate evidence pass. They must not be bulk-promoted merely to make the catalog numerically complete.
+
+### Coding agents / workers
+
 - jcode
 - Kimi Code CLI
 - MiMo Code
 - ZCode
-- Gemini CLI
 - Copilot CLI
 - Cursor Agent
 - Kiro
 - Claude Code
-- Codex CLI
 - mini-SWE-agent
 - SWE-ReX
 
-## Alternative agent / orchestration platforms
+### Alternative agent / orchestration platforms
 
 - Paperclip
 - Agent Zero
 - PAI / LifeOS
-- Dify
-- Flowise
 - Sim Studio
-- AnythingLLM
 - Multica
 - Open Agent
 - Fable / Fabel
 - Ruflo / Claude-Flow
 - Gas Town
-- Microsoft Agent Framework
-- Agno
-- CrewAI
 - Langflow
 
-## Specification / skills systems
+### Specification / skills systems
 
 - Superpowers
 - ECC
@@ -76,30 +73,23 @@ The loaded seed intentionally contains only reviewed entries. The names below re
 - OpenSpec
 - BMAD Method
 
-## Memory / context / retrieval
+### Memory / context / retrieval
 
 - OpenViking
 - TurboVec
-- Letta
 
-## Evaluation / security
+### Evaluation / security
 
 - Harbor
 - OpenEnv
 - AgentShield
-- Inspect AI
-- AgentDojo
-- garak
-- DeepEval
 
-## Inference / model infrastructure
+### Inference / model infrastructure
 
 - Colibri
 - Hugging Face tooling umbrella entry
-- TEI
-- ONNX Runtime
 
-## Domain / music AI
+### Domain / music AI
 
 - BACHI
 - AnalysisGNN
@@ -108,9 +98,8 @@ The loaded seed intentionally contains only reviewed entries. The names below re
 - MERT
 - MuSViT
 - LEGATO
-- Transformers.js
 
-## Discovery sources
+### Discovery sources
 
 - MCP Registry — discovery-source candidate only; must never become an automatically trusted install source.
 
@@ -118,6 +107,6 @@ The loaded seed intentionally contains only reviewed entries. The names below re
 
 Ordinary SaaS productivity connectors such as Gmail, Google Calendar or Slack may remain valid generic Registry items, but they are not the technical Marketplace product identity and are not promoted through this queue merely to increase catalog size.
 
-## Branch-preparation note
+## Completion boundary
 
-The loaded seed, taxonomy, Marketplace presentation and discovery-source seam are prepared in `issue-638-technical-marketplace-complete`. The remaining names in this file are intentionally data-curation work rather than missing execution/install code. They must not be bulk-promoted merely to make issue #638 appear numerically complete.
+The Marketplace engine, technical taxonomy, graphical presentation, manual/reference routing and discovery-source seam are already implemented. Remaining items in this file are **curation evidence work**, not missing Registry execution/install code. A queued name can be resolved by promotion, explicit reference/deferred/rejected classification, or by documenting that no sufficiently unambiguous/current upstream identity exists.
