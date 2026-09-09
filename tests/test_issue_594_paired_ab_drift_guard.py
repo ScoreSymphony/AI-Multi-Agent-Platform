@@ -55,12 +55,8 @@ def _seed_policy(*seeds: int) -> SeedPolicy:
 
 def _context(*, skill_digest: str, source_revision: str) -> EvalManifestContext:
     return EvalManifestContext(
-        skill_bundles=(
-            ManifestReference("skill_bundle", "candidate", digest=skill_digest),
-        ),
-        fixture_sources=(
-            ManifestReference("source", "fixture", revision=source_revision),
-        ),
+        skill_bundles=(ManifestReference("skill_bundle", "candidate", digest=skill_digest),),
+        fixture_sources=(ManifestReference("source", "fixture", revision=source_revision),),
     )
 
 
@@ -120,6 +116,4 @@ def test_paired_ab_rejects_fixture_drift_even_for_declared_candidate() -> None:
 
     assert comparison.status is Comparability.INCOMPARABLE
     assert comparison.blocking_differences
-    assert any(
-        item.path.startswith("fixture_sources") for item in comparison.blocking_differences
-    )
+    assert any(item.path.startswith("fixture_sources") for item in comparison.blocking_differences)
