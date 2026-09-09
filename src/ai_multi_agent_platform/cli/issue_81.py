@@ -1,7 +1,7 @@
-"""Issue #81 CLI composition for optional Registry/Marketplace operations.
+"""Issue #81 CLI composition for top-level optional platform domains.
 
-Registry commands are API-first and use only the canonical Control Plane surfaces
-registered by ``distribution.control_plane``. Every non-Registry area delegates
+Registry and governed Learning commands are API-first and use only the canonical
+Control Plane surfaces registered by the deployment. Every other area delegates
 unchanged to the current issue #82 CLI composition.
 """
 
@@ -22,6 +22,7 @@ from .client import (
 )
 from .credentials import AuthenticatedTransport, CredentialStore
 from .issue_82 import run_cli as issue_82_run_cli
+from .learning import add_learning_parser, execute_learning
 from .profiles import CLIProfile, ProfileError, ProfileStore, default_config_path
 from .registry import add_registry_parser, execute_registry
 from .render import Renderer
@@ -40,7 +41,8 @@ def run_cli(
     stdin: TextIO | None = None,
 ) -> int:
     arguments = list(argv) if argv is not None else sys.argv[1:]
-    if _requested_area(arguments) != "registry":
+    requested_area = _requested_area(arguments)
+    if requested_area not in {"registry", "learning"}:
         return issue_82_run_cli(
             arguments,
             transport=transport,
@@ -81,7 +83,12 @@ def run_cli(
             ),
             transport=AuthenticatedTransport(base_transport, credentials),
         )
-        response = execute_registry(args, client, _require_confirmation)
+        if args.area == "registry":
+            response = execute_registry(args, client, _require_confirmation)
+        elif args.area == "learning":
+            response = execute_learning(args, client, _require_confirmation)
+        else:
+            raise ProfileError(f"unsupported top-level CLI area: {args.area}")
         renderer.success(response)
         return 0
     except (ProfileError, ValueError) as exc:
@@ -107,10 +114,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--yes",
         action="store_true",
-        help="confirm Registry activation after reviewing the exact preview/version",
+        help="confirm side-effecting operations after reviewing the exact target/version",
     )
     areas = parser.add_subparsers(dest="area", required=True)
     add_registry_parser(areas)
+    add_learning_parser(areas)
     return parser
 
 
