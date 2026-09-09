@@ -93,6 +93,7 @@ class _EvaluationStub:
                 suite_id="learning-suite",
                 suite_version=1,
                 status=EvaluationRunStatus.COMPLETED,
+                snapshot=SimpleNamespace(references=()),
             ),
             results=(result,),
             comparison=SimpleNamespace(regressions=findings),
@@ -102,6 +103,10 @@ class _EvaluationStub:
 
     def get_run_detail(self, run_id: str) -> SimpleNamespace:
         return self._details[run_id]
+
+    def get_suite(self, suite_ref: str) -> SimpleNamespace:
+        assert suite_ref == "learning-suite@1"
+        return SimpleNamespace(cases=())
 
 
 class _VerificationStub:
