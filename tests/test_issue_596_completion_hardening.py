@@ -285,8 +285,7 @@ def test_expiry_after_approval_wait_preserves_prior_governed_invocation(
 
         assert expired.status is CompensationStatus.EXPIRED
         assert (
-            expired.canonical_tool_invocation_id
-            == awaiting_approval.canonical_tool_invocation_id
+            expired.canonical_tool_invocation_id == awaiting_approval.canonical_tool_invocation_id
         )
         assert expired.provider_id == awaiting_approval.provider_id
         assert provider.calls == []
