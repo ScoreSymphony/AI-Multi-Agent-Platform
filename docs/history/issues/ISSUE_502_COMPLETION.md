@@ -7,6 +7,10 @@ This record supersedes the pre-consolidation status statements in
 provenance, but its statements that formatter/lint/type/test/CI/CodeQL and ProjectAtlas containment
 validation were still deferred no longer describe the current `main` line.
 
+The architecture/scope decision is recorded explicitly in
+[`ADR 0011`](../../adr/0011-repository-intelligence-v1-core-and-optional-providers.md). That ADR
+supersedes the execution-status claims for #502 in the point-in-time 2026-09-07 roadmap snapshot.
+
 ## Final scope interpretation
 
 The issue owner's scope correction makes repository/code intelligence itself part of operational
@@ -52,22 +56,28 @@ The evaluation workflow proves, on Linux x86-64 and the exact pinned release ass
 - a pre-provider `AF_INET` self-test that must fail with `EPERM`;
 - bounded JSON scan/search/slice/health/settings commands;
 - source digest unchanged after the pilot;
-- machine-readable timing/CPU/RSS/state observations.
+- machine-readable timing/CPU/state observations plus a whole-pilot child-RSS high-water mark.
 
 The final workflow additionally compares the candidate against a real deterministic Git reference
-baseline on the **same immutable fixture revision**. It records measured values for:
+baseline on the **same immutable fixture revision**. It records like-for-like measured values for:
 
 - cold time to useful context;
 - warm query/slice time to useful context;
 - tool calls to useful context;
-- returned context bytes;
 - persistent provider-state bytes;
 - baseline and candidate command timing/CPU observations.
 
+Provider-specific raw stdout byte counts are retained only as transport observations. They are not
+compared as model-context size because the Git and ProjectAtlas outputs use different envelopes and
+have not been normalized to the same logical payload. Comparable peak RSS is likewise left
+unmeasured: `RUSAGE_CHILDREN.ru_maxrss` is a process-lifetime child high-water mark, so the final
+artifact records it only at the whole-pilot level rather than attributing it to individual commands.
+
 The comparison deliberately leaves the following unmeasured rather than inventing values:
-representative agent first-pass success, symbol/reference/dependency correctness,
-architecture/domain/impact usefulness, large-repository incremental/rebuild cost and dirty-workspace
-freshness for ProjectAtlas itself.
+normalized model-context bytes/tokens, comparable baseline-vs-candidate peak RSS, representative
+agent first-pass success, symbol/reference/dependency correctness, architecture/domain/impact
+usefulness, large-repository incremental/rebuild cost and dirty-workspace freshness for ProjectAtlas
+itself.
 
 ## ProjectAtlas decision
 
