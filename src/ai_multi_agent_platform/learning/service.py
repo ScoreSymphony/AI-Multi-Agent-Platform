@@ -530,7 +530,10 @@ class LearningService:
             else None
         )
         evaluation_project_id = self.evaluation_run_project_id(evaluation_run_id)
-        if evaluation_project_id is not None or target.resource_type not in _IDENTITY_BOUND_TARGET_TYPES:
+        if (
+            evaluation_project_id is not None
+            or target.resource_type not in _IDENTITY_BOUND_TARGET_TYPES
+        ):
             _require_matching_evaluation_project_scope(
                 project_id,
                 evaluation_project_id,
@@ -948,7 +951,9 @@ def _require_evaluation_target_binding(
     _require_evaluation_target_binding_for_target(candidate.target, detail, evaluation_run_id)
     if candidate.proposed_artifact_ref is not None:
         _require_evaluation_manifest(detail, evaluation_run_id)
-        if not _manifest_contains_learning_reference(detail.manifest, candidate.proposed_artifact_ref):
+        if not _manifest_contains_learning_reference(
+            detail.manifest, candidate.proposed_artifact_ref
+        ):
             raise ContractError(
                 ErrorCode.CONTRACT_VIOLATION,
                 "Evaluation manifest does not pin the proposed candidate artifact",
@@ -1025,7 +1030,10 @@ def _manifest_contains_learning_reference(manifest: Any, expected: LearningRefer
                 getattr(reference, "version", None),
             }:
                 continue
-            if expected.digest is not None and getattr(reference, "digest", None) != expected.digest:
+            if (
+                expected.digest is not None
+                and getattr(reference, "digest", None) != expected.digest
+            ):
                 continue
             return True
     return False
@@ -1039,10 +1047,7 @@ def _require_comparison_identity(run: Any, comparison: Any, evaluation_run_id: s
             "learning regression evidence has no persisted baseline run",
             details={"evaluation_run_id": evaluation_run_id},
         )
-    if (
-        comparison.current_run_id != run.run_id
-        or comparison.baseline_run_id != baseline_run_id
-    ):
+    if comparison.current_run_id != run.run_id or comparison.baseline_run_id != baseline_run_id:
         raise ContractError(
             ErrorCode.CONTRACT_VIOLATION,
             "Evaluation comparison does not match the current/baseline run references",

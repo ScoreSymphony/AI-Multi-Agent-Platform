@@ -470,9 +470,7 @@ def _initialize_new_required_single_node_stores(
         path = root.joinpath(*PurePosixPath(spec.path).parts)
         if path.exists():
             if path.is_symlink() or not path.is_file():
-                raise BackupError(
-                    f"restored durable store is not a regular file: {spec.path}"
-                )
+                raise BackupError(f"restored durable store is not a regular file: {spec.path}")
             if spec.kind == "sqlite":
                 _verify_sqlite_integrity(path)
                 initialized_versions[spec.path] = _sqlite_user_version(path)
@@ -488,9 +486,7 @@ def _initialize_new_required_single_node_stores(
                 connection.execute("PRAGMA user_version = 0")
                 connection.commit()
         except sqlite3.Error as exc:
-            raise BackupError(
-                f"cannot initialize new durable SQLite store: {spec.path}"
-            ) from exc
+            raise BackupError(f"cannot initialize new durable SQLite store: {spec.path}") from exc
         _verify_sqlite_integrity(path)
         initialized_versions[spec.path] = _sqlite_user_version(path)
     return initialized_versions
