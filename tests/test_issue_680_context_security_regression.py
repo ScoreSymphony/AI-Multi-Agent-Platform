@@ -40,16 +40,18 @@ class _ArtifactFileProvider:
     def __init__(
         self,
         artifact_id: str,
-        classification: DataClassification,
+        classification: DataClassification | None,
         *,
         file_id: str,
         sha256: str,
+        metadata: dict[str, object] | None = None,
     ) -> None:
         self.record = SimpleNamespace(
             file_id=file_id,
             sha256=sha256,
             artifact_ids=(artifact_id,),
-            classification=classification.value,
+            classification=None if classification is None else classification.value,
+            metadata=metadata or {},
         )
 
     async def list_files(self, context):
@@ -82,6 +84,7 @@ def _artifact_verification(
     sha256: str,
     task_id: str,
     project_id: str,
+    evidence_artifact_ids: tuple[str, ...] = (),
 ) -> tuple[object, VerificationResult]:
     subject = VerificationSubject(
         subject_type="artifact",
@@ -114,6 +117,7 @@ def _artifact_verification(
         ),
         outcome=VerificationOutcome.PASS,
         subject=subject,
+        evidence_artifact_ids=evidence_artifact_ids,
     )
     return request, result
 
@@ -200,6 +204,145 @@ def test_verification_artifact_classification_fails_closed_on_subject_provenance
     )
 
     assert classification is ContextDataClassification.SECRET_REFERENCE
+
+
+def test_verification_artifact_classification_uses_strongest_persisted_file_metadata() -> None:
+    task_id = new_id("task")
+    project_id = new_id("project")
+    artifact_id = new_id("artifact")
+    file_id = new_id("file")
+    sha256 = "1" * 64
+    request, result = _artifact_verification(
+        artifact_id=artifact_id,
+        file_id=file_id,
+        sha256=sha256,
+        task_id=task_id,
+        project_id=project_id,
+    )
+    resolver = CanonicalVerificationContextClassificationResolver(
+        _ArtifactFileProvider(
+            artifact_id,
+            DataClassification.PUBLIC,
+            file_id=file_id,
+            sha256=sha256,
+            metadata={"data_classification": DataClassification.RESTRICTED.value},
+        )  # type: ignore[arg-type]
+    )
+
+    classification = asyncio.run(
+        resolver.classify(
+            _source_request(task_id=task_id, project_id=project_id),
+            request,  # type: ignore[arg-type]
+            result,
+        )
+    )
+
+    assert classification is ContextDataClassification.RESTRICTED
+
+
+def test_verification_artifact_classification_fails_closed_on_malformed_metadata() -> None:
+    task_id = new_id("task")
+    project_id = new_id("project")
+    artifact_id = new_id("artifact")
+    file_id = new_id("file")
+    sha256 = "2" * 64
+    request, result = _artifact_verification(
+        artifact_id=artifact_id,
+        file_id=file_id,
+        sha256=sha256,
+        task_id=task_id,
+        project_id=project_id,
+    )
+    resolver = CanonicalVerificationContextClassificationResolver(
+        _ArtifactFileProvider(
+            artifact_id,
+            DataClassification.PUBLIC,
+            file_id=file_id,
+            sha256=sha256,
+            metadata={"data_classification": 7},
+        )  # type: ignore[arg-type]
+    )
+
+    classification = asyncio.run(
+        resolver.classify(
+            _source_request(task_id=task_id, project_id=project_id),
+            request,  # type: ignore[arg-type]
+            result,
+        )
+    )
+
+    assert classification is ContextDataClassification.SECRET_REFERENCE
+
+
+def test_verification_distinct_auxiliary_evidence_without_frozen_provenance_is_reference_only() -> (
+    None
+):
+    task_id = new_id("task")
+    project_id = new_id("project")
+    artifact_id = new_id("artifact")
+    evidence_artifact_id = new_id("artifact")
+    file_id = new_id("file")
+    sha256 = "3" * 64
+    request, result = _artifact_verification(
+        artifact_id=artifact_id,
+        file_id=file_id,
+        sha256=sha256,
+        task_id=task_id,
+        project_id=project_id,
+        evidence_artifact_ids=(evidence_artifact_id,),
+    )
+    resolver = CanonicalVerificationContextClassificationResolver(
+        _ArtifactFileProvider(
+            artifact_id,
+            DataClassification.PUBLIC,
+            file_id=file_id,
+            sha256=sha256,
+        )  # type: ignore[arg-type]
+    )
+
+    classification = asyncio.run(
+        resolver.classify(
+            _source_request(task_id=task_id, project_id=project_id),
+            request,  # type: ignore[arg-type]
+            result,
+        )
+    )
+
+    assert classification is ContextDataClassification.SECRET_REFERENCE
+
+
+def test_verification_subject_repeated_as_evidence_reuses_exact_subject_provenance() -> None:
+    task_id = new_id("task")
+    project_id = new_id("project")
+    artifact_id = new_id("artifact")
+    file_id = new_id("file")
+    sha256 = "4" * 64
+    request, result = _artifact_verification(
+        artifact_id=artifact_id,
+        file_id=file_id,
+        sha256=sha256,
+        task_id=task_id,
+        project_id=project_id,
+        evidence_artifact_ids=(artifact_id,),
+    )
+    resolver = CanonicalVerificationContextClassificationResolver(
+        _ArtifactFileProvider(
+            artifact_id,
+            DataClassification.PUBLIC,
+            file_id=file_id,
+            sha256=sha256,
+        )  # type: ignore[arg-type]
+    )
+
+    classification = asyncio.run(
+        resolver.classify(
+            _source_request(task_id=task_id, project_id=project_id),
+            request,  # type: ignore[arg-type]
+            result,
+        )
+    )
+
+    assert classification is ContextDataClassification.PUBLIC
 
 
 def test_public_single_node_live_task_source_fails_closed_for_unauthorized_actor(
