@@ -306,6 +306,7 @@ class CapabilityInvocation:
     compatibility: CapabilityCompatibilityRequest | None = None
     granted_permissions: frozenset[str] = frozenset()
     available_worker_capabilities: frozenset[str] = frozenset()
+    require_approval: bool = False
 
     def __post_init__(self) -> None:
         if not self.invocation_id.strip():
