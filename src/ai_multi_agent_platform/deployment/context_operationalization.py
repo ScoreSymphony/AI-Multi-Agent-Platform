@@ -10,13 +10,16 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from ai_multi_agent_platform.agents import AgentCapabilityTurn
+from ai_multi_agent_platform.agents import AgentCapabilityTurn, AgentRepository, AgentRunStatus
 from ai_multi_agent_platform.capabilities import (
     CapabilityInvocation,
     CapabilitySpec,
     bind_canonical_capability_invocation,
 )
-from ai_multi_agent_platform.context.bindings import JsonContextRunBindingRepository
+from ai_multi_agent_platform.context.bindings import (
+    ContextRunBindingRepository,
+    JsonContextRunBindingRepository,
+)
 from ai_multi_agent_platform.context.classification import effective_context_bundle_classification
 from ai_multi_agent_platform.context.control_plane import register_context_control_plane
 from ai_multi_agent_platform.context.lifecycle import (
@@ -35,7 +38,11 @@ from ai_multi_agent_platform.context.reconciliation import (
     ContextBindingReconciliationReport,
     reconcile_context_run_bindings,
 )
-from ai_multi_agent_platform.context.resolver import ContextAssemblyService, ContextResolver
+from ai_multi_agent_platform.context.resolver import (
+    ContextAssemblyService,
+    ContextBundleRepository,
+    ContextResolver,
+)
 from ai_multi_agent_platform.context.source_adapters import (
     AgentContextSourceAdapter,
     ContextSourceAdapterBinding,
@@ -119,6 +126,77 @@ class _TaskProjectScopeLifecycleBackend(LifecycleBackend):
 
     async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
         return await self._inner.cancel(run_id, context)
+
+
+def _bound_capability_classification(
+    request: CapabilityInvocation,
+    *,
+    agents: AgentRepository,
+    bundles: ContextBundleRepository,
+    run_bindings: ContextRunBindingRepository,
+) -> DataClassification:
+    active_runs = tuple(
+        record
+        for record in agents.list_agent_runs(request.trace.run_id)
+        if record.task_id == request.trace.task_id
+        and record.agent.agent_id == request.trace.agent_id
+        and record.status is AgentRunStatus.RUNNING
+    )
+    if len(active_runs) != 1:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress requires exactly one active canonical AgentRun",
+            details={
+                "run_id": request.trace.run_id,
+                "agent_id": request.trace.agent_id,
+                "matching_active_agent_runs": len(active_runs),
+            },
+        )
+    agent_run = active_runs[0]
+    try:
+        binding = run_bindings.get(agent_run.agent_run_id)
+    except KeyError as exc:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress requires the current AgentRun Context binding",
+            details={"agent_run_id": agent_run.agent_run_id},
+        ) from exc
+    if (
+        binding.run_id != request.trace.run_id
+        or binding.task_id != request.trace.task_id
+        or binding.agent_id != request.trace.agent_id
+        or binding.agent_revision != agent_run.agent.revision
+    ):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress binding does not match the current AgentRun",
+            details={"agent_run_id": agent_run.agent_run_id},
+        )
+    try:
+        bundle = bundles.get(binding.context_bundle_id)
+    except KeyError as exc:
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress binding references a missing Context Bundle",
+            details={"context_bundle_id": binding.context_bundle_id},
+        ) from exc
+    if (
+        bundle.context_bundle_id != binding.context_bundle_id
+        or bundle.digest != binding.context_bundle_digest
+        or bundle.run_id != binding.run_id
+        or bundle.task_id != binding.task_id
+        or bundle.agent_id != binding.agent_id
+        or bundle.agent_revision != binding.agent_revision
+    ):
+        raise ContractError(
+            ErrorCode.CONTRACT_VIOLATION,
+            "Context capability egress bundle does not match the current AgentRun binding",
+            details={
+                "agent_run_id": agent_run.agent_run_id,
+                "context_bundle_id": binding.context_bundle_id,
+            },
+        )
+    return effective_context_bundle_classification(bundle)
 
 
 @dataclass(slots=True)
@@ -321,22 +399,12 @@ def install_single_node_context(
         capability: CapabilitySpec,
     ) -> DataClassification:
         del capability
-        matches = tuple(
-            bundle
-            for bundle in bundles.list_for_run(request.trace.run_id)
-            if bundle.task_id == request.trace.task_id and bundle.agent_id == request.trace.agent_id
+        return _bound_capability_classification(
+            request,
+            agents=base.agents.repository,
+            bundles=bundles,
+            run_bindings=run_bindings,
         )
-        if len(matches) != 1:
-            raise ContractError(
-                ErrorCode.CONTRACT_VIOLATION,
-                "Context capability egress requires exactly one canonical Context Bundle",
-                details={
-                    "run_id": request.trace.run_id,
-                    "agent_id": request.trace.agent_id,
-                    "matching_context_bundles": len(matches),
-                },
-            )
-        return effective_context_bundle_classification(matches[0])
 
     capability_turn = (
         None
