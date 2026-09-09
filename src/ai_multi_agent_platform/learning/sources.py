@@ -4,6 +4,13 @@ from __future__ import annotations
 
 from ai_multi_agent_platform.contracts import ContractError, ErrorCode, JsonValue
 from ai_multi_agent_platform.research import ResearchService
+from ai_multi_agent_platform.research.models import (
+    Claim,
+    EvidenceRecord,
+    ResearchItem,
+    SourceObservation,
+    SourceRecord,
+)
 from ai_multi_agent_platform.security import RiskClassification
 
 from .models import (
@@ -19,6 +26,7 @@ from .source_evidence import (
     PlanningFailureSourceRef,
     RunFailureEvidenceResolver,
     RunFailureSourceRef,
+    require_operator_source_reference,
 )
 
 
@@ -241,6 +249,7 @@ class LearningSourceBridge:
         evidence_refs: tuple[LearningReference, ...] = (),
         project_id: str | None = None,
     ) -> tuple[LearningCandidate, bool]:
+        proposal_ref = require_operator_source_reference(proposal_ref)
         return self.learning.create_candidate(
             source_type=LearningSourceType.OPERATOR_PROPOSAL,
             problem=problem,
@@ -284,7 +293,13 @@ def _unique_references(
     return tuple(unique)
 
 
-def _require_research_chain(item, claim, source, observation, evidence) -> None:
+def _require_research_chain(
+    item: ResearchItem,
+    claim: Claim,
+    source: SourceRecord,
+    observation: SourceObservation,
+    evidence: EvidenceRecord,
+) -> None:
     expected_item_id = item.research_item_id
     mismatches: list[str] = []
     if claim.research_item_id != expected_item_id:
