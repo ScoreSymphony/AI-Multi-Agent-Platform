@@ -451,7 +451,8 @@ class OperationalContextBoundAgentRuntime:
             if selection.model_ref is None:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    "classification-aware model routing returned no canonical model configuration ID",
+                    "classification-aware model routing returned no canonical model "
+                    "configuration ID",
                 )
             return replace(runtime_requirements, explicit_model_id=selection.model_ref)
 
@@ -497,7 +498,8 @@ class OperationalContextBoundAgentRuntime:
             if selection.model_ref is None:
                 raise ContractError(
                     ErrorCode.CONTRACT_VIOLATION,
-                    "classification-aware model routing returned no canonical model configuration ID",
+                    "classification-aware model routing returned no canonical model "
+                    "configuration ID",
                 )
             allowed, _reason = await self._context_export_candidate_allowed(
                 bundle=bundle,
