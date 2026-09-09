@@ -30,6 +30,8 @@ from .control_plane import (
     _feedback_resource,
     register_learning_control_plane,
 )
+from .control_plane import _target as _parse_target
+from .models import LearningTarget
 from .runtime import ObservedLearningService
 from .runtime_control_plane import (
     LEARNING_POST_PROMOTION_COLLECTION,
@@ -238,19 +240,17 @@ class ScopedLearningPostPromotionResourceService(LearningPostPromotionResourceSe
         del query
         records: list[dict[str, JsonValue]] = []
         for candidate in self._learning.list_candidates():
-            if not await self._access.allowed(
-                context,
-                "learning-post-promotion-evaluation:list",
-                candidate.learning_candidate_id,
-                project_id=candidate.project_id,
+            for record in self._learning.post_promotion_recorder.list_for_candidate(
+                candidate.learning_candidate_id
             ):
-                continue
-            records.extend(
-                _post_promotion_resource(record)
-                for record in self._learning.post_promotion_recorder.list_for_candidate(
-                    candidate.learning_candidate_id
-                )
-            )
+                if not await self._access.allowed(
+                    context,
+                    "learning-post-promotion-evaluation:list",
+                    record.record_id,
+                    project_id=candidate.project_id,
+                ):
+                    continue
+                records.append(_post_promotion_resource(record))
         return tuple(records)
 
     async def get_resource(
@@ -303,7 +303,7 @@ class ScopedLearningCommand:
         resource_ref: str,
         payload: dict[str, JsonValue],
     ) -> None:
-        if self.action in {"learning.feedback.create", "learning.propose"}:
+        if self.action == "learning.feedback.create":
             await self.access.authorize(
                 context,
                 self.action,
@@ -312,8 +312,20 @@ class ScopedLearningCommand:
             )
             return
 
+        if self.action == "learning.propose":
+            project_id = _payload_project_id(payload)
+            self._require_supported_target_scope(_payload_target(payload), project_id)
+            await self.access.authorize(
+                context,
+                self.action,
+                resource_ref,
+                project_id=project_id,
+            )
+            return
+
         if self.action == "learning.propose-from-feedback":
             feedback = self.learning.repository.get_feedback(resource_ref)
+            self._require_supported_target_scope(_payload_target(payload), feedback.project_id)
             await self.access.authorize(
                 context,
                 self.action,
@@ -329,6 +341,16 @@ class ScopedLearningCommand:
             resource_ref,
             project_id=candidate.project_id,
         )
+        if self.action == "learning.promote":
+            target_project_id = self.learning.promotion_registry.resolve_project_id(candidate.target)
+            _require_matching_project_scope(candidate.project_id, target_project_id)
+            await self.access.authorize(
+                context,
+                self.action,
+                candidate.target.resource_id,
+                project_id=target_project_id,
+            )
+            return
         if self.action != "learning.supersede":
             return
 
@@ -341,6 +363,17 @@ class ScopedLearningCommand:
             project_id=replacement.project_id,
         ):
             _not_found("Learning Candidate")
+
+    def _require_supported_target_scope(
+        self,
+        target: LearningTarget,
+        candidate_project_id: str | None,
+    ) -> None:
+        registry = self.learning.promotion_registry
+        if not registry.supports(target.resource_type):
+            return
+        target_project_id = registry.resolve_project_id(target)
+        _require_matching_project_scope(candidate_project_id, target_project_id)
 
 
 def register_scoped_learning_control_plane(
@@ -403,6 +436,24 @@ def _payload_project_id(payload: dict[str, JsonValue]) -> str | None:
     if not isinstance(value, str) or not value.strip():
         raise ContractError(ErrorCode.INVALID_REQUEST, "project_id must be a non-blank string")
     return value
+
+
+def _payload_target(payload: dict[str, JsonValue]) -> LearningTarget:
+    value = payload.get("target")
+    if not isinstance(value, dict):
+        raise ContractError(ErrorCode.INVALID_REQUEST, "target must be an object")
+    return _parse_target(value)
+
+
+def _require_matching_project_scope(
+    candidate_project_id: str | None,
+    target_project_id: str | None,
+) -> None:
+    if candidate_project_id != target_project_id:
+        raise ContractError(
+            ErrorCode.FORBIDDEN,
+            "learning candidate project scope does not match the canonical target project",
+        )
 
 
 def _required_payload_string(payload: dict[str, JsonValue], field: str) -> str:
