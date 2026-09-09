@@ -149,6 +149,16 @@ class LearningQualityGate:
         allowed_policies = set(candidate.gate_plan.verification_policy_refs)
         for verification_id in candidate.verification_ids:
             request = self.verification.get_request(verification_id)
+            if request.project_id != candidate.project_id:
+                raise ContractError(
+                    ErrorCode.FORBIDDEN,
+                    "learning candidate project scope does not match Verification evidence",
+                    details={
+                        "verification_id": verification_id,
+                        "candidate_project_id": candidate.project_id,
+                        "verification_project_id": request.project_id,
+                    },
+                )
             policy_ref = f"{request.policy_id}@{request.policy_version}"
             if allowed_policies and policy_ref not in allowed_policies:
                 raise ContractError(
@@ -457,6 +467,16 @@ class LearningService:
                 raise ContractError(ErrorCode.UNAVAILABLE, "Verification service is not configured")
             for verification_id in verification_ids:
                 request = verification.get_request(verification_id)
+                if request.project_id != current.project_id:
+                    raise ContractError(
+                        ErrorCode.FORBIDDEN,
+                        "learning candidate project scope does not match Verification evidence",
+                        details={
+                            "verification_id": verification_id,
+                            "candidate_project_id": current.project_id,
+                            "verification_project_id": request.project_id,
+                        },
+                    )
                 if verification_id not in verification_refs:
                     verification_refs.append(verification_id)
                 _append_reference(
