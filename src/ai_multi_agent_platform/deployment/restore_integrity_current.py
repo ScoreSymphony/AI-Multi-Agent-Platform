@@ -6,16 +6,21 @@ import json
 import sqlite3
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import cast
+from typing import Protocol, cast
 
 from ai_multi_agent_platform.backup.integrity import RestoreValidationError
 from ai_multi_agent_platform.contracts import ContractError
 from ai_multi_agent_platform.kernel import RecoveryReport
+from ai_multi_agent_platform.learning.single_node import SingleNodeLearningComposition
 from ai_multi_agent_platform.templates import JsonTemplateRepository
 
 from .single_node import SingleNodeDeployment
 
 DeploymentRestoreValidator = Callable[[tuple[RecoveryReport, ...]], Awaitable[tuple[str, ...]]]
+
+
+class _LearningAwareDeployment(Protocol):
+    learning: SingleNodeLearningComposition
 
 
 @dataclass(frozen=True, slots=True)
@@ -381,9 +386,10 @@ def _validate_templates(deployment: SingleNodeDeployment, index: _CurrentIndex) 
 def _validate_learning(
     deployment: SingleNodeDeployment, index: _CurrentIndex
 ) -> tuple[int, int, int]:
+    learning = cast(_LearningAwareDeployment, deployment).learning
     try:
-        feedback_records = deployment.learning.repository.list_feedback()
-        candidates = deployment.learning.repository.list_candidates()
+        feedback_records = learning.repository.list_feedback()
+        candidates = learning.repository.list_candidates()
     except (ContractError, ValueError, TypeError) as exc:
         raise RestoreValidationError("cannot reconstruct restored Learning repository") from exc
 
@@ -394,12 +400,10 @@ def _validate_learning(
     for candidate in candidates:
         entity = f"learning candidate {candidate.learning_candidate_id}@{candidate.revision}"
         _validate_project(candidate.project_id, index, entity)
-        if deployment.learning.service.promotion_registry.supports(candidate.target.resource_type):
+        if learning.service.promotion_registry.supports(candidate.target.resource_type):
             try:
-                target_project_id = (
-                    deployment.learning.service.promotion_registry.resolve_project_id(
-                        candidate.target
-                    )
+                target_project_id = learning.service.promotion_registry.resolve_project_id(
+                    candidate.target
                 )
             except ContractError as exc:
                 raise RestoreValidationError(
@@ -420,9 +424,7 @@ def _validate_learning(
             )
         for evaluation_run_id in candidate.evaluation_run_ids:
             try:
-                evaluation_project_id = deployment.learning.service.evaluation_run_project_id(
-                    evaluation_run_id
-                )
+                evaluation_project_id = learning.service.evaluation_run_project_id(evaluation_run_id)
             except ContractError as exc:
                 raise RestoreValidationError(
                     f"{entity} cannot reconstruct Evaluation scope for {evaluation_run_id}"
@@ -451,10 +453,8 @@ def _validate_learning(
                 revision=receipt.new_revision,
             )
             try:
-                promoted_project_id = (
-                    deployment.learning.service.promotion_registry.resolve_project_id(
-                        promoted_target
-                    )
+                promoted_project_id = learning.service.promotion_registry.resolve_project_id(
+                    promoted_target
                 )
             except ContractError as exc:
                 raise RestoreValidationError(
@@ -486,7 +486,7 @@ def _validate_learning(
                 f"{learning_candidate_id}"
             )
         try:
-            record = deployment.learning.post_promotion_recorder.record_for_promotion(
+            record = learning.post_promotion_recorder.record_for_promotion(
                 learning_candidate_id,
                 int(target_revision),
             )
@@ -499,7 +499,7 @@ def _validate_learning(
                 f"post-promotion Learning Evaluation {record_id} identity is inconsistent"
             )
         try:
-            candidate_revision = deployment.learning.repository.get_candidate(
+            candidate_revision = learning.repository.get_candidate(
                 learning_candidate_id,
                 record.candidate_revision,
             )
