@@ -45,9 +45,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
     ) -> CompensationRequest:
         if idempotency_key is None:
             action = self.repository.get_action(action_id)
-            canonical = self.repository.find_request_by_key(
-                self._default_idempotency_key(action)
-            )
+            canonical = self.repository.find_request_by_key(self._default_idempotency_key(action))
             if canonical is not None:
                 self._validate_request_target(canonical, action)
             legacy = self._find_legacy_request(action)
@@ -187,9 +185,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         )
         expires_at = None
         if descriptor is not None and descriptor.window_seconds is not None:
-            expires_at = action.completed_at + timedelta(
-                seconds=descriptor.window_seconds
-            )
+            expires_at = action.completed_at + timedelta(seconds=descriptor.window_seconds)
         return CapabilityInvocation(
             invocation_id=invocation.invocation_id,
             capability_id=invocation.capability_id,
@@ -227,9 +223,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
             )
         return super()._record_invocation_failure(running, error)
 
-    def _request_identity_conflict(
-        self, action: CompletedSideEffect
-    ) -> ContractError | None:
+    def _request_identity_conflict(self, action: CompletedSideEffect) -> ContractError | None:
         """Return a fail-closed conflict when persisted default request identities disagree."""
 
         canonical_key = self._default_idempotency_key(action)
@@ -255,9 +249,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
             "manual reconciliation is required",
         )
 
-    def _find_legacy_request(
-        self, action: CompletedSideEffect
-    ) -> CompensationRequest | None:
+    def _find_legacy_request(self, action: CompletedSideEffect) -> CompensationRequest | None:
         """Resolve pre-hardening trigger-suffixed keys without creating a second undo.
 
         The first #596 implementation persisted keys ending in ``:<trigger>``. After the canonical
