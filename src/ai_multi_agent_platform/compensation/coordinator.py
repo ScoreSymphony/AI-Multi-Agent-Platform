@@ -1,8 +1,8 @@
 """Completion hardening for canonical compensation execution.
 
-This coordinator preserves the original #596 service contract while closing three recovery and
-security gaps discovered during integration review: legacy idempotency-key recovery, execution-time
-expiry enforcement and invocation-scoped Approval requirements.
+This coordinator preserves the original #596 service contract while closing recovery and security
+gaps discovered during integration review: legacy idempotency-key recovery, execution-time expiry
+enforcement and invocation-scoped Approval requirements.
 """
 
 from __future__ import annotations
@@ -35,8 +35,8 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
     """Hardened #596 coordinator used by the public compensation package.
 
     The base service remains the canonical implementation of group ordering, reconciliation,
-    Capability ownership and result recording. This subclass only strengthens safety at the three
-    boundaries that need cross-version or execution-time context.
+    Capability ownership and result recording. This subclass only strengthens safety at boundaries
+    that need cross-version or execution-time context.
     """
 
     def request_compensation(
@@ -51,8 +51,21 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
     ) -> CompensationRequest:
         if idempotency_key is None:
             action = self.repository.get_action(action_id)
+            canonical = self.repository.find_request_by_key(self._default_idempotency_key(action))
+            if canonical is not None:
+                self._validate_request_target(canonical, action)
             legacy = self._find_legacy_request(action)
-            if legacy is not None:
+            if (
+                canonical is not None
+                and legacy is not None
+                and canonical.compensation_id != legacy.compensation_id
+            ):
+                raise ContractError(
+                    ErrorCode.CONFLICT,
+                    "canonical and legacy compensation requests coexist for one immutable target; "
+                    "manual reconciliation is required",
+                )
+            if canonical is None and legacy is not None:
                 return legacy
         return super().request_compensation(
             action_id,
@@ -144,7 +157,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
                 f"{canonical_key}:{legacy_trigger.value}"
             )
             if existing is not None:
-                self._validate_legacy_target(existing, action)
+                self._validate_request_target(existing, action)
                 matches.append(existing)
 
         unique = {request.compensation_id: request for request in matches}
@@ -157,7 +170,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         return next(iter(unique.values()), None)
 
     @staticmethod
-    def _validate_legacy_target(
+    def _validate_request_target(
         request: CompensationRequest,
         action: CompletedSideEffect,
     ) -> None:
@@ -182,7 +195,7 @@ class CompensationCoordinator(_BaseCompensationCoordinator):
         if not same_target:
             raise ContractError(
                 ErrorCode.CONFLICT,
-                "legacy compensation idempotency key belongs to another immutable target",
+                "compensation idempotency key belongs to another immutable target",
             )
 
 
