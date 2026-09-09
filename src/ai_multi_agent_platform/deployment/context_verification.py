@@ -20,12 +20,12 @@ from ai_multi_agent_platform.contracts import (
     strongest_classification,
 )
 from ai_multi_agent_platform.data.contracts import FileProvider
-from ai_multi_agent_platform.data.models import DataAccessContext
+from ai_multi_agent_platform.data.models import DataAccessContext, FileRecord
 from ai_multi_agent_platform.verification import VerificationRequest, VerificationResult
 
 
 class CanonicalVerificationContextClassificationResolver(VerificationContextClassificationResolver):
-    """Inherit artifact classifications and fail closed for unclassified Result subjects."""
+    """Inherit exact persisted classifications and fail closed when provenance is incomplete."""
 
     def __init__(self, files: FileProvider) -> None:
         self.files = files
@@ -55,7 +55,18 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
             classifications.append(DataClassification.SECRET)
 
         for artifact_id in result.evidence_artifact_ids:
-            classifications.append(await self._artifact_classification(source_request, artifact_id))
+            if (
+                result.subject.subject_type == "artifact"
+                and artifact_id == result.subject.subject_id
+            ):
+                # The exact subject FileRecord revision/digest was already proven above.
+                continue
+            # #86 validates additional evidence artifacts when a result is submitted, but its
+            # durable VerificationResult currently keeps only their Artifact IDs, not the exact
+            # FileRecord revision/digest that was reviewed. A later Artifact-to-File relink must
+            # therefore never justify rendering findings at a weaker current classification.
+            # Keep findings reference-only until exact auxiliary evidence provenance is persisted.
+            classifications.append(DataClassification.SECRET)
 
         strongest = strongest_classification(*classifications) or DataClassification.SECRET
         return _context_classification(strongest)
@@ -104,17 +115,35 @@ class CanonicalVerificationContextClassificationResolver(VerificationContextClas
             # Never inherit a weaker classification from content that no longer matches the
             # immutable digest captured by the Verification subject.
             return DataClassification.SECRET
-        classification = record.classification
-        if classification is None:
-            return DataClassification.SECRET
+        return _persisted_file_classification(record)
+
+
+def _persisted_file_classification(record: FileRecord) -> DataClassification:
+    """Resolve the strongest persisted File classification without transient caller assumptions."""
+
+    values: list[DataClassification] = []
+    if record.classification is not None:
         try:
-            return (
-                classification
-                if isinstance(classification, DataClassification)
-                else DataClassification(classification)
+            values.append(
+                record.classification
+                if isinstance(record.classification, DataClassification)
+                else DataClassification(record.classification)
             )
         except ValueError:
             return DataClassification.SECRET
+
+    raw_metadata = record.metadata.get("data_classification")
+    if raw_metadata is not None:
+        # Match the canonical File egress contract: malformed classification metadata cannot be
+        # ignored in favor of a weaker record field.
+        if not isinstance(raw_metadata, str):
+            return DataClassification.SECRET
+        try:
+            values.append(DataClassification(raw_metadata))
+        except ValueError:
+            return DataClassification.SECRET
+
+    return strongest_classification(*values) or DataClassification.SECRET
 
 
 def _context_classification(value: DataClassification) -> ContextDataClassification:
