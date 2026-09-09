@@ -11,8 +11,13 @@ import hashlib
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Protocol
 
-from ai_multi_agent_platform.verification import VerificationService
+from ai_multi_agent_platform.verification import (
+    VerificationRequest,
+    VerificationResult,
+    VerificationService,
+)
 
 from .models import (
     ContextCandidate,
@@ -34,6 +39,17 @@ def _digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+class VerificationContextClassificationResolver(Protocol):
+    """Resolve the strongest canonical classification inherited by Verification evidence."""
+
+    async def classify(
+        self,
+        source_request: ContextSourceRequest,
+        verification_request: VerificationRequest,
+        result: VerificationResult,
+    ) -> ContextDataClassification: ...
+
+
 class VerificationContextSourceAdapter:
     """Project completed canonical #86 findings into Context as untrusted evidence."""
 
@@ -43,9 +59,11 @@ class VerificationContextSourceAdapter:
         self,
         verification: VerificationService,
         *,
+        classification_resolver: VerificationContextClassificationResolver | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.verification = verification
+        self.classification_resolver = classification_resolver
         self._now = now or (lambda: datetime.now(UTC))
 
     async def collect(self, request: ContextSourceRequest) -> tuple[ContextCandidate, ...]:
@@ -67,6 +85,19 @@ class VerificationContextSourceAdapter:
                 expires_at = result.completed_at + timedelta(seconds=policy.result_expiry_seconds)
                 if expires_at <= current:
                     freshness = ContextFreshness.STALE
+
+            # Findings are derived from the reviewed subject/evidence and must never be less
+            # sensitive than those canonical sources. A composition that cannot prove the source
+            # classification fails conservatively to reference-only secret handling.
+            classification = (
+                ContextDataClassification.SECRET_REFERENCE
+                if self.classification_resolver is None
+                else await self.classification_resolver.classify(
+                    request,
+                    verification_request,
+                    result,
+                )
+            )
 
             content = _canonical_json(
                 {
@@ -112,6 +143,7 @@ class VerificationContextSourceAdapter:
                 }
             )
             digest = _digest(content)
+            reference_only = classification is ContextDataClassification.SECRET_REFERENCE
             candidates.append(
                 ContextCandidate(
                     source=ContextSourceRef(
@@ -125,29 +157,38 @@ class VerificationContextSourceAdapter:
                     selection_reason=(
                         "canonical completed Verification result/findings linked to Task history"
                     ),
-                    inline_content=content,
+                    inline_content=None if reference_only else content,
+                    content_ref=(
+                        f"verification-result:{result.verification_result_id}"
+                        if reference_only
+                        else None
+                    ),
                     content_digest=digest,
                     freshness=freshness,
                     trust=ContextTrust.UNTRUSTED,
-                    # #86 Verification records do not currently expose an independent data
-                    # classification. Fail conservatively instead of downgrading findings that may
-                    # quote confidential/restricted source material.
-                    data_classification=ContextDataClassification.RESTRICTED,
+                    data_classification=classification,
                     priority=65,
                     relevance=0.9,
                     project_id=verification_request.project_id,
                     conflict_key=f"verification:{verification_request.verification_id}",
-                    metadata={
-                        "verification_id": verification_request.verification_id,
-                        "verification_result_id": result.verification_result_id,
-                        "policy_id": verification_request.policy_id,
-                        "policy_version": verification_request.policy_version,
-                        "stage_id": verification_request.stage_id,
-                        "outcome": result.outcome.value,
-                    },
+                    metadata=(
+                        {}
+                        if reference_only
+                        else {
+                            "verification_id": verification_request.verification_id,
+                            "verification_result_id": result.verification_result_id,
+                            "policy_id": verification_request.policy_id,
+                            "policy_version": verification_request.policy_version,
+                            "stage_id": verification_request.stage_id,
+                            "outcome": result.outcome.value,
+                        }
+                    ),
                 )
             )
         return tuple(candidates)
 
 
-__all__ = ["VerificationContextSourceAdapter"]
+__all__ = [
+    "VerificationContextClassificationResolver",
+    "VerificationContextSourceAdapter",
+]
