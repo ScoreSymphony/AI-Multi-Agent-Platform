@@ -301,7 +301,7 @@ def _require_research_chain(
     evidence: EvidenceRecord,
 ) -> None:
     expected_item_id = item.research_item_id
-    mismatches: list[str] = []
+    mismatches: list[JsonValue] = []
     if claim.research_item_id != expected_item_id:
         mismatches.append("claim.research_item_id")
     if source.research_item_id != expected_item_id:
