@@ -7,7 +7,7 @@ so every canonical Agent-bound Run crosses the Context Bundle boundary before mo
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from ai_multi_agent_platform.agents import AgentCapabilityTurn
@@ -22,6 +22,7 @@ from ai_multi_agent_platform.context.control_plane import register_context_contr
 from ai_multi_agent_platform.context.lifecycle import (
     CanonicalContextAgentLifecycleBackend,
     ContextLifecycleSourceRequest,
+    _bind_task_project_scope,
 )
 from ai_multi_agent_platform.context.models import ContextEntryRole, ContextSourceType
 from ai_multi_agent_platform.context.operational import (
@@ -49,7 +50,17 @@ from ai_multi_agent_platform.context.source_adapters import (
     TaskContextSourceAdapter,
 )
 from ai_multi_agent_platform.context.visibility import AuthorizationContextEntryVisibilityResolver
-from ai_multi_agent_platform.contracts import ContractError, DataClassification, ErrorCode
+from ai_multi_agent_platform.contracts import (
+    ContractError,
+    DataClassification,
+    ErrorCode,
+    ExecutionHandle,
+    ExecutionRequest,
+    ExecutionSnapshot,
+    LifecycleBackend,
+    OperationContext,
+    ProviderDescriptor,
+)
 from ai_multi_agent_platform.data import LocalKnowledgeProvider, LocalMemoryProvider
 from ai_multi_agent_platform.kernel import EventSourcedRunRepository, EventSourcedTaskRepository
 from ai_multi_agent_platform.research import (
@@ -83,6 +94,33 @@ if TYPE_CHECKING:
 CONTEXT_OUTPUT_RESERVE_TOKENS = 2_048
 
 
+class _TaskProjectScopeLifecycleBackend(LifecycleBackend):
+    """Resolve canonical Task Project scope before the #15 lifecycle authorization boundary."""
+
+    def __init__(
+        self,
+        inner: LifecycleBackend,
+        tasks: EventSourcedTaskRepository,
+    ) -> None:
+        self._inner = inner
+        self._tasks = tasks
+
+    @property
+    def descriptor(self) -> ProviderDescriptor:
+        return self._inner.descriptor
+
+    async def start(self, request: ExecutionRequest) -> ExecutionHandle:
+        task = await self._tasks.get_task(request.context.correlation_id)
+        context = _bind_task_project_scope(request.context, task.task.project_id)
+        return await self._inner.start(replace(request, context=context))
+
+    async def get(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        return await self._inner.get(run_id, context)
+
+    async def cancel(self, run_id: str, context: OperationContext) -> ExecutionSnapshot:
+        return await self._inner.cancel(run_id, context)
+
+
 @dataclass(slots=True)
 class SingleNodeContextComposition:
     """Durable context-related state exposed by the public SingleNodeDeployment."""
@@ -109,8 +147,9 @@ def install_single_node_context(
     """Install the canonical Context Bundle path into one already-built single-node deployment.
 
     The installer replaces only the kernel lifecycle participant. Every other canonical owner
-    remains unchanged and one #15 authorization wrapper stays the outer execution boundary. This
-    keeps Task/Run/Agent ownership intact while making #590 the effective context authority.
+    remains unchanged and one #15 authorization wrapper stays the execution enforcement boundary
+    after canonical Task Project scope is resolved. This keeps Task/Run/Agent ownership intact
+    while making #590 the effective context authority.
 
     When the public deployment supplies #591 bindings, Context rendering and capability execution
     share that exact durable egress gate. Focused lower-level embeddings may omit the bindings and
@@ -131,6 +170,7 @@ def install_single_node_context(
         binding_repository=run_bindings,
         egress_gate=None if egress is None else egress.runtime.gate,
         target_resolver=ModelRegistryContextEgressTargetResolver(base.models),
+        model_runtime=base.model_runtime if egress is not None else None,
         routing_policy=ContextRoutingPolicy(
             output_reserve_tokens=CONTEXT_OUTPUT_RESERVE_TOKENS,
         ),
@@ -314,8 +354,8 @@ def install_single_node_context(
 
     previous_lifecycle = base.kernel._lifecycle  # noqa: SLF001 - composition boundary replacement
     # The base profile intentionally already wraps its inner lifecycle with #15. Reuse that inner
-    # participant as the fallback and make one fresh #15 wrapper the outermost boundary, avoiding
-    # duplicate authorization/audit events for non-Agent executions.
+    # participant as the fallback and make one fresh #15 wrapper after canonical Project-scope
+    # binding, avoiding duplicate authorization/audit events for non-Agent executions.
     fallback = getattr(previous_lifecycle, "_inner", previous_lifecycle)
     lifecycle = CanonicalContextAgentLifecycleBackend(
         delegate=fallback,
@@ -328,10 +368,14 @@ def install_single_node_context(
         skill_bundle_resolver=skill_bundle_resolver,
         capability_turn=capability_turn,
     )
-    base.kernel._lifecycle = AuthorizedLifecycleBackend(  # noqa: SLF001
+    authorized_lifecycle = AuthorizedLifecycleBackend(
         lifecycle,
         base.approval_gate,
         allow_internal_service_reads=True,
+    )
+    base.kernel._lifecycle = _TaskProjectScopeLifecycleBackend(  # noqa: SLF001
+        authorized_lifecycle,
+        tasks,
     )
 
     register_context_control_plane(
