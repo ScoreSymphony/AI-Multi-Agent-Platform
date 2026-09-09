@@ -161,6 +161,7 @@ Every pilot is compared against the deterministic baseline. At minimum record:
 
 Marketing claims (including token savings) are not platform evidence until reproduced by this
 evaluation. Unmeasured metrics remain explicitly unmeasured rather than being represented as zero.
+Provider-specific transport byte counts are not interchangeable with normalized model-context size.
 
 ## Security defaults
 
@@ -186,8 +187,9 @@ The clarified provider-neutral v1 core is complete. The repository contains:
 
 ProjectAtlas v0.4.5 has also completed a pinned checksum-verified, read-only, external-state,
 no-network **evaluation** pilot. The final #502 workflow compares it against a real deterministic Git
-reference baseline on the same immutable tiny fixture and records measured timing/tool-call/context-
-byte/state deltas without fabricating unmeasured correctness metrics.
+reference baseline on the same immutable tiny fixture and records like-for-like timing, tool-call
+and persistent-state deltas without fabricating unmeasured correctness, normalized context-size or
+comparable memory metrics.
 
 The final provider decision for #502 is **experimental/deferred**. ProjectAtlas is not the default
 provider and its production repository map/search/source-slice/symbol/graph capabilities remain
@@ -199,5 +201,8 @@ provider adoption, richer graph/semantic capability activation, version-pinned o
 representative large-repository benchmarks and production worker sandboxing belong in follow-up
 work. They must not weaken or replace the shipped deterministic baseline.
 
-See `docs/history/issues/ISSUE_502_COMPLETION.md` for the final acceptance record and
+The explicit architecture/scope decision is recorded in
+`docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md`, which supersedes the
+point-in-time #502 execution-status claims in the 2026-09-07 roadmap snapshot. See
+`docs/history/issues/ISSUE_502_COMPLETION.md` for the final acceptance record and
 `REPOSITORY_INTELLIGENCE_PROJECTATLAS_PILOT.md` for the candidate evidence boundary.
