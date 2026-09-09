@@ -51,6 +51,8 @@ def test_public_single_node_shares_one_durable_egress_gate(tmp_path: Path) -> No
     assert deployment.model_runtime.egress_gate is gate
     assert deployment.connectors.egress_gate is gate
     assert deployment.context.runtime.exporter.egress_gate is gate
+    assert deployment.handoffs.context_runtime.exporter.egress_gate is gate
+    assert deployment.handoffs.context_runtime.target_resolver is not None
 
     capability_turn = deployment.context.lifecycle._capability_turn  # noqa: SLF001
     assert capability_turn is not None
