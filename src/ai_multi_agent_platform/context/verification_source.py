@@ -93,10 +93,10 @@ class VerificationContextSourceAdapter:
                 ContextCandidate(
                     source=ContextSourceRef(
                         ContextSourceType.VERIFICATION,
-                        result.verification_result_id,
-                        revision=verification_request.verification_id,
+                        verification_request.verification_id,
+                        revision=result.verification_result_id,
                         digest=digest,
-                        locator=f"verification:{verification_request.verification_id}",
+                        locator=f"verification-result:{result.verification_result_id}",
                     ),
                     role=ContextEntryRole.EVIDENCE,
                     selection_reason=(
