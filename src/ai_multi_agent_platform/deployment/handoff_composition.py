@@ -36,6 +36,7 @@ from ai_multi_agent_platform.handoffs import (
     TelemetryHandoffAuditSink,
     register_handoff_control_plane,
 )
+from ai_multi_agent_platform.models import ModelRuntime
 from ai_multi_agent_platform.observability import Telemetry
 from ai_multi_agent_platform.research import SqliteResearchRepository
 from ai_multi_agent_platform.security import ActorIdentity, EgressGate
@@ -158,6 +159,7 @@ def build_single_node_handoff_composition(
     context_bundle_repository: JsonContextBundleRepository | None = None,
     context_binding_repository: JsonContextRunBindingRepository | None = None,
     egress_gate: EgressGate | None = None,
+    model_runtime: ModelRuntime | None = None,
 ) -> HandoffDeploymentComposition:
     """Build the restart-safe #651 composition over existing platform authorities."""
 
@@ -195,6 +197,7 @@ def build_single_node_handoff_composition(
         binding_repository=context_binding_repository,
         egress_gate=egress_gate,
         target_resolver=target_resolver,
+        model_runtime=model_runtime if egress_gate is not None else None,
     )
 
     references = CanonicalHandoffReferenceGateway(
