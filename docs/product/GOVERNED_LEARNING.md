@@ -210,7 +210,7 @@ platform extension list learning-post-promotion-evaluations
 platform extension commands
 ```
 
-The generic extension CLI remains deliberately read-only. Explicit Learning mutations use `platform learning`, including feedback creation, proposal, evidence binding, accept/reject/supersede and promotion. Promotion requires the CLI's global explicit confirmation (`platform --yes learning promote ...`) before transport; the server still owns authorization, exact-action Approval, stale-revision checks, quality gates and owner-domain revision creation. See `docs/cli/CLI_LEARNING.md` for command examples.
+The generic extension framework can execute commands for other registered domains, but the public entrypoint rejects `extension execute learning.*`. Explicit Learning mutations use `platform learning`, including feedback creation, proposal, evidence binding, accept/reject/supersede and promotion, so the generic executor cannot bypass Learning-specific safeguards. Promotion requires the CLI's global explicit confirmation (`platform --yes learning promote ...`) before transport; the server still owns authorization, exact-action Approval, stale-revision checks, quality gates and owner-domain revision creation. See `docs/cli/CLI_LEARNING.md` for command examples.
 
 ## Web
 
@@ -230,6 +230,8 @@ Public routes:
 ```
 
 The list/detail routes require both `learning-candidates` and `learning-feedback` in the Control Plane manifest. `LearningDetailPage` receives only manifest-advertised Learning decision commands, and `learning-post-promotion-evaluations` is treated as an optional capability. Missing commands remain disabled; the browser never invents a direct service fallback.
+
+The candidate queue uses the canonical cursor to expose additional pages and obtains status totals through server-side filters rather than treating the first page as the whole collection. Post-promotion evidence is filtered by exact `learning_candidate_id` on the Control Plane and follows cursors until all records for that candidate have been collected, so a record outside the first collection page cannot be misreported as missing.
 
 ## Single-node production composition
 
@@ -258,8 +260,8 @@ Issue #595's product path is covered at several layers:
 
 - `tests/test_issue_595_governed_learning.py` — core governed candidate, gate, promotion, persistence and recovery behavior;
 - `tests/test_issue_594_595_integration_review.py` — #594 Evaluation/Learning integration and exact evidence binding;
-- `tests/test_issue_81_cli_entrypoint.py` — public `platform learning` dispatch and promotion confirmation semantics;
-- `tests/test_issue_595_product_surfaces.py` — public Shell/navigation/CLI wiring regression;
+- `tests/test_issue_81_cli_entrypoint.py` — public `platform learning` dispatch, promotion confirmation and generic-executor bypass prevention;
+- `tests/test_issue_595_product_surfaces.py` — public Shell/navigation/CLI wiring plus pagination-boundary regression;
 - `frontend/src/app/navigation.test.ts` — Learning navigation registration;
 - `frontend/src/app/learningManifest.test.ts` — required-resource, read-only and manifest-command gating.
 
