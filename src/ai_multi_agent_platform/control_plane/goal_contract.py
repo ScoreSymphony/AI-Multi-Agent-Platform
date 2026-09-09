@@ -15,7 +15,6 @@ from ai_multi_agent_platform.goals import (
     GoalEvidence,
     GoalService,
     GoalState,
-    GoalTaskState,
     ObservationPolicy,
     SuccessCriterion,
     TaskGenerationPolicy,
@@ -38,7 +37,6 @@ GOAL_COMMANDS = (
     "goal.revise",
     "goal.review",
     "goal.attach-task",
-    "goal.record-task-outcome",
 )
 
 
@@ -246,23 +244,6 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
             )
         )
 
-    async def record_task_outcome(
-        context: RequestContext, resource_ref: str, payload: dict[str, JsonValue]
-    ) -> dict[str, JsonValue]:
-        try:
-            task_state = GoalTaskState(_required_string(payload, "task_state"))
-        except ValueError as exc:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "invalid Goal Task outcome") from exc
-        return _goal_resource(
-            await service.record_task_outcome(
-                goal_id=resource_ref,
-                task_id=_required_string(payload, "task_id"),
-                task_state=task_state,
-                idempotency_key=_idempotency(context),
-                actor_ref=context.actor.principal_ref,
-            )
-        )
-
     return {
         "goal.create": create,
         "goal.activate": activate,
@@ -273,7 +254,6 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
         "goal.revise": revise,
         "goal.review": review,
         "goal.attach-task": attach_task,
-        "goal.record-task-outcome": record_task_outcome,
     }
 
 
