@@ -151,7 +151,9 @@ class _ProviderContextPolicy:
             target_kind=request.target.kind,
             target_id=request.target.target_id,
             effective_classification=request.classification,
-            reason_code=(EgressReasonCode.ALLOWED if allowed else EgressReasonCode.TARGET_POLICY_DENIED),
+            reason_code=(
+                EgressReasonCode.ALLOWED if allowed else EgressReasonCode.TARGET_POLICY_DENIED
+            ),
             policy_version=self.version,
             audit_metadata={"target_posture": request.target.effective_posture.value},
         )
@@ -289,7 +291,16 @@ def _handoff_runtime_fixture() -> tuple[
         audit=object(),  # type: ignore[arg-type]
         tasks=_TaskRepository(task_id, project_id),  # type: ignore[arg-type]
     )
-    return runtime, handoff.handoff_id, project_id, run_id, consumer, actor, assembly, context_runtime
+    return (
+        runtime,
+        handoff.handoff_id,
+        project_id,
+        run_id,
+        consumer,
+        actor,
+        assembly,
+        context_runtime,
+    )
 
 
 def test_handoff_binds_canonical_task_project_before_context_egress_path() -> None:
