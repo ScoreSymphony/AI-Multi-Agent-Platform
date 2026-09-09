@@ -19,7 +19,6 @@ _GOAL_COMMANDS = [
     "goal.revise",
     "goal.review",
     "goal.attach-task",
-    "goal.record-task-outcome",
 ]
 
 

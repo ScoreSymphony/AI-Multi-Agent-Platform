@@ -6,9 +6,12 @@ on:
     paths:
       - ".github/workflows/repository-intelligence-projectatlas-pilot.yml"
       - "scripts/ci/issue502_no_network_exec.py"
+      - "scripts/ci/issue502_baseline_comparison.py"
       - "scripts/ci/issue502_projectatlas_pilot.py"
+      - "scripts/ci/issue502_projectatlas_comparison.py"
       - "docs/extensions/REPOSITORY_INTELLIGENCE_EVALUATION.md"
       - "docs/extensions/REPOSITORY_INTELLIGENCE_PROJECTATLAS_PILOT.md"
+      - "docs/history/issues/ISSUE_502_COMPLETION.md"
 
 permissions:
   contents: read
@@ -42,9 +45,9 @@ jobs:
           chmod +x "$PROJECTATLAS_BIN"
           echo "PROJECTATLAS_BIN=$PROJECTATLAS_BIN" >> "$GITHUB_ENV"
 
-      - name: Run contained read-only and no-network pilot
+      - name: Run contained pilot and measured baseline comparison
         run: |
-          python scripts/ci/issue502_projectatlas_pilot.py \
+          python scripts/ci/issue502_projectatlas_comparison.py \
             --binary "$PROJECTATLAS_BIN" \
             --no-network-wrapper scripts/ci/issue502_no_network_exec.py \
             --report artifacts/repository-intelligence/projectatlas-v0.4.5.json

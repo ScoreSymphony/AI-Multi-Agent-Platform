@@ -15,13 +15,13 @@ from ai_multi_agent_platform.goals import (
     GoalEvidence,
     GoalService,
     GoalState,
-    GoalTaskState,
     ObservationPolicy,
     SuccessCriterion,
     TaskGenerationPolicy,
     TaskRevisionPolicy,
 )
 from ai_multi_agent_platform.goals.repository import goal_state_to_json
+from ai_multi_agent_platform.security import ActorType, infer_actor_identity
 
 from .extensions import CommandHandler, ResourceService
 from .models import PageQuery, RequestContext
@@ -37,7 +37,6 @@ GOAL_COMMANDS = (
     "goal.revise",
     "goal.review",
     "goal.attach-task",
-    "goal.record-task-outcome",
 )
 
 
@@ -214,13 +213,17 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
         raw_evidence = payload.get("evidence", [])
         if not isinstance(raw_evidence, list):
             raise ContractError(ErrorCode.INVALID_REQUEST, "evidence must be an array")
+        current = await service.get_goal(resource_ref)
+        evidence = tuple(
+            _parse_evidence(context, item, current.success_criteria) for item in raw_evidence
+        )
         return _goal_resource(
             await service.review_goal(
                 goal_id=resource_ref,
                 idempotency_key=_idempotency(context),
                 expected_revision=_required_int(payload, "expected_revision"),
                 trigger_ref=_required_string(payload, "trigger_ref"),
-                evidence=tuple(_parse_evidence(item) for item in raw_evidence),
+                evidence=evidence,
                 next_review_at=(
                     None if raw_next is None else _parse_datetime(raw_next, "next_review_at")
                 ),
@@ -241,23 +244,6 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
             )
         )
 
-    async def record_task_outcome(
-        context: RequestContext, resource_ref: str, payload: dict[str, JsonValue]
-    ) -> dict[str, JsonValue]:
-        try:
-            task_state = GoalTaskState(_required_string(payload, "task_state"))
-        except ValueError as exc:
-            raise ContractError(ErrorCode.INVALID_REQUEST, "invalid Goal Task outcome") from exc
-        return _goal_resource(
-            await service.record_task_outcome(
-                goal_id=resource_ref,
-                task_id=_required_string(payload, "task_id"),
-                task_state=task_state,
-                idempotency_key=_idempotency(context),
-                actor_ref=context.actor.principal_ref,
-            )
-        )
-
     return {
         "goal.create": create,
         "goal.activate": activate,
@@ -268,7 +254,6 @@ def goal_command_handlers(service: GoalService) -> dict[str, CommandHandler]:
         "goal.revise": revise,
         "goal.review": review,
         "goal.attach-task": attach_task,
-        "goal.record-task-outcome": record_task_outcome,
     }
 
 
@@ -352,17 +337,68 @@ def _parse_autonomy(value: dict[str, JsonValue] | None) -> AutonomyPolicy:
     )
 
 
-def _parse_evidence(raw: JsonValue) -> GoalEvidence:
+def _parse_evidence(
+    context: RequestContext,
+    raw: JsonValue,
+    success_criteria: tuple[SuccessCriterion, ...],
+) -> GoalEvidence:
     value = _object(raw, "evidence[]")
     observed = _optional_string(value, "observed_at")
     evidence_id = _optional_string(value, "evidence_id")
+    criterion_id = _required_string(value, "criterion_id")
+    criterion = next(
+        (item for item in success_criteria if item.criterion_id == criterion_id),
+        None,
+    )
+    if criterion is None:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "Goal evidence criterion_id is not defined by the current Goal revision",
+        )
+    kind = _required_string(value, "kind")
+    if kind != criterion.kind.value:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "Goal evidence kind must match the canonical success criterion kind",
+        )
+    supplied_actor_ref = _optional_string(value, "actor_ref")
+    if supplied_actor_ref is not None and supplied_actor_ref != context.actor.principal_ref:
+        raise ContractError(
+            ErrorCode.INVALID_REQUEST,
+            "Goal evidence actor_ref is server-bound to the authenticated principal",
+        )
+
+    claimed_verified = value.get("verified")
+    if claimed_verified is not None and not isinstance(claimed_verified, bool):
+        raise ContractError(ErrorCode.INVALID_REQUEST, "verified must be a boolean")
+
+    if kind == GoalCriterionKind.HUMAN_ACCEPTANCE.value:
+        actor_type = context.actor.actor_type
+        if actor_type is None:
+            actor_type = infer_actor_identity(context.actor.principal_ref).actor_type.value
+        if actor_type != ActorType.HUMAN.value:
+            raise ContractError(
+                ErrorCode.FORBIDDEN,
+                "human Goal acceptance requires an authenticated human actor",
+            )
+        verified = True
+        source_ref = f"human-acceptance:{context.actor.principal_ref}"
+    else:
+        if claimed_verified is True:
+            raise ContractError(
+                ErrorCode.INVALID_REQUEST,
+                "verified Goal evidence must come from a canonical verification/promotion boundary",
+            )
+        verified = False
+        source_ref = _required_string(value, "source_ref")
+
     kwargs: dict[str, Any] = {
-        "criterion_id": _required_string(value, "criterion_id"),
-        "kind": _required_string(value, "kind"),
+        "criterion_id": criterion_id,
+        "kind": kind,
         "value": value.get("value"),
-        "source_ref": _required_string(value, "source_ref"),
-        "verified": _required_bool(value, "verified"),
-        "actor_ref": _optional_string(value, "actor_ref"),
+        "source_ref": source_ref,
+        "verified": verified,
+        "actor_ref": context.actor.principal_ref,
     }
     if observed is not None:
         kwargs["observed_at"] = _parse_datetime(observed, "observed_at")

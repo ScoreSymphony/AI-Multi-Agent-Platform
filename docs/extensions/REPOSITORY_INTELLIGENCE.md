@@ -148,7 +148,7 @@ be verified at evaluation time before a pilot.
 
 Every pilot is compared against the deterministic baseline. At minimum record:
 
-- time to useful context and representative task/first-pass success;
+- time to useful context and representative task/first-pass success where available;
 - tool calls, broad/full-file reads, repeated exploration and model-context bytes/tokens;
 - source-slice/revision provenance accuracy;
 - symbol/reference/dependency correctness where applicable;
@@ -160,7 +160,8 @@ Every pilot is compared against the deterministic baseline. At minimum record:
 - failure, disable, repair and rebuild behavior.
 
 Marketing claims (including token savings) are not platform evidence until reproduced by this
-evaluation.
+evaluation. Unmeasured metrics remain explicitly unmeasured rather than being represented as zero.
+Provider-specific transport byte counts are not interchangeable with normalized model-context size.
 
 ## Security defaults
 
@@ -169,14 +170,39 @@ provider-owned cache/index directory, no repository writes, no worktree ownershi
 no unrestricted Docker socket, no global secrets, egress denied unless explicitly required,
 bounded resources, recorded provenance, and a deterministic disable/remove/rebuild path.
 
-## Current #502 completion boundary
+## #502 completion boundary
 
-The repository now has the provider-neutral taxonomy, exact Repository provenance, deterministic
-required baseline, CapabilityRegistry fallback, production #82/#15 immutable-revision wiring and
-Run-bound #37 Workspace freshness including dirty local materializations and bounded fail-closed
-reads.
+The clarified provider-neutral v1 core is complete. The repository contains:
 
-Issue #502 remains open for the enhanced-provider work that is intentionally optional at runtime:
-current candidate verification/pilots, comparative evaluation evidence, accepted provider/plugin
-packaging, lifecycle/disable/rebuild validation and optional Registry metadata. Those integrations
-must not weaken or replace the shipped baseline.
+- the canonical repository-intelligence taxonomy;
+- exact Repository and Run-bound Workspace provenance;
+- deterministic required baseline behavior;
+- CapabilityRegistry selection and deterministic fallback;
+- production #82/#15 immutable-revision wiring;
+- #37 Workspace Snapshot/live-materialization freshness including dirty-content evidence;
+- bounded Context funnel and scoped Search federation integrations;
+- heavy-work resource envelopes that fail closed until admission bounds are measured;
+- an optional #20-compatible ProjectAtlas candidate shell with reversible lifecycle;
+- safe optional technical Registry/catalog representation.
+
+ProjectAtlas v0.4.5 has also completed a pinned checksum-verified, read-only, external-state,
+no-network **evaluation** pilot. The final #502 workflow compares it against a real deterministic Git
+reference baseline on the same immutable tiny fixture and records like-for-like timing, tool-call
+and persistent-state deltas without fabricating unmeasured correctness, normalized context-size or
+comparable memory metrics.
+
+The final provider decision for #502 is **experimental/deferred**. ProjectAtlas is not the default
+provider and its production repository map/search/source-slice/symbol/graph capabilities remain
+disabled. The CI seccomp wrapper proves the evaluation boundary only; it is not treated as a generic
+production sandbox.
+
+That conservative provider decision does not keep the v1 core issue open. Future third-party
+provider adoption, richer graph/semantic capability activation, version-pinned output normalizers,
+representative large-repository benchmarks and production worker sandboxing belong in follow-up
+work. They must not weaken or replace the shipped deterministic baseline.
+
+The explicit architecture/scope decision is recorded in
+`docs/adr/0011-repository-intelligence-v1-core-and-optional-providers.md`, which supersedes the
+point-in-time #502 execution-status claims in the 2026-09-07 roadmap snapshot. See
+`docs/history/issues/ISSUE_502_COMPLETION.md` for the final acceptance record and
+`REPOSITORY_INTELLIGENCE_PROJECTATLAS_PILOT.md` for the candidate evidence boundary.

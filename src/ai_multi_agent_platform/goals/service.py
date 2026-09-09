@@ -13,6 +13,7 @@ from ai_multi_agent_platform.kernel import PlatformKernel
 
 from .criteria import evaluate_criteria, required_criteria_satisfied
 from .models import (
+    TERMINAL_GOAL_STATUSES,
     AutonomyPolicy,
     CriterionEvaluation,
     GoalConstraints,
@@ -458,9 +459,14 @@ class GoalService:
             failed_cycles += 1
         elif task_state is GoalTaskState.SUCCEEDED:
             failed_cycles = 0
-        progress = (
-            GoalProgress.DEGRADED if task_state is GoalTaskState.FAILED else GoalProgress.MONITORING
-        )
+        if current.status in TERMINAL_GOAL_STATUSES or current.status is GoalStatus.PAUSED:
+            progress = current.progress
+        else:
+            progress = (
+                GoalProgress.DEGRADED
+                if task_state is GoalTaskState.FAILED
+                else GoalProgress.MONITORING
+            )
         updated = replace(
             current,
             linked_tasks=tuple(links),
@@ -554,6 +560,13 @@ class GoalService:
             status = GoalStatus.WAITING
             progress = GoalProgress.PARTIAL
             decision_reason = "criteria remain unmet but automatic Task generation is disabled"
+        elif current.task_generation_policy.proposal_required:
+            status = GoalStatus.PAUSED
+            progress = GoalProgress.BLOCKED
+            decision_reason = (
+                "Goal policy requires Proposal/Specification mediation; "
+                "automatic Proposal generation is not configured"
+            )
         else:
             task_id = deterministic_goal_task_id(goal_id, current.revision, idempotency_key, 0)
             created_task_id = await self._task_creator.create_goal_task(
