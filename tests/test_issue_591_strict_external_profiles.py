@@ -58,7 +58,7 @@ def _configured_free_external_profile() -> EgressProfile:
     )
 
 
-def test_durable_runtime_blocks_profileless_external_target_by_default(tmp_path: Path) -> None:
+def test_durable_runtime_blocks_profileless_external_by_default(tmp_path: Path) -> None:
     runtime = build_durable_egress_runtime(tmp_path / "egress-profiles.json")
 
     decision = asyncio.run(
@@ -70,9 +70,7 @@ def test_durable_runtime_blocks_profileless_external_target_by_default(tmp_path:
     assert decision.audit_metadata["external_profile_required"] is True
 
 
-def test_public_single_node_composition_inherits_strict_external_profile_policy(
-    tmp_path: Path,
-) -> None:
+def test_public_single_node_uses_strict_external_profile_policy(tmp_path: Path) -> None:
     deployment = build_single_node_deployment(
         SingleNodeConfig(data_dir=tmp_path / "platform", secure_cookie=False)
     )
@@ -87,7 +85,7 @@ def test_public_single_node_composition_inherits_strict_external_profile_policy(
     assert decision.reason_code is EgressReasonCode.UNVERIFIED_PROFILE
 
 
-def test_durable_runtime_keeps_profileless_local_target_functional(tmp_path: Path) -> None:
+def test_durable_runtime_keeps_profileless_local_functional(tmp_path: Path) -> None:
     runtime = build_durable_egress_runtime(tmp_path / "egress-profiles.json")
 
     decision = asyncio.run(runtime.gate.evaluate(_request(posture=EgressTargetPosture.LOCAL)))
@@ -96,7 +94,7 @@ def test_durable_runtime_keeps_profileless_local_target_functional(tmp_path: Pat
     assert decision.reason_code is EgressReasonCode.ALLOWED
 
 
-def test_inline_external_profile_satisfies_strict_durable_requirement(tmp_path: Path) -> None:
+def test_inline_external_profile_satisfies_strict_requirement(tmp_path: Path) -> None:
     runtime = build_durable_egress_runtime(tmp_path / "egress-profiles.json")
 
     decision = asyncio.run(
@@ -112,9 +110,7 @@ def test_inline_external_profile_satisfies_strict_durable_requirement(tmp_path: 
     assert decision.reason_code is EgressReasonCode.ALLOWED
 
 
-def test_focused_embedding_can_explicitly_keep_legacy_profileless_external_behavior(
-    tmp_path: Path,
-) -> None:
+def test_focused_embedding_can_opt_out_of_strict_external_profiles(tmp_path: Path) -> None:
     runtime = build_durable_egress_runtime(
         tmp_path / "egress-profiles.json",
         require_external_profile=False,
