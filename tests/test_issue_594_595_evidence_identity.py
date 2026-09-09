@@ -22,7 +22,6 @@ from ai_multi_agent_platform.learning import (
 from ai_multi_agent_platform.security import RiskClassification
 from ai_multi_agent_platform.verification import VerificationOutcome
 
-
 _TARGET_CASES = (
     (LearningTargetType.AGENT, "agent"),
     (LearningTargetType.SKILL, "skill"),
@@ -278,7 +277,7 @@ def _subject_for(reference: LearningReference) -> SimpleNamespace:
     )
 
 
-def _learning_service(tmp_path, *, evaluation: "_EvaluationStub") -> LearningService:
+def _learning_service(tmp_path, *, evaluation: _EvaluationStub) -> LearningService:
     return LearningService(
         SQLiteLearningRepository(tmp_path / "learning.sqlite3"),
         quality_gate=LearningQualityGate(evaluation=cast(Any, evaluation)),
