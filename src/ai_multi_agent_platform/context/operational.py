@@ -38,6 +38,7 @@ from ai_multi_agent_platform.models import (
     ModelRuntime,
     RoutingRequirements,
 )
+from ai_multi_agent_platform.models.runtime import _model_egress_profile
 from ai_multi_agent_platform.security.egress import EgressGate
 
 from .bindings import (
@@ -153,6 +154,28 @@ class ModelRegistryContextEgressTargetResolver:
             if configured.kind is not EgressTargetKind.CONTEXT_EXPORT:
                 raise ValueError("configured model Context egress target must use context_export")
             return configured
+
+        model_profile = _model_egress_profile(model)
+        if model_profile is not None:
+            # The Context export crosses the same destination boundary as the selected model.
+            # Project the canonical inline model profile instead of requiring operators to
+            # duplicate trust/cost policy under a second CONTEXT_EXPORT profile.
+            context_profile = replace(
+                model_profile,
+                profile_id=f"{model_profile.profile_id}:context-export",
+                target_kind=EgressTargetKind.CONTEXT_EXPORT,
+                target_id=model.config_id,
+            )
+            return EgressTarget(
+                kind=EgressTargetKind.CONTEXT_EXPORT,
+                target_id=model.config_id,
+                profile=context_profile,
+                policy_metadata={
+                    "model_config_id": model.config_id,
+                    "provider_id": model.provider_id,
+                    "profile_projection": "model-inline-egress-profile",
+                },
+            )
 
         posture = (
             EgressTargetPosture.INTERNAL
